@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/ingestion-service/Dockerfile
+    container_name: ingestion-service
+    restart: unless-stopped
+    volumes: ["./data:/app/data"]
+    env_file:
+      - .env
+
+  product-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/product-processor-service/Dockerfile
+    container_name: product-processor-service
+    restart: unless-stopped
+    env_file:
+      - .env
+
+  embedding-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/embedding-service/Dockerfile
+    container_name: embedding-service
+    restart: unless-stopped
+    env_file:
+      - .env
