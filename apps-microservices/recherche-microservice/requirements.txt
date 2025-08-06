@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+websockets
+pymilvus
+sentence-transformers
+rerankers
+numpy
+torch
+transformers
