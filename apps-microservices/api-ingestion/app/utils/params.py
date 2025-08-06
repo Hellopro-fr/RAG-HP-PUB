@@ -5,7 +5,7 @@ from app.router.ingestion.ingestion import router as IngestionRouter
 params = [
     [
         IngestionRouter,
-        f"/cleaner",
+        f"/ingestion",
         Tags.ingestion,
         True
     ]
