@@ -27,7 +27,8 @@ class FileCreatedHandler(FileSystemEventHandler):
             print(f"\n🔎 Ingestion-Service: Nouveau fichier détecté: {event.src_path}")
             time.sleep(1); publish_file_content(event.src_path, self.channel)
 
-if __name__ == "__main__":
+def main():
+    """Point d'entrée principal pour le service d'ingestion."""
     print("🚀 Ingestion-Service: Démarrage...")
     connection = None
     for i in range(10):
@@ -50,3 +51,6 @@ if __name__ == "__main__":
     finally:
         observer.join(); connection.close()
         print("✅ Ingestion-Service: Connexion et observateur fermés.")
+
+if __name__ == "__main__":
+    main()
