@@ -10,7 +10,7 @@ class Publisher:
         """
         self.channel = connection.channel()
         self.exchange_name = 'processed_data_exchange'
-        self.routing_key = 'processed_data.product'
+        self.routing_key = 'data.ready_for_embedding'
 
         # Déclare l'exchange où il va publier
         self.channel.exchange_declare(
