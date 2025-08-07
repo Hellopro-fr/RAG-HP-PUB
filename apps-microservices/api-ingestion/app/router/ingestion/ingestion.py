@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Request, HTTPException, status
 from app.schemas.ingestion.ingestion import BaseIngestion as IngestionRequest, BaseIngestionReponse, BaseIngestionReponseSucces
 from app.messaging.publisher import publish_message
+from app.core.ingestion.ingestion import routing_key_collection
 
 router = APIRouter()
 
@@ -13,18 +14,20 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
 
     - **payload**: Les données à envoyer, conformes au schéma `IngestionRequest`.
     """
-    logging.info(f"Requête reçue pour publication sur la clé de routage : {payload.routing_key}")
     
     channel = request.app.state.rabbitmq_channel
     
     if not channel:
         return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
+    exchange_name = "data_exchange"
+    routing_key = routing_key_collection(payload.collection)
+    
     success = publish_message(
         channel=channel,
-        exchange_name=payload.exchange_name,
-        routing_key=payload.routing_key,
-        data=payload.data.model_dump()
+        exchange_name=exchange_name,
+        routing_key=routing_key,
+        data=payload.data
     )
 
     if not success:
@@ -34,6 +37,8 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
         code=status.HTTP_202_ACCEPTED, 
         message="Le message a été mis en file d'attente pour publication.", 
         details={
-            "exchange": payload.exchange_name,
-            "routing_key": payload.routing_key,
-        })
+            "exchange": exchange_name,
+            "routing_key": routing_key,
+            "collection": payload.collection
+        }
+    )

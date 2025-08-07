@@ -75,7 +75,7 @@ def startup_event():
 async def error_handler(request, exc: Exception):
     logging.error(str(exc))
     return error_response(
-        "EXCEPTION_ERROR", f"{exc}", status.HTTP_500_INTERNAL_SERVER_ERROR)
+        "EXCEPTION_ERROR", f"{exc}", str(status.HTTP_500_INTERNAL_SERVER_ERROR))
 
 @app.on_event("shutdown")
 def shutdown_event():
