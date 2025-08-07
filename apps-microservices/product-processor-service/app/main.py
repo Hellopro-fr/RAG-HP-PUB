@@ -1,8 +1,15 @@
 # apps-microservices/product-processor-service/app/main.py
 
 import pika
-import os
 import time
+
+import sys
+import os
+
+# Ajoute le répertoire du service courant au path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, CURRENT_DIR)
+
 from messaging.consumer import Consumer
 from messaging.publisher import Publisher
 
