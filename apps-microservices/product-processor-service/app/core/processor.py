@@ -7,9 +7,9 @@ from common_utils.autres.CollectionName import CollectionName
 def process_product_data_for_embedding(product_data: dict) -> dict:
     """
     Prend un dictionnaire de produit, le nettoie et prépare le message
-    pour l'étape d'embedding.
-    
-    Retourne: Un dictionnaire prêt à être publié.
+    pour l’étape d’embedding.
+
+    Retourne : Un dictionnaire prêt à être publié.
     """
     # Étape 1: Vérifier les données d'entrée
     if not isinstance(product_data, dict):

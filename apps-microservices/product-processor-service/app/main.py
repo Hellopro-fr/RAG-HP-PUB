@@ -1,7 +1,6 @@
 # apps-microservices/product-processor-service/app/main.py
 
 import pika
-import os
 import time
 from product_processor_service.messaging.consumer import Consumer
 from product_processor_service.messaging.publisher import Publisher

@@ -10,6 +10,15 @@ ENV PYTHONPATH=/app
 COPY libs/common-utils /app/libs/common-utils
 RUN pip install -e /app/libs/common-utils
 # On copie les requirements du service
+# Étape 1: Définir le PYTHONPATH.
+# Dit à Python de toujours chercher les modules à partir du dossier /app.
+ENV PYTHONPATH=/app
+
+# Étape 2: Installer les dépendances
+# On copie la lib partagée
+COPY libs/common-utils /app/libs/common-utils
+RUN pip install -e /app/libs/common-utils
+# On copie les requirements du service
 COPY apps-microservices/embedding-service/requirements.txt .
 RUN pip install -r requirements.txt
 
