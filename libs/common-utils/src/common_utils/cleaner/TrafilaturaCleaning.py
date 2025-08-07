@@ -12,7 +12,7 @@ from langdetect import detect
 from sentence_splitter import SentenceSplitter
 from collections import Counter
 
-from schemas.cleaner.cleaner import BaseTrafilaturaReponse, TrafilaturaReponseHtml, BaseTrafilatura
+from schemas.cleaner import BaseTrafilaturaReponse, TrafilaturaReponseHtml, BaseTrafilatura
 
 from lxml.etree import tostring, SubElement
 

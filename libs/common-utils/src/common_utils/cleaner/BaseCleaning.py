@@ -5,9 +5,10 @@ import re
 
 # Useful for typing
 from logging import Logger
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from markdownify import markdownify as md
 from datetime import datetime
+from lxml.etree import tostring
 
 logging.basicConfig(
     level=logging.INFO,
@@ -47,6 +48,37 @@ class CleanerBase:
             soup = BeautifulSoup(html_content, 'lxml')
         
         return soup
+    
+    def clean(self) -> str:
+        """
+        Steps:
+        1. Convert HTML to BeautifulSoup object.
+        2. Keep only tags related to table.
+        3. Convert the result to markdown.
+        4. Return the cleaned text.
+        """
+        result = ""
+        
+        if not self.data:
+            logging.warning("Aucune donnée à traiter.")
+            return result
+        
+        if not isinstance(self.data, str):
+            logging.warning("Les données doivent être une chaîne de caractères.")
+            return result
+        
+        soup = self.convert_to_soup(self.data)
+        if not soup:
+            logging.warning("Impossible de convertir les données en BeautifulSoup.")
+            return result
+        
+        soup = self._strip_tags(soup)
+        if not isinstance(soup, BeautifulSoup):
+            logging.warning("Le résultat après le stripping n'est pas un objet BeautifulSoup.")
+            return result
+        
+        # Convert to markdown
+        
             
     def strip_html(self) -> str:
         """
@@ -59,9 +91,14 @@ class CleanerBase:
             logging.warning("Aucune donnée à traiter.")
             return result
         
-        if isinstance(self.data, str):
-            soup = self.convert_to_soup(self.data)
-            if soup:
+        if not isinstance(self.data, str):
+            logging.warning("Les données doivent être une chaîne de caractères.")
+            return result
+        
+        soup = self.convert_to_soup(self.data)
+        if not soup:
+            logging.warning("Impossible de convertir les données en BeautifulSoup.")
+            return result
                 
         
         for item in self.data:
@@ -88,7 +125,7 @@ class CleanerBase:
             "output": self.output
         }
     
-    def _strip_tags(self, soup: BeautifulSoup):
+    def _strip_tags(self, soup: BeautifulSoup) -> str:
         """
         Strip HTML tags and return cleaned text.
         Remove all tags except tags related to table
@@ -103,8 +140,11 @@ class CleanerBase:
             
         # Keep only table tags
         for element in soup.find_all(True):
-            if element.name not in ['table', 'tr', 'td', 'th']:
+            if isinstance(element, Tag) and element.name not in ['table', 'tr', 'td', 'th']:
                 element.unwrap()
+                
+        # Convert to string
+        stripped_content = self._normalize_whitespace(tostring(soup, encoding='unicode', method='text'))
         
         # Get text and normalize whitespace
         stripped_content = self._normalize_whitespace(soup.get_text(separator=' ', strip=True))
