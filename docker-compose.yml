@@ -7,6 +7,7 @@ services:
       dockerfile: ./apps-microservices/ingestion-service/Dockerfile
     container_name: ingestion-service
     restart: unless-stopped
+    volumes: ["./data:/app/data"]
     env_file:
       - .env
 
