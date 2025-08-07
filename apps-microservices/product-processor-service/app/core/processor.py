@@ -1,7 +1,7 @@
 # apps-microservices/product-processor-service/app/core/processor.py
 
 import json
-from common_utils.cleaner.BaseCleaning import BaseCleaning
+from common_utils.cleaner.CleanHTML import CleanHTML
 
 def process_product_data_for_embedding(product_data: dict) -> dict:
     """
@@ -15,7 +15,7 @@ def process_product_data_for_embedding(product_data: dict) -> dict:
         raise ValueError("Les données du produit doivent être un dictionnaire.")
     
     # Étape 2: Nettoyer la description du produit
-    cleaner = BaseCleaning(product_data.get("description_produit", ""))
+    cleaner = CleanHTML(product_data.get("description_produit", ""))
     cleaned_description = cleaner.clean()
     
     # Étape 3: Remplacer la description nettoyée dans les données du produit

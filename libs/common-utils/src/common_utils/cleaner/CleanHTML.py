@@ -1,25 +1,22 @@
 import logging
 import re
-import logging
 
 from bs4 import BeautifulSoup, Tag
-from markdownify import markdownify as md
-from datetime import datetime
-from lxml.etree import tostring
+from markdownify import MarkdownConverter
 
-# logging.basicConfig(
-#     level=logging.INFO,
-#     format='%(asctime)s - %(levelname)s - %(message)s'
-# )
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
-class BaseCleaning:
+class CleanHTML:
     """
     Class base to clean data.
     """
 
     def __init__(self, data: str):
-        self.date = datetime.now()
         self.data = data
+        self.TABLE_RELATED_TAGS = ['table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td']
         
     @staticmethod
     def _normalize_whitespace(text: str) -> str:
@@ -69,27 +66,30 @@ class BaseCleaning:
             logging.warning("Impossible de convertir les données en BeautifulSoup.")
             return result
         
-        stripped_text = self._strip_tags(soup)
-        if not stripped_text:
-            logging.warning("Le texte nettoyé est vide.")
+        soup = self._strip_tags(soup)
+        if not soup:
+            logging.warning("Le contenu de la page est vide après le stripping des tags.")
             return result
         
         # Convert to markdown
-        markdown_text = self._convert_to_markdown(stripped_text)
+        def md(soup: BeautifulSoup, **options):
+            return MarkdownConverter(**options).convert_soup(soup)
+        
+        markdown_text = md(soup, convert=self.TABLE_RELATED_TAGS)
         if not markdown_text:
             logging.warning("La conversion en markdown a échoué.")
             return result
         
-        return markdown_text
+        return markdown_text.strip()
     
-    def _strip_tags(self, soup: BeautifulSoup) -> str:
+    def _strip_tags(self, soup: BeautifulSoup) -> BeautifulSoup:
         """
         Strip HTML tags and return cleaned text.
         Remove all tags except tags related to table
         """
         if not soup or not isinstance(soup, BeautifulSoup):
             logging.warning("Invalid BeautifulSoup object.")
-            return ""
+            return soup
         
         # Remove script and style elements
         for element in soup(['script', 'style']):
@@ -100,35 +100,4 @@ class BaseCleaning:
             if isinstance(element, Tag) and element.name not in ['table', 'tr', 'td', 'th']:
                 element.unwrap()
                 
-        # Convert to string
-        stripped_content = self._normalize_whitespace(tostring(soup, encoding='unicode', method='text')).strip()
-        
-        return stripped_content
-    
-    def _convert_to_markdown(self, data: str) -> str:
-        """
-        Convert HTML content to Markdown format.
-        """
-        if not data:
-            logging.warning("Aucune donnée à convertir en markdown.")
-            return ""
-        
-        if not isinstance(data, str):
-            logging.warning("Les données doivent être une chaîne de caractères.")
-            return ""
-        
-        # Convert into markdown
-        markdown_content = md(data, heading_style="ATX", escape_html=False)
-        if not markdown_content:
-            logging.warning("La conversion en markdown a échoué, le contenu est vide.")
-            return ""
-        
-        # Normalize whitespace in the markdown content
-        markdown_content = self._normalize_whitespace(markdown_content).strip()
-        
-        # Check if markdown content is empty after normalization
-        if not markdown_content:
-            logging.warning("Le contenu markdown est vide après normalisation.")
-            return ""
-        
-        return markdown_content
+        return soup
