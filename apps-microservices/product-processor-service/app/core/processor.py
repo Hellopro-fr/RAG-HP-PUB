@@ -2,6 +2,7 @@
 
 import json
 from common_utils.cleaner.CleanHTML import CleanHTML
+from common_utils.autres.CollectionName import CollectionName
 
 def process_product_data_for_embedding(product_data: dict) -> dict:
     """
@@ -15,20 +16,40 @@ def process_product_data_for_embedding(product_data: dict) -> dict:
         raise ValueError("Les données du produit doivent être un dictionnaire.")
     
     # Étape 2: Nettoyer la description du produit
-    cleaner = CleanHTML(product_data.get("description_produit", ""))
+    cleaner = CleanHTML(product_data.get("description", ""))
     cleaned_description = cleaner.clean()
     
     # Étape 3: Remplacer la description nettoyée dans les données du produit
-    product_data["description_produit"] = cleaned_description
+    if cleaned_description is not None:
+        product_data["description"] = cleaned_description
     
     # Étape 4: Préparer le texte à embedder (À voir avec l'équipe en charge)
-    text_to_embed = f"PRODUIT : {product_data.get('nom_produit', '')}. DESCRIPTION : {cleaned_description}"
+    text_to_embed = (
+        f"TITRE DU PRODUIT : {product_data.get('nom_produit', '')}\n"
+        f"DESCRIPTION : {cleaned_description}\n"
+        f"PRIX: {product_data.get('prix', '')}\n"
+        f"CATEGORIE: {product_data.get('nom_categorie', '')}\n"
+        f"LIVRAISON: {product_data.get('livraison', '')}\n"
+        f"STOCK: {product_data.get('stock', '')}"
+    )
     
-    # Étape 5: Construire le message de sortie
+    # Étape 5: Ajouter les métadonnées nécessaires
+    metadata = {
+        key: value
+        for key, value in product_data.items()
+    }
+    
+    # Étape 6: Construire le message de sortie
     output_message = {
-        "metadata": product_data,
-        "embedding": text_to_embed,
-        "target_collection": "products_collection"
+        "data": {
+            "embedding": text_to_embed,
+            "metadata": metadata,
+            **{k: product_data.get(k, "") for k in [
+                "id_produit", "nom_produit", "id_categorie", "description",
+                "nom_categorie", "id_fournisseur", "fournisseur", "domaine"
+            ]}
+        },
+        "collection": CollectionName.PRODUIT
     }
     
     # Afficher le message de sortie pour débogage
