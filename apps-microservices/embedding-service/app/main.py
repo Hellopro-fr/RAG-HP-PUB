@@ -1,14 +1,9 @@
 import pika
 import time
-
-import sys
 import os
 
-# Ajoute le répertoire du service courant au path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from messaging.consumer import Consumer
-from messaging.publisher import Publisher
+from embedding_service_messaging.consumer import Consumer
+from embedding_service_messaging.publisher import Publisher
 
 def main():
     """
