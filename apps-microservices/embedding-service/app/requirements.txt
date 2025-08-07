@@ -1,0 +1,5 @@
+langchain_text_splitters
+pika
+pytest
+sentence-transformers 
+torch

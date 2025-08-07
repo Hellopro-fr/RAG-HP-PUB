@@ -7,18 +7,14 @@ QUEUE_NAME = 'embedding_queue'
 
 def on_message_callback(ch, method, properties, body):
     data = json.loads(body)
+
+    # Todo: à modifier selon le flow de l'application
     product_id = data.get("metadata", {}).get('id_produit', 'ID inconnu')
     print(f"\n🤖 Embedding-Service: Message reçu pour '{product_id}'.")
 
     # Étape 1: Récupérer le texte à "embedder"
-    text_to_embed = data.get('text_to_embed', '')
+    text_to_embed = data.get('embedding', '')
     print(f"   - Texte à embedder: \"{text_to_embed[:50]}...\"")
-
-    # Étape 2: Simuler la création de l'embedding
-    # Dans la réalité, ici on appellerait un modèle (ex: SentenceTransformer)
-    time.sleep(0.5) # Simule le temps de calcul
-    fake_vector = [len(text_to_embed), len(text_to_embed.split()), 0.123]
-    print(f"   ⚡️ Vecteur (simulé) créé: {fake_vector}")
 
     # Pour ce test, on s'arrête ici. L'étape suivante serait de publier
     # vers le milvus-loader.
