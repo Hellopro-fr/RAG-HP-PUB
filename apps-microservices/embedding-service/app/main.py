@@ -5,8 +5,7 @@ import sys
 import os
 
 # Ajoute le répertoire du service courant au path
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, CURRENT_DIR)
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from messaging.consumer import Consumer
 from messaging.publisher import Publisher
