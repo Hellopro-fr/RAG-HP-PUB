@@ -24,11 +24,12 @@ class Publisher:
         """
         Publie un message (dictionnaire) sur le topic configuré.
         """
-        product_id = message_dict.get("metadata", {}).get("id_produit", "inconnu")
         self.channel.basic_publish(
             exchange=self.exchange_name,
             routing_key=self.routing_key,
             body=json.dumps(message_dict).encode('utf-8'),
             properties=pika.BasicProperties(delivery_mode=2)
         )
-        print(f"   📤 Message pour '{product_id}' traité et publié pour embedding.")
+        
+        print(f"   📤 Output Message post embedding '{message_dict}'")
+        print(f"   📤 Message traité et publié post embedding.")

@@ -30,8 +30,7 @@ class Consumer:
         Callback privé qui orchestre le traitement d'un message.
         """
         product_data = json.loads(body)
-        product_id = product_data.get('id_produit', 'ID inconnu')
-        print(f"\n📥 Embedding-Product-Processor: Message reçu pour '{product_id}'.")
+        print(f"\n📥 Embedding-Product-Processor: Message reçu pre embedding.")
 
         # 1. Appelle la logique métier PURE
         output_message = embed_product_data(product_data)

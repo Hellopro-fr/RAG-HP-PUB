@@ -1,7 +1,7 @@
 import pika
 import time
 import os
-
+    
 from embedding_service_messaging.consumer import Consumer
 from embedding_service_messaging.publisher import Publisher
 
