@@ -27,6 +27,7 @@ class Consumer:
         """
         Callback privé qui orchestre le traitement d'un message.
         """
+        print("📥 Product-Processor: Message reçu.")
         product_data = json.loads(body)
         product_id = product_data.get('id_produit', 'ID inconnu')
         print(f"\n📥 Product-Processor: Message reçu pour '{product_id}'.")
