@@ -1,5 +1,3 @@
-import json
-import os
 import logging
 import re
 
@@ -72,58 +70,18 @@ class CleanerBase:
             logging.warning("Impossible de convertir les données en BeautifulSoup.")
             return result
         
-        soup = self._strip_tags(soup)
-        if not isinstance(soup, BeautifulSoup):
-            logging.warning("Le résultat après le stripping n'est pas un objet BeautifulSoup.")
+        stripped_text = self._strip_tags(soup)
+        if not stripped_text:
+            logging.warning("Le texte nettoyé est vide.")
             return result
         
         # Convert to markdown
-        
-            
-    def strip_html(self) -> str:
-        """
-        Process data to remove HTML tags and extract text.
-        Remove all tags except tags related to table and convert the result to markdown.
-        """
-        result = ""
-        
-        if not self.data:
-            logging.warning("Aucune donnée à traiter.")
+        markdown_text = self._convert_to_markdown(stripped_text)
+        if not markdown_text:
+            logging.warning("La conversion en markdown a échoué.")
             return result
         
-        if not isinstance(self.data, str):
-            logging.warning("Les données doivent être une chaîne de caractères.")
-            return result
-        
-        soup = self.convert_to_soup(self.data)
-        if not soup:
-            logging.warning("Impossible de convertir les données en BeautifulSoup.")
-            return result
-                
-        
-        for item in self.data:
-            if not isinstance(item, dict):
-                logging.warning("Item is not a dictionary: %s", item)
-                continue
-            
-            identifier = getattr(item, keys.get('id') or 'id', None)
-            content_to_strip = getattr(item, keys.get('content') or 'content', None)
-            
-            if not identifier or not content_to_strip:
-                logging.warning("Identifier or content to strip is missing in item: %s", item)
-                continue
-            
-            soup = self.convert_to_soup(identifier, content_to_strip)
-            stripped_content = self._strip_tags(soup, identifier)
-            
-            if stripped_content:
-                item[keys.get('content') or 'content'] = stripped_content
-                result.append(item)
-            
-        return {
-            "result": result,
-            "output": self.output
-        }
+        return markdown_text
     
     def _strip_tags(self, soup: BeautifulSoup) -> str:
         """
@@ -144,84 +102,34 @@ class CleanerBase:
                 element.unwrap()
                 
         # Convert to string
-        stripped_content = self._normalize_whitespace(tostring(soup, encoding='unicode', method='text'))
-        
-        # Get text and normalize whitespace
-        stripped_content = self._normalize_whitespace(soup.get_text(separator=' ', strip=True))
-        
-        # Check if stripped content is empty
-        if not stripped_content:
-            logging.warning("Stripped content is empty.")
-            return ""
-        
-        return stripped_content
-        
-        if not soup or not isinstance(soup, BeautifulSoup):
-            logging.warning("Invalid BeautifulSoup object for the identifier: %s", identifier)
-            return ""
-        
-        # Remove script and style elements
-        for element in soup(['script', 'style']):
-            element.decompose()
-        
-        # Get text and normalize whitespace
-        stripped_content = self._normalize_whitespace(soup.get_text(separator=' ', strip=True))
-        
-        # Check if stripped content is empty
-        if not stripped_content:
-            logging.warning("Stripped content is empty for the identifier: %s", identifier)
-            return ""
+        stripped_content = self._normalize_whitespace(tostring(soup, encoding='unicode', method='text')).strip()
         
         return stripped_content
     
-    def convert_markdown(self, keys: dict = {}) -> dict:
-        """
-        Process data to convert HTML content to Markdown.
-        """
-        result = []
-        
-        for item in self.data:
-            if not isinstance(item, dict):
-                logging.warning("Item is not a dictionary: %s", item)
-                continue
-            
-            identifier = getattr(item, keys.get('id') or 'id', None)
-            content_to_convert = getattr(item, keys.get('content') or 'content', None)
-            
-            if not identifier or not content_to_convert:
-                logging.warning("Identifier or content to convert is missing in item: %s", item)
-                continue
-            
-            markdown_content = self._convert_to_markdown(content_to_convert)
-            
-            if markdown_content:
-                item[keys.get('content') or 'content'] = markdown_content
-                result.append(item)
-        
-        return {
-            "result": result,
-            "output": self.output
-        }
-    
-    def _convert_to_markdown(self, html_content):
+    def _convert_to_markdown(self, data: str) -> str:
         """
         Convert HTML content to Markdown format.
         """
-        if not html_content:
-            logging.warning("HTML content is empty or None.")
+        if not data:
+            logging.warning("Aucune donnée à convertir en markdown.")
             return ""
         
-        markdown_content = md(html_content, heading_style="ATX", escape_html=False)
+        if not isinstance(data, str):
+            logging.warning("Les données doivent être une chaîne de caractères.")
+            return ""
+        
+        # Convert into markdown
+        markdown_content = md(data, heading_style="ATX", escape_html=False)
         if not markdown_content:
-            logging.warning("Markdown conversion resulted in empty content.")
+            logging.warning("La conversion en markdown a échoué, le contenu est vide.")
             return ""
         
         # Normalize whitespace in the markdown content
-        markdown_content = self._normalize_whitespace(markdown_content)
+        markdown_content = self._normalize_whitespace(markdown_content).strip()
         
         # Check if markdown content is empty after normalization
         if not markdown_content:
-            logging.warning("Markdown content is empty after normalization.")
+            logging.warning("Le contenu markdown est vide après normalisation.")
             return ""
         
         return markdown_content
