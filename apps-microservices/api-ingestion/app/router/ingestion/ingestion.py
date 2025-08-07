@@ -17,7 +17,7 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
     
     channel = request.app.state.rabbitmq_channel
     
-    if not channel:
+    if not channel or channel.is_closed:
         return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
     exchange_name = "data_exchange"
