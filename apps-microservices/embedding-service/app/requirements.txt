@@ -1,5 +1,5 @@
-langchain_text_splitters
-pika
-pytest
-sentence-transformers 
 torch
+sentence-transformers 
+langchain_text_splitters
+pytest
+pika
