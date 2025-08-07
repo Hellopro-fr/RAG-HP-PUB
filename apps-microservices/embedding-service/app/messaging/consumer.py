@@ -1,10 +1,10 @@
 import pika
 import json
-from messaging.publisher import EmbeddingPublisher  # Importe notre publisher local
+from messaging.publisher import Publisher  # Importe notre publisher local
 from core.processor import embed_product_data # Importe la logique métier
 
-class EmbeddingConsumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: EmbeddingPublisher):
+class Consumer:
+    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
         """
         Initialise le consumer.
         Il a besoin d'une connexion ET d'une instance du publisher.

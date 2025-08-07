@@ -1,7 +1,7 @@
 import pika
 import json
 
-class EmbeddingPublisher:
+class Publisher:
     def __init__(self, connection: pika.BlockingConnection):
         """
         Initialise le publisher avec une connexion RabbitMQ existante.

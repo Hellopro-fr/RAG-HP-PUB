@@ -1,8 +1,15 @@
 import pika
-import os
 import time
-from messaging.consumer import EmbeddingConsumer
-from messaging.publisher import EmbeddingPublisher
+
+import sys
+import os
+
+# Ajoute le répertoire du service courant au path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, CURRENT_DIR)
+
+from messaging.consumer import Consumer
+from messaging.publisher import Publisher
 
 def main():
     """
@@ -28,10 +35,10 @@ def main():
 
     try:
         # 1. Créer une instance du publisher
-        publisher = EmbeddingPublisher(connection)
+        publisher = Publisher(connection)
         
         # 2. Créer une instance du consumer et lui passer le publisher
-        consumer = EmbeddingConsumer(connection, publisher)
+        consumer = Consumer(connection, publisher)
         
         # 3. Lancer l'écoute
         consumer.start_consuming()
