@@ -1,19 +1,18 @@
 import logging
 import re
+import logging
 
-# Useful for typing
-from logging import Logger
 from bs4 import BeautifulSoup, Tag
 from markdownify import markdownify as md
 from datetime import datetime
 from lxml.etree import tostring
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(levelname)s - %(message)s'
+# )
 
-class CleanerBase:
+class BaseCleaning:
     """
     Class base to clean data.
     """

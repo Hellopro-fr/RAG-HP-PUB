@@ -1,7 +1,7 @@
 # apps-microservices/product-processor-service/app/core/processor.py
 
 import json
-from common_utils.cleaning import clean_product_description
+from common_utils.cleaner.BaseCleaning import BaseCleaning
 
 def process_product_data_for_embedding(product_data: dict) -> dict:
     """
@@ -10,21 +10,27 @@ def process_product_data_for_embedding(product_data: dict) -> dict:
     
     Retourne: Un dictionnaire prêt à être publié.
     """
-    # Étape 1: Nettoyer la description
-    cleaned_desc = clean_product_description(product_data.get("description_produit", ""))
-
-    # Étape 2: Préparer le texte à embedder
-    text_to_embed = f"PRODUIT : {product_data.get('nom_produit', '')}. DESCRIPTION : {cleaned_desc}"
-
-    # Étape 3: Construire le message de sortie
+    # Étape 1: Vérifier les données d'entrée
+    if not isinstance(product_data, dict):
+        raise ValueError("Les données du produit doivent être un dictionnaire.")
+    
+    # Étape 2: Nettoyer la description du produit
+    cleaner = BaseCleaning(product_data.get("description_produit", ""))
+    cleaned_description = cleaner.clean()
+    
+    # Étape 3: Remplacer la description nettoyée dans les données du produit
+    product_data["description_produit"] = cleaned_description
+    
+    # Étape 4: Préparer le texte à embedder (À voir avec l'équipe en charge)
+    text_to_embed = f"PRODUIT : {product_data.get('nom_produit', '')}. DESCRIPTION : {cleaned_description}"
+    
+    # Étape 5: Construire le message de sortie
     output_message = {
-        "metadata": {
-            "id_produit": product_data.get("id_produit"),
-            "nom_produit": product_data.get("nom_produit"),
-            "description_nettoyee": cleaned_desc
-        },
-        "text_to_embed": text_to_embed,
+        "metadata": product_data,
+        "embedding": text_to_embed,
         "target_collection": "products_collection"
     }
     
+    # Étape 6: Retourner le message prêt à être publié
+    print(f"📦 Product-Processor: Produit '{product_data.get('id_produit', 'ID inconnu')}' traité pour embedding.")
     return output_message

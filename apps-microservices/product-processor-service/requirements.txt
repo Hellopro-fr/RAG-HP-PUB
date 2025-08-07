@@ -1,1 +1,7 @@
 pika
+markdownify
+beautifulsoup4
+bs4
+python-dotenv
+html5lib
+lxml
