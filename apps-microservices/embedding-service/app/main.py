@@ -1,8 +1,8 @@
 import pika
 import os
 import time
-from messaging.consumer import Consumer
-from messaging.publisher import Publisher
+from messaging.consumer import EmbeddingConsumer
+from messaging.publisher import EmbeddingPublisher
 
 def main():
     """
@@ -28,10 +28,10 @@ def main():
 
     try:
         # 1. Créer une instance du publisher
-        publisher = Publisher(connection)
+        publisher = EmbeddingPublisher(connection)
         
         # 2. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher)
+        consumer = EmbeddingConsumer(connection, publisher)
         
         # 3. Lancer l'écoute
         consumer.start_consuming()
