@@ -3,8 +3,8 @@
 import pika
 import os
 import time
-from messaging.consumer import Consumer
-from messaging.publisher import Publisher
+from product_processor_service.messaging.consumer import Consumer
+from product_processor_service.messaging.publisher import Publisher
 
 def main():
     """

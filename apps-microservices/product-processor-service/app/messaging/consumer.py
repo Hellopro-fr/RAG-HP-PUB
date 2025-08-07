@@ -2,8 +2,8 @@
 
 import pika
 import json
-from messaging.publisher import Publisher  # Importe notre publisher local
-from core.processor import process_product_data_for_embedding # Importe la logique métier
+from product_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
+from product_processor_service.core.processor import process_product_data_for_embedding # Importe la logique métier
 
 class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
