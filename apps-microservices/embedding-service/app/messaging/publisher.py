@@ -7,7 +7,7 @@ class Publisher:
         Initialise le publisher avec une connexion RabbitMQ existante.
         """
         self.channel = connection.channel()
-        self.exchange_name = 'processed_data_exchange'
+        self.exchange_name = 'embedded_data_exchange'
 
         # à modifier selon le flow de l'application
         self.routing_key = 'data.ready_for_insertion'

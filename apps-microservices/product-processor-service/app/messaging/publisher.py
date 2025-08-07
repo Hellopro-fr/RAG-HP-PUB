@@ -1,5 +1,3 @@
-# apps-microservices/product-processor-service/app/messaging/publisher.py
-
 import pika
 import json
 

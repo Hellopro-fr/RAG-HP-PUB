@@ -2,8 +2,8 @@ import pika
 import time
 import os
     
-from embedding_service_messaging.consumer import Consumer
-from embedding_service_messaging.publisher import Publisher
+from embedding_service.messaging.consumer import Consumer
+from embedding_service.messaging.publisher import Publisher
 
 def main():
     """

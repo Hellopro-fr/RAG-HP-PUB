@@ -1,5 +1,3 @@
-# apps-microservices/product-processor-service/app/main.py
-
 import pika
 import time
 from product_processor_service.messaging.consumer import Consumer

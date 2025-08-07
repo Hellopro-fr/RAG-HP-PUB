@@ -1,5 +1,3 @@
-# apps-microservices/product-processor-service/app/messaging/consumer.py
-
 import pika
 import json
 from product_processor_service.messaging.publisher import Publisher  # Importe notre publisher local

@@ -1,7 +1,7 @@
 import pika
 import json
-from embedding_service_messaging.publisher import Publisher  # Importe notre publisher local
-from embedding_service_core.processor import embed_product_data # Importe la logique métier
+from embedding_service.messaging.publisher import Publisher  # Importe notre publisher local
+from embedding_service.core.processor import embed_product_data # Importe la logique métier
 
 class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):

@@ -1,5 +1,3 @@
-# apps-microservices/product-processor-service/app/core/processor.py
-
 import json
 from common_utils.cleaner.CleanHTML import CleanHTML
 from common_utils.autres.CollectionName import CollectionName
