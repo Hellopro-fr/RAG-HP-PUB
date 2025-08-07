@@ -24,7 +24,7 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
         channel=channel,
         exchange_name=payload.exchange_name,
         routing_key=payload.routing_key,
-        data=payload.data
+        data=payload.data.model_dump()
     )
 
     if not success:

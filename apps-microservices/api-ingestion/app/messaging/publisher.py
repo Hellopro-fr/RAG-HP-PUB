@@ -29,4 +29,4 @@ def publish_message(channel, exchange_name: str, routing_key: str, data: dict):
         return True
     except Exception as e:
         logging.error(f"Erreur lors de la publication du message : {e}")
-        return False
+        print(f"Erreur lors de la publication du message : {e}")
