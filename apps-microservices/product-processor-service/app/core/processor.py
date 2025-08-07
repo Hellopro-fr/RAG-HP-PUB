@@ -31,6 +31,9 @@ def process_product_data_for_embedding(product_data: dict) -> dict:
         "target_collection": "products_collection"
     }
     
+    # Afficher le message de sortie pour débogage
+    print(f"🔍 Product-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2)}")
+    
     # Étape 6: Retourner le message prêt à être publié
     print(f"📦 Product-Processor: Produit '{product_data.get('id_produit', 'ID inconnu')}' traité pour embedding.")
     return output_message
