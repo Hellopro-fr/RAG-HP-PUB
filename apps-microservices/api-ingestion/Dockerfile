@@ -6,7 +6,7 @@ ENV PYTHONPATH=/app
 
 # Étape 2: Installer les dépendances
 # Copie et installe la librairie partagée
-COPY libs/common-utils/src/common_utils /app/app/common_utils
+COPY libs/common-utils /app/app/common_utils
 RUN pip install -e /app/app/common_utils
 
 # Copie et installe les requirements spécifiques au service
