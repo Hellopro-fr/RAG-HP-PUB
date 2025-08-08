@@ -28,3 +28,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+
+  database-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/database-service/Dockerfile
+    container_name: database-service
+    restart: unless-stopped
+    env_file:
+      - .env
