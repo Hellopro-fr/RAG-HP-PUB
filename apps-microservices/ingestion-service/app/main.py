@@ -1,6 +1,7 @@
 import pika, os, time, json
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from common_utils.autres.CollectionName import CollectionName
 
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
 EXCHANGE_NAME = 'data_exchange'
@@ -13,9 +14,15 @@ def publish_file_content(filepath, channel):
         with open(filepath, 'r') as f:
             for line in f:
                 if line.strip():
-                    channel.basic_publish(exchange=EXCHANGE_NAME, routing_key=ROUTING_KEY_PRODUCT, body=line.encode('utf-8'), properties=pika.BasicProperties(delivery_mode=2))
-                    product_data = json.loads(line)
-                    print(f"  ✉️  Produit '{product_data['id_produit']}' publié.")
+                    data = {}
+                    data_json = json.loads(line.strip())
+                    data["data"] = data_json
+                    data["collection"] = CollectionName.PRODUIT
+                    body = json.dumps(data)
+                    print(f"📥 Ingestion-Service: Publication du message pour '{body.encode('utf-8')}'...")
+                    channel.basic_publish(exchange=EXCHANGE_NAME, routing_key=ROUTING_KEY_PRODUCT, body=body.encode('utf-8'), properties=pika.BasicProperties(delivery_mode=2))
+                    product_data = json.loads(body)
+                    print(f"  ✉️  Produit '{product_data['data']['id_produit']}' publié.")
         print(f"✅ Ingestion-Service: Fichier '{filepath}' traité avec succès.")
     except Exception as e:
         print(f"❌ Ingestion-Service: Erreur lors du traitement du fichier '{filepath}': {e}")

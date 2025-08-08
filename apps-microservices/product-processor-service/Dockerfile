@@ -15,8 +15,8 @@ RUN pip install -r requirements.txt
 
 # Étape 3: Copier le code source
 # On copie le CONTENU du dossier app local directement dans le WORKDIR (/app)
-COPY apps-microservices/product-processor-service/app/ .
+COPY apps-microservices/product-processor-service/app/ /app/product_processor_service
 
 # Étape 4: Définir la commande
 # On peut maintenant exécuter le script directement, les imports fonctionneront grâce au PYTHONPATH.
-CMD ["python", "-u", "main.py"]
+CMD ["python", "-u", "-m", "product_processor_service.main"]
