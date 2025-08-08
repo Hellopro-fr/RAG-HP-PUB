@@ -58,7 +58,7 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
 
     exchange_name = "data_exchange"
     
-    response: list[BaseIngestionReponseSucces | BaseIngestionReponse]
+    response: list[BaseIngestionReponseSucces | BaseIngestionReponse] = []
     for payload in payloads:
         routing_key = routing_key_collection(payload.collection)
         success = publish_message(
@@ -68,21 +68,21 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
             data=payload.model_dump()
         )
 
-    if not success:
-        response.append(
-            BaseIngestionReponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Échec de la publication du message sur RabbitMQ.")
-        )
-    else:
-        response.append(
-            BaseIngestionReponseSucces(
-                code=status.HTTP_202_ACCEPTED, 
-                message="Le message a été mis en file d'attente pour publication.", 
-                details={
-                    "exchange": exchange_name,
-                    "routing_key": routing_key,
-                    "collection": payload.collection
-                }
+        if not success:
+            response.append(
+                BaseIngestionReponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Échec de la publication du message sur RabbitMQ.")
             )
-        )
+        else:
+            response.append(
+                BaseIngestionReponseSucces(
+                    code=status.HTTP_202_ACCEPTED, 
+                    message="Le message a été mis en file d'attente pour publication.", 
+                    details={
+                        "exchange": exchange_name,
+                        "routing_key": routing_key,
+                        "collection": payload.collection
+                    }
+                )
+            )
 
     return response
