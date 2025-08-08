@@ -17,14 +17,14 @@ def main():
     for i in range(10):
         try:
             connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ Embedding-Product-Processor: Connecté à RabbitMQ.")
+            print("✅ Database-Product-Processor: Connecté à RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ Embedding-Product-Processor: En attente de RabbitMQ... {i+1}s")
+            print(f"⏳ Database-Product-Processor: En attente de RabbitMQ... {i+1}s")
             time.sleep(1)
 
     if not connection:
-        print("❌ Embedding-Product-Processor: Impossible de se connecter, arrêt du service.")
+        print("❌ Database-Product-Processor: Impossible de se connecter, arrêt du service.")
         exit(1)
 
     try:
@@ -38,11 +38,11 @@ def main():
         consumer.start_consuming()
 
     except KeyboardInterrupt:
-        print("\n🛑 Embedding-Product-Processor: Arrêt demandé.")
+        print("\n🛑 Database-Product-Processor: Arrêt demandé.")
     finally:
         if connection and not connection.is_closed:
             connection.close()
-            print("✅ Embedding-Product-Processor: Connexion RabbitMQ fermée.")
+            print("✅ Database-Product-Processor: Connexion RabbitMQ fermée.")
 
 if __name__ == '__main__':
     main()

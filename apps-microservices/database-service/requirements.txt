@@ -1,5 +1,5 @@
-torch
-sentence-transformers 
-langchain_text_splitters
+pymilvus
+pydantic
 pytest
 pika
+python-dotenv

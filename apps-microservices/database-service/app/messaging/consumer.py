@@ -30,7 +30,7 @@ class Consumer:
         Callback privé qui orchestre le traitement d'un message.
         """
         product_data = json.loads(body)
-        print(f"\n📥 Embedding-Product-Processor: Message reçu pre embedding.")
+        print(f"\n📥 Database-Product-Processor: Message reçu.")
 
         # 1. Appelle la logique métier PURE
         output_message = insertion_data(product_data)
@@ -46,5 +46,5 @@ class Consumer:
         Démarre la boucle d'écoute des messages.
         """
         self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-        print("👂 Embedding-Product-Processor: En attente de messages...")
+        print("👂 Database-Product-Processor: En attente de messages...")
         self.channel.start_consuming()

@@ -31,5 +31,5 @@ class Publisher:
             properties=pika.BasicProperties(delivery_mode=2)
         )
         
-        print(f"   📤 Output Message post embedding '{message_dict}'")
-        print(f"   📤 Message traité et publié post embedding.")
+        print(f"   📤 Output Message '{message_dict}'")
+        print(f"   📤 Message traité et publié.")
