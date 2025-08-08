@@ -37,3 +37,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+
+  webhook-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/webhook-service/Dockerfile
+    container_name: webhook-service
+    restart: unless-stopped
+    env_file:
+      - .env

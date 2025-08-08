@@ -3,7 +3,6 @@ from common_utils.database.MilvusCrud import MilvusCrud
 from common_utils.autres.CollectionName import CollectionName
 import logging
 
-
 def insertion_data(product_data: dict) -> dict:
     """
     Prend toutes les resultats de l'embedding puis ensuite inserer les chunk sur bdd vectoriel
@@ -12,7 +11,7 @@ def insertion_data(product_data: dict) -> dict:
     """
 
     products = product_data.get("data", {})
-    collection = product_data.get("collection", "produits")
+    collection = product_data.get("collection", CollectionName.PRODUIT)
 
     try:
         collection_enum = CollectionName(collection)
@@ -43,7 +42,7 @@ def insertion_data(product_data: dict) -> dict:
     output_message = {
         "collection": collection,
         "data": result,
-        "id_produit": product_id
+        "id": product_id
     }
     
     return output_message
