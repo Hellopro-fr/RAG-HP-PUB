@@ -7,6 +7,8 @@ cd ./app/
 ls -la
 cd ./common_utils/
 ls -la
-cd ../..
+cd ./src/
+ls -la
+cd ../../..
 
 uvicorn main:app --host 0.0.0.0 --port 8509 --reload
