@@ -3,7 +3,6 @@ import time
 import os
     
 from webhook_service.messaging.consumer import Consumer
-from webhook_service.messaging.publisher import Publisher
 
 def main():
     """
@@ -28,11 +27,9 @@ def main():
         exit(1)
 
     try:
-        # 1. Créer une instance du publisher
-        publisher = Publisher(connection)
         
         # 2. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher)
+        consumer = Consumer(connection)
         
         # 3. Lancer l'écoute
         consumer.start_consuming()
