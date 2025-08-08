@@ -2,7 +2,7 @@ from enum import Enum
 
 # TODO:
 # modification url à notifier / à confirmer si à mettre dans .env
-class CollectionName(str, Enum):
+class CollectionWebhook(str, Enum):
     """
     Enum for the possible collection names.
     The values correspond to the string that the API will accept.
