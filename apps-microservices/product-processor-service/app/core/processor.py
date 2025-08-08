@@ -26,7 +26,7 @@ def process_product_data_for_embedding(product_data: dict) -> dict:
         f"TITRE DU PRODUIT : {product_data.get('nom_produit', '')}\n"
         f"DESCRIPTION : {cleaned_description}\n"
         f"PRIX: {product_data.get('prix', '')}\n"
-        f"CATEGORIE: {product_data.get('nom_categorie', '')}\n"
+        f"CATEGORIE: {product_data.get('categorie', '')}\n"
         f"LIVRAISON: {product_data.get('livraison', '')}\n"
         f"STOCK: {product_data.get('stock', '')}"
     )
@@ -44,7 +44,7 @@ def process_product_data_for_embedding(product_data: dict) -> dict:
             "metadata": metadata,
             **{k: product_data.get(k, "") for k in [
                 "id_produit", "nom_produit", "id_categorie", "description",
-                "nom_categorie", "id_fournisseur", "fournisseur", "domaine"
+                "categorie", "id_fournisseur", "fournisseur", "domaine"
             ]}
         },
         "collection": CollectionName.PRODUIT

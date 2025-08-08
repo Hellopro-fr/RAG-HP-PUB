@@ -3,7 +3,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
-from config.settings import settings
+from common_utils.database.config.settings import Configuration, settings
 
 from pymilvus import (
     connections,
@@ -15,7 +15,7 @@ from pymilvus import (
     MilvusException,
 )
 
-from schemas.produit import InsertProduitRequest
+from common_utils.database.schemas.produit import InsertProduitRequest
 
 @dataclass
 class ModelConfig:
@@ -24,7 +24,7 @@ class ModelConfig:
     dimension: int = 1024
 
 class MilvusCrud:
-    def __init__(self, config: Config = settings , **kwargs: Any):
+    def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
         if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_API_KEY:

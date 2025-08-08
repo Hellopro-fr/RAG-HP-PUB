@@ -144,13 +144,13 @@ class Embedding:
 
         for i, data in enumerate(chunks):
         
-            chunk_id = i + 1
+            chunk_id = str(i + 1)
 
             try:
                 embeddings = self.embed(data)
                 
                 data_tmp = data_to_embed.copy()
-                data_tmp["embedding"] = embeddings
+                data_tmp["embedding"] = embeddings[0]
                 data_tmp["chunk_id"] = chunk_id  
                 data_tmp["chunk_number"] = i + 1 
                 data_tmp["total_chunks"] = len(chunks)
