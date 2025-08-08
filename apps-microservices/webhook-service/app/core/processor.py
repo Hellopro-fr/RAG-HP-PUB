@@ -21,7 +21,7 @@ def send_webhook(payload: dict) -> dict:
     collection = payload.get("collection", collections.PRODUIT)
 
     try:
-        url_webhook = CollectionWebhook(collection)
+        url_webhook = CollectionWebhook.get(collection)
     except ValueError:
         logging.error("'%s' n'est pas un nom de collection valide.", collection)
         return ""
