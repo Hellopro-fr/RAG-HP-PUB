@@ -1,6 +1,7 @@
 import pika, os, time, json
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from common_utils.autres.CollectionName import CollectionName
 
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
 EXCHANGE_NAME = 'data_exchange'
@@ -16,7 +17,7 @@ def publish_file_content(filepath, channel):
                     data = {}
                     data_json = json.loads(line.strip())
                     data["data"] = data_json
-                    data["collection"] = "produit"
+                    data["collection"] = CollectionName.PRODUIT
                     body = json.dumps(data)
                     print(f"📥 Ingestion-Service: Publication du message pour '{body.encode('utf-8')}'...")
                     channel.basic_publish(exchange=EXCHANGE_NAME, routing_key=ROUTING_KEY_PRODUCT, body=body.encode('utf-8'), properties=pika.BasicProperties(delivery_mode=2))

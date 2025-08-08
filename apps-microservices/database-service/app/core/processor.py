@@ -1,5 +1,4 @@
 from common_utils.database.MilvusCrud import MilvusCrud
-from common_utils.schemas.produit import InsertProduitRequest
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
