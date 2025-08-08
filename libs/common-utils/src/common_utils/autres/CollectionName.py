@@ -10,3 +10,11 @@ class CollectionName(str, Enum):
     CATEGORIE = "categories"
     ECHANGE = "echanges"
     FOURNISSEUR = "fournisseurs"
+    
+RoutingKeys = {
+    CollectionName.PRODUIT: "new_data.product",
+    CollectionName.DEVIS: "new_data.devis",
+    CollectionName.CATEGORIE: "new_data.category",
+    CollectionName.ECHANGE: "new_data.echange",
+    CollectionName.FOURNISSEUR: "new_data.supplier"
+}
