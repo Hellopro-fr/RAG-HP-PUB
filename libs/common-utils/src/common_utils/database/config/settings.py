@@ -7,8 +7,8 @@ load_dotenv()
 
 
 class Configuration:
-    ZILLIZ_URI: Optional[str] = os.environ.get("ZILLIZ_URI")
-    ZILLIZ_API_KEY: Optional[str] = os.environ.get("ZILLIZ_API_KEY")
+    QDRANT_URI: Optional[str] = os.environ.get("QDRANT_URI")
+    QDRANT_API_KEY: Optional[str] = os.environ.get("QDRANT_API_KEY")
     MODEL: Optional[str] = os.environ.get("MODEL") or "dangvantuan/sentence-camembert-large"
     RECREATE_COLLECTIONS: bool = False
 

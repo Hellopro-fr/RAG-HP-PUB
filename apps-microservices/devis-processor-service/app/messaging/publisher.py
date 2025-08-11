@@ -7,10 +7,8 @@ class Publisher:
         Initialise le publisher avec une connexion RabbitMQ existante.
         """
         self.channel = connection.channel()
-        self.exchange_name = 'embedded_data_exchange'
-
-        # à modifier selon le flow de l'application
-        self.routing_key = 'data.ready_for_insertion'
+        self.exchange_name = 'processed_data_exchange'
+        self.routing_key = 'data.ready_for_embedding'
 
         # Déclare l'exchange où il va publier
         self.channel.exchange_declare(
@@ -24,15 +22,11 @@ class Publisher:
         """
         Publie un message (dictionnaire) sur le topic configuré.
         """
-        collection = message_dict.get("collection", "inconnu")
-        self.routing_key = f"data.{collection.lower()}.ready_for_insertion"
-
+        id_demande = message_dict.get("id_demande", "ID DI inconnu")
         self.channel.basic_publish(
             exchange=self.exchange_name,
             routing_key=self.routing_key,
             body=json.dumps(message_dict).encode('utf-8'),
             properties=pika.BasicProperties(delivery_mode=2)
         )
-        
-        print(f"   📤 Output Message post embedding '{message_dict}'")
-        print(f"   📤 Message traité et publié post embedding.")
+        print(f"   📤 Message pour '{id_demande}' traité et publié pour embedding.")

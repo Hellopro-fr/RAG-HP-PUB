@@ -127,12 +127,12 @@ class Embedding:
     def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:
         batch_to_insert = []
 
-        data_clean = self._clean_text(data_to_embed.get("embedding", ""))
+        data_clean = self._clean_text(data_to_embed.get("text", ""))
 
         self.logger.info(f"Le texte à vectoriser : {data_clean}")
 
 
-        if not data_to_embed.get("embedding",""):
+        if not data_to_embed.get("text",""):
             self.logger.warning(f"Le texte à vectoriser est vide")
             self.logger.warning(f"Data: {data_to_embed}")
             return []
@@ -150,13 +150,18 @@ class Embedding:
                 embeddings = self.embed(data)
                 
                 data_tmp = data_to_embed.copy()
+
+                data_tmp.pop("text",None)
+
                 data_tmp["embedding"] = embeddings[0]
+                data_tmp["text"] = data  
                 data_tmp["chunk_id"] = chunk_id  
                 data_tmp["chunk_number"] = i + 1 
                 data_tmp["total_chunks"] = len(chunks)
                 data_tmp["metadata"]["chunk_id"] = chunk_id  # Ajout du texte original du chunk 
                 data_tmp["metadata"]["chunk_number"] = i + 1 
                 data_tmp["metadata"]["total_chunks"] = len(chunks)
+                data_tmp["metadata"]["text"] = data
                 
                 batch_to_insert.append(data_tmp)
 

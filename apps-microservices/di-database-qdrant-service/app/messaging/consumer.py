@@ -1,7 +1,7 @@
 import pika
 import json
-from embedding_service.messaging.publisher import Publisher  # Importe notre publisher local
-from embedding_service.core.processor import embed_input_data # Importe la logique métier
+from di_database_qdrant_service.messaging.publisher import Publisher  # Importe notre publisher local
+from di_database_qdrant_service.core.processor import insertion_data # Importe la logique métier
 
 class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
@@ -11,13 +11,13 @@ class Consumer:
         """
         self.channel = connection.channel()
         self.publisher = publisher
-        self.exchange_name = 'processed_data_exchange'
+        self.exchange_name = 'embedded_data_exchange'
 
         # à modifier selon le flow de l'application
-        self.routing_key = 'data.ready_for_embedding'
+        self.routing_key = 'data.devis.ready_for_insertion'
 
         # Todo: à vérifier si le nom de la queue est correct
-        self.queue_name = 'embedding_queue'
+        self.queue_name = 'insertion_devis_queue'
 
         # Déclare l'exchange où il consomme
         self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
@@ -29,11 +29,11 @@ class Consumer:
         """
         Callback privé qui orchestre le traitement d'un message.
         """
-        input_data = json.loads(body)
-        print(f"\n📥 Embedding-Product-Processor: Message reçu pre embedding.")
+        devis_data = json.loads(body)
+        print(f"\n📥 Database-Devis-Processor: Message reçu.")
 
         # 1. Appelle la logique métier PURE
-        output_message = embed_input_data(input_data)
+        output_message = insertion_data(devis_data)
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)
@@ -46,5 +46,5 @@ class Consumer:
         Démarre la boucle d'écoute des messages.
         """
         self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-        print("👂 Embedding-Product-Processor: En attente de messages...")
+        print("👂 Database-Devis-Processor: En attente de messages...")
         self.channel.start_consuming()

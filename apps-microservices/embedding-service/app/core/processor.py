@@ -1,7 +1,7 @@
 from common_utils.embedding.Embedding import Embedding
 from common_utils.autres.CollectionName import CollectionName
 
-def embed_product_data(product_data: dict) -> dict:
+def embed_input_data(input_data: dict) -> dict:
     """
     Prend un dictionnaire de produit, vectorise le donnée dans le champ embedding et prépare le message
     pour l'étape d'insertion dans la base vectorielle
@@ -9,10 +9,10 @@ def embed_product_data(product_data: dict) -> dict:
     Retourne: Un dictionnaire prêt à être publié.
     """
     embedding_service = Embedding()
-    product = product_data.get("data", {})
-    collection = product_data.get("collection", CollectionName.PRODUIT)
+    datas = input_data.get("data", {})
+    collection = input_data.get("collection", CollectionName.PRODUIT)
 
-    result_embedding = embedding_service.embed_data_clean(product)
+    result_embedding = embedding_service.embed_data_clean(datas)
     
     output_message = {
         "collection": collection,
