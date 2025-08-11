@@ -32,7 +32,7 @@ class Consumer:
             print("❌ Devis-Processor: Aucune donnée de produit trouvée dans le message.")
             ch.basic_ack(delivery_tag=method.delivery_tag)
             return
-        id_demande = devis_data.get('id_demande', 'ID inconnu')
+        id_demande = devis_data.get('id_lead', 'ID inconnu')
         print(f"\n📥 Devis-Processor: Message reçu pour '{id_demande}'.")
 
         # 1. Appelle la logique métier PURE
