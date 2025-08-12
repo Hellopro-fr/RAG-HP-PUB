@@ -16,7 +16,8 @@ from qdrant_client.http.models import (
     FieldCondition,
     MatchValue,
     PointStruct,
-    HnswConfigDiff
+    HnswConfigDiff,
+    PayloadSchemaType
 )
 
 from common_utils.database.schemas.devis import InsertDevisRequest
@@ -69,11 +70,11 @@ class QdrantDevisCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
-        self.client.create_payload_index(collection_name, field_name="id_lead", field_schema=models.PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="categorie", field_schema=models.PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="naf2", field_schema=models.PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="naf5", field_schema=models.PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="effectif", field_schema=models.PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="id_lead", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="naf2", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="naf5", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="effectif", field_schema=PayloadSchemaType.KEYWORD)
 
         self.collection = collection_name
         return collection_name
