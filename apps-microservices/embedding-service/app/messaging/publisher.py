@@ -34,5 +34,6 @@ class Publisher:
             properties=pika.BasicProperties(delivery_mode=2)
         )
         
+        print(f"   📤 routing_key : '{routing_key}'")
         print(f"   📤 Output Message post embedding '{message_dict}'")
         print(f"   📤 Message traité et publié post embedding.")

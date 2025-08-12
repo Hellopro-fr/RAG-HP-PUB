@@ -17,6 +17,7 @@ class InsertDevisRequest(BaseModel):
     societe          : str
     date_ajout       : str
     chunk_id         : str
+    text             : str
     embedding        : List[float]
     chunk_number     : int
     total_chunks     : int
