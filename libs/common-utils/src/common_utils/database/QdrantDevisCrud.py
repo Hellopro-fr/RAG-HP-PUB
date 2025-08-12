@@ -15,7 +15,8 @@ from qdrant_client.http.models import (
     Filter,
     FieldCondition,
     MatchValue,
-    PointStruct
+    PointStruct,
+    HnswConfigDiff
 )
 
 from common_utils.database.schemas.devis import InsertDevisRequest
@@ -40,11 +41,6 @@ class QdrantDevisCrud:
             api_key=self.config.QDRANT_API_KEY
         )
 
-    # def _connect_to_milvus(self):
-    #     # Avec Qdrant, la connexion est déjà faite à l'init
-    #     self.logger.info("Connexion à Qdrant...")
-    #     self.logger.info("✓ Connexion Qdrant établie.")
-
     def _get_or_create_collection(self, model_config: ModelConfig):
         collection_name = model_config.collection_name
         model_key = model_config.model_id
@@ -62,21 +58,25 @@ class QdrantDevisCrud:
             self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
             self.client.create_collection(
                 collection_name=collection_name,
-                vectors_config=VectorParams(size=model_config.dimension, distance=Distance.COSINE)
+                vectors_config=VectorParams(size=model_config.dimension, distance=Distance.COSINE),
+				hnsw_config=HnswConfigDiff(
+					m=16,
+					ef_construct=256
+				)
             )
             self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' créée.")
         else:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
+
+        self.client.create_payload_index(collection_name, field_name="id_lead", field_schema=models.PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="categorie", field_schema=models.PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="naf2", field_schema=models.PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="naf5", field_schema=models.PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="effectif", field_schema=models.PayloadSchemaType.KEYWORD)
+
         self.collection = collection_name
         return collection_name
-
-    def generate_hashed_id(self) -> str:
-        # Génère un UUID v4 aléatoire
-        random_uuid = uuid.uuid4().hex  # hex = chaîne de 32 caractères
-        # Hache le UUID avec SHA256 pour encore plus d'unicité
-        hashed = hashlib.sha256(random_uuid.encode()).hexdigest()
-        return hashed
 
     def insert_devis(self, demande_di: InsertDevisRequest) -> Dict[str, Any]:
         data = demande_di
@@ -84,7 +84,6 @@ class QdrantDevisCrud:
         model_key = model_config.model_id
 
         try:
-            # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
 
             if not data or self.collection is None:
@@ -96,7 +95,7 @@ class QdrantDevisCrud:
             
             points.append(
                 PointStruct(
-                    id=self.generate_hashed_id(),
+                    id=str(uuid.uuid4()),
                     vector=data.get("embedding"),
                     payload={k: v for k, v in data.items() if k != "embedding"}
                 )
@@ -115,7 +114,6 @@ class QdrantDevisCrud:
         model_key = model_config.model_id
 
         try:
-            # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
 
             if not data or self.collection is None:

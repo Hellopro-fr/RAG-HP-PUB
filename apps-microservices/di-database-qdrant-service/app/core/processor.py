@@ -27,7 +27,7 @@ def insertion_data(devis_data: dict) -> dict:
     func = processing_functions.get(collection_enum)
     result = []
     if func:
-        for di in devis
+        for di in devis:
             di_id = di.get('id_lead', 'ID inconnu')
             chunk = di.get('chunk_number', 'Numero chunk inconnu')
             total = di.get('total_chunks', 'Total chunk inconnu')
