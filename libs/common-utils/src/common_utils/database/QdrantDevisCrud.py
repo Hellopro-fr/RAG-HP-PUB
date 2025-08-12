@@ -9,7 +9,6 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
     Distance,
     VectorParams,
-    FieldType,
     Filter,
     FieldCondition,
     MatchValue,
@@ -69,7 +68,7 @@ class QdrantDevisCrud:
         self.collection = collection_name
         return collection_name
 
-    def insert_demande_di(self, demande_di: InsertDevisRequest) -> Dict[str, Any]:
+    def insert_devis(self, demande_di: InsertDevisRequest) -> Dict[str, Any]:
         data = demande_di
         model_config = ModelConfig()
         model_key = model_config.model_id
@@ -84,14 +83,14 @@ class QdrantDevisCrud:
             self.logger.info(f"[{model_key}][demande_di] Insertion de {len(data)} entités dans '{self.collection}'...")
 
             points = []
-            for item in data:
-                points.append(
-                    PointStruct(
-                        id=None,  # auto-généré
-                        vector=item["embedding"],
-                        payload={k: v for k, v in item.items() if k != "embedding"}
-                    )
+            # for item in data:
+            points.append(
+                PointStruct(
+                    # id=None,  # auto-généré
+                    vector=data.get("embedding"),
+                    payload={k: v for k, v in data.items() if k != "embedding"}
                 )
+            )
 
             result = self.client.upsert(collection_name=self.collection, points=points)
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
@@ -100,7 +99,7 @@ class QdrantDevisCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][demande_di] Erreur Qdrant lors de l'insertion : {e}", exc_info=True)
 
-    def update_demande_di(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
+    def update_devis(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
         data = demande_di
         model_config = ModelConfig()
         model_key = model_config.model_id
@@ -137,7 +136,7 @@ class QdrantDevisCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][demande_di] Erreur Qdrant lors de la mise à jour : {e}", exc_info=True)
 
-    def delete_demande_di(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
+    def delete_devis(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
         id_entity = demande_di.get("id")
@@ -159,7 +158,7 @@ class QdrantDevisCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][demande_di] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def get_demande_di(self, id_demande_di: str) -> Dict[str, Any]:
+    def get_devis(self, id_demande_di: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
