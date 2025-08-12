@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from common_utils.database.config.settings import Configuration, settings
 
+import uuid
+import hashlib
+
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
     Distance,
@@ -68,6 +71,13 @@ class QdrantDevisCrud:
         self.collection = collection_name
         return collection_name
 
+    def generate_hashed_id(self) -> str:
+        # Génère un UUID v4 aléatoire
+        random_uuid = uuid.uuid4().hex  # hex = chaîne de 32 caractères
+        # Hache le UUID avec SHA256 pour encore plus d'unicité
+        hashed = hashlib.sha256(random_uuid.encode()).hexdigest()
+        return hashed
+
     def insert_devis(self, demande_di: InsertDevisRequest) -> Dict[str, Any]:
         data = demande_di
         model_config = ModelConfig()
@@ -83,10 +93,10 @@ class QdrantDevisCrud:
             self.logger.info(f"[{model_key}][demande_di] Insertion de {len(data)} entités dans '{self.collection}'...")
 
             points = []
-            # for item in data:
+            
             points.append(
                 PointStruct(
-                    # id=None,  # auto-généré
+                    id=self.generate_hashed_id(),
                     vector=data.get("embedding"),
                     payload={k: v for k, v in data.items() if k != "embedding"}
                 )
