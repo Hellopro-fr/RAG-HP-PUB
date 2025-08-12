@@ -23,11 +23,11 @@ from qdrant_client.http.models import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "echanges"
+    collection_name: str = "siteweb"
     dimension: int = 1024
 
 
-class QdrantEchangeCrud:
+class QdrantwebsiteCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[str] = None
@@ -67,17 +67,14 @@ class QdrantEchangeCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
-        self.client.create_payload_index(collection_name, field_name="id_demande", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="id_produit", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="id_fournisseur", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="id_acheteur", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
 
         self.collection = collection_name
         return collection_name
 
-    def insert_echange(self, echange: Dict[str, Any]) -> Dict[str, Any]:
-        data = echange
+    def insert_website(self, website: Dict[str, Any]) -> Dict[str, Any]:
+        data = website
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -87,7 +84,7 @@ class QdrantEchangeCrud:
             if not data or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
-            self.logger.info(f"[{model_key}][echange] Insertion de {len(data)} entités dans '{self.collection}'...")
+            self.logger.info(f"[{model_key}][website] Insertion de {len(data)} entités dans '{self.collection}'...")
 
             points = []
             
@@ -104,10 +101,10 @@ class QdrantEchangeCrud:
 
             return {"status": "success", "ids": [p.id for p in points if p.id]}
         except Exception as e:
-            self.logger.error(f"[{model_key}][echange] Erreur Qdrant lors de l'insertion : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de l'insertion : {e}", exc_info=True)
 
-    def update_echange(self, echange: Dict[str, Any]) -> Dict[str, Any]:
-        data = echange
+    def update_website(self, website: Dict[str, Any]) -> Dict[str, Any]:
+        data = website
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -126,7 +123,7 @@ class QdrantEchangeCrud:
                     "message": "ID requis pour la mise à jour."
                 }
 
-            self.logger.info(f"[{model_key}][echange] Mise à jour de {len(data)} entités dans '{self.collection}'...")
+            self.logger.info(f"[{model_key}][website] Mise à jour de {len(data)} entités dans '{self.collection}'...")
             point = PointStruct(
                 id=data["id"],
                 vector=data["embedding"],
@@ -140,12 +137,12 @@ class QdrantEchangeCrud:
                 "ids": [data["id"]]
             }
         except Exception as e:
-            self.logger.error(f"[{model_key}][echange] Erreur Qdrant lors de la mise à jour : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la mise à jour : {e}", exc_info=True)
 
-    def delete_echange(self, echange: Dict[str, Any]) -> Dict[str, Any]:
+    def delete_website(self, website: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
-        id_entity = echange.get("id")
+        id_entity = website.get("id")
 
         try:
             # self._connect_to_milvus()
@@ -158,13 +155,13 @@ class QdrantEchangeCrud:
                 }
 
             self.client.delete(collection_name=self.collection, points_selector=[id_entity])
-            self.logger.info(f"[{model_key}] ✓ echange avec ID {id_entity} supprimé.")
+            self.logger.info(f"[{model_key}] ✓ website avec ID {id_entity} supprimé.")
 
-            return {"status": "success", "message": f"echange {id_entity} supprimé."}
+            return {"status": "success", "message": f"website {id_entity} supprimé."}
         except Exception as e:
-            self.logger.error(f"[{model_key}][echange] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def get_echange(self, id_echange: str) -> Dict[str, Any]:
+    def get_website(self, id_website: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -172,11 +169,11 @@ class QdrantEchangeCrud:
             # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
 
-            if not id_echange:
-                return {"status": "error", "message": "ID echange requis."}
+            if not id_website:
+                return {"status": "error", "message": "ID website requis."}
 
             filter_query = Filter(
-                must=[FieldCondition(key="id_echange", match=MatchValue(value=id_echange))]
+                must=[FieldCondition(key="id_website", match=MatchValue(value=id_website))]
             )
 
             scroll_result, _ = self.client.scroll(
@@ -187,4 +184,4 @@ class QdrantEchangeCrud:
 
             return {"status": "success", "data": [p.payload for p in scroll_result]}
         except Exception as e:
-            self.logger.error(f"[{model_key}][echange] Erreur Qdrant lors de la récupération : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la récupération : {e}", exc_info=True)

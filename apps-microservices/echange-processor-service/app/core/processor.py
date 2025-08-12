@@ -25,14 +25,7 @@ def process_echange_data_for_embedding(echange_data: dict) -> dict:
     output_message = {
         "data": {
             "text": text_to_embed,
-            "metadata": metadata,
-            # Todo: à modifier si nécessaire
-            **{k: echange_data.get(k, "") for k in [
-                "id_demande", "produit" , "categorie",
-                "id_produit", "id_categorie" , "id_fournisseur",
-                "fournisseur", "etat", "affichage",
-                "acheteur", "id_acheteur", "date_ajout"
-            ]}
+             **{k: v for k, v in echange_data.items() if k not in ['text']}
         },
         "collection": CollectionName.ECHANGE
     }

@@ -3,8 +3,6 @@ from typing import List , Dict, Any
 
 class InsertDevisRequest(BaseModel):
     id_lead          : str
-    message          : str
-    message_hellopro : str
     categorie        : str
     effectif         : str
     prof_ou_part     : str

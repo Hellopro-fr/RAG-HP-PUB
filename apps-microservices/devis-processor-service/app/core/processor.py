@@ -25,14 +25,8 @@ def process_devis_data_for_embedding(devis_data: dict) -> dict:
     output_message = {
         "data": {
             "text": text_to_embed,
-            "metadata": metadata,
-            # Todo: à remplacer ou à supprimer
-            **{k: devis_data.get(k, "") for k in [
-                "id_lead", "message", "message_hellopro", "categorie",
-                "effectif", "prof_ou_part", "naf2", "naf5",
-                "departement", "region", "pays", "critere", "societe",
-                "date_ajout"
-            ]}
+            **{k: v for k, v in devis_data.items() if k not in ['text']}
+
         },
         "collection": CollectionName.DEVIS
     }

@@ -20,8 +20,6 @@ from qdrant_client.http.models import (
     PayloadSchemaType
 )
 
-from common_utils.database.schemas.devis import InsertDevisRequest
-
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
@@ -69,7 +67,7 @@ class QdrantDevisCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
-        self.client.create_payload_index(collection_name, field_name="id_lead", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="lead_id", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="naf2", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="naf5", field_schema=PayloadSchemaType.KEYWORD)
@@ -78,7 +76,7 @@ class QdrantDevisCrud:
         self.collection = collection_name
         return collection_name
 
-    def insert_devis(self, demande_di: InsertDevisRequest) -> Dict[str, Any]:
+    def insert_devis(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
         data = demande_di
         model_config = ModelConfig()
         model_key = model_config.model_id

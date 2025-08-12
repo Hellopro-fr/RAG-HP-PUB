@@ -28,7 +28,7 @@ def insertion_data(devis_data: dict) -> dict:
     result = []
     if func:
         for di in devis:
-            id_di = di.get('id_lead', 'ID Demande inconnu')
+            id_di = di.get('lead_id', 'ID Demande inconnu')
             chunk = di.get('chunk_number', 'Numero chunk inconnu')
             total = di.get('total_chunks', 'Total chunk inconnu')
             logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", id_di, chunk, total)
