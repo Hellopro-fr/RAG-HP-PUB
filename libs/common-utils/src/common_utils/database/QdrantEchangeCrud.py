@@ -21,13 +21,11 @@ from qdrant_client.http.models import (
 )
 
 from common_utils.database.schemas.echange import InsertEchangeRequest
-from common_utils.autres.CollectionName import CollectionName
-
 
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = CollectionName.ECHANGE
+    collection_name: str = "echanges"
     dimension: int = 1024
 
 

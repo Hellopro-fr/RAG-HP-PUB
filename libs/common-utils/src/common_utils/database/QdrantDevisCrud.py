@@ -21,13 +21,11 @@ from qdrant_client.http.models import (
 )
 
 from common_utils.database.schemas.devis import InsertDevisRequest
-from common_utils.autres.CollectionName import CollectionName
-
 
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = CollectionName.DEVIS
+    collection_name: str = "devis"
     dimension: int = 1024
 
 
