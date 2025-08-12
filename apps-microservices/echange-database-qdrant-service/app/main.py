@@ -2,8 +2,8 @@ import pika
 import time
 import os
     
-from di_database_qdrant_service.messaging.consumer import Consumer
-from di_database_qdrant_service.messaging.publisher import Publisher
+from echange_database_qdrant_service.messaging.consumer import Consumer
+from echange_database_qdrant_service.messaging.publisher import Publisher
 
 def main():
     """
@@ -17,14 +17,14 @@ def main():
     for i in range(10):
         try:
             connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ Database-Devis-Processor: Connecté à RabbitMQ.")
+            print("✅ Database-Echange-Processor: Connecté à RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ Database-Devis-Processor: En attente de RabbitMQ... {i+1}s")
+            print(f"⏳ Database-Echange-Processor: En attente de RabbitMQ... {i+1}s")
             time.sleep(1)
 
     if not connection:
-        print("❌ Database-Devis-Processor: Impossible de se connecter, arrêt du service.")
+        print("❌ Database-Echange-Processor: Impossible de se connecter, arrêt du service.")
         exit(1)
 
     try:
@@ -38,11 +38,11 @@ def main():
         consumer.start_consuming()
 
     except KeyboardInterrupt:
-        print("\n🛑 Database-Devis-Processor: Arrêt demandé.")
+        print("\n🛑 Database-Echange-Processor: Arrêt demandé.")
     finally:
         if connection and not connection.is_closed:
             connection.close()
-            print("✅ Database-Devis-Processor: Connexion RabbitMQ fermée.")
+            print("✅ Database-Echange-Processor: Connexion RabbitMQ fermée.")
 
 if __name__ == '__main__':
     main()

@@ -28,17 +28,17 @@ def insertion_data(devis_data: dict) -> dict:
     result = []
     if func:
         for di in devis:
-            di_id = di.get('id_lead', 'ID inconnu')
+            id_di = di.get('id_lead', 'ID Demande inconnu')
             chunk = di.get('chunk_number', 'Numero chunk inconnu')
             total = di.get('total_chunks', 'Total chunk inconnu')
-            logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", di_id, chunk, total)
+            logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", id_di, chunk, total)
             result.append(func(di))
             
     
     output_message = {
         "collection": collection,
-        "data": result,
-        "id": di_id
+        "data"      : result,
+        "id_demande": id_di
     }
     
     return output_message
