@@ -35,5 +35,5 @@ def process_devis_data_for_embedding(devis_data: dict) -> dict:
     print(f"🔍Devis-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2)}")
     
     # Étape 6: Retourner le message prêt à être publié
-    print(f"📦 Devis-Processor: Produit '{devis_data.get('id_lead', 'ID inconnu')}' traité pour embedding.")
+    print(f"📦 Devis-Processor: Lead '{devis_data.get('lead_id', 'ID inconnu')}' traité pour embedding.")
     return output_message

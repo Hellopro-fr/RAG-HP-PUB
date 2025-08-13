@@ -22,7 +22,7 @@ class Publisher:
         """
         Publie un message (dictionnaire) sur le topic configuré.
         """
-        id_demande = message_dict.get("id_lead", "ID DI inconnu")
+        id_demande = message_dict.get("id_demande", "ID DI inconnu")
         self.channel.basic_publish(
             exchange=self.exchange_name,
             routing_key=self.routing_key,

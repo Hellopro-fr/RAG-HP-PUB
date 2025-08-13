@@ -10,7 +10,7 @@ def process_echange_data_for_embedding(echange_data: dict) -> dict:
     """
     # Étape 1: Vérifier les données d'entrée
     if not isinstance(echange_data, dict):
-        raise ValueError("Les données du devis doivent être un dictionnaire.")
+        raise ValueError("Les données doivent être un dictionnaire.")
     
     # Étape 4: Préparer le texte à embedder (À voir avec l'équipe en charge)
     text_to_embed = echange_data.get('text', '')
