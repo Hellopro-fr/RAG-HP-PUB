@@ -1,12 +1,9 @@
-import os
 import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from logging.handlers import TimedRotatingFileHandler
 from common_utils.database.config.settings import Configuration, settings
 
 import uuid
-import hashlib
 
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
@@ -31,12 +28,12 @@ class QdrantwebsiteCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[str] = None
-        if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_API_KEY:
-            raise ValueError("Qdrant host et API Key doivent être définis dans l'environnement.")
+        if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_PORT:
+            raise ValueError("Qdrant host et port doivent être définis dans l'environnement.")
         self.logger = kwargs.get('logger', logging)
         self.client = QdrantClient(
-            url=self.config.QDRANT_HOST_URL,
-            api_key=self.config.QDRANT_API_KEY
+            host=self.config.QDRANT_HOST_URL,
+            port=self.config.QDRANT_PORT
         )
 
     def _get_or_create_collection(self, model_config: ModelConfig):
@@ -69,8 +66,11 @@ class QdrantwebsiteCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
-        self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="affichage", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="etat", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="page_type", field_schema=PayloadSchemaType.KEYWORD)
 
         self.collection = collection_name
         return collection_name

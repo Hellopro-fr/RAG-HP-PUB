@@ -1,12 +1,9 @@
-import os
 import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from logging.handlers import TimedRotatingFileHandler
 from common_utils.database.config.settings import Configuration, settings
 
 import uuid
-import hashlib
 
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
@@ -69,11 +66,11 @@ class QdrantDevisCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
-        self.client.create_payload_index(collection_name, field_name="lead_id", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="naf2", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="naf5", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="effectif", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="affichage", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="etat", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="page_type", field_schema=PayloadSchemaType.KEYWORD)
 
         self.collection = collection_name
         return collection_name
