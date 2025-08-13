@@ -58,9 +58,11 @@ class QdrantDevisCrud:
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=model_config.dimension, distance=Distance.COSINE),
 				hnsw_config=HnswConfigDiff(
-					m=16,
-					ef_construct=256
-				)
+					m=32,
+					ef_construct=200
+				),
+                shard_number=2,
+                replication_factor=2
             )
             self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' créée.")
         else:
