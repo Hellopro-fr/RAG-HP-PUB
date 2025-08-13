@@ -158,10 +158,6 @@ class Embedding:
                 data_tmp["chunk_id"] = chunk_id  
                 data_tmp["chunk_number"] = i + 1 
                 data_tmp["total_chunks"] = len(chunks)
-                data_tmp["metadata"]["chunk_id"] = chunk_id  # Ajout du texte original du chunk 
-                data_tmp["metadata"]["chunk_number"] = i + 1 
-                data_tmp["metadata"]["total_chunks"] = len(chunks)
-                data_tmp["metadata"]["text"] = data
                 
                 batch_to_insert.append(data_tmp)
 
