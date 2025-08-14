@@ -73,11 +73,15 @@ class TrafilaturaHp:
     """
     def extract(self, keys: dict = {}) -> BaseTrafilaturaReponse | TrafilaturaReponseHtml:
         # response_objects = Annotated[BaseTrafilaturaReponse | TrafilaturaReponseHtml]
-        html = []
-        url = getattr(self.info, keys.get('url') or 'url', "")
-        content = getattr(self.info, keys.get('content') or 'content', "")
+        # html = []
+        # url = getattr(self.info, keys.get('url') or 'url', "")
+        # content = getattr(self.info, keys.get('content') or 'content', "")
 
-        fetch_content = getattr(self.info, keys.get('fetch') or 'fetch', False)
+        # fetch_content = getattr(self.info, keys.get('fetch') or 'fetch', False)
+
+        url = self.info.get("url","")
+        content = self.info.get("content","")
+        fetch_content = self.info.get("fetch",False)
 
         if fetch_content:
             content_fetch = self._trafilatura.fetch_url(url, no_ssl=True)
