@@ -1,4 +1,4 @@
-from common_utils.database.QdrantEchangeCrud import QdrantEchangeCrud
+from common_utils.database.QdrantWebsiteCrud import QdrantWebsiteCrud
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
@@ -19,7 +19,7 @@ def insertion_data(website_data: dict) -> dict:
         logging.error("'%s' n'est pas un nom de collection valide.", collection)
         return None
 
-    qdrant = QdrantEchangeCrud()
+    qdrant = QdrantWebsiteCrud()
     processing_functions = {
         CollectionName.WEBSITE: qdrant.insert_website,
     }
