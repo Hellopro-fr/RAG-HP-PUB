@@ -12,18 +12,7 @@ import os
 import pika
 
 description = """
-API pour le projet RAG Hellopro 🚀
-
-## à Venir
-
-Voici les fonctionnalités / Services à venir:
-
-* **Scrapping** (_pas implementé_).
-* **Néttoyage (ETL)** (_pas implementé_).
-* **Qualification LLM** (_pas implementé_).
-* **Vectorisation** (_pas implementé_).
-* **Matching** (_pas implementé_).
-* **CRUD** (_pas implementé_).
+API Ingestion pour le projet RAG Hellopro 🚀
 """
 
 

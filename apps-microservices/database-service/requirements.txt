@@ -1,5 +1,0 @@
-pymilvus
-pydantic
-pytest
-pika
-python-dotenv
