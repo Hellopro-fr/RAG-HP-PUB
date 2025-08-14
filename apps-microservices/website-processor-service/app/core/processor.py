@@ -14,18 +14,17 @@ def process_website_data_for_embedding(website_data: dict) -> dict:
         raise ValueError("Les données doivent être un dictionnaire.")
     
     # Étape 2: Préparer le texte à embedder (À voir avec l'équipe en charge)
-    text_to_embed = website_data.get('text', '')
 
-    # Etape 3: Nettoyer les données  
-    trafila = TrafilaturaHp(
-        {
+    info = {
             "url": website_data.get("url",""),
             "content": website_data.get("text",""),
             "fetch": False
         }
-    )
+
+    # Etape 3: Nettoyer les données  
+    trafila = TrafilaturaHp(info)
     # trafila.info = text_to_embed
-    text_to_embed_clean = trafila.extract()
+    text_to_embed_clean = trafila.extract(info)
     
     
     # Étape 5: Construire le message de sortie
