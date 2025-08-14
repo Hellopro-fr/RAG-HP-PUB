@@ -24,7 +24,7 @@ class ModelConfig:
     dimension: int = 1024
 
 
-class QdrantwebsiteCrud:
+class QdrantWebsiteCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[str] = None
