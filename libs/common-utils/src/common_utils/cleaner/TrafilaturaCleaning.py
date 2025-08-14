@@ -72,7 +72,7 @@ class TrafilaturaHp:
     }
     """
     def extract(self, keys: dict = {}) -> BaseTrafilaturaReponse | TrafilaturaReponseHtml:
-        response_objects = Annotated[BaseTrafilaturaReponse | TrafilaturaReponseHtml]
+        # response_objects = Annotated[BaseTrafilaturaReponse | TrafilaturaReponseHtml]
         html = []
         url = getattr(self.info, keys.get('url') or 'url', "")
         content = getattr(self.info, keys.get('content') or 'content', "")
