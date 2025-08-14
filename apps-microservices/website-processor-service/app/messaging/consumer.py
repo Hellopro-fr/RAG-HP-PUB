@@ -12,7 +12,7 @@ class Consumer:
         self.channel = connection.channel()
         self.publisher = publisher
         self.exchange_name = 'data_exchange'
-        self.routing_key = 'new_data.echange'
+        self.routing_key = 'new_data.website'
         self.queue_name = 'website_processing_queue'
 
         # Déclare l'exchange où il consomme
