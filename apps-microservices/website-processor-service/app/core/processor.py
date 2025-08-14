@@ -23,9 +23,8 @@ def process_website_data_for_embedding(website_data: dict) -> dict:
 
     # Etape 3: Nettoyer les données  
     trafila = TrafilaturaHp(info)
-    # trafila.info = text_to_embed
-    text_to_embed_clean = trafila.extract(info)
-    
+    res_clean = trafila.extract(info)
+    text_to_embed_clean = res_clean.content
     
     # Étape 5: Construire le message de sortie
     output_message = {
