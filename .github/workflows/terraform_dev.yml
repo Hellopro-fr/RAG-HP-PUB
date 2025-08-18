@@ -59,11 +59,14 @@ jobs:
 
       - name: Init
         run: terraform init
+      
+      - name: Terraform Validate
+        run: terraform validate
 
       - name: Plan
-        # run: terraform plan -var-file=terraform.tfvars -out=tf.tfplan -compact-warnings
-        run: terraform plan -var-file=terraform.tfvars -target=module.vpc -out=tf-vpc.tfplan
+        run: terraform plan -var-file=terraform.tfvars -out=tf.tfplan -compact-warnings
+        # run: terraform plan -var-file=terraform.tfvars -target=module.vpc -out=tf-vpc.tfplan
 
       - name: Apply
         if: github.event_name == 'push'
-        run: terraform apply -var-file=terraform.tfvars -auto-approve "tf.tfplan" && rm tf.tfpl
+        run: terraform apply -var-file=terraform.tfvars -auto-approve "tf.tfplan" && rm tf.tfplan

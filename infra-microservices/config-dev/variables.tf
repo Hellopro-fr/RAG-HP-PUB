@@ -10,13 +10,13 @@ variable "subnetworks" {
     region        = string
   }))
 }
-# variable repository_id {}
+variable repository_id {}
 variable "description" {
   description = "Description du repository"
   type        = string
   default     = ""
 }
-# variable zone_name {}
-# variable dns_name {}
+variable zone_name {}
+variable dns_name {}
 
 variable proxy_subnet_prefix {}

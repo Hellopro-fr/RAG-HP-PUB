@@ -9,4 +9,9 @@ subnetworks = [
   ]
 zone       = "europe-west1-b"
 subnetwork = "hellopro-subnet-dev"
+repository_id = "hellopro"
+zone_name ="hellopro-private"
+dns_name ="hello.dev.private.com."
+
+
 proxy_subnet_prefix = "10.0.125.0/24"
