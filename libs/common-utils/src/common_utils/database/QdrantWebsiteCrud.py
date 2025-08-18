@@ -1,5 +1,6 @@
 import logging
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 from dataclasses import dataclass
 from common_utils.database.config.settings import Configuration, settings
 
@@ -93,6 +94,9 @@ class QdrantWebsiteCrud:
 
             self.logger.info(f"[{model_key}][website] Insertion de {len(data)} entités dans '{self.collection}'...")
 
+            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+            data["date_maj"] = None     
+            
             points = []
             
             points.append(
@@ -131,6 +135,9 @@ class QdrantWebsiteCrud:
                 }
 
             self.logger.info(f"[{model_key}][website] Mise à jour de {len(data)} entités dans '{self.collection}'...")
+
+            data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+
             point = PointStruct(
                 id=data["id"],
                 vector=data["embedding"],
