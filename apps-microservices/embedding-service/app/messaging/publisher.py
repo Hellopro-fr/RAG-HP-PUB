@@ -6,7 +6,7 @@ class Publisher:
         """
         Initialise le publisher avec une connexion RabbitMQ existante.
         """
-        self.channel = connection.channel(
+        self.channel = connection.channel()
         print("✅ Publisher initialisé.")
 
     def publish_message(self, message_dict: dict):
@@ -15,7 +15,6 @@ class Publisher:
         """
         collection = message_dict.get("collection", "inconnu")
         collection = collection.lower()
-        
         self.exchange_name = f"{collection}_embedded_data_exchange"
         self.routing_key = f"data.{collection}.ready_for_insertion"
 
