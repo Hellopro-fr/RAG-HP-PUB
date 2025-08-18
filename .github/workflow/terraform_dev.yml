@@ -17,13 +17,13 @@ on:
       - main
       - preprod
       - develop
-      # - features/infra-gcp
+      - features/infra-gcp
     paths:
       - 'infra-microservices/config-dev/**'
       - 'infra-microservices/modules/**'
   pull_request:
     branches:
-      - features/infra-gcp-dev-poc
+      - features/infra-gcp
     paths:
       - 'infra-microservices/config-dev/**'
       - 'infra-microservices/modules/**'
