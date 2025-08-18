@@ -6,18 +6,7 @@ class Publisher:
         """
         Initialise le publisher avec une connexion RabbitMQ existante.
         """
-        self.channel = connection.channel()
-        self.exchange_name = 'embedded_data_exchange'
-
-        # à modifier selon le flow de l'application
-        self.routing_key = 'data.ready_for_insertion'
-
-        # Déclare l'exchange où il va publier
-        self.channel.exchange_declare(
-            exchange=self.exchange_name, 
-            exchange_type='topic', 
-            durable=True
-        )
+        self.channel = connection.channel(
         print("✅ Publisher initialisé.")
 
     def publish_message(self, message_dict: dict):
@@ -25,7 +14,17 @@ class Publisher:
         Publie un message (dictionnaire) sur le topic configuré.
         """
         collection = message_dict.get("collection", "inconnu")
-        self.routing_key = f"data.{collection.lower()}.ready_for_insertion"
+        collection = collection.lower()
+        
+        self.exchange_name = f"{collection}_embedded_data_exchange"
+        self.routing_key = f"data.{collection}.ready_for_insertion"
+
+        # Déclare l'exchange où il va publier
+        self.channel.exchange_declare(
+            exchange=self.exchange_name, 
+            exchange_type='topic', 
+            durable=True
+        )
 
         self.channel.basic_publish(
             exchange=self.exchange_name,

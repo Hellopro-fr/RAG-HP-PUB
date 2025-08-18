@@ -11,7 +11,7 @@ class Consumer:
         """
         self.channel = connection.channel()
         self.publisher = publisher
-        self.exchange_name = 'embedded_data_exchange'
+        self.exchange_name = 'devis_embedded_data_exchange'
 
         # à modifier selon le flow de l'application
         self.routing_key = 'data.devis.ready_for_insertion'
