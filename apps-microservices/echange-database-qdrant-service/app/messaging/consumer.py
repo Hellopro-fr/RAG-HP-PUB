@@ -11,10 +11,10 @@ class Consumer:
         """
         self.channel = connection.channel()
         self.publisher = publisher
-        self.exchange_name = 'echange_embedded_data_exchange'
+        self.exchange_name = 'echanges_embedded_data_exchange'
 
         # à modifier selon le flow de l'application
-        self.routing_key = 'data.echange.ready_for_insertion'
+        self.routing_key = 'data.echanges.ready_for_insertion'
 
         # Todo: à vérifier si le nom de la queue est correct
         self.queue_name = 'insertion_echanges_queue'
