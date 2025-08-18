@@ -21,12 +21,16 @@ on:
     paths:
       - 'infra-microservices/config-dev/**'
       - 'infra-microservices/modules/**'
+      - '.github/workflows/**'
   pull_request:
     branches:
       - features/infra-gcp
+      - features/infra-gcp-dev-poc
     paths:
       - 'infra-microservices/config-dev/**'
       - 'infra-microservices/modules/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
 
 jobs:
   terraform:
@@ -57,7 +61,8 @@ jobs:
         run: terraform init
 
       - name: Plan
-        run: terraform plan -var-file=terraform.tfvars -out=tf.tfplan -compact-warnings
+        # run: terraform plan -var-file=terraform.tfvars -out=tf.tfplan -compact-warnings
+        run: terraform plan -var-file=terraform.tfvars -target=module.vpc -out=tf-vpc.tfplan
 
       - name: Apply
         if: github.event_name == 'push'
