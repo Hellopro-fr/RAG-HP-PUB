@@ -1,0 +1,64 @@
+name: Terraform GCP Deploy
+
+#on:
+#  workflow_dispatch:
+#    inputs:
+#      environment:
+#        description: 'Environment to deploy'
+#        required: true
+#        type: choice
+#        options:
+#          - dev
+#          - int
+#          - prod
+on:
+  push:
+    branches:
+      - main
+      - preprod
+      - develop
+      # - features/infra-gcp
+    paths:
+      - 'infra-microservices/config-dev/**'
+      - 'infra-microservices/modules/**'
+  pull_request:
+    branches:
+      - features/infra-gcp-dev-poc
+    paths:
+      - 'infra-microservices/config-dev/**'
+      - 'infra-microservices/modules/**'
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infra-microservices/config-dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY_DEV }}'
+
+      - name: Set Google Cloud Project
+        run:  gcloud config set project ${{ secrets.GCP_PROJECT_ID_DEV }}
+
+      - name: Init
+        run: terraform init
+
+      - name: Plan
+        run: terraform plan -var-file=terraform.tfvars -out=tf.tfplan -compact-warnings
+
+      - name: Apply
+        if: github.event_name == 'push'
+        run: terraform apply -var-file=terraform.tfvars -auto-approve "tf.tfplan" && rm tf.tfpl
