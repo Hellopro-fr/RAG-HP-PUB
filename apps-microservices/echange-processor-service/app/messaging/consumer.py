@@ -32,7 +32,7 @@ class Consumer:
             print("❌ Echange-Processor: Aucune donnée trouvée dans le message.")
             ch.basic_ack(delivery_tag=method.delivery_tag)
             return
-        id_demande = echange_data.get('id_demande', 'ID inconnu')
+        id_demande = echange_data.get('lead_id', 'ID inconnu')
         print(f"\n📥 Echange-Processor: Message reçu pour '{id_demande}'.")
 
         # 1. Appelle la logique métier PURE

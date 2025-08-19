@@ -11,7 +11,7 @@ def insertion_data(website_data: dict) -> dict:
     """
 
     websites = website_data.get("data",[])
-    collection = website_data.get("collection", CollectionName.WEBSITE)
+    collection = website_data.get("collection", CollectionName.SITEWEB)
 
     try:
         collection_enum = CollectionName(collection)
@@ -21,13 +21,14 @@ def insertion_data(website_data: dict) -> dict:
 
     qdrant = QdrantWebsiteCrud()
     processing_functions = {
-        CollectionName.WEBSITE: qdrant.insert_website,
+        CollectionName.SITEWEB: qdrant.insert_website,
     }
 
     func = processing_functions.get(collection_enum)
     result = []
     if func:
         for website in websites:
+            #Todo: à verifier
             url            = website.get('url', 'Url inconnu')
             chunk          = website.get('chunk_number', 'Numero chunk inconnu')
             total          = website.get('total_chunks', 'Total chunk inconnu')

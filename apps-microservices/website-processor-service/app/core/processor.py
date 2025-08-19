@@ -33,7 +33,7 @@ def process_website_data_for_embedding(website_data: dict) -> dict:
             # Todo: à modifier si nécessaire
             **{k: v for k, v in website_data.items() if k not in ['text']}
         },
-        "collection": CollectionName.WEBSITE
+        "collection": CollectionName.SITEWEB
     }    
 
     # Afficher le message de sortie pour débogage
