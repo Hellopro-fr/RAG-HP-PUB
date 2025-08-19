@@ -1,0 +1,10 @@
+pika
+python-dotenv
+beautifulsoup4
+bs4
+trafilatura
+markdownify
+langdetect
+sentence_splitter
+python-multipart
+html5lib
