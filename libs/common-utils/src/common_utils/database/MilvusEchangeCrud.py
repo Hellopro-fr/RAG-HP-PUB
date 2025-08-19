@@ -22,7 +22,7 @@ class ModelConfig:
     collection_name: str = "echanges_poc"
     dimension: int = 1024
 
-class MilvusCrud:
+class MilvusEchangeCrud:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None

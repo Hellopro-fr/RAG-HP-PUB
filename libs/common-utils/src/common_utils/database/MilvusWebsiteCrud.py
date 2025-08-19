@@ -22,7 +22,7 @@ class ModelConfig:
     collection_name: str = "siteweb_poc"
     dimension: int = 1024
 
-class MilvusCrud:
+class MilvusWebsiteCrud:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
