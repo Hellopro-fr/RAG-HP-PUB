@@ -28,6 +28,8 @@ class Consumer:
         print("📥 Website-Processor: Message reçu.")
         data = json.loads(body)
         website_data = data.get('data', {})
+        bdd = data.get('database', "qdrant")
+
         
         if not website_data:
             print("❌ Website-Processor: Aucune donnée trouvée dans le message.")
@@ -37,7 +39,7 @@ class Consumer:
         print(f"\n📥 Website-Processor: Message reçu")
 
         # 1. Appelle la logique métier PURE
-        output_message = process_website_data_for_embedding(website_data)
+        output_message = process_website_data_for_embedding(website_data,bdd)
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)

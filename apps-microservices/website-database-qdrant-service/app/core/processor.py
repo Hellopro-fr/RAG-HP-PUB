@@ -1,4 +1,5 @@
 from common_utils.database.QdrantWebsiteCrud import QdrantWebsiteCrud
+from common_utils.database.MilvusWebsiteCrud import MilvusWebsiteCrud
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
@@ -12,6 +13,7 @@ def insertion_data(website_data: dict) -> dict:
 
     websites = website_data.get("data",[])
     collection = website_data.get("collection", CollectionName.SITEWEB)
+    bdd = website_data.get("database", "qdrant") 
 
     try:
         collection_enum = CollectionName(collection)
@@ -19,9 +21,14 @@ def insertion_data(website_data: dict) -> dict:
         logging.error("'%s' n'est pas un nom de collection valide.", collection)
         return None
 
-    qdrant = QdrantWebsiteCrud()
+    if(bdd.lower() == "milvus"):
+        base_vectorielle = MilvusWebsiteCrud()
+    else:
+        base_vectorielle = QdrantWebsiteCrud()
+
     processing_functions = {
-        CollectionName.SITEWEB: qdrant.insert_website,
+        CollectionName.SITEWEB: base_vectorielle.insert_website
+
     }
 
     func = processing_functions.get(collection_enum)

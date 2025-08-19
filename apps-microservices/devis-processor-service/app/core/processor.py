@@ -1,7 +1,7 @@
 import json
 from common_utils.autres.CollectionName import CollectionName
 
-def process_devis_data_for_embedding(devis_data: dict) -> dict:
+def process_devis_data_for_embedding(devis_data: dict,bdd: str = "qdrant") -> dict:
     """
     Prend un dictionnaire de produit, le nettoie et prépare le message
     pour l’étape d’embedding.
@@ -28,7 +28,8 @@ def process_devis_data_for_embedding(devis_data: dict) -> dict:
             **{k: v for k, v in devis_data.items() if k not in ['text']}
 
         },
-        "collection": CollectionName.DEVIS
+        "collection": CollectionName.DEVIS,
+        "database": bdd
     }
     
     # Afficher le message de sortie pour débogage

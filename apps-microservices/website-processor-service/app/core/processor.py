@@ -2,7 +2,7 @@ import json
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
 
-def process_website_data_for_embedding(website_data: dict) -> dict:
+def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") -> dict:
     """
     Prend un dictionnaire de produit, le nettoie et prépare le message
     pour l’étape d’embedding.
@@ -33,7 +33,8 @@ def process_website_data_for_embedding(website_data: dict) -> dict:
             # Todo: à modifier si nécessaire
             **{k: v for k, v in website_data.items() if k not in ['text']}
         },
-        "collection": CollectionName.SITEWEB
+        "collection": CollectionName.SITEWEB,
+        "database": bdd  
     }    
 
     # Afficher le message de sortie pour débogage

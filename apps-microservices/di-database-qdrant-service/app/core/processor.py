@@ -1,4 +1,5 @@
 from common_utils.database.QdrantDevisCrud import QdrantDevisCrud
+from common_utils.database.MilvusDevisCrud import MilvusDevisCrud
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
@@ -12,6 +13,7 @@ def insertion_data(devis_data: dict) -> dict:
 
     devis = devis_data.get("data",[])
     collection = devis_data.get("collection", CollectionName.DEVIS)
+    bdd = devis_data.get("database", "qdrant")
 
     try:
         collection_enum = CollectionName(collection)
@@ -19,9 +21,14 @@ def insertion_data(devis_data: dict) -> dict:
         logging.error("'%s' n'est pas un nom de collection valide.", collection)
         return None
 
-    qdrant = QdrantDevisCrud()
+
+    if(bdd.lower() == "milvus"):
+        base_vectorielle = MilvusDevisCrud()
+    else:
+        base_vectorielle = QdrantDevisCrud()
+
     processing_functions = {
-        CollectionName.DEVIS: qdrant.insert_devis,
+        CollectionName.DEVIS: base_vectorielle.insert_devis,
     }
 
     func = processing_functions.get(collection_enum)

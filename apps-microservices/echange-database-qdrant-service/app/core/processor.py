@@ -1,4 +1,5 @@
 from common_utils.database.QdrantEchangeCrud import QdrantEchangeCrud
+from common_utils.database.MilvusEchangeCrud import MilvusEchangeCrud
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
@@ -12,6 +13,7 @@ def insertion_data(echange_data: dict) -> dict:
 
     echanges = echange_data.get("data",[])
     collection = echange_data.get("collection", CollectionName.ECHANGE)
+    bdd = echange_data.get("database", "qdrant")
 
     try:
         collection_enum = CollectionName(collection)
@@ -19,9 +21,14 @@ def insertion_data(echange_data: dict) -> dict:
         logging.error("'%s' n'est pas un nom de collection valide.", collection)
         return None
 
-    qdrant = QdrantEchangeCrud()
+    if(bdd.lower() == "milvus"):
+        base_vectorielle = MilvusEchangeCrud()
+    else:
+        base_vectorielle = QdrantEchangeCrud()
+
+
     processing_functions = {
-        CollectionName.ECHANGE: qdrant.insert_echange,
+        CollectionName.ECHANGE: base_vectorielle.insert_echange,
     }
 
     func = processing_functions.get(collection_enum)

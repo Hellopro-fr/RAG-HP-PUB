@@ -28,6 +28,8 @@ class Consumer:
         print("📥 Devis-Processor: Message reçu.")
         data = json.loads(body)
         devis_data = data.get('data', {})
+        bdd = data.get('database', "qdrant")
+
         if not devis_data:
             print("❌ Devis-Processor: Aucune donnée trouvée dans le message.")
             ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -36,7 +38,7 @@ class Consumer:
         print(f"\n📥 Devis-Processor: Message reçu pour '{id_demande}'.")
 
         # 1. Appelle la logique métier PURE
-        output_message = process_devis_data_for_embedding(devis_data)
+        output_message = process_devis_data_for_embedding(devis_data,bdd)
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)

@@ -28,6 +28,8 @@ class Consumer:
         print("📥 Echange-Processor: Message reçu.")
         data = json.loads(body)
         echange_data = data.get('data', {})
+        bdd = data.get('database', "qdrant")
+
         if not echange_data:
             print("❌ Echange-Processor: Aucune donnée trouvée dans le message.")
             ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -36,7 +38,7 @@ class Consumer:
         print(f"\n📥 Echange-Processor: Message reçu pour '{id_demande}'.")
 
         # 1. Appelle la logique métier PURE
-        output_message = process_echange_data_for_embedding(echange_data)
+        output_message = process_echange_data_for_embedding(echange_data,bdd)
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)

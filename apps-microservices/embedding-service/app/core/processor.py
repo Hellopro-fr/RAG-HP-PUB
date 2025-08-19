@@ -17,6 +17,7 @@ def embed_input_data(input_data: dict) -> dict:
     output_message = {
         "collection": collection,
         "data": result_embedding,
+        "database": input_data.get("database", "qdrant")  # Par défaut, on utilise Qdrant
     }
     
     return output_message

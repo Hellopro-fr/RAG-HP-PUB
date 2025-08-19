@@ -1,7 +1,7 @@
 import json
 from common_utils.autres.CollectionName import CollectionName
 
-def process_echange_data_for_embedding(echange_data: dict) -> dict:
+def process_echange_data_for_embedding(echange_data: dict, bdd: str = "qdrant") -> dict:
     """
     Prend un dictionnaire de produit, le nettoie et prépare le message
     pour l’étape d’embedding.
@@ -27,7 +27,8 @@ def process_echange_data_for_embedding(echange_data: dict) -> dict:
             "text": text_to_embed,
              **{k: v for k, v in echange_data.items() if k not in ['text']}
         },
-        "collection": CollectionName.ECHANGE
+        "collection": CollectionName.ECHANGE,
+        "database": bdd
     }
                 
 
