@@ -27,11 +27,11 @@ class Consumer:
         """
         Callback privé qui orchestre le traitement d'un message.
         """
-        product_data = json.loads(body)
+        data = json.loads(body)
         print(f"\n📥 webhook-Processor: Message reçu.")
 
         # 1. Appelle la logique métier PURE
-        send_webhook(product_data)
+        send_webhook(data)
 
         # 3. Acquitte le message original
         ch.basic_ack(delivery_tag=method.delivery_tag)
