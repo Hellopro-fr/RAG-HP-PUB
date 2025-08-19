@@ -19,4 +19,12 @@ variable "description" {
 variable zone_name {}
 variable dns_name {}
 
+
+variable node_ntwk_tag {
+
+  type = list
+  default= []
+}
+
 variable proxy_subnet_prefix {}
+variable ip_cidr_range_vpc_connector_serverless {}

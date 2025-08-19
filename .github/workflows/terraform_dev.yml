@@ -17,6 +17,7 @@ on:
       - main
       - preprod
       - develop
+      - features/poc
       - features/infra-gcp
     paths:
       - 'infra-microservices/config-dev/**'
@@ -24,8 +25,9 @@ on:
       - '.github/workflows/**'
   pull_request:
     branches:
+      - features/poc
       - features/infra-gcp
-      - features/infra-gcp-dev-poc
+      # - features/infra-gcp-dev-poc
     paths:
       - 'infra-microservices/config-dev/**'
       - 'infra-microservices/modules/**'
@@ -62,10 +64,19 @@ jobs:
       
       - name: Terraform Validate
         run: terraform validate
+      
+      - name: Plan Target VPC
+        run: terraform plan -var-file=terraform.tfvars -target=module.vpc -out=tf-vpc.tfplan
+      
+      - name: Plan Target DNS
+        run: terraform plan -var-file=terraform.tfvars -target=module.dns -out=tf-dns.tfplan
 
-      - name: Plan
-        run: terraform plan -var-file=terraform.tfvars -out=tf.tfplan -compact-warnings
-        # run: terraform plan -var-file=terraform.tfvars -target=module.vpc -out=tf-vpc.tfplan
+      - name: Plan Target VPC
+        run: terraform plan -var-file=terraform.tfvars -target=module.artifact_registry -out=tf-artifact_registry.tfplan
+
+      # - name: Plan
+      #   run: terraform plan -var-file=terraform.tfvars -out=tf.tfplan -compact-warnings
+      #   # run: terraform plan -var-file=terraform.tfvars -target=module.vpc -out=tf-vpc.tfplan
 
       - name: Apply
         if: github.event_name == 'push'

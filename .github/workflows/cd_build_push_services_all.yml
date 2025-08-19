@@ -1,0 +1,232 @@
+
+name: 'Build and Deploy all-services services'
+
+on:
+  push:
+    branches:
+      - main
+      - preprod
+      - develop
+    paths:
+      - "apps-microservices/**"
+      -  '.github/workflows/**'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID_DEV }}
+  REGISTRY_HOST: europe-west1-docker.pkg.dev
+  VARIABLES: ${{ secrets.DEV_ENV }}
+  AR_REPOSITORY: hellopro
+  REGION: europe-west1
+  DEFAULT_MEMORY: 2Gi
+  DEFAULT_CPU: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      any_changed: ${{ steps.set-matrix.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) Détecter quels services ont changé
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            ingestion-service: 'apps-microservices/ingestion-service/**'
+            product-processor-service: 'apps-microservices/product-processor-service/**'
+            embedding-service: 'apps-microservices/embedding-service/**'
+            database-service: 'apps-microservices/database-service/**'
+            webhook-service: 'apps-microservices/webhook-service/**'
+            cleaner-etl-service: 'apps-microservices/cleaner-etl-service/**'
+            scrapping-services: 'apps-microservices/scrapping-services/**'
+
+      # 2) Construire dynamiquement la matrix avec paramètres par service
+      - id: set-matrix
+        shell: bash
+        run: |
+          set -e
+
+          MATRIX='{"include":['
+          SEP=""
+
+          add(){
+            local name="$1" ctx="$2" df="$3" cpu="$4" mem="$5" vpc="$6" ing="$7" conc="$8" min="$9" max="${10}" pub="${11}"
+            MATRIX="${MATRIX}${SEP}{\"service\":\"${name}\",\"context\":\"${ctx}\",\"dockerfile\":\"${df}\",\"cpu\":\"${cpu}\",\"memory\":\"${mem}\",\"vpc_connector\":\"${vpc}\",\"ingress\":\"${ing}\",\"concurrency\":\"${conc}\",\"min_instances\":\"${min}\",\"max_instances\":\"${max}\",\"public\":\"${pub}\"}"
+            SEP=","
+          }
+
+          ANY=false
+
+          # Privé par défaut (ingress interne + LB). Public uniquement pour webhook-service.
+          if [[ "${{ steps.filter.outputs.ingestion-service }}" == "true" ]]; then
+            add "ingestion-service" "apps-microservices/ingestion-service" "apps-microservices/ingestion-service/Dockerfile" "2" "4Gi" "vpc-access-connector" "internal-and-cloud-load-balancing" "80" "0" "5" "false"; ANY=true
+          fi
+          if [[ "${{ steps.filter.outputs.product-processor-service }}" == "true" ]]; then
+            add "product-processor-service" "apps-microservices/product-processor-service" "apps-microservices/product-processor-service/Dockerfile" "2" "4Gi" "vpc-access-connector" "internal-and-cloud-load-balancing" "80" "0" "5" "false"; ANY=true
+          fi
+          if [[ "${{ steps.filter.outputs.embedding-service }}" == "true" ]]; then
+            add "embedding-service" "apps-microservices/embedding-service" "apps-microservices/embedding-service/Dockerfile" "4" "8Gi" "vpc-access-connector" "internal-and-cloud-load-balancing" "40" "0" "3" "false"; ANY=true
+          fi
+          if [[ "${{ steps.filter.outputs.database-service }}" == "true" ]]; then
+            add "database-service" "apps-microservices/database-service" "apps-microservices/database-service/Dockerfile" "2" "4Gi" "vpc-access-connector" "internal-and-cloud-load-balancing" "40" "0" "3" "false"; ANY=true
+          fi
+          if [[ "${{ steps.filter.outputs.webhook-service }}" == "true" ]]; then
+            # Webhook public (reçoit des callbacks externes)
+            add "webhook-service" "apps-microservices/webhook-service" "apps-microservices/webhook-service/Dockerfile" "1" "1Gi" "vpc-access-connector" "all" "60" "0" "10" "true"; ANY=true
+          fi
+          if [[ "${{ steps.filter.outputs.cleaner-etl-service }}" == "true" ]]; then
+            add "cleaner-etl-service" "apps-microservices/cleaner-etl-service" "apps-microservices/cleaner-etl-service/Dockerfile" "1" "2Gi" "vpc-access-connector" "internal-and-cloud-load-balancing" "80" "0" "5" "false"; ANY=true
+          fi
+          if [[ "${{ steps.filter.outputs.scrapping-services }}" == "true" ]]; then
+            add "scrapping-services" "apps-microservices/scrapping-services" "apps-microservices/scrapping-services/Dockerfile" "2" "4Gi" "vpc-access-connector" "internal-and-cloud-load-balancing" "60" "0" "5" "false"; ANY=true
+          fi
+
+          MATRIX="${MATRIX}]}"
+
+          echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
+          echo "any_changed=${ANY}" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy ${{ matrix.service }} → ${{ github.ref_name }}
+    needs: prepare
+    if: needs.prepare.outputs.any_changed == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cloudrun-${{ matrix.service }}-${{ github.ref_name }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Choix env/projet/SA selon la branche + calcul des noms/tags
+      - name: Select environment & project
+        id: envsel
+        shell: bash
+        run: |
+          set -e
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+            echo "PROJECT_ID=${{ secrets.GCP_PROJECT_ID_PROD }}" >> $GITHUB_ENV
+            echo "SA_KEY=${{ secrets.GCP_SA_KEY_PROD }}" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF_NAME}" == "preprod" ]]; then
+            echo "ENVIRONMENT=preprod" >> $GITHUB_ENV
+            echo "PROJECT_ID=${{ secrets.GCP_PROJECT_ID_PREPROD }}" >> $GITHUB_ENV
+            echo "SA_KEY=${{ secrets.GCP_SA_KEY_PREPROD }}" >> $GITHUB_ENV
+          else
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+            echo "PROJECT_ID=${{ secrets.GCP_PROJECT_ID_DEV }}" >> $GITHUB_ENV
+            echo "SA_KEY=${{ secrets.GCP_SA_KEY_DEV }}" >> $GITHUB_ENV
+          fi
+
+          echo "REGISTRY_HOST=${{ env.REGION }}-docker.pkg.dev" >> $GITHUB_ENV
+
+          SERVICE_NAME="${{ matrix.service }}-${ENVIRONMENT}"
+          echo "SERVICE_NAME=${SERVICE_NAME}" >> $GITHUB_ENV
+
+          IMAGE="${REGISTRY_HOST}/${PROJECT_ID}/${{ env.AR_REPOSITORY }}/${{ matrix.service }}:${GITHUB_SHA}"
+          LATEST="${REGISTRY_HOST}/${PROJECT_ID}/${{ env.AR_REPOSITORY }}/${{ matrix.service }}:${ENVIRONMENT}-latest"
+          echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
+          echo "LATEST_TAG=${LATEST}" >> $GITHUB_ENV
+
+          # Flag d'exposition public/privé
+          if [[ "${{ matrix.public }}" == "true" ]]; then
+            echo "AUTH_FLAG=--allow-unauthenticated" >> $GITHUB_ENV
+          else
+            echo "AUTH_FLAG=" >> $GITHUB_ENV
+          fi
+
+      # Matérialiser le .env runtime depuis les secrets GitHub (+ overlay repo si présent)
+      - name: Build runtime .env
+        id: dotenv
+        shell: bash
+        run: |
+          set -e
+          # 1) .env par environnement depuis GitHub Secrets
+          case "${ENVIRONMENT}" in
+            dev)     CONTENT='${{ secrets.DEV_ENV }}' ;;
+            preprod) CONTENT='${{ secrets.PREPROD_ENV }}' ;;
+            prod)    CONTENT='${{ secrets.PROD_ENV }}' ;;
+          esac
+          printf '%s\n' "$CONTENT" | sed 's/\r$//' > "$RUNNER_TEMP/runtime.env" || true
+
+          # 2) Overlay optionnel non secret commité : apps-microservices/<service>/<env>.env
+          REPO_ENV="apps-microservices/${{ matrix.service }}/${ENVIRONMENT}.env"
+          if [[ -f "${REPO_ENV}" ]]; then
+            sed 's/\r$//' "${REPO_ENV}" >> "$RUNNER_TEMP/runtime.env"
+          fi
+
+          # 3) Nettoyage: enlever lignes vides/commentaires ; garder KEY=VALUE
+          awk -F= 'NF && $1 !~ /^[[:space:]]*#/ {print}' "$RUNNER_TEMP/runtime.env" > "$RUNNER_TEMP/runtime.clean.env" || true
+          mv "$RUNNER_TEMP/runtime.clean.env" "$RUNNER_TEMP/runtime.env" || true
+          chmod 600 "$RUNNER_TEMP/runtime.env"
+          echo "ENV_FILE=$RUNNER_TEMP/runtime.env" >> $GITHUB_ENV
+
+      # Auth GCP via clé JSON (WIF/OIDC recommandé plus tard)
+      - name: Auth to GCP (JSON key)
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ env.SA_KEY }}'
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ env.REGISTRY_HOST }}" --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build context limité au service + cache registry + 2 tags (SHA et env-latest)
+      - name: Build & Push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE }}
+            ${{ env.LATEST_TAG }}
+          cache-from: type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ matrix.service }}:buildcache
+          cache-to:   type=registry,ref=${{ env.REGISTRY_HOST }}/${{ env.PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ matrix.service }}:buildcache,mode=max
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            ENVIRONMENT=${{ env.ENVIRONMENT }}
+          # (Option) secrets de build si nécessaires (npm token/pip, etc.)
+          # secrets: |
+          #   id=app_env,src=${{ env.ENV_FILE }}
+
+      - name: Deploy to Cloud Run (Gen2)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region:  ${{ env.REGION }}
+          image:   ${{ env.IMAGE }}
+          # Injecte les variables runtime depuis le .env (non secrets critiques)
+          env_vars_file: ${{ env.ENV_FILE }}
+          flags: >
+            --execution-environment=gen2
+            --platform=managed
+            --cpu=${{ matrix.cpu || env.DEFAULT_CPU }}
+            --memory=${{ matrix.memory || env.DEFAULT_MEMORY }}
+            --concurrency=${{ matrix.concurrency }}
+            --min-instances=${{ matrix.min_instances }}
+            --max-instances=${{ matrix.max_instances }}
+            --timeout=600
+            --vpc-connector=${{ matrix.vpc_connector }}
+            --vpc-egress=all-traffic
+            --ingress=${{ matrix.ingress }}
+            --labels=commit=${{ github.sha }},service=${{ matrix.service }},env=${{ env.ENVIRONMENT }}
+            --revision-suffix=${{ github.sha }}
+            ${{ env.AUTH_FLAG }}
+            # (Option) pour secrets critiques, préférer Secret Manager :
+            # --set-secrets=DB_PASSWORD=projects/$PROJECT_ID/secrets/DB_PASSWORD:latest
+            # --set-secrets=API_KEY=projects/$PROJECT_ID/secrets/API_KEY:latest

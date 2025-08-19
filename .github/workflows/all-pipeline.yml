@@ -1,0 +1,162 @@
+name: Pipeline Orchestrator {SERVICE_NAME}
+on:
+  push:
+    branches:
+      - main
+      - preprod
+      - develop
+    paths:
+      - 'apps-microservices/database-service/**'
+      - 'apps-microservices/ingestion-service/**'
+      - 'apps-microservices/embedding-service/**'
+      - 'apps-microservices/product-processor-service/**'
+      - 'apps-microservices/webhook-service/**'
+      # - 'apps-microservices/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches:
+      - main
+      - preprod
+      - develop
+      - features/poc
+    paths:
+      - 'apps-microservices/database-service/**'
+      - 'apps-microservices/ingestion-service/**'
+      - 'apps-microservices/embedding-service/**'
+      - 'apps-microservices/product-processor-service/**'
+      - 'apps-microservices/webhook-service/**'
+      # - 'apps-microservices/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service name'
+        required: true
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: read    # requis par dorny/paths-filter sur PR
+  actions: read
+
+concurrency:
+  group: pipeline-all-${{ github.ref }}
+  cancel-in-progress: true
+
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      embedding: ${{ steps.filter.outputs.embedding }}
+      database:  ${{ steps.filter.outputs.database }}
+      ingestion: ${{ steps.filter.outputs.ingestion }}
+      webhook:   ${{ steps.filter.outputs.webhook }}
+      product-processor-service:   ${{ steps.filter.outputs.product-processor-service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect changed services
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            embedding:
+              - 'apps-microservices/embedding-service/**'
+            database:
+              - 'apps-microservices/database-service/**'
+            ingestion:
+              - 'apps-microservices/ingestion-service/**'
+            webhook:
+              - 'apps-microservices/webhook-service/**'
+            product-processor:
+              - 'apps-microservices/product-processor-service/**'
+
+      # (Optionnel) Override manuel via workflow_dispatch
+      - name: Override from manual input
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.service != '' }}
+        run: |
+          svc="${{ inputs.service }}"
+          echo "embedding=$([ "$svc" = "embedding-service" ] || [ "$svc" = "all" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "data=$([ "$svc" = "database-service" ] || [ "$svc" = "all" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "ingestion=$([ "$svc" = "ingestion-service" ] || [ "$svc" = "all" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "webhook=$([ "$svc" = "webhook-service" ] || [ "$svc" = "all" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "product-processor-service=$([ "$svc" = "product-processor-service" ] || [ "$svc" = "all" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+        shell: bash
+
+  # ========== CI PAR SERVICE ==========
+  ci-embedding:
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.embedding == 'true' }}
+    uses: ./.github/workflows/ci-embedding-service.yml
+    secrets: inherit
+
+  ci-data:
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.data == 'true' }}
+    uses: ./.github/workflows/ci-database-service.yml
+    secrets: inherit
+
+  ci-ingestion:
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.ingestion == 'true' }}
+    uses: ./.github/workflows/ci-ingestion-service.yml
+    secrets: inherit
+
+  ci-webhook:
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.webhook == 'true' }}
+    uses: ./.github/workflows/ci-webhook-service.yml
+    secrets: inherit
+  
+  ci-product-processor:
+    needs: [detect-changes]
+    if: ${{ needs.detect-changes.outputs.product-processor-service == 'true' }}
+    uses: ./.github/workflows/ci-product-processor-service.yml
+    secrets: inherit
+
+  # ========== CD PAR SERVICE (seulement sur PUSH main/preprod/develop) ==========
+  cd-embedding:
+    needs: [ci-embedding]
+    if: ${{ github.event_name == 'push' && contains(fromJSON('["refs/heads/main","refs/heads/preprod","refs/heads/develop"]'), github.ref) }}
+    uses: ./.github/workflows/cd_build_push_embedding_service.yml
+    secrets: inherit
+    concurrency:
+      group: cd-embedding-${{ github.ref }}
+      cancel-in-progress: true
+
+  cd-data:
+    needs: [ci-data]
+    if: ${{ github.event_name == 'push' && contains(fromJSON('["refs/heads/main","refs/heads/preprod","refs/heads/develop"]'), github.ref) }}
+    uses: ./.github/workflows/cd_build_push_database_service.yml
+    secrets: inherit
+    concurrency:
+      group: cd-data-${{ github.ref }}
+      cancel-in-progress: true
+
+  cd-ingestion:
+    needs: [ci-ingestion]
+    if: ${{ github.event_name == 'push' && contains(fromJSON('["refs/heads/main","refs/heads/preprod","refs/heads/develop"]'), github.ref) }}
+    uses: ./.github/workflows/cd_build_push_ingestion_service.yml
+    secrets: inherit
+    concurrency:
+      group: cd-ingestion-${{ github.ref }}
+      cancel-in-progress: true
+
+  cd-webhook:
+    needs: [ci-webhook]
+    if: ${{ github.event_name == 'push' && contains(fromJSON('["refs/heads/main","refs/heads/preprod","refs/heads/develop"]'), github.ref) }}
+    uses: ./.github/workflows/cd_build_push_webhook_service.yml
+    secrets: inherit
+    concurrency:
+      group: cd-webhook-${{ github.ref }}
+      cancel-in-progress: true
+  
+  cd-product-processor:
+    needs: [ci-product-processor]
+    if: ${{ github.event_name == 'push' && contains(fromJSON('["refs/heads/main","refs/heads/preprod","refs/heads/develop"]'), github.ref) }}
+    uses: ./.github/workflows/cd_build_push_product-processor-service.yml
+    secrets: inherit
+    concurrency:
+      group: cd-product-processor-${{ github.ref }}
+      cancel-in-progress: true
