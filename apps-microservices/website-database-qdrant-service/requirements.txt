@@ -3,3 +3,4 @@ pydantic
 pytest
 pika
 python-dotenv
+pymilvus
