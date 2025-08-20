@@ -11,7 +11,7 @@ class Consumer:
         """
         self.channel = connection.channel()
         self.publisher = publisher
-        self.exchange_name = 'data_exchange'
+        self.exchange_name = 'data_exchange_devis'
         self.routing_key = 'new_data.devis'
         self.queue_name = 'devis_processing_queue'
 

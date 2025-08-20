@@ -11,7 +11,7 @@ class Consumer:
         """
         self.channel = connection.channel()
         self.publisher = publisher
-        self.exchange_name = 'data_exchange'
+        self.exchange_name = 'data_exchange_echanges'
         self.routing_key = 'new_data.echange'
         self.queue_name = 'echange_processing_queue'
 
@@ -34,7 +34,7 @@ class Consumer:
             print("❌ Echange-Processor: Aucune donnée trouvée dans le message.")
             ch.basic_ack(delivery_tag=method.delivery_tag)
             return
-        id_demande = echange_data.get('lead_id', 'ID inconnu')
+        id_demande = echange_data.get('id_demande', 'ID inconnu')
         print(f"\n📥 Echange-Processor: Database : '{bdd}'.")
         print(f"\n📥 Echange-Processor: Message reçu pour '{id_demande}'.")
 

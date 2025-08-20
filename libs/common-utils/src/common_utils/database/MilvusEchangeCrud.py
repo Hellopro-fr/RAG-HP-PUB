@@ -168,6 +168,10 @@ class MilvusEchangeCrud:
             
             data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
 
+            # Sanitize the record to ensure no None values
+            # This is important for Milvus compatibility
+            data = Utils.sanitize_record(data)  
+
             result = self.collection.upsert(data)
             self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.Utils import Utils
+
 
 from pymilvus import (
     connections,
@@ -126,6 +128,10 @@ class MilvusDevisCrud:
             data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
             data["date_maj"] = None  
 
+            # Sanitize the record to ensure no None values
+            # This is important for Milvus compatibility
+            data = Utils.sanitize_record(data)  
+            
             result = self.collection.insert(data)
             self.collection.flush()
 
@@ -173,6 +179,10 @@ class MilvusDevisCrud:
             
             data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
 
+            # Sanitize the record to ensure no None values
+            # This is important for Milvus compatibility
+            data = Utils.sanitize_record(data)  
+            
             result = self.collection.upsert(data)
             self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")

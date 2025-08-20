@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.Utils import Utils
+
 
 from pymilvus import (
     connections,
@@ -60,8 +62,8 @@ class MilvusWebsiteCrud:
                 FieldSchema(name="id_fournisseur", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="etat", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="affichage", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="vf-id-categorie", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="vf-nom-categorie", dtype=DataType.VARCHAR, max_length=512),
+                FieldSchema(name="vf_id_categorie", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="vf_nom_categorie", dtype=DataType.VARCHAR, max_length=512),
                 FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=512),
                 FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="chunk_id", dtype=DataType.VARCHAR , max_length=64),
@@ -117,6 +119,10 @@ class MilvusWebsiteCrud:
             data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
             data["date_maj"] = None  
 
+            # Sanitize the record to ensure no None values
+            # This is important for Milvus compatibility
+            data = Utils.sanitize_record(data)  
+            
             result = self.collection.insert(data)
             self.collection.flush()
 
@@ -163,6 +169,10 @@ class MilvusWebsiteCrud:
             
             
             data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+
+            # Sanitize the record to ensure no None values
+            # This is important for Milvus compatibility
+            data = Utils.sanitize_record(data)  
 
             result = self.collection.upsert(data)
             self.collection.flush()
