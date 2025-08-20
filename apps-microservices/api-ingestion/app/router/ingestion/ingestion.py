@@ -39,7 +39,8 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
         details={
             "exchange": exchange_name,
             "routing_key": routing_key,
-            "collection": payload.collection
+            "collection": payload.collection,
+            "database": payload.database
         }
     )
 
@@ -82,7 +83,8 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
                     details={
                         "exchange": exchange_name,
                         "routing_key": routing_key,
-                        "collection": payload.collection
+                        "collection": payload.collection,
+                        "database": payload.database
                     }
                 )
             )
