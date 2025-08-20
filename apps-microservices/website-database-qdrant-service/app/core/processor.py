@@ -33,6 +33,7 @@ def insertion_data(website_data: dict) -> dict:
 
     func = processing_functions.get(collection_enum)
     result = []
+    url = ""
     if func:
         for website in websites:
             #Todo: à verifier
@@ -42,11 +43,13 @@ def insertion_data(website_data: dict) -> dict:
             logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", url, chunk, total)
             result.append(func(website))
             
+    if not url:
+        print(f"Insertion siteweb url vide : {websites}")
     
     output_message = {
         "collection" : collection,
         "data"       : result,
-        "url"        : url,
+        "url"        : url
     }
     
     return output_message
