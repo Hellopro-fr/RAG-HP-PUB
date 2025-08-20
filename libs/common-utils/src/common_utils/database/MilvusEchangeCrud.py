@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from common_utils.database.config.settings import Configuration, settings
+from common_utils.database.Utils import Utils
 
 from pymilvus import (
     connections,
@@ -114,7 +115,11 @@ class MilvusEchangeCrud:
             self.logger.info(f"[{model_key}][Echange] Insertion de batch de {len(data)} entités dans '{self.collection.name}'...")
            
             data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None  
+            data["date_maj"] = None
+
+            # Sanitize the record to ensure no None values
+            # This is important for Milvus compatibility
+            data = Utils.sanitize_record(data)  
 
             result = self.collection.insert(data)
             self.collection.flush()
