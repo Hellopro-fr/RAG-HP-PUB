@@ -20,7 +20,7 @@ def process_devis_data_for_embedding(devis_data: dict,bdd: str = "qdrant") -> di
     output_message = {
         "data": {
             "text": text_to_embed,
-            **{k: v for k, v in devis_data.items() if k not in ['text']}
+            **{k.replace("-", "_"): v for k, v in devis_data.items() if k not in ['text']}
 
         },
         "collection": CollectionName.DEVIS,
