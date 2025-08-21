@@ -77,8 +77,8 @@ class QdrantCategoriesCrud:
         self.collection = collection_name
         return collection_name
 
-    def insert_categories(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
-        data = demande_di
+    def insert_categories(self, categorie: Dict[str, Any]) -> Dict[str, Any]:
+        data = categorie
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -110,8 +110,8 @@ class QdrantCategoriesCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][categories] Erreur Qdrant lors de l'insertion : {e}", exc_info=True)
 
-    def update_categories(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
-        data = demande_di
+    def update_categories(self, categorie: Dict[str, Any]) -> Dict[str, Any]:
+        data = categorie
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -149,10 +149,10 @@ class QdrantCategoriesCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][categories] Erreur Qdrant lors de la mise à jour : {e}", exc_info=True)
 
-    def delete_categories(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
+    def delete_categories(self, categorie: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
-        id_entity = demande_di.get("id")
+        id_entity = categorie.get("id")
 
         try:
             # self._connect_to_milvus()
@@ -165,9 +165,9 @@ class QdrantCategoriesCrud:
                 }
 
             self.client.delete(collection_name=self.collection, points_selector=[id_entity])
-            self.logger.info(f"[{model_key}] ✓ demande_di avec ID {id_entity} supprimé.")
+            self.logger.info(f"[{model_key}] ✓ categorie avec ID {id_entity} supprimé.")
 
-            return {"status": "success", "message": f"demande_di {id_entity} supprimé."}
+            return {"status": "success", "message": f"categorie {id_entity} supprimé."}
         except Exception as e:
             self.logger.error(f"[{model_key}][categories] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
