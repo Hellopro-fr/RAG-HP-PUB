@@ -47,6 +47,7 @@ def insertion_data(website_data: dict) -> dict:
         print(f"Insertion siteweb url vide : {websites}")
     
     output_message = {
+        "database"   : bdd,
         "collection" : collection,
         "data"       : result,
         "url"        : url
