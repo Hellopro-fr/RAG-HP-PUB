@@ -70,7 +70,7 @@ class MilvusDevisCrud:
                 FieldSchema(name="siren", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="siret", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_du_lead", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="nb_mec", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="nb_mec", dtype=DataType.INT64),
                 FieldSchema(name="liste_frns", dtype=DataType.VARCHAR, max_length=512),
                 FieldSchema(name="appreciation_lead", dtype=DataType.VARCHAR, max_length=255),
                 FieldSchema(name="id_produit", dtype=DataType.VARCHAR, max_length=64),
