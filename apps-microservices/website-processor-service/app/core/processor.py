@@ -31,7 +31,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         "data": {
             "text": text_to_embed_clean,
             # Todo: à modifier si nécessaire
-            **{k: v for k, v in website_data.items() if k not in ['text']}
+            **{k.replace("-", "_"): v for k, v in website_data.items() if k not in ['text']}
         },
         "collection": CollectionName.SITEWEB,
         "database": bdd  
