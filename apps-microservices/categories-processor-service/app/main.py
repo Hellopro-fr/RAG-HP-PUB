@@ -2,8 +2,8 @@ import pika
 import os
 import time
 
-from devis_processor_service.messaging.consumer import Consumer
-from devis_processor_service.messaging.publisher import Publisher
+from categories_processor_service.messaging.consumer import Consumer
+from categories_processor_service.messaging.publisher import Publisher
 
 def main():
     """
