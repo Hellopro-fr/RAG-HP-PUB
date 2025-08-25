@@ -29,18 +29,18 @@ class QdrantWebsiteCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[str] = None
-        # if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_PORT:
-        if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_API_KEY:
+        # if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_API_KEY:
+        if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_PORT:
             raise ValueError("Qdrant host et port/api_key doivent être définis dans l'environnement.")
         self.logger = kwargs.get('logger', logging)
-        self.client = QdrantClient(
-            url=self.config.QDRANT_HOST_URL,
-            api_key=self.config.QDRANT_API_KEY
-        )
         # self.client = QdrantClient(
-        #     host=self.config.QDRANT_HOST_URL,
-        #     port=self.config.QDRANT_PORT
+        #     url=self.config.QDRANT_HOST_URL,
+        #     api_key=self.config.QDRANT_API_KEY
         # )
+        self.client = QdrantClient(
+            host=self.config.QDRANT_HOST_URL,
+            port=self.config.QDRANT_PORT
+        )
 
     def _get_or_create_collection(self, model_config: ModelConfig):
         collection_name = model_config.collection_name
