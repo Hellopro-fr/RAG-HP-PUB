@@ -20,7 +20,7 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
     if not channel or channel.is_closed:
         return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
-    exchange_name = "data_exchange"
+    exchange_name = f"data_exchange_{payload.collection}"
     routing_key = routing_key_collection(payload.collection)
     
     success = publish_message(
@@ -39,7 +39,8 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
         details={
             "exchange": exchange_name,
             "routing_key": routing_key,
-            "collection": payload.collection
+            "collection": payload.collection,
+            "database": payload.database
         }
     )
 
@@ -56,11 +57,11 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
     if not channel or channel.is_closed:
         return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
-    exchange_name = "data_exchange"
     
     response: list[BaseIngestionReponseSucces | BaseIngestionReponse] = []
 
     for payload in payloads:
+        exchange_name = f"data_exchange_{payload.collection}"
         routing_key = routing_key_collection(payload.collection)
         
         success = publish_message(
@@ -82,7 +83,8 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
                     details={
                         "exchange": exchange_name,
                         "routing_key": routing_key,
-                        "collection": payload.collection
+                        "collection": payload.collection,
+                        "database": payload.database
                     }
                 )
             )

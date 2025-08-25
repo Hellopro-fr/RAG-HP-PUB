@@ -10,6 +10,7 @@ class BaseIngestion(BaseModel):
         CollectionName, # <-- Use the Enum as the type
         Field(title="Nom de la collection de destination")
     ] = CollectionName.PRODUIT
+    database: Annotated[str, Field(title="Nom de la base de données", description="La base de données dans laquelle les données seront stockées. Par défaut, c'est 'qdrant'.")] = "qdrant"
 
 
 class BaseIngestionReponse(BaseModel):
