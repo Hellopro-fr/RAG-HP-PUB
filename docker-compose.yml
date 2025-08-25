@@ -37,6 +37,15 @@ services:
     env_file:
       - .env
 
+  categories-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/categories-processor-service/Dockerfile
+    container_name: categories-processor-service
+    restart: unless-stopped
+    env_file:
+      - .env
+
   embedding-service:
     build:
       context: .
@@ -69,6 +78,15 @@ services:
       context: .
       dockerfile: ./apps-microservices/website-database-qdrant-service/Dockerfile
     container_name: website-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+
+  categories-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/categories-database-qdrant-service/Dockerfile
+    container_name: categories-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
