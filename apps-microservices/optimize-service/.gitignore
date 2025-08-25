@@ -1,0 +1,11 @@
+__pycache__/
+CACHED
+ERROR
+.env
+.venv/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+*.log
+!requirements.txt
