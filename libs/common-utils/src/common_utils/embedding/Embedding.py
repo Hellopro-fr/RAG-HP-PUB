@@ -64,22 +64,33 @@ class Config:
 class Embedding:
     def __init__(self, model_name: str = "dangvantuan/sentence-camembert-large", config: Config = Config(),**kwargs):
         self.config = config
-        self.model: Optional[SentenceTransformer] = None
         self.model_name = model_name
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.logger = kwargs.get("logger",logger)
-
+        
+        self.logger.info(f"Initialisation de l'Embedding avec le modèle : {self.model_name} sur le device : {self.device}")
+        
+        try:
+            self.model: Optional[SentenceTransformer] = SentenceTransformer(self.model_name, device=self.device)
+            self.logger.info("Model loaded successfully.")
+        except Exception as e:
+            self.logger.error(f"Failed to load model '{self.model_name}': {e}", exc_info=True)
+            self.model = None # Ensure model is None if loading fails
+            # You might want to raise the exception here to stop the service from starting
+            # raise e
     
-    def embed(self, sentences: str) -> list[list[float]]:
-        self.logger.info(f"Utilisation du modèle d'embedding : {self.model_name}")
-        self.logger.info(f"Device utilisé pour l'embedding : {self.device}")
-
-        self.model = SentenceTransformer(self.model_name, device=self.device)
-
+    def embed(self, sentences: list[str]) -> list[list[float]]:
+        if not self.model:
+            self.logger.error("Model is not loaded. Cannot perform embedding.")
+            # Return an empty list of the correct shape or handle the error appropriately
+            return [[] for _ in sentences]
+        
+        # The model is already loaded, just use it.
+        # Note: We now process a list of sentences for better batching.
         return self.model.encode(
-            [sentences], 
-            show_progress_bar=False, 
-            normalize_embeddings=True, 
+            sentences,
+            show_progress_bar=False,
+            normalize_embeddings=True,
             batch_size=self.config.BATCH_SIZE
         ).tolist()
 
@@ -126,51 +137,80 @@ class Embedding:
     ### MODIFIED ###
     def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:
         batch_to_insert = []
-
-        data_clean = self._clean_text(data_to_embed.get("text", ""))
-
-        self.logger.info(f"Le texte à vectoriser : {data_clean}")
-
-
+        
         if not data_to_embed.get("text",""):
             self.logger.warning(f"Le texte à vectoriser est vide")
             self.logger.warning(f"Data: {data_to_embed}")
             return []
+        
+        data_clean = self._clean_text(data_to_embed.get("text", ""))
+        
+        if not data_clean:
+            self.logger.warning(f"Le texte à vectoriser est vide après nettoyage")
+            self.logger.warning(f"Data: {data_clean}")
+            return []
+        
+        self.logger.info(f"Le texte à vectoriser : {data_clean}")
 
         # Todo: Vérifier si le type de page est renseigné
         chunks = self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
+        # if not chunks:
+        #     chunks = [data_clean] # Assurer qu'il y a au moins un chunk
+            
         if not chunks:
-            chunks = [data_clean] # Assurer qu'il y a au moins un chunk
-
-        for i, data in enumerate(chunks):
+            self.logger.warning(f"Aucun chunk créé pour le texte donné.")
+            self.logger.warning(f"Data: {data_clean}")
+            return []
         
-            chunk_id = str(i + 1)
-
-            try:
-                embeddings = self.embed(data)
-                
+        try:
+            all_embeddings = self.embed(chunks)
+            
+            total_chunks = len(chunks)
+            
+            for i, (chunk_text, chunk_embedding) in enumerate(zip(chunks, all_embeddings)):
                 data_tmp = data_to_embed.copy()
-
-                data_tmp.pop("text",None)
-
-                data_tmp["embedding"] = embeddings[0]
-                data_tmp["text"] = data  
-                data_tmp["chunk_id"] = chunk_id  
-                data_tmp["chunk_number"] = i + 1 
-                data_tmp["total_chunks"] = len(chunks)
+                data_tmp.pop("text", None)
+                
+                data_tmp["embedding"] = chunk_embedding
+                data_tmp["text"] = chunk_text
+                data_tmp["chunk_id"] = str(i + 1)
+                data_tmp["chunk_number"] = i + 1
+                data_tmp["total_chunks"] = total_chunks
                 
                 batch_to_insert.append(data_tmp)
+        except Exception as e:
+            self.logger.error(f"Erreur lors de la création des chunks: {e}", exc_info=True)
+            return []
 
-                del data_tmp
+        # for i, data in enumerate(chunks):
+        
+        #     chunk_id = str(i + 1)
 
-            except Exception as e:
-                self.logger.error(f"Echec d'embedding pour le chunk {chunk_id}: {e}", exc_info=True)
-                self.logger.error(f"Data : {data}") 
-                return []
-            finally:
-                self.logger.info(f"Cleaning up resources...")
-                del self.model
-                self.model = None
-                if self.device == 'cuda': torch.cuda.empty_cache()
+        #     try:
+        #         embeddings = self.embed(data)
+                
+        #         data_tmp = data_to_embed.copy()
+
+        #         data_tmp.pop("text",None)
+
+        #         data_tmp["embedding"] = embeddings[0]
+        #         data_tmp["text"] = data  
+        #         data_tmp["chunk_id"] = chunk_id  
+        #         data_tmp["chunk_number"] = i + 1 
+        #         data_tmp["total_chunks"] = len(chunks)
+                
+        #         batch_to_insert.append(data_tmp)
+
+        #         del data_tmp
+
+        #     except Exception as e:
+        #         self.logger.error(f"Echec d'embedding pour le chunk {chunk_id}: {e}", exc_info=True)
+        #         self.logger.error(f"Data : {data}") 
+        #         return []
+        #     finally:
+        #         self.logger.info(f"Cleaning up resources...")
+        #         del self.model
+        #         self.model = None
+        #         if self.device == 'cuda': torch.cuda.empty_cache()
 
         return batch_to_insert
