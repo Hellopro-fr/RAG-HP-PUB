@@ -43,6 +43,7 @@ def insertion_data(fournisseurs_data: dict) -> dict:
             
     
     output_message = {
+        "database"      : bdd,
         "collection"    : collection,
         "data"          : result,
         "id_fournisseur": id_fournisseur

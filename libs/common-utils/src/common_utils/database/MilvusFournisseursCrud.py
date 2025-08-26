@@ -66,7 +66,7 @@ class MilvusFournisseursCrud:
                 FieldSchema(name="id_categorie_phare_2", dtype=DataType.VARCHAR, max_length=255),
                 FieldSchema(name="nom_categorie_phare_3", dtype=DataType.VARCHAR, max_length=512),
                 FieldSchema(name="id_categorie_phare_3", dtype=DataType.VARCHAR, max_length=255),                
-                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=512),
+                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="chunk_id", dtype=DataType.VARCHAR , max_length=64),
                 FieldSchema(name="chunk_number", dtype=DataType.INT64),
                 FieldSchema(name="total_chunks", dtype=DataType.INT64),
