@@ -15,17 +15,12 @@ def process_devis_data_for_embedding(devis_data: dict,bdd: str = "qdrant") -> di
     # Étape 4: Préparer le texte à embedder (À voir avec l'équipe en charge)
     text_to_embed = devis_data.get('text', '')
     
-    # Étape 5: Ajouter les métadonnées nécessaires
-    metadata = {
-        key: value
-        for key, value in devis_data.items() if key not in ['text']
-    }
     
     # Étape 6: Construire le message de sortie
     output_message = {
         "data": {
             "text": text_to_embed,
-            **{k: v for k, v in devis_data.items() if k not in ['text']}
+            **{k.replace("-", "_"): v for k, v in devis_data.items() if k not in ['text']}
 
         },
         "collection": CollectionName.DEVIS,

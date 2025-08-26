@@ -17,7 +17,6 @@ def send_webhook(payload: dict) -> dict:
     Retourne: Un dictionnaire prêt à être publié.
     """
 
-    payload.pop("data")
     collection = payload.get("collection", collections.PRODUIT)
 
     try:

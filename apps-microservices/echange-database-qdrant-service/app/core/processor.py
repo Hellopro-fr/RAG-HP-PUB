@@ -45,6 +45,7 @@ def insertion_data(echange_data: dict) -> dict:
             
     
     output_message = {
+        "database"       : bdd,
         "collection"     : collection,
         "data"           : result,
         "id_demande"     : id_di,

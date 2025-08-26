@@ -2,8 +2,8 @@ import pika
 import os
 import time
 
-from devis_processor_service.messaging.consumer import Consumer
-from devis_processor_service.messaging.publisher import Publisher
+from categories_processor_service.messaging.consumer import Consumer
+from categories_processor_service.messaging.publisher import Publisher
 
 def main():
     """
@@ -17,14 +17,14 @@ def main():
     for i in range(10):
         try:
             connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ DI-Processor: Connecté à RabbitMQ.")
+            print("✅ Categories-Processor: Connecté à RabbitMQ.")
             break
         except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ DI-Processor: En attente de RabbitMQ... {i+1}s")
+            print(f"⏳ Categories-Processor: En attente de RabbitMQ... {i+1}s")
             time.sleep(1)
 
     if not connection:
-        print("❌ DI-Processor: Impossible de se connecter, arrêt du service.")
+        print("❌ Categories-Processor: Impossible de se connecter, arrêt du service.")
         exit(1)
 
     try:
@@ -38,11 +38,11 @@ def main():
         consumer.start_consuming()
 
     except KeyboardInterrupt:
-        print("\n🛑 DI-Processor: Arrêt demandé.")
+        print("\n🛑 Categories-Processor: Arrêt demandé.")
     finally:
         if connection and not connection.is_closed:
             connection.close()
-            print("✅ DI-Processor: Connexion RabbitMQ fermée.")
+            print("✅ Categories-Processor: Connexion RabbitMQ fermée.")
 
 if __name__ == '__main__':
     main()

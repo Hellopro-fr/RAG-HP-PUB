@@ -63,7 +63,7 @@ class MilvusEchangeCrud:
                 FieldSchema(name="affichage", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="acheteur", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="id_acheteur", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=512),
+                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="conversation_id", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="chunk_id", dtype=DataType.VARCHAR , max_length=64),
                 FieldSchema(name="chunk_number", dtype=DataType.INT64),
@@ -83,6 +83,7 @@ class MilvusEchangeCrud:
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
             collection.create_index(field_name="categorie", index_name="idx_categorie")
+            collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
             collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
             collection.create_index(field_name="affichage", index_name="idx_affichage")
             collection.create_index(field_name="etat", index_name="idx_etat")

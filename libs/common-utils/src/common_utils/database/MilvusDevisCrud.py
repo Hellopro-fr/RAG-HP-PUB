@@ -70,13 +70,13 @@ class MilvusDevisCrud:
                 FieldSchema(name="siren", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="siret", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_du_lead", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="nb_mec", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="nb_mec", dtype=DataType.INT64),
                 FieldSchema(name="liste_frns", dtype=DataType.VARCHAR, max_length=512),
                 FieldSchema(name="appreciation_lead", dtype=DataType.VARCHAR, max_length=255),
                 FieldSchema(name="id_produit", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=255),
                 FieldSchema(name="page_type", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=512),
+                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="chunk_id", dtype=DataType.VARCHAR , max_length=64),
                 FieldSchema(name="chunk_number", dtype=DataType.INT64),
                 FieldSchema(name="total_chunks", dtype=DataType.INT64),
@@ -95,6 +95,7 @@ class MilvusDevisCrud:
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
             collection.create_index(field_name="categorie", index_name="idx_categorie")
+            collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
             collection.create_index(field_name="page_type", index_name="idx_page_type")
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")

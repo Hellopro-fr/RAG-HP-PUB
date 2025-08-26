@@ -25,7 +25,7 @@ def process_echange_data_for_embedding(echange_data: dict, bdd: str) -> dict:
     output_message = {
         "data": {
             "text": text_to_embed,
-             **{k: v for k, v in echange_data.items() if k not in ['text']}
+             **{k.replace("-", "_"): v for k, v in echange_data.items() if k not in ['text']}
         },
         "collection": CollectionName.ECHANGE,
         "database": bdd
