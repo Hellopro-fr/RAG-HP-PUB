@@ -8,7 +8,7 @@ class Publisher:
         Initialise le publisher avec une connexion RabbitMQ existante.
         """
         self.connection = connection
-        self.channel = connection.channel()
+        self.channel = self.connection.channel()
         self.rabbitmq_connection = RabbitMQConnection()
         print("✅ Publisher initialisé.")
 
