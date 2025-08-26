@@ -134,7 +134,6 @@ class Embedding:
         )
         return text_splitter.split_text(text)
 
-    ### MODIFIED ###
     def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:
         batch_to_insert = []
         
@@ -152,10 +151,8 @@ class Embedding:
         
         self.logger.info(f"Le texte à vectoriser : {data_clean}")
 
-        # Todo: Vérifier si le type de page est renseigné
+        # Vérifier si le type de page est renseigné
         chunks = self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
-        # if not chunks:
-        #     chunks = [data_clean] # Assurer qu'il y a au moins un chunk
             
         if not chunks:
             self.logger.warning(f"Aucun chunk créé pour le texte donné.")
@@ -181,36 +178,5 @@ class Embedding:
         except Exception as e:
             self.logger.error(f"Erreur lors de la création des chunks: {e}", exc_info=True)
             return []
-
-        # for i, data in enumerate(chunks):
-        
-        #     chunk_id = str(i + 1)
-
-        #     try:
-        #         embeddings = self.embed(data)
-                
-        #         data_tmp = data_to_embed.copy()
-
-        #         data_tmp.pop("text",None)
-
-        #         data_tmp["embedding"] = embeddings[0]
-        #         data_tmp["text"] = data  
-        #         data_tmp["chunk_id"] = chunk_id  
-        #         data_tmp["chunk_number"] = i + 1 
-        #         data_tmp["total_chunks"] = len(chunks)
-                
-        #         batch_to_insert.append(data_tmp)
-
-        #         del data_tmp
-
-        #     except Exception as e:
-        #         self.logger.error(f"Echec d'embedding pour le chunk {chunk_id}: {e}", exc_info=True)
-        #         self.logger.error(f"Data : {data}") 
-        #         return []
-        #     finally:
-        #         self.logger.info(f"Cleaning up resources...")
-        #         del self.model
-        #         self.model = None
-        #         if self.device == 'cuda': torch.cuda.empty_cache()
 
         return batch_to_insert
