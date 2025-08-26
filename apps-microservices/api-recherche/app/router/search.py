@@ -1,0 +1,43 @@
+from fastapi import APIRouter, HTTPException, Body
+from app.schemas.search import SearchRequest, SearchResponse
+from app.core.search import search_in_qdrant, search_in_milvus
+import logging
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+@router.post("/milvus/search", response_model=SearchResponse, tags=["Recherche - MILVUS"])
+async def milvus_search_endpoint(request: SearchRequest = Body(...)):
+    try:
+        logger.info(f"Requête reçue sur /milvus/search pour les sources: {request.source}")
+        if not request.prompt.strip():
+            raise ValueError("Le prompt ne peut pas être vide.")
+        if not request.source:
+            raise ValueError("Au moins une source doit être spécifiée.")
+        
+        results = await search_in_milvus(request)
+        return results
+    except ValueError as ve:
+        logger.error(f"Erreur de validation (400): {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Erreur interne du serveur (500): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
+
+@router.post("/qdrant/search", response_model=SearchResponse, tags=["Recherche - QDRANT"])
+async def qdrant_search_endpoint(request: SearchRequest = Body(...)):
+    try:
+        logger.info(f"Requête reçue sur /qdrant/search pour les sources: {request.source}")
+        if not request.prompt.strip():
+            raise ValueError("Le prompt ne peut pas être vide.")
+        if not request.source:
+            raise ValueError("Au moins une source doit être spécifiée.")
+            
+        results = await search_in_qdrant(request)
+        return results
+    except ValueError as ve:
+        logger.error(f"Erreur de validation (400): {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Erreur interne du serveur (500): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
