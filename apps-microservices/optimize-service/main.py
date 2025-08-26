@@ -1,4 +1,5 @@
 import logging
+from dotenv import load_dotenv
 import os
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.openapi.utils import get_openapi
@@ -6,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.credentials import settings
 from app.utils.params import params
 from app.utils.response import error_response
+
+load_dotenv(dotenv_path=".env")
 
 description = """
 API d'embedding [RAG Hellopro] 🚀
