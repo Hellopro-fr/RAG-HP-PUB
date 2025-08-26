@@ -35,22 +35,34 @@ def insertion_data(website_data: dict) -> dict:
     result = []
     url = ""
     if func:
-        for website in websites:
-            #Todo: à verifier
-            url            = website.get('url', 'Url inconnu')
-            chunk          = website.get('chunk_number', 'Numero chunk inconnu')
-            total          = website.get('total_chunks', 'Total chunk inconnu')
-            logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", url, chunk, total)
-            result.append(func(website))
+        url = websites[0].get('url', 'Url inconnu')
+        #Verifier si l'url est déjà dans la bdd
+        res = base_vectorielle.get_website(url=url)
+
+        if res.get("status") == "error":
+            logging.error("Erreur lors de la vérification de l'URL %s : %s", url, res.get("message"))
+            output_message = {
+                "database"   : bdd,
+                "collection" : collection,
+                "data"       : [],
+                "url"        : url,
+                "error"      : res.get("message")
+            }
+        elif res.get("status") == "success":
+
+            if res.get("data").count > 0 :
+                logging.info("L'URL %s existe déjà dans la base de données. Insertion ignorée.", url)
+                result = res.get("data", [])
+            else:
+                result = func(websites)
+        
+            output_message = {
+                "database"   : bdd,
+                "collection" : collection,
+                "data"       : result,
+                "url"        : url,
+                "already_in_bdd": res.get("data").count > 0
+            }
             
-    if not url:
-        print(f"Insertion siteweb url vide : {websites}")
-    
-    output_message = {
-        "database"   : bdd,
-        "collection" : collection,
-        "data"       : result,
-        "url"        : url
-    }
     
     return output_message

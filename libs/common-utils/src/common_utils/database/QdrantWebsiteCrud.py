@@ -82,31 +82,31 @@ class QdrantWebsiteCrud:
         self.collection = collection_name
         return collection_name
 
-    def insert_website(self, website: Dict[str, Any]) -> Dict[str, Any]:
-        data = website
+    def insert_website(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             self._get_or_create_collection(model_config)
 
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
             self.logger.info(f"[{model_key}][website] Insertion de {len(data)} entités dans '{self.collection}'...")
 
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None     
-            
             points = []
-            
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=data.get("embedding"),
-                    payload={k: v for k, v in data.items() if k != "embedding"}
+
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None     
+                
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=data.get("embedding"),
+                        payload={k: v for k, v in data.items() if k != "embedding"}
+                    )
                 )
-            )
 
             result = self.client.upsert(collection_name=self.collection, points=points)
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
@@ -176,7 +176,7 @@ class QdrantWebsiteCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def get_website(self, id_website: str) -> Dict[str, Any]:
+    def get_website(self, url: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -184,17 +184,16 @@ class QdrantWebsiteCrud:
             # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
 
-            if not id_website:
-                return {"status": "error", "message": "ID website requis."}
+            if not url:
+                return {"status": "error", "message": "Url website requis."}
 
             filter_query = Filter(
-                must=[FieldCondition(key="id_website", match=MatchValue(value=id_website))]
+                must=[FieldCondition(key="url", match=MatchValue(value=url))]
             )
 
             scroll_result, _ = self.client.scroll(
                 collection_name=self.collection,
-                scroll_filter=filter_query,
-                limit=1
+                scroll_filter=filter_query
             )
 
             return {"status": "success", "data": [p.payload for p in scroll_result]}
