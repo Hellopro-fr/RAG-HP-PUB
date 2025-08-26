@@ -11,7 +11,7 @@ class Consumer:
         """
         self.channel = connection.channel()
         self.publisher = publisher
-        self.exchange_name = 'data_exchange'
+        self.exchange_name = 'data_exchange_produits'
         self.routing_key = 'new_data.product'
         self.queue_name = 'product_processing_queue'
 
