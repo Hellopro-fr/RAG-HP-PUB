@@ -8,5 +8,6 @@ langdetect
 sentence_splitter
 python-multipart
 html5lib
-lxml[html_clean]
+lxml
+lxml_html_clean
 pydantic
