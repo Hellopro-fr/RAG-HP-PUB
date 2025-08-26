@@ -7,6 +7,8 @@ services:
       dockerfile: ./apps-microservices/api-ingestion/Dockerfile
     container_name: api-ingestion-service
     restart: unless-stopped
+    ports:
+      - "8509:8509"
     env_file:
       - .env
 
@@ -45,6 +47,13 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   di-database-qdrant-service:
     build:

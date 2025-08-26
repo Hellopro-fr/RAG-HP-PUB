@@ -1,37 +1,48 @@
 import pika
 import json
+from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 class Publisher:
     def __init__(self, connection: pika.BlockingConnection):
         """
         Initialise le publisher avec une connexion RabbitMQ existante.
         """
+        self.connection = connection
         self.channel = connection.channel()
+        self.rabbitmq_connection = RabbitMQConnection()
         print("✅ Publisher initialisé.")
 
     def publish_message(self, message_dict: dict):
-        """
-        Publie un message (dictionnaire) sur le topic configuré.
-        """
-        collection = message_dict.get("collection", "inconnu")
-        collection = collection.lower()
-        self.exchange_name = f"{collection}_embedded_data_exchange"
-        self.routing_key = f"data.{collection}.ready_for_insertion"
 
-        # Déclare l'exchange où il va publier
-        self.channel.exchange_declare(
-            exchange=self.exchange_name, 
-            exchange_type='topic', 
-            durable=True
-        )
+        try:
+            """
+            Publie un message (dictionnaire) sur le topic configuré.
+            """
+            collection = message_dict.get("collection", "inconnu")
+            collection = collection.lower()
+            self.exchange_name = f"{collection}_embedded_data_exchange"
+            self.routing_key = f"data.{collection}.ready_for_insertion"
 
-        self.channel.basic_publish(
-            exchange=self.exchange_name,
-            routing_key=self.routing_key,
-            body=json.dumps(message_dict).encode('utf-8'),
-            properties=pika.BasicProperties(delivery_mode=2)
-        )
+            # Déclare l'exchange où il va publier
+            self.channel.exchange_declare(
+                exchange=self.exchange_name, 
+                exchange_type='topic', 
+                durable=True
+            )
+
+            self.channel.basic_publish(
+                exchange=self.exchange_name,
+                routing_key=self.routing_key,
+                body=json.dumps(message_dict).encode('utf-8'),
+                properties=pika.BasicProperties(delivery_mode=2)
+            )
+            
+            print(f"   📤 routing_key : '{self.routing_key}'")
+            print(f"   📤 Output Message post embedding '{message_dict}'")
+            print(f"   📤 Message traité et publié post embedding.")
         
-        print(f"   📤 routing_key : '{self.routing_key}'")
-        print(f"   📤 Output Message post embedding '{message_dict}'")
-        print(f"   📤 Message traité et publié post embedding.")
+        except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
+            print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+            self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
+            self.channel = self.connection.channel()
+            self.publish_message(message_dict)  # retry après reconnexion

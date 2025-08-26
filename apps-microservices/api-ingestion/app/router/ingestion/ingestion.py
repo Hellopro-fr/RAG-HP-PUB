@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, HTTPException, status
 from app.schemas.ingestion.ingestion import BaseIngestion as IngestionRequest, BaseIngestionReponse, BaseIngestionReponseSucces
 from app.messaging.publisher import publish_message
 from app.core.ingestion.ingestion import routing_key_collection
+from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 router = APIRouter()
 
@@ -18,7 +19,11 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
     channel = request.app.state.rabbitmq_channel
     
     if not channel or channel.is_closed:
-        return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
+        connection = RabbitMQConnection().create_connection(max_retries=10, retry_delay=5)
+        if connection:
+            channel = connection.channel()
+        else:
+            return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
     exchange_name = f"data_exchange_{payload.collection}"
     routing_key = routing_key_collection(payload.collection)
@@ -55,6 +60,12 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
     channel = request.app.state.rabbitmq_channel
     
     if not channel or channel.is_closed:
+        connection = RabbitMQConnection().create_connection(max_retries=10, retry_delay=5)
+        if connection:
+            channel = connection.channel()
+        else:
+            return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
+
         return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
     
