@@ -3,3 +3,5 @@ sentence-transformers
 langchain_text_splitters
 pytest
 pika
+protobuf
+tiktoken
