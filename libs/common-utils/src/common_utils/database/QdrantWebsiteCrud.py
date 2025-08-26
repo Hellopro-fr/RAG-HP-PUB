@@ -72,6 +72,7 @@ class QdrantWebsiteCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
+        self.client.create_payload_index(collection_name, field_name="url", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
