@@ -18,9 +18,9 @@ RUN pip install -r requirements.txt
 COPY apps-microservices/api-ingestion .
 
 # Étape 4: Exposer le port
-EXPOSE 8509
+EXPOSE 8510
 
 # Étape 5: Définir la commande de lancement directement
 # On lance Uvicorn en lui disant de trouver le module 'main' dans le paquet 'api_ingestion_service'
-# Le port est défini dynamiquement par la variable $PORT de Render, avec une valeur par défaut de 8509.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8509"]
+# Le port est défini dynamiquement par la variable $PORT de Render, avec une valeur par défaut de 8510.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8510"]
