@@ -23,7 +23,7 @@ class ModelConfig:
     collection_name: str = "produits"
     dimension: int = 1024
 
-class MilvusEchangeCrud:
+class MilvusProduitsCrud:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -115,7 +115,7 @@ class MilvusEchangeCrud:
         return collection
 
 
-    def insert_echange(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -159,7 +159,7 @@ class MilvusEchangeCrud:
             self.logger.error(f"[{model_key}][Echange] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {data}")
     
-    def update_echange(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def update_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -175,13 +175,13 @@ class MilvusEchangeCrud:
                 }
             
             if not data.get("id"):
-                self.logger.error(f"[{model_key}][Echange] Mise à jour sans ID.")
+                self.logger.error(f"[{model_key}][Produits] Mise à jour sans ID.")
                 return {
                     "status": "error",
                     "message": "Clé primaire (ID) requise pour la mise à jour."
                 }
 
-            self.logger.info(f"[{model_key}][Echange] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
+            self.logger.info(f"[{model_key}][Produits] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
             
             
             data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
@@ -200,13 +200,13 @@ class MilvusEchangeCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de mise à jour : {e}")
+            self.logger.error(f"[{model_key}][Produits] Erreur Milvus lors de mise à jour : {e}")
             self.logger.error(f"Data : {data}")
         except Exception as e:
-            self.logger.error(f"[{model_key}][Echange] Mise à jour de batch : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][Produits] Mise à jour de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {data}")
 
-    def delete_echange(self,data: Dict[str, Any]) -> Dict[str, Any]:
+    def delete_produits(self,data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
         id_entity_milvus = data.get("id")
@@ -222,13 +222,13 @@ class MilvusEchangeCrud:
                 }
 
             if not id_entity_milvus:
-                self.logger.error(f"[{model_key}][Echange] Suppression sans ID.")
+                self.logger.error(f"[{model_key}][Produits] Suppression sans ID.")
                 return {
                     "status": "error",
                     "message": "Clé primaire (ID) requise pour la suppression."
                 }
 
-            self.logger.info(f"[{model_key}][Echange] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
+            self.logger.info(f"[{model_key}][Produits] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
             result = self.collection.delete(f"id == {id_entity_milvus}")
             self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
@@ -239,6 +239,6 @@ class MilvusEchangeCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la suppression : {e}")
+            self.logger.error(f"[{model_key}][Produits] Erreur Milvus lors de la suppression : {e}")
         except Exception as e:
-            self.logger.error(f"[{model_key}][Echange] Suppression : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][Produits] Suppression : {e}", exc_info=True)

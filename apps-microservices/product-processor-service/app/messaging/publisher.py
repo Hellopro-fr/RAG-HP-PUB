@@ -22,7 +22,7 @@ class Publisher:
         """
         Publie un message (dictionnaire) sur le topic configuré.
         """
-        product_id = message_dict.get("metadata", {}).get("id_produit", "inconnu")
+        product_id = message_dict.get("id_produit", "ID produit inconnu")
         self.channel.basic_publish(
             exchange=self.exchange_name,
             routing_key=self.routing_key,

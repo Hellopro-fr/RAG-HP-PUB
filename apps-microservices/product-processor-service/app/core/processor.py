@@ -31,7 +31,6 @@ def process_product_data_for_embedding(product_data: dict,bdd: str = "qdrant") -
     output_message = {
         "data": {
             "text": text_to_embed,
-            "metadata": metadata,
             **{k: v for k, v in product_data.items() if k not in ['text']}
         },
         "collection": CollectionName.PRODUIT,
