@@ -54,8 +54,7 @@ class Consumer:
         """
         Démarre la boucle d'écoute des messages.
         """
-        i = 3
-        while i > 0:
+        for i in range(3):
             try:
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
                 print("👂 Embedding-Product-Processor: En attente de messages...")
@@ -64,4 +63,3 @@ class Consumer:
             except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
                 print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
                 self.connect()
-                i-=1

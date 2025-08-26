@@ -23,12 +23,9 @@ class RabbitMQConnection:
         while attempts < max_retries:
             try:
                 print(f"🔄 Tentative {attempts+1}/{max_retries} de connexion à RabbitMQ...")
-                params = pika.ConnectionParameters(
-                    host=self.host,
-                    heartbeat=60,                # garde la connexion vivante
-                    blocked_connection_timeout=300
-                )
-                self.connection = pika.BlockingConnection(params)
+           
+                self.connection = pika.BlockingConnection(pika.URLParameters(self.host))
+        
                 print("✅ Connexion RabbitMQ établie.")
                 return self.connection
             except Exception as e:

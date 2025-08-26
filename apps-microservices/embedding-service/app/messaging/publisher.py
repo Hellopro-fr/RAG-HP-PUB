@@ -14,35 +14,36 @@ class Publisher:
 
     def publish_message(self, message_dict: dict):
 
-        try:
-            """
-            Publie un message (dictionnaire) sur le topic configuré.
-            """
-            collection = message_dict.get("collection", "inconnu")
-            collection = collection.lower()
-            self.exchange_name = f"{collection}_embedded_data_exchange"
-            self.routing_key = f"data.{collection}.ready_for_insertion"
+        for i in range(3):  # Essaye de se reconnecter 3 fois
+            try:
+                """
+                Publie un message (dictionnaire) sur le topic configuré.
+                """
+                collection = message_dict.get("collection", "inconnu")
+                collection = collection.lower()
+                self.exchange_name = f"{collection}_embedded_data_exchange"
+                self.routing_key = f"data.{collection}.ready_for_insertion"
 
-            # Déclare l'exchange où il va publier
-            self.channel.exchange_declare(
-                exchange=self.exchange_name, 
-                exchange_type='topic', 
-                durable=True
-            )
+                # Déclare l'exchange où il va publier
+                self.channel.exchange_declare(
+                    exchange=self.exchange_name, 
+                    exchange_type='topic', 
+                    durable=True
+                )
 
-            self.channel.basic_publish(
-                exchange=self.exchange_name,
-                routing_key=self.routing_key,
-                body=json.dumps(message_dict).encode('utf-8'),
-                properties=pika.BasicProperties(delivery_mode=2)
-            )
-            
-            print(f"   📤 routing_key : '{self.routing_key}'")
-            print(f"   📤 Output Message post embedding '{message_dict}'")
-            print(f"   📤 Message traité et publié post embedding.")
-        
-        except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
-            print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
-            self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-            self.channel = self.connection.channel()
-            self.publish_message(message_dict)  # retry après reconnexion
+                self.channel.basic_publish(
+                    exchange=self.exchange_name,
+                    routing_key=self.routing_key,
+                    body=json.dumps(message_dict).encode('utf-8'),
+                    properties=pika.BasicProperties(delivery_mode=2)
+                )
+                
+                print(f"   📤 routing_key : '{self.routing_key}'")
+                print(f"   📤 Output Message post embedding '{message_dict}'")
+                print(f"   📤 Message traité et publié post embedding.")
+
+                break  # Si la publication réussit, on sort de la boucle
+            except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
+                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
+                self.channel = self.connection.channel()
