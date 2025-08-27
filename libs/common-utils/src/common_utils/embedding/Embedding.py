@@ -85,9 +85,6 @@ class Embedding:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.logger = kwargs.get("logger",logger)
         self.time_logger = kwargs.get("time_logger", time_logger)
-
-        # Charger les valeurs cumulées à partir du log
-        self.total_time, self.total_count = self._load_cumulative_stats()
         
         self.logger.info(f"Initialisation de l'Embedding avec le modèle : {self.model_name} sur le device : {self.device}")
         
@@ -100,27 +97,12 @@ class Embedding:
             # You might want to raise the exception here to stop the service from starting
             # raise e
     
-    def _load_cumulative_stats(self) -> tuple[float, int]:
-        """Lit temps_embedding.log pour récupérer total_time et total_data."""
-        log_path = "/logs/temps_embedding.log"
-        if not os.path.exists(log_path):
-            return 0.0, 0
 
-        try:
-            with open(log_path, "r", encoding="utf-8") as f:
-                line = f.read().strip()
-            match = re.match(r"total_time:\s*([\d.]+)s\s*,\s*total_data:\s*(\d+)", line)
-            if match:
-                return float(match.group(1)), int(match.group(2))
-        except Exception as e:
-            self.logger.error(f"Impossible de lire {log_path} : {e}")
-        return 0.0, 0
-
-    def _save_cumulative_stats(self):
-        """Écrase le fichier avec les stats cumulées."""
+    def _append_time_log(self, elapsed: float):
+        """Ajoute une ligne avec le temps d’exécution dans temps_embedding.log"""
         log_path = "/logs/temps_embedding.log"
-        with open(log_path, "w", encoding="utf-8") as f:
-            f.write(f"total_time: {self.total_time:.4f}s , total_data: {self.total_count}")
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"total_time: {elapsed:.4f}s\n")
 
     def embed(self, sentences: list[str]) -> list[list[float]]:
         if not self.model:
@@ -140,12 +122,8 @@ class Embedding:
 
         elapsed = time.perf_counter() - start_time
 
-        # Mise à jour des stats
-        self.total_time += elapsed
-        self.total_count += 1
-
         # Sauvegarde des stats dans le fichier (en écrasant le contenu)
-        self._save_cumulative_stats()
+        self._append_time_log(elapsed)
 
         return vector
     
