@@ -81,6 +81,7 @@ class MilvusProduitsCrud:
                 FieldSchema(name="delai_livraison", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="marque", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="fabricant", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="garantie", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="normes", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="frais_de_port", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="caracteristique", dtype=DataType.VARCHAR, max_length=512),
