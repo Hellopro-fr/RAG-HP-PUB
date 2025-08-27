@@ -4,8 +4,10 @@ from embedding_service.messaging.publisher import Publisher  # Importe notre pub
 from embedding_service.core.processor import embed_input_data # Importe la logique métier
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
+from sentence_transformers import SentenceTransformer
+
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
+    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher, model: SentenceTransformer):
         """
         Initialise le consumer.
         Il a besoin d'une connexion ET d'une instance du publisher.
@@ -20,6 +22,7 @@ class Consumer:
         # Todo: à vérifier si le nom de la queue est correct
         self.queue_name = 'embedding_queue'
         self.rabbitmq_connection = RabbitMQConnection()
+        self.model = model
         self.connect()
         print("✅ Consumer initialisé.")
 
@@ -42,7 +45,7 @@ class Consumer:
         print(f"\n📥 Embedding-Product-Processor: Message reçu pre embedding.")
 
         # 1. Appelle la logique métier PURE
-        output_message = embed_input_data(input_data)
+        output_message = embed_input_data(input_data, model=self.model)
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)

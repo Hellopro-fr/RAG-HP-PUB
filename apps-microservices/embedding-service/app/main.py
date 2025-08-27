@@ -5,6 +5,8 @@ import os
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
 
+from sentence_transformers import SentenceTransformer
+
 def main():
     """
     Point d'entrée principal du service.
@@ -32,7 +34,8 @@ def main():
         publisher = Publisher(connection)
         
         # 2. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher)
+        model = SentenceTransformer("dangvantuan/sentence-camembert-large", device="cuda")
+        consumer = Consumer(connection, publisher, model=model)
         
         # 3. Lancer l'écoute
         consumer.start_consuming()

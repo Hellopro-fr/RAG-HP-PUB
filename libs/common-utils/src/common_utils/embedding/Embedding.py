@@ -89,7 +89,8 @@ class Embedding:
         self.logger.info(f"Initialisation de l'Embedding avec le modèle : {self.model_name} sur le device : {self.device}")
         
         try:
-            self.model: Optional[SentenceTransformer] = SentenceTransformer(self.model_name, device=self.device)
+            # self.model: Optional[SentenceTransformer] = SentenceTransformer(self.model_name, device=self.device)
+            self.model: Optional[SentenceTransformer] = kwargs.get("model", "")
             self.logger.info("Model loaded successfully.")
         except Exception as e:
             self.logger.error(f"Failed to load model '{self.model_name}': {e}", exc_info=True)
