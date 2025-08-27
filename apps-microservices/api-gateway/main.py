@@ -34,7 +34,7 @@ async def proxy(service: str, path: str, request: Request):
 
     async with httpx.AsyncClient() as client:
         response = await client.request(
-            method, url, headers=headers, content=body
+            method, url, headers=headers, content=body, timeout=None
         )
 
     if response.status_code == 403:
