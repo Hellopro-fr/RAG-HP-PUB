@@ -48,6 +48,7 @@ services:
     env_file:
       - .env
     deploy:
+      replicas: 4
       resources:
         reservations:
           devices:
