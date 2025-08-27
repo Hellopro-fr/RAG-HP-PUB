@@ -33,3 +33,9 @@ class SearchResponse(BaseModel):
     total_process: float
     llm_execution: float
     import_duration: float
+
+class LLMPipeline(BaseModel):
+    llm_response: str = ""
+    llm_duration: str = ""
+    full_user_prompt: str = ""
+    context: str = ""

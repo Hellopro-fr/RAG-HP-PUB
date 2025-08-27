@@ -7,7 +7,7 @@ from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from pymilvus import connections, Collection, utility
 from app.core.credentials import settings
-from app.schemas.search import SearchRequest
+from app.schemas.search import SearchRequest, LLMPipeline
 
 class DeepSeek:
 	def __init__(self, config=None):
@@ -76,6 +76,28 @@ import_duration = time.perf_counter() - import_start_time
 # Dictionnaires de mapping
 list_etat = {"1": "Client", "2": "Pause", "3": "Prospect"}
 list_affichage = {"1": "Complet", "3": "Restreint", "5": "Découverte", "4": "Non visible"}
+
+def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
+    llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
+    if request.action == 2 and context_texts:
+        context = "\n-----\n\n\n".join(context_texts)
+        full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
+        
+        start_llm_time = time.perf_counter()
+        if request.chat_model == "deepseek":
+            deepseek = DeepSeek()
+            deepseek.set_temperature(request.temperature)
+            llm_response = deepseek.chat(full_user_prompt)['content']
+        else:
+            openai_client = get_openai_client()
+            completion = openai_client.chat.completions.create(
+                model=request.chat_model,
+                messages=[{"role": "user", "content": full_user_prompt}],
+                temperature=float(request.temperature)
+            )
+            llm_response = completion.choices[0].message.content
+        llm_duration = time.perf_counter() - start_llm_time
+    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
 
 def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_vide: bool):
     must_conditions = []
@@ -171,16 +193,17 @@ async def search_in_qdrant(request: SearchRequest):
             final_text = payload.get("text", "")
             
             # TODO complété: Logique de reconstruction des chunks pour 'devis_poc'
+            # correction : indexation du champ lead_id
             # if source == "devis_poc" and total_chunks > 1 and lead_id:
             if source == "devis_poc____" and total_chunks > 1 and lead_id:
                 logger.info(f"Reconstruction pour lead_id: {lead_id}")
                 sibling_chunks, _ = qdrant_client.scroll(
                     collection_name=source,
-                    # scroll_filter=models.Filter(must=[models.FieldCondition(key="lead_id", match=models.MatchValue(value=lead_id))]),
+                    scroll_filter=models.Filter(must=[models.FieldCondition(key="lead_id", match=models.MatchValue(value=lead_id))]),
                     # TODO : à vérifier
-                    scroll_filter=Filter(must=[
-                        FieldCondition(key="lead_id", match=MatchValue(value=lead_id))
-                    ]),
+                    # scroll_filter=Filter(must=[
+                    #     FieldCondition(key="lead_id", match=MatchValue(value=lead_id))
+                    # ]),
                     limit=total_chunks,
                     with_payload=True
                 )
@@ -202,51 +225,91 @@ async def search_in_qdrant(request: SearchRequest):
         all_results[source] = matches_info
     search_duration = time.perf_counter() - start_search
 
-    llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
-    if request.action == 2 and context_texts:
-        context = "\n\n".join(context_texts)
-        full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
+    llm_req = llm_prompt(request, context_texts)
+    # llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
+    # if request.action == 2 and context_texts:
+    #     context = "\n-----\n\n\n".join(context_texts)
+    #     full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
         
-        start_llm_time = time.perf_counter()
-        if request.chat_model == "deepseek":
-            deepseek = DeepSeek()
-            deepseek.set_temperature(request.temperature)
-            llm_response = deepseek.chat(full_user_prompt)['content']
-        else:
-            openai_client = get_openai_client()
-            completion = openai_client.chat.completions.create(
-                model=request.chat_model,
-                messages=[{"role": "user", "content": full_user_prompt}],
-                temperature=float(request.temperature)
-            )
-            llm_response = completion.choices[0].message.content
-        llm_duration = time.perf_counter() - start_llm_time
+    #     start_llm_time = time.perf_counter()
+    #     if request.chat_model == "deepseek":
+    #         deepseek = DeepSeek()
+    #         deepseek.set_temperature(request.temperature)
+    #         llm_response = deepseek.chat(full_user_prompt)['content']
+    #     else:
+    #         openai_client = get_openai_client()
+    #         completion = openai_client.chat.completions.create(
+    #             model=request.chat_model,
+    #             messages=[{"role": "user", "content": full_user_prompt}],
+    #             temperature=float(request.temperature)
+    #         )
+    #         llm_response = completion.choices[0].message.content
+    #     llm_duration = time.perf_counter() - start_llm_time
 
     total_duration = time.perf_counter() - start_total_time
     
     return {
         "database": "qdrant",
         "user_query": request.prompt,
-        "filter": search_filter.dict() if search_filter else None,
+        "filter": search_filter.dict() if search_filter else "",
         "matches": all_results,
-        "context": context if request.action == 2 else "",
-        "response": llm_response,
+        "context": llm_req.context,
+        "response": llm_req.llm_response,
         "embedding": round(embed_duration, 2),
         "fournisseur_non_vide": fournisseur_non_vide,
-        "full_user_prompt": full_user_prompt,
-        "chat_model": "gpt-4",
+        "full_user_prompt": llm_req.full_user_prompt,
+        "chat_model": request.chat_model,
         "temperature": request.temperature,
         "vector_search": round(search_duration, 2),
         "total_process": round(total_duration, 2),
-        "llm_execution": round(llm_duration, 2),
+        "llm_execution": round(llm_req.llm_duration, 2),
         "import_duration": round(import_duration, 2)
     }
+
+def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
+	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
+	clauses = []
+
+	# Catégories (ex: 'categorie in ["Bungalows", "Container"]')
+	categorie_dict = data.get("categorie", {})
+	if categorie_dict:
+		vals = [f'"{v}"' for v in categorie_dict.values()] # Ajouter des guillemets pour les chaînes
+		if vals: 
+			clauses.append(f'categorie in [{",".join(vals)}]')
+
+	# Fournisseurs
+	fournisseur_dict = data.get("fournisseur", {})
+	if fournisseur_dict:
+		vals = [f'"{v}"' for v in fournisseur_dict.values()]
+		if vals: 
+			clauses.append(f'{payload_fournisseur_key} in [{",".join(vals)}]')
+
+	# État
+	etat_ids = data.get("etat", [])
+	if etat_ids:
+		vals = [f'"{list_etat[str(e)]}"' for e in etat_ids if str(e) in list_etat]
+		if vals: 
+			clauses.append(f'etat in [{",".join(vals)}]')
+
+	# Affichage
+	affichage_ids = data.get("affichage", [])
+	if affichage_ids:
+		vals = [f'"{list_affichage[str(a)]}"' for a in affichage_ids if str(a) in list_affichage]
+		if vals: 
+			clauses.append(f'affichage in [{",".join(vals)}]')
+
+	# Fournisseur non vide
+	if fournisseur_non_vide:
+		clauses.append(f'{payload_fournisseur_key} != "" and {payload_fournisseur_key} is not null')
+
+	return " and ".join(clauses)
 
 async def search_in_milvus(request: SearchRequest):
     # Implémentation complète de la recherche Milvus
     logger.info(f"[MILVUS] Recherche: prompt='{request.prompt[:50]}...', sources={request.source}")
     start_total_time = time.perf_counter()
 
+    # 1. Obtenir les ressources nécessaires
     get_milvus_connection()
     embedding_model = get_embedding_model()
 
@@ -257,9 +320,7 @@ async def search_in_milvus(request: SearchRequest):
     top_k = int(request.nombre_resultat)
     all_results = {}
     context_texts = []
-    
-    # NOTE: L'implémentation de la logique de filtre pour Milvus ('build_milvus_expression')
-    # n'était pas dans le notebook. Il faudrait la créer si nécessaire. Pour l'instant, la recherche se fera sans filtres complexes.
+
     filter_expr = "" # Placeholder
 
     start_search = time.perf_counter()
@@ -274,42 +335,72 @@ async def search_in_milvus(request: SearchRequest):
 
         search_params = {"metric_type": "COSINE", "params": {"ef": 150}}
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
+        
+        filter_expr = build_milvus_expression(request.dict(), "id_fournisseur", "1000000" in request.fournisseur)
 
         search_results = collection.search(
             data=query_vector,
             anns_field="embedding",
             param=search_params,
             limit=top_k,
-            expr=filter_expr if filter_expr else None,
+            expr=filter_expr,
             output_fields=output_fields
         )
-        
+      
+        # Récupérer le payload complet pour les IDs trouvés
+        hit_ids = [hit.id for hit in search_results[0]]
+        if not hit_ids:
+            all_results[source] = []
+            continue
+
+        # La récupération du payload complet se fait via .query
+        entities = collection.query(expr=f"id in {hit_ids}", output_fields=["*"])
+
+        # Mapper les distances de recherche aux entités complètes
+        id_to_distance = {hit.id: hit.distance for hit in search_results[0]}
+
         matches_info = []
-        if search_results and search_results[0]:
-            for hit in search_results[0]:
-                entity = {field: hit.entity.get(field) for field in output_fields}
-                context_texts.append(entity.get("text", ""))
-                matches_info.append({
-                    "id": hit.id, "score": hit.distance, "id_lead": entity.get("lead_id"), "metadata": entity
-                })
+        for entity in entities:
+            # Logique de reconstruction de chunks (similaire à Qdrant)
+            # ...
+            final_text = entity.get("text", "")
+            context_texts.append(f"{final_text}\n-----\n")
+
+            matches_info.append({
+                "id": entity.get("id"),
+                "score": id_to_distance.get(entity.get("id")),
+                "id_lead": entity.get("lead_id"),
+                "metadata": entity
+            })
         all_results[source] = matches_info
+
+        # matches_info = []
+        # if search_results and search_results[0]:
+        #     for hit in search_results[0]:
+        #         entity = {field: hit.entity.get(field) for field in output_fields}
+        #         context_texts.append(entity.get("text", ""))
+        #         matches_info.append({
+        #             "id": hit.id, "score": hit.distance, "id_lead": entity.get("lead_id"), "metadata": entity
+        #         })
+        # all_results[source] = matches_info
     search_duration = time.perf_counter() - start_search
 
     # TODO complété: Logique LLM pour Milvus
-    llm_response, full_user_prompt, llm_duration = "", "", 0
-    if request.action == 2 and context_texts:
-        context = "\n\n".join(context_texts)
-        full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
+    llm_req = llm_prompt(request, context_texts)
+    # llm_response, full_user_prompt, llm_duration = "", "", 0
+    # if request.action == 2 and context_texts:
+    #     context = "\n\n".join(context_texts)
+    #     full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
         
-        start_llm_time = time.perf_counter()
-        openai_client = get_openai_client()
-        completion = openai_client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": full_user_prompt}],
-            temperature=float(request.temperature)
-        )
-        llm_response = completion.choices[0].message.content
-        llm_duration = time.perf_counter() - start_llm_time
+    #     start_llm_time = time.perf_counter()
+    #     openai_client = get_openai_client()
+    #     completion = openai_client.chat.completions.create(
+    #         model="gpt-4",
+    #         messages=[{"role": "user", "content": full_user_prompt}],
+    #         temperature=float(request.temperature)
+    #     )
+    #     llm_response = completion.choices[0].message.content
+    #     llm_duration = time.perf_counter() - start_llm_time
     
     total_duration = time.perf_counter() - start_total_time
     
@@ -318,15 +409,15 @@ async def search_in_milvus(request: SearchRequest):
         "user_query": request.prompt,
         "filter": filter_expr,
         "matches": all_results,
-        "context": context if request.action == 2 else "",
-        "response": llm_response,
+        "context": llm_req.context,
+        "response": llm_req.llm_response,
         "embedding": round(embed_duration, 2),
         "fournisseur_non_vide": None, # Non implémenté pour Milvus dans le code d'origine
-        "full_user_prompt": full_user_prompt,
+        "full_user_prompt": llm_req.full_user_prompt,
         "chat_model": "gpt-4",
         "temperature": request.temperature,
         "vector_search": round(search_duration, 2),
         "total_process": round(total_duration, 2),
-        "llm_execution": round(llm_duration, 2),
+        "llm_execution": round(llm_req.llm_duration, 2),
         "import_duration": round(import_duration, 2)
     }
