@@ -171,7 +171,8 @@ async def search_in_qdrant(request: SearchRequest):
             final_text = payload.get("text", "")
             
             # TODO complété: Logique de reconstruction des chunks pour 'devis_poc'
-            if source == "devis_poc" and total_chunks > 1 and lead_id:
+            # if source == "devis_poc" and total_chunks > 1 and lead_id:
+            if source == "devis_poc____" and total_chunks > 1 and lead_id:
                 logger.info(f"Reconstruction pour lead_id: {lead_id}")
                 sibling_chunks, _ = qdrant_client.scroll(
                     collection_name=source,
