@@ -75,7 +75,7 @@ class MilvusProduitsCrud:
                 FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="prix_ht", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="prix_ttc", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="statut", dtype=DataType.VARCHAR, max_length=64),
+                #FieldSchema(name="statut", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="remise", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="stock", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="delai_livraison", dtype=DataType.VARCHAR, max_length=64),
