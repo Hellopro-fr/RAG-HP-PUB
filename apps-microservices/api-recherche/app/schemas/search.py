@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import Annotated, List, Optional, Dict, Any
 
 # Ce schéma est identique à celui du notebook, comme demandé.
 class SearchRequest(BaseModel):
@@ -39,3 +39,9 @@ class LLMPipeline(BaseModel):
     llm_duration: float = ""
     full_user_prompt: str = ""
     context: str = ""
+    
+class SearchReponse(BaseModel):
+    results: Annotated[SearchResponse, Field(title="Contient l'objet du résultat depuis les recherches")]
+    # TODO:
+    # à supprimer les données en entrées pour vérification
+    post:  Annotated[SearchRequest, Field(title="Contient l'objet de la requête depuis les recherches")] = {}
