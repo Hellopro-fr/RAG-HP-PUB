@@ -39,6 +39,7 @@ class Publisher:
                 )
                 
                 print(f"   📤 routing_key : '{self.routing_key}'")
+                print(f"   📤 Output Message post embedding '{message_dict}'")
                 print(f"   📤 Message traité et publié post embedding.")
 
                 break  # Si la publication réussit, on sort de la boucle
