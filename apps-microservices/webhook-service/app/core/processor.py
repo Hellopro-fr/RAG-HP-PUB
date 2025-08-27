@@ -17,6 +17,10 @@ def send_webhook(payload: dict) -> dict:
     Retourne: Un dictionnaire prêt à être publié.
     """
 
+    if payload is None:
+        logging.error("Payload invalide pour le webhook.")
+        return ""
+    
     collection = payload.get("collection", collections.PRODUIT)
 
     try:
