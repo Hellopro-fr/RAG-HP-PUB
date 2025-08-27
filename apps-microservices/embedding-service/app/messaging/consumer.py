@@ -1,10 +1,8 @@
 import pika
 import json
-import threading
 from embedding_service.messaging.publisher import Publisher  # Importe notre publisher local
-from embedding_service.core.processor import embed_input_data  # Importe la logique métier
+from embedding_service.core.processor import embed_input_data # Importe la logique métier
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
-
 
 class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
@@ -39,42 +37,29 @@ class Consumer:
     def _on_message_callback(self, ch, method, properties, body):
         """
         Callback privé qui orchestre le traitement d'un message.
-        Chaque message est exécuté dans un thread séparé pour permettre le parallélisme.
         """
+        input_data = json.loads(body)
+        print(f"\n📥 Embedding-Product-Processor: Message reçu pre embedding.")
 
-        def task():
-            try:
-                input_data = json.loads(body)
-                print(f"\n📥 Embedding-Product-Processor: Message reçu pre embedding.")
+        # 1. Appelle la logique métier PURE
+        output_message = embed_input_data(input_data)
+        
+        # 2. Utilise le publisher pour envoyer le résultat
+        self.publisher.publish_message(output_message)
 
-                # 1. Appelle la logique métier PURE
-                output_message = embed_input_data(input_data)
-
-                # 2. Utilise le publisher pour envoyer le résultat
-                self.publisher.publish_message(output_message)
-
-                print("✅ Message traité et publié.")
-            except Exception as e:
-                print(f"❌ Erreur lors du traitement du message: {e}")
-            finally:
-                # 3. Acquitte le message original (même en cas d'erreur pour éviter un blocage)
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-
-        # Lance un thread par message
-        threading.Thread(target=task, daemon=True).start()
+        # 3. Acquitte le message original
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def start_consuming(self):
         """
         Démarre la boucle d'écoute des messages.
         """
-        # Permet à RabbitMQ d'envoyer jusqu'à 4 messages simultanés
-        self.channel.basic_qos(prefetch_count=4)
-        self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-        print("👂 Embedding-Product-Processor: En attente de messages (max 4 en parallèle)...")
-
-        while True:
+        for i in range(3):
             try:
+                self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
+                print("👂 Embedding-Product-Processor: En attente de messages...")
                 self.channel.start_consuming()
+                break  # Si start_consuming se termine normalement, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
                 print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
                 self.connect()
