@@ -183,8 +183,6 @@ class Embedding:
             self.logger.warning(f"Le texte à vectoriser est vide après nettoyage")
             self.logger.warning(f"Data: {data_clean}")
             return []
-        
-        self.logger.info(f"Le texte à vectoriser : {data_clean}")
 
         # Vérifier si le type de page est renseigné
         chunks = self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
