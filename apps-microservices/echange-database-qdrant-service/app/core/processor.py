@@ -34,7 +34,7 @@ def insertion_data(echange_data: dict) -> dict:
     func = processing_functions.get(collection_enum)
     result = []
     
-    if func:
+    if func and len(echanges) > 0:
         conversation_id = echanges[0].get("conversation_id", "conversation_id inconnu")
         res = base_vectorielle.get_echange(conversation_id=conversation_id)
 

@@ -33,7 +33,7 @@ def insertion_data(devis_data: dict) -> dict:
 
     func = processing_functions.get(collection_enum)
     result = []
-    if func:
+    if func and len(devis) > 0:
         lead_id = devis[0].get("lead_id", "lead_id inconnu")
         res = base_vectorielle.get_devis(lead_id=lead_id)
 

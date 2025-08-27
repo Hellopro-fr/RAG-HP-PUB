@@ -36,7 +36,7 @@ def insertion_data(website_data: dict) -> dict:
     result = []
     url = ""
 
-    if func:
+    if func and len(websites) > 0:
         url = websites[0].get("url", "Url inconnu")
         res = base_vectorielle.get_website(url=url)
 
