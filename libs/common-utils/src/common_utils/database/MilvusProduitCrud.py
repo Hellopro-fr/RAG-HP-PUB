@@ -88,6 +88,10 @@ class MilvusProduitsCrud:
                 FieldSchema(name="type_produit", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="montant_eco_participation", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="source_produits", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR , max_length=64),
+                FieldSchema(name="chunk_number", dtype=DataType.INT64),
+                FieldSchema(name="total_chunks", dtype=DataType.INT64),
+
             ]
             schema = CollectionSchema(fields, description=f"Collection de chunks de Echange pour {model_key}")
             collection = Collection(collection_name, schema, consistency_level="Strong")
