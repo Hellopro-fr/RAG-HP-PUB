@@ -175,11 +175,11 @@ async def search_in_qdrant(request: SearchRequest):
                 logger.info(f"Reconstruction pour lead_id: {lead_id}")
                 sibling_chunks, _ = qdrant_client.scroll(
                     collection_name=source,
-                    scroll_filter=models.Filter(must=[models.FieldCondition(key="lead_id", match=models.MatchValue(value=lead_id))]),
+                    # scroll_filter=models.Filter(must=[models.FieldCondition(key="lead_id", match=models.MatchValue(value=lead_id))]),
                     # TODO : à vérifier
-                    # scroll_filter=Filter(must=[
-                    #     FieldCondition(key="lead_id", match=MatchValue(value=lead_id))
-                    # ]),
+                    scroll_filter=Filter(must=[
+                        FieldCondition(key="lead_id", match=MatchValue(value=lead_id))
+                    ]),
                     limit=total_chunks,
                     with_payload=True
                 )
