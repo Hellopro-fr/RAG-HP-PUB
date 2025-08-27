@@ -32,37 +32,52 @@ def insertion_data(website_data: dict) -> dict:
     }
 
     func = processing_functions.get(collection_enum)
+    
     result = []
     url = ""
+
     if func:
-        url = websites[0].get('url', 'Url inconnu')
-        #Verifier si l'url est déjà dans la bdd
+        url = websites[0].get("url", "Url inconnu")
         res = base_vectorielle.get_website(url=url)
 
-        if res.get("status") == "error":
-            logging.error("Erreur lors de la vérification de l'URL %s : %s", url, res.get("message"))
-            output_message = {
-                "database"   : bdd,
-                "collection" : collection,
-                "data"       : [],
-                "url"        : url,
-                "error"      : res.get("message")
-            }
-        elif res.get("status") == "success":
+        status = res.get("status")
+        data   = res.get("data", [])
+        code   = res.get("code", None)
+        message = res.get("message", "")
 
-            if res.get("data").count > 0 :
+        if status == "error":
+            if code == 404:
+                result = func(websites)
+                output_message = {
+                    "database"       : bdd,
+                    "collection"     : collection,
+                    "data"           : result,
+                    "url"            : url,
+                    "already_in_bdd" : len(data) > 0
+                }
+            else:
+                logging.error("Erreur lors de la vérification de l'URL %s : %s", url, message)
+                output_message = {
+                    "database"   : bdd,
+                    "collection" : collection,
+                    "data"       : [],
+                    "url"        : url,
+                    "error"      : message
+                }
+
+        elif status == "success":
+            if len(data) > 0:
                 logging.info("L'URL %s existe déjà dans la base de données. Insertion ignorée.", url)
-                result = res.get("data", [])
+                result = data
             else:
                 result = func(websites)
-        
+
             output_message = {
-                "database"   : bdd,
-                "collection" : collection,
-                "data"       : result,
-                "url"        : url,
-                "already_in_bdd": res.get("data").count > 0
+                "database"       : bdd,
+                "collection"     : collection,
+                "data"           : result,
+                "url"            : url,
+                "already_in_bdd" : len(data) > 0
             }
-            
-    
-    return output_message
+
+        return output_message
