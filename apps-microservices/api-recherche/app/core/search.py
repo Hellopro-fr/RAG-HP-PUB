@@ -414,7 +414,7 @@ async def search_in_milvus(request: SearchRequest):
         "embedding": round(embed_duration, 2),
         "fournisseur_non_vide": None, # Non implémenté pour Milvus dans le code d'origine
         "full_user_prompt": llm_req.full_user_prompt,
-        "chat_model": "gpt-4",
+        "chat_model": request.chat_model,
         "temperature": request.temperature,
         "vector_search": round(search_duration, 2),
         "total_process": round(total_duration, 2),
