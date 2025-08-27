@@ -8,7 +8,7 @@ app = FastAPI(
     description="API pour interroger Qdrant ou Milvus et générer des réponses avec des LLMs."
 )
 
-app.include_router(search_router.router, prefix="/api/v1")
+app.include_router(search_router.router)
 
 @app.get("/", tags=["Monitoring"])
 def read_root():
