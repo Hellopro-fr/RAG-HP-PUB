@@ -97,7 +97,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
             )
             llm_response = completion.choices[0].message.content
         llm_duration = time.perf_counter() - start_llm_time
-    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
+    return LLMPipeline(llm_duration=str(llm_duration),llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
 
 def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_vide: bool):
     must_conditions = []
