@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
@@ -23,18 +24,34 @@ file_handler = TimedRotatingFileHandler(
     encoding='utf-8'
 )
 
+# Handler pour les logs de temps
+time_handler = TimedRotatingFileHandler(
+    filename="/logs/temps_embedding.log",
+    when='midnight',
+    interval=1,
+    backupCount=30,
+    encoding='utf-8'
+)
+
 console_handler = logging.StreamHandler()
 
 log_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(log_format)
+time_handler.setFormatter(log_format)
 console_handler.setFormatter(log_format)
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("embedding")
 logger.setLevel(logging.INFO)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 logger.propagate = False
+
+time_logger = logging.getLogger("embedding_time")
+time_logger.setLevel(logging.INFO)
+time_logger.addHandler(time_handler)
+time_logger.addHandler(console_handler)
+time_logger.propagate = False
 
 @dataclass
 class Config:
@@ -67,6 +84,10 @@ class Embedding:
         self.model_name = model_name
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.logger = kwargs.get("logger",logger)
+        self.time_logger = kwargs.get("time_logger", time_logger)
+
+        # Charger les valeurs cumulées à partir du log
+        self.total_time, self.total_count = self._load_cumulative_stats()
         
         self.logger.info(f"Initialisation de l'Embedding avec le modèle : {self.model_name} sur le device : {self.device}")
         
@@ -79,20 +100,62 @@ class Embedding:
             # You might want to raise the exception here to stop the service from starting
             # raise e
     
+    def _load_cumulative_stats(self) -> tuple[float, int]:
+        """Lit temps_embedding.log pour récupérer le dernier temps cumulé et le nombre de données."""
+        log_path = "/logs/temps_embedding.log"
+        total_time, total_count = 0.0, 0
+        if not os.path.exists(log_path):
+            return total_time, total_count
+
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            # On cherche la dernière ligne contenant "Temps cumulé"
+            for line in reversed(lines):
+                match = re.search(r"Temps cumulé : ([\d.]+) secondes pour (\d+) données", line)
+                if match:
+                    total_time = float(match.group(1))
+                    total_count = int(match.group(2))
+                    break
+        except Exception as e:
+            self.logger.error(f"Impossible de charger les stats depuis {log_path} : {e}")
+
+        return total_time, total_count
+
     def embed(self, sentences: list[str]) -> list[list[float]]:
         if not self.model:
             self.logger.error("Model is not loaded. Cannot perform embedding.")
             # Return an empty list of the correct shape or handle the error appropriately
             return [[] for _ in sentences]
         
+        start_time = time.perf_counter()
         # The model is already loaded, just use it.
         # Note: We now process a list of sentences for better batching.
-        return self.model.encode(
+        vector = self.model.encode(
             sentences,
             show_progress_bar=False,
             normalize_embeddings=True,
             batch_size=self.config.BATCH_SIZE
         ).tolist()
+
+        elapsed = time.perf_counter() - start_time
+
+        # Mise à jour des stats
+        self.total_time += elapsed
+        self.total_count += 1
+
+        # Log du temps pour cet appel
+        self.time_logger.info(f"Vectorisation terminée en {elapsed:.4f} secondes (phrase {self.total_count})")
+
+        # Log des stats cumulées (en secondes + minutes)
+        total_minutes = self.total_time / 60
+        self.time_logger.info(
+            f"Temps cumulé : {self.total_time:.4f} secondes ({total_minutes:.2f} minutes) pour {self.total_count} données"
+        )
+
+        return vector
+    
 
     ### FONCTION MODIFIÉE AVEC CORRECTION D'ENCODAGE ###
     @staticmethod
