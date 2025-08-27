@@ -71,7 +71,7 @@ class MilvusProduitsCrud:
                 FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="sku", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="ean", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="url_images", dtype=DataType.VARCHAR, max_length=4095),
+                FieldSchema(name="url_images", dtype=DataType.VARCHAR, max_length=512),
                 FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="prix_ht", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="prix_ttc", dtype=DataType.VARCHAR, max_length=64),
