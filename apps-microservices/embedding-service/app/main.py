@@ -42,7 +42,7 @@ def main():
 
         print(f"🔍 Chargement du modèle '{model_name}' sur le device '{device}'...")
 
-        model = SentenceTransformer(model_name=model_name, device=device)
+        model = SentenceTransformer(model_name, device=device)
         
         # 3. Créer une instance du consumer et lui passer le publisher
         consumer = Consumer(connection, publisher, model=model)
