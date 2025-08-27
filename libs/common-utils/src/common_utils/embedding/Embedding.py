@@ -101,27 +101,26 @@ class Embedding:
             # raise e
     
     def _load_cumulative_stats(self) -> tuple[float, int]:
-        """Lit temps_embedding.log pour récupérer le dernier temps cumulé et le nombre de données."""
+        """Lit temps_embedding.log pour récupérer total_time et total_data."""
         log_path = "/logs/temps_embedding.log"
-        total_time, total_count = 0.0, 0
         if not os.path.exists(log_path):
-            return total_time, total_count
+            return 0.0, 0
 
         try:
             with open(log_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-
-            # On cherche la dernière ligne contenant "Temps cumulé"
-            for line in reversed(lines):
-                match = re.search(r"Temps cumulé : ([\d.]+) secondes pour (\d+) données", line)
-                if match:
-                    total_time = float(match.group(1))
-                    total_count = int(match.group(2))
-                    break
+                line = f.read().strip()
+            match = re.match(r"total_time:\s*([\d.]+)s\s*,\s*total_data:\s*(\d+)", line)
+            if match:
+                return float(match.group(1)), int(match.group(2))
         except Exception as e:
-            self.logger.error(f"Impossible de charger les stats depuis {log_path} : {e}")
+            self.logger.error(f"Impossible de lire {log_path} : {e}")
+        return 0.0, 0
 
-        return total_time, total_count
+    def _save_cumulative_stats(self):
+        """Écrase le fichier avec les stats cumulées."""
+        log_path = "/logs/temps_embedding.log"
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(f"total_time: {self.total_time:.4f}s , total_data: {self.total_count}")
 
     def embed(self, sentences: list[str]) -> list[list[float]]:
         if not self.model:
@@ -145,14 +144,8 @@ class Embedding:
         self.total_time += elapsed
         self.total_count += 1
 
-        # Log du temps pour cet appel
-        self.time_logger.info(f"Vectorisation terminée en {elapsed:.4f} secondes (phrase {self.total_count})")
-
-        # Log des stats cumulées (en secondes + minutes)
-        total_minutes = self.total_time / 60
-        self.time_logger.info(
-            f"Temps cumulé : {self.total_time:.4f} secondes ({total_minutes:.2f} minutes) pour {self.total_count} données"
-        )
+        # Sauvegarde des stats dans le fichier (en écrasant le contenu)
+        self._save_cumulative_stats()
 
         return vector
     
