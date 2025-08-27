@@ -43,7 +43,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/embedding-service/Dockerfile
-    container_name: embedding-service
+    # container_name: embedding-service
     restart: unless-stopped
     env_file:
       - .env
