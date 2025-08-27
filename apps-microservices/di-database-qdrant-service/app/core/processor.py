@@ -34,19 +34,47 @@ def insertion_data(devis_data: dict) -> dict:
     func = processing_functions.get(collection_enum)
     result = []
     if func:
-        for di in devis:
-            id_di = di.get('lead_id', 'ID Demande inconnu')
-            chunk = di.get('chunk_number', 'Numero chunk inconnu')
-            total = di.get('total_chunks', 'Total chunk inconnu')
-            logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", id_di, chunk, total)
-            result.append(func(di))
-            
-    
-    output_message = {
-        "database"  : bdd,
-        "collection": collection,
-        "data"      : result,
-        "id_demande": id_di
-    }
-    
-    return output_message
+        lead_id = devis[0].get("lead_id", "lead_id inconnu")
+        res = base_vectorielle.get_devis(lead_id=lead_id)
+
+        status = res.get("status")
+        data   = res.get("data", [])
+        code   = res.get("code", None)
+        message = res.get("message", "")
+
+        if status == "error":
+            if code == 404:
+                result = func(devis)
+                output_message = {
+                    "database"       : bdd,
+                    "collection"     : collection,
+                    "data"           : result,
+                    "lead_id"        : lead_id,
+                    "already_in_bdd" : len(data) > 0
+                }
+            else:
+                logging.error("Erreur lors de la vérification de Lead ID  %s : %s", lead_id, message)
+                output_message = {
+                    "database"       : bdd,
+                    "collection"     : collection,
+                    "data"           : [],
+                    "lead_id"        : lead_id,
+                    "error"          : message
+                }
+
+        elif status == "success":
+            if len(data) > 0:
+                logging.info("La lead_id %s existe déjà dans la base de données. Insertion ignorée.", lead_id)
+                result = data
+            else:
+                result = func(devis)
+
+            output_message = {
+                "database"        : bdd,
+                "collection"      : collection,
+                "data"            : result,
+                "lead_id"         : lead_id,
+                "already_in_bdd"  : len(data) > 0
+            }
+
+        return output_message

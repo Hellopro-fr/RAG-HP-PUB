@@ -54,7 +54,7 @@ def insertion_data(echange_data: dict) -> dict:
                     "already_in_bdd" : len(data) > 0
                 }
             else:
-                logging.error("Erreur lors de la vérification de l'URL %s : %s", url, message)
+                logging.error("Erreur lors de la vérification de conversation ID  %s : %s", conversation_id, message)
                 output_message = {
                     "database"       : bdd,
                     "collection"     : collection,
@@ -65,7 +65,7 @@ def insertion_data(echange_data: dict) -> dict:
 
         elif status == "success":
             if len(data) > 0:
-                logging.info("L'URL %s existe déjà dans la base de données. Insertion ignorée.", url)
+                logging.info("La conversation_id %s existe déjà dans la base de données. Insertion ignorée.", conversation_id)
                 result = data
             else:
                 result = func(echanges)
