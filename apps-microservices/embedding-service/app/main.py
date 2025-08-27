@@ -1,11 +1,14 @@
 import pika
 import time
 import os
-    
+
+# Importer les modules nécessaires
+import torch
+from sentence_transformers import SentenceTransformer
+
+# Importer les modules locaux
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
-
-from sentence_transformers import SentenceTransformer
 
 def main():
     """
@@ -32,12 +35,19 @@ def main():
     try:
         # 1. Créer une instance du publisher
         publisher = Publisher(connection)
+
+        # 2. Initialiser le modèle d'embedding
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        model_name = "dangvantuan/sentence-camembert-large"
+
+        print(f"🔍 Chargement du modèle '{model_name}' sur le device '{device}'...")
+
+        model = SentenceTransformer(model_name=model_name, device=device)
         
-        # 2. Créer une instance du consumer et lui passer le publisher
-        model = SentenceTransformer("dangvantuan/sentence-camembert-large", device="cuda")
+        # 3. Créer une instance du consumer et lui passer le publisher
         consumer = Consumer(connection, publisher, model=model)
         
-        # 3. Lancer l'écoute
+        # 4. Lancer l'écoute
         consumer.start_consuming()
 
     except KeyboardInterrupt:

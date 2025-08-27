@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from logging.handlers import TimedRotatingFileHandler
-import torch
 
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -82,16 +81,12 @@ class Embedding:
     def __init__(self, model_name: str = "dangvantuan/sentence-camembert-large", config: Config = Config(),**kwargs):
         self.config = config
         self.model_name = model_name
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.logger = kwargs.get("logger",logger)
         self.time_logger = kwargs.get("time_logger", time_logger)
         
-        self.logger.info(f"Initialisation de l'Embedding avec le modèle : {self.model_name} sur le device : {self.device}")
-        
         try:
-            # self.model: Optional[SentenceTransformer] = SentenceTransformer(self.model_name, device=self.device)
             self.model: Optional[SentenceTransformer] = kwargs.get("model", "")
-            self.logger.info("Model loaded successfully.")
+            self.logger.info("Modèle chargé avec succès")
         except Exception as e:
             self.logger.error(f"Failed to load model '{self.model_name}': {e}", exc_info=True)
             self.model = None # Ensure model is None if loading fails
@@ -107,7 +102,7 @@ class Embedding:
 
     def embed(self, sentences: list[str]) -> list[list[float]]:
         if not self.model:
-            self.logger.error("Model is not loaded. Cannot perform embedding.")
+            self.logger.error("Modèle non chargé, impossible de vectoriser les données.")
             # Return an empty list of the correct shape or handle the error appropriately
             return [[] for _ in sentences]
         
