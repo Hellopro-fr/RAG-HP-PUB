@@ -93,7 +93,7 @@ class QdrantWebsiteCrud:
             if not datas or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
-            self.logger.info(f"[{model_key}][website] Insertion de {len(data)} entités dans '{self.collection}'...")
+            self.logger.info(f"[{model_key}][website] Insertion de {len(datas)} entités dans '{self.collection}'...")
 
             points = []
 
