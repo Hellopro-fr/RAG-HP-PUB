@@ -36,6 +36,6 @@ class SearchResponse(BaseModel):
 
 class LLMPipeline(BaseModel):
     llm_response: str = ""
-    llm_duration: str = ""
+    llm_duration: float = ""
     full_user_prompt: str = ""
     context: str = ""
