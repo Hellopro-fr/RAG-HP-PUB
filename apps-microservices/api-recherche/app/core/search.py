@@ -9,6 +9,29 @@ from pymilvus import connections, Collection, utility
 from app.core.credentials import settings
 from app.schemas.search import SearchRequest
 
+class DeepSeek:
+	def __init__(self, config=None):
+		config = config or {}
+		self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
+		self.BASE_URL = "https://api.deepseek.com"
+		self.MODEL = "deepseek-chat"
+		self.TEMPERATURE = 0.4
+		self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+
+	def chat(self, message):
+		response = self.client.chat.completions.create(
+			model=self.MODEL,
+			messages=[
+				{"role": "system", "content": "Tu es un assistant intelligent et serviable."},
+				{"role": "user", "content": message},
+			],
+			temperature=self.TEMPERATURE
+		)
+		return {"content": response.choices[0].message.content, "response": response}
+
+	def set_temperature(self, temperature):
+		self.TEMPERATURE = float(temperature)
+
 # Configuration du logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -32,11 +55,14 @@ def get_qdrant_client():
 
 def get_milvus_connection():
     alias = "default"
-    if not connections.has_connection(alias):
-        logger.info("Connexion à Milvus...")
-        connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
-        logger.info(f"Connecté à Milvus.")
-    return connections.get_connection(alias)
+    try:
+        if not connections.has_connection(alias):
+            logger.info("Connexion à Milvus...")
+            connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
+            logger.info(f"Connecté à Milvus.")
+    except Exception as e:
+        logger.error(f"❌ Erreur de connexion à Milvus: {e}")
+        raise e
 
 @lru_cache(maxsize=None)
 def get_openai_client():
@@ -70,6 +96,10 @@ def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_v
         noms_affichage = [list_affichage[str(a)] for a in affichage_ids if str(a) in list_affichage]
         if noms_affichage:
             must_conditions.append(FieldCondition(key="affichage", match=MatchAny(any=noms_affichage)))
+            
+    liste_page_types = data.get("page_type", [])
+    if liste_page_types:
+        must_conditions.append(FieldCondition(key="page_type", match=MatchAny(any=liste_page_types)))
 
     if fournisseur_non_vide:
         must_not_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value="")))
@@ -92,9 +122,10 @@ async def search_in_qdrant(request: SearchRequest):
     logger.info(f"Recherche Qdrant: prompt='{request.prompt[:50]}...', sources={request.source}")
     start_total_time = time.perf_counter()
     
+    # 1. Obtenir les ressources nécessaires (elles seront chargées si c'est le premier appel)
     qdrant_client = get_qdrant_client()
     embedding_model = get_embedding_model()
-
+    
     start_embed = time.perf_counter()
     query_vector = embedding_model.encode(request.prompt, normalize_embeddings=True).tolist()
     embed_duration = time.perf_counter() - start_embed
@@ -132,6 +163,7 @@ async def search_in_qdrant(request: SearchRequest):
         processed_lead_ids = set()
         for hit in hits:
             payload = hit.payload
+            total_chunks = payload.get("total_chunks", 1)
             lead_id = payload.get("lead_id")
             if source == "devis_poc" and lead_id and lead_id in processed_lead_ids:
                 continue
@@ -139,22 +171,28 @@ async def search_in_qdrant(request: SearchRequest):
             final_text = payload.get("text", "")
             
             # TODO complété: Logique de reconstruction des chunks pour 'devis_poc'
-            if source == "devis_poc" and payload.get("total_chunks", 1) > 1 and lead_id:
+            if source == "devis_poc" and total_chunks > 1 and lead_id:
                 logger.info(f"Reconstruction pour lead_id: {lead_id}")
                 sibling_chunks, _ = qdrant_client.scroll(
                     collection_name=source,
                     scroll_filter=models.Filter(must=[models.FieldCondition(key="lead_id", match=models.MatchValue(value=lead_id))]),
-                    limit=payload["total_chunks"],
+                    # TODO : à vérifier
+                    # scroll_filter=Filter(must=[
+                    #     FieldCondition(key="lead_id", match=MatchValue(value=lead_id))
+                    # ]),
+                    limit=total_chunks,
                     with_payload=True
                 )
-                if len(sibling_chunks) == payload["total_chunks"]:
+                if len(sibling_chunks) == total_chunks:
                     sorted_chunks = sorted(sibling_chunks, key=lambda c: c.payload.get("chunk_number", 0))
                     final_text = "".join([chunk.payload.get("text", "") for chunk in sorted_chunks])
                     payload["text"] = final_text
                 else:
-                    logger.warning(f"Reconstruction échouée pour {lead_id}. Chunks trouvés: {len(sibling_chunks)}/{payload['total_chunks']}")
+                    logger.warning(f"Reconstruction échouée pour {lead_id}. Chunks trouvés: {len(sibling_chunks)}/{total_chunks}")
 
             context_texts.append(final_text)
+            # TODO: à vérifier
+            # context_texts.append(f"{final_text}\n-----\n")
             matches_info.append({"id": hit.id, "score": hit.score, "id_lead": lead_id, "metadata": payload})
             
             if source == "devis_poc" and lead_id:
@@ -163,19 +201,24 @@ async def search_in_qdrant(request: SearchRequest):
         all_results[source] = matches_info
     search_duration = time.perf_counter() - start_search
 
-    llm_response, full_user_prompt, llm_duration = "", "", 0
+    llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
     if request.action == 2 and context_texts:
         context = "\n\n".join(context_texts)
         full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
         
         start_llm_time = time.perf_counter()
-        openai_client = get_openai_client()
-        completion = openai_client.chat.completions.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": full_user_prompt}],
-            temperature=float(request.temperature)
-        )
-        llm_response = completion.choices[0].message.content
+        if request.chat_model == "deepseek":
+            deepseek = DeepSeek()
+            deepseek.set_temperature(request.temperature)
+            llm_response = deepseek.chat(full_user_prompt)['content']
+        else:
+            openai_client = get_openai_client()
+            completion = openai_client.chat.completions.create(
+                model=request.chat_model,
+                messages=[{"role": "user", "content": full_user_prompt}],
+                temperature=float(request.temperature)
+            )
+            llm_response = completion.choices[0].message.content
         llm_duration = time.perf_counter() - start_llm_time
 
     total_duration = time.perf_counter() - start_total_time

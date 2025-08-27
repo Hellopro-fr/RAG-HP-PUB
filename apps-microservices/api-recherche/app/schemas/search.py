@@ -13,6 +13,8 @@ class SearchRequest(BaseModel):
     affichage: Optional[List[str]] = []
     temperature: str = "0"
     template_prompt: Optional[str] = ""
+    page_type: str = ""
+    chat_model: str = "gpt-4.1-2025-04-14"
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
 class SearchResponse(BaseModel):
