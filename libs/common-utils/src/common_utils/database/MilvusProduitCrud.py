@@ -94,13 +94,8 @@ class MilvusProduitsCrud:
 
             ]
             schema = CollectionSchema(fields, description=f"Collection de chunks de Echange pour {model_key}")
+            collection = Collection(collection_name, schema, consistency_level="Strong")
             
-            collection = Collection(
-                collection_name, 
-                schema,
-                num_shards=2, 
-                consistency_level="Strong"
-            )
             
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
@@ -127,7 +122,7 @@ class MilvusProduitsCrud:
         return collection
 
 
-    def insert_produits(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def insert_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -136,25 +131,22 @@ class MilvusProduitsCrud:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
             
-            if not datas or self.collection is None:
+            if not data or self.collection is None:
                 return {
                     "status": "error",
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
-            self.logger.info(f"[{model_key}][Produits] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
+            self.logger.info(f"[{model_key}][Echange] Insertion de batch de {len(data)} entités dans '{self.collection.name}'...")
            
-            sanitized_batch = []
-            for data in datas:
-                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-                data["date_maj"] = None  
+            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+            data["date_maj"] = None
 
-                # Sanitize the record to ensure no None values
-                # This is important for Milvus compatibility
-                data = Utils.sanitize_record(data)
-                sanitized_batch.append(data)  
-            
-            result = self.collection.insert(sanitized_batch)
+            # Sanitize the record to ensure no None values
+            # This is important for Milvus compatibility
+            data = Utils.sanitize_record(data)  
+
+            result = self.collection.insert(data)
             self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}") 
@@ -169,10 +161,10 @@ class MilvusProduitsCrud:
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de l'insertion : {e}")
-            self.logger.error(f"Data : {datas}")
+            self.logger.error(f"Data : {data}")
         except Exception as e:
             self.logger.error(f"[{model_key}][Echange] insertion de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {datas}")
+            self.logger.error(f"Data : {data}")
     
     def update_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
