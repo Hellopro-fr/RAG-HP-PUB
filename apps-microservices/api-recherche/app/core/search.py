@@ -131,7 +131,7 @@ def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_v
         if fournisseur:
             for key, value in fournisseur.items():
                 if value:
-                    vals = key if payload_fournisseur_key == 'id_fournisseur' else value
+                    vals = key if payload_fournisseur == 'id_fournisseur' else value
                     must_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value=vals)))
 
     if must_conditions or must_not_conditions:
