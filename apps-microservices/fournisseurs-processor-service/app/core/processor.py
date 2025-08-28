@@ -33,7 +33,7 @@ def process_fournisseurs_data_for_embedding(fournisseurs_data: dict,bdd: str = "
             **{k: v for k, v in fournisseurs_data.items() if k not in ['text']}
 
         },
-        "collection": CollectionName.CATEGORIE,
+        "collection": CollectionName.FOURNISSEUR,
         "database": bdd
     }
     
