@@ -102,6 +102,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
 def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_vide: bool):
     must_conditions = []
     must_not_conditions = []
+    should_conditions = []
     
     categorie = data.get("categorie", {})
     if categorie:
@@ -125,19 +126,27 @@ def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_v
 
     if fournisseur_non_vide:
         must_not_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value="")))
-        must_not_conditions.append(FieldCondition(key=payload_fournisseur, is_null=IsNullCondition(is_null=True)))
+        # must_not_conditions.append(FieldCondition(key=payload_fournisseur, is_null=IsNullCondition(is_null=True)))
     else:
         fournisseur = data.get("fournisseur", {})
         if fournisseur:
             for key, value in fournisseur.items():
                 if value:
-                    vals = key if payload_fournisseur == 'id_fournisseur' else value
-                    must_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value=vals)))
+                    if payload_fournisseur == 'id_fournisseur':
+                        must_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value=key)))
+                    elif payload_fournisseur == 'liste_frns':
+                        should_conditions.append(
+                            FieldCondition(
+                                key="list_frns",
+                                match=MatchText(text=value)
+                            )
+                        )
 
     if must_conditions or must_not_conditions:
         return Filter(
             must=must_conditions if must_conditions else None,
-            must_not=must_not_conditions if must_not_conditions else None
+            must_not=must_not_conditions if must_not_conditions else None,
+            should=should_conditions if should_conditions else None
         )
     return None
 
@@ -281,8 +290,7 @@ def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseu
 	# Fournisseurs
 	fournisseur_dict = data.get("fournisseur", {})
 	if fournisseur_dict:
-		items = fournisseur_dict.keys() if payload_fournisseur_key == "id_fournisseur" else fournisseur_dict.values()
-        vals = list(map(lambda v: f'"{v}"', items))
+		vals = list(map(lambda v: f'"{v}"', fournisseur_dict.keys() if payload_fournisseur_key == "id_fournisseur" else fournisseur_dict.values()))
 		if vals: 
 			clauses.append(f'{payload_fournisseur_key} in [{",".join(vals)}]')
 
