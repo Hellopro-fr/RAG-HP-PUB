@@ -21,7 +21,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 6
+      replicas: 4
 
   echange-processor-service:
     build:
@@ -32,7 +32,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 6
+      replicas: 4
 
   website-processor-service:
     build:
@@ -43,7 +43,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 6
+      replicas: 4
 
   embedding-service:
     build:
@@ -54,7 +54,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 6
+      replicas: 4
       resources:
         reservations:
           devices:
@@ -71,7 +71,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 6
+      replicas: 4
 
   echange-database-qdrant-service:
     build:
@@ -82,7 +82,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 6
+      replicas: 4
 
   website-database-qdrant-service:
     build:
@@ -93,7 +93,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 6
+      replicas: 4
 
   webhook-service:
     build:
