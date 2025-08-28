@@ -85,6 +85,7 @@ class MilvusFournisseursCrud:
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
             collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")            
+            collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")            
             collection.create_index(field_name="affichage", index_name="idx_affichage")            
             collection.create_index(field_name="etat", index_name="idx_etat")            
             collection.create_index(field_name="page_type", index_name="idx_page_type")            
