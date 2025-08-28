@@ -77,31 +77,31 @@ class QdrantProduitsCrud:
         self.collection = collection_name
         return collection_name
 
-    def insert_produits(self, produit: Dict[str, Any]) -> Dict[str, Any]:
-        data = produit
+    def insert_produits(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             self._get_or_create_collection(model_config)
 
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
-            self.logger.info(f"[{model_key}][produits] Insertion de {len(data)} entités dans '{self.collection}'...")
-
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None  
+            self.logger.info(f"[{model_key}][produits] Insertion de {len(datas)} entités dans '{self.collection}'...")
 
             points = []
             
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=data.get("embedding"),
-                    payload={k: v for k, v in data.items() if k != "embedding"}
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None     
+                
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=data.get("embedding"),
+                        payload={k: v for k, v in data.items() if k != "embedding"}
+                    )
                 )
-            )
 
             result = self.client.upsert(collection_name=self.collection, points=points)
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
@@ -179,6 +179,9 @@ class QdrantProduitsCrud:
             # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
 
+            if self.collection is None:
+                return {"status": "error", "message": "Collection non initialisée.","code":404}
+
             if not id_produit:
                 return {"status": "error", "message": "ID id_produit requis."}
 
@@ -192,6 +195,6 @@ class QdrantProduitsCrud:
                 limit=1
             )
 
-            return {"status": "success", "data": [p.payload for p in scroll_result]}
+            return {"status": "success", "data": [p.payload for p in scroll_result] if scroll_result else []}
         except Exception as e:
             self.logger.error(f"[{model_key}][produits] Erreur Qdrant lors de la récupération : {e}", exc_info=True)

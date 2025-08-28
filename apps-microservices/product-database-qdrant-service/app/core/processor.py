@@ -33,20 +33,49 @@ def insertion_data(produits_data: dict) -> dict:
 
     func = processing_functions.get(collection_enum)
     result = []
-    if func:
-        for cat in produits:
-            id_produit = cat.get('id_produit', 'ID Demande inconnu')
-            chunk        = cat.get('chunk_number', 'Numero chunk inconnu')
-            total        = cat.get('total_chunks', 'Total chunk inconnu')
-            logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", id_produit, chunk, total)
-            result.append(func(cat))
-            
-    
-    output_message = {
-        "collection": collection,
-        "data"      : result,
-        "id_produit": id_produit,
-        "database" : bdd
-    }
+
+    if func and len(produits) > 0:
+        id_produit = produits[0].get('id_produit', 'ID Demande inconnu')
+        res = base_vectorielle.get_produit(id_produit=id_produit)
+
+        status = res.get("status")
+        data   = res.get("data", [])
+        code   = res.get("code", None)
+        message = res.get("message", "")
+
+        if status == "error":
+            if code == 404:
+                result = func(produits)
+                output_message = {
+                    "database"      : bdd,
+                    "collection"    : collection,
+                    "data"          : result,
+                    "id_produit"    : id_produit,
+                    "already_in_bdd": len(data) > 0
+                }
+            else:
+                logging.error("Erreur lors de la vérification du produit ID  %s : %s", id_produit, message)
+                output_message = {
+                    "database"  : bdd,
+                    "collection": collection,
+                    "data"      : [],
+                    "id_produit": id_produit,
+                    "error"     : message
+                }
+
+        elif status == "success":
+            if len(data) > 0:
+                logging.info("Le produit ID  %s existe déjà dans la base de données. Insertion ignorée.", id_produit)
+                result = data
+            else:
+                result = func(produits)
+
+            output_message = {
+                "database"      : bdd,
+                "collection"    : collection,
+                "data"          : result,
+                "id_produit"    : id_produit,
+                "already_in_bdd": len(data) > 0
+            }
     
     return output_message
