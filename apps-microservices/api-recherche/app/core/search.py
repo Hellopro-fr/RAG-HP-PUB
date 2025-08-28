@@ -280,7 +280,8 @@ def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseu
 	# Fournisseurs
 	fournisseur_dict = data.get("fournisseur", {})
 	if fournisseur_dict:
-		vals = [f'"{v}"' for v in fournisseur_dict.values()]
+		items = fournisseur_dict.keys() if payload_fournisseur_key == "id_fournisseur" else fournisseur_dict.values()
+        vals = list(map(lambda v: f'"{v}"', items))
 		if vals: 
 			clauses.append(f'{payload_fournisseur_key} in [{",".join(vals)}]')
 
