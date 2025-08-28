@@ -93,8 +93,14 @@ class MilvusProduitsCrud:
                 FieldSchema(name="total_chunks", dtype=DataType.INT64),
 
             ]
-            schema = CollectionSchema(fields, description=f"Collection de chunks de Echange pour {model_key}")
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            schema = CollectionSchema(fields, description=f"Collection de chunks de Produit pour {model_key}")
+            
+            collection = Collection(
+                collection_name, 
+                schema,
+                num_shards=2, 
+                consistency_level="Strong"
+            )
             
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
@@ -105,11 +111,11 @@ class MilvusProduitsCrud:
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
             collection.create_index(field_name="id_produit", index_name="idx_produit")
-            collection.create_index(field_name="categorie", index_name="idx_categorie")
-            collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
-            collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
-            collection.create_index(field_name="affichage", index_name="idx_affichage")
-            collection.create_index(field_name="etat", index_name="idx_etat")
+            # collection.create_index(field_name="categorie", index_name="idx_categorie")
+            # collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
+            # collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
+            # collection.create_index(field_name="affichage", index_name="idx_affichage")
+            # collection.create_index(field_name="etat", index_name="idx_etat")
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
@@ -121,7 +127,7 @@ class MilvusProduitsCrud:
         return collection
 
 
-    def insert_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_produits(self, datas: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -130,23 +136,26 @@ class MilvusProduitsCrud:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
             
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {
                     "status": "error",
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
-            self.logger.info(f"[{model_key}][Echange] Insertion de batch de {len(data)} entités dans '{self.collection.name}'...")
+            self.logger.info(f"[{model_key}][Produits] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
            
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None
+            sanitized_batch = []
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None
 
-            # Sanitize the record to ensure no None values
-            # This is important for Milvus compatibility
-            data = Utils.sanitize_record(data)  
+                # Sanitize the record to ensure no None values
+                # This is important for Milvus compatibility
+                data = Utils.sanitize_record(data)  
+                sanitized_batch.append(data)
 
-            result = self.collection.insert(data)
-            self.collection.flush()
+            result = self.collection.insert(sanitized_batch)
+            # self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}") 
             self.logger.info(f"Clé primaire : {result.primary_keys}") 
@@ -159,11 +168,11 @@ class MilvusProduitsCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de l'insertion : {e}")
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"[{model_key}][Produits] Erreur Milvus lors de l'insertion : {e}")
+            self.logger.error(f"Data : {datas}")
         except Exception as e:
-            self.logger.error(f"[{model_key}][Echange] insertion de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"[{model_key}][Produits] insertion de batch : {e}", exc_info=True)
+            self.logger.error(f"Data : {datas}")
     
     def update_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
