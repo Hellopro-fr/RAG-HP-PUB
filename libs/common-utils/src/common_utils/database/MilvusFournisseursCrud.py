@@ -229,3 +229,43 @@ class MilvusFournisseursCrud:
             self.logger.error(f"[{model_key}][fournisseurs] Erreur Milvus lors de la suppression : {e}")
         except Exception as e:
             self.logger.error(f"[{model_key}][fournisseurs] Suppression : {e}", exc_info=True)
+
+    def get_fournisseurs(self,id_fournisseur: str) -> Dict[str, Any]:
+        list_id_fournisseur = [id_fournisseur]
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+        
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée.",
+                    "code": 404
+                }
+
+            if not id_fournisseur:
+                return {
+                    "status": "error",
+                    "message": "id_fournisseur requise pour la récupération.",
+                    "code" : 400
+                }
+
+            result = self.collection.query(
+                expr=f"id_fournisseur in {list_id_fournisseur}",
+                output_fields=["id"]
+            )
+            # self.collection.flush()
+            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+
+            return {
+                "status": "success",
+                "data": result
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Fournisseur] Erreur Milvus lors de la récupération : {e}")
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Fournisseur] Erreur de Récupèration de Fournisseur : {e}", exc_info=True)

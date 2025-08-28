@@ -170,7 +170,7 @@ class QdrantFournisseursCrud:
             return {"status": "success", "message": f"fournisseur {id_entity} supprimé."}
         except Exception as e:
             self.logger.error(f"[{model_key}][fournisseurs] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
-
+    
     def get_fournisseurs(self, id_fournisseur: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
@@ -178,9 +178,12 @@ class QdrantFournisseursCrud:
         try:
             # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
+            
+            if self.collection is None:
+                return {"status": "error", "message": "Collection non initialisée.","code":404}
 
             if not id_fournisseur:
-                return {"status": "error", "message": "ID id_fournisseur requis."}
+                return {"status": "error", "message": "ID id_fournisseur requis.", "code":400}
 
             filter_query = Filter(
                 must=[FieldCondition(key="id_fournisseur", match=MatchValue(value=id_fournisseur))]
@@ -192,6 +195,6 @@ class QdrantFournisseursCrud:
                 limit=1
             )
 
-            return {"status": "success", "data": [p.payload for p in scroll_result]}
+            return {"status": "success", "data": [p.payload for p in scroll_result] if scroll_result else []}
         except Exception as e:
-            self.logger.error(f"[{model_key}][fournisseurs] Erreur Qdrant lors de la récupération : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][categories] Erreur Qdrant lors de la récupération : {e}", exc_info=True)

@@ -254,6 +254,6 @@ class MilvusCategoriesCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}")
+            self.logger.error(f"[{model_key}][Categorie] Erreur Milvus lors de la récupération : {e}")
         except Exception as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][Categorie] Erreur de Récupèration de Categorie : {e}", exc_info=True)

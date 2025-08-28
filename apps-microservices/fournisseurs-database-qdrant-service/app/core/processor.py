@@ -33,20 +33,47 @@ def insertion_data(fournisseurs_data: dict) -> dict:
 
     func = processing_functions.get(collection_enum)
     result = []
-    if func:
-        for frs in fournisseurs:
-            id_fournisseur = frs.get('id_fournisseur', 'ID Demande inconnu')
-            chunk          = frs.get('chunk_number', 'Numero chunk inconnu')
-            total          = frs.get('total_chunks', 'Total chunk inconnu')
-            logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", id_fournisseur, chunk, total)
-            result.append(func(frs))
-            
+    if func and len(fournisseurs) > 0:
+        id_fournisseur = fournisseurs[0].get('id_fournisseur', 'id_categorie inconnu')
+        res = base_vectorielle.get_fournisseurs(id_fournisseur=id_fournisseur)
+        
+        status = res.get("status")
+        data   = res.get("data", [])
+        code   = res.get("code", None)
+        message = res.get("message", "")
+        
+        if status == "error":
+            if code == 404:
+                result = func(fournisseurs)
+                output_message = {
+                    "database"      : bdd,
+                    "collection"    : collection,
+                    "data"          : result,
+                    "id_fournisseur": id_fournisseur,
+                    "already_in_bdd": len(data) > 0
+                }
+            else:
+                logging.error("Erreur lors de la vérification de id_fournisseur  %s : %s", id_fournisseur, message)
+                output_message = {
+                    "database"      : bdd,
+                    "collection"    : collection,
+                    "data"          : [],
+                    "id_fournisseur": id_fournisseur,
+                    "error"         : message
+                }
+        elif status == "success":
+            if len(data) > 0:
+                logging.info("La id_fournisseur %s existe déjà dans la base de données. Insertion ignorée.", id_fournisseur)
+                result = data
+            else:
+                result = func(fournisseurs)
+                
+            output_message = {
+                "database"      : bdd,
+                "collection"    : collection,
+                "data"          : result,
+                "id_fournisseur": id_fournisseur,
+                "already_in_bdd": len(data) > 0
+            }
     
-    output_message = {
-        "database"      : bdd,
-        "collection"    : collection,
-        "data"          : result,
-        "id_fournisseur": id_fournisseur
-    }
-    
-    return output_message
+        return output_message
