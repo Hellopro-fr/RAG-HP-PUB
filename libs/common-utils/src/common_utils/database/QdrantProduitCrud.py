@@ -68,7 +68,7 @@ class QdrantProduitsCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
-        self.client.create_payload_index(collection_name, field_name="produit", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="id_produit", field_schema=PayloadSchemaType.KEYWORD)
         # self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
         # self.client.create_payload_index(collection_name, field_name="affichage", field_schema=PayloadSchemaType.KEYWORD)
         # self.client.create_payload_index(collection_name, field_name="etat", field_schema=PayloadSchemaType.KEYWORD)
