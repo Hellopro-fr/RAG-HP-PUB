@@ -138,7 +138,7 @@ def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_v
                         should_conditions.append(
                             FieldCondition(
                                 key="list_frns",
-                                match=MatchText(text=value)
+                                match=models.MatchText(text=value)
                             )
                         )
 
