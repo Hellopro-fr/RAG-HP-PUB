@@ -75,7 +75,13 @@ class MilvusWebsiteCrud:
                 FieldSchema(name="date_maj",  dtype=DataType.VARCHAR, max_length=64)
             ]
             schema = CollectionSchema(fields, description=f"Collection de chunks de siteweb pour {model_key}")
-            collection = Collection(collection_name, schema, consistency_level="Strong")
+            
+            collection = Collection(
+                collection_name, 
+                schema,
+                num_shards=2, 
+                consistency_level="Strong"
+            )
             
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
@@ -85,9 +91,11 @@ class MilvusWebsiteCrud:
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
+            collection.create_index(field_name="url", index_name="idx_url")
             collection.create_index(field_name="categorie", index_name="idx_categorie")
             collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
             collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
+            collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")
             collection.create_index(field_name="affichage", index_name="idx_affichage")
             collection.create_index(field_name="etat", index_name="idx_etat")
             collection.create_index(field_name="page_type", index_name="idx_page_type")
@@ -102,7 +110,7 @@ class MilvusWebsiteCrud:
         return collection
 
 
-    def insert_website(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_website(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -111,22 +119,25 @@ class MilvusWebsiteCrud:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
             
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {
                     "status": "error",
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
-            self.logger.info(f"[{model_key}][siteweb] Insertion de batch de {len(data)} entités dans '{self.collection.name}'...")
+            self.logger.info(f"[{model_key}][siteweb] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
            
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None  
+            sanitized_batch = []
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None  
 
-            # Sanitize the record to ensure no None values
-            # This is important for Milvus compatibility
-            data = Utils.sanitize_record(data)  
+                # Sanitize the record to ensure no None values
+                # This is important for Milvus compatibility
+                data = Utils.sanitize_record(data)
+                sanitized_batch.append(data)  
             
-            result = self.collection.insert(data)
+            result = self.collection.insert(sanitized_batch)
             self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}") 
@@ -229,3 +240,43 @@ class MilvusWebsiteCrud:
             self.logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de la suppression : {e}")
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] Suppression : {e}", exc_info=True)
+
+    def get_website(self,url: str) -> Dict[str, Any]:
+        list_url = [url]
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+        
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée.",
+                    "code": 404
+                }
+
+            if not url:
+                return {
+                    "status": "error",
+                    "message": "Url requise pour la récupération.",
+                    "code" : 400
+                }
+
+            result = self.collection.query(
+                expr=f"url in {list_url}",
+                output_fields=["id"]
+            )
+            self.collection.flush()
+            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+
+            return {
+                "status": "success",
+                "data": result
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Website] Erreur Milvus lors de la récupération : {e}")
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Website] Erreur de Récupèration de siteweb : {e}", exc_info=True)

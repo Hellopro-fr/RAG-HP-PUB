@@ -1,9 +1,9 @@
 import os
+import time
 import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from logging.handlers import TimedRotatingFileHandler
-import torch
 
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -23,18 +23,34 @@ file_handler = TimedRotatingFileHandler(
     encoding='utf-8'
 )
 
+# Handler pour les logs de temps
+time_handler = TimedRotatingFileHandler(
+    filename="/logs/temps_embedding.log",
+    when='midnight',
+    interval=1,
+    backupCount=30,
+    encoding='utf-8'
+)
+
 console_handler = logging.StreamHandler()
 
 log_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 file_handler.setFormatter(log_format)
+time_handler.setFormatter(log_format)
 console_handler.setFormatter(log_format)
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("embedding")
 logger.setLevel(logging.INFO)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 logger.propagate = False
+
+time_logger = logging.getLogger("embedding_time")
+time_logger.setLevel(logging.INFO)
+time_logger.addHandler(time_handler)
+time_logger.addHandler(console_handler)
+time_logger.propagate = False
 
 @dataclass
 class Config:
@@ -64,24 +80,49 @@ class Config:
 class Embedding:
     def __init__(self, model_name: str = "dangvantuan/sentence-camembert-large", config: Config = Config(),**kwargs):
         self.config = config
-        self.model: Optional[SentenceTransformer] = None
         self.model_name = model_name
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.logger = kwargs.get("logger",logger)
-
+        self.time_logger = kwargs.get("time_logger", time_logger)
+        
+        try:
+            self.model: Optional[SentenceTransformer] = kwargs.get("model", "")
+            self.logger.info("Modèle chargé avec succès")
+        except Exception as e:
+            self.logger.error(f"Failed to load model '{self.model_name}': {e}", exc_info=True)
+            self.model = None # Ensure model is None if loading fails
+            # You might want to raise the exception here to stop the service from starting
+            # raise e
     
-    def embed(self, sentences: str) -> list[list[float]]:
-        self.logger.info(f"Utilisation du modèle d'embedding : {self.model_name}")
-        self.logger.info(f"Device utilisé pour l'embedding : {self.device}")
 
-        self.model = SentenceTransformer(self.model_name, device=self.device)
+    def _append_time_log(self, elapsed: float):
+        """Ajoute une ligne avec le temps d’exécution dans temps_embedding.log"""
+        log_path = "/logs/temps_embedding.log"
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"total_time: {elapsed:.4f}s\n")
 
-        return self.model.encode(
-            [sentences], 
-            show_progress_bar=False, 
-            normalize_embeddings=True, 
+    def embed(self, sentences: list[str]) -> list[list[float]]:
+        if not self.model:
+            self.logger.error("Modèle non chargé, impossible de vectoriser les données.")
+            # Return an empty list of the correct shape or handle the error appropriately
+            return [[] for _ in sentences]
+        
+        start_time = time.perf_counter()
+        # The model is already loaded, just use it.
+        # Note: We now process a list of sentences for better batching.
+        vector = self.model.encode(
+            sentences,
+            show_progress_bar=False,
+            normalize_embeddings=True,
             batch_size=self.config.BATCH_SIZE
         ).tolist()
+
+        elapsed = time.perf_counter() - start_time
+
+        # Sauvegarde des stats dans le fichier (en écrasant le contenu)
+        self._append_time_log(elapsed)
+
+        return vector
+    
 
     ### FONCTION MODIFIÉE AVEC CORRECTION D'ENCODAGE ###
     @staticmethod
@@ -123,54 +164,47 @@ class Embedding:
         )
         return text_splitter.split_text(text)
 
-    ### MODIFIED ###
     def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:
         batch_to_insert = []
-
-        data_clean = self._clean_text(data_to_embed.get("text", ""))
-
-        self.logger.info(f"Le texte à vectoriser : {data_clean}")
-
-
+        
         if not data_to_embed.get("text",""):
             self.logger.warning(f"Le texte à vectoriser est vide")
             self.logger.warning(f"Data: {data_to_embed}")
             return []
-
-        # Todo: Vérifier si le type de page est renseigné
-        chunks = self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
-        if not chunks:
-            chunks = [data_clean] # Assurer qu'il y a au moins un chunk
-
-        for i, data in enumerate(chunks):
         
-            chunk_id = str(i + 1)
+        data_clean = self._clean_text(data_to_embed.get("text", ""))
+        
+        if not data_clean:
+            self.logger.warning(f"Le texte à vectoriser est vide après nettoyage")
+            self.logger.warning(f"Data: {data_clean}")
+            return []
 
-            try:
-                embeddings = self.embed(data)
-                
+        # Vérifier si le type de page est renseigné
+        chunks = self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
+            
+        if not chunks:
+            self.logger.warning(f"Aucun chunk créé pour le texte donné.")
+            self.logger.warning(f"Data: {data_clean}")
+            return []
+        
+        try:
+            all_embeddings = self.embed(chunks)
+            
+            total_chunks = len(chunks)
+            
+            for i, (chunk_text, chunk_embedding) in enumerate(zip(chunks, all_embeddings)):
                 data_tmp = data_to_embed.copy()
-
-                data_tmp.pop("text",None)
-
-                data_tmp["embedding"] = embeddings[0]
-                data_tmp["text"] = data  
-                data_tmp["chunk_id"] = chunk_id  
-                data_tmp["chunk_number"] = i + 1 
-                data_tmp["total_chunks"] = len(chunks)
+                data_tmp.pop("text", None)
+                
+                data_tmp["embedding"] = chunk_embedding
+                data_tmp["text"] = chunk_text
+                data_tmp["chunk_id"] = str(i + 1)
+                data_tmp["chunk_number"] = i + 1
+                data_tmp["total_chunks"] = total_chunks
                 
                 batch_to_insert.append(data_tmp)
-
-                del data_tmp
-
-            except Exception as e:
-                self.logger.error(f"Echec d'embedding pour le chunk {chunk_id}: {e}", exc_info=True)
-                self.logger.error(f"Data : {data}") 
-                return []
-            finally:
-                self.logger.info(f"Cleaning up resources...")
-                del self.model
-                self.model = None
-                if self.device == 'cuda': torch.cuda.empty_cache()
+        except Exception as e:
+            self.logger.error(f"Erreur lors de la création des chunks: {e}", exc_info=True)
+            return []
 
         return batch_to_insert

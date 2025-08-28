@@ -73,9 +73,11 @@ class QdrantEchangeCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
+        self.client.create_payload_index(collection_name, field_name="conversation_id", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="id_fournisseur", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="affichage", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="etat", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="page_type", field_schema=PayloadSchemaType.KEYWORD)
@@ -83,31 +85,31 @@ class QdrantEchangeCrud:
         self.collection = collection_name
         return collection_name
 
-    def insert_echange(self, echange: Dict[str, Any]) -> Dict[str, Any]:
-        data = echange
+    def insert_echange(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             self._get_or_create_collection(model_config)
 
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
-            self.logger.info(f"[{model_key}][echange] Insertion de {len(data)} entités dans '{self.collection}'...")
+            self.logger.info(f"[{model_key}][echange] Insertion de {len(datas)} entités dans '{self.collection}'...")
 
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None  
-            
             points = []
-            
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=data.get("embedding"),
-                    payload={k: v for k, v in data.items() if k != "embedding"}
+
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None     
+                
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=data.get("embedding"),
+                        payload={k: v for k, v in data.items() if k != "embedding"}
+                    )
                 )
-            )
 
             result = self.client.upsert(collection_name=self.collection, points=points)
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
@@ -177,7 +179,7 @@ class QdrantEchangeCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][echange] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def get_echange(self, id_echange: str) -> Dict[str, Any]:
+    def get_echange(self, conversation_id: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -185,11 +187,14 @@ class QdrantEchangeCrud:
             # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
 
-            if not id_echange:
-                return {"status": "error", "message": "ID echange requis."}
+            if self.collection is None:
+                return {"status": "error", "message": "Collection non initialisée.","code":404}
+
+            if not conversation_id:
+                return {"status": "error", "message": "Conversation ID requise.", "code":400}
 
             filter_query = Filter(
-                must=[FieldCondition(key="id_echange", match=MatchValue(value=id_echange))]
+                must=[FieldCondition(key="conversation_id", match=MatchValue(value=conversation_id))]
             )
 
             scroll_result, _ = self.client.scroll(
@@ -198,6 +203,6 @@ class QdrantEchangeCrud:
                 limit=1
             )
 
-            return {"status": "success", "data": [p.payload for p in scroll_result]}
+            return {"status": "success", "data": [p.payload for p in scroll_result] if scroll_result else []}
         except Exception as e:
             self.logger.error(f"[{model_key}][echange] Erreur Qdrant lors de la récupération : {e}", exc_info=True)
