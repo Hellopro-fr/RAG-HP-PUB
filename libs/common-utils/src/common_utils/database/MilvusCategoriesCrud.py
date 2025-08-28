@@ -76,7 +76,7 @@ class MilvusCategoriesCrud:
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
-            collection.create_index(field_name="categorie", index_name="idx_categorie")            
+            # collection.create_index(field_name="categorie", index_name="idx_categorie")
             collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")            
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
@@ -115,7 +115,7 @@ class MilvusCategoriesCrud:
             data = Utils.sanitize_record(data)  
             
             result = self.collection.insert(data)
-            self.collection.flush()
+            # self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}") 
             self.logger.info(f"Clé primaire : {result.primary_keys}") 
@@ -217,3 +217,43 @@ class MilvusCategoriesCrud:
             self.logger.error(f"[{model_key}][categories] Erreur Milvus lors de la suppression : {e}")
         except Exception as e:
             self.logger.error(f"[{model_key}][categories] Suppression : {e}", exc_info=True)
+    
+    def get_categories(self,id_categorie: str) -> Dict[str, Any]:
+        list_id_categorie = [id_categorie]
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+        
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée.",
+                    "code": 404
+                }
+
+            if not id_categorie:
+                return {
+                    "status": "error",
+                    "message": "Categorie ID requise pour la récupération.",
+                    "code" : 400
+                }
+
+            result = self.collection.query(
+                expr=f"id_categorie in {list_id_categorie}",
+                output_fields=["id"]
+            )
+            # self.collection.flush()
+            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+
+            return {
+                "status": "success",
+                "data": result
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}")
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}", exc_info=True)

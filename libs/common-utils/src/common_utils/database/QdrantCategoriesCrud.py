@@ -68,7 +68,7 @@ class QdrantCategoriesCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
-        self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
         # self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
         # self.client.create_payload_index(collection_name, field_name="affichage", field_schema=PayloadSchemaType.KEYWORD)
@@ -179,9 +179,12 @@ class QdrantCategoriesCrud:
         try:
             # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
+            
+            if self.collection is None:
+                return {"status": "error", "message": "Collection non initialisée.","code":404}
 
             if not id_categorie:
-                return {"status": "error", "message": "ID id_categorie requis."}
+                return {"status": "error", "message": "ID id_categorie requis.", "code":400}
 
             filter_query = Filter(
                 must=[FieldCondition(key="id_categorie", match=MatchValue(value=id_categorie))]
@@ -193,6 +196,6 @@ class QdrantCategoriesCrud:
                 limit=1
             )
 
-            return {"status": "success", "data": [p.payload for p in scroll_result]}
+            return {"status": "success", "data": [p.payload for p in scroll_result] if scroll_result else []}
         except Exception as e:
             self.logger.error(f"[{model_key}][categories] Erreur Qdrant lors de la récupération : {e}", exc_info=True)

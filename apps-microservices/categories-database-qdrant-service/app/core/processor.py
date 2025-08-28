@@ -33,19 +33,60 @@ def insertion_data(categories_data: dict) -> dict:
 
     func = processing_functions.get(collection_enum)
     result = []
-    if func:
-        for cat in categories:
-            id_categorie = cat.get('id_categorie', 'ID Demande inconnu')
-            chunk        = cat.get('chunk_number', 'Numero chunk inconnu')
-            total        = cat.get('total_chunks', 'Total chunk inconnu')
-            logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", id_categorie, chunk, total)
-            result.append(func(cat))
+    if func and len(categories) > 0:
+        id_categorie = categories[0].get('id_categorie', 'id_categorie inconnu')
+        res = base_vectorielle.get_categories(id_categorie=id_categorie)
+        
+        status = res.get("status")
+        data   = res.get("data", [])
+        code   = res.get("code", None)
+        message = res.get("message", "")
+        
+        if status == "error":
+            if code == 404:
+                result = func(categories)
+                output_message = {
+                    "database"      : bdd,
+                    "collection"    : collection,
+                    "data"          : result,
+                    "id_categorie"  : id_categorie,
+                    "already_in_bdd": len(data) > 0
+                }
+            else:
+                logging.error("Erreur lors de la vérification de id_categorie  %s : %s", id_categorie, message)
+                output_message = {
+                    "database"    : bdd,
+                    "collection"  : collection,
+                    "data"        : [],
+                    "id_categorie": id_categorie,
+                    "error"       : message
+                }
+        elif status == "success":
+            if len(data) > 0:
+                logging.info("La id_categorie %s existe déjà dans la base de données. Insertion ignorée.", id_categorie)
+                result = data
+            else:
+                result = func(categories)
+                
+            output_message = {
+                "database"      : bdd,
+                "collection"    : collection,
+                "data"          : result,
+                "id_categorie"  : id_categorie,
+                "already_in_bdd": len(data) > 0
+            }
+        
+        # for cat in categories:
+        #     chunk        = cat.get('chunk_number', 'Numero chunk inconnu')
+        #     total        = cat.get('total_chunks', 'Total chunk inconnu')
+        #     logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", id_categorie, chunk, total)
+        #     result.append(func(cat))
             
     
-    output_message = {
-        "collection": collection,
-        "data"      : result,
-        "id_categorie": id_categorie
-    }
+        # output_message = {
+        #     "collection": collection,
+        #     "data"      : result,
+        #     "id_categorie": id_categorie
+        # }
     
-    return output_message
+        return output_message
