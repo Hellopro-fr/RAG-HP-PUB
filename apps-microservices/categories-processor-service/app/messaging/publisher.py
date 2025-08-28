@@ -22,7 +22,8 @@ class Publisher:
         """
         Publie un message (dictionnaire) sur le topic configuré.
         """
-        id_categorie = message_dict.get("id_categorie", "ID DI inconnu")
+        # id_categorie = message_dict.get("id_categorie", "ID categorie inconnu")
+        id_categorie = message_dict.get("id_categorie") or message_dict.get("data", {}).get("id_categorie", "ID categorie inconnu")
         self.channel.basic_publish(
             exchange=self.exchange_name,
             routing_key=self.routing_key,

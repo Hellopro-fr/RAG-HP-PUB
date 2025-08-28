@@ -41,5 +41,5 @@ def process_categories_data_for_embedding(categories_data: dict,bdd: str = "qdra
     print(f"🔍Cateogries-Processor: Message prêt pour l'embedding: {json.dumps(output_message, indent=2)}")
     
     # Étape 6: Retourner le message prêt à être publié
-    print(f"📦 🔍Cateogries-Processor: Lead '{categories_data.get('id_categorie', 'ID inconnu')}' traité pour embedding.")
+    print(f"📦 🔍Cateogries-Processor: catégories '{categories_data.get('id_categorie', 'ID inconnu')}' traité pour embedding.")
     return output_message
