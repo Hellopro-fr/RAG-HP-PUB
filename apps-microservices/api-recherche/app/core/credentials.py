@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     DEEPSEEK_API_KEY: str
     MILVUS_URI: str
-    # MILVUS_PORT: str
+    MILVUS_PORT: str
     MILVUS_TOKEN: str
 
     MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
