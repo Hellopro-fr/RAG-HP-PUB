@@ -17,6 +17,6 @@ RoutingKeys = {
     CollectionName.DEVIS: "new_data.devis",
     CollectionName.CATEGORIE: "new_data.category",
     CollectionName.ECHANGE: "new_data.echange",
-    CollectionName.FOURNISSEUR: "new_data.supplier",
+    CollectionName.FOURNISSEUR: "new_data.fournisseurs",
     CollectionName.SITEWEB: "new_data.website"
 }
