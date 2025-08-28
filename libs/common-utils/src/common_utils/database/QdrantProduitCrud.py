@@ -171,7 +171,7 @@ class QdrantProduitsCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][produits] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def get_produits(self, id_produit: str) -> Dict[str, Any]:
+    def get_produit(self, id_produit: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
