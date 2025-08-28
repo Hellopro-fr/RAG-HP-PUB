@@ -125,7 +125,15 @@ def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_v
         must_conditions.append(FieldCondition(key="page_type", match=MatchAny(any=liste_page_types)))
 
     if fournisseur_non_vide:
-        must_not_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value="")))
+        if payload_fournisseur == 'id_fournisseur':
+            must_not_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value="")))
+        elif payload_fournisseur == 'liste_frns':
+            should_conditions.append(
+                FieldCondition(
+                    key="list_frns",
+                    match=models.MatchText(text="")
+                )
+            )
         # must_not_conditions.append(FieldCondition(key=payload_fournisseur, is_null=IsNullCondition(is_null=True)))
     else:
         fournisseur = data.get("fournisseur", {})
