@@ -142,7 +142,7 @@ def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_v
                             )
                         )
 
-    if must_conditions or must_not_conditions:
+    if must_conditions or must_not_conditions or should_conditions:
         return Filter(
             must=must_conditions if must_conditions else None,
             must_not=must_not_conditions if must_not_conditions else None,
