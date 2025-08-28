@@ -1,0 +1,6 @@
+.env
+.venv/
+__pycache__/
+app/logs/
+app/output/
+.env.url

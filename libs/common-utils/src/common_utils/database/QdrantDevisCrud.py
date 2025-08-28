@@ -29,13 +29,18 @@ class QdrantDevisCrud:
     def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[str] = None
-        # if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_PORT:
-        if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_API_KEY:
+        # if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_API_KEY:
+        if not self.config.QDRANT_HOST_URL or not self.config.QDRANT_PORT:
             raise ValueError("Qdrant host et port/api_key doivent être définis dans l'environnement.")
         self.logger = kwargs.get('logger', logging)
+        # self.client = QdrantClient(
+        #     url=self.config.QDRANT_HOST_URL,
+        #     api_key=self.config.QDRANT_API_KEY
+        # )
+
         self.client = QdrantClient(
-            url=self.config.QDRANT_HOST_URL,
-            api_key=self.config.QDRANT_API_KEY
+            host=self.config.QDRANT_HOST_URL,
+            port=self.config.QDRANT_PORT
         )
 
     def _get_or_create_collection(self, model_config: ModelConfig):
@@ -68,6 +73,7 @@ class QdrantDevisCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
+        self.client.create_payload_index(collection_name, field_name="lead_id", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
         self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
@@ -78,31 +84,31 @@ class QdrantDevisCrud:
         self.collection = collection_name
         return collection_name
 
-    def insert_devis(self, demande_di: Dict[str, Any]) -> Dict[str, Any]:
-        data = demande_di
+    def insert_devis(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             self._get_or_create_collection(model_config)
 
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
-            self.logger.info(f"[{model_key}][demande_di] Insertion de {len(data)} entités dans '{self.collection}'...")
-
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None  
+            self.logger.info(f"[{model_key}][demande_di] Insertion de {len(datas)} entités dans '{self.collection}'...")
 
             points = []
-            
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=data.get("embedding"),
-                    payload={k: v for k, v in data.items() if k != "embedding"}
+
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None     
+                
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=data.get("embedding"),
+                        payload={k: v for k, v in data.items() if k != "embedding"}
+                    )
                 )
-            )
 
             result = self.client.upsert(collection_name=self.collection, points=points)
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
@@ -172,7 +178,7 @@ class QdrantDevisCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][demande_di] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def get_devis(self, id_demande_di: str) -> Dict[str, Any]:
+    def get_devis(self, lead_id: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -180,11 +186,14 @@ class QdrantDevisCrud:
             # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
 
-            if not id_demande_di:
-                return {"status": "error", "message": "ID demande_di requis."}
+            if self.collection is None:
+                return {"status": "error", "message": "Collection non initialisée.","code":404}
+
+            if not lead_id:
+                return {"status": "error", "message": "Lead ID requis.", "code":400}
 
             filter_query = Filter(
-                must=[FieldCondition(key="id_demande_di", match=MatchValue(value=id_demande_di))]
+                must=[FieldCondition(key="lead_id", match=MatchValue(value=lead_id))]
             )
 
             scroll_result, _ = self.client.scroll(
@@ -193,6 +202,6 @@ class QdrantDevisCrud:
                 limit=1
             )
 
-            return {"status": "success", "data": [p.payload for p in scroll_result]}
+            return {"status": "success", "data": [p.payload for p in scroll_result] if scroll_result else []}
         except Exception as e:
             self.logger.error(f"[{model_key}][demande_di] Erreur Qdrant lors de la récupération : {e}", exc_info=True)
