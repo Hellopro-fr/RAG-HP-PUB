@@ -45,7 +45,8 @@ def insertion_data(produits_data: dict) -> dict:
     output_message = {
         "collection": collection,
         "data"      : result,
-        "id_produit": id_produit
+        "id_produit": id_produit,
+        "database" : bdd
     }
     
     return output_message
