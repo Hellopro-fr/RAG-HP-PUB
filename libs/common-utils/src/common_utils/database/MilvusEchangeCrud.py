@@ -266,7 +266,7 @@ class MilvusEchangeCrud:
                 expr=f"conversation_id in {list_conversation_id}",
                 output_fields=["id"]
             )
-            self.collection.flush()
+            # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
             return {

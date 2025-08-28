@@ -268,7 +268,7 @@ class MilvusWebsiteCrud:
                 expr=f"url in {list_url}",
                 output_fields=["id"]
             )
-            self.collection.flush()
+            # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
             return {

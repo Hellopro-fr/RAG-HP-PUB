@@ -276,7 +276,7 @@ class MilvusDevisCrud:
                 expr=f"lead_id in {list_lead_id}",
                 output_fields=["id"]
             )
-            self.collection.flush()
+            # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
             return {
