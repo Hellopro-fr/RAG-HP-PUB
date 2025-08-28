@@ -77,6 +77,7 @@ class MilvusCategoriesCrud:
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
             collection.create_index(field_name="categorie", index_name="idx_categorie")            
+            collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")            
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
