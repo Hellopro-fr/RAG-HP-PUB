@@ -142,7 +142,7 @@ class MilvusProduitsCrud:
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
-            self.logger.info(f"[{model_key}][Produits] Insertion de batch de {len(data)} entités dans '{self.collection.name}'...")
+            self.logger.info(f"[{model_key}][Produits] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
            
             sanitized_batch = []
             for data in datas:
