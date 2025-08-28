@@ -102,12 +102,12 @@ class MilvusDevisCrud:
             # collection.create_index(field_name="embedding", index_params=index_params)
 
             # # Optionnel: Créer des index scalaires pour les filtres fréquents
-            # collection.create_index(field_name="lead_id", index_name="idx_lead_id")
+            collection.create_index(field_name="lead_id", index_name="idx_lead_id")
             # collection.create_index(field_name="categorie", index_name="idx_categorie")
             # collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
             # collection.create_index(field_name="page_type", index_name="idx_page_type")
 
-            # self.logger.info(f"[{model_key}] ✓ Index créés.")
+            self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
             collection = Collection(collection_name)
