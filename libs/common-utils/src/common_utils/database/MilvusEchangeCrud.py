@@ -82,23 +82,23 @@ class MilvusEchangeCrud:
                 consistency_level="Strong"
             )
             
-            self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
+            # self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 200}}
-            collection.create_index(field_name="embedding", index_params=index_params)
+            # index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 200}}
+            # collection.create_index(field_name="embedding", index_params=index_params)
 
-            # Optionnel: Créer des index scalaires pour les filtres fréquents
-            collection.create_index(field_name="conversation_id", index_name="idx_conversation_id")
-            collection.create_index(field_name="categorie", index_name="idx_categorie")
-            collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
-            collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
-            collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")
-            collection.create_index(field_name="affichage", index_name="idx_affichage")
-            collection.create_index(field_name="etat", index_name="idx_etat")
+            # # Optionnel: Créer des index scalaires pour les filtres fréquents
+            # collection.create_index(field_name="conversation_id", index_name="idx_conversation_id")
+            # collection.create_index(field_name="categorie", index_name="idx_categorie")
+            # collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
+            # collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
+            # collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")
+            # collection.create_index(field_name="affichage", index_name="idx_affichage")
+            # collection.create_index(field_name="etat", index_name="idx_etat")
 
-            self.logger.info(f"[{model_key}] ✓ Index créés.")
+            # self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
             collection = Collection(collection_name)
@@ -136,7 +136,7 @@ class MilvusEchangeCrud:
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
-            self.collection.flush()
+            # self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}") 
             self.logger.info(f"Clé primaire : {result.primary_keys}") 
