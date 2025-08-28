@@ -169,10 +169,10 @@ class MilvusProduitsCrud:
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de l'insertion : {e}")
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
         except Exception as e:
             self.logger.error(f"[{model_key}][Echange] insertion de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
     
     def update_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
