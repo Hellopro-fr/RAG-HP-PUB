@@ -323,6 +323,11 @@ async def search_in_milvus(request: SearchRequest):
     context_texts = []
 
     filter_expr = "" # Placeholder
+    collection_metadata = {
+        "devis_poc": {"payload_fournisseur": "liste_frns"},
+        "siteweb_poc": {"payload_fournisseur": "id_fournisseur"},
+        "echanges_poc": {"payload_fournisseur": "id_fournisseur"}
+    }
 
     start_search = time.perf_counter()
     for source in request.source:
@@ -336,8 +341,9 @@ async def search_in_milvus(request: SearchRequest):
 
         search_params = {"metric_type": "COSINE", "params": {"ef": 150}}
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
-        
-        filter_expr = build_milvus_expression(request.dict(), "id_fournisseur", "1000000" in request.fournisseur)
+
+        metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
+        filter_expr = build_milvus_expression(request.dict(), metadata["payload_fournisseur"], "1000000" in request.fournisseur)
 
         search_results = collection.search(
             data=query_vector,
