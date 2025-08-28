@@ -49,7 +49,8 @@ def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"
 @lru_cache(maxsize=None)
 def get_qdrant_client():
     logger.info("Connexion initiale à Qdrant Cloud...")
-    client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+    # client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+    client = QdrantClient(host=settings.QDRANT_URL, port=settings.QDRANT_PORT)
     logger.info("Client Qdrant initialisé.")
     return client
 
