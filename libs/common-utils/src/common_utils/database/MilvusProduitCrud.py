@@ -96,7 +96,6 @@ class MilvusProduitsCrud:
             schema = CollectionSchema(fields, description=f"Collection de chunks de Echange pour {model_key}")
             collection = Collection(collection_name, schema, consistency_level="Strong")
             
-            
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
             # TODO : Vérifier les paramètres d'indexation
