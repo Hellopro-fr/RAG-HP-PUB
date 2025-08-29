@@ -187,6 +187,8 @@ class Embedding:
         # Vérifier si le type de page est renseigné
         chunks = self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
             
+        print("Liste chunks embedding", chunks)
+        
         if not chunks:
             self.logger.warning(f"Aucun chunk créé pour le texte donné.")
             self.logger.warning(f"Data: {data_clean}")
