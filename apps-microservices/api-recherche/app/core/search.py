@@ -87,7 +87,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         context = "\n-----\n\n\n".join(context_texts)
         full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
         
-        type_prompt = any(value in models for models in model.values())
+        type_prompt = any(request.chat_model in models for models in model_settings.values())
         
         start_llm_time = time.perf_counter()
         if type_prompt != "or":
