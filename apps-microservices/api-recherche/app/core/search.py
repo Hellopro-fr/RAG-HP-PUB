@@ -104,7 +104,27 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
                 )
                 llm_response = completion.choices[0].message.content
         else:
-            llm_response = chat_with_openrouter(request.chat_model, full_user_prompt).choices[0].message.content
+            client_or = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=settings.OPENROUTER_API_KEY,
+            )
+            completion = client.chat.completions.create(
+                extra_body={},
+                model=request.chat_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": full_user_prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+            llm_response = completion.choices[0].message.content
+            # llm_response = chat_with_openrouter(request.chat_model, full_user_prompt).choices[0].message.content
             
         llm_duration = time.perf_counter() - start_llm_time
     return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)

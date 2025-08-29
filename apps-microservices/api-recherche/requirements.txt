@@ -7,3 +7,4 @@ python-dotenv
 pymilvus
 pydantic-settings
 requests
+sentencepiece
