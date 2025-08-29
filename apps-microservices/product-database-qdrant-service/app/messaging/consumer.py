@@ -1,7 +1,7 @@
 import pika
 import json
-from product_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
-from product_processor_service.core.processor import process_product_data_for_embedding # Importe la logique métier
+from product_database_qdrant_service.messaging.publisher import Publisher  # Importe notre publisher local
+from product_database_qdrant_service.core.processor import insertion_data # Importe la logique métier
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 class Consumer:
@@ -12,16 +12,20 @@ class Consumer:
         """
         self.channel = connection.channel()
         self.publisher = publisher
-        self.exchange_name = 'data_exchange_produits'
-        self.routing_key = 'new_data.product'
-        self.queue_name = 'product_processing_queue'
+        self.exchange_name = 'produits_embedded_data_exchange'
+
+        # à modifier selon le flow de l'application
+        self.routing_key = 'data.produits.ready_for_insertion'
+
+        # Todo: à vérifier si le nom de la queue est correct
+        self.queue_name = 'insertion_produits_queue'
         self.rabbitmq_connection = RabbitMQConnection()
         self.connect()
         print("✅ Consumer initialisé.")
-
+    
     def connect(self):
         """
-        Établit la connexion et configure le consumer.
+        Établit une connexion RabbitMQ via la fonction utilitaire.
         """
         self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
         self.channel = self.connection.channel()
@@ -36,20 +40,11 @@ class Consumer:
         """
         Callback privé qui orchestre le traitement d'un message.
         """
-        print("📥 Product-Processor: Message reçu.")
-        data = json.loads(body)
-        product_data = data.get('data', {})
-        bdd = data.get('database', "qdrant")
-
-        if not product_data:
-            print("❌ Product-Processor: Aucune donnée de produit trouvée dans le message.")
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            return
-        product_id = product_data.get('id_produit', 'ID inconnu')
-        print(f"\n📥 Product-Processor: Message reçu pour '{product_id}'.")
+        devis_data = json.loads(body)
+        print(f"\n📥 Database-Produits-Processor: Message reçu.")
 
         # 1. Appelle la logique métier PURE
-        output_message = process_product_data_for_embedding(product_data,bdd)
+        output_message = insertion_data(devis_data)
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)
@@ -64,7 +59,7 @@ class Consumer:
                 Démarre la boucle d'écoute des messages.
                 """
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-                print("👂 Echange-Processor: En attente de messages...")
+                print("👂 Database-Produit-Processor: En attente de messages...")
                 self.channel.start_consuming()
                 break  # Si start_consuming se termine normalement, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:

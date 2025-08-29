@@ -9,9 +9,11 @@ class Publisher:
         """
         self.rabbitmq_connection = RabbitMQConnection()
         self.connection = connection
-        self.channel = connection.channel()
-        self.exchange_name = 'processed_data_exchange'
-        self.routing_key = 'data.ready_for_embedding'
+        self.channel = self.connection.channel()
+        self.exchange_name = 'inserted_data_exchange'
+
+        # à modifier selon le flow de l'application
+        self.routing_key = 'data.ready_for_webhook'
 
         # Déclare l'exchange où il va publier
         self.channel.exchange_declare(
@@ -33,7 +35,9 @@ class Publisher:
                     body=json.dumps(message_dict).encode('utf-8'),
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
-                print(f"   📤 Message traité et publié pour embedding.")
+                
+                print(f"   📤 Output Message '{message_dict}'")
+                print(f"   📤 Message traité et publié.")
                 break  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
                 print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
