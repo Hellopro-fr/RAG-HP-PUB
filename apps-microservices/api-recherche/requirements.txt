@@ -6,3 +6,4 @@ openai
 python-dotenv
 pymilvus
 pydantic-settings
+requests

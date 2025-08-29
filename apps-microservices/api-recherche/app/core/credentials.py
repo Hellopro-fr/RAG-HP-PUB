@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     ZILLIZ_URL: str
     ZILLIZ_PORT: str
     ZILLIZ_TOKEN: str
+    OPENROUTER_API_KEY: str
 
     MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
         "devis_poc": [
@@ -34,5 +35,18 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+
+model_settings = {
+    "openai": [
+        "gpt-4.1-2025-04-14",
+        "gpt-4o-2024-08-06",
+        "gpt-4o-2024-11-20",
+        "deepseek"
+    ],
+    "or": [
+        "qwen/qwen3-coder:free", 
+        "google/gemini-flash-1.5"
+    ]
+}
 
 settings = Settings()

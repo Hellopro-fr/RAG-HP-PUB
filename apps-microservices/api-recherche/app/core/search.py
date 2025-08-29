@@ -6,8 +6,10 @@ from qdrant_client.http.models import Filter, FieldCondition, MatchValue, IsNull
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from pymilvus import connections, Collection, utility
-from app.core.credentials import settings
+from app.core.credentials import settings, model_settings
 from app.schemas.search import SearchRequest, LLMPipeline
+
+from app.core.or import chat_with_openrouter
 
 class DeepSeek:
 	def __init__(self, config=None):
@@ -85,19 +87,25 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         context = "\n-----\n\n\n".join(context_texts)
         full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
         
+        type_prompt = any(value in models for models in model.values())
+        
         start_llm_time = time.perf_counter()
-        if request.chat_model == "deepseek":
-            deepseek = DeepSeek()
-            deepseek.set_temperature(request.temperature)
-            llm_response = deepseek.chat(full_user_prompt)['content']
+        if type_prompt != "or":
+            if request.chat_model == "deepseek":
+                deepseek = DeepSeek()
+                deepseek.set_temperature(request.temperature)
+                llm_response = deepseek.chat(full_user_prompt)['content']
+            else:
+                openai_client = get_openai_client()
+                completion = openai_client.chat.completions.create(
+                    model=request.chat_model,
+                    messages=[{"role": "user", "content": full_user_prompt}],
+                    temperature=float(request.temperature)
+                )
+                llm_response = completion.choices[0].message.content
         else:
-            openai_client = get_openai_client()
-            completion = openai_client.chat.completions.create(
-                model=request.chat_model,
-                messages=[{"role": "user", "content": full_user_prompt}],
-                temperature=float(request.temperature)
-            )
-            llm_response = completion.choices[0].message.content
+            llm_response = chat_with_openrouter(request.chat_model, full_user_prompt).choices[0].message.content
+            
         llm_duration = time.perf_counter() - start_llm_time
     return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
 
@@ -246,25 +254,6 @@ async def search_in_qdrant(request: SearchRequest):
     search_duration = time.perf_counter() - start_search
 
     llm_req = llm_prompt(request, context_texts)
-    # llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
-    # if request.action == 2 and context_texts:
-    #     context = "\n-----\n\n\n".join(context_texts)
-    #     full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
-        
-    #     start_llm_time = time.perf_counter()
-    #     if request.chat_model == "deepseek":
-    #         deepseek = DeepSeek()
-    #         deepseek.set_temperature(request.temperature)
-    #         llm_response = deepseek.chat(full_user_prompt)['content']
-    #     else:
-    #         openai_client = get_openai_client()
-    #         completion = openai_client.chat.completions.create(
-    #             model=request.chat_model,
-    #             messages=[{"role": "user", "content": full_user_prompt}],
-    #             temperature=float(request.temperature)
-    #         )
-    #         llm_response = completion.choices[0].message.content
-    #     llm_duration = time.perf_counter() - start_llm_time
 
     total_duration = time.perf_counter() - start_total_time
     
@@ -417,20 +406,6 @@ async def search_in_milvus(request: SearchRequest):
 
     # TODO complété: Logique LLM pour Milvus
     llm_req = llm_prompt(request, context_texts)
-    # llm_response, full_user_prompt, llm_duration = "", "", 0
-    # if request.action == 2 and context_texts:
-    #     context = "\n\n".join(context_texts)
-    #     full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
-        
-    #     start_llm_time = time.perf_counter()
-    #     openai_client = get_openai_client()
-    #     completion = openai_client.chat.completions.create(
-    #         model="gpt-4",
-    #         messages=[{"role": "user", "content": full_user_prompt}],
-    #         temperature=float(request.temperature)
-    #     )
-    #     llm_response = completion.choices[0].message.content
-    #     llm_duration = time.perf_counter() - start_llm_time
     
     total_duration = time.perf_counter() - start_total_time
     
