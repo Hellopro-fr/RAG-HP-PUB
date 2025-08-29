@@ -108,7 +108,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
                 base_url="https://openrouter.ai/api/v1",
                 api_key=settings.OPENROUTER_API_KEY,
             )
-            completion = client.chat.completions.create(
+            completion = client_or.chat.completions.create(
                 extra_body={},
                 model=request.chat_model,
                 messages=[
