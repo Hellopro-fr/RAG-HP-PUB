@@ -165,7 +165,7 @@ class Embedding:
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=strategy["chunk_size"],
             chunk_overlap=strategy["chunk_overlap"],
-            length_function=len(self.tokenizer.encode(text, add_special_tokens=False))  # basé sur tokens CamemBERT
+            length_function=lambda t: len(self.tokenizer.encode(text, add_special_tokens=False))  # basé sur tokens CamemBERT
         )
         return text_splitter.split_text(text)
 
