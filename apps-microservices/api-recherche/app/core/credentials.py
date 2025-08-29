@@ -45,6 +45,7 @@ model_settings = {
     ],
     "or": [
         "qwen/qwen3-coder:free", 
+        "qwen/qwen3-coder", 
         "google/gemini-flash-1.5"
     ]
 }
