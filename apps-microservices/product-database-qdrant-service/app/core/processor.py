@@ -11,9 +11,10 @@ def insertion_data(produits_data: dict) -> dict:
     Retourne: Un dictionnaire prêt à être publié.
     """
 
-    produits = produits_data.get("data",[])
+    produits   = produits_data.get("data",[])
     collection = produits_data.get("collection", CollectionName.PRODUIT)
-    bdd = produits_data.get("database", "qdrant")
+    bdd        = produits_data.get("database", "qdrant")
+    origin     = produits_data.get("origin", "bo")
 
     try:
         collection_enum = CollectionName(collection)
@@ -51,7 +52,8 @@ def insertion_data(produits_data: dict) -> dict:
                     "collection"    : collection,
                     "data"          : result,
                     "id_produit"    : id_produit,
-                    "already_in_bdd": len(data) > 0
+                    "already_in_bdd": len(data) > 0,
+                    "origin"        : origin
                 }
             else:
                 logging.error("Erreur lors de la vérification du produit ID  %s : %s", id_produit, message)
@@ -60,7 +62,8 @@ def insertion_data(produits_data: dict) -> dict:
                     "collection": collection,
                     "data"      : [],
                     "id_produit": id_produit,
-                    "error"     : message
+                    "error"     : message,
+                    "origin"        : origin
                 }
 
         elif status == "success":
@@ -75,7 +78,8 @@ def insertion_data(produits_data: dict) -> dict:
                 "collection"    : collection,
                 "data"          : result,
                 "id_produit"    : id_produit,
-                "already_in_bdd": len(data) > 0
+                "already_in_bdd": len(data) > 0,
+                "origin"        : origin
             }
     
     return output_message
