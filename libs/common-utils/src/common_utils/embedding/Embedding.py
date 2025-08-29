@@ -162,17 +162,11 @@ class Embedding:
 
     def _create_chunks(self, text: str, template: str) -> List[str]:
         strategy = self.config.CHUNK_STRATEGIES.get(template, self.config.DEFAULT_CHUNK_STRATEGY)
-        if not self.tokenizer or not isinstance(self.tokenizer, AutoTokenizer):
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=strategy["chunk_size"], chunk_overlap=strategy["chunk_overlap"],
-                length_function=len, separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""]
-            )
-        else:
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=strategy["chunk_size"],
-                chunk_overlap=strategy["chunk_overlap"],
-                length_function=len(self.tokenizer.encode(text, add_special_tokens=False))  # basé sur tokens CamemBERT
-            )
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=strategy["chunk_size"],
+            chunk_overlap=strategy["chunk_overlap"],
+            length_function=len(self.tokenizer.encode(text, add_special_tokens=False))  # basé sur tokens CamemBERT
+        )
         return text_splitter.split_text(text)
 
     def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:
