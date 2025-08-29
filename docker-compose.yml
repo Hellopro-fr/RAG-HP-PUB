@@ -45,23 +45,16 @@ services:
     deploy:
       replicas: 4
 
-  categories-processor-service:
+  product-processor-service:
     build:
       context: .
-      dockerfile: ./apps-microservices/categories-processor-service/Dockerfile
-    container_name: categories-processor-service
+      dockerfile: ./apps-microservices/product-processor-service/Dockerfile
+    # container_name: product-processor-service
     restart: unless-stopped
     env_file:
       - .env
-
-  fournisseurs-processor-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/fournisseurs-processor-service/Dockerfile
-    container_name: fournisseurs-processor-service
-    restart: unless-stopped
-    env_file:
-      - .env
+    deploy:
+      replicas: 4
 
   embedding-service:
     build:
@@ -107,6 +100,17 @@ services:
       context: .
       dockerfile: ./apps-microservices/website-database-qdrant-service/Dockerfile
     # container_name: website-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+  
+  product-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/product-database-qdrant-service/Dockerfile
+    # container_name: product-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
