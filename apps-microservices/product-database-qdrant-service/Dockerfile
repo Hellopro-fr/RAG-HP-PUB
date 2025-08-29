@@ -19,13 +19,13 @@ ENV PYTHONPATH=/app
 COPY libs/common-utils /app/libs/common-utils
 RUN pip install -e /app/libs/common-utils
 # On copie les requirements du service
-COPY apps-microservices/di-database-qdrant-service/requirements.txt .
+COPY apps-microservices/product-database-qdrant-service/requirements.txt .
 RUN pip install -r requirements.txt
 
 # Étape 3: Copier le code source
 # On copie le CONTENU du dossier app local directement dans le WORKDIR (/app)
-COPY apps-microservices/di-database-qdrant-service/app/ /app/di_database_qdrant_service
+COPY apps-microservices/product-database-qdrant-service/app/ /app/product_database_qdrant_service
 
 # Étape 4: Définir la commande
 # On peut maintenant exécuter le script directement, les imports fonctionneront grâce au PYTHONPATH.
-CMD ["python", "-u", "-m", "di_database_qdrant_service.main"]
+CMD ["python", "-u", "-m", "product_database_qdrant_service.main"]
