@@ -60,7 +60,7 @@ def get_milvus_connection():
         if not connections.has_connection(alias):
             logger.info("Connexion à Milvus...")
             # connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
-            connections.connect(alias, host=settings.MILVUS_URI, port=settings.MILVUS_PORT)
+            connections.connect(alias, host=settings.ZILLIZ_URL, port=settings.ZILLIZ_PORT)
             logger.info(f"Connecté à Milvus.")
     except Exception as e:
         logger.error(f"❌ Erreur de connexion à Milvus: {e}")
@@ -380,7 +380,11 @@ async def search_in_milvus(request: SearchRequest):
             continue
 
         # La récupération du payload complet se fait via .query
-        entities = collection.query(expr=f"id in {hit_ids}", output_fields=["*"])
+        all_fields = [field.name for field in collection.schema.fields]
+
+        # Exclude embedding
+        fields_without_embedding = [f for f in all_fields if f != "embedding"]
+        entities = collection.query(expr=f"id in {hit_ids}", output_fields=fields_without_embedding)
 
         # Mapper les distances de recherche aux entités complètes
         id_to_distance = {hit.id: hit.distance for hit in search_results[0]}
