@@ -62,7 +62,7 @@ def get_milvus_connection():
         if not connections.has_connection(alias):
             logger.info("Connexion à Milvus...")
             # connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
-            connections.connect(alias, host=settings.ZILLIZ_URL, port=settings.ZILLIZ_PORT)
+            connections.connect(alias, host=settings.ZILLIZ_URI, port=settings.ZILLIZ_PORT)
             logger.info(f"Connecté à Milvus.")
     except Exception as e:
         logger.error(f"❌ Erreur de connexion à Milvus: {e}")
