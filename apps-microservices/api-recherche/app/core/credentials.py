@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str
     OPENAI_API_KEY: str
     DEEPSEEK_API_KEY: str
-    ZILLIZ_URL: str
+    ZILLIZ_URI: str
     ZILLIZ_PORT: str
     ZILLIZ_TOKEN: str
     OPENROUTER_API_KEY: str
