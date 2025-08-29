@@ -8,6 +8,8 @@ from logging.handlers import TimedRotatingFileHandler
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from transformers import AutoTokenizer # pour encoder du modèle d'embedding
+
 import re
 
 # --- CONFIGURATION ---
@@ -84,6 +86,8 @@ class Embedding:
         self.logger = kwargs.get("logger",logger)
         self.time_logger = kwargs.get("time_logger", time_logger)
         
+        self.tokenizer = kwargs.get("tokenizer") if kwargs.get("tokenizer") else None
+        
         try:
             self.model: Optional[SentenceTransformer] = kwargs.get("model", "")
             self.logger.info("Modèle chargé avec succès")
@@ -158,10 +162,17 @@ class Embedding:
 
     def _create_chunks(self, text: str, template: str) -> List[str]:
         strategy = self.config.CHUNK_STRATEGIES.get(template, self.config.DEFAULT_CHUNK_STRATEGY)
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=strategy["chunk_size"], chunk_overlap=strategy["chunk_overlap"],
-            length_function=len, separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""]
-        )
+        if not self.tokenizer or not isinstance(self.tokenizer, AutoTokenizer):
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=strategy["chunk_size"], chunk_overlap=strategy["chunk_overlap"],
+                length_function=len, separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""]
+            )
+        else:
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=strategy["chunk_size"],
+                chunk_overlap=strategy["chunk_overlap"],
+                length_function=len(self.tokenizer.encode(text, add_special_tokens=False))  # basé sur tokens CamemBERT
+            )
         return text_splitter.split_text(text)
 
     def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:

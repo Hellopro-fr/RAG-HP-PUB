@@ -10,6 +10,8 @@ from sentence_transformers import SentenceTransformer
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
 
+from transformers import AutoTokenizer # pour encoder du modèle d'embedding
+
 def main():
     """
     Point d'entrée principal du service.
@@ -39,13 +41,20 @@ def main():
         # 2. Initialiser le modèle d'embedding
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         model_name = "dangvantuan/sentence-camembert-large"
+        
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        # def hf_length_function(text: str) -> int:
+        #     """Compte les tokens avec CamemBERT"""
+        #     return len(tokenizer.encode(text, add_special_tokens=False))
 
         print(f"🔍 Chargement du modèle '{model_name}' sur le device '{device}'...")
 
         model = SentenceTransformer(model_name, device=device)
         
+        
         # 3. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher, model=model)
+        consumer = Consumer(connection, publisher, model=model, tokenizer=tokenizer)
         
         # 4. Lancer l'écoute
         consumer.start_consuming()
