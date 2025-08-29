@@ -79,35 +79,37 @@ class QdrantCategoriesCrud:
         return collection_name
 
     def insert_categories(self, categorie: Dict[str, Any]) -> Dict[str, Any]:
-        data = categorie
+        datas = categorie
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             self._get_or_create_collection(model_config)
 
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
-            self.logger.info(f"[{model_key}][categories] Insertion de {len(data)} entités dans '{self.collection}'...")
-
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None  
-
-            points = []
+            self.logger.info(f"[{model_key}][categories] Insertion de {len(datas)} entités dans '{self.collection}'...")
             
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=data.get("embedding"),
-                    payload={k: v for k, v in data.items() if k != "embedding"}
+            points = []
+
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None     
+                
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=data.get("embedding"),
+                        payload={k: v for k, v in data.items() if k != "embedding"}
+                    )
                 )
-            )
 
             result = self.client.upsert(collection_name=self.collection, points=points)
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
 
             return {"status": "success", "ids": [p.id for p in points if p.id]}
+            
         except Exception as e:
             self.logger.error(f"[{model_key}][categories] Erreur Qdrant lors de l'insertion : {e}", exc_info=True)
 

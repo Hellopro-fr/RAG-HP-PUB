@@ -78,30 +78,31 @@ class QdrantFournisseursCrud:
         return collection_name
 
     def insert_fournisseurs(self, fournisseur: Dict[str, Any]) -> Dict[str, Any]:
-        data = fournisseur
+        datas = fournisseur
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             self._get_or_create_collection(model_config)
 
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
-            self.logger.info(f"[{model_key}][fournisseurs] Insertion de {len(data)} entités dans '{self.collection}'...")
-
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None  
+            self.logger.info(f"[{model_key}][fournisseurs] Insertion de {len(datas)} entités dans '{self.collection}'...")
 
             points = []
-            
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=data.get("embedding"),
-                    payload={k: v for k, v in data.items() if k != "embedding"}
+
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None     
+                
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=data.get("embedding"),
+                        payload={k: v for k, v in data.items() if k != "embedding"}
+                    )
                 )
-            )
 
             result = self.client.upsert(collection_name=self.collection, points=points)
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
