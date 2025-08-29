@@ -4,7 +4,7 @@ from typing import Annotated, List, Optional, Dict, Any
 # Ce schéma est identique à celui du notebook, comme demandé.
 class SearchRequest(BaseModel):
     prompt: str
-    source: Optional[List[str]] = []
+    source: Optional[List[str]] = ["site_web"]
     nombre_resultat: Optional[str] = "10"
     action: Optional[int] = 1
     categorie: Optional[Dict[str, str]] = {}
