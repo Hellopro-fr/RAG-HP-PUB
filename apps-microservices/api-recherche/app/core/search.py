@@ -87,10 +87,11 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         context = "\n-----\n\n\n".join(context_texts)
         full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
         
-        type_prompt = any(request.chat_model in models for models in model_settings.values())
+        type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
         
+        print(f"Type prompt: {type_prompt}, modèle: {request.chat_model}")
         start_llm_time = time.perf_counter()
-        if type_prompt != "or":
+        if type_prompt == "openai":
             if request.chat_model == "deepseek":
                 deepseek = DeepSeek()
                 deepseek.set_temperature(request.temperature)
