@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str
     ZILLIZ_URI: str
     ZILLIZ_PORT: str
-    ZILLIZ_TOKEN: str
+    ZILLIZ_API_KEY: str
     OPENROUTER_API_KEY: str
 
     MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
