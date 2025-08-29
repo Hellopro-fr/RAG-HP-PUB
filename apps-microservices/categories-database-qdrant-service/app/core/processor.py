@@ -66,6 +66,7 @@ def insertion_data(categories_data: dict) -> dict:
                 logging.info("La id_categorie %s existe déjà dans la base de données. Insertion ignorée.", id_categorie)
                 result = data
             else:
+                logging.info("✅ Traitement réussi pour l'item '%s' - %s / %s.", id_categorie)
                 result = func(categories)
                 
             output_message = {
