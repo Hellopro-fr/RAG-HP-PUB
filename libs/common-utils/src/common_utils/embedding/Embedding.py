@@ -8,6 +8,8 @@ from logging.handlers import TimedRotatingFileHandler
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from transformers import AutoTokenizer # pour encoder du modèle d'embedding
+
 import re
 
 # --- CONFIGURATION ---
@@ -84,6 +86,8 @@ class Embedding:
         self.logger = kwargs.get("logger",logger)
         self.time_logger = kwargs.get("time_logger", time_logger)
         
+        self.tokenizer = kwargs.get("tokenizer") if kwargs.get("tokenizer") else None
+        
         try:
             self.model: Optional[SentenceTransformer] = kwargs.get("model", "")
             self.logger.info("Modèle chargé avec succès")
@@ -109,12 +113,15 @@ class Embedding:
         start_time = time.perf_counter()
         # The model is already loaded, just use it.
         # Note: We now process a list of sentences for better batching.
-        vector = self.model.encode(
-            sentences,
-            show_progress_bar=False,
-            normalize_embeddings=True,
-            batch_size=self.config.BATCH_SIZE
-        ).tolist()
+        try:
+            vector = self.model.encode(
+                sentences,
+                show_progress_bar=False,
+                normalize_embeddings=True,
+                batch_size=self.config.BATCH_SIZE
+            ).tolist()
+        except Exception as e:
+            self.logger.error(f"Erreur lors de l'encodage des phrases: {e}", exc_info=True)
 
         elapsed = time.perf_counter() - start_time
 
@@ -158,9 +165,15 @@ class Embedding:
 
     def _create_chunks(self, text: str, template: str) -> List[str]:
         strategy = self.config.CHUNK_STRATEGIES.get(template, self.config.DEFAULT_CHUNK_STRATEGY)
+        
+        def hf_length_function(text: str) -> int:
+            """Compte les tokens avec CamemBERT"""
+            return len(self.tokenizer.encode(text, add_special_tokens=False))
+
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=strategy["chunk_size"], chunk_overlap=strategy["chunk_overlap"],
-            length_function=len, separators=["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""]
+            chunk_size=strategy["chunk_size"],
+            chunk_overlap=strategy["chunk_overlap"],
+            length_function=hf_length_function  # basé sur tokens CamemBERT
         )
         return text_splitter.split_text(text)
 
@@ -181,7 +194,7 @@ class Embedding:
 
         # Vérifier si le type de page est renseigné
         chunks = self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
-            
+        
         if not chunks:
             self.logger.warning(f"Aucun chunk créé pour le texte donné.")
             self.logger.warning(f"Data: {data_clean}")

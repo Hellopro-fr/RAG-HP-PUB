@@ -58,6 +58,7 @@ Thumbs.db
 
 ##ENV
 *.env
+*.env*
 *.local
 
 # Local .terraform directories

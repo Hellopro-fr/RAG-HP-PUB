@@ -7,3 +7,4 @@ protobuf
 tiktoken
 sentencepiece
 python-dotenv
+transformers
