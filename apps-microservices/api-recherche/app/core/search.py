@@ -9,7 +9,7 @@ from pymilvus import connections, Collection, utility
 from app.core.credentials import settings, model_settings
 from app.schemas.search import SearchRequest, LLMPipeline
 
-from app.core.or import chat_with_openrouter
+from app.core.openrouter import chat_with_openrouter
 
 class DeepSeek:
 	def __init__(self, config=None):
