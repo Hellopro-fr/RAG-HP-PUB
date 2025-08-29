@@ -101,7 +101,7 @@ class MilvusFournisseursCrud:
         return collection
 
 
-    def insert_fournisseurs(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_fournisseurs(self, datas: Dict[str, Any]) -> Dict[str, Any]:
 
         model_config = ModelConfig()
         model_key = model_config.model_id
@@ -111,22 +111,25 @@ class MilvusFournisseursCrud:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
             
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {
                     "status": "error",
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
-            self.logger.info(f"[{model_key}][fournisseurs] Insertion de batch de {len(data)} entités dans '{self.collection.name}'...")
+            self.logger.info(f"[{model_key}][fournisseurs] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
            
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None  
-
-            # Sanitize the record to ensure no None values
-            # This is important for Milvus compatibility
-            data = Utils.sanitize_record(data)  
-            
-            result = self.collection.insert(data)
+            sanitized_batch = []           
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None
+                
+                # Sanitize the record to ensure no None values
+                # This is important for Milvus compatibility
+                data = Utils.sanitize_record(data)
+                sanitized_batch.append(data)
+                        
+            result = self.collection.insert(sanitized_batch)
             self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}") 
