@@ -221,7 +221,7 @@ async def search_in_qdrant(request: SearchRequest):
     _search_params_verification = _search_params(request)
     if _search_params_verification:
         top_k = int(_search_params_verification["ef"])
-        logger.info(f"Utilisation des paramètres de recherche personnalisés: {search_params}")
+        logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
 
     search_params = models.SearchParams(hnsw_ef=_ef_search(top_k), exact=False)
     
@@ -376,7 +376,7 @@ async def search_in_milvus(request: SearchRequest):
     _search_params_verification = _search_params(request)
     if _search_params_verification:
         top_k = int(_search_params_verification["ef"])
-        logger.info(f"Utilisation des paramètres de recherche personnalisés: {search_params}")
+        logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
         
     all_results = {}
     context_texts = []
