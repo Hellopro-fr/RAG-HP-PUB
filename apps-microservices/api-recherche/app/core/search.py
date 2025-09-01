@@ -215,7 +215,7 @@ async def search_in_qdrant(request: SearchRequest):
     embed_duration = time.perf_counter() - start_embed
 
     top_k = int(request.nombre_resultat)
-    search_params = models.SearchParams(hnsw_ef=300, exact=False)
+    search_params = models.SearchParams(hnsw_ef=_ef_search(request.nombre_resultat), exact=False)
     
     all_results = {}
     context_texts = []
@@ -381,7 +381,7 @@ async def search_in_milvus(request: SearchRequest):
         collection = Collection(name=source)
         collection.load()
 
-        search_params = {"metric_type": "COSINE", "params": {"ef": 150}}
+        search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(request.nombre_resultat)}}
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
 
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
