@@ -58,10 +58,10 @@ class QdrantCategoriesCrud:
                 vectors_config=VectorParams(size=model_config.dimension, distance=Distance.COSINE),
 				hnsw_config=HnswConfigDiff(
 					m=32,
-					ef_construct=200
+					ef_construct=300
 				),
                 shard_number=2,
-                replication_factor=2
+                replication_factor= 1 #normalement ça devrait être 3 mais pour l'insertion massive on le garde à 1 d'abord
             )
             self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' créée.")
         else:

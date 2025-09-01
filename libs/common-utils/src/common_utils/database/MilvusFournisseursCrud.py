@@ -81,15 +81,15 @@ class MilvusFournisseursCrud:
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 200}}
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 300}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
-            collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")            
+            # collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")            
             collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")            
-            collection.create_index(field_name="affichage", index_name="idx_affichage")            
-            collection.create_index(field_name="etat", index_name="idx_etat")            
-            collection.create_index(field_name="page_type", index_name="idx_page_type")            
+            # collection.create_index(field_name="affichage", index_name="idx_affichage")            
+            # collection.create_index(field_name="etat", index_name="idx_etat")            
+            # collection.create_index(field_name="page_type", index_name="idx_page_type")            
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
