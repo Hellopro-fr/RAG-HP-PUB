@@ -105,15 +105,6 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
         
         type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
-        
-        print(f"Type prompt: {type_prompt}, modèle: {request.chat_model}")
-        # rep de trace dans un fichier
-        TRACES_DIR = "app/output"
-        os.makedirs(TRACES_DIR, exist_ok=True)
-        with open(os.path.join(TRACES_DIR, "full_user_prompt.txt"), "a", encoding="utf-8") as f:
-            trace_prompt = "-----------------------\n"
-            trace_prompt += f"Modèle: {request.chat_model} - Temperature: {request.temperature} - nb_chunk: {request.nombre_resultat}\nPrompt : {full_user_prompt}\n"
-            f.write(trace_prompt)
             
         start_llm_time = time.perf_counter()
         if type_prompt == "openai":
