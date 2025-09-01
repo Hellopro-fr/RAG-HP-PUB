@@ -1,4 +1,5 @@
 import time
+import os
 import logging
 from functools import lru_cache
 from qdrant_client import QdrantClient, models
@@ -94,10 +95,14 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
         
         print(f"Type prompt: {type_prompt}, modèle: {request.chat_model}")
-        with open("full_user_prompt.txt", "a", encoding="utf-8") as f:
+        # rep de trace dans un fichier
+        TRACES_DIR = "app/output"
+        os.makedirs(TRACES_DIR, exist_ok=True)
+        with open(os.path.join(UPLOAD_DIR, "full_user_prompt.txt"), "a", encoding="utf-8") as f:
             trace_prompt = "-----------------------\n"
             trace_prompt += f"Modèle: {request.chat_model} - Temperature: {request.temperature} - nb_chunk: {request.nombre_resultat}\nPrompt : {full_user_prompt}\n"
-            f.write(full_user_prompt)
+            f.write(trace_prompt)
+            
         start_llm_time = time.perf_counter()
         if type_prompt == "openai":
             if request.chat_model == "deepseek":
