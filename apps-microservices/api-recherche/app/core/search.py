@@ -75,6 +75,10 @@ def get_openai_client():
     logger.info("Client OpenAI initialisé.")
     return client
 
+def _ef_search(nb_chunk: int) -> int:
+    """Calcule la valeur ef_search pour Qdrant/Milvus en fonction du nombre de chunks."""
+    return 300 if nb_chunk <= 150 else nb_chunk * 2
+
 import_duration = time.perf_counter() - import_start_time
 
 # Dictionnaires de mapping
@@ -90,6 +94,10 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
         
         print(f"Type prompt: {type_prompt}, modèle: {request.chat_model}")
+        with open("full_user_prompt.txt", "a", encoding="utf-8") as f:
+            trace_prompt = "-----------------------\n"
+            trace_prompt += f"Modèle: {request.chat_model} - Temperature: {request.temperature} - nb_chunk: {request.nombre_resultat}\nPrompt : {full_user_prompt}\n"
+            f.write(full_user_prompt)
         start_llm_time = time.perf_counter()
         if type_prompt == "openai":
             if request.chat_model == "deepseek":
