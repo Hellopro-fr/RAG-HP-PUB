@@ -21,7 +21,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "devis"
+    collection_name: str = "devis_poc_300"
     dimension: int = 1024
 
 class MilvusDevisCrud:

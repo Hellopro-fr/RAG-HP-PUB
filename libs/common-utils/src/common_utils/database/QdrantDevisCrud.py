@@ -21,7 +21,7 @@ from qdrant_client.http.models import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "devis"
+    collection_name: str = "devis_poc_300"
     dimension: int = 1024
 
 
@@ -65,7 +65,7 @@ class QdrantDevisCrud:
 					m=32,
 					ef_construct=300
 				),
-                shard_number=3,
+                shard_number=2,
                 replication_factor=1 # Pour l'insertion massive initiale, on met 1 (plus rapide)
             )
             self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' créée.")

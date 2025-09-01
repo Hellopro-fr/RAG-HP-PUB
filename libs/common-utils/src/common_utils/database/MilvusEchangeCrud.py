@@ -20,7 +20,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "echanges"
+    collection_name: str = "echanges_poc_300"
     dimension: int = 1024
 
 class MilvusEchangeCrud:
