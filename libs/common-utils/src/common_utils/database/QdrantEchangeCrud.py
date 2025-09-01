@@ -21,7 +21,7 @@ from qdrant_client.http.models import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "echanges_poc_48_500"
+    collection_name: str = "echanges_poc_64_400"
     dimension: int = 1024
 
 
@@ -62,8 +62,8 @@ class QdrantEchangeCrud:
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=model_config.dimension, distance=Distance.COSINE),
 				hnsw_config=HnswConfigDiff(
-					m=48,
-					ef_construct=500
+					m=64,
+					ef_construct=400
 				),
                 shard_number=2,
                 replication_factor=2
