@@ -76,7 +76,7 @@ def get_openai_client():
     logger.info("Client OpenAI initialisé.")
     return client
 
-def _search_params(request: SearchRequest) -> Dict | None:
+def _search_params(request: SearchRequest) -> dict | None:
     ef_search = request.params.get("ef_search") if request.params else None
     m_params  = request.params.get("m") if request.params else None
     
