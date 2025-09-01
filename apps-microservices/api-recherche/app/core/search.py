@@ -219,11 +219,12 @@ async def search_in_qdrant(request: SearchRequest):
 
     top_k = int(request.nombre_resultat)
     _search_params_verification = _search_params(request)
+    _top_k = top_k
     if _search_params_verification:
-        top_k = int(_search_params_verification["ef"])
+        _top_k = int(_search_params_verification["ef"])
         logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
 
-    search_params = models.SearchParams(hnsw_ef=_ef_search(top_k), exact=False)
+    search_params = models.SearchParams(hnsw_ef=_ef_search(_top_k), exact=False)
     
     all_results = {}
     context_texts = []
@@ -374,8 +375,9 @@ async def search_in_milvus(request: SearchRequest):
 
     top_k = int(request.nombre_resultat)
     _search_params_verification = _search_params(request)
+    _top_k = top_k
     if _search_params_verification:
-        top_k = int(_search_params_verification["ef"])
+        _top_k = int(_search_params_verification["ef"])
         logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
         
     all_results = {}
@@ -393,6 +395,7 @@ async def search_in_milvus(request: SearchRequest):
         _source = source
         if _search_params_verification:
             _source = f"{source}{_search_params_verification['source']}" 
+            
         
         if not utility.has_collection(_source):
             logger.warning(f"La collection Milvus '{source}' n'existe pas.")
@@ -402,7 +405,7 @@ async def search_in_milvus(request: SearchRequest):
         collection = Collection(name=_source)
         collection.load()
 
-        search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(top_k)}}
+        search_params = {"metric_type": "COSINE", "params": {"ef": _top_k if _search_params_verification else _ef_search(top_k)}}
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
 
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
