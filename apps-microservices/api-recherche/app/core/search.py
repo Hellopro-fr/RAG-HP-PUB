@@ -1,4 +1,5 @@
 import time
+import os
 import logging
 from functools import lru_cache
 from qdrant_client import QdrantClient, models
@@ -75,6 +76,10 @@ def get_openai_client():
     logger.info("Client OpenAI initialisé.")
     return client
 
+def _ef_search(nb_chunk: int) -> int:
+    """Calcule la valeur ef_search pour Qdrant/Milvus en fonction du nombre de chunks."""
+    return 300 if nb_chunk <= 150 else nb_chunk * 2
+
 import_duration = time.perf_counter() - import_start_time
 
 # Dictionnaires de mapping
@@ -90,6 +95,14 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
         
         print(f"Type prompt: {type_prompt}, modèle: {request.chat_model}")
+        # rep de trace dans un fichier
+        TRACES_DIR = "app/output"
+        os.makedirs(TRACES_DIR, exist_ok=True)
+        with open(os.path.join(TRACES_DIR, "full_user_prompt.txt"), "a", encoding="utf-8") as f:
+            trace_prompt = "-----------------------\n"
+            trace_prompt += f"Modèle: {request.chat_model} - Temperature: {request.temperature} - nb_chunk: {request.nombre_resultat}\nPrompt : {full_user_prompt}\n"
+            f.write(trace_prompt)
+            
         start_llm_time = time.perf_counter()
         if type_prompt == "openai":
             if request.chat_model == "deepseek":
@@ -202,7 +215,7 @@ async def search_in_qdrant(request: SearchRequest):
     embed_duration = time.perf_counter() - start_embed
 
     top_k = int(request.nombre_resultat)
-    search_params = models.SearchParams(hnsw_ef=300, exact=False)
+    search_params = models.SearchParams(hnsw_ef=_ef_search(top_k), exact=False)
     
     all_results = {}
     context_texts = []
@@ -368,7 +381,7 @@ async def search_in_milvus(request: SearchRequest):
         collection = Collection(name=source)
         collection.load()
 
-        search_params = {"metric_type": "COSINE", "params": {"ef": 150}}
+        search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(top_k)}}
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
 
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})

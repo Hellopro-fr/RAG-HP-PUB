@@ -12,6 +12,28 @@ services:
     env_file:
       - .env
 
+  api-recherche-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-recherche/Dockerfile
+    container_name: api-recherche-service
+    restart: unless-stopped
+    ports:
+      - "8510:8510"
+    env_file:
+      - .env
+
+  api-gateway-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-gateway/Dockerfile
+    container_name: api-gateway-service
+    restart: unless-stopped
+    ports:
+      - "8500:8500"
+    env_file:
+      - .env
+
   devis-processor-service:
     build:
       context: .
