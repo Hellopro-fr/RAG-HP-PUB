@@ -60,8 +60,8 @@ class QdrantProduitsCrud:
 					m=32,
 					ef_construct=200
 				),
-                shard_number=2,
-                replication_factor=2
+                shard_number=6,
+                replication_factor=3
             )
             self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' créée.")
         else:
