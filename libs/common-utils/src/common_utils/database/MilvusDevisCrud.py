@@ -21,7 +21,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "devis_poc_48_400"
+    collection_name: str = "devis_poc_48_500"
     dimension: int = 1024
 
 class MilvusDevisCrud:
@@ -97,7 +97,7 @@ class MilvusDevisCrud:
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 400}}
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 500}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # # Optionnel: Créer des index scalaires pour les filtres fréquents

@@ -21,7 +21,7 @@ from qdrant_client.http.models import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "echanges_poc_48_400"
+    collection_name: str = "echanges_poc_48_500"
     dimension: int = 1024
 
 
@@ -63,10 +63,10 @@ class QdrantEchangeCrud:
                 vectors_config=VectorParams(size=model_config.dimension, distance=Distance.COSINE),
 				hnsw_config=HnswConfigDiff(
 					m=48,
-					ef_construct=400
+					ef_construct=500
 				),
                 shard_number=2,
-                replication_factor=1 # Pour l'insertion massive initiale, on met 1 (plus rapide)
+                replication_factor=2
             )
             self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' créée.")
         else:
