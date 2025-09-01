@@ -76,6 +76,18 @@ def get_openai_client():
     logger.info("Client OpenAI initialisé.")
     return client
 
+def _search_params(request: SearchRequest) -> Dict | None:
+    ef_search = request.params.get("ef_search") if request.params else None
+    m_params  = request.params.get("m") if request.params else None
+    
+    if ef_search and m_params:
+        return {
+            "ef": int(ef_search),
+            "m": int(m_params),
+            "source": f"_{m_params}_{ef_search}"
+        }
+    
+    return None
 def _ef_search(nb_chunk: int) -> int:
     """Calcule la valeur ef_search pour Qdrant/Milvus en fonction du nombre de chunks."""
     return 300 if nb_chunk <= 150 else nb_chunk * 2
@@ -215,6 +227,13 @@ async def search_in_qdrant(request: SearchRequest):
     embed_duration = time.perf_counter() - start_embed
 
     top_k = int(request.nombre_resultat)
+    _search_params_verification = _search_params(request)
+    _source = source
+    if _search_params_verification:
+        top_k = int(_search_params_verification["ef"])
+        _source = f"{source}{_search_params_verification['source']}" 
+        logger.info(f"Utilisation des paramètres de recherche personnalisés: {search_params}")
+
     search_params = models.SearchParams(hnsw_ef=_ef_search(top_k), exact=False)
     
     all_results = {}
@@ -235,7 +254,7 @@ async def search_in_qdrant(request: SearchRequest):
         search_filter = build_qdrant_filters(request.dict(), payload_fournisseur, fournisseur_non_vide)
         
         hits = qdrant_client.search(
-            collection_name=source,
+            collection_name=_source,
             query_vector=query_vector,
             limit=top_k,
             with_payload=True,
@@ -361,6 +380,13 @@ async def search_in_milvus(request: SearchRequest):
     embed_duration = time.perf_counter() - start_embed
 
     top_k = int(request.nombre_resultat)
+    _search_params_verification = _search_params(request)
+    _source = source
+    if _search_params_verification:
+        top_k = int(_search_params_verification["ef"])
+        _source = f"{source}{_search_params_verification['source']}" 
+        logger.info(f"Utilisation des paramètres de recherche personnalisés: {search_params}")
+        
     all_results = {}
     context_texts = []
 
@@ -378,7 +404,7 @@ async def search_in_milvus(request: SearchRequest):
             all_results[source] = []
             continue
 
-        collection = Collection(name=source)
+        collection = Collection(name=_source)
         collection.load()
 
         search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(top_k)}}

@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "API-HP-RAG"
     PROJECT_VERSION: str = "0.0.1"
 
+    QDRANT_URL: str
     QDRANT_HOST_URL: str
     QDRANT_PORT: str
     QDRANT_API_KEY: str
