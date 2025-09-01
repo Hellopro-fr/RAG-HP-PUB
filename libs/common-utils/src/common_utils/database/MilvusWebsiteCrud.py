@@ -21,7 +21,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "siteweb_poc_300"
+    collection_name: str = "siteweb_poc_48_400"
     dimension: int = 1024
 
 class MilvusWebsiteCrud:
@@ -86,7 +86,7 @@ class MilvusWebsiteCrud:
 
             # # TODO : Vérifier les paramètres d'indexation
             # # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 300}}
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 400}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # # Optionnel: Créer des index scalaires pour les filtres fréquents
