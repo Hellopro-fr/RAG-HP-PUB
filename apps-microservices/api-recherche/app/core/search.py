@@ -98,7 +98,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         # rep de trace dans un fichier
         TRACES_DIR = "app/output"
         os.makedirs(TRACES_DIR, exist_ok=True)
-        with open(os.path.join(UPLOAD_DIR, "full_user_prompt.txt"), "a", encoding="utf-8") as f:
+        with open(os.path.join(TRACES_DIR, "full_user_prompt.txt"), "a", encoding="utf-8") as f:
             trace_prompt = "-----------------------\n"
             trace_prompt += f"Modèle: {request.chat_model} - Temperature: {request.temperature} - nb_chunk: {request.nombre_resultat}\nPrompt : {full_user_prompt}\n"
             f.write(trace_prompt)
