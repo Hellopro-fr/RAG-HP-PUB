@@ -8,7 +8,7 @@ ENV PYTHONPATH=/app
 COPY apps-microservices/api-gateway/requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY apps-microservices/api-ingestion .
+COPY apps-microservices/api-gateway .
 
 EXPOSE 8500
 
