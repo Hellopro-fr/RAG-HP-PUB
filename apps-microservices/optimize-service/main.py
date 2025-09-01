@@ -82,12 +82,6 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-4B"):
         print(f"Erreur lors du chargement du modèle: {e}")
         raise
 
-# Chargement du modèle au démarrage de l'application
-print("Initialisation du modèle Qwen...")
-qwen_tokenizer, qwen_model = load_qwen_model()
-
-# Création de l'optimiseur avec le modèle pré-chargé
-product_optimizer = ProductOptimizerQwen(tokenizer=qwen_tokenizer, model=qwen_model)
 
 app = FastAPI()
 

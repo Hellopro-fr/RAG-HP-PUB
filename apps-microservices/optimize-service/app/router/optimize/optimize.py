@@ -3,12 +3,16 @@ from app.schemas.optimize.optimize import OptimRequest, OptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
 from app.core.optimize.Qwen3_4B_Q4 import ProductOptimizerQwen
 import os
+from main import load_qwen_model
 
 router = APIRouter()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-@router.post("/", response_model=OptimResponse)
+# Chargement du modèle au démarrage de l'application
+qwen_tokenizer, qwen_model = load_qwen_model()
+
+@router.post("/openai", response_model=OptimResponse)
 def optimize(request: OptimRequest):
     try:
         optimizing_service = ProductOptimizer(OPENAI_API_KEY)
@@ -25,7 +29,8 @@ def optimize(request: OptimRequest):
 @router.post("/qwen", response_model=OptimResponse)
 def optimizeQwen(request: OptimRequest):
     try:
-        optimizing_service = ProductOptimizerQwen()
+        optimizing_service = ProductOptimizerQwen(tokenizer=qwen_tokenizer, model=qwen_model)
+        #optimizeQwen = optimizing_service.optimize_product(request.dict())
         optimizeQwen = optimizing_service.optimize_product(request.dict())
 
         print(optimizeQwen)
