@@ -219,10 +219,8 @@ async def search_in_qdrant(request: SearchRequest):
 
     top_k = int(request.nombre_resultat)
     _search_params_verification = _search_params(request)
-    _source = source
     if _search_params_verification:
         top_k = int(_search_params_verification["ef"])
-        _source = f"{source}{_search_params_verification['source']}" 
         logger.info(f"Utilisation des paramètres de recherche personnalisés: {search_params}")
 
     search_params = models.SearchParams(hnsw_ef=_ef_search(top_k), exact=False)
@@ -243,6 +241,10 @@ async def search_in_qdrant(request: SearchRequest):
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
         payload_fournisseur = metadata["payload_fournisseur"]
         search_filter = build_qdrant_filters(request.dict(), payload_fournisseur, fournisseur_non_vide)
+        
+        _source = source
+        if _search_params_verification:
+            _source = f"{source}{_search_params_verification['source']}"
         
         hits = qdrant_client.search(
             collection_name=_source,
@@ -372,10 +374,8 @@ async def search_in_milvus(request: SearchRequest):
 
     top_k = int(request.nombre_resultat)
     _search_params_verification = _search_params(request)
-    _source = source
     if _search_params_verification:
         top_k = int(_search_params_verification["ef"])
-        _source = f"{source}{_search_params_verification['source']}" 
         logger.info(f"Utilisation des paramètres de recherche personnalisés: {search_params}")
         
     all_results = {}
@@ -390,7 +390,11 @@ async def search_in_milvus(request: SearchRequest):
 
     start_search = time.perf_counter()
     for source in request.source:
-        if not utility.has_collection(source):
+        _source = source
+        if _search_params_verification:
+            _source = f"{source}{_search_params_verification['source']}" 
+        
+        if not utility.has_collection(_source):
             logger.warning(f"La collection Milvus '{source}' n'existe pas.")
             all_results[source] = []
             continue
