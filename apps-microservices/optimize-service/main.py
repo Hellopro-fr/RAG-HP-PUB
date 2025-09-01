@@ -1,12 +1,18 @@
 import logging
+import torch
 from dotenv import load_dotenv
 import os
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
+
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
 from app.core.credentials import settings
 from app.utils.params import params
 from app.utils.response import error_response
+
+from app.core.optimize.Qwen3_4B_Q4 import ProductOptimizerQwen
 
 load_dotenv(dotenv_path=".env")
 
@@ -15,6 +21,73 @@ API d'embedding [RAG Hellopro] 🚀
 """
 
 os.makedirs(f'{settings.DOCUMENT_ROOT}/logs', exist_ok=True)
+
+# ===== CHARGEMENT DU MODÈLE QWEN =====
+def load_qwen_model(model_name: str = "Qwen/Qwen3-4B"):
+    """
+    Charge le modèle Qwen avec quantization 4-bit.
+    
+    Args:
+        model_name (str): Nom du modèle Hugging Face
+        
+    Returns:
+        tuple: (tokenizer, model)
+    """
+    try:
+        print(f"Chargement du tokenizer {model_name}...")
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        
+        # Ajouter un token de padding si nécessaire
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        # Vérifier les conditions pour la quantization
+        if not torch.cuda.is_available():
+            raise Exception("GPU non disponible - quantization impossible")
+            
+        print("Configuration de la quantization 4-bit...")
+        
+        # Vérifier la version de bitsandbytes
+        try:
+            import bitsandbytes as bnb
+            print(f"✓ BitsAndBytes version détectée")
+        except ImportError:
+            raise Exception("BitsAndBytes non disponible")
+        
+        # Config quantization Q4 avec BitsAndBytes
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",  # nf4 > fp4 en qualité
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16
+        )
+
+        print(f"Chargement du modèle {model_name} en 4-bit...")
+        # Charger le modèle en 4-bit (Q4)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            quantization_config=bnb_config,
+            device_map="auto",
+            torch_dtype=torch.float16,
+            trust_remote_code=True
+        )
+
+        # Vérifier le device
+        device = next(model.parameters()).device
+        print(f"✓ Modèle {model_name} chargé en 4-bit sur {device}")
+        
+        return tokenizer, model
+        
+    except Exception as e:
+        print(f"Erreur lors du chargement du modèle: {e}")
+        raise
+
+# Chargement du modèle au démarrage de l'application
+print("Initialisation du modèle Qwen...")
+qwen_tokenizer, qwen_model = load_qwen_model()
+
+# Création de l'optimiseur avec le modèle pré-chargé
+product_optimizer = ProductOptimizerQwen(tokenizer=qwen_tokenizer, model=qwen_model)
 
 app = FastAPI()
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
+from app.core.optimize.Qwen3_4B_Q4 import ProductOptimizerQwen
 import os
 
 router = APIRouter()
@@ -17,6 +18,20 @@ def optimize(request: OptimRequest):
 
         # ⚠️ S'assurer que "data" est bien retourné
         return {"data": [optimize]}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/qwen", response_model=OptimResponse)
+def optimizeQwen(request: OptimRequest):
+    try:
+        optimizing_service = ProductOptimizerQwen()
+        optimizeQwen = optimizing_service.optimize_product(request.dict())
+
+        print(optimizeQwen)
+
+        # ⚠️ S'assurer que "data" est bien retourné
+        return {"data": [optimizeQwen]}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
