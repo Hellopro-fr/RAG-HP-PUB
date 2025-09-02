@@ -25,6 +25,13 @@ services:
       - "8510:8510"
     env_file:
       - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   api-gateway-service:
     build:
