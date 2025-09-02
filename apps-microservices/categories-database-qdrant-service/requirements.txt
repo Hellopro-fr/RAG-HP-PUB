@@ -1,0 +1,6 @@
+qdrant-client
+pydantic
+pytest
+pika
+python-dotenv
+pymilvus

@@ -15,6 +15,9 @@ class SearchRequest(BaseModel):
     template_prompt: Optional[str] = ""
     page_type: str = ""
     chat_model: str = "gpt-4.1-2025-04-14"
+    params: Optional[Dict[str, Any]] = {}
+    use_reranker: Optional[bool] = False
+    reranker_model: Optional[str] = "antoinelouis/crossencoder-camembert-base-mmarcoFR"
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
 class SearchResponse(BaseModel):

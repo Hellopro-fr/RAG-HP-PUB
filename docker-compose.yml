@@ -12,6 +12,28 @@ services:
     env_file:
       - .env
 
+  api-recherche-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-recherche/Dockerfile
+    container_name: api-recherche-service
+    restart: unless-stopped
+    ports:
+      - "8510:8510"
+    env_file:
+      - .env
+
+  api-gateway-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-gateway/Dockerfile
+    container_name: api-gateway-service
+    restart: unless-stopped
+    ports:
+      - "8500:8500"
+    env_file:
+      - .env
+
   devis-processor-service:
     build:
       context: .
@@ -50,6 +72,28 @@ services:
       context: .
       dockerfile: ./apps-microservices/product-processor-service/Dockerfile
     # container_name: product-processor-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+
+  categories-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/categories-processor-service/Dockerfile
+    # container_name: categories-processor-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+
+  fournisseurs-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/fournisseurs-processor-service/Dockerfile
+    # container_name: fournisseurs-processor-service
     restart: unless-stopped
     env_file:
       - .env
@@ -111,6 +155,28 @@ services:
       context: .
       dockerfile: ./apps-microservices/product-database-qdrant-service/Dockerfile
     # container_name: product-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+
+  categories-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/categories-database-qdrant-service/Dockerfile
+    # container_name: categories-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+
+  fournisseurs-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/fournisseurs-database-qdrant-service/Dockerfile
+    # container_name: fournisseurs-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env

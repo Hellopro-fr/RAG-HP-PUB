@@ -1,10 +1,12 @@
 import time
+import os
 import logging
 from functools import lru_cache
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue, IsNullCondition, MatchAny
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from pymilvus import connections, Collection, utility
 from app.core.credentials import settings, model_settings
 from app.schemas.search import SearchRequest, LLMPipeline
@@ -52,9 +54,17 @@ def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"
 def get_qdrant_client():
     logger.info("Connexion initiale à Qdrant Cloud...")
     # client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
-    client = QdrantClient(host=settings.QDRANT_URL, port=settings.QDRANT_PORT)
+    client = QdrantClient(host=settings.QDRANT_HOST_URL, port=settings.QDRANT_PORT)
     logger.info("Client Qdrant initialisé.")
     return client
+
+@lru_cache(maxsize=None)
+def get_reranker_model(model_name: str = "antoinelouis/crossencoder-camembert-base-mmarcoFR"):
+    """Charge le modèle CrossEncoder pour le reranking."""
+    logger.info(f"Chargement du modèle de reranking '{model_name}'...")
+    model = CrossEncoder(model_name)
+    logger.info("Modèle de reranking chargé.")
+    return model
 
 def get_milvus_connection():
     alias = "default"
@@ -62,7 +72,7 @@ def get_milvus_connection():
         if not connections.has_connection(alias):
             logger.info("Connexion à Milvus...")
             # connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
-            connections.connect(alias, host=settings.ZILLIZ_URL, port=settings.ZILLIZ_PORT)
+            connections.connect(alias, host=settings.ZILLIZ_URI, port=settings.ZILLIZ_PORT)
             logger.info(f"Connecté à Milvus.")
     except Exception as e:
         logger.error(f"❌ Erreur de connexion à Milvus: {e}")
@@ -74,6 +84,22 @@ def get_openai_client():
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
     logger.info("Client OpenAI initialisé.")
     return client
+
+def _search_params(request: SearchRequest) -> dict | None:
+    ef_search = request.params.get("ef_search") if request.params else None
+    m_params  = request.params.get("m") if request.params else None
+    
+    if ef_search and m_params:
+        return {
+            "ef": int(ef_search),
+            "m": int(m_params),
+            "source": f"_{m_params}_{ef_search}"
+        }
+    
+    return None
+def _ef_search(nb_chunk: int) -> int:
+    """Calcule la valeur ef_search pour Qdrant/Milvus en fonction du nombre de chunks."""
+    return 300 if nb_chunk <= 150 else nb_chunk * 2
 
 import_duration = time.perf_counter() - import_start_time
 
@@ -87,10 +113,10 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         context = "\n-----\n\n\n".join(context_texts)
         full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
         
-        type_prompt = any(request.chat_model in models for models in model_settings.values())
-        
+        type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
+            
         start_llm_time = time.perf_counter()
-        if type_prompt != "or":
+        if type_prompt == "openai":
             if request.chat_model == "deepseek":
                 deepseek = DeepSeek()
                 deepseek.set_temperature(request.temperature)
@@ -201,7 +227,17 @@ async def search_in_qdrant(request: SearchRequest):
     embed_duration = time.perf_counter() - start_embed
 
     top_k = int(request.nombre_resultat)
-    search_params = models.SearchParams(hnsw_ef=300, exact=False)
+    _search_params_verification = _search_params(request)
+    _top_k = top_k
+    if _search_params_verification:
+        _top_k = int(_search_params_verification["ef"])
+        logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
+        
+    if request.use_reranker:
+        _top_k = _top_k * 3 
+        logger.info(f"Reranker activé. Récupération de {_top_k} documents pour reranker à {top_k}.")
+
+    search_params = models.SearchParams(hnsw_ef=_ef_search(_top_k), exact=False)
     
     all_results = {}
     context_texts = []
@@ -220,10 +256,14 @@ async def search_in_qdrant(request: SearchRequest):
         payload_fournisseur = metadata["payload_fournisseur"]
         search_filter = build_qdrant_filters(request.dict(), payload_fournisseur, fournisseur_non_vide)
         
+        _source = source
+        if _search_params_verification:
+            _source = f"{source}{_search_params_verification['source']}"
+        
         hits = qdrant_client.search(
-            collection_name=source,
+            collection_name=_source,
             query_vector=query_vector,
-            limit=top_k,
+            limit=_top_k,
             with_payload=True,
             query_filter=search_filter,
             search_params=search_params
@@ -262,7 +302,8 @@ async def search_in_qdrant(request: SearchRequest):
                 else:
                     logger.warning(f"Reconstruction échouée pour {lead_id}. Chunks trouvés: {len(sibling_chunks)}/{total_chunks}")
 
-            context_texts.append(final_text)
+            if not request.use_reranker:
+                context_texts.append(final_text)
             # TODO: à vérifier
             # context_texts.append(f"{final_text}\n-----\n")
             matches_info.append({"id": hit.id, "score": hit.score, "id_lead": lead_id, "metadata": payload})
@@ -272,6 +313,43 @@ async def search_in_qdrant(request: SearchRequest):
 
         all_results[source] = matches_info
     search_duration = time.perf_counter() - start_search
+    
+    rerank_duration = 0
+    if request.use_reranker:
+        logger.info("Début du reranking...")
+        start_rerank_time = time.perf_counter()
+        reranker = get_reranker_model(request.reranker_model)
+        reranked_results = {}
+        for source, matches in all_results.items():
+            if not matches:
+                reranked_results[source] = []
+                continue
+            
+            # Créer les paires [requête, texte_document] pour le cross-encoder
+            pairs = [[request.prompt, match["metadata"]["text"]] for match in matches]
+            
+            # Obtenir les scores du reranker
+            scores = reranker.predict(pairs, show_progress_bar=False)
+            
+            # Ajouter les scores de reranking aux résultats
+            for match, score in zip(matches, scores):
+                match["rerank_score"] = float(score)
+            
+            # Trier les résultats par le nouveau score et garder le top_k
+            reranked_matches = sorted(matches, key=lambda x: x["rerank_score"], reverse=True)
+            reranked_results[source] = reranked_matches[:top_k]
+        
+        all_results = reranked_results # Remplacer les résultats par les résultats rerankés
+        rerank_duration = time.perf_counter() - start_rerank_time
+        logger.info(f"Reranking terminé en {rerank_duration:.2f}s.")
+
+        # ### AJOUT ###: Reconstruire le contexte à partir des résultats (potentiellement rerankés)
+        context_texts = []
+        for source, matches in all_results.items():
+            for match in matches:
+                # La logique de reconstruction pour 'devis_poc' est complexe à intégrer post-reranking.
+                # Pour l'instant, nous utilisons le texte du chunk qui a été reranké.
+                context_texts.append(match["metadata"].get("text", ""))
 
     llm_req = llm_prompt(request, context_texts)
 
@@ -347,6 +425,17 @@ async def search_in_milvus(request: SearchRequest):
     embed_duration = time.perf_counter() - start_embed
 
     top_k = int(request.nombre_resultat)
+    _search_params_verification = _search_params(request)
+    _top_k = top_k
+    if _search_params_verification:
+        _top_k = int(_search_params_verification["ef"])
+        logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
+        
+    _top_k = top_k
+    if request.use_reranker:
+        _top_k = _top_k * 3
+        logger.info(f"Reranker activé. Récupération de {_top_k} documents pour reranker à {top_k}.")
+        
     all_results = {}
     context_texts = []
 
@@ -359,27 +448,36 @@ async def search_in_milvus(request: SearchRequest):
 
     start_search = time.perf_counter()
     for source in request.source:
-        if not utility.has_collection(source):
+        _source = source
+        if _search_params_verification:
+            _source = f"{source}{_search_params_verification['source']}" 
+            
+        
+        if not utility.has_collection(_source):
             logger.warning(f"La collection Milvus '{source}' n'existe pas.")
             all_results[source] = []
             continue
 
-        collection = Collection(name=source)
+        collection = Collection(name=_source)
         collection.load()
 
-        search_params = {"metric_type": "COSINE", "params": {"ef": 150}}
+        search_params = {"metric_type": "COSINE", "params": {"ef": _top_k if _search_params_verification else _ef_search(top_k)}}
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
 
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
         filter_expr = build_milvus_expression(request.dict(), metadata["payload_fournisseur"], "1000000" in request.fournisseur)
 
+        all_fields = [field.name for field in collection.schema.fields]
+        fields_without_embedding = [f for f in all_fields if f != "embedding"]
+        
         search_results = collection.search(
             data=query_vector,
             anns_field="embedding",
             param=search_params,
             limit=top_k,
             expr=filter_expr,
-            output_fields=output_fields
+            # output_fields=output_fields
+            output_fields=fields_without_embedding
         )
       
         # Récupérer le payload complet pour les IDs trouvés
@@ -389,24 +487,28 @@ async def search_in_milvus(request: SearchRequest):
             continue
 
         # La récupération du payload complet se fait via .query
-        all_fields = [field.name for field in collection.schema.fields]
+        # all_fields = [field.name for field in collection.schema.fields]
 
         # Exclude embedding
-        fields_without_embedding = [f for f in all_fields if f != "embedding"]
-        entities = collection.query(expr=f"id in {hit_ids}", output_fields=fields_without_embedding)
+        # fields_without_embedding = [f for f in all_fields if f != "embedding"]
+        # entities = collection.query(expr=f"id in {hit_ids}", output_fields=fields_without_embedding)
 
         # Mapper les distances de recherche aux entités complètes
         id_to_distance = {hit.id: hit.distance for hit in search_results[0]}
 
         matches_info = []
-        for entity in entities:
+        for hit in search_results[0]:
             # Logique de reconstruction de chunks (similaire à Qdrant)
             # ...
+            entity = hit.entity.to_dict()
             final_text = entity.get("text", "")
-            context_texts.append(f"{final_text}\n-----\n")
+            if not request.use_reranker:
+                context_texts.append(f"{final_text}\n-----\n")
 
             matches_info.append({
                 "id": entity.get("id"),
+                # "score": id_to_distance.get(entity.get("id")),
+                "score": entity.distance,
                 "score": id_to_distance.get(entity.get("id")),
                 "id_lead": entity.get("lead_id"),
                 "metadata": entity
@@ -423,6 +525,37 @@ async def search_in_milvus(request: SearchRequest):
         #         })
         # all_results[source] = matches_info
     search_duration = time.perf_counter() - start_search
+    
+    rerank_duration = 0
+    if request.use_reranker:
+        logger.info("Début du reranking...")
+        start_rerank_time = time.perf_counter()
+        reranker = get_reranker_model(request.reranker_model)
+        reranked_results = {}
+        for source, matches in all_results.items():
+            if not matches:
+                reranked_results[source] = []
+                continue
+            
+            pairs = [[request.prompt, match["metadata"]["text"]] for match in matches]
+            scores = reranker.predict(pairs, show_progress_bar=False)
+            
+            for match, score in zip(matches, scores):
+                match["rerank_score"] = float(score)
+            
+            reranked_matches = sorted(matches, key=lambda x: x["rerank_score"], reverse=True)
+            reranked_results[source] = reranked_matches[:top_k]
+        
+        all_results = reranked_results
+        rerank_duration = time.perf_counter() - start_rerank_time
+        logger.info(f"Reranking terminé en {rerank_duration:.2f}s.")
+
+        # ### AJOUT ###: Reconstruire le contexte à partir des résultats (potentiellement rerankés)
+        logger.info("Reconstruction du contexte après reranking...")
+        context_texts = []
+        for source, matches in all_results.items():
+            for match in matches:
+                context_texts.append(match["metadata"].get("text", ""))
 
     # TODO complété: Logique LLM pour Milvus
     llm_req = llm_prompt(request, context_texts)

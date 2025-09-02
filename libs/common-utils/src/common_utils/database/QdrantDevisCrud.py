@@ -21,7 +21,7 @@ from qdrant_client.http.models import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "devis_poc"
+    collection_name: str = "devis_poc_64_500"
     dimension: int = 1024
 
 
@@ -62,8 +62,8 @@ class QdrantDevisCrud:
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=model_config.dimension, distance=Distance.COSINE),
 				hnsw_config=HnswConfigDiff(
-					m=32,
-					ef_construct=200
+					m=64,
+					ef_construct=500
 				),
                 shard_number=2,
                 replication_factor=2
@@ -74,12 +74,19 @@ class QdrantDevisCrud:
 
 
         self.client.create_payload_index(collection_name, field_name="lead_id", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="affichage", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="etat", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="page_type", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="effectif", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="naf2", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="naf5", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="prof_ou_part", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="departement", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="region", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="pays", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="siren", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="siret", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="date_du_lead", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="id_produit", field_schema=PayloadSchemaType.KEYWORD)
 
         self.collection = collection_name
         return collection_name
