@@ -501,18 +501,18 @@ async def search_in_milvus(request: SearchRequest):
         for hit in search_results[0]:
             # Logique de reconstruction de chunks (similaire à Qdrant)
             # ...
-            entity = hit.entity.to_dict()
+            entity_dict = hit.entity.to_dict()
             final_text = entity.get("text", "")
             if not request.use_reranker:
                 context_texts.append(f"{final_text}\n-----\n")
 
             matches_info.append({
-                "id": entity.get("id"),
-                # "score": id_to_distance.get(entity.get("id")),
-                "score": entity.get("distance"),
-                # "score": id_to_distance.get(entity.get("id")),
-                "id_lead": entity.get("lead_id"),
-                "metadata": entity
+                "id": entity_dict.get("id"),
+                # "score": id_to_distance.get(entity_dict.get("id")),
+                "score": entity_dict.distance,
+                # "score": id_to_distance.get(entity_dict.get("id")),
+                "id_lead": entity_dict.get("lead_id"),
+                "metadata": entity_dict
             })
         all_results[source] = matches_info
 
