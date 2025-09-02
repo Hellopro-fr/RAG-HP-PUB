@@ -66,7 +66,7 @@ class QdrantFournisseursCrud:
 					ef_construct=300
 				),
                 shard_number=3,
-                replication_factor= 1 #normalement ça devrait être 3 mais pour l'insertion massive on le garde à 1 d'abord
+                replication_factor= 3 
             )
             self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' créée.")
         else:
