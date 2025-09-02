@@ -7,16 +7,12 @@ from bs4 import BeautifulSoup
 class QualifierService:
     def __init__(self):
         self.llm_args = {
-            "model": "Qwen/Qwen1.5-14B-Chat-AWQ",
+            "model": "Qwen/Qwen3-14B-AWQ",
             "quantization": "awq",
             "gpu_memory_utilization": 0.90,
             "trust_remote_code": True,
             "dtype": "auto",
-            # --- CORRECTION FINALE ICI ---
-            # On réduit la longueur maximale pour qu'elle rentre
-            # confortablement dans la mémoire restante du GPU T4.
-            "max_model_len": 2048 
-            # --- FIN DE LA CORRECTION ---
+            "max_model_len": 2048
         }
         self.llm = LLM(**self.llm_args)
         self.tokenizer = self.llm.get_tokenizer()
@@ -38,7 +34,12 @@ class QualifierService:
         user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=truncated_content)
         conversation = [{"role": "user", "content": user_prompt}]
         
-        formatted_prompt = self.tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+        formatted_prompt = self.tokenizer.apply_chat_template(
+            conversation, 
+            tokenize=False, 
+            add_generation_prompt=True,
+            enable_thinking=False # Crucial pour obtenir un JSON propre
+        )
         
         outputs = self.llm.generate([formatted_prompt], sampling_params)
         raw_text = outputs[0].outputs[0].text.strip()
