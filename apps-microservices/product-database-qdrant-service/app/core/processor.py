@@ -36,7 +36,7 @@ def insertion_data(produits_data: dict) -> dict:
     result = []
 
     if func and len(produits) > 0:
-        id_produit = produits[0].get('id_produit', 'ID Demande inconnu')
+        id_produit = produits[0].get('id_produit', 'ID produit inconnu')
         res = base_vectorielle.get_produit(id_produit=id_produit)
 
         status = res.get("status")
