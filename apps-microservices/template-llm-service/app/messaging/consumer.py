@@ -1,17 +1,31 @@
 import pika
 import json
+import threading
 from app.messaging.publisher import Publisher
 from app.core.qualifier.service import QualifierService
 
-# Le système de lazy loading du service LLM reste identique
+# On crée un verrou global pour protéger l'initialisation du service
+service_initialization_lock = threading.Lock()
 qualifier_service_instance: QualifierService | None = None
 
 def get_qualifier_service() -> QualifierService:
+    """
+    Fonction "thread-safe" qui charge le service (et le modèle LLM) de manière différée.
+    Le verrou garantit qu'un seul thread peut initialiser le service à la fois.
+    """
     global qualifier_service_instance
-    if qualifier_service_instance is None:
-        print("--- LAZY LOADING: Initialisation du QualifierService (chargement du modèle)... ---")
-        qualifier_service_instance = QualifierService()
-        print("--- LAZY LOADING: Service initialisé et prêt. ---")
+    # Si l'instance existe déjà, on la retourne directement sans attendre
+    if qualifier_service_instance:
+        return qualifier_service_instance
+
+    # Le premier thread qui arrive acquiert le verrou. Les autres attendent ici.
+    with service_initialization_lock:
+        # On revérifie si l'instance n'a pas été créée par un autre thread
+        # pendant qu'on attendait le verrou.
+        if qualifier_service_instance is None:
+            print("--- LAZY LOADING: Initialisation du QualifierService (chargement du modèle)... ---")
+            qualifier_service_instance = QualifierService()
+            print("--- LAZY LOADING: Service initialisé et prêt. ---")
     return qualifier_service_instance
 
 class Consumer:
@@ -35,10 +49,12 @@ class Consumer:
 
     def _on_message_callback(self, ch, method, properties, body):
         try:
-            message = json.loads(body)
-            print(f"\n📥 template-llm-service: Message reçu pour templating (classification).")
-
+            # L'appel à get_qualifier_service() est maintenant sûr.
+            # Si le modèle charge, cet appel va bloquer et attendre.
             service = get_qualifier_service()
+            
+            message = json.loads(body)
+            print(f"\n📥 template-llm-service: Message reçu pour classification.")
 
             data_payload = message.get("data", {})
             url = data_payload.get("url", "URL non fournie")
@@ -46,26 +62,21 @@ class Consumer:
 
             if not content:
                 print("   -> Contenu vide, message ignoré.")
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                return
-
-            type_page, _, _ = service.classify(url=url, content=content)
-            
-            print(f"   -> Classification terminée : {type_page}")
-
-            # On enrichit le message original avec le type de page
-            message["classification_result"] = {
-                "type_page": type_page
-            }
-            
-            self.publisher.publish_message(message)
+                # On ne retourne plus ici, on laisse le finally acquitter
+            else:
+                type_page, _, _ = service.classify(url=url, content=content)
+                print(f"   -> Classification terminée : {type_page}")
+                message["classification_result"] = {"type_page": type_page}
+                self.publisher.publish_message(message)
 
         except Exception as e:
             print(f"❌ Erreur lors du traitement du message : {e}")
         
         finally:
+            # L'acquittement unique et centralisé est toujours la bonne pratique
             ch.basic_ack(delivery_tag=method.delivery_tag)
-
+            print("   -> Message acquitté.")
+            
     def start_consuming(self):
         self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
         print("👂 template-llm-service: En attente de messages...")
