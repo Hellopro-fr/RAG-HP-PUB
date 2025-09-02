@@ -233,8 +233,9 @@ async def search_in_qdrant(request: SearchRequest):
         _top_k = int(_search_params_verification["ef"])
         logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
         
+    reranking_top_k = top_k
     if request.use_reranker:
-        _top_k = _top_k * 3 
+        reranking_top_k = top_k * 3 
         logger.info(f"Reranker activé. Récupération de {_top_k} documents pour reranker à {top_k}.")
 
     search_params = models.SearchParams(hnsw_ef=_ef_search(_top_k), exact=False)
@@ -263,7 +264,7 @@ async def search_in_qdrant(request: SearchRequest):
         hits = qdrant_client.search(
             collection_name=_source,
             query_vector=query_vector,
-            limit=_top_k,
+            limit=reranking_top_k,
             with_payload=True,
             query_filter=search_filter,
             search_params=search_params
@@ -431,9 +432,9 @@ async def search_in_milvus(request: SearchRequest):
         _top_k = int(_search_params_verification["ef"])
         logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
         
-    _top_k = top_k
+    reranking_top_k = top_k
     if request.use_reranker:
-        _top_k = _top_k * 3
+        reranking_top_k = top_k * 3
         logger.info(f"Reranker activé. Récupération de {_top_k} documents pour reranker à {top_k}.")
         
     all_results = {}
@@ -474,7 +475,7 @@ async def search_in_milvus(request: SearchRequest):
             data=query_vector,
             anns_field="embedding",
             param=search_params,
-            limit=top_k,
+            limit=reranking_top_k,
             expr=filter_expr,
             # output_fields=output_fields
             output_fields=fields_without_embedding
