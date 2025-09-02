@@ -20,7 +20,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "echanges_poc_48_500"
+    collection_name: str = "echanges_poc_64_400"
     dimension: int = 1024
 
 class MilvusEchangeCrud:
@@ -85,7 +85,7 @@ class MilvusEchangeCrud:
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 48, "efConstruction": 500}}
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 64, "efConstruction": 400}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # # Optionnel: Créer des index scalaires pour les filtres fréquents
