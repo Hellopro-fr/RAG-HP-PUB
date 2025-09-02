@@ -5,7 +5,7 @@ from app.router.ingestion.ingestion import router as IngestionRouter
 params = [
     [
         IngestionRouter,
-        f"/ingestion",
+        f"/classify",
         Tags.ingestion,
         True
     ]
