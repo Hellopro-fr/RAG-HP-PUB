@@ -98,7 +98,6 @@ class MilvusProduitsCrud:
             collection = Collection(
                 collection_name, 
                 schema,
-                num_shards=2, 
                 consistency_level="Strong"
             )
             
