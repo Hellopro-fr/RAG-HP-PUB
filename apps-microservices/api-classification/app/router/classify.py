@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 @router.post("/classify", response_model=ClassificationResponse, tags=["Classification"])
 async def classify(request: ClassificationRequest = Body(...)):
     try:
-        if not request.data.strip():
+        if not request.data:
             raise ValueError("Le paramètre data ne peut pas être vide.")
         
         return { "response" : "OK" }
