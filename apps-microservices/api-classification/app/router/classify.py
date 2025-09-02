@@ -6,7 +6,7 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/classify", response_model=ClassificationResponse, tags=["Classification"])
+@router.post("/classify", tags=["Classification"])
 async def classify(request: ClassificationRequest = Body(...)):
     try:
         if not request.data:
