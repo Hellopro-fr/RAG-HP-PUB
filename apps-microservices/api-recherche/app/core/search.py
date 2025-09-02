@@ -509,7 +509,7 @@ async def search_in_milvus(request: SearchRequest):
             matches_info.append({
                 "id": entity.get("id"),
                 # "score": id_to_distance.get(entity.get("id")),
-                "score": entity.distance,
+                "score": entity.get("distance"),
                 # "score": id_to_distance.get(entity.get("id")),
                 "id_lead": entity.get("lead_id"),
                 "metadata": entity
