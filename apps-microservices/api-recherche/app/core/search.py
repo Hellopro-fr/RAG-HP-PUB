@@ -497,34 +497,35 @@ async def search_in_milvus(request: SearchRequest):
         # Mapper les distances de recherche aux entités complètes
         id_to_distance = {hit.id: hit.distance for hit in search_results[0]}
 
-        matches_info = []
-        for hit in search_results[0]:
-            # Logique de reconstruction de chunks (similaire à Qdrant)
-            # ...
-            entity_dict = hit.entity.to_dict()
-            final_text = entity.get("text", "")
-            if not request.use_reranker:
-                context_texts.append(f"{final_text}\n-----\n")
-
-            matches_info.append({
-                "id": entity_dict.get("id"),
-                # "score": id_to_distance.get(entity_dict.get("id")),
-                "score": entity_dict.distance,
-                # "score": id_to_distance.get(entity_dict.get("id")),
-                "id_lead": entity_dict.get("lead_id"),
-                "metadata": entity_dict
-            })
-        all_results[source] = matches_info
-
         # matches_info = []
-        # if search_results and search_results[0]:
-        #     for hit in search_results[0]:
-        #         entity = {field: hit.entity.get(field) for field in output_fields}
-        #         context_texts.append(entity.get("text", ""))
-        #         matches_info.append({
-        #             "id": hit.id, "score": hit.distance, "id_lead": entity.get("lead_id"), "metadata": entity
-        #         })
+        # for hit in search_results[0]:
+        #     # Logique de reconstruction de chunks (similaire à Qdrant)
+        #     # ...
+        #     entity_dict = hit.entity.to_dict()
+        #     final_text = entity_dict.get("text", "")
+        #     if not request.use_reranker:
+        #         context_texts.append(f"{final_text}\n-----\n")
+
+        #     matches_info.append({
+        #         # "id": entity_dict.get("id"),
+        #         "id": hit.id,
+        #         # "score": id_to_distance.get(entity_dict.get("id")),
+        #         "score": hit.distance,
+        #         # "score": id_to_distance.get(entity_dict.get("id")),
+        #         "id_lead": entity_dict.get("lead_id"),
+        #         "metadata": entity_dict
+        #     })
         # all_results[source] = matches_info
+
+        matches_info = []
+        if search_results and search_results[0]:
+            for hit in search_results[0]:
+                entity = {field: hit.entity.get(field) for field in output_fields}
+                context_texts.append(entity.get("text", ""))
+                matches_info.append({
+                    "id": hit.id, "score": hit.distance, "id_lead": entity.get("lead_id"), "metadata": entity
+                })
+        all_results[source] = matches_info
     search_duration = time.perf_counter() - start_search
     
     rerank_duration = 0
