@@ -1,0 +1,12 @@
+version: "3.8"
+services:
+  api-classification:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8500:8500"
+    volumes:
+      - .:/app
+    tty: true
+    stdin_open: true
