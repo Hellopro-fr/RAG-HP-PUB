@@ -68,6 +68,9 @@ class MilvusProduitsInserer:
                 schema,
                 consistency_level="Strong"
             )
+
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 300}}
+            collection.create_index(field_name="embedding", index_params=index_params)
             
         else:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
@@ -96,11 +99,6 @@ class MilvusProduitsInserer:
            
             sanitized_batch = []
             for data in datas:
-                # data_insert = []
-                # data_insert["id_produit"] = data.get("id_produit")
-                # data_insert["id_produit_milvus"] = ",".join(data["data"]["ids"])
-                # data_insert["embedding"] = [0.1, 0.2, 0.3, 0.4]
-
                 data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
                 data["date_maj"] = None
 

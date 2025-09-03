@@ -60,6 +60,7 @@ def insertion_data(produits_data: dict) -> dict:
                     "origin"        : origin
                 }
                 data_bo_milvus.append({
+                    "embedding"       : [0.0]*1024,
                     "id_produit"       : id_produit,
                     "id_produit_milvus": result.get("ids", ""),
                     "date_ajout"       : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -84,6 +85,7 @@ def insertion_data(produits_data: dict) -> dict:
             else:
                 result = func(produits)
                 data_bo_milvus.append({
+                    "embedding"       : [0.0]*1024,
                     "id_produit"       : id_produit,
                     "id_produit_milvus": result.get("ids", ""),
                     "date_ajout"       : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -99,6 +101,6 @@ def insertion_data(produits_data: dict) -> dict:
                 "already_in_bdd": len(data) > 0,
                 "origin"        : origin
             }
-    if len(data_bo_milvus) > 0:
+    if len(data_bo_milvus) > 0 and bdd == "milvus":
         res_correspondance = correspondance_produit.insert_correpondance_produit(data_bo_milvus)
     return output_message
