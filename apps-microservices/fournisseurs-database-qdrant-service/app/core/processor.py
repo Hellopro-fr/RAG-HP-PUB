@@ -1,8 +1,10 @@
 from common_utils.database.QdrantFournisseursCrud import QdrantFournisseursCrud
 from common_utils.database.MilvusFournisseursCrud import MilvusFournisseursCrud
+from common_utils.database.MilvusFournisseursInserer import MilvusFournisseursInserer
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
+from datetime import datetime
 
 def insertion_data(fournisseurs_data: dict) -> dict:
     """
@@ -36,11 +38,13 @@ def insertion_data(fournisseurs_data: dict) -> dict:
     if func and len(fournisseurs) > 0:
         id_fournisseur = fournisseurs[0].get('id_fournisseur', 'id_categorie inconnu')
         res = base_vectorielle.get_fournisseurs(id_fournisseur=id_fournisseur)
+        correspondance_frs = MilvusFournisseursInserer()
         
         status = res.get("status")
         data   = res.get("data", [])
         code   = res.get("code", None)
         message = res.get("message", "")
+        data_bo_milvus = []
         
         if status == "error":
             if code == 404:
@@ -52,6 +56,13 @@ def insertion_data(fournisseurs_data: dict) -> dict:
                     "id_fournisseur": id_fournisseur,
                     "already_in_bdd": len(data) > 0
                 }
+                data_bo_milvus.append({
+                    "embedding"            : [0.0]*1024,
+                    "id_fournisseur_milvus": result.get("ids", ""),
+                    "id_fournisseur"       : id_fournisseur,
+                    "date_ajout"           : datetime.now().isoformat(),
+                    "date_maj"             : ""
+                })
             else:
                 logging.error("Erreur lors de la vérification de id_fournisseur  %s : %s", id_fournisseur, message)
                 output_message = {
@@ -68,6 +79,13 @@ def insertion_data(fournisseurs_data: dict) -> dict:
             else:
                 logging.info("✅ Traitement réussi pour l'item '%s' - %s / %s.", id_fournisseur)
                 result = func(fournisseurs)
+                data_bo_milvus.append({
+                    "embedding"            : [0.0]*1024,
+                    "id_fournisseur_milvus": result.get("ids", ""),
+                    "id_fournisseur"       : id_fournisseur,
+                    "date_ajout"           : datetime.now().isoformat(),
+                    "date_maj"             : ""
+                })
                 
             output_message = {
                 "database"      : bdd,
@@ -76,5 +94,8 @@ def insertion_data(fournisseurs_data: dict) -> dict:
                 "id_fournisseur": id_fournisseur,
                 "already_in_bdd": len(data) > 0
             }
+        
+        if len(data_bo_milvus) > 0 and bdd == "milvus":
+            correspondance_frs.insert_correspondance_fournisseurs(data_bo_milvus)
     
         return output_message
