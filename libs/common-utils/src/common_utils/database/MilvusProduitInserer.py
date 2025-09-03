@@ -23,7 +23,7 @@ class ModelConfig:
     collection_name: str = "correspondance_produits_bo_milvus"
     dimension: int = 1024
 
-class MilvusProduitsInserer:
+class MilvusProduitInserer:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
