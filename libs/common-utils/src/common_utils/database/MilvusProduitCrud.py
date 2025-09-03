@@ -284,7 +284,7 @@ class MilvusProduitsCrud:
                 expr=f"id_produit in {list_id_produit}",
                 output_fields=["id"]
             )
-            self.collection.flush()
+            #self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
             return {
