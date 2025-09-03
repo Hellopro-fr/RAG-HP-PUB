@@ -1,16 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
 from app.core.optimize.Qwen3_4B_Q4 import ProductOptimizerQwen
 import os
-from main import load_qwen_model
 
 router = APIRouter()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-# Chargement du modèle au démarrage de l'application
-qwen_tokenizer, qwen_model = load_qwen_model()
 
 @router.post("/openai", response_model=OptimResponse)
 def optimize(request: OptimRequest):
@@ -27,11 +23,14 @@ def optimize(request: OptimRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/qwen", response_model=OptimResponse)
-def optimizeQwen(request: OptimRequest):
+def optimizeQwen(request: Request, payload: OptimRequest):
     try:
-        optimizing_service = ProductOptimizerQwen(tokenizer=qwen_tokenizer, model=qwen_model)
+        tokenizer = request.app.state.qwen_tokenizer
+        model = request.app.state.qwen_model
+
+        optimizing_service = ProductOptimizerQwen(tokenizer, model)
         #optimizeQwen = optimizing_service.optimize_product(request.dict())
-        optimizeQwen = optimizing_service.optimize_product(request.dict())
+        optimizeQwen = optimizing_service.optimize_product(payload.dict())
 
         print(optimizeQwen)
 

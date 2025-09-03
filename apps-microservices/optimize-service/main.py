@@ -12,8 +12,6 @@ from app.core.credentials import settings
 from app.utils.params import params
 from app.utils.response import error_response
 
-from app.core.optimize.Qwen3_4B_Q4 import ProductOptimizerQwen
-
 load_dotenv(dotenv_path=".env")
 
 description = """
@@ -82,8 +80,13 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-4B"):
         print(f"Erreur lors du chargement du modèle: {e}")
         raise
 
-
 app = FastAPI()
+
+# ===== CHARGEMENT DU MODÈLE QWEN =====
+tokenizer, model = load_qwen_model()  # Chargé une seule fois
+
+app.state.qwen_tokenizer = tokenizer
+app.state.qwen_model = model
 
 # TODO
 # ajout des origines à utiliser pour l'API
