@@ -1,8 +1,10 @@
 from common_utils.database.QdrantEchangeCrud import QdrantEchangeCrud
 from common_utils.database.MilvusEchangeCrud import MilvusEchangeCrud
+from common_utils.database.MilvusEchangeInserer import MilvusEchangeInserer
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
+import datetime
 
 def insertion_data(echange_data: dict) -> dict:
     """
@@ -37,11 +39,13 @@ def insertion_data(echange_data: dict) -> dict:
     if func and len(echanges) > 0:
         conversation_id = echanges[0].get("conversation_id", "conversation_id inconnu")
         res = base_vectorielle.get_echange(conversation_id=conversation_id)
+        correspondance_echange = MilvusEchangeInserer()
 
         status = res.get("status")
         data   = res.get("data", [])
         code   = res.get("code", None)
         message = res.get("message", "")
+        data_bo_milvus = [] 
 
         if status == "error":
             if code == 404:
@@ -53,6 +57,14 @@ def insertion_data(echange_data: dict) -> dict:
                     "conversation_id": conversation_id,
                     "already_in_bdd" : len(data) > 0
                 }
+                data_bo_milvus.append({
+                    "id_echange_milvus": result.get("ids", ""),
+                    "conversation_id"  : conversation_id,
+                    "date_ajout"      : datetime.now().isoformat(),
+                    "date_maj"        : ""
+                })
+
+                
             else:
                 logging.error("Erreur lors de la vérification de conversation ID  %s : %s", conversation_id, message)
                 output_message = {
@@ -69,6 +81,12 @@ def insertion_data(echange_data: dict) -> dict:
                 result = data
             else:
                 result = func(echanges)
+                data_bo_milvus.append({
+                    "id_echange_milvus": result.get("ids", ""),
+                    "conversation_id"  : conversation_id,
+                    "date_ajout"      : datetime.now().isoformat(),
+                    "date_maj"        : ""
+                })
 
             output_message = {
                 "database"        : bdd,
@@ -78,4 +96,6 @@ def insertion_data(echange_data: dict) -> dict:
                 "already_in_bdd"  : len(data) > 0
             }
 
+        if len(data_bo_milvus) > 0:
+            res_correspondance = correspondance_echange.insert_correspondance_echange(data_bo_milvus)
         return output_message
