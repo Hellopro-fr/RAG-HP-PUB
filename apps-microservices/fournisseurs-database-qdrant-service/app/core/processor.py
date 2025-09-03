@@ -49,6 +49,11 @@ def insertion_data(fournisseurs_data: dict) -> dict:
         if status == "error":
             if code == 404:
                 result = func(fournisseurs)
+                if not result:  # None, {}, ou False
+                    id_datas_milvus = ""
+                else:
+                    id_datas_milvus = result.get("ids", "")
+                    
                 output_message = {
                     "database"      : bdd,
                     "collection"    : collection,
@@ -58,7 +63,7 @@ def insertion_data(fournisseurs_data: dict) -> dict:
                 }
                 data_bo_milvus.append({
                     "embedding"            : [0.0]*1024,
-                    "id_fournisseur_milvus": result.get("ids", ""),
+                    "id_fournisseur_milvus": id_datas_milvus,
                     "id_fournisseur"       : id_fournisseur,
                     "date_ajout"           : datetime.now().isoformat(),
                     "date_maj"             : ""
