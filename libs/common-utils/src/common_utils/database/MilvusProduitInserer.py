@@ -53,9 +53,9 @@ class MilvusProduitInserer:
             fields = [
                 #TODO a completer / verifier
                 FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True ,max_length=64),
-                FieldSchema(name="id_produit", dtype=DataType.VARCHAR , max_length=64),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
-                FieldSchema(name="id_milvus_produit", dtype=DataType.VARCHAR, max_length=512),
+                FieldSchema(name="id_produit", dtype=DataType.VARCHAR , max_length=64),
+                FieldSchema(name="id_produit_milvus", dtype=DataType.VARCHAR, max_length=512),
                 FieldSchema(name="origin", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_ajout", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_maj", dtype=DataType.VARCHAR, max_length=64)
