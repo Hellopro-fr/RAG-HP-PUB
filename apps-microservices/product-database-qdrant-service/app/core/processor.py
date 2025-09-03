@@ -51,6 +51,10 @@ def insertion_data(produits_data: dict) -> dict:
         if status == "error":
             if code == 404:
                 result = func(produits)
+                if not result:  # None, {}, ou False
+                    id_produit_milvus = ""
+                else:
+                    id_produit_milvus = result.get("ids", "")
                 output_message = {
                     "database"      : bdd,
                     "collection"    : collection,
@@ -84,10 +88,14 @@ def insertion_data(produits_data: dict) -> dict:
                 result = data
             else:
                 result = func(produits)
+                if not result:  # None, {}, ou False
+                    id_produit_milvus = ""
+                else:
+                    id_produit_milvus = result.get("ids", "")
                 data_bo_milvus.append({
                     "embedding"       : [0.0]*1024,
                     "id_produit"       : id_produit,
-                    "id_produit_milvus": result.get("ids", ""),
+                    "id_produit_milvus": id_produit_milvus,
                     "date_ajout"       : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "date_maj"         : "",
                     "origin"           : origin
