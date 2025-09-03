@@ -8,8 +8,8 @@ ENV PYTHONPATH=/app
 
 # Étape 2: Installer TOUTES les dépendances dans l'environnement global du conteneur
 # D'abord, on copie et installe notre librairie partagée
-COPY libs/common-utils /app/libs/common-utils
-RUN pip install -e /app/libs/common-utils
+# COPY libs/common-utils /app/libs/common-utils
+# RUN pip install -e /app/libs/common-utils
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service
 COPY apps-microservices/optimize-service/requirements.txt .
