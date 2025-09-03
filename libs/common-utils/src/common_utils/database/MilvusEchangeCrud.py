@@ -20,7 +20,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "echanges_poc_64_500"
+    collection_name: str = "echanges"
     dimension: int = 1024
 
 class MilvusEchangeCrud:
@@ -85,7 +85,7 @@ class MilvusEchangeCrud:
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 64, "efConstruction": 500}}
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 300}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # # Optionnel: Créer des index scalaires pour les filtres fréquents
@@ -107,7 +107,7 @@ class MilvusEchangeCrud:
         return collection
 
 
-    def insert_echange(self, datas: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_echange(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -190,7 +190,7 @@ class MilvusEchangeCrud:
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             
             return {
-                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
+                "ids": ",".join(map(str, result.primary_keys)) if result.primary_keys else "",
                 "status": "success",
             }
 
