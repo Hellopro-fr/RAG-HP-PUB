@@ -1,8 +1,10 @@
 from common_utils.database.QdrantProduitCrud import QdrantProduitsCrud
 from common_utils.database.MilvusProduitCrud import MilvusProduitsCrud
+from common_utils.database.MilvusProduitInserer import MilvusProduitInserer
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
+from datetime import datetime
 
 def insertion_data(produits_data: dict) -> dict:
     """
@@ -38,11 +40,13 @@ def insertion_data(produits_data: dict) -> dict:
     if func and len(produits) > 0:
         id_produit = produits[0].get('id_produit', 'ID produit inconnu')
         res = base_vectorielle.get_produit(id_produit=id_produit)
+        correspondance_produit = MilvusProduitInserer()
 
         status = res.get("status")
         data   = res.get("data", [])
         code   = res.get("code", None)
         message = res.get("message", "")
+        data_bo_milvus = []
 
         if status == "error":
             if code == 404:
@@ -55,6 +59,13 @@ def insertion_data(produits_data: dict) -> dict:
                     "already_in_bdd": len(data) > 0,
                     "origin"        : origin
                 }
+                data_bo_milvus.append({
+                    "id_produit"       : id_produit,
+                    "id_produit_milvus": result.get("ids", ""),
+                    "date_ajout"       : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "date_maj"         : "",
+                    "origin"           : origin
+                })
             else:
                 logging.error("Erreur lors de la vérification du produit ID  %s : %s", id_produit, message)
                 output_message = {
@@ -72,6 +83,13 @@ def insertion_data(produits_data: dict) -> dict:
                 result = data
             else:
                 result = func(produits)
+                data_bo_milvus.append({
+                    "id_produit"       : id_produit,
+                    "id_produit_milvus": result.get("ids", ""),
+                    "date_ajout"       : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "date_maj"         : "",
+                    "origin"           : origin
+                })
 
             output_message = {
                 "database"      : bdd,
@@ -81,5 +99,6 @@ def insertion_data(produits_data: dict) -> dict:
                 "already_in_bdd": len(data) > 0,
                 "origin"        : origin
             }
-    
+    if len(data_bo_milvus) > 0:
+        res_correspondance = correspondance_produit.insert_correpondance_produit(data_bo_milvus)
     return output_message

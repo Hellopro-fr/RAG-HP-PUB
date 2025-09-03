@@ -7,7 +7,6 @@ import requests
 import json
 import hmac
 from dotenv import load_dotenv
-from common_utils.database.MilvusProduitInsereCrud import MilvusProduitInsereCrud
 load_dotenv()
 
 
@@ -24,51 +23,34 @@ def send_webhook(payload: dict) -> dict:
     
     collection = payload.get("collection", collections.PRODUIT)
 
-    if collection == "produits":
-        print("oui")
-        base_vectorielle = MilvusProduitInsereCrud()
-        processing_functions = {
-            "produits_insere" : base_vectorielle.insert_produits_insere
+    try:
+        url_webhook = CollectionWebhook.get(collection)
+    except ValueError:
+        logging.error("'%s' n'est pas un nom de collection valide.", collection)
+        return ""
+
+    try:
+        # 1. Convertir le payload en une chaîne JSON compacte (sans espaces)
+        payload_body = json.dumps(payload, separators=(',', ':')).encode('utf-8')
+
+        # 2. Calculer la signature HMAC-SHA256
+        signature = hmac.new(os.environ.get("KEY_WEBHOOK").encode('utf-8'), payload_body, hashlib.sha256).hexdigest()
+
+        # 3. Préparer les en-têtes avec la signature
+        headers = {
+            'Content-Type': 'application/json',
+            'X-Webhook-Signature': signature  # Le nom de l'en-tête peut varier
         }
 
-        func = processing_functions.get("produits_insere")
-        if func:
-            data_insert = json.loads(payload)
-            output_message = func(payload)
-            print(f"Insertion effectuée")
-            print(f"Statut : {output_message}")
-            return output_message
+        # 4. Envoyer la requête avec le corps brut (bytes) et les en-têtes
+        response = requests.post(url_webhook, data=payload_body, headers=headers, timeout=10)
+        
+        response.raise_for_status()
+        print(f"Webhook envoyé avec succès")
+        print(f"Statut : {response.status_code}")
+        print(f"URL notifié : {url_webhook}")
+        return True
 
-    else:
-        try:
-            url_webhook = CollectionWebhook.get(collection)
-        except ValueError:
-            logging.error("'%s' n'est pas un nom de collection valide.", collection)
-            return ""
-
-        try:
-            # 1. Convertir le payload en une chaîne JSON compacte (sans espaces)
-            payload_body = json.dumps(payload, separators=(',', ':')).encode('utf-8')
-
-            # 2. Calculer la signature HMAC-SHA256
-            signature = hmac.new(os.environ.get("KEY_WEBHOOK").encode('utf-8'), payload_body, hashlib.sha256).hexdigest()
-
-            # 3. Préparer les en-têtes avec la signature
-            headers = {
-                'Content-Type': 'application/json',
-                'X-Webhook-Signature': signature  # Le nom de l'en-tête peut varier
-            }
-
-            # 4. Envoyer la requête avec le corps brut (bytes) et les en-têtes
-            response = requests.post(url_webhook, data=payload_body, headers=headers, timeout=10)
-            
-            response.raise_for_status()
-            print(f"Webhook envoyé avec succès")
-            print(f"Statut : {response.status_code}")
-            print(f"URL notifié : {url_webhook}")
-            return True
-
-        except requests.exceptions.RequestException as e:
-            print(f"ERREUR : L'envoi du webhook a échoué : {e}")
-            return False
-    
+    except requests.exceptions.RequestException as e:
+        print(f"ERREUR : L'envoi du webhook a échoué : {e}")
+        return False

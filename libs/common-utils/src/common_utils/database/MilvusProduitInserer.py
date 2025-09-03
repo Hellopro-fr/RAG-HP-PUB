@@ -20,10 +20,10 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "produits_insere"
+    collection_name: str = "correspondance_produits_bo_milvus"
     dimension: int = 1024
 
-class MilvusProduitsInsereCrud:
+class MilvusProduitsInserer:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -56,6 +56,9 @@ class MilvusProduitsInsereCrud:
                 FieldSchema(name="id_produit", dtype=DataType.VARCHAR , max_length=64),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
                 FieldSchema(name="id_milvus_produit", dtype=DataType.VARCHAR, max_length=512),
+                FieldSchema(name="origin", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="date_ajout", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="date_maj", dtype=DataType.VARCHAR, max_length=64)
 
             ]
             schema = CollectionSchema(fields, description=f"Collection de chunks de Produit pour {model_key}")
@@ -66,27 +69,15 @@ class MilvusProduitsInsereCrud:
                 consistency_level="Strong"
             )
             
-            self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
-
-            # TODO : Vérifier les paramètres d'indexation
-            # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 200}}
-            collection.create_index(field_name="embedding", index_params=index_params)
-
-            # Optionnel: Créer des index scalaires pour les filtres fréquents
-            collection.create_index(field_name="id_produit", index_name="idx_produit")
-
-            self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
             collection = Collection(collection_name)
         
         collection.load()
-        self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête.")
         return collection
 
 
-    def insert_produits_insere(self, datas: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_correpondance_produit(self, datas: List[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -105,15 +96,18 @@ class MilvusProduitsInsereCrud:
            
             sanitized_batch = []
             for data in datas:
-                data_insert = []
-                data_insert["id_produit"] = data.get("id_produit")
-                data_insert["id_produit_milvus"] = ",".join(data["data"]["ids"])
-                data_insert["embedding"] = [0.1, 0.2, 0.3, 0.4]
+                # data_insert = []
+                # data_insert["id_produit"] = data.get("id_produit")
+                # data_insert["id_produit_milvus"] = ",".join(data["data"]["ids"])
+                # data_insert["embedding"] = [0.1, 0.2, 0.3, 0.4]
+
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None
 
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
-                data_insert = Utils.sanitize_record(data_insert)  
-                sanitized_batch.append(data_insert)
+                data = Utils.sanitize_record(data)  
+                sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
             # self.collection.flush()
@@ -129,8 +123,8 @@ class MilvusProduitsInsereCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Produits] Erreur Milvus lors de l'insertion : {e}")
+            self.logger.error(f"[{model_key}][Correspondance produits BO-Milvus] Erreur Milvus lors de l'insertion : {e}")
             self.logger.error(f"Data : {datas}")
         except Exception as e:
-            self.logger.error(f"[{model_key}][Produits] insertion de batch : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][Correspondance produits BO-Milvus] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {datas}")
