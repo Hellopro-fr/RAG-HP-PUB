@@ -54,14 +54,14 @@ class MilvusCategoriesCrud:
             fields = [
                 # Todo : ce clé doit être unique
                 FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True ,max_length=64),
-                FieldSchema(name="url", dtype=DataType.VARCHAR , max_length=512),
+                FieldSchema(name="url", dtype=DataType.VARCHAR , max_length=65535),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
-                FieldSchema(name="domaine", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="categorie", dtype=DataType.VARCHAR, max_length=512),
-                FieldSchema(name="id_categorie", dtype=DataType.VARCHAR, max_length=255),
-                FieldSchema(name="type_categorie", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="domaine", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="categorie", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="id_categorie", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="type_categorie", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR , max_length=64),
+                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR , max_length=65535),
                 FieldSchema(name="chunk_number", dtype=DataType.INT64),
                 FieldSchema(name="total_chunks", dtype=DataType.INT64),
                 FieldSchema(name="date_ajout",  dtype=DataType.VARCHAR, max_length=64),
@@ -127,8 +127,8 @@ class MilvusCategoriesCrud:
             
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
             
-            return {
-                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
+            return {                
+                "ids": ','.join(map(str, result.primary_keys)) if result.primary_keys else "",
                 "status": "success",
             }
 
