@@ -4,7 +4,7 @@ from common_utils.database.MilvusEchangeInserer import MilvusEchangeInserer
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
-import datetime
+from datetime import datetime
 
 def insertion_data(echange_data: dict) -> dict:
     """
