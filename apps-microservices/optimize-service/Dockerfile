@@ -19,8 +19,8 @@ RUN pip install -r requirements.txt
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
 COPY apps-microservices/optimize-service .
 
-# Étape 4: Exposer le port
-EXPOSE 8563
+# # Étape 4: Exposer le port
+# EXPOSE 8563
 
 
 # Étape 5: Définir la commande de lancement directement
