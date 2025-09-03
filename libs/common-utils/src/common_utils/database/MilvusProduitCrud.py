@@ -105,7 +105,7 @@ class MilvusProduitsCrud:
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 200}}
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 300}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
@@ -126,7 +126,7 @@ class MilvusProduitsCrud:
         return collection
 
 
-    def insert_produits(self, datas: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_produits(self, datas: List[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -162,7 +162,7 @@ class MilvusProduitsCrud:
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
             
             return {
-                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
+                "ids": ','.join(map(str, result.primary_keys)) if result.primary_keys else "",
                 "status": "success",
             }
 
