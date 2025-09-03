@@ -58,6 +58,7 @@ def insertion_data(echange_data: dict) -> dict:
                     "already_in_bdd" : len(data) > 0
                 }
                 data_bo_milvus.append({
+                    "embedding"       : [0.0]*1024,
                     "id_echange_milvus": result.get("ids", ""),
                     "conversation_id"  : conversation_id,
                     "date_ajout"      : datetime.now().isoformat(),
@@ -82,6 +83,7 @@ def insertion_data(echange_data: dict) -> dict:
             else:
                 result = func(echanges)
                 data_bo_milvus.append({
+                    "embedding"       : [0.0]*1024,
                     "id_echange_milvus": result.get("ids", ""),
                     "conversation_id"  : conversation_id,
                     "date_ajout"      : datetime.now().isoformat(),

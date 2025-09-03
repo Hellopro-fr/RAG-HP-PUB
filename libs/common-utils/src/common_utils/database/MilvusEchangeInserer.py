@@ -46,6 +46,7 @@ class MilvusEchangeInserer:
             fields = [
                 # Todo : ce clé doit être unique
                 FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True ,max_length=64),
+                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),
                 FieldSchema(name="id_echange_milvus", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="conversation_id", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_ajout", dtype=DataType.VARCHAR, max_length=64),
@@ -58,6 +59,9 @@ class MilvusEchangeInserer:
                 schema,
                 consistency_level="Strong"
             )
+
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 300}}
+            collection.create_index(field_name="embedding", index_params=index_params)
 
             # # Optionnel: Créer des index scalaires pour les filtres fréquents
             # collection.create_index(field_name="conversation_id", index_name="idx_conversation_id")
@@ -100,7 +104,7 @@ class MilvusEchangeInserer:
 
         except MilvusException as e:
             self.logger.error(f"[Correspondace Echange BO-Milvus] Erreur Milvus lors de l'insertion : {e}")
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
         except Exception as e:
             self.logger.error(f"[Correspondace Echange BO-Milvus] insertion de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
