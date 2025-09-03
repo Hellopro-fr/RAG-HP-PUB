@@ -21,7 +21,7 @@ from pymilvus import (
 class ModelConfig:
     collection_name: str = "correspondance_devis_bo_milvus"
 
-class MilvusEchangeInserer:
+class MilvusDevisInserer:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
