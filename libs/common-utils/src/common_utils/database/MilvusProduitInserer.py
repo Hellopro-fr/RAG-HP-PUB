@@ -19,9 +19,11 @@ from pymilvus import (
 
 @dataclass
 class ModelConfig:
-    collection_name: str = "correspondance_devis_bo_milvus"
+    model_id: str = settings.MODEL
+    collection_name: str = "correspondance_produits_bo_milvus"
+    dimension: int = 1024
 
-class MilvusDevisInserer:
+class MilvusProduitsInserer:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -31,28 +33,35 @@ class MilvusDevisInserer:
         self.logger = kwargs.get('logger', logging)
         
     def _connect_to_milvus(self):
+        self.logger.info("Connexion sur Zilliz cloud...")
         # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
         connections.connect("default", host=self.config.ZILLIZ_URI, port=self.config.ZILLIZ_PORT)
+        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
     
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
+        model_key = model_config.model_id
 
         if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
+            logging.warning(f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'")
             utility.drop_collection(collection_name)
 
         if not utility.has_collection(collection_name):
+            self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
-                # Todo : ce clé doit être unique
+                #TODO a completer / verifier
                 FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True ,max_length=64),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),
-                FieldSchema(name="id_devis_milvus", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="lead_id", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="id_produit", dtype=DataType.VARCHAR , max_length=64),
+                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
+                FieldSchema(name="id_milvus_produit", dtype=DataType.VARCHAR, max_length=512),
+                FieldSchema(name="origin", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_ajout", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_maj", dtype=DataType.VARCHAR, max_length=64)
+
             ]
-            schema = CollectionSchema(fields, description=f"Collection de correspondance Milvus - BO Demande de devis")
+            schema = CollectionSchema(fields, description=f"Collection de chunks de Produit pour {model_key}")
             
             collection = Collection(
                 collection_name, 
@@ -62,18 +71,18 @@ class MilvusDevisInserer:
 
             index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
             collection.create_index(field_name="embedding", index_params=index_params)
-
-            # # Optionnel: Créer des index scalaires pour les filtres fréquents
-            # collection.create_index(field_name="conversation_id", index_name="idx_conversation_id")
+            
         else:
+            self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
             collection = Collection(collection_name)
         
         collection.load()
         return collection
 
 
-    def insert_correspondance_devis(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def insert_correpondance_produit(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
+        model_key = model_config.model_id
 
         try:
             
@@ -86,6 +95,8 @@ class MilvusDevisInserer:
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
+            self.logger.info(f"[{model_key}][Produits] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
+           
             sanitized_batch = []
             for data in datas:
                 data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
@@ -96,15 +107,22 @@ class MilvusDevisInserer:
                 data = Utils.sanitize_record(data)  
                 sanitized_batch.append(data)
 
-            self.collection.insert(sanitized_batch)
+            result = self.collection.insert(sanitized_batch)
+            # self.collection.flush()
 
+            self.logger.info(f"Résultat insertion : {result}") 
+            self.logger.info(f"Clé primaire : {result.primary_keys}") 
+            
+            self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
+            
             return {
+                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
                 "status": "success",
             }
 
         except MilvusException as e:
-            self.logger.error(f"[Correspondace Devis BO-Milvus] Erreur Milvus lors de l'insertion : {e}")
+            self.logger.error(f"[{model_key}][Correspondance produits BO-Milvus] Erreur Milvus lors de l'insertion : {e}")
             self.logger.error(f"Data : {datas}")
         except Exception as e:
-            self.logger.error(f"[Correspondace Devis BO-Milvus] insertion de batch : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][Correspondance produits BO-Milvus] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {datas}")

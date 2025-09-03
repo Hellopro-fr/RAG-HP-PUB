@@ -83,7 +83,7 @@ class MilvusFournisseursCrud:
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 300}}
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # Optionnel: Créer des index scalaires pour les filtres fréquents
