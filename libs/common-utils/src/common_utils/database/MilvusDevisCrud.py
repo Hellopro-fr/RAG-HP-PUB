@@ -153,7 +153,7 @@ class MilvusDevisCrud:
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
             
             return {
-                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
+                "ids": ",".join(map(str,result.primary_keys)) if result.primary_keys else "",
                 "status": "success",
             }
 

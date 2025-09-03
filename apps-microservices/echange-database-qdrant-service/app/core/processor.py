@@ -98,6 +98,7 @@ def insertion_data(echange_data: dict) -> dict:
                 "already_in_bdd"  : len(data) > 0
             }
 
-        if len(data_bo_milvus) > 0:
-            res_correspondance = correspondance_echange.insert_correspondance_echange(data_bo_milvus)
+        if len(data_bo_milvus) > 0 and bdd == "milvus":
+            correspondance_echange.insert_correspondance_echange(data_bo_milvus)
+        
         return output_message

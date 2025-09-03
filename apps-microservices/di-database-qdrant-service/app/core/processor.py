@@ -1,8 +1,10 @@
 from common_utils.database.QdrantDevisCrud import QdrantDevisCrud
 from common_utils.database.MilvusDevisCrud import MilvusDevisCrud
+from common_utils.database.MilvusDevisInserer import MilvusDevisInserer
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
+from datetime import datetime
 
 def insertion_data(devis_data: dict) -> dict:
     """
@@ -36,11 +38,13 @@ def insertion_data(devis_data: dict) -> dict:
     if func and len(devis) > 0:
         lead_id = devis[0].get("lead_id", "lead_id inconnu")
         res = base_vectorielle.get_devis(lead_id=lead_id)
+        correspondance_devis = MilvusDevisInserer()
 
         status = res.get("status")
         data   = res.get("data", [])
         code   = res.get("code", None)
         message = res.get("message", "")
+        data_bo_milvus = []
 
         if status == "error":
             if code == 404:
@@ -52,6 +56,14 @@ def insertion_data(devis_data: dict) -> dict:
                     "lead_id"        : lead_id,
                     "already_in_bdd" : len(data) > 0
                 }
+                data_bo_milvus.append({
+                    "embedding"        : [0.0]*1024,
+                    "id_echange_milvus": result.get("ids", ""),
+                    "lead_id"          : lead_id,
+                    "date_ajout"       : datetime.now().isoformat(),
+                    "date_maj"         : ""
+                })
+
             else:
                 logging.error("Erreur lors de la vérification de Lead ID  %s : %s", lead_id, message)
                 output_message = {
@@ -68,6 +80,13 @@ def insertion_data(devis_data: dict) -> dict:
                 result = data
             else:
                 result = func(devis)
+                data_bo_milvus.append({
+                    "embedding"      : [0.0]*1024,
+                    "id_devis_milvus": result.get("ids", ""),
+                    "lead_id"        : lead_id,
+                    "date_ajout"     : datetime.now().isoformat(),
+                    "date_maj"       : ""
+                })
 
             output_message = {
                 "database"        : bdd,
@@ -76,5 +95,8 @@ def insertion_data(devis_data: dict) -> dict:
                 "lead_id"         : lead_id,
                 "already_in_bdd"  : len(data) > 0
             }
+
+        if len(data_bo_milvus) > 0 and bdd == "milvus":
+            correspondance_devis.insert_correspondance_devis(data_bo_milvus)
 
         return output_message
