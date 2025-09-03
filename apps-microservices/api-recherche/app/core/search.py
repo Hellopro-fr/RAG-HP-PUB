@@ -62,7 +62,7 @@ def get_qdrant_client():
 def get_reranker_model(model_name: str = "antoinelouis/crossencoder-camembert-base-mmarcoFR"):
     """Charge le modèle CrossEncoder pour le reranking."""
     logger.info(f"Chargement du modèle de reranking '{model_name}'...")
-    model = CrossEncoder(model_name)
+    model = CrossEncoder(model_name, trust_remote_code=True)
     logger.info("Modèle de reranking chargé.")
     return model
 
