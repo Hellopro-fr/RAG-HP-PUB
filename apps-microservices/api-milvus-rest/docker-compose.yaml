@@ -1,0 +1,12 @@
+version: "2.38"
+services:
+  fastapi-rag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8502:8502"
+    volumes:
+      - .:/app
+    tty: true
+    stdin_open: true
