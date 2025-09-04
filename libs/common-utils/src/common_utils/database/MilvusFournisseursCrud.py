@@ -103,7 +103,7 @@ class MilvusFournisseursCrud:
         return collection
 
 
-    def insert_fournisseurs(self, datas: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_fournisseurs(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         model_config = ModelConfig()
         model_key = model_config.model_id

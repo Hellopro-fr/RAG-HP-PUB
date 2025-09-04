@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import Response
 from app.core.settings import settings, SERVICE_MAP
 import httpx
+import websockets
 
 app = FastAPI(
     title="API Gateway",
@@ -11,6 +12,9 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None
 )
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Proxy requests to backend services
 @app.api_route("/{service}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
@@ -45,6 +49,67 @@ async def proxy(service: str, path: str, request: Request):
         status_code=response.status_code,
         media_type=response.headers.get("content-type")
     )
+    
+@app.websocket("/{service}/{path:path}")
+async def websocket_proxy(service: str, path: str, websocket: WebSocket):
+    base_url = SERVICE_MAP.get(f"/{service}")
+    if not base_url:
+        logger.warning(f"[GW] Service '{service}' non trouvé. Fermeture WS.")
+        await websocket.close(code=1008)
+        return
+
+    ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://")
+    target_url = f"{ws_url}/{path}"
+    
+    # --- AJOUT CRUCIAL : Transmettre les query parameters ---
+    if websocket.url.query:
+        target_url += "?" + websocket.url.query
+        
+    logger.info(f"[GW] Connexion client acceptée pour {websocket.url.path}")
+    await websocket.accept()
+
+    try:
+        logger.info(f"[GW] Tentative de connexion au backend : {target_url}")
+        # Transmettre les en-têtes est aussi vital
+        async with websockets.connect(target_url, extra_headers=websocket.headers.raw_items()) as backend_ws:
+            logger.info("[GW] Connexion au backend réussie. Démarrage du relais.")
+            
+            # Tâche pour relayer les messages du client vers le backend
+            async def forward_to_backend():
+                try:
+                    while True:
+                        data = await websocket.receive_text()
+                        logger.info(f"[GW] Client -> Backend: {data[:200]}...")
+                        await backend_ws.send(data)
+                except WebSocketDisconnect:
+                    logger.info("[GW] Le client s'est déconnecté.")
+
+            # Tâche pour relayer les messages du backend vers le client
+            async def forward_to_client():
+                try:
+                    while True:
+                        data = await backend_ws.recv()
+                        logger.info(f"[GW] Backend -> Client: {data[:200]}...")
+                        await websocket.send_text(data)
+                except websockets.exceptions.ConnectionClosed:
+                    logger.info("[GW] Le backend a fermé la connexion.")
+
+            # Lancer et attendre que l'une des deux connexions se termine
+            client_task = asyncio.create_task(forward_to_backend())
+            backend_task = asyncio.create_task(forward_to_client())
+            done, pending = await asyncio.wait(
+                [client_task, backend_task], return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+
+    except websockets.exceptions.InvalidStatusCode as e:
+        logger.error(f"[GW] ERREUR: Le backend a refusé la connexion WebSocket avec le statut {e.status_code}")
+    except Exception as e:
+        logger.error(f"[GW] ERREUR inattendue dans le proxy WebSocket : {e}", exc_info=True)
+    finally:
+        logger.info("[GW] Nettoyage et fermeture de la connexion.")
+        await websocket.close()
 
 
 # Combine all OpenAPI schemas

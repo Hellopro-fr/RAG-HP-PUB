@@ -52,6 +52,8 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-gateway/Dockerfile
     container_name: api-gateway-service
+    volumes:
+      - ./apps-microservices/api-gateway:/app:rw
     restart: unless-stopped
     ports:
       - "8500:8500"
@@ -133,7 +135,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./apps-microservices/embedding-service:/app:rw
+      - ./apps-microservices/embedding-service/app:/app/embedding_service:rw
     deploy:
       replicas: 8
       resources:
