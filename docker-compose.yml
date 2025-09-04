@@ -142,11 +142,6 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    
-    environment:
-      # Passe le numéro du replica (de 1 à 8) dans la variable TASK_SLOT
-      - TASK_SLOT={{.Task.Slot}}
-
 
   di-database-qdrant-service:
     build:
@@ -190,7 +185,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 8
+      replicas: 20
 
   categories-database-qdrant-service:
     build:
