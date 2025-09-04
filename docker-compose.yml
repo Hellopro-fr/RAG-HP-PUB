@@ -52,6 +52,8 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-gateway/Dockerfile
     container_name: api-gateway-service
+    volumes:
+      - ./apps-microservices/api-gateway:/app:rw
     restart: unless-stopped
     ports:
       - "8500:8500"
