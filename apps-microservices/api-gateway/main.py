@@ -4,6 +4,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import Response
 from app.core.settings import settings, SERVICE_MAP
 import httpx
+import websockets
 
 app = FastAPI(
     title="API Gateway",
@@ -45,6 +46,62 @@ async def proxy(service: str, path: str, request: Request):
         status_code=response.status_code,
         media_type=response.headers.get("content-type")
     )
+    
+@app.websocket("/{service}/{path:path}")
+async def websocket_proxy(service: str, path: str, websocket: WebSocket):
+    """
+    Proxy pour les connexions WebSocket.
+    """
+    base_url = SERVICE_MAP.get(f"/{service}")
+    if not base_url:
+        # FastAPI ne gère pas bien les réponses d'erreur avant accept(),
+        # donc nous fermons simplement la connexion.
+        await websocket.close(code=1008) # Policy Violation
+        return
+
+    # Convertir l'URL http:// en ws://
+    ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://")
+    target_url = f"{ws_url}/{path}"
+    
+    # Accepter la connexion du client
+    await websocket.accept()
+
+    try:
+        # Établir une connexion WebSocket avec le service backend
+        async with websockets.connect(target_url, extra_headers=websocket.headers.raw_items()) as backend_ws:
+            
+            # Tâches pour relayer les messages dans les deux sens
+            async def forward_to_backend():
+                while True:
+                    data = await websocket.receive_text()
+                    await backend_ws.send(data)
+
+            async def forward_to_client():
+                while True:
+                    data = await backend_ws.recv()
+                    await websocket.send_text(data)
+
+            # Lancer les deux tâches en parallèle
+            client_task = asyncio.create_task(forward_to_backend())
+            backend_task = asyncio.create_task(forward_to_client())
+
+            # Attendre que l'une des tâches se termine (ce qui signifie une déconnexion)
+            done, pending = await asyncio.wait(
+                [client_task, backend_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            
+            # Annuler les tâches restantes pour nettoyer
+            for task in pending:
+                task.cancel()
+
+    except (WebSocketDisconnect, websockets.exceptions.ConnectionClosed):
+        print(f"WebSocket déconnecté pour {service}/{path}")
+    except Exception as e:
+        print(f"Erreur dans le proxy WebSocket : {e}")
+    finally:
+        # Assurez-vous que les connexions sont bien fermées
+        await websocket.close()
 
 
 # Combine all OpenAPI schemas
