@@ -13,6 +13,9 @@ app = FastAPI(
     openapi_url=None
 )
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Proxy requests to backend services
 @app.api_route("/{service}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
 async def proxy(service: str, path: str, request: Request):
