@@ -38,8 +38,23 @@ def main():
         # 1. Créer une instance du publisher
         publisher = Publisher(connection)
 
-        # 2. Initialiser le modèle d'embedding
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # Déterminer le nombre de GPUs disponibles
+        num_gpus = torch.cuda.device_count()
+
+        # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if num_gpus > 0:
+            # Récupérer le numéro du replica depuis la variable d'environnement
+            # Le '1' par défaut est pour les tests locaux sans Swarm
+            task_slot = int(os.environ.get('TASK_SLOT', 1))
+            
+            # Calculer l'ID du GPU à utiliser (avec le modulo)
+            # task_slot va de 1 à 8, donc on fait -1 pour un index de 0 à 7
+            gpu_id = (task_slot - 1) % num_gpus
+            device = f'cuda:{gpu_id}'
+
+        else:
+            device = 'cpu'
+
         model_name = "dangvantuan/sentence-camembert-large"
         
         tokenizer = AutoTokenizer.from_pretrained(model_name)

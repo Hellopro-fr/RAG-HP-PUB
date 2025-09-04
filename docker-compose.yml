@@ -132,14 +132,21 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - ./apps-microservices/embedding-service:/app:rw
     deploy:
-      replicas: 4
+      replicas: 8
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    
+    environment:
+      # Passe le numéro du replica (de 1 à 8) dans la variable TASK_SLOT
+      - TASK_SLOT={{.Task.Slot}}
+
 
   di-database-qdrant-service:
     build:
@@ -150,7 +157,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 8
 
   echange-database-qdrant-service:
     build:
@@ -161,7 +168,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 8
 
   website-database-qdrant-service:
     build:
@@ -183,7 +190,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 8
 
   categories-database-qdrant-service:
     build:

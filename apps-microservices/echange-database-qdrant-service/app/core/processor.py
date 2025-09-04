@@ -86,8 +86,8 @@ def insertion_data(echange_data: dict) -> dict:
                     "embedding"       : [0.0]*1024,
                     "id_echange_milvus": result.get("ids", ""),
                     "conversation_id"  : conversation_id,
-                    "date_ajout"      : datetime.now().isoformat(),
-                    "date_maj"        : ""
+                    "date_ajout"       : datetime.now().isoformat(),
+                    "date_maj"         : ""
                 })
 
             output_message = {

@@ -14,18 +14,15 @@ def process_echange_data_for_embedding(echange_data: dict, bdd: str) -> dict:
     
     # Étape 4: Préparer le texte à embedder (À voir avec l'équipe en charge)
     text_to_embed = echange_data.get('text', '')
+    conversation_id = f"{echange_data.get('id_demande', 'unknown')}_{echange_data.get('id_fournisseur', 'unknown')}"
     
-    # Étape 5: Ajouter les métadonnées nécessaires
-    metadata = {
-        key: value
-        for key, value in echange_data.items() if key not in ['text']
-    }
     
     # Étape 6: Construire le message de sortie
     output_message = {
         "data": {
             "text": text_to_embed,
-             **{k.replace("-", "_"): v for k, v in echange_data.items() if k not in ['text']}
+            "conversation_id": conversation_id,
+             **{k.replace("-", "_"): v for k, v in echange_data.items() if k not in ['text','conversation_id']}
         },
         "collection": CollectionName.ECHANGE,
         "database": bdd
