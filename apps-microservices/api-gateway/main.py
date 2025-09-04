@@ -49,67 +49,63 @@ async def proxy(service: str, path: str, request: Request):
     
 @app.websocket("/{service}/{path:path}")
 async def websocket_proxy(service: str, path: str, websocket: WebSocket):
-    """
-    Proxy pour les connexions WebSocket.
-    """
     base_url = SERVICE_MAP.get(f"/{service}")
     if not base_url:
-        # FastAPI ne gère pas bien les réponses d'erreur avant accept(),
-        # donc nous fermons simplement la connexion.
-        await websocket.close(code=1008) # Policy Violation
+        logger.warning(f"[GW] Service '{service}' non trouvé. Fermeture WS.")
+        await websocket.close(code=1008)
         return
 
-    # Convertir l'URL http:// en ws://
     ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://")
     target_url = f"{ws_url}/{path}"
     
-    # Accepter la connexion du client
+    # --- AJOUT CRUCIAL : Transmettre les query parameters ---
+    if websocket.url.query:
+        target_url += "?" + websocket.url.query
+        
+    logger.info(f"[GW] Connexion client acceptée pour {websocket.url.path}")
     await websocket.accept()
 
     try:
-        # Établir une connexion WebSocket avec le service backend
+        logger.info(f"[GW] Tentative de connexion au backend : {target_url}")
+        # Transmettre les en-têtes est aussi vital
         async with websockets.connect(target_url, extra_headers=websocket.headers.raw_items()) as backend_ws:
+            logger.info("[GW] Connexion au backend réussie. Démarrage du relais.")
             
-            # Tâches pour relayer les messages dans les deux sens
+            # Tâche pour relayer les messages du client vers le backend
             async def forward_to_backend():
                 try:
                     while True:
                         data = await websocket.receive_text()
-                        logger.debug(f"Client -> Backend: {data[:100]}") # Log tronqué
+                        logger.info(f"[GW] Client -> Backend: {data[:200]}...")
                         await backend_ws.send(data)
                 except WebSocketDisconnect:
-                    logger.info("Le client a fermé la connexion (forward_to_backend).")
+                    logger.info("[GW] Le client s'est déconnecté.")
 
+            # Tâche pour relayer les messages du backend vers le client
             async def forward_to_client():
                 try:
                     while True:
                         data = await backend_ws.recv()
-                        logger.debug(f"Backend -> Client: {data[:100]}") # Log tronqué
+                        logger.info(f"[GW] Backend -> Client: {data[:200]}...")
                         await websocket.send_text(data)
                 except websockets.exceptions.ConnectionClosed:
-                    logger.info("Le backend a fermé la connexion (forward_to_client).")
+                    logger.info("[GW] Le backend a fermé la connexion.")
 
-            # Lancer les deux tâches en parallèle
+            # Lancer et attendre que l'une des deux connexions se termine
             client_task = asyncio.create_task(forward_to_backend())
             backend_task = asyncio.create_task(forward_to_client())
-
-            # Attendre que l'une des tâches se termine (ce qui signifie une déconnexion)
             done, pending = await asyncio.wait(
-                [client_task, backend_task],
-                return_when=asyncio.FIRST_COMPLETED,
+                [client_task, backend_task], return_when=asyncio.FIRST_COMPLETED
             )
-            
-            # Annuler les tâches restantes pour nettoyer
             for task in pending:
                 task.cancel()
-            logger.info("Une des connexions a été fermée, nettoyage des tâches en cours.")
 
-    except (WebSocketDisconnect, websockets.exceptions.ConnectionClosed):
-        print(f"WebSocket déconnecté pour {service}/{path}")
+    except websockets.exceptions.InvalidStatusCode as e:
+        logger.error(f"[GW] ERREUR: Le backend a refusé la connexion WebSocket avec le statut {e.status_code}")
     except Exception as e:
-        print(f"Erreur dans le proxy WebSocket : {e}")
+        logger.error(f"[GW] ERREUR inattendue dans le proxy WebSocket : {e}", exc_info=True)
     finally:
-        # Assurez-vous que les connexions sont bien fermées
+        logger.info("[GW] Nettoyage et fermeture de la connexion.")
         await websocket.close()
 
 

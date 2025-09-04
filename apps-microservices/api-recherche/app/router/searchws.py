@@ -9,11 +9,6 @@ from app.schemas.search import SearchRequest
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.get("/ws/health_check")
-def health_check():
-    """Endpoint de test pour vérifier si ce routeur est bien chargé."""
-    return {"status": "ok", "message": "Le routeur search_ws est bien vivant !"}
-
 @router.websocket("/ws/search")
 async def websocket_search(websocket: WebSocket):
     """
