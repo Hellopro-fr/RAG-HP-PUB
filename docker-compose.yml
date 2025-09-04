@@ -219,3 +219,13 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+  api-rest-milvus-service:
+      build:
+        context: .
+        dockerfile: ./apps-microservices/api-rest-milvus/Dockerfile
+      container_name: api-rest-milvus
+      restart: unless-stopped
+      ports:
+        - "8509:8509"
+      env_file:
+        - .env
