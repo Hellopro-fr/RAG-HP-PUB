@@ -2,4 +2,4 @@ from enum import Enum
 
 
 class RouterTags:
-    ingestion = ["Ingestion"]
+    rest-milvus = ["rest-milvus"]

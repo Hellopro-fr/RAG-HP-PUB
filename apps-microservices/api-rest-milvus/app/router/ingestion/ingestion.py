@@ -1,19 +1,19 @@
-# app/router/ingestion_api.py
+# app/router/rest-milvus_api.py
 import logging
 from fastapi import APIRouter, Request, HTTPException, status
-from app.schemas.ingestion.ingestion import BaseIngestion as IngestionRequest, BaseIngestionReponse, BaseIngestionReponseSucces
+from app.schemas.rest-milvus.rest-milvus import Baserest-milvus as rest-milvusRequest, Baserest-milvusReponse, Baserest-milvusReponseSucces
 from app.messaging.publisher import publish_message
-from app.core.ingestion.ingestion import routing_key_collection
+from app.core.rest-milvus.rest-milvus import routing_key_collection
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 router = APIRouter()
 
 @router.post("/publier", summary="Publier un message sur RabbitMQ")
-def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseIngestionReponseSucces | BaseIngestionReponse:
+def publish_to_rabbitmq(payload: rest-milvusRequest, request: Request) -> Baserest-milvusReponseSucces | Baserest-milvusReponse:
     """
     Reçoit des données et les publie dans la file d'attente RabbitMQ.
 
-    - **payload**: Les données à envoyer, conformes au schéma `IngestionRequest`.
+    - **payload**: Les données à envoyer, conformes au schéma `rest-milvusRequest`.
     """
     
     channel = request.app.state.rabbitmq_channel
@@ -23,7 +23,7 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
         if connection:
             channel = connection.channel()
         else:
-            return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
+            return Baserest-milvusReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
     exchange_name = f"data_exchange_{payload.collection}"
     routing_key = routing_key_collection(payload.collection)
@@ -36,9 +36,9 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
     )
 
     if not success:
-        return BaseIngestionReponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Échec de la publication du message sur RabbitMQ.")
+        return Baserest-milvusReponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Échec de la publication du message sur RabbitMQ.")
 
-    return BaseIngestionReponseSucces(
+    return Baserest-milvusReponseSucces(
         code=status.HTTP_202_ACCEPTED, 
         message="Le message a été mis en file d'attente pour publication.", 
         details={
@@ -50,11 +50,11 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
     )
 
 @router.post("/publier-lot", summary="Publier plusieurs lots sur RabbitMQ")
-def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> list[BaseIngestionReponseSucces | BaseIngestionReponse]:
+def publish_lot_rabbitmq(payloads: list[rest-milvusRequest], request: Request) -> list[Baserest-milvusReponseSucces | Baserest-milvusReponse]:
     """
     Reçoit des données et les publie dans la file d'attente RabbitMQ.
 
-    - **payload**: Les données à envoyer, conformes au schéma `IngestionRequest`.
+    - **payload**: Les données à envoyer, conformes au schéma `rest-milvusRequest`.
     """
     
     channel = request.app.state.rabbitmq_channel
@@ -64,12 +64,12 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
         if connection:
             channel = connection.channel()
         else:
-            return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
+            return Baserest-milvusReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
-        return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
+        return Baserest-milvusReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
     
-    response: list[BaseIngestionReponseSucces | BaseIngestionReponse] = []
+    response: list[Baserest-milvusReponseSucces | Baserest-milvusReponse] = []
 
     for payload in payloads:
         exchange_name = f"data_exchange_{payload.collection}"
@@ -84,11 +84,11 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
 
         if not success:
             response.append(
-                BaseIngestionReponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Échec de la publication du message sur RabbitMQ.")
+                Baserest-milvusReponse(code=status.HTTP_500_INTERNAL_SERVER_ERROR, message="Échec de la publication du message sur RabbitMQ.")
             )
         else:
             response.append(
-                BaseIngestionReponseSucces(
+                Baserest-milvusReponseSucces(
                     code=status.HTTP_202_ACCEPTED, 
                     message="Le message a été mis en file d'attente pour publication.", 
                     details={

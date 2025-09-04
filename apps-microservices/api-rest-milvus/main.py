@@ -12,7 +12,7 @@ import os
 import pika
 
 description = """
-API Ingestion pour le projet RAG Hellopro 🚀
+API rest-milvus pour le projet RAG Hellopro 🚀
 """
 
 
@@ -39,7 +39,7 @@ logging.basicConfig(
 
 @app.on_event("startup")
 def startup_event():
-    logging.info("🚀 Ingestion-API: Démarrage et tentative de connexion à RabbitMQ...")
+    logging.info("🚀 rest-milvus-API: Démarrage et tentative de connexion à RabbitMQ...")
     connection = None
     for i in range(10):
         try:
@@ -49,14 +49,14 @@ def startup_event():
             app.state.rabbitmq_channel = connection.channel()
             # On s'assure que l'exchange par défaut existe
             app.state.rabbitmq_channel.exchange_declare(exchange='data_exchange', exchange_type='topic', durable=True)
-            logging.info("✅ Ingestion-API: Connecté à RabbitMQ.")
+            logging.info("✅ rest-milvus-API: Connecté à RabbitMQ.")
             return
         except pika.exceptions.AMQPConnectionError as e:
-            logging.warning(f"⏳ Ingestion-API: RabbitMQ n'est pas prêt ({e}). Nouvelle tentative dans {i+1}s...")
+            logging.warning(f"⏳ rest-milvus-API: RabbitMQ n'est pas prêt ({e}). Nouvelle tentative dans {i+1}s...")
             time.sleep(i + 1)
     
     if not connection:
-        logging.critical("❌ Ingestion-API: Impossible de se connecter à RabbitMQ après plusieurs tentatives. L'application démarre sans connexion.")
+        logging.critical("❌ rest-milvus-API: Impossible de se connecter à RabbitMQ après plusieurs tentatives. L'application démarre sans connexion.")
         app.state.rabbitmq_connection = None
         app.state.rabbitmq_channel = None
 
@@ -68,7 +68,7 @@ async def error_handler(request, exc: Exception):
 
 @app.on_event("shutdown")
 def shutdown_event():
-    logging.info("🛑 Ingestion-API: Arrêt de l'application...")
+    logging.info("🛑 rest-milvus-API: Arrêt de l'application...")
     if hasattr(app.state, 'rabbitmq_connection') and app.state.rabbitmq_connection and app.state.rabbitmq_connection.is_open:
         logging.info("Fermeture de la connexion RabbitMQ...")
         app.state.rabbitmq_connection.close()
@@ -86,7 +86,7 @@ for item in params:
 
 @app.get("/", tags=["Health Check"])
 def read_root():
-    return {"status": "ok", "service": "Ingestion API"}
+    return {"status": "ok", "service": "rest-milvus API"}
 
 def use_route_names_as_operation_ids(app: FastAPI) -> None:
     for route in app.routes:
