@@ -16,7 +16,7 @@ class SearchRequest(BaseModel):
     page_type: str = ""
     chat_model: str = "gpt-4.1-2025-04-14"
     params: Optional[Dict[str, Any]] = {}
-    use_reranker: Optional[bool] = False
+    use_reranker: Optional[bool] = True
     reranker_model: Optional[str] = "BAAI/bge-reranker-v2-m3"
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
