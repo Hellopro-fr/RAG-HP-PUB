@@ -17,7 +17,7 @@ class SearchRequest(BaseModel):
     chat_model: str = "gpt-4.1-2025-04-14"
     params: Optional[Dict[str, Any]] = {}
     use_reranker: Optional[bool] = False
-    reranker_model: Optional[str] = "antoinelouis/crossencoder-camembert-base-mmarcoFR"
+    reranker_model: Optional[str] = "BAAI/bge-reranker-v2-m3"
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
 class SearchResponse(BaseModel):
