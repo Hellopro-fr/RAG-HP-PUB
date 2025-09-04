@@ -1,5 +1,6 @@
 import time
 import os
+import torch
 import logging
 from functools import lru_cache
 from qdrant_client import QdrantClient, models
@@ -53,8 +54,10 @@ def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"
 @lru_cache(maxsize=None)
 def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
     """Charge le modèle CrossEncoder pour le reranking."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Détection du device pour le modèle de reranking : {device}")
     logger.info(f"Chargement du modèle de reranking '{model_name}'...")
-    model = CrossEncoder(model_name, trust_remote_code=True)
+    model = CrossEncoder(model_name, trust_remote_code=True, device=device)
     logger.info("Modèle de reranking chargé.")
     return model
 
