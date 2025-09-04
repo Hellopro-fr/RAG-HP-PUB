@@ -84,6 +84,12 @@ def insertion_data(fournisseurs_data: dict) -> dict:
             else:
                 logging.info("✅ Traitement réussi pour l'item '%s' - %s / %s.", id_fournisseur)
                 result = func(fournisseurs)
+                
+                if not result:  # None, {}, ou False
+                    id_datas_milvus = ""
+                else:
+                    id_datas_milvus = result.get("ids", "")
+                    
                 data_bo_milvus.append({
                     "embedding"            : [0.0]*1024,
                     "id_fournisseur_milvus": id_datas_milvus,
