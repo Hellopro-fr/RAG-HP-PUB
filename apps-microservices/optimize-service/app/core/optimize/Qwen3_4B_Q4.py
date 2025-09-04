@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Dict, Any
 import torch
+import re
 
 class ProductOptimizerQwen:
     """Classe pour optimiser les produits scrappés avec Qwen3-4B en Q4."""
@@ -93,17 +94,82 @@ class ProductOptimizerQwen:
             TITRE PRODUIT = {data.get('nom_produit', '')}
             DESCRIPTION PRODUIT = {data.get('description_produit', '')}
 
-            Réponse JSON:"""
+            Réponse JSON uniquement:"""
         return prompt
 
-    def optimize_product(self, product_data: Dict[str, Any], max_new_tokens: int = 2000, temperature: float = 0.3) -> Dict[str, str]:
+    def extract_json_from_text(self, text: str) -> str:
+        """
+        Extrait le JSON de la réponse du modèle avec plusieurs stratégies.
+        
+        Args:
+            text (str): Texte brut contenant le JSON
+            
+        Returns:
+            str: JSON extrait et nettoyé
+        """
+        # Stratégie 1: Chercher les blocs de code markdown
+        json_patterns = [
+            r'```json\s*(\{.*?\})\s*```',
+            r'```\s*(\{.*?\})\s*```',
+            r'(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})'
+        ]
+        
+        for pattern in json_patterns:
+            matches = re.findall(pattern, text, re.DOTALL)
+            if matches:
+                return matches[0].strip()
+        
+        # Stratégie 2: Chercher la première accolade ouvrante et la dernière fermante
+        start = text.find('{')
+        if start != -1:
+            # Compter les accolades pour trouver la fermeture correcte
+            brace_count = 0
+            end = start
+            for i, char in enumerate(text[start:], start):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end = i + 1
+                        break
+            
+            if end > start:
+                return text[start:end].strip()
+        
+        # Stratégie 3: Retourner le texte tel quel si rien trouvé
+        return text.strip()
+
+    def clean_json_string(self, json_str: str) -> str:
+        """
+        Nettoie la chaîne JSON des caractères problématiques.
+        
+        Args:
+            json_str (str): Chaîne JSON à nettoyer
+            
+        Returns:
+            str: Chaîne JSON nettoyée
+        """
+        # Supprimer les caractères de contrôle et espaces en trop
+        json_str = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', json_str)
+        
+        # Supprimer les sauts de ligne et espaces en trop au début/fin
+        json_str = json_str.strip()
+        
+        # Supprimer les commentaires JavaScript/JSON
+        json_str = re.sub(r'//.*$', '', json_str, flags=re.MULTILINE)
+        json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
+        
+        return json_str
+
+    def optimize_product(self, product_data: Dict[str, Any], max_new_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, str]:
         """
         Optimise un produit en utilisant Qwen3-4B.
 
         Args:
             product_data (Dict[str, Any]): Données du produit
             max_new_tokens (int): Nombre maximal de tokens générés
-            temperature (float): Température pour la génération
+            temperature (float): Température pour la génération (réduite pour plus de consistance)
 
         Returns:
             Dict[str, str]: Titre et description optimisés
@@ -111,7 +177,7 @@ class ProductOptimizerQwen:
         try:
             prompt = self.generate_prompt(product_data)
 
-            # Préparer les entrées
+           # Préparer les entrées
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
             # Génération avec paramètres optimisés
@@ -126,49 +192,70 @@ class ProductOptimizerQwen:
                 )
 
             # Décoder seulement la partie générée
-            generated_text = self.tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True).strip()
+            generated_text = self.tokenizer.decode(
+                outputs[0][inputs['input_ids'].shape[1]:], 
+                skip_special_tokens=True
+            ).strip()
 
-            # Nettoyage de la réponse
-            content = generated_text
-            
-            # Extraire le JSON s'il est entouré de markdown
-            if "```json" in content:
-                start = content.find("```json") + 7
-                end = content.find("```", start)
-                if end != -1:
-                    content = content[start:end].strip()
-            elif "```" in content:
-                start = content.find("```") + 3
-                end = content.find("```", start)
-                if end != -1:
-                    content = content[start:end].strip()
-            
-            # Trouver le JSON dans la réponse
-            start_json = content.find("{")
-            end_json = content.rfind("}") + 1
-            
-            if start_json != -1 and end_json > start_json:
-                json_content = content[start_json:end_json]
-            else:
-                json_content = content
+            print(f"Texte généré brut: {repr(generated_text)}")
 
-            # Parser JSON
-            result = json.loads(json_content)
+            # Extraire le JSON avec les nouvelles méthodes
+            json_content = self.extract_json_from_text(generated_text)
+            json_content = self.clean_json_string(json_content)
+            
+            print(f"JSON extrait: {repr(json_content)}")
 
+            # Tentative de parsing JSON avec gestion d'erreurs améliorée
+            try:
+                result = json.loads(json_content)
+            except json.JSONDecodeError as e:
+                # Tentative de correction automatique
+                print(f"Erreur JSON initiale: {e}")
+                
+                # Essayer de corriger des erreurs courantes
+                corrected_json = json_content
+                
+                # Corriger les guillemets manquants ou mal formés
+                corrected_json = re.sub(r'(\w+):', r'"\1":', corrected_json)
+                corrected_json = re.sub(r':\s*([^",\{\}\[\]]+)(?=\s*[,\}])', r': "\1"', corrected_json)
+                
+                try:
+                    result = json.loads(corrected_json)
+                    print("JSON corrigé avec succès")
+                except json.JSONDecodeError:
+                    # En cas d'échec, retourner les données originales
+                    raise Exception(f"JSON malformé non récupérable: {str(e)}\nContenu: {json_content}")
+
+            # Vérifier la structure de la réponse
+            if not isinstance(result, dict):
+                raise ValueError("La réponse doit être un objet JSON")
+                
             if "Titre" not in result or "Description" not in result:
-                raise ValueError("Format de sortie invalide - clés manquantes")
+                raise ValueError(f"Format de sortie invalide - clés manquantes. Clés trouvées: {list(result.keys())}")
+
+            # Validation des types
+            titre = str(result["Titre"]).strip()
+            description = str(result["Description"]).strip()
+            
+            if not titre or not description:
+                raise ValueError("Le titre et la description ne peuvent pas être vides")
 
             return {
-                "titre": result["Titre"],
-                "description": result["Description"]
+                "titre": titre,
+                "description": description
             }
 
         except json.JSONDecodeError as e:
-            print(f"Erreur JSON: {e}")
-            print(f"Contenu brut: {generated_text}")
+            error_msg = f"Erreur JSON: {str(e)}\nTexte généré: {repr(generated_text)}\nJSON extrait: {repr(json_content)}"
+            print(error_msg)
+            logging.error(error_msg)
             raise Exception(f"Réponse du modèle invalide (JSON malformé): {str(e)}")
+            
         except Exception as e:
-            raise Exception(f"Erreur lors de la génération: {str(e)}")
+            error_msg = f"Erreur lors de la génération: {str(e)}"
+            print(error_msg)
+            logging.error(error_msg)
+            raise Exception(error_msg)
 
     def optimize_batch(self, products_list: list) -> list:
         """
