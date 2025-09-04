@@ -13,6 +13,10 @@ class Configuration:
 
     ZILLIZ_URI: Optional[str] = os.environ.get("ZILLIZ_URI")
     ZILLIZ_API_KEY: Optional[str] = os.environ.get("ZILLIZ_API_KEY")
+    ZILLIZ_PORT: Optional[int] = os.environ.get("ZILLIZ_PORT")
+    
+    M_PARAMS: Optional[int] = int(os.environ.get("M_PARAMS") or 32)
+    EF_PARAMS: Optional[int] = int(os.environ.get("EF_PARAMS") or 300)
     
     MODEL: Optional[str] = os.environ.get("MODEL") or "dangvantuan/sentence-camembert-large"
     RECREATE_COLLECTIONS: bool = False

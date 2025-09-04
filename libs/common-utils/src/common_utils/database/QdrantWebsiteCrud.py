@@ -21,7 +21,7 @@ from qdrant_client.http.models import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "siteweb_poc"
+    collection_name: str = "siteweb_poc_64_500"
     dimension: int = 1024
 
 
@@ -61,8 +61,8 @@ class QdrantWebsiteCrud:
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=model_config.dimension, distance=Distance.COSINE),
 				hnsw_config=HnswConfigDiff(
-					m=32,
-					ef_construct=200
+					m=64,
+					ef_construct=500
 				),
                 shard_number=2,
                 replication_factor=2
@@ -72,41 +72,43 @@ class QdrantWebsiteCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
 
 
-        self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="affichage", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="etat", field_schema=PayloadSchemaType.KEYWORD)
-        self.client.create_payload_index(collection_name, field_name="page_type", field_schema=PayloadSchemaType.KEYWORD)
+        self.client.create_payload_index(collection_name, field_name="url", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="categorie", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="id_categorie", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="fournisseur", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="id_fournisseur", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="affichage", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="etat", field_schema=PayloadSchemaType.KEYWORD)
+        # self.client.create_payload_index(collection_name, field_name="page_type", field_schema=PayloadSchemaType.KEYWORD)
 
         self.collection = collection_name
         return collection_name
 
-    def insert_website(self, website: Dict[str, Any]) -> Dict[str, Any]:
-        data = website
+    def insert_website(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             self._get_or_create_collection(model_config)
 
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {"status": "error", "message": "Aucune donnée à insérer ou collection non initialisée."}
 
-            self.logger.info(f"[{model_key}][website] Insertion de {len(data)} entités dans '{self.collection}'...")
+            self.logger.info(f"[{model_key}][website] Insertion de {len(datas)} entités dans '{self.collection}'...")
 
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None     
-            
             points = []
-            
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=data.get("embedding"),
-                    payload={k: v for k, v in data.items() if k != "embedding"}
+
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None     
+                
+                points.append(
+                    PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=data.get("embedding"),
+                        payload={k: v for k, v in data.items() if k != "embedding"}
+                    )
                 )
-            )
 
             result = self.client.upsert(collection_name=self.collection, points=points)
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
@@ -176,7 +178,7 @@ class QdrantWebsiteCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def get_website(self, id_website: str) -> Dict[str, Any]:
+    def get_website(self, url: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -184,11 +186,14 @@ class QdrantWebsiteCrud:
             # self._connect_to_milvus()
             self._get_or_create_collection(model_config)
 
-            if not id_website:
-                return {"status": "error", "message": "ID website requis."}
+            if self.collection is None:
+                return {"status": "error", "message": "Collection non initialisée.","code":404}
+
+            if not url:
+                return {"status": "error", "message": "Url website requis.","code":400}
 
             filter_query = Filter(
-                must=[FieldCondition(key="id_website", match=MatchValue(value=id_website))]
+                must=[FieldCondition(key="url", match=MatchValue(value=url))]
             )
 
             scroll_result, _ = self.client.scroll(
@@ -197,6 +202,7 @@ class QdrantWebsiteCrud:
                 limit=1
             )
 
-            return {"status": "success", "data": [p.payload for p in scroll_result]}
+            return {"status": "success", "data": [p.payload for p in scroll_result] if scroll_result else []}
         except Exception as e:
             self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la récupération : {e}", exc_info=True)
+

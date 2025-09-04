@@ -1,9 +1,33 @@
 import pika
 import time
 import os
-    
+import socket
+
+# Importer les modules nécessaires
+import torch
+from sentence_transformers import SentenceTransformer
+
+# Importer les modules locaux
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
+
+from transformers import AutoTokenizer # pour encoder du modèle d'embedding
+
+def resolve_task_slot() -> int:
+    """
+    Détermine le numéro de slot (réplica) pour ce conteneur.
+    - Si TASK_SLOT est défini et valide -> utilise cette valeur.
+    - Sinon -> déduit l'index depuis le hostname (ex: embedding-service-3 → 3).
+    - Sinon -> fallback = 1
+    """
+    
+    # fallback via hostname (utile en docker-compose scale)
+    hostname = socket.gethostname()  # ex: embedding-service-3
+    parts = hostname.split("-")
+    try:
+        return int(parts[-1])
+    except ValueError:
+        return 1
 
 def main():
     """
@@ -30,11 +54,41 @@ def main():
     try:
         # 1. Créer une instance du publisher
         publisher = Publisher(connection)
+
+        # Déterminer le nombre de GPUs disponibles
+        num_gpus = torch.cuda.device_count()
+
+        # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if num_gpus > 0:
+            # Récupérer le numéro du replica depuis la variable d'environnement
+            # Le '1' par défaut est pour les tests locaux sans Swarm
+            task_slot = resolve_task_slot()
+            
+            # Calculer l'ID du GPU à utiliser (avec le modulo)
+            # task_slot va de 1 à 8, donc on fait -1 pour un index de 0 à 7
+            gpu_id = (task_slot - 1) % num_gpus
+            device = f'cuda:{gpu_id}'
+
+        else:
+            device = 'cpu'
+
+        model_name = "dangvantuan/sentence-camembert-large"
         
-        # 2. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+        # def hf_length_function(text: str) -> int:
+        #     """Compte les tokens avec CamemBERT"""
+        #     return len(tokenizer.encode(text, add_special_tokens=False))
+
+        print(f"🔍 Chargement du modèle '{model_name}' sur le device '{device}'...")
+
+        model = SentenceTransformer(model_name, device=device)
         
-        # 3. Lancer l'écoute
+        
+        # 3. Créer une instance du consumer et lui passer le publisher
+        consumer = Consumer(connection, publisher, model=model, tokenizer=tokenizer)
+        
+        # 4. Lancer l'écoute
         consumer.start_consuming()
 
     except KeyboardInterrupt:

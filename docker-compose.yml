@@ -7,6 +7,54 @@ services:
       dockerfile: ./apps-microservices/api-ingestion/Dockerfile
     container_name: api-ingestion-service
     restart: unless-stopped
+    ports:
+      - "8509:8509"
+    env_file:
+      - .env
+
+  api-recherche-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-recherche/Dockerfile
+    container_name: api-recherche-service
+    restart: unless-stopped
+    # TODO: à supprimer en PROD
+    volumes:
+      - ./apps-microservices/api-recherche:/app:rw
+    ports:
+      - "8510:8510"
+    env_file:
+      - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+ 
+  api-classification-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-classification/Dockerfile
+    container_name: api-classification-service
+    restart: unless-stopped
+    # TODO: à supprimer en PROD
+    volumes:
+      - ./apps-microservices/api-classification:/app:rw
+    ports:
+      - "8566:8566"
+    env_file:
+      - .env
+
+  api-gateway-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-gateway/Dockerfile
+    container_name: api-gateway-service
+    restart: unless-stopped
+    ports:
+      - "8500:8500"
     env_file:
       - .env
 
@@ -14,64 +62,152 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/devis-processor-service/Dockerfile
-    container_name: devis-processor-service
+    # container_name: devis-processor-service
     restart: unless-stopped
     env_file:
       - .env
+    deploy:
+      replicas: 4
 
   echange-processor-service:
     build:
       context: .
       dockerfile: ./apps-microservices/echange-processor-service/Dockerfile
-    container_name: echange-processor-service
+    # container_name: echange-processor-service
     restart: unless-stopped
     env_file:
       - .env
+    deploy:
+      replicas: 4
 
   website-processor-service:
     build:
       context: .
       dockerfile: ./apps-microservices/website-processor-service/Dockerfile
-    container_name: website-processor-service
+    # container_name: website-processor-service
     restart: unless-stopped
     env_file:
       - .env
+    deploy:
+      replicas: 4
+
+  product-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/product-processor-service/Dockerfile
+    # container_name: product-processor-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+
+  categories-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/categories-processor-service/Dockerfile
+    # container_name: categories-processor-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+
+  fournisseurs-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/fournisseurs-processor-service/Dockerfile
+    # container_name: fournisseurs-processor-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
 
   embedding-service:
     build:
       context: .
       dockerfile: ./apps-microservices/embedding-service/Dockerfile
-    container_name: embedding-service
+    # container_name: embedding-service
     restart: unless-stopped
     env_file:
       - .env
+    volumes:
+      - ./apps-microservices/embedding-service:/app:rw
+    deploy:
+      replicas: 8
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   di-database-qdrant-service:
     build:
       context: .
       dockerfile: ./apps-microservices/di-database-qdrant-service/Dockerfile
-    container_name: di-database-qdrant-service
+    # container_name: di-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
+    deploy:
+      replicas: 8
 
   echange-database-qdrant-service:
     build:
       context: .
       dockerfile: ./apps-microservices/echange-database-qdrant-service/Dockerfile
-    container_name: echange-database-qdrant-service
+    # container_name: echange-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
+    deploy:
+      replicas: 8
 
   website-database-qdrant-service:
     build:
       context: .
       dockerfile: ./apps-microservices/website-database-qdrant-service/Dockerfile
-    container_name: website-database-qdrant-service
+    # container_name: website-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
+    deploy:
+      replicas: 4
+  
+  product-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/product-database-qdrant-service/Dockerfile
+    # container_name: product-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 20
+
+  categories-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/categories-database-qdrant-service/Dockerfile
+    # container_name: categories-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+
+  fournisseurs-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/fournisseurs-database-qdrant-service/Dockerfile
+    # container_name: fournisseurs-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
 
   webhook-service:
     build:

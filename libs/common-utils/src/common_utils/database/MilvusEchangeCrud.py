@@ -20,7 +20,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "echanges_poc"
+    collection_name: str = "echanges"
     dimension: int = 1024
 
 class MilvusEchangeCrud:
@@ -74,21 +74,28 @@ class MilvusEchangeCrud:
                 FieldSchema(name="date_maj",  dtype=DataType.VARCHAR, max_length=64)
             ]
             schema = CollectionSchema(fields, description=f"Collection de chunks de Echange pour {model_key}")
-            collection = Collection(collection_name, schema, consistency_level="Strong")
             
-            self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
+            collection = Collection(
+                collection_name, 
+                schema,
+                consistency_level="Strong"
+            )
+            
+            # self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": 32, "efConstruction": 200}}
+            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
-            # Optionnel: Créer des index scalaires pour les filtres fréquents
-            collection.create_index(field_name="categorie", index_name="idx_categorie")
-            collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
-            collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
-            collection.create_index(field_name="affichage", index_name="idx_affichage")
-            collection.create_index(field_name="etat", index_name="idx_etat")
+            # # Optionnel: Créer des index scalaires pour les filtres fréquents
+            collection.create_index(field_name="conversation_id", index_name="idx_conversation_id")
+            # collection.create_index(field_name="categorie", index_name="idx_categorie")
+            # collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
+            # collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
+            # collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")
+            # collection.create_index(field_name="affichage", index_name="idx_affichage")
+            # collection.create_index(field_name="etat", index_name="idx_etat")
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
@@ -100,7 +107,7 @@ class MilvusEchangeCrud:
         return collection
 
 
-    def insert_echange(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def insert_echange(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -109,23 +116,26 @@ class MilvusEchangeCrud:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
             
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {
                     "status": "error",
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
-            self.logger.info(f"[{model_key}][Echange] Insertion de batch de {len(data)} entités dans '{self.collection.name}'...")
+            self.logger.info(f"[{model_key}][Echange] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
            
-            data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-            data["date_maj"] = None
+            sanitized_batch = []
+            for data in datas:
+                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None
 
-            # Sanitize the record to ensure no None values
-            # This is important for Milvus compatibility
-            data = Utils.sanitize_record(data)  
+                # Sanitize the record to ensure no None values
+                # This is important for Milvus compatibility
+                data = Utils.sanitize_record(data)  
+                sanitized_batch.append(data)
 
-            result = self.collection.insert(data)
-            self.collection.flush()
+            result = self.collection.insert(sanitized_batch)
+            # self.collection.flush()
 
             self.logger.info(f"Résultat insertion : {result}") 
             self.logger.info(f"Clé primaire : {result.primary_keys}") 
@@ -133,7 +143,7 @@ class MilvusEchangeCrud:
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
             
             return {
-                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
+                "ids": ",".join(map(str,result.primary_keys)) if result.primary_keys else "",
                 "status": "success",
             }
 
@@ -180,7 +190,7 @@ class MilvusEchangeCrud:
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             
             return {
-                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
+                "ids": ",".join(map(str, result.primary_keys)) if result.primary_keys else "",
                 "status": "success",
             }
 
@@ -227,3 +237,43 @@ class MilvusEchangeCrud:
             self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la suppression : {e}")
         except Exception as e:
             self.logger.error(f"[{model_key}][Echange] Suppression : {e}", exc_info=True)
+
+    def get_echange(self,conversation_id: str) -> Dict[str, Any]:
+        list_conversation_id = [conversation_id]
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+        
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée.",
+                    "code": 404
+                }
+
+            if not conversation_id:
+                return {
+                    "status": "error",
+                    "message": "Conversation ID requise pour la récupération.",
+                    "code" : 400
+                }
+
+            result = self.collection.query(
+                expr=f"conversation_id in {list_conversation_id}",
+                output_fields=["id"]
+            )
+            # self.collection.flush()
+            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+
+            return {
+                "status": "success",
+                "data": result
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}")
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}", exc_info=True)

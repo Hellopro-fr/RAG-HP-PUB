@@ -2,9 +2,12 @@ import pika
 import json
 from embedding_service.messaging.publisher import Publisher  # Importe notre publisher local
 from embedding_service.core.processor import embed_input_data # Importe la logique métier
+from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
+
+from sentence_transformers import SentenceTransformer
 
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
+    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher, model: SentenceTransformer, **kwargs):
         """
         Initialise le consumer.
         Il a besoin d'une connexion ET d'une instance du publisher.
@@ -18,12 +21,25 @@ class Consumer:
 
         # Todo: à vérifier si le nom de la queue est correct
         self.queue_name = 'embedding_queue'
+        self.rabbitmq_connection = RabbitMQConnection()
+        self.model = model
+        
+        # ajout de tokenizer pour chunking
+        self.tokenizer = kwargs.get("tokenizer") if kwargs.get("tokenizer") else None
+        
+        self.connect()
+        print("✅ Consumer initialisé.")
 
+    def connect(self):
+        """
+        Établit une connexion RabbitMQ via la fonction utilitaire.
+        """
+        self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
+        self.channel = self.connection.channel()
         # Déclare l'exchange où il consomme
         self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
         self.channel.queue_declare(queue=self.queue_name, durable=True)
         self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
-        print("✅ Consumer initialisé.")
 
     def _on_message_callback(self, ch, method, properties, body):
         """
@@ -33,7 +49,7 @@ class Consumer:
         print(f"\n📥 Embedding-Product-Processor: Message reçu pre embedding.")
 
         # 1. Appelle la logique métier PURE
-        output_message = embed_input_data(input_data)
+        output_message = embed_input_data(input_data, model=self.model, tokenizer=self.tokenizer)
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)
@@ -45,6 +61,12 @@ class Consumer:
         """
         Démarre la boucle d'écoute des messages.
         """
-        self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-        print("👂 Embedding-Product-Processor: En attente de messages...")
-        self.channel.start_consuming()
+        for i in range(3):
+            try:
+                self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
+                print("👂 Embedding-Product-Processor: En attente de messages...")
+                self.channel.start_consuming()
+                break  # Si start_consuming se termine normalement, on sort de la boucle
+            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
+                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                self.connect()

@@ -1,8 +1,10 @@
 from common_utils.database.QdrantDevisCrud import QdrantDevisCrud
 from common_utils.database.MilvusDevisCrud import MilvusDevisCrud
+from common_utils.database.MilvusDevisInserer import MilvusDevisInserer
 
 from common_utils.autres.CollectionName import CollectionName
 import logging
+from datetime import datetime
 
 def insertion_data(devis_data: dict) -> dict:
     """
@@ -33,20 +35,68 @@ def insertion_data(devis_data: dict) -> dict:
 
     func = processing_functions.get(collection_enum)
     result = []
-    if func:
-        for di in devis:
-            id_di = di.get('lead_id', 'ID Demande inconnu')
-            chunk = di.get('chunk_number', 'Numero chunk inconnu')
-            total = di.get('total_chunks', 'Total chunk inconnu')
-            logging.info("   ✅ Traitement réussi pour l'item '%s' - %s / %s.", id_di, chunk, total)
-            result.append(func(di))
-            
-    
-    output_message = {
-        "database"  : bdd,
-        "collection": collection,
-        "data"      : result,
-        "id_demande": id_di
-    }
-    
-    return output_message
+    if func and len(devis) > 0:
+        lead_id = devis[0].get("lead_id", "lead_id inconnu")
+        res = base_vectorielle.get_devis(lead_id=lead_id)
+        correspondance_devis = MilvusDevisInserer()
+
+        status = res.get("status")
+        data   = res.get("data", [])
+        code   = res.get("code", None)
+        message = res.get("message", "")
+        data_bo_milvus = []
+
+        if status == "error":
+            if code == 404:
+                result = func(devis)
+                output_message = {
+                    "database"       : bdd,
+                    "collection"     : collection,
+                    "data"           : result,
+                    "lead_id"        : lead_id,
+                    "already_in_bdd" : len(data) > 0
+                }
+                data_bo_milvus.append({
+                    "embedding"        : [0.0]*1024,
+                    "id_echange_milvus": result.get("ids", ""),
+                    "lead_id"          : lead_id,
+                    "date_ajout"       : datetime.now().isoformat(),
+                    "date_maj"         : ""
+                })
+
+            else:
+                logging.error("Erreur lors de la vérification de Lead ID  %s : %s", lead_id, message)
+                output_message = {
+                    "database"       : bdd,
+                    "collection"     : collection,
+                    "data"           : [],
+                    "lead_id"        : lead_id,
+                    "error"          : message
+                }
+
+        elif status == "success":
+            if len(data) > 0:
+                logging.info("La lead_id %s existe déjà dans la base de données. Insertion ignorée.", lead_id)
+                result = data
+            else:
+                result = func(devis)
+                data_bo_milvus.append({
+                    "embedding"      : [0.0]*1024,
+                    "id_devis_milvus": result.get("ids", ""),
+                    "lead_id"        : lead_id,
+                    "date_ajout"     : datetime.now().isoformat(),
+                    "date_maj"       : ""
+                })
+
+            output_message = {
+                "database"        : bdd,
+                "collection"      : collection,
+                "data"            : result,
+                "lead_id"         : lead_id,
+                "already_in_bdd"  : len(data) > 0
+            }
+
+        if len(data_bo_milvus) > 0 and bdd == "milvus":
+            correspondance_devis.insert_correspondance_devis(data_bo_milvus)
+
+        return output_message
