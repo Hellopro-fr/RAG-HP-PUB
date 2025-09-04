@@ -53,13 +53,34 @@ def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"
 
 @lru_cache(maxsize=None)
 def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
-    """Charge le modèle CrossEncoder pour le reranking."""
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info(f"Détection du device pour le modèle de reranking : {device}")
-    logger.info(f"Chargement du modèle de reranking '{model_name}'...")
-    model = CrossEncoder(model_name, trust_remote_code=True, device=device)
-    logger.info("Modèle de reranking chargé.")
-    return model
+    """
+    Charge le modèle CrossEncoder pour le reranking de manière robuste en deux étapes.
+    """
+    # Étape 1 : Déterminer le device cible final (GPU si possible, sinon CPU)
+    target_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"Device cible détecté pour le reranker : {target_device}")
+
+    try:
+        # Étape 2 : Forcer le chargement du modèle sur le CPU pour éviter le bug du "meta tensor".
+        # C'est l'étape la plus sûre pour matérialiser le modèle avec ses poids.
+        logger.info(f"Chargement initial du modèle de reranking '{model_name}' sur le CPU...")
+        model = CrossEncoder(model_name, trust_remote_code=True, device='cpu')
+        logger.info("Modèle chargé avec succès sur le CPU.")
+
+        # Étape 3 : Si le device cible est un GPU, déplacer le modèle maintenant qu'il est entièrement chargé.
+        if target_device.type == 'cuda':
+            logger.info(f"Déplacement du modèle entièrement chargé vers le device : {target_device}...")
+            model.to(target_device)
+            logger.info("Modèle déplacé avec succès sur le GPU.")
+
+        logger.info("Modèle de reranking prêt à l'emploi.")
+        return model
+
+    except Exception as e:
+        logger.error(f"Une erreur critique est survenue lors du chargement du modèle de reranking : {e}", exc_info=True)
+        # Relancer l'exception pour que le démarrage de l'application échoue clairement
+        # C'est mieux qu'un état instable.
+        raise e
 
 def get_milvus_connection():
     alias = "default"
