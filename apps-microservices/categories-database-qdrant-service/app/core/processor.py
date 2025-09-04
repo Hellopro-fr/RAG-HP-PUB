@@ -87,11 +87,11 @@ def insertion_data(categories_data: dict) -> dict:
                 result = func(categories)
                 
                 data_bo_milvus.append({
-                    "embedding"        : [0.0]*1024,
-                    "id_echange_milvus": result.get("ids", ""),
-                    "id_categorie"     : id_categorie,
-                    "date_ajout"       : datetime.now().isoformat(),
-                    "date_maj"         : ""
+                    "embedding"          : [0.0]*1024,
+                    "id_categorie_milvus": id_datas_milvus,
+                    "id_categorie"       : id_categorie,
+                    "date_ajout"         : datetime.now().isoformat(),
+                    "date_maj"           : ""
                 })
                 
             output_message = {

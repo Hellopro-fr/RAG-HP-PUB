@@ -86,7 +86,7 @@ def insertion_data(fournisseurs_data: dict) -> dict:
                 result = func(fournisseurs)
                 data_bo_milvus.append({
                     "embedding"            : [0.0]*1024,
-                    "id_fournisseur_milvus": result.get("ids", ""),
+                    "id_fournisseur_milvus": id_datas_milvus,
                     "id_fournisseur"       : id_fournisseur,
                     "date_ajout"           : datetime.now().isoformat(),
                     "date_maj"             : ""
