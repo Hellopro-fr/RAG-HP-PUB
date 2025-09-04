@@ -226,6 +226,6 @@ services:
       container_name: api-rest-milvus
       restart: unless-stopped
       ports:
-        - "8509:8509"
+        - "8515:8515"
       env_file:
         - .env
