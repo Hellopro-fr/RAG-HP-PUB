@@ -72,14 +72,22 @@ async def websocket_proxy(service: str, path: str, websocket: WebSocket):
             
             # Tâches pour relayer les messages dans les deux sens
             async def forward_to_backend():
-                while True:
-                    data = await websocket.receive_text()
-                    await backend_ws.send(data)
+                try:
+                    while True:
+                        data = await websocket.receive_text()
+                        logger.debug(f"Client -> Backend: {data[:100]}") # Log tronqué
+                        await backend_ws.send(data)
+                except WebSocketDisconnect:
+                    logger.info("Le client a fermé la connexion (forward_to_backend).")
 
             async def forward_to_client():
-                while True:
-                    data = await backend_ws.recv()
-                    await websocket.send_text(data)
+                try:
+                    while True:
+                        data = await backend_ws.recv()
+                        logger.debug(f"Backend -> Client: {data[:100]}") # Log tronqué
+                        await websocket.send_text(data)
+                except websockets.exceptions.ConnectionClosed:
+                    logger.info("Le backend a fermé la connexion (forward_to_client).")
 
             # Lancer les deux tâches en parallèle
             client_task = asyncio.create_task(forward_to_backend())
@@ -94,6 +102,7 @@ async def websocket_proxy(service: str, path: str, websocket: WebSocket):
             # Annuler les tâches restantes pour nettoyer
             for task in pending:
                 task.cancel()
+            logger.info("Une des connexions a été fermée, nettoyage des tâches en cours.")
 
     except (WebSocketDisconnect, websockets.exceptions.ConnectionClosed):
         print(f"WebSocket déconnecté pour {service}/{path}")
