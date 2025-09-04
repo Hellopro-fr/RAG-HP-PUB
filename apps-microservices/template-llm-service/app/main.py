@@ -1,15 +1,15 @@
 import pika
 import time
 import os
-from app.messaging.consumer import Consumer
-from app.messaging.publisher import Publisher
+from .messaging.consumer import Consumer
+from .messaging.publisher import Publisher
 
 def main():
     """
     Point d'entrée principal du service de classification LLM.
     Met en place la connexion RabbitMQ et lance le consommateur.
     """
-    rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
+    rabbitmq_url = "amqps://ezvrvpcr:epljQvbs4j0R0qJUMKWtBRNV-whMOxF7@whale.rmq.cloudamqp.com/ezvrvpcr"
     connection = None
 
     # Boucle de connexion robuste à RabbitMQ
