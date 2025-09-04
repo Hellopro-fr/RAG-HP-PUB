@@ -1,6 +1,4 @@
 fastapi[all]
 uvicorn
 python-dotenv
-pydantic
-pika
-pydantic-settings
+pymilvus
