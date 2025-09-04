@@ -86,6 +86,11 @@ def insertion_data(categories_data: dict) -> dict:
                 logging.info("✅ Traitement réussi pour l'item '%s' - %s / %s.", id_categorie)
                 result = func(categories)
                 
+                if not result:  # None, {}, ou False
+                    id_datas_milvus = ""
+                else:
+                    id_datas_milvus = result.get("ids", "")
+                
                 data_bo_milvus.append({
                     "embedding"          : [0.0]*1024,
                     "id_categorie_milvus": id_datas_milvus,
