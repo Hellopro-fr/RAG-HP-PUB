@@ -133,7 +133,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./apps-microservices/embedding-service:/app:rw
+      - ./apps-microservices/embedding-service/app:/app/embedding_service:rw
     deploy:
       replicas: 8
       resources:
