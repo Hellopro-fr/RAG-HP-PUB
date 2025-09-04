@@ -1,0 +1,42 @@
+# app/router/search_ws.py
+
+import json
+import logging
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from app.core.searchws import search_in_milvus_stream  # We will create this new streaming function
+from app.schemas.search import SearchRequest
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+@router.websocket("/ws/search")
+async def websocket_search(websocket: WebSocket):
+    """
+    Handles the WebSocket connection for real-time search.
+    - Accepts a connection.
+    - Waits for a JSON message containing the search request.
+    - Calls the streaming search function and sends updates to the client.
+    """
+    await websocket.accept()
+    logger.info("WebSocket connection accepted.")
+    try:
+        # Wait for the client to send the search request
+        data = await websocket.receive_text()
+        request_data = json.loads(data)
+        
+        # Validate the request data using our Pydantic model
+        search_request = SearchRequest(**request_data)
+        
+        # Call the streaming search function and send updates
+        async for update in search_in_milvus_stream(search_request):
+            await websocket.send_json(update)
+
+    except WebSocketDisconnect:
+        logger.warning("Client disconnected.")
+    except Exception as e:
+        logger.error(f"An error occurred in the WebSocket: {e}", exc_info=True)
+        # Send an error message to the client before closing
+        await websocket.send_json({"type": "error", "payload": str(e)})
+    finally:
+        logger.info("Closing WebSocket connection.")
+        await websocket.close()
