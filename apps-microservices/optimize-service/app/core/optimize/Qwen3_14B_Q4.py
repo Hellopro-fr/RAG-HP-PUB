@@ -90,9 +90,9 @@ class ProductOptimizerQwen:
             }}
 
             # INPUTS :
-            CATEGORIE PRODUIT = {data.get('categorie_produit', '')}
-            TITRE PRODUIT = {data.get('nom_produit', '')}
-            DESCRIPTION PRODUIT = {data.get('description_produit', '')}
+            CATEGORIE PRODUIT = {{data.get('categorie_produit', '')}}
+            TITRE PRODUIT = {{data.get('nom_produit', '')}}
+            DESCRIPTION PRODUIT = {{data.get('description_produit', '')}}
 
             Réponse JSON uniquement:"""
         
@@ -297,18 +297,18 @@ class ProductOptimizerQwen:
                     print("JSON corrigé avec succès")
                 except json.JSONDecodeError as e:
                     return {
-                        'error': f"Format JSON invalide pour le produit {product_id}: {str(e)}"
+                        'error': f"Format JSON invalide pour le produit {str(product_id)}: {str(e)}"
                     }
 
             # Vérifier la structure de la réponse
             if not isinstance(result, dict):
                 return {
-                    'error': f"Format de réponse invalide pour le produit {product_id}: doit être un objet JSON"
+                    'error': f"Format de réponse invalide pour le produit {str(product_id)}: doit être un objet JSON"
                 }
                 
             if "Titre" not in result or "Description" not in result:
                 return {
-                    'error': f"Clés manquantes dans la réponse pour le produit {product_id}. Clés trouvées: {list(result.keys())}"
+                    'error': f"Clés manquantes dans la réponse pour le produit {str(product_id)}. Clés trouvées: {list(result.keys())}"
                 }
 
             # Validation des types et contenu
@@ -317,7 +317,7 @@ class ProductOptimizerQwen:
             
             if not titre or not description:
                 return {
-                    'error': f"Titre ou description vide pour le produit {product_id}"
+                    'error': f"Titre ou description vide pour le produit {str(product_id)}"
                 }
 
             # Retourner le succès avec l'ID
@@ -332,7 +332,7 @@ class ProductOptimizerQwen:
             }
 
         except Exception as e:
-            error_msg = f"Erreur lors du traitement du produit {product_id}: {str(e)}"
+            error_msg = f"Erreur lors du traitement du produit {str(product_id)}: {str(e)}"
             print(error_msg)
             logging.error(error_msg)
             return {
