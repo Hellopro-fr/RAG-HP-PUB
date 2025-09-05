@@ -1,0 +1,9 @@
+vllm
+torch
+transformers
+accelerate
+numpy
+beautifulsoup4
+pika
+pytest
+pytest-mock

@@ -126,6 +126,23 @@ services:
     deploy:
       replicas: 4
 
+  template-llm-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/template-llm-service/Dockerfile
+    container_name: template-llm-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Configuration spécifique pour l'accès au GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1 # On demande l'accès à 1 GPU
+              capabilities: [gpu]
+
   embedding-service:
     build:
       context: .
