@@ -162,26 +162,28 @@ class ProductOptimizerQwen:
         
         return json_str
 
-    def optimize_product(self, product_data: Dict[str, Any], max_new_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, str]:
+    def optimize_product(self, product_data: Dict[str, Any], max_new_tokens: int = 2000, temperature: float = 0.1) -> Dict[str, Any]:
         """
         Optimise un produit en utilisant Qwen3-4B.
 
         Args:
-            product_data (Dict[str, Any]): Données du produit
+            product_data (Dict[str, Any]): Données du produit (doit contenir 'id')
             max_new_tokens (int): Nombre maximal de tokens générés
-            temperature (float): Température pour la génération (réduite pour plus de consistance)
+            temperature (float): Température pour la génération
 
         Returns:
-            Dict[str, str]: Titre et description optimisés
+            Dict[str, Any]: Résultat avec 'success' ou 'error'
         """
+        product_id = product_data.get('id_produit_scrapping', '')
+        
         try:
             prompt = self.generate_prompt(product_data)
 
-           # Préparer les entrées
+            # Préparer les entrées
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
             # Génération avec paramètres optimisés
-            with torch.no_grad():  # Économiser la mémoire
+            with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
                     max_new_tokens=max_new_tokens,
@@ -199,63 +201,68 @@ class ProductOptimizerQwen:
 
             print(f"Texte généré brut: {repr(generated_text)}")
 
-            # Extraire le JSON avec les nouvelles méthodes
+            # Extraire et nettoyer le JSON
             json_content = self.extract_json_from_text(generated_text)
             json_content = self.clean_json_string(json_content)
             
             print(f"JSON extrait: {repr(json_content)}")
 
-            # Tentative de parsing JSON avec gestion d'erreurs améliorée
+            # Tentative de parsing JSON
+            result = None
             try:
                 result = json.loads(json_content)
-            except json.JSONDecodeError as e:
+            except json.JSONDecodeError:
                 # Tentative de correction automatique
-                print(f"Erreur JSON initiale: {e}")
-                
-                # Essayer de corriger des erreurs courantes
                 corrected_json = json_content
-                
-                # Corriger les guillemets manquants ou mal formés
                 corrected_json = re.sub(r'(\w+):', r'"\1":', corrected_json)
                 corrected_json = re.sub(r':\s*([^",\{\}\[\]]+)(?=\s*[,\}])', r': "\1"', corrected_json)
                 
                 try:
                     result = json.loads(corrected_json)
                     print("JSON corrigé avec succès")
-                except json.JSONDecodeError:
-                    # En cas d'échec, retourner les données originales
-                    raise Exception(f"JSON malformé non récupérable: {str(e)}\nContenu: {json_content}")
+                except json.JSONDecodeError as e:
+                    return {
+                        'error': f"Format JSON invalide pour le produit {product_id}: {str(e)}"
+                    }
 
             # Vérifier la structure de la réponse
             if not isinstance(result, dict):
-                raise ValueError("La réponse doit être un objet JSON")
+                return {
+                    'error': f"Format de réponse invalide pour le produit {product_id}: doit être un objet JSON"
+                }
                 
             if "Titre" not in result or "Description" not in result:
-                raise ValueError(f"Format de sortie invalide - clés manquantes. Clés trouvées: {list(result.keys())}")
+                return {
+                    'error': f"Clés manquantes dans la réponse pour le produit {product_id}. Clés trouvées: {list(result.keys())}"
+                }
 
-            # Validation des types
+            # Validation des types et contenu
             titre = str(result["Titre"]).strip()
             description = str(result["Description"]).strip()
             
             if not titre or not description:
-                raise ValueError("Le titre et la description ne peuvent pas être vides")
+                return {
+                    'error': f"Titre ou description vide pour le produit {product_id}"
+                }
 
+            # Retourner le succès avec l'ID
             return {
-                "titre": titre,
-                "description": description
+                'success': {
+                    'resume': {
+                        'id': product_id,
+                        'titre': titre,
+                        'description': description
+                    }
+                }
             }
 
-        except json.JSONDecodeError as e:
-            error_msg = f"Erreur JSON: {str(e)}\nTexte généré: {repr(generated_text)}\nJSON extrait: {repr(json_content)}"
-            print(error_msg)
-            logging.error(error_msg)
-            raise Exception(f"Réponse du modèle invalide (JSON malformé): {str(e)}")
-            
         except Exception as e:
-            error_msg = f"Erreur lors de la génération: {str(e)}"
+            error_msg = f"Erreur lors du traitement du produit {product_id}: {str(e)}"
             print(error_msg)
             logging.error(error_msg)
-            raise Exception(error_msg)
+            return {
+                'error': error_msg
+            }
 
     def optimize_batch(self, products_list: list) -> list:
         """
@@ -265,19 +272,11 @@ class ProductOptimizerQwen:
             products_list (list): Liste de dictionnaires contenant les données produits
             
         Returns:
-            list: Liste des résultats optimisés
+            list: Liste des résultats avec 'success' ou 'error'
         """
         results = []
         for i, product_data in enumerate(products_list):
-            try:
-                print(f"Traitement du produit {i+1}/{len(products_list)}")
-                result = self.optimize_product(product_data)
-                results.append(result)
-            except Exception as e:
-                print(f"Erreur pour le produit {i+1}: {e}")
-                results.append({
-                    "titre": product_data.get('nom_produit', ''),
-                    "description": product_data.get('description_produit', ''),
-                    "error": str(e)
-                })
+            print(f"Traitement du produit {i+1}/{len(products_list)}")
+            result = self.optimize_product(product_data)
+            results.append(result)
         return results
