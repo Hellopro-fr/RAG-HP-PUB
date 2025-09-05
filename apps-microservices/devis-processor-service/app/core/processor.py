@@ -19,11 +19,17 @@ def convertir_date_to_timestamp(date_str: str) -> int:
 def convert_fields_to_int(data: dict, fields: list[str]) -> dict:
     """
     Convertit certains champs en int si possible.
+    - Si valeur None ou "", on met 0
+    - Si non convertible, on garde la valeur d'origine
     """
     for field in fields:
         if field in data:
+            value = data[field]
+            if value is None or value == "":
+                data[field] = 0
+                continue
             try:
-                data[field] = int(data[field] if data[field] is not None else 0)
+                data[field] = int(value)
             except (ValueError, TypeError):
                 pass 
     return data
