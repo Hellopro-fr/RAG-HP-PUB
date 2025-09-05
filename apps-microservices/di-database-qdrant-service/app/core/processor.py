@@ -58,7 +58,7 @@ def insertion_data(devis_data: dict) -> dict:
                 }
                 data_bo_milvus.append({
                     "embedding"        : [0.0]*1024,
-                    "id_echange_milvus": result.get("ids", ""),
+                    "id_devis_milvus"  : result.get("ids", ""),
                     "lead_id"          : lead_id,
                     "date_ajout"       : datetime.now().isoformat(),
                     "date_maj"         : ""

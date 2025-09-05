@@ -45,10 +45,10 @@ class MilvusDevisInserer:
             # Définition du schéma détaillé
             fields = [
                 # Todo : ce clé doit être unique
-                FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True ,max_length=64),
+                FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),
                 FieldSchema(name="id_devis_milvus", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="lead_id", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="lead_id", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="date_ajout", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_maj", dtype=DataType.VARCHAR, max_length=64)
             ]

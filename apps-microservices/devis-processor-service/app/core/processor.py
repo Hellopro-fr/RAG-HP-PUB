@@ -23,7 +23,7 @@ def convert_fields_to_int(data: dict, fields: list[str]) -> dict:
     for field in fields:
         if field in data:
             try:
-                data[field] = int(data[field])
+                data[field] = int(data[field] if data[field] is not None else 0)
             except (ValueError, TypeError):
                 pass 
     return data
