@@ -422,7 +422,6 @@ async def search_in_milvus(request: SearchRequest):
     embedding_model = get_embedding_model()
 
     start_embed = time.perf_counter()
-    print('Prompt', request.prompt)
     
     query_vector = [embedding_model.encode(request.prompt, normalize_embeddings=True).tolist()]
     embed_duration = time.perf_counter() - start_embed
