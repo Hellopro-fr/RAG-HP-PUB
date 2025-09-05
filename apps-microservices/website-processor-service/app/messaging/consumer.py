@@ -53,7 +53,7 @@ class Consumer:
         # 2. Vérification du message de sortie par rapport au type de page pour définir la prochaine étape
         if not output_message.get("data", {}).get("type_page",""):
             # Modifier la route de publication vers "data.ready_for_template_check"
-            self.publisher.routing_key = 'data.ready_for_template_check'
+            self.publisher.routing_key = 'data.ready_for_templating'
             print("🔄 Website-Processor: Redirection du message vers la vérification de template")
         
         # 2. Utilise le publisher pour envoyer le résultat
