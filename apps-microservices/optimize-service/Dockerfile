@@ -13,7 +13,7 @@ ENV PYTHONPATH=/app
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service
 COPY apps-microservices/optimize-service/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE

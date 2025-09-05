@@ -1,5 +1,6 @@
 fastapi[all]
 uvicorn
+vllm
 python-dotenv
 pydantic
 pydantic-settings
@@ -8,4 +9,3 @@ torch
 transformers
 accelerate
 bitsandbytes
-vllm
