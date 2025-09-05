@@ -17,7 +17,63 @@ class ProductOptimizerQwen:
         self.llm = LLM(**self.llm_args)
         self.tokenizer = self.llm.get_tokenizer()
     
+    def clean_html_attributes(self, html_content: str) -> str:
+        """
+        Nettoie les attributs des balises HTML tout en conservant les balises elles-mêmes.
+        
+        Args:
+            html_content (str): Le contenu HTML à nettoyer
+            
+        Returns:
+            str: Le contenu HTML sans attributs dans les balises
+        """
+        if not html_content:
+            return html_content
+            
+        # Pattern pour matcher les balises HTML avec leurs attributs
+        # Capture le nom de la balise et ignore tous les attributs
+        pattern = r'<(/?)(\w+)(?:\s+[^>]*)?>'
+        
+        # Remplace par la balise sans attributs
+        cleaned_content = re.sub(pattern, r'<\1\2>', html_content)
+        
+        return cleaned_content
+    
+    def clean_input_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Nettoie les données d'entrée, notamment la description produit.
+        
+        Args:
+            data (Dict[str, Any]): Les données d'entrée
+            
+        Returns:
+            Dict[str, Any]: Les données nettoyées
+        """
+        cleaned_data = data.copy()
+        
+        # Nettoyage de la description produit
+        if 'description_produit' in cleaned_data and cleaned_data['description_produit']:
+            cleaned_data['description_produit'] = self.clean_html_attributes(
+                cleaned_data['description_produit']
+            )
+        
+        # nettoyer d'autres champs
+        if 'nom_produit' in cleaned_data and cleaned_data['nom_produit']:
+            cleaned_data['nom_produit'] = self.clean_html_attributes(
+                cleaned_data['nom_produit']
+            )
+        if 'categorie_produit' in cleaned_data and cleaned_data['categorie_produit']:
+            cleaned_data['categorie_produit'] = self.clean_html_attributes(
+                cleaned_data['categorie_produit']
+            )
+            
+        return cleaned_data
+    
     def generate_prompt(self, data: Dict[str, Any]) -> str:
+
+        # Nettoyage des données d'entrée avant génération du prompt
+        cleaned_data = self.clean_input_data(data)
+
         """Génère le prompt pour le modèle basé sur les données du produit."""
         prompt = f"""OUBLIE TOUTES LES INSTRUCTIONS PRÉCÉDENTES
             # GOAL =
@@ -87,9 +143,9 @@ class ProductOptimizerQwen:
             }}}}
 
             # INPUTS :
-            CATEGORIE PRODUIT = {data.get('categorie_produit', '')}
-            TITRE PRODUIT = {data.get('nom_produit', '')}
-            DESCRIPTION PRODUIT = {data.get('description_produit', '')}
+            CATEGORIE PRODUIT = {cleaned_data.get('categorie_produit', '')}
+            TITRE PRODUIT = {cleaned_data.get('nom_produit', '')}
+            DESCRIPTION PRODUIT = {cleaned_data.get('description_produit', '')}
 
             Réponse JSON uniquement:"""
         return prompt
