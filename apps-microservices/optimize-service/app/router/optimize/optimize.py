@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
-from app.core.optimize.Qwen3_14B_Q4 import ProductOptimizerQwen
+# from app.core.optimize.Qwen3_14B_Q4 import ProductOptimizerQwen
+from app.core.optimize.Qwen3_14B_AWQ import ProductOptimizerQwen
+
 import os
 
 router = APIRouter()
@@ -25,10 +27,10 @@ def optimize(request: OptimRequest):
 @router.post("/qwen", response_model=OptimResponse)
 def optimizeQwen(request: Request, payload: OptimRequest):
     try:
-        tokenizer = request.app.state.qwen_tokenizer
-        model = request.app.state.qwen_model
+        # tokenizer = request.app.state.qwen_tokenizer
+        # model = request.app.state.qwen_model
 
-        optimizing_service = ProductOptimizerQwen(tokenizer, model)
+        optimizing_service = ProductOptimizerQwen()
         #optimizeQwen = optimizing_service.optimize_product(request.dict())
         optimizeQwen = optimizing_service.optimize_product(payload.dict())
 

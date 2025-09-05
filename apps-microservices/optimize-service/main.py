@@ -21,73 +21,73 @@ API d'embedding [RAG Hellopro] 🚀
 os.makedirs(f'{settings.DOCUMENT_ROOT}/logs', exist_ok=True)
 
 # ===== CHARGEMENT DU MODÈLE QWEN =====
-def load_qwen_model(model_name: str = ""):
-    """
-    Charge le modèle Qwen avec quantization 4-bit.
+# def load_qwen_model(model_name: str = ""):
+#     """
+#     Charge le modèle Qwen avec quantization 4-bit.
     
-    Args:
-        model_name (str): Nom du modèle Hugging Face
+#     Args:
+#         model_name (str): Nom du modèle Hugging Face
         
-    Returns:
-        tuple: (tokenizer, model)
-    """
-    try:
-        print(f"Chargement du tokenizer {model_name}...")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+#     Returns:
+#         tuple: (tokenizer, model)
+#     """
+#     try:
+#         print(f"Chargement du tokenizer {model_name}...")
+#         tokenizer = AutoTokenizer.from_pretrained(model_name)
         
-        # Ajouter un token de padding si nécessaire
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+#         # Ajouter un token de padding si nécessaire
+#         if tokenizer.pad_token is None:
+#             tokenizer.pad_token = tokenizer.eos_token
 
-        # Vérifier les conditions pour la quantization
-        if not torch.cuda.is_available():
-            raise Exception("GPU non disponible - quantization impossible")
+#         # Vérifier les conditions pour la quantization
+#         if not torch.cuda.is_available():
+#             raise Exception("GPU non disponible - quantization impossible")
             
-        print("Configuration de la quantization 4-bit...")
+#         print("Configuration de la quantization 4-bit...")
         
-        # Vérifier la version de bitsandbytes
-        try:
-            import bitsandbytes as bnb
-            print(f"✓ BitsAndBytes version détectée")
-        except ImportError:
-            raise Exception("BitsAndBytes non disponible")
+#         # Vérifier la version de bitsandbytes
+#         try:
+#             import bitsandbytes as bnb
+#             print(f"✓ BitsAndBytes version détectée")
+#         except ImportError:
+#             raise Exception("BitsAndBytes non disponible")
         
-        # Config quantization Q4 avec BitsAndBytes
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",  # nf4 > fp4 en qualité
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_compute_dtype=torch.float16
-        )
+#         # Config quantization Q4 avec BitsAndBytes
+#         bnb_config = BitsAndBytesConfig(
+#             load_in_4bit=True,
+#             bnb_4bit_quant_type="nf4",  # nf4 > fp4 en qualité
+#             bnb_4bit_use_double_quant=True,
+#             bnb_4bit_compute_dtype=torch.float16
+#         )
 
-        print(f"Chargement du modèle {model_name} en 4-bit...")
-        # Charger le modèle en 4-bit (Q4)
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            quantization_config=bnb_config,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            trust_remote_code=True
-        )
+#         print(f"Chargement du modèle {model_name} en 4-bit...")
+#         # Charger le modèle en 4-bit (Q4)
+#         model = AutoModelForCausalLM.from_pretrained(
+#             model_name,
+#             quantization_config=bnb_config,
+#             device_map="auto",
+#             torch_dtype=torch.float16,
+#             trust_remote_code=True
+#         )
 
-        # Vérifier le device
-        device = next(model.parameters()).device
-        print(f"✓ Modèle {model_name} chargé en 4-bit sur {device}")
+#         # Vérifier le device
+#         device = next(model.parameters()).device
+#         print(f"✓ Modèle {model_name} chargé en 4-bit sur {device}")
         
-        return tokenizer, model
+#         return tokenizer, model
         
-    except Exception as e:
-        print(f"Erreur lors du chargement du modèle: {e}")
-        raise
+#     except Exception as e:
+#         print(f"Erreur lors du chargement du modèle: {e}")
+#         raise
 
 app = FastAPI()
 
 # ===== CHARGEMENT DU MODÈLE QWEN =====
-version_llm = "Qwen/Qwen3-14B"
-tokenizer, model = load_qwen_model(version_llm)  # Chargé une seule fois
+# version_llm = "Qwen/Qwen3-14B"
+# tokenizer, model = load_qwen_model(version_llm)  # Chargé une seule fois
 
-app.state.qwen_tokenizer = tokenizer
-app.state.qwen_model = model
+# app.state.qwen_tokenizer = tokenizer
+# app.state.qwen_model = model
 
 # TODO 
 # ajout des origines à utiliser pour l'API
