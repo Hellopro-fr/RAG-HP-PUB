@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
-from app.core.optimize.Qwen3_4B_Q4 import ProductOptimizerQwen
+from app.core.optimize.Qwen3_14B_Q4 import ProductOptimizerQwen
 import os
 
 router = APIRouter()

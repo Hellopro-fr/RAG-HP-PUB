@@ -21,7 +21,7 @@ API d'embedding [RAG Hellopro] 🚀
 os.makedirs(f'{settings.DOCUMENT_ROOT}/logs', exist_ok=True)
 
 # ===== CHARGEMENT DU MODÈLE QWEN =====
-def load_qwen_model(model_name: str = "Qwen/Qwen3-4B"):
+def load_qwen_model(model_name: str = ""):
     """
     Charge le modèle Qwen avec quantization 4-bit.
     
@@ -83,12 +83,13 @@ def load_qwen_model(model_name: str = "Qwen/Qwen3-4B"):
 app = FastAPI()
 
 # ===== CHARGEMENT DU MODÈLE QWEN =====
-tokenizer, model = load_qwen_model()  # Chargé une seule fois
+version_llm = "Qwen/Qwen3-14B"
+tokenizer, model = load_qwen_model(version_llm)  # Chargé une seule fois
 
 app.state.qwen_tokenizer = tokenizer
 app.state.qwen_model = model
 
-# TODO
+# TODO 
 # ajout des origines à utiliser pour l'API
 app.add_middleware(
     CORSMiddleware,
