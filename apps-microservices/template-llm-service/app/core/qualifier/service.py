@@ -1,45 +1,82 @@
 import json
-from pathlib import Path
-from typing import Optional
+import re
+from vllm import LLM, SamplingParams
+from .utils import PROMPT_TEMPLATE_FR
+from bs4 import BeautifulSoup
 
-PROMPT_TEMPLATE_FR = """
-Tu es un classifieur de type de pages pour sites de fournisseurs de matériel professionnel.
-En entrée, tu reçois le contenu texte présent dans le code source HTML d’une page. Attention, il faut donc identifier le contenu principal de la page et en identifier le sens. Ne pas se laisser influencer par le contenu présent dans le header ou le footer par exemple.
-Ta tâche est de déterminer quelle est la fonction principale de cette page pour l’utilisateur final, pas simplement sa structure HTML.
-En sortie, tu dois produire un objet JSON :
-Si la page correspond à un des types listés → retourne uniquement :
-json
-{{ "type_page": "valeur" }}
-Si la page ne correspond à aucun type → retourne :
-json
-{{ "type_page": "autre", "commentaire_si_autre": "explication en 15 mots max" }}
-Critère clé : ne te base pas uniquement sur les balises Markdown.
-Analyse le but de la page pour l’utilisateur final : s’informer, comparer, acheter, demander un devis, découvrir une offre locale, etc.
-Voici les types de pages possibles :
-"home" : page d’accueil du site.
-"listing_produit" : page présentant une **gamme de produits** ou une **catégorie de produits**, listant plusieurs modèles ou variantes, avec navigation possible vers des fiches détaillées. Peut contenir des descriptions générales, comparatifs, avantages, caractéristiques et prix de plusieurs modèles.
-"fiche_produit" : page présentant en détail un seul produit spécifique.
-"fiche_realisation" : page montrant un projet ou cas client réalisé.
-"Presentation-societe" : présentation institutionnelle de l’entreprise (histoire, équipe, mission), sans mention produit.
-"contact" : prise de contact (formulaire, téléphone, carte, email), ou liste des points de vente.
-"cgv_mentions_legales_cgu" : page juridique : CGV, CGU, mentions légales, droits, responsabilités, propriété intellectuelle.
-"article" : contenu éditorial (blog, guide, actualité) visant à informer, conseiller ou expliquer un sujet.
-"Savoir_faire" : page valorisant une expertise technique ou métier liée au matériel ou service proposé.
-"Page_local" : page SEO dédiée à une localisation précise, avec une offre ou un savoir-faire ciblé localement.
-"demande_devis" : page pour obtenir un devis sur un ou plusieurs produits.
-"compte_client" : espace personnel de connexion ou gestion client (commandes, devis, infos personnelles, etc).
-"recrutement" : page de recrutement avec un ou plusieurs offres d’emploi.
-"references_clients" : logos, témoignages ou avis clients valorisant l’entreprise.
-"faq" : questions fréquentes.
-"plan_du_site" : liste structurée de liens vers les pages du site.
-"politique_confidentialite" : politique de confidentialité ou cookies, RGPD, gestion des données personnelles.
-"autre" : si aucun de ces types ne correspond.
-Rappels :
-Si "type_page" ≠ "autre", ne génère pas de champ "commentaire_si_autre".
-Génère seulement le JSON, sans autre texte.
-Ne pas se laisser influencer par les premières balises Markdown (ex : une page “containers à Lyon” n’est ni une fiche produit ni un article, mais une offre localisée = "offre_segment").
-Analyse le but marketing ou fonctionnel de la page.
-Voici l'url de la page : {url}
-Contenu en entrée (Markdown) :
-{content}
-"""
+class QualifierService:
+    def __init__(self):
+        self.llm_args = {
+            "model": "Qwen/Qwen3-14B-AWQ",
+            "quantization": "awq",
+            # --- LEVIER 1 : UTILISATION DE LA MÉMOIRE POUR UN L4 ---
+            # On peut être un peu plus agressif avec 24 Go de VRAM
+            "gpu_memory_utilization": 0.85,
+            "trust_remote_code": True,
+            "dtype": "auto",
+            # --- LEVIER 2 : LONGUEUR MAXIMALE ADAPTÉE AU L4 ---
+            # 8192 est une valeur ambitieuse mais qui devrait passer sur un L4.
+            # Si vous rencontrez encore des erreurs de mémoire, réduisez à 6144 ou 4096.
+            "max_model_len": 8192
+        }
+        self.llm = LLM(**self.llm_args)
+        self.tokenizer = self.llm.get_tokenizer()
+
+    def classify(self, url: str, content: str):
+        if not content:
+            return "contenu_vide", None, None
+        
+        soup = BeautifulSoup(content, 'html.parser')
+        for tag in soup(["script", "style", "header", "footer", "nav", "aside"]):
+            tag.decompose()
+        cleaned_text = soup.get_text(separator='\n', strip=True)
+        
+        # --- LEVIER 3 : TRONCATURE PAR TOKENS ADAPTÉE ---
+        # On garde une marge de sécurité (ex: 1024 tokens pour le prompt et la réponse)
+        max_content_tokens = self.llm_args["max_model_len"] - 1024 # 8192 - 1024 = 7168
+
+        content_tokens = self.tokenizer.encode(cleaned_text)
+
+        if len(content_tokens) > max_content_tokens:
+            truncated_tokens = content_tokens[:max_content_tokens]
+            truncated_content = self.tokenizer.decode(truncated_tokens)
+        else:
+            truncated_content = cleaned_text
+        
+        # ... (le reste de la fonction est identique et correct) ...
+        sampling_params = SamplingParams(max_tokens=250, temperature=0.1)
+        user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=truncated_content)
+        conversation = [{"role": "user", "content": user_prompt}]
+        
+        formatted_prompt = self.tokenizer.apply_chat_template(
+            conversation, 
+            tokenize=False, 
+            add_generation_prompt=True,
+            enable_thinking=False
+        )
+        
+        final_prompt_tokens = self.tokenizer.encode(formatted_prompt)
+        if len(final_prompt_tokens) >= self.llm_args["max_model_len"]:
+             print(f"--- ERREUR CRITIQUE : Le prompt final ({len(final_prompt_tokens)} tokens) dépasse la limite de {self.llm_args['max_model_len']}. ---")
+             return "erreur_prompt_trop_long", None, None
+
+        outputs = self.llm.generate([formatted_prompt], sampling_params)
+        raw_text = outputs[0].outputs[0].text.strip()
+        
+        try:
+            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if match:
+                json_string = match.group(0)
+                result = json.loads(json_string)
+            else:
+                start_index = raw_text.find('{')
+                if start_index != -1:
+                    repaired_json = raw_text[start_index:] + "}"
+                    result = json.loads(repaired_json)
+                else:
+                    raise ValueError("Aucun début de JSON ('{') trouvé dans la sortie.")
+        except (json.JSONDecodeError, ValueError) as e:
+            print(f"--- ERREUR DE PARSING JSON --- \nErreur: {e} \nSortie brute: '{raw_text}'")
+            result = {"type_page": "erreur_parsing"}
+            
+        return result.get("type_page", "N/A"), None, None
