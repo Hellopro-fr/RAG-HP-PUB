@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "API-HP-RAG"
     PROJECT_VERSION: str = "0.0.1"
 
-    QDRANT_URL: str
+    QDRANT_URL: str = ""
     QDRANT_HOST_URL: str
     QDRANT_PORT: str
     QDRANT_API_KEY: str
@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     OPENROUTER_API_KEY: str
     DEEPSEEK_API_KEY: str
+    M_PARAMS: str
+    EF_PARAMS: str
 
     MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
         "devis_poc": [

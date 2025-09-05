@@ -10,6 +10,7 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 from pymilvus import connections, Collection, utility
 from app.core.credentials import settings, model_settings
 from app.schemas.search import SearchRequest, LLMPipeline
+import asyncio
 
 from app.core.openrouter import chat_with_openrouter
 
@@ -65,6 +66,12 @@ def get_milvus_connection():
             logger.info("Connexion à Milvus...")
             # connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
             connections.connect(alias, host=settings.ZILLIZ_URI, port=settings.ZILLIZ_PORT)
+            print(settings.ZILLIZ_URI, settings.ZILLIZ_PORT)
+            # 2. List all collections
+            collection_names = utility.list_collections()
+
+            # 3. Print the list of collection names
+            print("Collections in Milvus:", collection_names)
             logger.info(f"Connecté à Milvus.")
     except Exception as e:
         logger.error(f"❌ Erreur de connexion à Milvus: {e}")

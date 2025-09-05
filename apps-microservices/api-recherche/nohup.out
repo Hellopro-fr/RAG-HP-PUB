@@ -1,0 +1,854 @@
+INFO:     Will watch for changes in these directories: ['/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche']
+INFO:     Uvicorn running on http://0.0.0.0:8510 (Press CTRL+C to quit)
+INFO:     Started reloader process [633339] using WatchFiles
+INFO:     Started server process [633341]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2025-08-29 15:44:57,757 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-08-29 15:44:57,757 - app.core.search - INFO - [MILVUS] Recherche: prompt='container aménagé...', sources=['siteweb_poc']
+2025-08-29 15:44:57,757 - app.core.search - INFO - Connexion à Milvus...
+2025-08-29 15:44:57,828 - app.core.search - INFO - Connecté à Milvus.
+2025-08-29 15:44:57,828 - app.core.search - INFO - Chargement initial du modèle d'embedding 'dangvantuan/sentence-camembert-large'...
+2025-08-29 15:44:57,938 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cuda:0
+2025-08-29 15:44:57,938 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: dangvantuan/sentence-camembert-large
+2025-08-29 15:44:58,128 - sentence_transformers.SentenceTransformer - WARNING - No sentence-transformers model found with name dangvantuan/sentence-camembert-large. Creating a new one with mean pooling.
+2025-08-29 15:44:59,778 - app.core.search - INFO - Modèle d'embedding chargé.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.65it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.65it/s]
+INFO:     34.90.162.9:47900 - "POST /milvus/search HTTP/1.1" 200 OK
+2025-08-29 15:46:42,919 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-08-29 15:46:42,920 - app.core.search - INFO - [MILVUS] Recherche: prompt='container aménagé...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 47.92it/s]
+INFO:     34.90.162.9:42056 - "POST /milvus/search HTTP/1.1" 200 OK
+2025-08-29 15:49:53,004 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc', 'devis_poc', 'echanges_poc']
+2025-08-29 15:49:53,005 - app.core.search - INFO - Recherche Qdrant: prompt='Bungalow toilete acces PMR...', sources=['siteweb_poc', 'devis_poc', 'echanges_poc']
+2025-08-29 15:49:53,005 - app.core.search - INFO - Connexion initiale à Qdrant Cloud...
+2025-08-29 15:49:53,170 - httpx - INFO - HTTP Request: GET http://34.52.142.50:6333 "HTTP/1.1 200 OK"
+2025-08-29 15:49:53,170 - app.core.search - INFO - Client Qdrant initialisé.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 46.69it/s]
+2025-08-29 15:49:53,231 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 15:49:53,256 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/devis_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 15:49:53,279 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/echanges_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:43988 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 15:57:37,146 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-08-29 15:57:37,146 - app.core.search - INFO - [MILVUS] Recherche: prompt='Bungalow toilete acces PMR...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 48.97it/s]
+INFO:     34.90.162.9:43016 - "POST /milvus/search HTTP/1.1" 200 OK
+2025-08-29 15:58:08,940 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 15:58:08,941 - app.core.search - INFO - Recherche Qdrant: prompt='Bungalow toilete acces PMR...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 58.62it/s]
+2025-08-29 15:58:08,993 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:43606 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 16:10:40,116 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 16:10:40,116 - app.core.search - INFO - Recherche Qdrant: prompt='roulotte 2 essieux...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 46.71it/s]
+2025-08-29 16:10:40,175 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:46732 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 16:10:42,540 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-08-29 16:10:42,540 - app.core.search - INFO - [MILVUS] Recherche: prompt='roulotte 2 essieux...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 58.23it/s]
+INFO:     34.90.162.9:46742 - "POST /milvus/search HTTP/1.1" 200 OK
+2025-08-29 16:12:17,755 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-08-29 16:12:17,756 - app.core.search - INFO - [MILVUS] Recherche: prompt='roulotte 8 personnes...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 46.32it/s]
+INFO:     34.90.162.9:49370 - "POST /milvus/search HTTP/1.1" 200 OK
+2025-08-29 16:12:21,064 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 16:12:21,064 - app.core.search - INFO - Recherche Qdrant: prompt='roulotte 8 personnes...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 60.71it/s]
+2025-08-29 16:12:21,117 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:49376 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:36:50,166 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:36:50,167 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé pour surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.17it/s]
+2025-08-29 19:36:50,224 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:46658 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:40:31,008 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:40:31,008 - app.core.search - INFO - Recherche Qdrant: prompt='Modèle de page : page produit...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 47.77it/s]
+2025-08-29 19:40:31,067 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:34790 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:42:31,953 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:42:31,953 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service caractéristiques...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 47.20it/s]
+2025-08-29 19:42:32,012 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:42:32,029 - app.core.search - INFO - Initialisation du client OpenAI...
+2025-08-29 19:42:32,081 - app.core.search - INFO - Client OpenAI initialisé.
+2025-08-29 19:42:44,215 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:46294 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:44:36,920 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:44:36,920 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service caractéristiques...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 48.14it/s]
+2025-08-29 19:44:36,978 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:34152 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:44:39,467 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:44:39,468 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service caractéristiques...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 62.27it/s]
+2025-08-29 19:44:39,510 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:45:21,799 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:34160 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:47:55,146 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:47:55,146 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service caractéristiques...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.07it/s]
+2025-08-29 19:47:55,200 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:48:28,364 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:40288 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:49:19,851 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:49:19,852 - app.core.search - INFO - Recherche Qdrant: prompt='Si un acheteur cherche une/des caisse libre servic...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 39.93it/s]
+2025-08-29 19:49:19,924 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:49:20,441 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:20,441 - openai._base_client - INFO - Retrying request to /chat/completions in 0.496508 seconds
+2025-08-29 19:49:21,562 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:21,562 - openai._base_client - INFO - Retrying request to /chat/completions in 0.930538 seconds
+2025-08-29 19:49:22,947 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:22,948 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 105260. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 105260. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:54388 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-29 19:49:37,189 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:49:37,189 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 60.43it/s]
+2025-08-29 19:49:37,249 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:49:37,808 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:37,809 - openai._base_client - INFO - Retrying request to /chat/completions in 0.423266 seconds
+2025-08-29 19:49:39,091 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:39,092 - openai._base_client - INFO - Retrying request to /chat/completions in 0.964269 seconds
+2025-08-29 19:49:40,781 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:40,782 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 108815. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 108815. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:44448 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-29 19:49:43,979 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:49:43,979 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 48.34it/s]
+2025-08-29 19:49:44,043 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:49:44,562 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:44,562 - openai._base_client - INFO - Retrying request to /chat/completions in 0.409242 seconds
+2025-08-29 19:49:45,963 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:45,964 - openai._base_client - INFO - Retrying request to /chat/completions in 0.936507 seconds
+2025-08-29 19:49:47,636 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:49:47,636 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 108815. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 108815. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:38672 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-29 19:50:25,185 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:50:25,185 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 61.51it/s]
+2025-08-29 19:50:25,240 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:50:25,812 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:50:25,813 - openai._base_client - INFO - Retrying request to /chat/completions in 0.477726 seconds
+2025-08-29 19:50:26,683 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:50:26,683 - openai._base_client - INFO - Retrying request to /chat/completions in 0.885347 seconds
+2025-08-29 19:50:28,312 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:50:28,313 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 82231. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 82231. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:50100 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-29 19:50:30,161 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:50:30,161 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 61.68it/s]
+2025-08-29 19:50:30,218 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:50102 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:50:37,383 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:50:37,383 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 60.52it/s]
+2025-08-29 19:50:37,434 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:50:54,354 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:39766 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:50:59,699 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:50:59,700 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 52.49it/s]
+2025-08-29 19:50:59,759 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:51:00,497 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:00,497 - openai._base_client - INFO - Retrying request to /chat/completions in 0.457849 seconds
+2025-08-29 19:51:01,361 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:01,362 - openai._base_client - INFO - Retrying request to /chat/completions in 0.852328 seconds
+2025-08-29 19:51:02,651 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:02,651 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 55642. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 55642. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:36888 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-29 19:51:08,961 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:51:08,961 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 61.26it/s]
+2025-08-29 19:51:09,012 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:51:09,311 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:09,312 - openai._base_client - INFO - Retrying request to /chat/completions in 0.414539 seconds
+2025-08-29 19:51:09,984 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:09,985 - openai._base_client - INFO - Retrying request to /chat/completions in 0.921158 seconds
+2025-08-29 19:51:11,226 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:11,227 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 43869. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 43869. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:53654 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-29 19:51:17,353 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:51:17,353 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 60.60it/s]
+2025-08-29 19:51:17,407 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:51:17,749 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:17,749 - openai._base_client - INFO - Retrying request to /chat/completions in 0.387265 seconds
+2025-08-29 19:51:18,439 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:18,440 - openai._base_client - INFO - Retrying request to /chat/completions in 0.897090 seconds
+2025-08-29 19:51:19,580 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:51:19,581 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 32932. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 32932. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:42238 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-29 19:51:24,367 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:51:24,367 - app.core.search - INFO - Recherche Qdrant: prompt='caisse libre service automatique caractéristique u...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 59.94it/s]
+2025-08-29 19:51:24,421 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:51:48,689 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:36254 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:53:44,751 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:53:44,751 - app.core.search - INFO - Recherche Qdrant: prompt='roulotte de chantier...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.14it/s]
+2025-08-29 19:53:44,808 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:54:02,694 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:58816 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-29 19:55:06,968 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-29 19:55:06,969 - app.core.search - INFO - Recherche Qdrant: prompt='roulotte de chantier...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.28it/s]
+2025-08-29 19:55:07,027 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-08-29 19:55:07,270 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:55:07,271 - openai._base_client - INFO - Retrying request to /chat/completions in 0.488955 seconds
+2025-08-29 19:55:07,973 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:55:07,973 - openai._base_client - INFO - Retrying request to /chat/completions in 0.870606 seconds
+2025-08-29 19:55:09,043 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-08-29 19:55:09,044 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 31169. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 31169. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:35536 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-30 06:38:02,721 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['site_web']
+2025-08-30 06:38:02,721 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager pour surf...', sources=['site_web']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.13it/s]
+2025-08-30 06:38:02,777 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/site_web/points/search "HTTP/1.1 404 Not Found"
+2025-08-30 06:38:02,778 - app.router.search - ERROR - Erreur interne du serveur (500): Unexpected Response: 404 (Not Found)
+Raw response content:
+b'{"status":{"error":"Not found: Collection `site_web` doesn\'t exist!"},"time":0.00001248}'
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 224, in search_in_qdrant
+    hits = qdrant_client.search(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/qdrant_client.py", line 376, in search
+    return self._client.search(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/qdrant_remote.py", line 523, in search
+    search_result = self.http.search_api.search_points(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api/search_api.py", line 936, in search_points
+    return self._build_for_search_points(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api/search_api.py", line 487, in _build_for_search_points
+    return self.api_client.request(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.UnexpectedResponse: Unexpected Response: 404 (Not Found)
+Raw response content:
+b'{"status":{"error":"Not found: Collection `site_web` doesn\'t exist!"},"time":0.00001248}'
+INFO:     34.90.162.9:57726 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-30 06:38:16,150 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-30 06:38:16,150 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager pour surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 61.22it/s]
+2025-08-30 06:38:16,207 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:50502 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-08-30 11:41:32,562 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['site_web']
+2025-08-30 11:41:32,562 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager pour surf...', sources=['site_web']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 48.74it/s]
+2025-08-30 11:41:32,616 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/site_web/points/search "HTTP/1.1 404 Not Found"
+2025-08-30 11:41:32,617 - app.router.search - ERROR - Erreur interne du serveur (500): Unexpected Response: 404 (Not Found)
+Raw response content:
+b'{"status":{"error":"Not found: Collection `site_web` doesn\'t exist!"},"time":9.502e-6}'
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 224, in search_in_qdrant
+    hits = qdrant_client.search(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/qdrant_client.py", line 376, in search
+    return self._client.search(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/qdrant_remote.py", line 523, in search
+    search_result = self.http.search_api.search_points(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api/search_api.py", line 936, in search_points
+    return self._build_for_search_points(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api/search_api.py", line 487, in _build_for_search_points
+    return self.api_client.request(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.UnexpectedResponse: Unexpected Response: 404 (Not Found)
+Raw response content:
+b'{"status":{"error":"Not found: Collection `site_web` doesn\'t exist!"},"time":9.502e-6}'
+INFO:     34.90.162.9:52368 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-30 11:42:59,239 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['site_web']
+2025-08-30 11:42:59,239 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager pour surf...', sources=['site_web']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 51.65it/s]
+2025-08-30 11:42:59,292 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/site_web/points/search "HTTP/1.1 404 Not Found"
+2025-08-30 11:42:59,293 - app.router.search - ERROR - Erreur interne du serveur (500): Unexpected Response: 404 (Not Found)
+Raw response content:
+b'{"status":{"error":"Not found: Collection `site_web` doesn\'t exist!"},"time":3.75e-6}'
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 224, in search_in_qdrant
+    hits = qdrant_client.search(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/qdrant_client.py", line 376, in search
+    return self._client.search(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/qdrant_remote.py", line 523, in search
+    search_result = self.http.search_api.search_points(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api/search_api.py", line 936, in search_points
+    return self._build_for_search_points(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api/search_api.py", line 487, in _build_for_search_points
+    return self.api_client.request(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.UnexpectedResponse: Unexpected Response: 404 (Not Found)
+Raw response content:
+b'{"status":{"error":"Not found: Collection `site_web` doesn\'t exist!"},"time":3.75e-6}'
+INFO:     34.90.162.9:45820 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-08-30 11:43:06,862 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-08-30 11:43:06,862 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager pour surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 51.84it/s]
+2025-08-30 11:43:06,921 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:41678 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:11:24,592 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:11:24,592 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.02it/s]
+2025-09-01 06:11:24,656 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 06:12:03,694 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:44934 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:12:23,048 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:12:23,048 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 51.10it/s]
+2025-09-01 06:12:23,108 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 06:12:55,838 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:56096 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:13:22,657 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:13:22,657 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 51.54it/s]
+2025-09-01 06:13:22,717 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:41570 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:13:30,589 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:13:30,589 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 62.26it/s]
+2025-09-01 06:13:30,647 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:38798 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:13:48,392 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:13:48,392 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 54.19it/s]
+2025-09-01 06:13:48,457 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:51330 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:15:59,853 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:15:59,853 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 51.16it/s]
+2025-09-01 06:15:59,917 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 06:16:01,302 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:16:01,303 - openai._base_client - INFO - Retrying request to /chat/completions in 0.493158 seconds
+2025-09-01 06:16:02,498 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:16:02,498 - openai._base_client - INFO - Retrying request to /chat/completions in 0.832820 seconds
+2025-09-01 06:16:04,026 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:16:04,027 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 99627. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 99627. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:39824 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-09-01 06:16:57,839 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:16:57,839 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 50.75it/s]
+2025-09-01 06:16:57,895 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 06:16:58,713 - httpx - INFO - HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: or, modèle: google/gemini-flash-1.5
+INFO:     34.90.162.9:60852 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:42:19,387 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:42:19,387 - app.core.search - INFO - Recherche Qdrant: prompt='Réfectoire de chantier Cougnaud...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 50.92it/s]
+2025-09-01 06:42:19,444 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:52274 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:45:57,560 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:45:57,560 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 51.93it/s]
+2025-09-01 06:45:57,624 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 06:45:58,259 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:45:58,260 - openai._base_client - INFO - Retrying request to /chat/completions in 0.388145 seconds
+2025-09-01 06:45:59,349 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:45:59,349 - openai._base_client - INFO - Retrying request to /chat/completions in 0.896331 seconds
+2025-09-01 06:46:00,759 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:46:00,760 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 75101. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 75101. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:36386 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-09-01 06:46:13,632 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:46:13,633 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 59.74it/s]
+2025-09-01 06:46:13,688 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 06:46:13,979 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:46:13,979 - openai._base_client - INFO - Retrying request to /chat/completions in 0.429037 seconds
+2025-09-01 06:46:14,956 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:46:14,956 - openai._base_client - INFO - Retrying request to /chat/completions in 0.912641 seconds
+2025-09-01 06:46:16,191 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 06:46:16,191 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 49901. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 277, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 49901. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:37712 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-09-01 06:52:48,197 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:52:48,197 - app.core.search - INFO - Recherche Qdrant: prompt='Réfectoire de chantier Cougnaud...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 50.45it/s]
+2025-09-01 06:52:48,255 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:46180 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:53:47,308 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:53:47,308 - app.core.search - INFO - Recherche Qdrant: prompt='Réfectoire de chantier Cougnaud...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 48.69it/s]
+2025-09-01 06:53:47,368 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:41560 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:54:34,598 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:54:34,598 - app.core.search - INFO - Recherche Qdrant: prompt='Réfectoire de chantier Cougnaud...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 60.19it/s]
+2025-09-01 06:54:34,650 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:58644 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 06:54:36,237 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-09-01 06:54:36,237 - app.core.search - INFO - [MILVUS] Recherche: prompt='Réfectoire de chantier Cougnaud...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 61.98it/s]
+INFO:     34.90.162.9:58658 - "POST /milvus/search HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/core/search.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [633341]
+INFO:     Started server process [754336]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2025-09-01 06:57:51,445 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 06:57:51,445 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé surf...', sources=['siteweb_poc']
+2025-09-01 06:57:51,445 - app.core.search - INFO - Connexion initiale à Qdrant Cloud...
+2025-09-01 06:57:51,919 - httpx - INFO - HTTP Request: GET http://34.52.142.50:6333 "HTTP/1.1 200 OK"
+2025-09-01 06:57:51,920 - app.core.search - INFO - Client Qdrant initialisé.
+2025-09-01 06:57:51,920 - app.core.search - INFO - Chargement initial du modèle d'embedding 'dangvantuan/sentence-camembert-large'...
+2025-09-01 06:57:52,031 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cuda:0
+2025-09-01 06:57:52,031 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: dangvantuan/sentence-camembert-large
+2025-09-01 06:57:53,668 - sentence_transformers.SentenceTransformer - WARNING - No sentence-transformers model found with name dangvantuan/sentence-camembert-large. Creating a new one with mean pooling.
+2025-09-01 06:58:08,595 - app.core.search - INFO - Modèle d'embedding chargé.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  1.23it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  1.23it/s]
+2025-09-01 06:58:09,445 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 06:58:09,454 - app.core.search - INFO - Initialisation du client OpenAI...
+2025-09-01 06:58:09,507 - app.core.search - INFO - Client OpenAI initialisé.
+2025-09-01 06:58:46,810 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:51672 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 07:00:26,524 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-09-01 07:00:26,524 - app.core.search - INFO - [MILVUS] Recherche: prompt='Réfectoire de chantier Cougnaud...', sources=['siteweb_poc']
+2025-09-01 07:00:26,524 - app.core.search - INFO - Connexion à Milvus...
+2025-09-01 07:00:26,631 - app.core.search - INFO - Connecté à Milvus.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 48.82it/s]
+INFO:     34.90.162.9:53606 - "POST /milvus/search HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/core/search.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [754336]
+INFO:     Started server process [757435]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2025-09-01 07:02:47,807 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:02:47,807 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé surf...', sources=['siteweb_poc']
+2025-09-01 07:02:47,807 - app.core.search - INFO - Connexion initiale à Qdrant Cloud...
+2025-09-01 07:02:47,973 - httpx - INFO - HTTP Request: GET http://34.52.142.50:6333 "HTTP/1.1 200 OK"
+2025-09-01 07:02:47,974 - app.core.search - INFO - Client Qdrant initialisé.
+2025-09-01 07:02:47,974 - app.core.search - INFO - Chargement initial du modèle d'embedding 'dangvantuan/sentence-camembert-large'...
+2025-09-01 07:02:48,082 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cuda:0
+2025-09-01 07:02:48,083 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: dangvantuan/sentence-camembert-large
+2025-09-01 07:02:48,265 - sentence_transformers.SentenceTransformer - WARNING - No sentence-transformers model found with name dangvantuan/sentence-camembert-large. Creating a new one with mean pooling.
+2025-09-01 07:02:50,099 - app.core.search - INFO - Modèle d'embedding chargé.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.73it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.73it/s]
+2025-09-01 07:02:50,501 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 07:02:50,510 - app.router.search - ERROR - Erreur interne du serveur (500): name 'UPLOAD_DIR' is not defined
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 290, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 101, in llm_prompt
+    with open(os.path.join(UPLOAD_DIR, "full_user_prompt.txt"), "a", encoding="utf-8") as f:
+NameError: name 'UPLOAD_DIR' is not defined
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:38220 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+WARNING:  WatchFiles detected changes in 'app/core/search.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [757435]
+INFO:     Started server process [758061]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2025-09-01 07:03:48,584 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:03:48,584 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé surf...', sources=['siteweb_poc']
+2025-09-01 07:03:48,584 - app.core.search - INFO - Connexion initiale à Qdrant Cloud...
+2025-09-01 07:03:48,751 - httpx - INFO - HTTP Request: GET http://34.52.142.50:6333 "HTTP/1.1 200 OK"
+2025-09-01 07:03:48,752 - app.core.search - INFO - Client Qdrant initialisé.
+2025-09-01 07:03:48,752 - app.core.search - INFO - Chargement initial du modèle d'embedding 'dangvantuan/sentence-camembert-large'...
+2025-09-01 07:03:48,860 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cuda:0
+2025-09-01 07:03:48,860 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: dangvantuan/sentence-camembert-large
+2025-09-01 07:03:49,041 - sentence_transformers.SentenceTransformer - WARNING - No sentence-transformers model found with name dangvantuan/sentence-camembert-large. Creating a new one with mean pooling.
+2025-09-01 07:03:50,831 - app.core.search - INFO - Modèle d'embedding chargé.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.00it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.00it/s]
+2025-09-01 07:03:51,367 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 07:03:51,376 - app.core.search - INFO - Initialisation du client OpenAI...
+2025-09-01 07:03:51,430 - app.core.search - INFO - Client OpenAI initialisé.
+2025-09-01 07:04:22,344 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:59472 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 07:04:22,358 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:04:22,358 - app.core.search - INFO - Recherche Qdrant: prompt='Self Check-out possédant 128 Go de stockage et un ...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.42it/s]
+2025-09-01 07:04:22,415 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:58294 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 07:05:12,107 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:05:12,107 - app.core.search - INFO - Recherche Qdrant: prompt='container aménager surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 54.43it/s]
+2025-09-01 07:05:12,166 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 07:05:13,137 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 07:05:13,138 - openai._base_client - INFO - Retrying request to /chat/completions in 0.488976 seconds
+2025-09-01 07:05:13,883 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 07:05:13,883 - openai._base_client - INFO - Retrying request to /chat/completions in 0.964709 seconds
+2025-09-01 07:05:15,384 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 07:05:15,385 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 49901. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 290, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 114, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 49901. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:35294 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-09-01 07:05:33,351 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-09-01 07:05:33,351 - app.core.search - INFO - [MILVUS] Recherche: prompt='Self Check-out possédant 128 Go de stockage et un ...', sources=['siteweb_poc']
+2025-09-01 07:05:33,351 - app.core.search - INFO - Connexion à Milvus...
+2025-09-01 07:05:33,397 - app.core.search - INFO - Connecté à Milvus.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 61.21it/s]
+INFO:     34.90.162.9:43930 - "POST /milvus/search HTTP/1.1" 200 OK
+WARNING:  WatchFiles detected changes in 'app/core/search.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [758061]
+INFO:     Started server process [761160]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2025-09-01 07:10:52,538 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:10:52,538 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé surf...', sources=['siteweb_poc']
+2025-09-01 07:10:52,538 - app.core.search - INFO - Connexion initiale à Qdrant Cloud...
+2025-09-01 07:10:52,705 - httpx - INFO - HTTP Request: GET http://34.52.142.50:6333 "HTTP/1.1 200 OK"
+2025-09-01 07:10:52,706 - app.core.search - INFO - Client Qdrant initialisé.
+2025-09-01 07:10:52,706 - app.core.search - INFO - Chargement initial du modèle d'embedding 'dangvantuan/sentence-camembert-large'...
+2025-09-01 07:10:52,813 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cuda:0
+2025-09-01 07:10:52,813 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: dangvantuan/sentence-camembert-large
+2025-09-01 07:10:54,926 - sentence_transformers.SentenceTransformer - WARNING - No sentence-transformers model found with name dangvantuan/sentence-camembert-large. Creating a new one with mean pooling.
+2025-09-01 07:11:03,219 - app.core.search - INFO - Modèle d'embedding chargé.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  1.66it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  1.66it/s]
+2025-09-01 07:11:03,830 - app.router.search - ERROR - Erreur interne du serveur (500): '<=' not supported between instances of 'str' and 'int'
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 218, in search_in_qdrant
+    search_params = models.SearchParams(hnsw_ef=_ef_search(request.nombre_resultat), exact=False)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 81, in _ef_search
+    return 300 if nb_chunk <= 150 else nb_chunk * 2
+TypeError: '<=' not supported between instances of 'str' and 'int'
+INFO:     34.90.162.9:57006 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-09-01 07:12:56,872 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-09-01 07:12:56,872 - app.core.search - INFO - [MILVUS] Recherche: prompt='Self Check-out possédant 128 Go de stockage et un ...', sources=['siteweb_poc']
+2025-09-01 07:12:56,872 - app.core.search - INFO - Connexion à Milvus...
+2025-09-01 07:12:56,923 - app.core.search - INFO - Connecté à Milvus.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 46.01it/s]
+2025-09-01 07:12:56,995 - app.router.search - ERROR - Erreur interne du serveur (500): '<=' not supported between instances of 'str' and 'int'
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 18, in milvus_search_endpoint
+    results = await search_in_milvus(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 384, in search_in_milvus
+    search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(request.nombre_resultat)}}
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 81, in _ef_search
+    return 300 if nb_chunk <= 150 else nb_chunk * 2
+TypeError: '<=' not supported between instances of 'str' and 'int'
+INFO:     34.90.162.9:35210 - "POST /milvus/search HTTP/1.1" 500 Internal Server Error
+2025-09-01 07:13:08,584 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-09-01 07:13:08,584 - app.core.search - INFO - [MILVUS] Recherche: prompt='Self Check-out possédant 128 Go de stockage et un ...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 58.16it/s]
+2025-09-01 07:13:08,651 - app.router.search - ERROR - Erreur interne du serveur (500): '<=' not supported between instances of 'str' and 'int'
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 18, in milvus_search_endpoint
+    results = await search_in_milvus(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 384, in search_in_milvus
+    search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(request.nombre_resultat)}}
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 81, in _ef_search
+    return 300 if nb_chunk <= 150 else nb_chunk * 2
+TypeError: '<=' not supported between instances of 'str' and 'int'
+INFO:     34.90.162.9:49124 - "POST /milvus/search HTTP/1.1" 500 Internal Server Error
+WARNING:  WatchFiles detected changes in 'app/core/search.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [761160]
+INFO:     Started server process [762423]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+2025-09-01 07:13:17,859 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-09-01 07:13:17,859 - app.core.search - INFO - [MILVUS] Recherche: prompt='Self Check-out possédant 128 Go de stockage et un ...', sources=['siteweb_poc']
+2025-09-01 07:13:17,859 - app.core.search - INFO - Connexion à Milvus...
+2025-09-01 07:13:17,901 - app.core.search - INFO - Connecté à Milvus.
+2025-09-01 07:13:17,901 - app.core.search - INFO - Chargement initial du modèle d'embedding 'dangvantuan/sentence-camembert-large'...
+2025-09-01 07:13:18,008 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cuda:0
+2025-09-01 07:13:18,008 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: dangvantuan/sentence-camembert-large
+2025-09-01 07:13:18,179 - sentence_transformers.SentenceTransformer - WARNING - No sentence-transformers model found with name dangvantuan/sentence-camembert-large. Creating a new one with mean pooling.
+2025-09-01 07:13:19,827 - app.core.search - INFO - Modèle d'embedding chargé.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  1.59it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  1.59it/s]
+INFO:     34.90.162.9:34302 - "POST /milvus/search HTTP/1.1" 200 OK
+2025-09-01 07:13:21,735 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:13:21,736 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé surf...', sources=['siteweb_poc']
+2025-09-01 07:13:21,737 - app.core.search - INFO - Connexion initiale à Qdrant Cloud...
+2025-09-01 07:13:21,903 - httpx - INFO - HTTP Request: GET http://34.52.142.50:6333 "HTTP/1.1 200 OK"
+2025-09-01 07:13:21,903 - app.core.search - INFO - Client Qdrant initialisé.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 11.91it/s]
+2025-09-01 07:13:22,020 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:34306 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 07:13:25,583 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-09-01 07:13:25,583 - app.core.search - INFO - [MILVUS] Recherche: prompt='Self Check-out possédant 128 Go de stockage et un ...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 59.16it/s]
+INFO:     34.90.162.9:57438 - "POST /milvus/search HTTP/1.1" 200 OK
+2025-09-01 07:13:29,068 - app.router.search - INFO - Requête reçue sur /milvus/search pour les sources: ['siteweb_poc']
+2025-09-01 07:13:29,068 - app.core.search - INFO - [MILVUS] Recherche: prompt='Self Check-out possédant 128 Go de stockage et un ...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 59.34it/s]
+INFO:     34.90.162.9:57452 - "POST /milvus/search HTTP/1.1" 200 OK
+2025-09-01 07:13:33,991 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:13:33,991 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 60.05it/s]
+2025-09-01 07:13:34,052 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:56562 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 07:14:14,778 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:14:14,778 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.04it/s]
+2025-09-01 07:14:14,840 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 07:14:14,884 - app.core.search - INFO - Initialisation du client OpenAI...
+2025-09-01 07:14:14,936 - app.core.search - INFO - Client OpenAI initialisé.
+2025-09-01 07:14:15,789 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 07:14:15,790 - openai._base_client - INFO - Retrying request to /chat/completions in 0.409208 seconds
+2025-09-01 07:14:16,868 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 07:14:16,868 - openai._base_client - INFO - Retrying request to /chat/completions in 0.779678 seconds
+2025-09-01 07:14:18,130 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2025-09-01 07:14:18,131 - app.router.search - ERROR - Erreur interne du serveur (500): Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 96959. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Traceback (most recent call last):
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/router/search.py", line 36, in qdrant_search_endpoint
+    results = await search_in_qdrant(request)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 290, in search_in_qdrant
+    llm_req = llm_prompt(request, context_texts)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/app/core/search.py", line 114, in llm_prompt
+    completion = openai_client.chat.completions.create(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_utils/_utils.py", line 287, in wrapper
+    return func(*args, **kwargs)
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/resources/chat/completions/completions.py", line 1147, in create
+    return self._post(
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1259, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+  File "/home/devhp/RAG-HP-PUB/apps-microservices/api-recherche/.venv/lib/python3.10/site-packages/openai/_base_client.py", line 1047, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'Request too large for gpt-4.1 in organization org-wlg0tzv2MHAmXvFoOwFciIOr on tokens per min (TPM): Limit 30000, Requested 96959. The input or output tokens must be reduced in order to run successfully. Visit https://platform.openai.com/account/rate-limits to learn more.', 'type': 'tokens', 'param': None, 'code': 'rate_limit_exceeded'}}
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:47718 - "POST /qdrant/search HTTP/1.1" 500 Internal Server Error
+2025-09-01 07:15:28,836 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:15:28,836 - app.core.search - INFO - Recherche Qdrant: prompt='Je cherche un module mobile pour 4 personnes avec ...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 45.52it/s]
+2025-09-01 07:15:28,895 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+INFO:     34.90.162.9:58256 - "POST /qdrant/search HTTP/1.1" 200 OK
+2025-09-01 07:19:23,772 - app.router.search - INFO - Requête reçue sur /qdrant/search pour les sources: ['siteweb_poc']
+2025-09-01 07:19:23,772 - app.core.search - INFO - Recherche Qdrant: prompt='container aménagé surf...', sources=['siteweb_poc']
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 49.03it/s]
+2025-09-01 07:19:23,829 - httpx - INFO - HTTP Request: POST http://34.52.142.50:6333/collections/siteweb_poc/points/search "HTTP/1.1 200 OK"
+2025-09-01 07:19:48,978 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+Type prompt: openai, modèle: gpt-4.1-2025-04-14
+INFO:     34.90.162.9:35392 - "POST /qdrant/search HTTP/1.1" 200 OK
+INFO:     34.90.162.9:52932 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     34.90.162.9:50276 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     34.90.162.9:46078 - "GET /openapi.json HTTP/1.1" 200 OK
+/usr/lib/python3.10/multiprocessing/resource_tracker.py:224: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

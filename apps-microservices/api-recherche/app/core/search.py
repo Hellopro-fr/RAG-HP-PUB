@@ -419,9 +419,18 @@ async def search_in_milvus(request: SearchRequest):
 
     # 1. Obtenir les ressources nécessaires
     get_milvus_connection()
+    print(connections.has_connection('default'))
+        # 2. List all collections
+    print(settings.ZILLIZ_URI, settings.ZILLIZ_PORT)
+    collection_names = utility.list_collections()
+
+    # 3. Print the list of collection names
+    print("Collections in Milvus:", collection_names)
     embedding_model = get_embedding_model()
 
     start_embed = time.perf_counter()
+    print(request.prompt)
+    
     query_vector = [embedding_model.encode(request.prompt, normalize_embeddings=True).tolist()]
     embed_duration = time.perf_counter() - start_embed
 
@@ -459,10 +468,12 @@ async def search_in_milvus(request: SearchRequest):
             all_results[source] = []
             continue
 
+        print(_source)
         collection = Collection(name=_source)
         collection.load()
 
         search_params = {"metric_type": "COSINE", "params": {"ef": _top_k if _search_params_verification else _ef_search(top_k)}}
+        
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
 
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
@@ -471,6 +482,7 @@ async def search_in_milvus(request: SearchRequest):
         all_fields = [field.name for field in collection.schema.fields]
         fields_without_embedding = [f for f in all_fields if f != "embedding"]
         
+        print(reranking_top_k)
         search_results = collection.search(
             data=query_vector,
             anns_field="embedding",
