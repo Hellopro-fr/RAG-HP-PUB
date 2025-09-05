@@ -419,17 +419,10 @@ async def search_in_milvus(request: SearchRequest):
 
     # 1. Obtenir les ressources nécessaires
     get_milvus_connection()
-    print(connections.has_connection('default'))
-        # 2. List all collections
-    print(settings.ZILLIZ_URI, settings.ZILLIZ_PORT)
-    collection_names = utility.list_collections()
-
-    # 3. Print the list of collection names
-    print("Collections in Milvus:", collection_names)
     embedding_model = get_embedding_model()
 
     start_embed = time.perf_counter()
-    print(request.prompt)
+    print('Prompt', request.prompt)
     
     query_vector = [embedding_model.encode(request.prompt, normalize_embeddings=True).tolist()]
     embed_duration = time.perf_counter() - start_embed
@@ -532,7 +525,7 @@ async def search_in_milvus(request: SearchRequest):
         matches_info = []
         if search_results and search_results[0]:
             for hit in search_results[0]:
-                entity = {field: hit.entity.get(field) for field in output_fields}
+                entity = {field: hit.entity.get(field) for field in fields_without_embedding}
                 context_texts.append(entity.get("text", ""))
                 matches_info.append({
                     "id": hit.id, "score": hit.distance, "id_lead": entity.get("lead_id"), "metadata": entity
@@ -550,8 +543,9 @@ async def search_in_milvus(request: SearchRequest):
             if not matches:
                 reranked_results[source] = []
                 continue
-            
-            pairs = [[request.prompt, match["metadata"]["text"]] for match in matches]
+
+            pairs = [[request.prompt, match["metadata"].get("text", "")] for match in matches]
+
             scores = reranker.predict(pairs, show_progress_bar=False)
             
             for match, score in zip(matches, scores):
