@@ -464,7 +464,8 @@ async def search_in_milvus(request: SearchRequest):
         collection = Collection(name=_source)
         collection.load()
 
-        search_params = {"metric_type": "COSINE", "params": {"ef": _top_k if _search_params_verification else _ef_search(top_k)}}
+        # search_params = {"metric_type": "COSINE", "params": {"ef": _top_k if _search_params_verification else _ef_search(top_k)}}
+        search_params = {"metric_type": "COSINE", "params": {"ef": 300}}
         
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
 
