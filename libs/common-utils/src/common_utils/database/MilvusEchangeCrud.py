@@ -52,7 +52,7 @@ class MilvusEchangeCrud:
             # Définition du schéma détaillé
             fields = [
                 # Todo : ce clé doit être unique
-                FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True ,max_length=65535),
+                FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True),
                 FieldSchema(name="id_demande", dtype=DataType.VARCHAR , max_length=65535),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
                 FieldSchema(name="produit", dtype=DataType.VARCHAR, max_length=65535),
