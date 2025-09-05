@@ -1,18 +1,25 @@
 import pika
 import time
 import os
+# On utilise des imports relatifs pour la robustesse dans Docker
 from .messaging.consumer import Consumer
-from .messaging.publisher import Publisher
+# Le publisher n'est plus une classe à instancier ici
 
 def main():
     """
     Point d'entrée principal du service de classification LLM.
-    Met en place la connexion RabbitMQ et lance le consommateur.
     """
-    rabbitmq_url = "amqps://ezvrvpcr:epljQvbs4j0R0qJUMKWtBRNV-whMOxF7@whale.rmq.cloudamqp.com/ezvrvpcr"
+    # --- CORRECTION ICI ---
+    # On lit l'URL depuis les variables d'environnement.
+    # Le .env et Docker Compose se chargeront de la fournir.
+    rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
+    if not rabbitmq_url:
+        print("❌ ERREUR: La variable d'environnement RABBITMQ_URL n'est pas définie.")
+        exit(1)
+    # --- FIN DE LA CORRECTION ---
+        
     connection = None
-
-    # Boucle de connexion robuste à RabbitMQ
+    # ... (la boucle de connexion est parfaite) ...
     for i in range(10):
         try:
             connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
@@ -27,8 +34,10 @@ def main():
         exit(1)
 
     try:
-        publisher = Publisher(connection)
-        consumer = Consumer(connection, publisher)
+        # --- CORRECTION ICI ---
+        # On n'instancie plus le publisher, on passe juste la connexion au consumer
+        consumer = Consumer(connection)
+        # --- FIN DE LA CORRECTION ---
         consumer.start_consuming()
     except KeyboardInterrupt:
         print("\n🛑 template-llm-service: Arrêt demandé.")

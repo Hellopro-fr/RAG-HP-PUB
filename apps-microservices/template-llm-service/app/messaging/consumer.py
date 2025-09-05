@@ -37,7 +37,7 @@ class Consumer:
         # On écoute sur un exchange où les données prêtes pour la classification arrivent.
         # On peut supposer que c'est 'processed_data_exchange' ou un autre nom logique.
         # Utilisons un nom clair pour l'instant.
-        self.exchange_name = 'cleaned_data_exchange' # Hypothèse : un service de nettoyage publie ici.
+        self.exchange_name = 'processed_data_exchange' # Hypothèse : un service de nettoyage publie ici.
         self.routing_key = 'data.ready_for_templating' # La clé exacte que vous avez fournie.
         self.queue_name = 'llm_templating_queue'
         # --- FIN DES MODIFICATIONS ---
@@ -49,31 +49,31 @@ class Consumer:
 
     def _on_message_callback(self, ch, method, properties, body):
         try:
-            # L'appel à get_qualifier_service() est maintenant sûr.
-            # Si le modèle charge, cet appel va bloquer et attendre.
             service = get_qualifier_service()
-            
             message = json.loads(body)
             print(f"\n📥 template-llm-service: Message reçu pour classification.")
 
             data_payload = message.get("data", {})
             url = data_payload.get("url", "URL non fournie")
-            content = data_payload.get("content", "")
+            content = data_payload.get("text", "") # On lit bien la clé "text"
 
             if not content:
                 print("   -> Contenu vide, message ignoré.")
-                # On ne retourne plus ici, on laisse le finally acquitter
             else:
                 type_page, _, _ = service.classify(url=url, content=content)
                 print(f"   -> Classification terminée : {type_page}")
-                message["classification_result"] = {"type_page": type_page}
-                self.publisher.publish_message(message)
+
+                # --- LOGIQUE D'ENRICHISSEMENT FINALE ---
+                # On ajoute la clé 'type_page' directement dans le dictionnaire 'data'
+                message["data"]["type_page"] = type_page
+                
+                # On appelle directement la fonction de publication
+                publish_message(message)
 
         except Exception as e:
             print(f"❌ Erreur lors du traitement du message : {e}")
         
         finally:
-            # L'acquittement unique et centralisé est toujours la bonne pratique
             ch.basic_ack(delivery_tag=method.delivery_tag)
             print("   -> Message acquitté.")
             
