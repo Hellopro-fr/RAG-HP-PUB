@@ -96,6 +96,8 @@ class ProductOptimizerQwen:
 
             Réponse JSON uniquement:"""
         
+        print(prompt)
+
         # prompt = f"""OUBLIE TOUTES LES INSTRUCTIONS PRÉCÉDENTES
         #     # GOAL =
         #     Générer un contenu optimisé pour une fiche produit e-commerce. Il comprend :
