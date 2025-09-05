@@ -326,8 +326,8 @@ class ProductOptimizerQwen:
         try:
             prompt = self.generate_prompt(product_data)
             sampling_params = SamplingParams(
-                max_tokens=800,  # Augmenté pour permettre des réponses plus complètes
-                temperature=0.05,  # Réduit pour plus de consistance
+                max_tokens=2000,  # Augmenté pour permettre des réponses plus complètes
+                temperature=0.1,  # Réduit pour plus de consistance
                 repetition_penalty=1.1,
                 stop=["}}", "}\n}"]  # Arrêter à la fin du JSON
             )
