@@ -37,8 +37,14 @@ def main():
     try:
         # 1. Créer une instance du publisher
         publisher = Publisher(connection)
+        
+        # Spécifier l'ID du GPU à utiliser (0 si un seul GPU est disponible)
+        device_id = 0
+        
+        if torch.cuda.device_count() > 1:
+            device_id = 1
 
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device = f'cuda:{device_id}' if torch.cuda.is_available() else 'cpu'
 
         model_name = "dangvantuan/sentence-camembert-large"
         
