@@ -1,4 +1,4 @@
-from app.schemas.check_doublon_shemas import SearchRequest, LLMPipeline
+from app.schemas.check_doublon_shemas import SearchRequest
 import logging
 
 
