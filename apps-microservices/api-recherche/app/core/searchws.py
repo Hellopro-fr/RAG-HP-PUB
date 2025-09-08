@@ -121,6 +121,7 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
     full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
     
     type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
+    logger.info(f"Prompt LLM: '{full_user_prompt}'")
 
     try:
         if type_prompt == "openai":
