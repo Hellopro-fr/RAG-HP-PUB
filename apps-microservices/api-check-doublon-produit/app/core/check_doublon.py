@@ -1,4 +1,8 @@
 from app.schemas.check_doublon_shemas import SearchRequest
+from pymilvus import connections, Collection, utility
+
+from common_utils.database.config.settings import Configuration, settings
+
 import logging
 
 
@@ -12,3 +16,16 @@ async def search_in_milvus(request: SearchRequest):
         "from_similarity": False,
         "score": 0.0
     }
+    
+
+def get_milvus_connection():
+    alias = "default"
+    try:
+        if not connections.has_connection(alias):
+            logger.info("Connexion à Milvus...")
+            # connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
+            connections.connect(alias, host=settings.ZILLIZ_URI, port=settings.ZILLIZ_PORT)
+            logger.info(f"Connecté à Milvus.")
+    except Exception as e:
+        logger.error(f"❌ Erreur de connexion à Milvus: {e}")
+        raise e
