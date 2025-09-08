@@ -4,7 +4,7 @@ import json
 import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.core.searchws import search_in_milvus_stream  # We will create this new streaming function
-from app.schemas.search import SearchRequest
+from app.schemas.search import SearchRequestWs as SearchRequest
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

@@ -1,3 +1,4 @@
+import math
 import time
 import os
 import logging
@@ -9,7 +10,7 @@ from openai import OpenAI
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from pymilvus import connections, Collection, utility
 from app.core.credentials import settings, model_settings
-from app.schemas.search import SearchRequest, LLMPipeline
+from app.schemas.search import SearchRequestWs as SearchRequest, LLMOptions
 import asyncio
 
 from app.core.openrouter import chat_with_openrouter
@@ -97,13 +98,22 @@ def _ef_search(nb_chunk: int) -> int:
     """Calcule la valeur ef_search pour Qdrant/Milvus en fonction du nombre de chunks."""
     return 300 if nb_chunk <= 150 else nb_chunk * 2
 
+def convert_score_to_percentage(score: float, score_type: str = 'cosine') -> float:
+    """Convertit un score de similarité ou de reranker en pourcentage."""
+    if score_type == 'reranker':
+        # Applique la fonction sigmoïde pour mapper le logit à une plage de 0-1
+        prob = 1 / (1 + math.exp(-score))
+        return round(prob * 100, 2)
+    else: # Par défaut, traite le score comme une similarité cosinus (déjà entre 0 et 1)
+        return round(score * 100, 2)
+    
 import_duration = time.perf_counter() - import_start_time
 
 # Dictionnaires de mapping
 list_etat = {"1": "Client", "2": "Pause", "3": "Prospect"}
 list_affichage = {"1": "Complet", "3": "Restreint", "5": "Découverte", "4": "Non visible"}
 
-def llm_prompt_stream(request: SearchRequest, context_texts):
+def llm_prompt_stream(request: LLMOptions, context_texts):
     """
     Génère une réponse LLM en streaming et yield chaque token.
     """
@@ -203,8 +213,8 @@ async def search_in_milvus_stream(request: SearchRequest):
     embed_duration = time.perf_counter() - start_embed
     yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
     
-    top_k = int(request.nombre_resultat)
-    reranking_top_k = top_k * 3 if request.use_reranker else top_k
+    top_k = int(request.top_k)
+    reranking_top_k = top_k * 3 if request.options.use_reranker else top_k
 
     all_results = {}
     context_texts = []
@@ -229,7 +239,7 @@ async def search_in_milvus_stream(request: SearchRequest):
 
         search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(reranking_top_k)}}
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
-        filter_expr = build_milvus_expression(request.dict(), metadata["payload_fournisseur"], "1000000" in request.fournisseur)
+        filter_expr = build_milvus_expression(request.filtre, metadata["payload_fournisseur"], "1000000" in request.filtre.get("fournisseur", {}))
         
         all_fields = [field.name for field in collection.schema.fields]
         fields_without_embedding = [f for f in all_fields if f != "embedding"]
@@ -250,6 +260,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                     all_matches_for_reranking.append({
                         "id": hit.id, 
                         "score": hit.distance, 
+                        "relevance_score": convert_score_to_percentage(float(hit.distance), score_type='cosine'), 
                         "metadata": dict(hit.entity), 
                         "source": source
                     })
@@ -258,13 +269,14 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "error", "payload": f"Error searching in {source}: {e}"}
             all_results[source] = []
 
+    yield {"type": "status", "payload": len(all_matches_for_reranking)}
     search_duration = time.perf_counter() - start_search
     rerank_duration = 0
     final_results = []
-    if request.use_reranker and all_matches_for_reranking:
+    if request.options.use_reranker and all_matches_for_reranking:
         yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
         start_rerank_time = time.perf_counter()
-        reranker = await asyncio.to_thread(get_reranker_model, request.reranker_model)
+        reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
         
         # *** CORRECTION 1 : Utilisation de .get() pour le reranker ***
         pairs = [[request.prompt, match["metadata"].get("text", "")] for match in all_matches_for_reranking]
@@ -272,6 +284,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         
         for match, score in zip(all_matches_for_reranking, scores):
             match["rerank_score"] = float(score)
+            match['relevance_score'] = convert_score_to_percentage(float(score), score_type='reranker')
         
         reranked_matches = sorted(all_matches_for_reranking, key=lambda x: x["rerank_score"], reverse=True)
         final_results = reranked_matches[:top_k]
@@ -285,7 +298,7 @@ async def search_in_milvus_stream(request: SearchRequest):
     llm_generation_started = False
     llm_duration = 0
     if request.action == 2 and final_results:
-        yield {"type": "status", "payload": f"Génération de la réponse avec le LLM : {request.chat_model}..."}
+        yield {"type": "status", "payload": f"Génération de la réponse avec le LLM : {request.llm.chat_model}..."}
         
         # *** CORRECTION 2 : Utilisation de .get() pour le contexte du LLM ***
         context_texts = [res["metadata"].get("text", "") for res in final_results]
@@ -294,7 +307,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         llm_generation_started = True
         start_llm_time = time.perf_counter()
         
-        token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+        token_generator = await asyncio.to_thread(llm_prompt_stream, request.llm, context_texts)
         
         for token in token_generator:
             yield {"type": "llm_chunk", "payload": token}

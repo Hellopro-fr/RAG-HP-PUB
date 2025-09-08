@@ -19,6 +19,25 @@ class SearchRequest(BaseModel):
     use_reranker: Optional[bool] = True
     reranker_model: Optional[str] = "BAAI/bge-reranker-v2-m3"
 
+class LLMOptions(BaseModel):
+    chat_model: str = "gpt-4.1-2025-04-14"
+    temperature: float = 0.0
+    template_prompt: Optional[str] = ""
+
+class RerankerOptions(BaseModel):
+    use_reranker: bool = True
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+
+class SearchRequestWs(BaseModel):
+    prompt: str
+    source: Optional[List[str]] = ['produits']
+    action: Optional[int] = 1
+    top_k: Optional[int] = 10
+    filtre: Optional[Dict[str, Any]] = {}
+    filtre_source: Optional[Dict[str, List[str]]] = {}
+    llm: Optional[LLMOptions] = {}
+    options: Optional[RerankerOptions] = RerankerOptions()
+
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
 class SearchResponse(BaseModel):
     database: str
