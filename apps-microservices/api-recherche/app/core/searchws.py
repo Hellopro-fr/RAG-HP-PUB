@@ -160,7 +160,7 @@ def filtre_source (filtre: dict) -> str:
     clauses = []
     for key, val in filtre.items():
         if isinstance(val, list):
-            clauses.append(f"{key} in [{",".join(val)}]")
+            clauses.append(f"{key} in [{','.join(val)}]")
         elif isinstance(val, str):
             clauses.append(f'{key} == "{val}"')
     return " and ".join(clauses)
