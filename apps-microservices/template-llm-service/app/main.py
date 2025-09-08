@@ -1,25 +1,41 @@
 import pika
 import time
 import os
-# On utilise des imports relatifs pour la robustesse dans Docker
+from vllm import LLM
+
+# On utilise des imports absolus basés sur le nom du module qui sera dans le PYTHONPATH
 from template_llm_service.messaging.consumer import Consumer
-# Le publisher n'est plus une classe à instancier ici
+from template_llm_service.messaging.publisher import Publisher
 
 def main():
     """
-    Point d'entrée principal du service de classification LLM.
+    Point d'entrée principal du service.
+    Charge le modèle LLM et lance les composants RabbitMQ.
     """
-    # --- CORRECTION ICI ---
-    # On lit l'URL depuis les variables d'environnement.
-    # Le .env et Docker Compose se chargeront de la fournir.
-    rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
+    rabbitmq_url = os.environ.get("RABBITMQ_URL")
     if not rabbitmq_url:
         print("❌ ERREUR: La variable d'environnement RABBITMQ_URL n'est pas définie.")
         exit(1)
-    # --- FIN DE LA CORRECTION ---
-        
+
+    print("🚀 template-llm-service: Démarrage...")
+    print("🧠 Chargement du modèle LLM (cela peut prendre plusieurs minutes)...")
+    llm_config = {
+        "model": "Qwen/Qwen3-14B-AWQ",
+        "quantization": "awq",
+        "gpu_memory_utilization": 0.85,
+        "trust_remote_code": True,
+        "dtype": "auto",
+        "max_model_len": 4096
+    }
+    try:
+        llm = LLM(**llm_config)
+        tokenizer = llm.get_tokenizer()
+        print("✅ Modèle LLM chargé avec succès.")
+    except Exception as e:
+        print(f"❌ ERREUR CRITIQUE: Impossible de charger le modèle LLM. Arrêt du service. Erreur: {e}")
+        exit(1)
+
     connection = None
-    # ... (la boucle de connexion est parfaite) ...
     for i in range(10):
         try:
             connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
@@ -34,10 +50,8 @@ def main():
         exit(1)
 
     try:
-        # --- CORRECTION ICI ---
-        # On n'instancie plus le publisher, on passe juste la connexion au consumer
-        consumer = Consumer(connection)
-        # --- FIN DE LA CORRECTION ---
+        publisher = Publisher(connection)
+        consumer = Consumer(connection, publisher, llm, tokenizer, llm_config)
         consumer.start_consuming()
     except KeyboardInterrupt:
         print("\n🛑 template-llm-service: Arrêt demandé.")
