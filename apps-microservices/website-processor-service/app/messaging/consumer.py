@@ -55,6 +55,10 @@ class Consumer:
             # Modifier la route de publication vers "data.ready_for_template_check"
             self.publisher.routing_key = 'data.ready_for_templating'
             print("🔄 Website-Processor: Redirection du message vers la vérification de template")
+        else:
+            # Remettre la route par défaut pour l'embedding
+            self.publisher.routing_key = 'data.ready_for_embedding'
+            print("➡️ Website-Processor: Message prêt pour l'embedding")
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)
