@@ -1,74 +1,46 @@
 import pika
 import json
-import threading
-from template_llm_service.messaging.publisher import publish_message
-from template_llm_service.core.qualifier.service import QualifierService
-
-# On crée un verrou global pour protéger l'initialisation du service
-service_initialization_lock = threading.Lock()
-qualifier_service_instance: QualifierService | None = None
-
-def get_qualifier_service() -> QualifierService:
-    """
-    Fonction "thread-safe" qui charge le service (et le modèle LLM) de manière différée.
-    Le verrou garantit qu'un seul thread peut initialiser le service à la fois.
-    """
-    global qualifier_service_instance
-    # Si l'instance existe déjà, on la retourne directement sans attendre
-    if qualifier_service_instance:
-        return qualifier_service_instance
-
-    # Le premier thread qui arrive acquiert le verrou. Les autres attendent ici.
-    with service_initialization_lock:
-        # On revérifie si l'instance n'a pas été créée par un autre thread
-        # pendant qu'on attendait le verrou.
-        if qualifier_service_instance is None:
-            print("--- LAZY LOADING: Initialisation du QualifierService (chargement du modèle)... ---")
-            qualifier_service_instance = QualifierService()
-            print("--- LAZY LOADING: Service initialisé et prêt. ---")
-    return qualifier_service_instance
+from vllm import LLM
+from templating_llm_service.publisher import Publisher
+from templating_llm_service.core.processor import classify_page_template
+from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher):
+    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher, llm: LLM, tokenizer, llm_config: dict):
         self.channel = connection.channel()
         self.publisher = publisher
+        self.llm = llm
+        self.tokenizer = tokenizer
+        self.llm_config = llm_config
         
-        # --- MODIFICATIONS ICI POUR CORRESPONDRE AU FLUX ---
-        # On écoute sur un exchange où les données prêtes pour la classification arrivent.
-        # On peut supposer que c'est 'processed_data_exchange' ou un autre nom logique.
-        # Utilisons un nom clair pour l'instant.
-        self.exchange_name = 'processed_data_exchange' # Hypothèse : un service de nettoyage publie ici.
-        self.routing_key = 'data.ready_for_templating' # La clé exacte que vous avez fournie.
-        self.queue_name = 'llm_templating_queue'
-        # --- FIN DES MODIFICATIONS ---
+        self.exchange_name = 'cleaned_data_exchange'
+        self.routing_key = 'data.website.ready_for_classification'
+        self.queue_name = 'llm_classification_queue'
 
+        self.rabbitmq_connection = RabbitMQConnection()
+
+        self.connect()
+        print("✅ Consumer initialisé.")
+
+    def connect(self):
+        """
+        Établit une connexion RabbitMQ via la fonction utilitaire.
+        """
+        self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
+        self.channel = self.connection.channel()
+        # Déclare l'exchange où il consomme
         self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
         self.channel.queue_declare(queue=self.queue_name, durable=True)
         self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
-        print(f"✅ Consumer initialisé, en écoute de '{self.routing_key}' sur l'exchange '{self.exchange_name}'.")
 
     def _on_message_callback(self, ch, method, properties, body):
         try:
-            service = get_qualifier_service()
             message = json.loads(body)
             print(f"\n📥 template-llm-service: Message reçu pour classification.")
 
-            data_payload = message.get("data", {})
-            url = data_payload.get("url", "URL non fournie")
-            content = data_payload.get("text", "") # On lit bien la clé "text"
-
-            if not content:
-                print("   -> Contenu vide, message ignoré.")
-            else:
-                type_page, _, _ = service.classify(url=url, content=content)
-                print(f"   -> Classification terminée : {type_page}")
-
-                # --- LOGIQUE D'ENRICHISSEMENT FINALE ---
-                # On ajoute la clé 'type_page' directement dans le dictionnaire 'data'
-                message["data"]["type_page"] = type_page
-                
-                # On appelle directement la fonction de publication
-                publish_message(message)
+            output_message = classify_page_template(self.llm, self.tokenizer, self.llm_config, message)
+            
+            self.publisher.publish_message(output_message)
 
         except Exception as e:
             print(f"❌ Erreur lors du traitement du message : {e}")
@@ -78,6 +50,12 @@ class Consumer:
             print("   -> Message acquitté.")
             
     def start_consuming(self):
-        self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-        print("👂 template-llm-service: En attente de messages...")
-        self.channel.start_consuming()
+        for i in range(3):
+            try:
+                self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
+                print("👂 template-llm-service: En attente de messages...")
+                self.channel.start_consuming()
+                break  # Si start_consuming se termine normalement, on sort de la boucle
+            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
+                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                self.connect()
