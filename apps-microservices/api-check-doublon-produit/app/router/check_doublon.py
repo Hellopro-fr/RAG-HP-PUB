@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Body
 from app.schemas.check_doublon_shemas import SearchRequest, SearchResponse, SearchReponse
 
-from app.core.check_doublon import search_in_qdrant, search_in_milvus
+from app.core.check_doublon import search_in_milvus
 
 import logging
 
