@@ -22,7 +22,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         raise ValueError("Les données doivent être un dictionnaire.")
     
     # Étape 2: Vérifier si la présence du page_type == "header_footer" sinon on procède normalement
-    if website_data.get("type_page","") == "header_footer":
+    if website_data.get("page_type","") == "header_footer":
         log = "la vérification de template"
         # Étape 2.1: Extraire le header et footer
         try:

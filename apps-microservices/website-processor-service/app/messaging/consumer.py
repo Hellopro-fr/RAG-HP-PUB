@@ -51,7 +51,7 @@ class Consumer:
         output_message = process_website_data_for_embedding(website_data,bdd)
         
         # 2. Vérification du message de sortie par rapport au type de page pour définir la prochaine étape
-        if not output_message.get("data", {}).get("type_page",""):
+        if not output_message.get("data", {}).get("page_type",""):
             # Modifier la route de publication vers "data.ready_for_template_check"
             self.publisher.routing_key = 'data.ready_for_templating'
             print("🔄 Website-Processor: Redirection du message vers la vérification de template")
