@@ -1,8 +1,8 @@
 import pika
 import json
 from vllm import LLM
-from templating_llm_service.publisher import Publisher
-from templating_llm_service.core.processor import classify_page_template
+from template_llm_service.publisher import Publisher
+from template_llm_service.core.processor import classify_page_template
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 class Consumer:
