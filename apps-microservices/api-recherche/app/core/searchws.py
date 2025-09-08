@@ -330,7 +330,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         llm_generation_started = True
         start_llm_time = time.perf_counter()
         
-        token_generator = await asyncio.to_thread(llm_prompt_stream, request.llm, context_texts)
+        token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
         
         for token in token_generator:
             yield {"type": "llm_chunk", "payload": token}
