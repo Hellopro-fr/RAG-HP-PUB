@@ -13,9 +13,9 @@ class Consumer:
         self.tokenizer = tokenizer
         self.llm_config = llm_config
         
-        self.exchange_name = 'cleaned_data_exchange'
-        self.routing_key = 'data.website.ready_for_classification'
-        self.queue_name = 'llm_classification_queue'
+        self.exchange_name = 'processed_data_exchange'
+        self.routing_key = 'data.ready_for_templating'
+        self.queue_name = 'llm_templating_queue'
 
         self.rabbitmq_connection = RabbitMQConnection()
 
