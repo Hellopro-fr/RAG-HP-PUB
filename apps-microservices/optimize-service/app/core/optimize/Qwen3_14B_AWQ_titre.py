@@ -107,9 +107,9 @@ class ProductTitleOptimizer:
             }}}}
 
             # INPUTS :
-            CATEGORIE PRODUIT = {cleaned_data.get('categorie_produit', '')}
-            TITRE PRODUIT = {cleaned_data.get('nom_produit', '')}
-            DESCRIPTION PRODUIT = {cleaned_data.get('description_produit', '')}
+            CATEGORIE PRODUIT = {data.get('categorie_produit', '')}
+            TITRE PRODUIT = {data.get('nom_produit', '')}
+            DESCRIPTION PRODUIT = {data.get('description_produit', '')}
 
             Réponse JSON uniquement:"""
         return prompt
