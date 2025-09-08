@@ -1,7 +1,7 @@
 import pika
 import json
 import threading
-from template_llm_service.messaging.publisher import Publisher
+from template_llm_service.messaging.publisher import publish_message
 from template_llm_service.core.qualifier.service import QualifierService
 
 # On crée un verrou global pour protéger l'initialisation du service
