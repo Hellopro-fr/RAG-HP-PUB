@@ -162,7 +162,7 @@ def filtre_source (filtre: dict, source: str = "") -> list:
         if key == "id_categorie" and source == "produits": 
             key = "categorie"
         if isinstance(val, list):
-            clauses.append(f"{key} in [{','.join(val)}]")
+            clauses.append(f"{key} in ['{"','".join(val)}']")
         elif isinstance(val, str):
             clauses.append(f'{key} == "{val}"')
     return clauses
