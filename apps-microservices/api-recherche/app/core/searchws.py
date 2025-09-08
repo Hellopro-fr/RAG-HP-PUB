@@ -235,7 +235,11 @@ async def search_in_milvus_stream(request: SearchRequest):
     all_matches_for_reranking = []
     
     start_search = time.perf_counter()
-    for source, filtre in request.source.items():
+    for item in request.source:
+        source = item.source
+        filtre = item.filtre
+        print(f"Processing source: '{source}' with filtre: {filtre}")
+        
         yield {"type": "status", "payload": f"Recherche dans {source}..."}
 
         if not utility.has_collection(source):
