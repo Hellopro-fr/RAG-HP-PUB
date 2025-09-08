@@ -2,7 +2,7 @@ import pika
 import time
 import os
 # On utilise des imports relatifs pour la robustesse dans Docker
-from template_llm_service.app.messaging.consumer import Consumer
+from template_llm_service.messaging.consumer import Consumer
 # Le publisher n'est plus une classe à instancier ici
 
 def main():

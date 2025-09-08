@@ -1,8 +1,8 @@
 import pika
 import json
 import threading
-from template_llm_service.app.messaging.publisher import Publisher
-from template_llm_service.app.core.qualifier.service import QualifierService
+from template_llm_service.messaging.publisher import Publisher
+from template_llm_service.core.qualifier.service import QualifierService
 
 # On crée un verrou global pour protéger l'initialisation du service
 service_initialization_lock = threading.Lock()
