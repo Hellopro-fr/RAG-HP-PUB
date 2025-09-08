@@ -120,20 +120,20 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
     context = "\n-----\n\n\n".join(context_texts)
     full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
     
-    type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
+    type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
 
     try:
         if type_prompt == "openai":
-            if request.chat_model == "deepseek":
+            if request.llm.chat_model == "deepseek":
                 deepseek = DeepSeek()
-                deepseek.set_temperature(request.temperature)
+                deepseek.set_temperature(request.llm.temperature)
                 stream = deepseek.chat(full_user_prompt, stream=True)
             else:
                 openai_client = get_openai_client()
                 stream = openai_client.chat.completions.create(
-                    model=request.chat_model,
+                    model=request.llm.chat_model,
                     messages=[{"role": "user", "content": full_user_prompt}],
-                    temperature=float(request.temperature),
+                    temperature=float(request.llm.temperature),
                     stream=True
                 )
         else: # OpenRouter
@@ -142,7 +142,7 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
                 api_key=settings.OPENROUTER_API_KEY,
             )
             stream = client_or.chat.completions.create(
-                model=request.chat_model,
+                model=request.llm.chat_model,
                 messages=[{"role": "user", "content": full_user_prompt}],
                 stream=True
             )
