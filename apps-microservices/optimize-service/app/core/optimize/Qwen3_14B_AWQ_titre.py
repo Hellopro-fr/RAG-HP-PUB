@@ -4,12 +4,12 @@ import re
 from typing import Dict, Any
 from vllm import LLM, SamplingParams
 
-class ProductOptimizerQwen:
+class ProductTitleOptimizer:
     def __init__(self):
         self.llm_args = {
             "model": "Qwen/Qwen3-14B-AWQ",
             "quantization": "awq",
-            "gpu_memory_utilization": 0.9,
+            "gpu_memory_utilization": 0.85,
             "trust_remote_code": True,
             "dtype": "auto",
             "max_model_len": 8192
@@ -70,16 +70,13 @@ class ProductOptimizerQwen:
         return cleaned_data
     
     def generate_prompt(self, data: Dict[str, Any]) -> str:
-
         # Nettoyage des données d'entrée avant génération du prompt
-        cleaned_data = self.clean_input_data(data)
+        # cleaned_data = self.clean_input_data(data)
 
         """Génère le prompt pour le modèle basé sur les données du produit."""
         prompt = f"""OUBLIE TOUTES LES INSTRUCTIONS PRÉCÉDENTES
             # GOAL =
-            Générer un contenu optimisé pour une fiche produit e-commerce. Il comprend :
-            1. Un titre produit amélioré en enrichissant uniquement avec des informations présentes dans le contenu.
-            2. Une version mise en forme HTML de la description produit, **sans changer le contenu ni la structure des phrases**.
+            Générer un titre produit optimisé pour une fiche produit e-commerce en enrichissant uniquement avec des informations présentes dans le contenu.
 
             # TODO =
             Tu es un assistant éditorial du contenu produit pour un site e-commerce. Tu dois impérativement suivre les étapes ci-dessous et respecter les consignes avec précision. Toute modification non autorisée du contenu ou interprétation personnelle est interdite.
@@ -87,13 +84,12 @@ class ProductOptimizerQwen:
             # ÉTAPES =
             1. Lire attentivement "TITRE PRODUIT", "DESCRIPTION PRODUIT" et "CATEGORIE PRODUIT".
             2. Générer un nouveau titre produit en suivant **scrupuleusement** les règles de "CONSIGNES TITRE PRODUIT".
-            3. Générer une version **mise en forme HTML** de la description produit, en respectant **strictement** les règles de "CONSIGNES DESCRIPTION PRODUIT".
 
             # CONSIGNES POUR LE TITRE =
             - Longueur entre 30 et 130 caractères.
             - Tu dois uniquement réagencer ou enrichir le titre **avec des informations déjà présentes** dans "TITRE PRODUIT" ou "DESCRIPTION PRODUIT".
             - Ne JAMAIS inventer, supposer ou extrapoler.
-            - Ne pas supprimer d'information du titre initial, sauf si clairement non pertinente (ex : “trtrtrtr”,"\\\\",...).
+            - Ne pas supprimer d'information du titre initial, sauf si clairement non pertinente (ex : "trtrtrtr","\\\\",...).
             - Dans l'idéal, inclure le nom de la catégorie produit (ou son synonyme/similaire), la marque, la référence, les caractéristiques différenciantes si elles sont explicitement présentes.
             - Utiliser des tirets (-) quand nécessaire
             - Évite les majuscules excessives (max 40% du titre).
@@ -104,42 +100,10 @@ class ProductOptimizerQwen:
             Exemple 2: Bungalow démontable sur mesure de 2 à 12m de long, avec accouplement possible
             Exemple 3: Chaîne à galets d'accumulation en acier, avec maillon raccord
 
-            # CONSIGNES POUR LA DESCRIPTION =
-            - Ne modifier ou reformuler les phrases, sauf erreur évidente ou contenu manifestement inutile.
-            - Si la description contient déjà du HTML, tu peux le conserver s'il est correct, sinon le corriger ou le structurer proprement.
-            - Tu dois mettre en gras (`<b>`) les mots, les passages et sections importants.
-            - Tu as le droit de :
-            - Corriger les ponctuations erronées (`?` → `,` ou `’`, etc.)
-            - Ajouter des sauts de ligne (`<br>`), soulignages (`<u>`), puces HTML (`<ul><li>`) si utile.
-            - Structurer les caractéristiques techniques en tableau HTML à 2 colonnes :
-                - Colonne 1 : nom de la caractéristique en gras
-                - Colonne 2 : valeur commencant en majuscule, même si ce n’est pas le cas dans le texte source.
-            - Si le contenu contient des données multiples ou comparatives, générer un tableau HTML à plusieurs colonnes, avec un en-tête clair. Assure-toi que les valeurs soient bien alignées sur les bonnes colonnes pour une lecture fluide et précise.
-            - Lorsque plusieurs lignes commencent par un tiret ou numérotation suivi d'un texte et d'un deux-points (ex. -texte : valeur), supprimer le tiret/numérotation. tu dois choisir de présenter ces informations sous forme de bullet points ou de tableau HTML ou les deux si nécessaires, selon ce qui rend la lecture la plus claire. Si un tableau est utilisé, afficher les données en deux colonnes sans inclure le tiret/numérotation ni le deux-points dans la première colonne. Si des bullet points sont utilisés, conserver le deux-points (:) après la clé, mais supprimer le tiret/numérotation au début.
-            Exemple : "Hauteur :" ou "- Hauteur"  ou "1- Hauteur" ou "a) Hauteur"
-            → devient simplement "Hauteur" si tableau HTML
-            → devient simplement "Hauteur : " si bullet point
-            - Supprimer uniquement les chaînes sans sens évident : “trtrtrtr”, “>>>”, etc.
-            - Supprime les <br> ou sauts de ligne \n qui sont excessifs, redondants ou mal placés.
-            - Conserve uniquement les sauts de ligne nécessaires pour structurer visuellement la description et aérer le texte, sans excès.
-            - Ne pas insérer plus de deux <br> ou sauts de ligne \n consécutifs. Un <br> ou /n suffit généralement entre deux paragraphes.
-            - Si le contenu est déjà bien espacé, n'ajoute pas de <br> ou \n supplémentaires.
-            - uniquement si au moins deux éléments consécutifs doivent être listés.
-            - Imbriquer les balises HTML (ex. <strong>,<b> dans <li> ou <td>).
-            - Les unités peuvent être normalisées (si présentes) sans être considérées comme une modification de fond.
-            exemple : Ø 60.30" → "Diamètre : 60,30 mm"
-
-            - Tu ne dois :
-            - JAMAIS modifier l'ordre ou le fond des phrases.
-            - JAMAIS ajouter de contenu.
-            - JAMAIS reformuler ou resumer le texte de sortie.
-            - JAMAIS utiliser un bullet point <ul><li> s'il n'y a qu'un seul élément dans la liste. Utilise 
-
             # FORMAT DE SORTIE OBLIGATOIRE =
             Tu dois répondre **uniquement** en JSON, sans aucune introduction ni commentaire, avec le format suivant :
             {{{{
-            "Titre": "Ton titre généré ici",
-            "Description": "Ta description mise en forme ici avec balises HTML"
+            "Titre": "Ton titre généré ici"
             }}}}
 
             # INPUTS :
@@ -299,17 +263,13 @@ class ProductOptimizerQwen:
     def extract_manually(self, text: str) -> Dict[str, Any]:
         """Extraction manuelle en cas d'échec du parsing JSON."""
         try:
-            # Chercher le titre
+            # Chercher le titre uniquement
             titre_match = re.search(r'"Titre"\s*:\s*"([^"]*(?:\\.[^"]*)*)"', text, re.DOTALL)
-            description_match = re.search(r'"Description"\s*:\s*"([^"]*(?:\\.[^"]*)*)"', text, re.DOTALL)
             
             result = {}
             
             if titre_match:
                 result["Titre"] = titre_match.group(1).replace('\\"', '"')
-            
-            if description_match:
-                result["Description"] = description_match.group(1).replace('\\"', '"')
             
             if result:
                 print("Extraction manuelle réussie")
@@ -321,17 +281,26 @@ class ProductOptimizerQwen:
         return None
     
     def optimize_product(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Optimise uniquement le titre du produit.
+        
+        Args:
+            product_data (Dict[str, Any]): Données du produit
+            
+        Returns:
+            Dict[str, Any]: Résultat avec le titre optimisé ou une erreur
+        """
         product_id = product_data.get('id_produit_scrapping', 'unknown')
         
         try:
             prompt = self.generate_prompt(product_data)
             sampling_params = SamplingParams(
-                max_tokens=768,  # Augmenté pour permettre des réponses plus complètes
+                max_tokens=256,  # Réduit car on ne génère que le titre
                 temperature=0.1,  # Réduit pour plus de consistance
                 repetition_penalty=1.05,
-                top_k=40,                # limite à 40 choix max à chaque étape
-                top_p=0.9,               # garde seulement 90% de la masse de proba
-                stop=["}}", "}\n}"]  # Arrêter à la fin du JSON
+                top_k=40,
+                top_p=0.9,
+                stop=["}", "}}", "}\n}"]  # Arrêter à la fin du JSON
             )
             
             conversation = [{"role": "user", "content": prompt}]
@@ -346,7 +315,6 @@ class ProductOptimizerQwen:
 
             prompt_tokens = len(self.tokenizer.encode(formatted_prompt))
             print(f"👉 Nombre de tokens dans le prompt : {prompt_tokens}")
-
 
             if len(final_prompt_tokens) >= self.llm_args["max_model_len"]:
                 print(f"--- ERREUR CRITIQUE : Le prompt final ({len(final_prompt_tokens)} tokens) dépasse la limite de {self.llm_args['max_model_len']}. ---")
@@ -367,6 +335,12 @@ class ProductOptimizerQwen:
                 print(error_msg)
                 print("JSON extrait:")
                 print(json_str[:500] + "..." if len(json_str) > 500 else json_str)
+                return {"error": error_msg}
+            
+            # Vérifier que le titre est présent
+            if "Titre" not in result:
+                error_msg = f"Titre manquant dans la réponse pour le produit {product_id}"
+                print(error_msg)
                 return {"error": error_msg}
             
             return {"success": result}
