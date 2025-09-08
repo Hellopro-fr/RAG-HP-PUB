@@ -56,6 +56,7 @@ class MilvusProduitsCrud:
                 FieldSchema(name="id_produit", dtype=DataType.VARCHAR , max_length=64),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
                 FieldSchema(name="url", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="nom_produit", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="page_type", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="domaine", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="fournisseur", dtype=DataType.VARCHAR, max_length=65535),
