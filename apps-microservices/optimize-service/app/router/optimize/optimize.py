@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Request
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
 # from app.core.optimize.Qwen3_14B_Q4 import ProductOptimizerQwen
-from app.core.optimize.Qwen3_14B_AWQ import ProductOptimizerQwen
+# from app.core.optimize.Qwen3_14B_AWQ import ProductOptimizerQwen
+from app.core.optimize.Qwen3_14B_AWQ_titre import ProductTitleOptimizer
 
 import os
 import threading
@@ -13,9 +14,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # On crée un verrou global pour protéger l'initialisation du service
 service_initialization_lock = threading.Lock()
-qwen_service_instance: ProductOptimizerQwen | None = None
+qwen_service_instance: ProductTitleOptimizer | None = None
 
-def get_qwen_optimize_service() -> ProductOptimizerQwen:
+def get_qwen_optimize_service() -> ProductTitleOptimizer:
     """
     Fonction "thread-safe" qui charge le service (et le modèle LLM) de manière différée.
     Le verrou garantit qu'un seul thread peut initialiser le service à la fois.
@@ -30,8 +31,8 @@ def get_qwen_optimize_service() -> ProductOptimizerQwen:
         # On revérifie si l'instance n'a pas été créée par un autre thread
         # pendant qu'on attendait le verrou.
         if qwen_service_instance is None:
-            print("--- LAZY LOADING: Initialisation du ProductOptimizerQwen (chargement du modèle)... ---")
-            qwen_service_instance = ProductOptimizerQwen()
+            print("--- LAZY LOADING: Initialisation du ProductTitleOptimizer (chargement du modèle)... ---")
+            qwen_service_instance = ProductTitleOptimizer()
             print("--- LAZY LOADING: Service initialisé et prêt. ---")
     return qwen_service_instance
 
