@@ -1,7 +1,7 @@
 from app.schemas.check_doublon_shemas import SearchRequest
 from pymilvus import connections, Collection, utility
 
-from common_utils.database.config.settings import Configuration, settings
+from app.core.credentials import settings
 
 import logging
 
