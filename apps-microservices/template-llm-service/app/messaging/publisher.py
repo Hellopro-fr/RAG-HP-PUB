@@ -4,6 +4,8 @@ from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 class Publisher:
     def __init__(self, connection: pika.BlockingConnection):
+        
+        self.rabbitmq_connection = RabbitMQConnection()
         self.connection = connection
         self.channel = self.connection.channel()
         self.exchange_name = 'processed_data_exchange'
@@ -26,5 +28,8 @@ class Publisher:
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
                 print(f"   📤 Message classifié publié avec la clé '{self.routing_key}'.")
-            except Exception as e:
-                print(f"PUBLISHER ERROR: {e}")
+                break
+            except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
+                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
+                self.channel = self.connection.channel()
