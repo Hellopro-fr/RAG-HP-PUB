@@ -163,7 +163,14 @@ def filtre_source (filtre: dict) -> str:
             clauses.append(FieldCondition(key=key, match=MatchAny(any=[MatchValue(value=v) for v in val])))
         elif isinstance(val, str):
             clauses.append(FieldCondition(key=key, match=MatchValue(value=val)))
-    return " and ".join(clauses)
+    if not clauses:
+        return ""
+
+    # Convert each FieldCondition object in the list to a string
+    string_clauses = [str(c) for c in clauses]
+
+    # Now, join the list of STRINGS
+    return " and ".join(string_clauses)
 
 def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
 	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
