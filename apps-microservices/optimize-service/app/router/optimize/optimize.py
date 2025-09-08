@@ -97,7 +97,7 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
         error_count = len(batch_results) - success_count
         
         response = {
-            "data": batch_results,
+            "result": batch_results,
             "metadata": {
                 "total_products": len(batch_results),
                 "successful_optimizations": success_count,
