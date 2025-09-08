@@ -246,3 +246,17 @@ services:
         - "8515:8515"
       env_file:
         - .env
+
+  api-check-doublon-produit:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-check-doublon-produit/Dockerfile
+    container_name: api-check-doublon-produit
+    restart: unless-stopped
+    # TODO: à supprimer en PROD
+    volumes:
+      - ./apps-microservices/api-check-doublon-produit:/app:rw
+    ports:
+      - "8516:8516"
+    env_file:
+      - .env
