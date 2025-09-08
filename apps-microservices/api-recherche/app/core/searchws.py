@@ -238,7 +238,7 @@ async def search_in_milvus_stream(request: SearchRequest):
     for item in request.source:
         source = item.source
         filtre = item.filtre
-        print(f"Processing source: '{source}' with filtre: {filtre}")
+        logger.info(f"Processing source: '{source}' with filtre: {filtre}")
         
         yield {"type": "status", "payload": f"Recherche dans {source}..."}
 
@@ -262,6 +262,8 @@ async def search_in_milvus_stream(request: SearchRequest):
             filters.append(filter_expr_source)
         
         filter_expr = " and ".join(filters) if filters else ""
+        
+        logger.info(f"Filtre expression : {filter_expr}")
         
         all_fields = [field.name for field in collection.schema.fields]
         fields_without_embedding = [f for f in all_fields if f != "embedding"]
@@ -291,7 +293,6 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "error", "payload": f"Error searching in {source}: {e}"}
             all_results[source] = []
 
-    yield {"type": "status", "payload": len(all_matches_for_reranking)}
     search_duration = time.perf_counter() - start_search
     rerank_duration = 0
     final_results = []
