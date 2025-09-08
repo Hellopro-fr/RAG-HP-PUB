@@ -118,7 +118,7 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
     Génère une réponse LLM en streaming et yield chaque token.
     """
     context = "\n-----\n\n\n".join(context_texts)
-    full_user_prompt = request.options.template_prompt.format(chunks=context, recherche=request.prompt)
+    full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
     
     type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
 
