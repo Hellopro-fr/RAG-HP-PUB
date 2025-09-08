@@ -160,9 +160,9 @@ def filtre_source (filtre: dict) -> str:
     clauses = []
     for key, val in filtre.items():
         if isinstance(val, list):
-            clauses.append(f"{key} in {[f'\"{v}\"' for v in val]}")
+            clauses.append(f"{key} in [{",".join(val)}]")
         elif isinstance(val, str):
-            clauses.append(f"{key} == \"{val}\"")
+            clauses.append(f'{key} == "{val}"')
     return " and ".join(clauses)
 
 def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
