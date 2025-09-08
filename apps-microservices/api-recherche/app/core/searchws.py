@@ -156,6 +156,15 @@ def llm_prompt_stream(request: LLMOptions, context_texts):
         yield f"\n\n--- ERREUR --- \n{e}"
 
 
+def filtre_source (filtre: dict) -> str:
+    clauses = []
+    for key, val in filtre.items():
+        if isinstance(val, list):
+            clauses.append(FieldCondition(key=key, match=MatchAny(any=[MatchValue(value=v) for v in val])))
+        elif isinstance(val, str):
+            clauses.append(FieldCondition(key=key, match=MatchValue(value=val)))
+    return " and ".join(clauses)
+
 def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
 	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
 	clauses = []
@@ -226,7 +235,7 @@ async def search_in_milvus_stream(request: SearchRequest):
     all_matches_for_reranking = []
     
     start_search = time.perf_counter()
-    for source in request.source:
+    for source, filtre in request.source.items():
         yield {"type": "status", "payload": f"Recherche dans {source}..."}
 
         if not utility.has_collection(source):
@@ -239,7 +248,16 @@ async def search_in_milvus_stream(request: SearchRequest):
 
         search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(reranking_top_k)}}
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
+        
+        filters = []
         filter_expr = build_milvus_expression(request.filtre, metadata["payload_fournisseur"], "1000000" in request.filtre.get("fournisseur", {}))
+        if filter_expr:
+            filters.append(filter_expr)
+        filter_expr_source = filtre_source(filtre) if filtre else ""
+        if filter_expr_source:
+            filters.append(filter_expr_source)
+        
+        filter_expr = " and ".join(filters) if filters else ""
         
         all_fields = [field.name for field in collection.schema.fields]
         fields_without_embedding = [f for f in all_fields if f != "embedding"]

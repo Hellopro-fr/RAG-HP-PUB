@@ -19,6 +19,10 @@ class SearchRequest(BaseModel):
     use_reranker: Optional[bool] = True
     reranker_model: Optional[str] = "BAAI/bge-reranker-v2-m3"
 
+class SourcesFiltre(BaseModel):
+    source: str
+    filtre: Dict[str, Any] = {}
+    
 class LLMOptions(BaseModel):
     chat_model: str = "gpt-4.1-2025-04-14"
     temperature: float = 0.0
@@ -30,7 +34,7 @@ class RerankerOptions(BaseModel):
 
 class SearchRequestWs(BaseModel):
     prompt: str
-    source: Optional[List[str]] = ['produits']
+    source: Optional[List[SourcesFiltre]] = [SourcesFiltre(source="produits", filtre={})]
     action: Optional[int] = 1
     top_k: Optional[int] = 10
     filtre: Optional[Dict[str, Any]] = {}
