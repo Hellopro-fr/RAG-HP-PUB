@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, Request
-from app.schemas.optimize.optimize import OptimRequest, OptimResponse
+from app.schemas.optimize.optimize import OptimRequest, OptimResponse, BatchOptimRequest, BatchOptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
-# from app.core.optimize.Qwen3_14B_Q4 import ProductOptimizerQwen
-# from app.core.optimize.Qwen3_14B_AWQ import ProductOptimizerQwen
-from app.core.optimize.Qwen3_14B_AWQ_titre import ProductTitleOptimizer
-
+# from app.core.optimize.Qwen3_14B_AWQ_titre import ProductTitleOptimizer
+from app.core.optimize.Qwen3_14B_AWQ_par_lots import ProductTitleOptimizer
+from typing import List, Dict, Any
+import time
 import os
 import threading
 
@@ -67,3 +67,44 @@ def optimizeQwen(request: Request, payload: OptimRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/qwen/batch", response_model=BatchOptimResponse)
+def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
+    """
+    Endpoint pour optimiser plusieurs produits par lots de 1000.
+    """
+    try:
+        start_time = time.time()
+        
+        print(f"Début du traitement par lots de {len(payload.products)} produits")
+        
+        optimizing_service = get_qwen_optimize_service()
+        
+        # Conversion des données Pydantic en dictionnaires
+        products_data = [product.dict() for product in payload.products]
+        
+        # Traitement par lots
+        batch_results = optimizing_service.optimize_products_batch(products_data)
+        
+        end_time = time.time()
+        processing_time = end_time - start_time
+        
+        print(f"Traitement par lots terminé en {processing_time:.2f} secondes")
+        
+        # Calcul des statistiques
+        success_count = sum(1 for result in batch_results if "success" in result)
+        error_count = len(batch_results) - success_count
+        
+        response = {
+            "data": batch_results,
+            "metadata": {
+                "total_products": len(batch_results),
+                "successful_optimizations": success_count,
+                "failed_optimizations": error_count,
+                "processing_time_seconds": round(processing_time, 2),
+                "batch_size": optimizing_service.batch_size
+            }
+        }
+        
+        return response
