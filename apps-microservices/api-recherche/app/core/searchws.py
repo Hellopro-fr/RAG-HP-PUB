@@ -113,12 +113,12 @@ import_duration = time.perf_counter() - import_start_time
 list_etat = {"1": "Client", "2": "Pause", "3": "Prospect"}
 list_affichage = {"1": "Complet", "3": "Restreint", "5": "Découverte", "4": "Non visible"}
 
-def llm_prompt_stream(request: LLMOptions, context_texts):
+def llm_prompt_stream(request: SearchRequest, context_texts):
     """
     Génère une réponse LLM en streaming et yield chaque token.
     """
     context = "\n-----\n\n\n".join(context_texts)
-    full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
+    full_user_prompt = request.options.template_prompt.format(chunks=context, recherche=request.prompt)
     
     type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
 
