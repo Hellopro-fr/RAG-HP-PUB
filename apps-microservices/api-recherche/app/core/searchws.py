@@ -159,15 +159,12 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
 def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
     for key, val in filtre.items():
-        join_sep = ","
         if key == "id_categorie" and source == "produits": 
             key = "categorie"
-            join_sep = "','"
         if isinstance(val, list):
-            joined = join_sep.join(val)
-            clauses.append(f"{key} in ['{joined}']")
+            clauses.append(f"{key} in {repr(val)}")
         elif isinstance(val, str):
-            clauses.append(f'{key} == "{val}"')
+            clauses.append(f'{key} == {repr(val)}')
     return clauses
 
 def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
