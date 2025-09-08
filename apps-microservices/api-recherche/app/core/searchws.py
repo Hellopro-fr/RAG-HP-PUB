@@ -156,14 +156,16 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
         yield f"\n\n--- ERREUR --- \n{e}"
 
 
-def filtre_source (filtre: dict) -> str:
+def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
     for key, val in filtre.items():
+        if key == "id_categorie" and source == "produits": 
+            key = "categorie"
         if isinstance(val, list):
             clauses.append(f"{key} in [{','.join(val)}]")
         elif isinstance(val, str):
             clauses.append(f'{key} == "{val}"')
-    return " and ".join(clauses)
+    return clauses
 
 def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
 	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
@@ -254,12 +256,16 @@ async def search_in_milvus_stream(request: SearchRequest):
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
         
         filters = []
-        filter_expr = build_milvus_expression(request.filtre, metadata["payload_fournisseur"], "1000000" in request.filtre.get("fournisseur", {}))
+        # filter_expr = build_milvus_expression(request.filtre, metadata["payload_fournisseur"], "1000000" in request.filtre.get("fournisseur", {}))
+        # if filter_expr:
+        #     filters.append(filter_expr)
+        filter_expr = filtre_source(request.filtre, source)
         if filter_expr:
-            filters.append(filter_expr)
+            filters.append(" and ".join(filter_expr))
+        
         filter_expr_source = filtre_source(filtre) if filtre else ""
         if filter_expr_source:
-            filters.append(filter_expr_source)
+            filters.append(" and ".join(filter_expr_source))
         
         filter_expr = " and ".join(filters) if filters else ""
         
