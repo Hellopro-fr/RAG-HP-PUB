@@ -278,7 +278,8 @@ class ProductTitleOptimizer:
             if prompt_tokens >= self.llm_args["max_model_len"]:
                 print(f"--- ERREUR : Prompt trop long ({prompt_tokens} tokens) pour le produit {product_id} ---")
                 return {
-                    "error": f"Prompt trop long ({prompt_tokens} tokens) pour le produit {product_id}"
+                    "id_produit_scrapping": product_id,
+                    "error": "erreur_prompt_trop_long"
                 }
             
             outputs = self.llm.generate([formatted_prompt], sampling_params)
@@ -289,11 +290,13 @@ class ProductTitleOptimizer:
             
             if result is None:
                 return {
+                    "id_produit_scrapping": product_id,
                     "error": f"Impossible de parser le JSON pour le produit {product_id}"
                 }
             
             if "Titre" not in result:
                 return {
+                    "id_produit_scrapping": product_id,
                     "error": f"Titre manquant dans la réponse pour le produit {product_id}"
                 }
             
@@ -307,6 +310,7 @@ class ProductTitleOptimizer:
             print(error_msg)
             logging.error(error_msg)
             return {
+                "id_produit_scrapping": product_id,
                 "error": error_msg
             }
 
@@ -365,7 +369,8 @@ class ProductTitleOptimizer:
                 
                 if formatted_prompts[i] == "Erreur: prompt trop long":
                     results.append({
-                        "error": f"Prompt trop long pour le produit {product_id}"
+                        "id_produit_scrapping": product_id,
+                        "error": "erreur_prompt_trop_long"
                     })
                     continue
                 
@@ -374,13 +379,10 @@ class ProductTitleOptimizer:
                     json_str = self.extract_json_from_text(raw_text)
                     result = self.parse_json_safely(json_str)
                     
-                    if result is None:
+                    if result is None or "Titre" not in result:
                         results.append({
-                            "error": f"Impossible de parser le JSON pour le produit {product_id}"
-                        })
-                    elif "Titre" not in result:
-                        results.append({
-                            "error": f"Titre manquant dans la réponse pour le produit {product_id}"
+                            "id_produit_scrapping": product_id,
+                            "error": "Impossible de parser le JSON ou titre manquant"
                         })
                     else:
                         results.append({
@@ -390,7 +392,8 @@ class ProductTitleOptimizer:
                         
                 except Exception as e:
                     results.append({
-                        "error": f"Erreur de traitement pour le produit {product_id}: {str(e)}"
+                        "id_produit_scrapping": product_id,
+                        "error": f"Erreur de traitement: {str(e)}"
                     })
             
             return results
@@ -402,7 +405,8 @@ class ProductTitleOptimizer:
             # Retourner des erreurs pour tous les produits du lot
             return [
                 {
-                    "error": f"Erreur lors du traitement du lot pour le produit {product.get('id_produit_scrapping', 'unknown')}: {error_msg}"
+                    "id_produit_scrapping": product.get('id_produit_scrapping', 'unknown'),
+                    "error": error_msg
                 } for product in batch_products
             ]
 
@@ -438,7 +442,8 @@ class ProductTitleOptimizer:
                 # Ajouter des erreurs pour tous les produits du lot
                 batch_errors = [
                     {
-                        "error": f"Erreur lors du traitement du lot {batch_num} pour le produit {product.get('id_produit_scrapping', 'unknown')}: {error_msg}"
+                        "id_produit_scrapping": product.get('id_produit_scrapping', 'unknown'),
+                        "error": error_msg
                     } for product in batch
                 ]
                 all_results.extend(batch_errors)
