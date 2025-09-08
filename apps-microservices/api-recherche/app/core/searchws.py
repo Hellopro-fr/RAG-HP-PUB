@@ -325,7 +325,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         yield {"type": "status", "payload": f"Génération de la réponse avec le LLM : {request.llm.chat_model}..."}
         
         # *** CORRECTION 2 : Utilisation de .get() pour le contexte du LLM ***
-        context_texts = [res["metadata"].get("text", "") for res in final_results]
+        context_texts = [res["metadata"]["entity"].get("text", "") for res in final_results]
         
         yield {"type": "llm_start"}
         llm_generation_started = True
