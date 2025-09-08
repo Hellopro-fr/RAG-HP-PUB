@@ -1,14 +1,14 @@
 from fastapi import APIRouter, HTTPException, Body
 from app.schemas.check_doublon_shemas import SearchRequest, SearchResponse, SearchReponse
 
-from app.core.check_doublon import search_in_qdrant, search_in_milvus
+from app.core.check_doublon import search_in_milvus
 
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/check-doublon" , summary="Vérifie le doublon produit dans Milvus")
+@router.post("/check-doublon", response_model=SearchReponse , summary="Vérifie le doublon produit dans Milvus")
 async def milvus_search_endpoint(request: SearchRequest = Body(...)):
     try:
         logger.info(f"Requête reçue sur /check-doublon pour nom : {request.nom_produit}")
