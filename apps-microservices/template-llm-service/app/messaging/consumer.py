@@ -29,7 +29,7 @@ def get_qualifier_service() -> QualifierService:
     return qualifier_service_instance
 
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
+    def __init__(self, connection: pika.BlockingConnection, publisher):
         self.channel = connection.channel()
         self.publisher = publisher
         
