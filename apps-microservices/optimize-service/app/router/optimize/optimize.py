@@ -108,3 +108,8 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
         }
         
         return response
+        
+    except Exception as e:
+        error_msg = f"Erreur lors du traitement par lots: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
