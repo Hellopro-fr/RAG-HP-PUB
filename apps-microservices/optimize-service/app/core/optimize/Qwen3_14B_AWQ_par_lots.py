@@ -34,26 +34,26 @@ class ProductTitleOptimizerBatch:
     #     return cleaned_content
     
     # def clean_input_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Nettoie les données d'entrée, notamment la description produit.
-        """
-        cleaned_data = data.copy()
+        # """
+        # Nettoie les données d'entrée, notamment la description produit.
+        # """
+        # cleaned_data = data.copy()
         
-        if 'description_produit' in cleaned_data and cleaned_data['description_produit']:
-            cleaned_data['description_produit'] = self.clean_html_attributes(
-                cleaned_data['description_produit']
-            )
+        # if 'description_produit' in cleaned_data and cleaned_data['description_produit']:
+        #     cleaned_data['description_produit'] = self.clean_html_attributes(
+        #         cleaned_data['description_produit']
+        #     )
         
-        if 'nom_produit' in cleaned_data and cleaned_data['nom_produit']:
-            cleaned_data['nom_produit'] = self.clean_html_attributes(
-                cleaned_data['nom_produit']
-            )
-        if 'categorie_produit' in cleaned_data and cleaned_data['categorie_produit']:
-            cleaned_data['categorie_produit'] = self.clean_html_attributes(
-                cleaned_data['categorie_produit']
-            )
+        # if 'nom_produit' in cleaned_data and cleaned_data['nom_produit']:
+        #     cleaned_data['nom_produit'] = self.clean_html_attributes(
+        #         cleaned_data['nom_produit']
+        #     )
+        # if 'categorie_produit' in cleaned_data and cleaned_data['categorie_produit']:
+        #     cleaned_data['categorie_produit'] = self.clean_html_attributes(
+        #         cleaned_data['categorie_produit']
+        #     )
             
-        return cleaned_data
+        # return cleaned_data
     
     def generate_prompt(self, data: Dict[str, Any]) -> str:
         """Génère le prompt pour le modèle basé sur les données du produit."""
@@ -80,7 +80,7 @@ class ProductTitleOptimizerBatch:
             - Ne jamais utiliser de balise HTML
             - Écrire toujours m² (surface) et m³ (volume) avec exposant et espace insécable (ex. : 45 m², 12 m³).
             - Ne jamais écrire m2, m3 ni ajouter de pluriel aux symboles.
-            - Toujours conserver le type d’acquisition du produit (neuf, occasion, location) présent dans le titre initial.
+            - Toujours conserver le type d'acquisition du produit (neuf, occasion, location) présent dans le titre initial.
 
             Exemple 1: Scierie LT15 Wood Mizer - essence ou diesel pour billes jusqu'à 70cm de diamètre et 5,4m de long
             Exemple 2: Bungalow démontable sur mesure de 2 à 12m de long, avec accouplement possible
