@@ -182,7 +182,7 @@ def filtre_source (filtre: dict, source: str = "") -> list:
             logger.info(f"dtype none {key}")
             continue
         
-                if dtype == DataType.ARRAY:
+        if dtype == DataType.ARRAY:
             if isinstance(val, list):
                 sub_clauses = [f"array_contains({key}, {repr(str(v))})" for v in val]
                 if sub_clauses:
