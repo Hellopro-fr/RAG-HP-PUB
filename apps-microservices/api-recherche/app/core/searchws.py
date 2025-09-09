@@ -356,7 +356,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
         
         # *** CORRECTION 1 : Utilisation de .get() pour le reranker ***
-        pairs = [[request.prompt, match["metadata"]["text"]] for match in all_matches_for_reranking]
+        pairs = [[request.prompt, match["metadata"]["entity"]["text"]] for match in all_matches_for_reranking]
         scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
         
         for match, score in zip(all_matches_for_reranking, scores):
