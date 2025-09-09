@@ -346,7 +346,14 @@ async def search_in_milvus_stream(request: SearchRequest):
         last_step_time = current_time  # Mettre à jour le marqueur de temps
         logger.info(f"Temps de préparation des paires : {pairs_duration:.4f} secondes.")
 
-        scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
+        # scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
+        with torch.inference_mode(), torch.autocast("cuda"):
+            scores = await asyncio.to_thread(
+                reranker.predict, 
+                pairs, 
+                show_progress_bar=False,
+                batch_size=128 # Voir Étape 2
+            )
         current_time = time.perf_counter()
         prediction_duration = current_time - last_step_time
         last_step_time = current_time # Mettre à jour le marqueur de temps
