@@ -65,7 +65,7 @@ def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
     # Si vous êtes sur CPU, 7 secondes est normal. Sur GPU, ce sera bien plus rapide.
     model = CrossEncoder(model_name, device=device, trust_remote_code=True)
     try:
-        model.model = torch.compile(model.model, mode="max-autotune")
+        model.model = torch.compile(model.model, mode="reduce-overhead")
         logger.info("Modèle de reranking compilé avec torch.compile() pour une performance optimale.")
     except Exception as e:
         logger.warning(f"Impossible de compiler le modèle avec torch.compile : {e}")
