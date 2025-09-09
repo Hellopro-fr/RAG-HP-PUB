@@ -425,6 +425,12 @@ async def search_in_milvus_stream(request: SearchRequest):
     search_duration = time.perf_counter() - start_search
     rerank_duration = 0
     final_results = []
+
+    initial_matches = sorted(all_matches_for_reranking, key=lambda x: x['score'], reverse=True)
+    initial_results = initial_matches[:top_k]
+    if initial_results:
+        yield {"type": "initial_results", "payload": {"results": initial_results, "duration": round(search_duration, 2)}}
+
     if request.options.use_reranker and all_matches_for_reranking:
         yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
         start_rerank_time = time.perf_counter()

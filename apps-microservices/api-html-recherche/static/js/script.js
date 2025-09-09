@@ -1057,6 +1057,25 @@ $(function () {
     }
   }
 
+    function handleSearchResultsPayload(payload) {
+    // Met à jour les résultats de recherche dans l'état, en les adaptant
+    state.searchResults = payload.results.map(adaptSearchResult);
+    console.log("Mise à jour de l'état avec les résultats :", state.searchResults);
+
+    // 1. Extraire les IDs des résultats qui sont des produits
+    const id_produits_a_chercher = state.searchResults
+      .filter(result => result.source === 'produits' && result.id_produit)
+      .map(result => result.id_produit);
+
+    // 2. Si on a des produits, on va chercher leurs infos détaillées
+    if (id_produits_a_chercher.length > 0) {
+      // La fonction `get_info_produit` mettra à jour l'UI dans son callback `complete`
+      get_info_produit(id_produits_a_chercher);
+    } else {
+      // S'il n'y a aucun produit, on affiche directement les résultats
+      updateUI();
+    }
+  }
   // --- DÉBUT DE LA SECTION FUSIONNÉE ---
 
   /**
@@ -1235,23 +1254,29 @@ $(function () {
         case 'error':
           console.error(`[WS Error] ${data.payload}`);
           break;
+        case 'initial_results':
+          console.log("Réception des résultats initiaux (pré-reranking).");
+          // On utilise notre nouvelle fonction helper pour traiter les résultats
+          handleSearchResultsPayload(data.payload);
+          break;
         case 'rerank_complete':
           // Met à jour les résultats de recherche dans l'état, en les adaptant
-          state.searchResults = data.payload.results.map(adaptSearchResult);
+          handleSearchResultsPayload(data.payload);
+          // state.searchResults = data.payload.results.map(adaptSearchResult);
 
-          // 1. Extraire les IDs des résultats qui sont des produits
-          const id_produits_a_chercher = state.searchResults
-            .filter(result => result.source === 'produits' && result.id_produit)
-            .map(result => result.id_produit);
+          // // 1. Extraire les IDs des résultats qui sont des produits
+          // const id_produits_a_chercher = state.searchResults
+          //   .filter(result => result.source === 'produits' && result.id_produit)
+          //   .map(result => result.id_produit);
 
-          console.log(`IDs de produits à chercher:`, id_produits_a_chercher);
-          // 2. Si on a des produits, on va chercher leurs infos détaillées
-          if (id_produits_a_chercher.length > 0) {
-            get_info_produit(id_produits_a_chercher);
-          } else {
-            // S'il n'y a aucun produit, on affiche directement les résultats
-            updateUI();
-          }
+          // console.log(`IDs de produits à chercher:`, id_produits_a_chercher);
+          // // 2. Si on a des produits, on va chercher leurs infos détaillées
+          // if (id_produits_a_chercher.length > 0) {
+          //   get_info_produit(id_produits_a_chercher);
+          // } else {
+          //   // S'il n'y a aucun produit, on affiche directement les résultats
+          //   updateUI();
+          // }
           break;
         case 'llm_start':
           state.llmResponse = ''; // S'assure que la réponse est vide au début du streaming
