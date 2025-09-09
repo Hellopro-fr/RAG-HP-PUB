@@ -27,7 +27,7 @@ def convert_model_to_onnx():
     
     try:
         logger.info("Téléchargement du modèle et du tokenizer depuis Hugging Face...")
-        model = ORTModelForSequenceClassification.from_pretrained(MODEL_ID, from_transformers=True, trust_remote_code=True)
+        model = ORTModelForSequenceClassification.from_pretrained(MODEL_ID, export=True, trust_remote_code=True)
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 
         logger.info(f"Sauvegarde du modèle converti dans '{ONNX_PATH}'...")
