@@ -31,8 +31,8 @@ def get_qwen_optimize_service() -> ProductTitleOptimizerBatch:
         # On revérifie si l'instance n'a pas été créée par un autre thread
         # pendant qu'on attendait le verrou.
         if qwen_service_instance is None:
-            print("--- LAZY LOADING: Initialisation du ProductTitleOptimizer (chargement du modèle)... ---")
-            qwen_service_instance = ProductTitleOptimizer()
+            print("--- LAZY LOADING: Initialisation du ProductTitleOptimizerBatch (chargement du modèle)... ---")
+            qwen_service_instance = ProductTitleOptimizerBatch()
             print("--- LAZY LOADING: Service initialisé et prêt. ---")
     return qwen_service_instance
 
