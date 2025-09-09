@@ -46,6 +46,20 @@ services:
       - "8566:8566"
     env_file:
       - .env
+  
+  api-html-recherche-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-html-recherche/Dockerfile
+    container_name: api-html-recherche-service
+    restart: unless-stopped
+    # TODO: à supprimer en PROD
+    volumes:
+      - ./apps-microservices/api-classification:/app:rw
+    ports:
+      - "8550:8550"
+    env_file:
+      - .env
 
   api-gateway-service:
     build:

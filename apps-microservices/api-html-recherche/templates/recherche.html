@@ -1,109 +1,114 @@
 <!DOCTYPE html>
 <html lang="fr">
-
-<head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Recherche RAG Intelligente</title>
-	<!-- À NE PAS UTILISER pour ce script -->
-	<!-- VERSION COMPLÈTE CORRECTE -->
-	<script src="https://code.jquery.com/jquery-3.7.1.min.js"
-		integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
-	<script src="https://cdn.tailwindcss.com"></script>
-	<!-- <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Recherche RAG</title>
+    <!-- À NE PAS UTILISER pour ce script -->
+    <!-- VERSION COMPLÈTE CORRECTE -->
+    <script
+      src="https://code.jquery.com/jquery-3.7.1.min.js"
+      integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+      crossorigin="anonymous"
+    ></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 	<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script> -->
 
-	<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-	<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-	<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
-	<!-- MODIFICATION : Ajout de la librairie Marked.js pour convertir le Markdown en HTML -->
-	<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- MODIFICATION : Ajout de la librairie Marked.js pour convertir le Markdown en HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-	<style>
-		/* 1. Définition de votre palette de couleurs personnalisée */
-		:root {
-			--color-orange: #FB5607;
-			--color-orange-secondary: #F46C0E;
-			--color-orange-light: #FFF5F0;
-			--color-orange-heavy: #E24C04;
-			--color-bleu: #3353FF;
-			--color-bleu-light: #F5F6FF;
-			--color-bleu-heavy: #0026F5;
-			--color-bleu-noir: #041325;
-			--color-noir: #1D1D1B;
-			--color-noir-heavy: #000000;
-			--color-gris: #5F5F5F;
-			--color-gris-blanc: #D7DBE0;
-			--color-clair-1: #E9E9E9;
-			--color-clair-2: #EAECF1;
-			--color-clair-3: #F0F2F5;
-			--color-clair-4: #F4F4F4;
-			--color-white: #FFF;
-			--color-vert: #02C39A;
-			--color-vert-light: #DCFFF7;
-			/* Utilisé pour la pertinence */
-			--color-rouge: #EA1F38;
-			--color-rouge-light: #FEF1F3;
-			/* Utilisé pour la pertinence */
-			--color-bleu-light-2: #ADBAFF;
-			--color-orange-light-2: #FEC8AF;
-		}
+    <style>
+      /* 1. Définition de votre palette de couleurs personnalisée */
+      :root {
+        --color-orange: #fb5607;
+        --color-orange-secondary: #f46c0e;
+        --color-orange-light: #fff5f0;
+        --color-orange-heavy: #e24c04;
+        --color-bleu: #3353ff;
+        --color-bleu-light: #f5f6ff;
+        --color-bleu-heavy: #0026f5;
+        --color-bleu-noir: #041325;
+        --color-noir: #1d1d1b;
+        --color-noir-heavy: #000000;
+        --color-gris: #5f5f5f;
+        --color-gris-blanc: #d7dbe0;
+        --color-clair-1: #e9e9e9;
+        --color-clair-2: #eaecf1;
+        --color-clair-3: #f0f2f5;
+        --color-clair-4: #f4f4f4;
+        --color-white: #fff;
+        --color-vert: #02c39a;
+        --color-vert-light: #dcfff7;
+        /* Utilisé pour la pertinence */
+        --color-rouge: #ea1f38;
+        --color-rouge-light: #fef1f3;
+        /* Utilisé pour la pertinence */
+        --color-bleu-light-2: #adbaff;
+        --color-orange-light-2: #fec8af;
+      }
 
-		/* Animations et styles personnalisés */
-		.animate-spin {
-			animation: spin 1s linear infinite;
-		}
+      /* Animations et styles personnalisés */
+      .animate-spin {
+        animation: spin 1s linear infinite;
+      }
 
-		@keyframes spin {
-			from {
-				transform: rotate(0deg);
-			}
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
 
-			to {
-				transform: rotate(360deg);
-			}
-		}
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
-		.slide-in-from-right {
-			animation: slideInFromRight 0.3s ease-out;
-		}
+      .slide-in-from-right {
+        animation: slideInFromRight 0.3s ease-out;
+      }
 
-		@keyframes slideInFromRight {
-			from {
-				transform: translateX(100%);
-			}
+      @keyframes slideInFromRight {
+        from {
+          transform: translateX(100%);
+        }
 
-			to {
-				transform: translateX(0);
-			}
-		}
+        to {
+          transform: translateX(0);
+        }
+      }
 
-		.slide-in-from-top {
-			animation: slideInFromTop 0.2s ease-out;
-		}
+      .slide-in-from-top {
+        animation: slideInFromTop 0.2s ease-out;
+      }
 
-		@keyframes slideInFromTop {
-			from {
-				transform: translateY(-10px);
-				opacity: 0;
-			}
+      @keyframes slideInFromTop {
+        from {
+          transform: translateY(-10px);
+          opacity: 0;
+        }
 
-			to {
-				transform: translateY(0);
-				opacity: 1;
-			}
-		}
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
 
-		.line-clamp-3 {
-			display: -webkit-box;
-			-webkit-line-clamp: 3;
-			-webkit-box-orient: vertical;
-			overflow: hidden;
-		}
+      .line-clamp-3 {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
 
-		/*.select2-container--default .select2-selection--single {
+      /*.select2-container--default .select2-selection--single {
 			height: 36px;
 			/* Correspond à h-9 de Tailwind
 			border: 1px solid var(--color-gris-blanc);
@@ -152,993 +157,1320 @@
 			border-color: var(--color-bleu);
 		}*/
 
-		/* Styles pour les éléments de formulaire personnalisés */
-		.custom-select {
-			appearance: none;
-			background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5F5F' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
-			background-position: right 0.5rem center;
-			background-repeat: no-repeat;
-			background-size: 1.5em 1.5em;
-			padding-right: 2.5rem;
-		}
+      /* Styles pour les éléments de formulaire personnalisés */
+      .custom-select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5F5F' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 0.5rem center;
+        background-repeat: no-repeat;
+        background-size: 1.5em 1.5em;
+        padding-right: 2.5rem;
+      }
 
-		.multi-select-dropdown {
-			max-height: 200px;
-			overflow-y: auto;
-		}
+      .multi-select-dropdown {
+        max-height: 200px;
+        overflow-y: auto;
+      }
 
-		.checkbox-custom {
-			appearance: none;
-			width: 1rem;
-			height: 1rem;
-			border: 1px solid var(--color-gris-blanc);
-			border-radius: 0.25rem;
-			background-color: white;
-			cursor: pointer;
-			position: relative;
-		}
+      .checkbox-custom {
+        appearance: none;
+        width: 1rem;
+        height: 1rem;
+        border: 1px solid var(--color-gris-blanc);
+        border-radius: 0.25rem;
+        background-color: white;
+        cursor: pointer;
+        position: relative;
+      }
 
-		.checkbox-custom:checked {
-			background-color: var(--color-bleu);
-			border-color: var(--color-bleu);
-		}
+      .checkbox-custom:checked {
+        background-color: var(--color-bleu);
+        border-color: var(--color-bleu);
+      }
 
-		.checkbox-custom:checked::after {
-			content: '✓';
-			position: absolute;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			color: white;
-			font-size: 0.75rem;
-			font-weight: bold;
-		}
+      .checkbox-custom:checked::after {
+        content: "✓";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-size: 0.75rem;
+        font-weight: bold;
+      }
 
-		.slider {
-			-webkit-appearance: none;
-			appearance: none;
-			height: 4px;
-			background: var(--color-clair-2);
-			border-radius: 2px;
-			outline: none;
-		}
+      .slider {
+        -webkit-appearance: none;
+        appearance: none;
+        height: 4px;
+        background: var(--color-clair-2);
+        border-radius: 2px;
+        outline: none;
+      }
 
-		.slider::-webkit-slider-thumb {
-			-webkit-appearance: none;
-			appearance: none;
-			width: 16px;
-			height: 16px;
-			background: var(--color-bleu);
-			border-radius: 50%;
-			cursor: pointer;
-		}
+      .slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        background: var(--color-bleu);
+        border-radius: 50%;
+        cursor: pointer;
+      }
 
-		.slider::-moz-range-thumb {
-			width: 16px;
-			height: 16px;
-			background: var(--color-bleu);
-			border-radius: 50%;
-			cursor: pointer;
-			border: none;
-		}
-		/* Style pour le contenu Markdown rendu */
-		#llmResponseText ul { list-style-type: disc; padding-left: 20px; }
-		#llmResponseText ol { list-style-type: decimal; padding-left: 20px; }
-		#llmResponseText h1, #llmResponseText h2, #llmResponseText h3 { font-weight: 600; margin-top: 8px; margin-bottom: 4px; }
-		#llmResponseText h1 { font-size: 1.1em; }
-		#llmResponseText h2 { font-size: 1.05em; }
-		#llmResponseText strong { font-weight: 600; }
-	</style>
-	<script>
-		// 2. Configuration de Tailwind pour utiliser votre palette
-		tailwind.config = {
-			theme: {
-				extend: {
-					colors: {
-						'custom-orange': 'var(--color-orange)',
-						'custom-orange-light': 'var(--color-orange-light)',
-						'custom-orange-heavy': 'var(--color-orange-heavy)',
-						'custom-bleu': 'var(--color-bleu)',
-						'custom-bleu-light': 'var(--color-bleu-light)',
-						'custom-bleu-heavy': 'var(--color-bleu-heavy)',
-						'custom-bleu-light-2': 'var(--color-bleu-light-2)',
-						'custom-noir': 'var(--color-noir)',
-						'custom-gris': 'var(--color-gris)',
-						'custom-gris-blanc': 'var(--color-gris-blanc)',
-						'custom-clair-1': 'var(--color-clair-1)',
-						'custom-clair-2': 'var(--color-clair-2)',
-						'custom-clair-3': 'var(--color-clair-3)',
-						'custom-vert-light': 'var(--color-vert-light)',
-						'custom-rouge-light': 'var(--color-rouge-light)',
-					},
-					fontFamily: {
-						sans: ['Inter', 'sans-serif'],
-					}
-				}
-			}
-		}
-	</script>
-	<link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
-</head>
+      .slider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        background: var(--color-bleu);
+        border-radius: 50%;
+        cursor: pointer;
+        border: none;
+      }
+      /* Style pour le contenu Markdown rendu */
+      #llmResponseText ul {
+        list-style-type: disc;
+        padding-left: 20px;
+      }
+      #llmResponseText ol {
+        list-style-type: decimal;
+        padding-left: 20px;
+      }
+      #llmResponseText h1,
+      #llmResponseText h2,
+      #llmResponseText h3 {
+        font-weight: 600;
+        margin-top: 8px;
+        margin-bottom: 4px;
+      }
+      #llmResponseText h1 {
+        font-size: 1.1em;
+      }
+      #llmResponseText h2 {
+        font-size: 1.05em;
+      }
+      #llmResponseText strong {
+        font-weight: 600;
+      }
+    </style>
+    <script>
+      // 2. Configuration de Tailwind pour utiliser votre palette
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              "custom-orange": "var(--color-orange)",
+              "custom-orange-light": "var(--color-orange-light)",
+              "custom-orange-heavy": "var(--color-orange-heavy)",
+              "custom-bleu": "var(--color-bleu)",
+              "custom-bleu-light": "var(--color-bleu-light)",
+              "custom-bleu-heavy": "var(--color-bleu-heavy)",
+              "custom-bleu-light-2": "var(--color-bleu-light-2)",
+              "custom-noir": "var(--color-noir)",
+              "custom-gris": "var(--color-gris)",
+              "custom-gris-blanc": "var(--color-gris-blanc)",
+              "custom-clair-1": "var(--color-clair-1)",
+              "custom-clair-2": "var(--color-clair-2)",
+              "custom-clair-3": "var(--color-clair-3)",
+              "custom-vert-light": "var(--color-vert-light)",
+              "custom-rouge-light": "var(--color-rouge-light)",
+            },
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', path='/css/style.css') }}"
+    />
+  </head>
 
-<body class="min-h-screen bg-custom-clair-3 flex flex-col font-sans">
-	<!-- Header -->
-	<header class="border-b border-custom-clair-2 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-		<div class="container mx-auto px-4 py-4">
-			<div class="flex items-center gap-2 md:gap-4">
-				<div class="flex items-center gap-2">
-					<i data-lucide="sparkles" class="h-5 w-5 md:h-6 md:w-6 text-custom-orange"></i>
-					<h1 class="text-lg md:text-xl font-semibold text-custom-noir hidden sm:block">Recherche RAG
-						Intelligente</h1>
-					<h1 class="text-lg font-semibold text-custom-noir sm:hidden">RAG</h1>
-				</div>
+  <body class="min-h-screen bg-custom-clair-3 flex flex-col font-sans">
+    <!-- Header -->
+    <header
+      class="border-b border-custom-clair-2 bg-white/80 backdrop-blur-sm sticky top-0 z-50"
+    >
+      <div class="container mx-auto px-4 py-4">
+        <div class="flex items-center gap-2 md:gap-4">
+          <div class="flex items-center gap-2">
+            <i
+              data-lucide="sparkles"
+              class="h-5 w-5 md:h-6 md:w-6 text-custom-orange"
+            ></i>
+            <h1
+              class="text-lg md:text-xl font-semibold text-custom-noir hidden sm:block"
+            >
+              Recherche RAG
+            </h1>
+            <h1 class="text-lg font-semibold text-custom-noir sm:hidden">
+              RAG
+            </h1>
+          </div>
 
-				<div class="flex-1 max-w-2xl">
-					<div class="relative">
-						<i data-lucide="search"
-							class="absolute left-3 top-1/2 transform -translate-y-1/2 text-custom-gris h-4 w-4"></i>
-						<input type="text" id="searchInput" placeholder="Rechercher..."
-							class="w-full pl-10 pr-4 h-10 md:h-12 text-sm md:text-base border border-custom-gris-blanc rounded-lg focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none" />
-					</div>
-				</div>
+          <div class="flex-1 max-w-2xl">
+            <div class="relative">
+              <i
+                data-lucide="search"
+                class="absolute left-3 top-1/2 transform -translate-y-1/2 text-custom-gris h-4 w-4"
+              ></i>
+              <input
+                type="text"
+                id="searchInput"
+                placeholder="Rechercher..."
+                class="w-full pl-10 pr-4 h-10 md:h-12 text-sm md:text-base border border-custom-gris-blanc rounded-lg focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none"
+              />
+            </div>
+          </div>
 
-				<div class="flex items-center gap-1 md:gap-2">
-					<!-- Mobile search button -->
-					<button id="searchBtn"
-						class="md:hidden px-3 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-						<i data-lucide="search" class="h-4 w-4"></i>
-					</button>
+          <div class="flex items-center gap-1 md:gap-2">
+            <!-- Mobile search button -->
+            <button
+              id="searchBtn"
+              class="md:hidden px-3 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <i data-lucide="search" class="h-4 w-4"></i>
+            </button>
 
-					<!-- Desktop search button -->
-					<button id="searchBtnDesktop"
-						class="hidden md:flex items-center gap-2 px-4 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-						<i data-lucide="search" class="h-4 w-4"></i>
-						<span id="searchBtnText">Rechercher</span>
-					</button>
+            <!-- LLM Toggle -->
+            <button
+              id="llmToggle"
+              class="hidden lg:flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors"
+            >
+              <i data-lucide="sparkles" class="h-4 w-4"></i>
+              <span id="llmToggleText">IA</span>
+            </button>
 
-					<!-- LLM Toggle -->
-					<button id="llmToggle"
-						class="hidden lg:flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors">
-						<i data-lucide="sparkles" class="h-4 w-4"></i>
-						<span id="llmToggleText">IA</span>
-					</button>
+            <!-- Desktop search button -->
+            <button
+              id="searchBtnDesktop"
+              class="hidden md:flex items-center gap-2 px-4 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <i data-lucide="search" class="h-4 w-4"></i>
+              <span id="searchBtnText">Rechercher</span>
+            </button>
 
-					<!-- Mobile filter button -->
-					<button id="mobileFilterBtn"
-						class="md:hidden px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2">
-						<i data-lucide="menu" class="h-4 w-4"></i>
-					</button>
+            <!-- Mobile filter button -->
+            <button
+              id="mobileFilterBtn"
+              class="md:hidden px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2"
+            >
+              <i data-lucide="menu" class="h-4 w-4"></i>
+            </button>
 
-					<!-- Desktop filter toggle -->
-					<button id="filterToggle"
-						class="hidden md:flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors">
-						<i data-lucide="filter" class="h-4 w-4"></i>
-						<span class="hidden lg:inline">Filtres</span>
-					</button>
+            <!-- Desktop filter toggle -->
+            <button
+              id="filterToggle"
+              class="hidden md:flex items-center gap-2 ml-6 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors"
+              title="Afficher/Masquer les filtres"
+              >
+              <i data-lucide="filter" class="h-4 w-4"></i>
+              <!-- <span class="hidden lg:inline">Filtres</span> -->
+            </button>
 
-					<!-- Results toggle -->
-					<button id="resultsToggle"
-						class="flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors"
-						title="Afficher/Masquer les résultats">
-						<span id="resultsToggleIcon"><i data-lucide="panel-right-open" class="h-4 w-4"></i></span>
-						<span class="hidden sm:inline">Résultats</span>
-					</button>
-				</div>
-			</div>
-		</div>
-	</header>
+            <!-- Results toggle -->
+            <button
+              id="resultsToggle"
+              class="flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors"
+              title="Afficher/Masquer les résultats"
+            >
+              <span id="resultsToggleIcon"
+                ><i data-lucide="panel-right-open" class="h-4 w-4"></i
+              ></span>
+              <!-- <span class="hidden sm:inline">Résultats</span> -->
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
 
-	<div class="flex-1 flex">
-		<!-- **CORRECTION 1** : Le conteneur parent gère maintenant l'espace global -->
-        <div class="w-full max-w-screen-2xl mx-auto px-2 md:px-4 py-4 md:py-6 flex gap-4 md:gap-6 flex-1"
-            id="mainContainer">
-            <!-- Desktop Sidebar Filters -->
-            <aside id="filterSidebar" class="hidden md:block w-80 space-y-4 flex-shrink-0">
-                <div class="bg-white rounded-lg border border-custom-clair-2 shadow-sm">
-                    <div class="p-4 border-b border-custom-clair-2">
-                        <h3 class="text-base font-semibold flex items-center gap-2 text-custom-noir">
-                            <i data-lucide="settings" class="h-4 w-4"></i>
-                            Paramètres de recherche
-                        </h3>
-                    </div>
-                    <div class="p-4 space-y-4">
-                        <!-- Top K Results -->
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-custom-noir">Nombre de résultats (top_k)</label>
-                            <div class="px-2">
-                                <input type="range" id="topKSlider" min="1" max="200" value="10" class="slider w-full">
-                                <div class="flex justify-between text-xs text-custom-gris mt-1">
-                                    <span>1</span>
-                                    <span id="topKValue" class="font-medium">10</span>
-                                    <span>200</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="border-custom-clair-2">
-
-                        <!-- Data Sources -->
-                        <div class="space-y-3">
-                            <button id="sourcesToggle"
-                                class="flex items-center justify-between w-full p-2 hover:bg-custom-clair-3 rounded-md transition-colors">
-                                <span class="font-medium text-sm text-custom-noir">Sources de données</span>
-                                <i data-lucide="chevron-down" class="h-4 w-4 transition-transform"
-                                    id="sourcesChevron"></i>
-                            </button>
-                            <div id="sourcesContent" class="space-y-3">
-                                <!-- Produits -->
-                                <div class="space-y-2 pl-2">
-                                    <div
-                                        class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
-                                        <input type="checkbox" id="produits" class="checkbox-custom">
-                                        <label for="produits"
-                                            class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Produits</label>
-                                    </div>
-                                    <div id="produitsSubfilters" class="pl-6 space-y-2 hidden">
-                                        <div class="space-y-1">
-                                            <label class="text-xs text-custom-gris">Source</label>
-                                            <select id="produitsSource"
-                                                class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm">
-                                                <option value="">Choisir...</option>
-                                                <option value="Scrapping">Scrapping</option>
-                                                <option value="BO">Front</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Devis -->
-                                <div class="space-y-2 pl-2">
-                                    <div
-                                        class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
-                                        <input type="checkbox" id="devis" class="checkbox-custom">
-                                        <label for="devis"
-                                            class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Demande de devis</label>
-                                    </div>
-                                    <div id="devisSubfilters" class="pl-6 space-y-3 hidden">
-                                        <div class="space-y-1">
-                                            <label class="text-xs text-custom-gris">Naf</label>
-                                            <select id="devisNaf"
-                                                class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                                                multiple 
-                                                data-ajax="true" 
-                                                data-url="https://dev-www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php" 
-                                                data-pagination="true" 
-                                                data-payload="recup_naf"
-                                            >
-                                            </select>
-                                        </div>
-                                        <div class="space-y-1">
-                                            <label class="text-xs text-custom-gris">Effectif</label>
-                                            <select id="devisEffectif"
-                                                class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                                                multiple 
-                                                data-ajax="true" 
-                                                data-url="https://dev-www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php" 
-                                                data-pagination="true" 
-                                                data-payload="recup_effectif"
-                                            >
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- MCF & HelloPro -->
-                                <div class="space-y-2 pl-2">
-                                    <div
-                                        class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
-                                        <input type="checkbox" id="echanges" class="checkbox-custom">
-                                        <label for="echanges"
-                                            class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">MCF &
-                                            HelloPro</label>
-                                    </div>
-                                </div>
-
-                                <!-- Site Web -->
-                                <div class="space-y-2 pl-2">
-                                    <div
-                                        class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
-                                        <input type="checkbox" id="siteweb" class="checkbox-custom">
-                                        <label for="siteweb"
-                                            class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Site
-                                            Web</label>
-                                    </div>
-                                    <div id="sitewebSubfilters" class="pl-6 hidden">
-                                        <div class="space-y-1">
-                                            <label class="text-xs text-custom-gris">Modèle de page</label>
-                                            <select id="sitewebModele"
-                                                class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm">
-                                                <option value="">Choisir...</option>
-                                                <option value="landing">Landing Page</option>
-                                                <option value="product">Page Produit</option>
-                                                <option value="blog">Blog</option>
-                                                <option value="ecommerce">E-commerce</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="border-custom-clair-2">
-
-                        <!-- Advanced Filters -->
-                        <div class="space-y-3">
-                            <button id="advancedToggle"
-                                class="flex items-center justify-between w-full p-2 hover:bg-custom-clair-3 rounded-md transition-colors">
-                                <span class="font-medium text-sm text-custom-noir">Filtres avancés</span>
-                                <i data-lucide="chevron-right" class="h-4 w-4 transition-transform"
-                                    id="advancedChevron"></i>
-                            </button>
-                            <div id="advancedContent" class="space-y-3 hidden">
-                                <!-- État -->
-                                <div class="space-y-2">
-                                    <label class="text-sm font-medium flex items-center gap-2 text-custom-noir">
-                                        <i data-lucide="users" class="h-4 w-4 text-custom-gris"></i>
-                                        État
-                                    </label>
-                                    <select id="etatFilter"
-                                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                                        multiple="">
-                                        <option value="client">Client</option>
-                                        <option value="pause">Pause</option>
-                                        <option value="prospect">Prospect</option>
-                                    </select>
-                                </div>
-
-                                <!-- Affichage -->
-                                <div class="space-y-2">
-                                    <label class="text-sm font-medium flex items-center gap-2 text-custom-noir">
-                                        <i data-lucide="eye" class="h-4 w-4 text-custom-gris"></i>
-                                        Affichage
-                                    </label>
-                                    <select id="affichageFilter"
-                                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                                        multiple>
-                                        <option value="complet">Complet</option>
-                                        <option value="restreint">Restreint</option>
-                                        <option value="non-visible">Non visible</option>
-                                        <option value="decouverte">Découverte</option>
-                                    </select>
-                                </div>
-
-                                <!-- Catégorie -->
-                                <div class="space-y-2">
-                                    <label class="text-sm font-medium text-custom-noir">Catégorie</label>
-                                    <div class="relative">
-                                        <select id="categorieDropdown"
-                                            class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                                            multiple  
-                                        >
-                                            <option value="2016431">Containers aménagés</option>
-                                            <option value="2008670">Stations de lavage</option>
-                                            <option value="2007702">Ponts élévateurs</option>
-                                            <option value="2003445">Chambres froides</option>
-                                            <option value="2017735">Ascenseurs privatifs</option>
-                                            <option value="1002167">Montes-charges</option>
-                                            <option value="2013765">Monnayeurs</option>
-                                            <option value="2019606">Distributeurs automatique multi-produits</option>
-                                            <option value="2004590">Balayeuse de voirie</option>
-                                            <option value="2002944">Barrières anti-inondation</option>
-                                            <option value="2008035">Groupes électrogènes industriels</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <!-- Fournisseur -->
-                                <div class="space-y-2">
-                                    <label class="text-sm font-medium text-custom-noir">Fournisseur</label>
-                                    <div class="relative">
-                                        <select id="fournisseurDropdown"
-                                            class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                                            multiple 
-                                        >
-                                        <option value='5005'>Alsace Manutention</option>
-                                            <option value='133281'>GRUSE</option>
-                                            <option value='690010'>ETNA FRANCE</option>
-                                            <option value='4007'>ORONA - ALMA</option>
-                                            <option value='734333'>DWS</option>
-                                            <option value='2060318'>XL INDUSTRIE</option>
-                                            <option value='1676291'>Midilev : Ascenseur Toulouse</option>
-                                            <option value='2209995'>LIFT SYSTEME</option>
-                                            <option value='2176756'>ABRIAL ACCES ETAGES SARL</option>
-                                            <option value='2253146'>EdmoLift Solutions</option>
-                                            <option value='1608643'>PEITHO</option>
-                                            <option value='2224298'>ASCENSEURS M&P</option>
-                                            <option value='2231054'>MP Ascenceurs</option>
-                                            <option value='2399788'>Interlift</option>
-                                            <option value='2407221'>MEMA</option>
-                                            <option value='950932'>Proelevation - HIDRAL France</option>
-                                            <option value='2085274'>ASCENSEURS PAOLI</option>
-                                            <option value='2085258'>ACCES ELEVATION</option>
-                                            <option value='1037129'>Ascenseurs et Automatismes de Gascogne</option>
-                                            <option value='2421700'>Robles Eleser, S.L.</option>
-                                            <option value='2169049'>CAPITAL SALUD AND</option>
-                                            <option value='2040553'>BKG FRANCE</option>
-                                            <option value='2085283'>3MC</option>
-                                            <option value='2421655'>Electroelsa Srl</option>
-                                            <option value='2421722'>RAFAEL ACCESSIBILITE FERMETURES-R.A.F.</option>
-                                            <option value='2223781'>ADS ELEVATEURS</option>
-                                            <option value='662661'>EdmoLift Solutions</option>
-                                            <option value='238846'>SACHOT ASCENSEURS</option>
-                                            <option value='1303716'>G.B.G. Concept (SARL)</option>
-                                            <option value='766171'>ATOUT'ETAGE</option>
-                                            <option value='1351514'>SYCA SYSTEMS</option>
-                                            <option value='2421759'>GRUPPO MILLEPIANI S.P.A.</option>
-                                            <option value='1300411'>LORALTEC S.A.S.</option>
-                                            <option value='1478849'>CAURET</option>
-                                            <option value='2478238'>DIANAR</option>
-                                            <option value='2426326'>Schindler France</option>
-                                            <option value='2398509'>KLEEMANN HELLAS MECHANICAL CONSTRUCTIONS</option>
-                                            <option value='798727'>HAMON</option>
-                                            <option value='2495197'>GEDA-Dechentreiter GmbH & Co.KG</option>
-                                            <option value='2470580'>Hidral</option>
-                                            <option value='2495214'>CMC MONTE CHARGES</option>
-                                            <option value='2495220'>Liftech, S.A.</option>
-                                            <option value='2495239'>Imem</option>
-                                            <option value='2495250'>Xiamen Wellift Elevator Co., Ltd.</option>
-                                            <option value='2581852'>ZONZINI SRL</option>
-                                            <option value='2426316'>ASA</option>
-                                            <option value='2785997'>Ma�a �l�vation</option>
-                                            <option value='1579025'>Protoumat</option>
-                                            <option value='2469699'>Vinca</option>
-                                            <option value='2040554'>ARATAL ATTRACTIVE MOBILITY</option>
-                                            <option value='1731'>MSEI Environnement</option>
-                                            <option value='1376'>Hydroconcept</option>
-                                            <option value='636940'>RCY</option>
-                                            <option value='1733450'>ORISQUES DISTRIBUTION SAS</option>
-                                            <option value='1713419'>MEGASECUR.EUROPE</option>
-                                            <option value='2072500'>COLLAD'EAU SYSTEME PROTECT PNEUMATIQUE</option>
-                                            <option value='1409276'>COLUREX</option>
-                                            <option value='94658'>INTERALLIANCE</option>
-                                            <option value='24219'>M.S.U ( Mat�riel de S�curit� Urbaine )</option>
-                                            <option value='2174517'>FRANCE OBTURATEUR</option>
-                                            <option value='2431449'>floodsax</option>
-                                            <option value='2402296'>FEUGIER ENVIRONNEMENT</option>
-                                            <option value='2431398'>BERGTEC International AG</option>
-                                            <option value='1609835'>AXESS INDUSTRIES</option>
-                                            <option value='1846687'>GED Event</option>
-                                            <option value='2617681'>Centrale Brico</option>
-                                            <option value='274591'>ESTHI</option>
-                                            <option value='95479'>AGEC</option>
-                                            <option value='257020'>RGTE</option>
-                                            <option value='272819'>DT Froid</option>
-                                            <option value='626816'>AM PRO</option>
-                                            <option value='156491'>MOOV & COOK</option>
-                                            <option value='627052'>MAT SUP EQUIPEMENTS</option>
-                                            <option value='190872'>MODULFROID SERVICE</option>
-                                            <option value='773118'>SARL LEGOFF</option>
-                                            <option value='1837479'>CHR Discount</option>
-                                            <option value='1947237'>KRISTAL FROID MACHINES</option>
-                                            <option value='167930'>Infrico mgd</option>
-                                            <option value='190994'>REFTRADE FRANCE</option>
-                                            <option value='283203'>Bonnet N�v�</option>
-                                            <option value='283827'>FRIMA CONCEPT</option>
-                                            <option value='370630'>TIBBLOC</option>
-                                            <option value='410619'>Noma Cool Nord</option>
-                                            <option value='565979'>PROCOLD</option>
-                                            <option value='1193860'>Froid 77</option>
-                                            <option value='1369845'>MATERIELS DIRECT</option>
-                                            <option value='21204'>ISOCAB FRANCE</option>
-                                            <option value='2045191'>ERIDES</option>
-                                            <option value='2052590'>FROID ET MACHINES CONCESSIONNAIRE</option>
-                                            <option value='2042218'>Remorques du midi</option>
-                                            <option value='1769866'>SARL LAMBERTIN</option>
-                                            <option value='2052765'>SYNERGIES AGENCEMENTS REFRIGERATION CUISSON</option>
-                                            <option value='1983104'>FMF SERVICES</option>
-                                            <option value='2176541'>EASY FROID</option>
-                                            <option value='1277631'>SOCIETE CHRISTIAN RAGE SARL</option>
-                                            <option value='1675973'>PLANETE FROID SARL</option>
-                                            <option value='1762756'>COLDINNOV</option>
-                                            <option value='2092430'>GASTROMASTRO</option>
-                                            <option value='167902'>Furnotel</option>
-                                            <option value='893513'>Pro Inox France</option>
-                                            <option value='2281412'>MV CUISINES</option>
-                                            <option value='2386166'>PROVENCE FROID</option>
-                                            <option value='2469602'>Kide</option>
-                                            <option value='1527592'>HENGEL</option>
-                                            <option value='1059723'>Viessmann France SAS</option>
-                                            <option value='2526101'>Incold</option>
-                                            <option value='2471538'>Stock Direct CHR</option>
-                                            <option value='2571426'>ALMIA</option>
-                                            <option value='2578087'>Chahed</option>
-                                            <option value='2578809'>Impafri S.L.</option>
-                                            <option value='2456142'>ICEPROD.JM, ICE-SHOP</option>
-                                            <option value='2429350'>iceshop</option>
-                                            <option value='896266'>PROMOSHOP</option>
-                                            <option value='2599196'>SFT</option>
-                                            <option value='2641435'>Indisol</option>
-                                            <option value='651455'>Dag Concept CHR</option>
-                                            <option value='1559522'>CHR MARKET INTERNATIONAL</option>
-                                            <option value='2930512'>acierama</option>
-                                            <option value='2794898'>AM FROID SOLUTIONS</option>
-                                            <option value='2822815'>FP DISTRIBUTION</option>
-                                            <option value='2835899'>EQUIPE CUISINE</option>
-                                            <option value='2582811'>Odimer</option>
-                                            <option value='1522441'>EUROFROID CALADE</option>
-                                            <option value='2893531'>BC FROID</option>
-                                            <option value='2552343'>METRO</option>
-                                            <option value='2328935'>TBS PRO FRANCE</option>
-                                            <option value='2864077'>SOLARIS NORTH POLE</option>
-                                            <option value='2835611'>CM PACK</option>
-                                            <option value='1764934'>STL SARL - Materiels-cuisine.com</option>
-                                            <option value='2951114'>PARLAPAPA</option>
-                                            <option value='2920317'>ICI, c'est le Bon Choix</option>
-                                            <option value='2989299'>Esolve-SDC</option>
-                                            <option value='2052610'>DAP DISTRIBUTION</option>
-                                            <option value='2419091'>ELECTRO-CLIMAT BAILLY ECB</option>
-                                            <option value='2886452'>Groupe JLC</option>
-                                            <option value='133287'>AUSA France</option>
-                                            <option value='809868'>MERCURYS</option>
-                                            <option value='76005'>APP ENVIRONNEMENT</option>
-                                            <option value='178553'>ARVEL SNOWTEC</option>
-                                            <option value='524123'>PRODIM</option>
-                                            <option value='201758'>DANIEL PERIE</option>
-                                            <option value='150548'>EXPERT NETT</option>
-                                            <option value='163270'>Semat</option>
-                                            <option value='135897'>GROUPE CLEAN - CLEAN MATERIEL</option>
-                                            <option value='2169014'>BILLY - MATERIEL DE NETTOYAGE</option>
-                                            <option value='2207834'>CMN SAV</option>
-                                            <option value='2191451'>LOCATION VOIRIE ENVIRONNEMENT</option>
-                                            <option value='1353709'>DELTA SUD</option>
-                                            <option value='150847'>SAML</option>
-                                            <option value='2204788'>LOCA LAV</option>
-                                            <option value='2216222'>MECA CLEAN</option>
-                                            <option value='808829'>AMV</option>
-                                            <option value='1585348'>Mat�riels Techniques de Nettoyage</option>
-                                            <option value='1199817'>Bryn</option>
-                                            <option value='2460407'>EOW</option>
-                                            <option value='1492038'>BOSCHUNG ENVIRONNEMENT</option>
-                                            <option value='2460324'>Piquersa</option>
-                                            <option value='150448'>CMAR</option>
-                                            <option value='6620'>Bucher municipal</option>
-                                            <option value='2519464'>TENAX INTERNATIONAL s.r.l.</option>
-                                            <option value='2257790'>ROS ROCA</option>
-                                            <option value='73439'>DULEVO-FRANCE</option>
-                                            <option value='2464509'>Aebi Schmidt</option>
-                                            <option value='1498633'>SERGE MONOD EQUIPEMENT</option>
-                                            <option value='2519973'>Dulevo International S.p.A.</option>
-                                            <option value='2519919'>SARL Lemonnier</option>
-                                            <option value='571369'>Europe Service</option>
-                                            <option value='1244165'>AFRELEC INDUSTRIE - RPA</option>
-                                            <option value='2156772'>SKAPNET</option>
-                                            <option value='134502'>HAKO</option>
-                                            <option value='2977541'>DB EQUIPMENT</option>
-                                            <option value='1059660'>Faun SA</option>
-                                            <option value='631025'>Euro-expos</option>
-                                            <option value='1353120'>Finkbeiner</option>
-                                            <option value='249285'>MAHA FRANCE</option>
-                                            <option value='1367000'>EUROOUEST</option>
-                                            <option value='249115'>NUSSBAUM</option>
-                                            <option value='1582719'>CCG Sarl</option>
-                                            <option value='1619709'>CELETTE FRANCE</option>
-                                            <option value='1352039'>Torros</option>
-                                            <option value='2174471'>SEG</option>
-                                            <option value='2047976'>VALENCE NORD AUTOMOBILE</option>
-                                            <option value='1097301'>FRANCE MANUTENTION</option>
-                                            <option value='1590586'>PRP Machines</option>
-                                            <option value='2393238'>Tyre Bay Direct France</option>
-                                            <option value='2399746'>OMER</option>
-                                            <option value='2416685'>LAUNCHPRO FRANCE</option>
-                                            <option value='1623101'>sr-distribution</option>
-                                            <option value='1582720'>IFI HOLDING</option>
-                                            <option value='2168782'>MAT AUTO</option>
-                                            <option value='2174594'>RR EQUIPEMENTS</option>
-                                            <option value='1582715'>Twin Busch GARAGE EQUIPMENT - FRANCE</option>
-                                            <option value='2575064'>Qingdao GG Lifters Co.,Ltd</option>
-                                            <option value='2416679'>ACTIA</option>
-                                            <option value='2416676'>AUTOMOTIVE EQUIPMENT</option>
-                                            <option value='1587074'>PiecesEtPneus</option>
-                                            <option value='2636911'>Helloshop26</option>
-                                            <option value='2399470'>TEA � Tout Equipement Atelier</option>
-                                            <option value='2399748'>GEDAUTO DESARROLLO S.L</option>
-                                            <option value='2416670'>CNO</option>
-                                            <option value='2399768'>UNIC Industrie</option>
-                                            <option value='2207308'>LE COIN DU GARAGISTE</option>
-                                            <option value='2208261'>MECATECHNIC SAS</option>
-                                            <option value='2778147'>Locateck Services</option>
-                                            <option value='2407194'>MATEXPERT SOLUTIONS (SAS)</option>
-                                            <option value='2905474'>HELLOPRO DEMO MHP</option>
-                                            <option value='154599'>OPTIMACHINES</option>
-                                            <option value='1680260'>Global-Tools</option>
-                                            <option value='881464'>OreikO</option>
-                                            <option value='514203'>DEMA</option>
-                                            <option value='216213'>PG ENERGIES</option>
-                                            <option value='238832'>APPLANAT</option>
-                                            <option value='1335400'>GELEC</option>
-                                            <option value='170411'>Commagen</option>
-                                            <option value='1719396'>SE2M</option>
-                                            <option value='591351'>Gbknives</option>
-                                            <option value='21040'>Sdmo</option>
-                                            <option value='124960'>LBO</option>
-                                            <option value='128293'>WORMS ENTREPRISE</option>
-                                            <option value='131898'>DIESEL ELECTRIC</option>
-                                            <option value='1034549'>Guainville International</option>
-                                            <option value='1034564'>SAMLLOC</option>
-                                            <option value='1099229'>SPATMAT</option>
-                                            <option value='1631951'>Penouest</option>
-                                            <option value='2069633'>ELECTRICITE GAY</option>
-                                            <option value='216196'>MECATLANTIC</option>
-                                            <option value='2071679'>ETABLISSEMENTS MICHEL</option>
-                                            <option value='2071681'>D V T M</option>
-                                            <option value='378686'>neoler energie</option>
-                                            <option value='216232'>SEMIM</option>
-                                            <option value='607988'>GESN</option>
-                                            <option value='2183647'>PELLEGRINI ENERGIE & MAINTENANCE</option>
-                                            <option value='2219427'>SARL CHAGNEAU</option>
-                                            <option value='2413718'>ATLAS COPCO GONTROLS</option>
-                                            <option value='2421900'>XYLEM WATER SOLUTIONS AB</option>
-                                            <option value='2462803'>Inmesol</option>
-                                            <option value='2462768'>Mosa</option>
-                                            <option value='2462967'>Onis Visa</option>
-                                            <option value='2462979'>Westerbeke</option>
-                                            <option value='2203928'>2G ENERGIE S.A.S.</option>
-                                            <option value='2462757'>Genmac</option>
-                                            <option value='2463234'>AEM</option>
-                                            <option value='2463238'>AJ Power</option>
-                                            <option value='2462825'>Atlas</option>
-                                            <option value='2463257'>Ausonia</option>
-                                            <option value='2462751'>Europower / SOFRAM</option>
-                                            <option value='2462932'>Genelec</option>
-                                            <option value='2462841'>Genesal Energy</option>
-                                            <option value='2462817'>Kohler</option>
-                                            <option value='2462939'>INNIO</option>
-                                            <option value='2463274'>Generac Mobile</option>
-                                            <option value='2463289'>HYUNDAI</option>
-                                            <option value='2414318'>REGUL-ELEC</option>
-                                            <option value='1053703'>2 H Energy</option>
-                                            <option value='2372156'>BRICO-ONE SARL</option>
-                                            <option value='134580'>HIMOINSA France</option>
-                                            <option value='1168340'>LAYERE LOCATION</option>
-                                            <option value='216201'>NPS Driven</option>
-                                            <option value='2796249'>FIX ON</option>
-                                            <option value='1586974'>GAP MATERIEL</option>
-                                            <option value='117129'>DEVALLE EAU ET FORCE</option>
-                                            <option value='2323728'>H2SYS</option>
-                                            <option value='1343451'>LOXAM</option>
-                                            <option value='2906192'>H2X ECOSYSTEMS</option>
-                                            <option value='1587019'>ISERMAT - BATIMENT</option>
-                                            <option value='2927140'>GROUPE MMO</option>
-                                            <option value='2927182'>Compagnie G�n�rale de Location (C.G.L.)</option>
-                                            <option value='2238261'>SoloStocks France</option>
-                                            <option value='1798852'>R.A.M.S.</option>
-                                            <option value='1700810'>RL-Distrib RACINE</option>
-                                            <option value='1683316'>EG DISTRI</option>
-                                            <option value='2956401'>Outilise</option>
-                                            <option value='2889971'>GENIWATT</option>
-                                            <option value='2906671'>EO DEV</option>
-                                            <option value='2995051'>SAROS GROUP NL</option>
-                                            <option value='249186'>Groupe Lavance</option>
-                                            <option value='1637578'>RENSON INTERNATIONAL</option>
-                                            <option value='2091083'>Mix France</option>
-                                            <option value='229994'>FRANCE NETTOYEURS</option>
-                                            <option value='164680'>TECNOLEC</option>
-                                            <option value='107503'>HEURTAUX</option>
-                                            <option value='1090767'>MONTANIER</option>
-                                            <option value='2407339'>LAVATECH</option>
-                                            <option value='2926923'>Wash Equipement</option>
-                                            <option value='353649'>PETROGEST</option>
-                                            <option value='1184813'>ATMOSPHERE DEVELOPPEMENT</option>
-                                            <option value='1301024'>DA OUEST</option>
-                                            <option value='2150309'>BRIGADE</option>
-                                            <option value='2419245'>OFFICE DIGITAL</option>
-                                            <option value='2585968'>JBE Consulting</option>
-                                            <option value='2412021'>EURO COMMERCE 60</option>
-                                            <option value='167832'>Crisalid</option>
-                                            <option value='2218220'>OXHOO</option>
-                                            <option value='2389369'>TOLE CONCEPT (Cash Defender)</option>
-                                            <option value='2417442'>CALVADOS CAISSE ENREGISTREUSE 1841 RUE DES SOURCES 14200 HEROUVILLE SAINT CLAIR</option>
-                                            <option value='2729174'>TACTILE POINT DE VENTES</option>
-                                            <option value='2554475'>Tactilpad</option>
-                                            <option value='2784726'>Kilo Bravo / balcom.fr</option>
-                                            <option value='2779629'>AU COMPTOIR DE LA CAISSE</option>
-                                            <option value='2871353'>YABLEO</option>
-                                            <option value='2938992'>POINT EXPERT DEVELOPPEMENT</option>
-                                            <option value='2778063'>Innovorder</option>
-                                            <option value='1186691'>EMMAMAX</option>
-                                            <option value='2962738'>FRANCE SOLUTION</option>
-                                            <option value='1366092'>ISKANDER MARINE</option>
-                                            <option value='206008'>Bsl - Bertinot Sanitaire Location</option>
-                                            <option value='1540903'>STE OXYMONTAGE</option>
-                                            <option value='2169215'>ACOR</option>
-                                            <option value='2345835'>Maison Container</option>
-                                            <option value='1381362'>CONTAINERS SOLUTIONS</option>
-                                            <option value='2184493'>MON CAMION RESTO</option>
-                                            <option value='2402850'>Containerama</option>
-                                            <option value='2429626'>MAISON ECO 3</option>
-                                            <option value='1666159'>GOLIAT</option>
-                                            <option value='2429657'>Maisons Conteneur Highcube</option>
-                                            <option value='2429689'>Plein Sud Paysage</option>
-                                            <option value='2429551'>Ma Maison Container</option>
-                                            <option value='2429623'>CONTAIN LIFE</option>
-                                            <option value='1610926'>CONTAINERZ</option>
-                                            <option value='2500241'>STOCKOBOX</option>
-                                            <option value='1421772'>123Modules</option>
-                                            <option value='1681338'>EBF Solutions</option>
-                                            <option value='2329513'>iZimat</option>
-                                            <option value='2793316'>Eurobox</option>
-                                            <option value='2172454'>MOUVBOX</option>
-                                            <option value='2896386'>WOOKI SMART</option>
-                                            <option value='2922854'>Ocean containers</option>
-                                            <option value='2948680'>Bluetainer</option>
-                                            <option value='2952234'>PYXIS</option>
-                                            <option value='2711364'>Ecoframe</option>
-                                            <option value='2951115'>JDK CONCEPT</option>
-                                            <option value='2951120'>SCEA PIRASTOT</option>
-                                            <option value='2789034'>BRYT DEVELOPPEMENT</option>
-                                            <option value='2976014'>ID KUB</option>
-                                            <option value='2955039'>ARL CONCEPT</option>
-                                            <option value='2835618'>Module�</option>
-                                            <option value='2925483'>Duneloft</option>
-                                            <option value='914837'>Duba Container</option>
-                                            <option value='2952140'>ESPACES & STRUCTURES</option>
-                                            <option value='213459'>LARDE</option>
-                                            <option value='2976196'>KIOSQUE&BOX</option>
-                                            <option value='1064719'>TAF DIFFUSION</option>
-                                            <option value='1153480'>DOMOLIFT</option>
-                                            <option value='1404322'>Pass'rel</option>
-                                            <option value='284912'>SODIMAS</option>
-                                            <option value='1328095'>Vimec srl</option>
-                                            <option value='2060162'>SEMA</option>
-                                            <option value='2100210'>ACEM</option>
-                                            <option value='2085271'>WONDER MAKERS</option>
-                                            <option value='2169043'>EMILEVE</option>
-                                            <option value='2071496'>SUD ACCESSIBILITE</option>
-                                            <option value='2458003'>ALT-ACCESS</option>
-                                            <option value='2470827'>Savaria</option>
-                                            <option value='2470828'>Slitz</option>
-                                            <option value='2470832'>Enier</option>
-                                            <option value='2426314'>still9</option>
-                                            <option value='2391714'>SODIMAS</option>
-                                            <option value='2471019'>Fain</option>
-                                            <option value='2471010'>AEA</option>
-                                            <option value='2470826'>Arealift</option>
-                                            <option value='123141'>ETABLISSEMENTS BOURGEOIS</option>
-                                            <option value='2449563'>AUTOMATISMES CORSE</option>
-                                            <option value='2405694'>Voltasud 83</option>
-                                            <option value='2060193'>ALTICA</option>
-                                            <option value='2835235'>A.M.E. Ouest</option>
-                                            <option value='2963581'>le monte escalier breton</option>
-                                            <option value='123139'>STANNAH</option>
-                                            <option value='2784112'>e-thik</option>
-                                            <option value='2306486'>LEDISTRIB</option>
-                                            <option value='2887256'>SARL BS Distribution</option>
-                                            <option value='2793185'>ESPACE DRIVE</option>
-                                            <option value='2925956'>selflystore.com</option>
-                                            <option value='2196732'>DISTRIBUTEUR FRANCE</option>
-                                            <option value='2925380'>GDCLIENTS</option>
-                                            <option value='2565304'>Digitizme</option>
-                                            <option value='2952613'>RP SOLUTIONS</option>
-                                            <option value='2660320'>SASU LDA</option>
-                                            <option value='2959781'>DISTRI'CLICK</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+    <div class="flex-1 flex">
+      <!-- **CORRECTION 1** : Le conteneur parent gère maintenant l'espace global -->
+      <div
+        class="w-full max-w-screen-2xl mx-auto px-2 md:px-4 py-4 md:py-6 flex gap-4 md:gap-6 flex-1"
+        id="mainContainer"
+      >
+        <!-- Desktop Sidebar Filters -->
+        <aside
+          id="filterSidebar"
+          class="hidden md:block w-80 space-y-4 flex-shrink-0"
+        >
+          <div
+            class="bg-white rounded-lg border border-custom-clair-2 shadow-sm"
+          >
+            <div class="p-4 border-b border-custom-clair-2">
+              <h3
+                class="text-base font-semibold flex items-center gap-2 text-custom-noir"
+              >
+                <i data-lucide="settings" class="h-4 w-4"></i>
+                Paramètres de recherche
+              </h3>
+            </div>
+            <div class="p-4 space-y-4">
+              <!-- Top K Results -->
+              <div class="space-y-2">
+                <label class="text-sm font-medium text-custom-noir"
+                  >Nombre de résultats (top_k)</label
+                >
+                <div class="px-2">
+                  <input
+                    type="range"
+                    id="topKSlider"
+                    min="1"
+                    max="200"
+                    value="10"
+                    class="slider w-full"
+                  />
+                  <div
+                    class="flex justify-between text-xs text-custom-gris mt-1"
+                  >
+                    <span>1</span>
+                    <span id="topKValue" class="font-medium">10</span>
+                    <span>200</span>
+                  </div>
                 </div>
+              </div>
 
-                <!-- LLM Configuration -->
-                <div id="llmConfig" class="bg-white rounded-lg border border-custom-bleu-light-2 shadow-sm hidden">
-                    <div class="p-4 border-b border-custom-clair-2 flex items-center justify-between">
-                        <h3 class="text-base font-semibold flex items-center gap-2 text-custom-bleu">
-                            <i data-lucide="sparkles" class="h-4 w-4"></i>
-                            Configuration LLM
-                        </h3>
-                        <button id="closeLlm" class="h-6 w-6 p-0 hover:bg-custom-clair-2 rounded">
-                            <i data-lucide="x" class="h-3 w-3"></i>
-                        </button>
+              <hr class="border-custom-clair-2" />
+
+              <!-- Data Sources -->
+              <div class="space-y-3">
+                <button
+                  id="sourcesToggle"
+                  class="flex items-center justify-between w-full p-2 hover:bg-custom-clair-3 rounded-md transition-colors"
+                >
+                  <span class="font-medium text-sm text-custom-noir"
+                    >Sources de données</span
+                  >
+                  <i
+                    data-lucide="chevron-down"
+                    class="h-4 w-4 transition-transform"
+                    id="sourcesChevron"
+                  ></i>
+                </button>
+                <div id="sourcesContent" class="space-y-3">
+                  <!-- Produits -->
+                  <div class="space-y-2 pl-2">
+                    <div
+                      class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        id="produits"
+                        class="checkbox-custom"
+                      />
+                      <label
+                        for="produits"
+                        class="text-sm font-medium cursor-pointer flex-1 text-custom-noir"
+                        >Produits</label
+                      >
                     </div>
-                    <div class="p-4 space-y-4">
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-custom-noir">Prompt personnalisé</label>
-                            <textarea id="llmPrompt" placeholder="Entrez votre prompt pour le LLM..."
-                                class="w-full min-h-[80px] px-3 py-2 text-sm border border-custom-gris-blanc rounded-md focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none"></textarea>
-                        </div>
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-custom-noir">Température</label>
-                            <div class="px-2">
-                                <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="0.4"
-                                    class="slider w-full">
-                                <div class="flex justify-between text-xs text-custom-gris mt-1">
-                                    <span>0.0</span>
-                                    <span id="temperatureValue" class="font-medium">0.4</span>
-                                    <span>1.0</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="space-y-2">
-                            <label class="text-sm font-medium text-custom-noir">Modèle LLM</label>
-                            <select id="llmModel"
-                                class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm">
-                                <option value="google/gemini-flash-1.5" selected="">Gemini flash 1.5</option>
-                                <option value="qwen/qwen3-coder:free">Qwen3 Coder:free</option>
-                                <option value="qwen/qwen3-coder">Qwen3 Coder</option>
-                                <option value="gpt-4.1-2025-04-14">gpt-4.1-2025-04-14</option>
-                                <!-- <option value="gpt-5-2025-08-07">gpt-5-2025-08-07</option> -->
-                                <option value="gpt-4o-2024-08-06">gpt-4o-2024-08-06</option>
-                                <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
-                                <option value="deepseek">Deepseek chat</option>
-                            </select>
-                        </div>
-                        <button id="generateAI"
-                            class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-custom-orange text-white rounded-lg hover:bg-custom-orange-heavy transition-colors">
-                            <i data-lucide="sparkles" class="h-4 w-4"></i>
-                            Générer avec IA
-                        </button>
+                    <div id="produitsSubfilters" class="pl-6 space-y-2 hidden">
+                      <div class="space-y-1">
+                        <label class="text-xs text-custom-gris">Source</label>
+                        <select
+                          id="produitsSource"
+                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                           multiple=""
+                        >
+                          <option disabled>Choisir...</option>
+                          <option value="Scrapping">Scrapping</option>
+                          <option value="BO">Front</option>
+                        </select>
+                      </div>
                     </div>
+                  </div>
+
+                  <!-- Devis -->
+                  <div class="space-y-2 pl-2">
+                    <div
+                      class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        id="devis"
+                        class="checkbox-custom"
+                      />
+                      <label
+                        for="devis"
+                        class="text-sm font-medium cursor-pointer flex-1 text-custom-noir"
+                        >Demande de devis</label
+                      >
+                    </div>
+                    <div id="devisSubfilters" class="pl-6 space-y-3 hidden">
+                      <div class="space-y-1">
+                        <label class="text-xs text-custom-gris">Naf</label>
+                        <select
+                          id="devisNaf"
+                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                          multiple
+                          data-ajax="true"
+                          data-url="https://dev-www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                          data-pagination="true"
+                          data-payload="recup_naf"
+                        ></select>
+                      </div>
+                      <div class="space-y-1">
+                        <label class="text-xs text-custom-gris">Effectif</label>
+                        <select
+                          id="devisEffectif"
+                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                          multiple
+                          data-ajax="true"
+                          data-url="https://dev-www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                          data-pagination="true"
+                          data-payload="recup_effectif"
+                        ></select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- MCF & HelloPro -->
+                  <div class="space-y-2 pl-2">
+                    <div
+                      class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        id="echanges"
+                        class="checkbox-custom"
+                      />
+                      <label
+                        for="echanges"
+                        class="text-sm font-medium cursor-pointer flex-1 text-custom-noir"
+                        >MCF & HelloPro</label
+                      >
+                    </div>
+                  </div>
+
+                  <!-- Site Web -->
+                  <div class="space-y-2 pl-2">
+                    <div
+                      class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        id="siteweb"
+                        class="checkbox-custom"
+                      />
+                      <label
+                        for="siteweb"
+                        class="text-sm font-medium cursor-pointer flex-1 text-custom-noir"
+                        >Site Web</label
+                      >
+                    </div>
+                    <div id="sitewebSubfilters" class="pl-6 hidden">
+                      <div class="space-y-1">
+                        <label class="text-xs text-custom-gris"
+                          >Modèle de page</label
+                        >
+                        <select
+                          id="sitewebModele"
+                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        >
+                          <option value="">Choisir...</option>
+                          <option value="landing">Landing Page</option>
+                          <option value="product">Page Produit</option>
+                          <option value="blog">Blog</option>
+                          <option value="ecommerce">E-commerce</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-            </aside>
+              </div>
 
-            <!-- Main Content -->
-            <!-- **CORRECTION 2** : <main> est maintenant un conteneur flexible simple -->
-            <main class="flex-1 min-w-0">
-                <!-- **CORRECTION 3** : Ce div interne contrôle la largeur du contenu pour une meilleure lisibilité -->
-                <div class="max-w-4xl mx-auto space-y-4">
-                    <!-- Search Metrics -->
-                    <div id="searchMetrics" class="bg-white rounded-lg border border-custom-clair-2 p-3 hidden">
-                        <div id="searchingState" class="flex items-center gap-2">
-                            <div
-                                class="animate-spin rounded-full h-4 w-4 border-2 border-custom-bleu border-t-transparent">
-                            </div>
-                            <span class="text-sm text-custom-gris">Recherche en cours...</span>
-                        </div>
-                        <div id="metricsContent" class="space-y-2 hidden">
-                            <div class="flex items-center gap-2">
-                                <i data-lucide="target" class="h-4 w-4 text-custom-bleu"></i>
-                                <span class="text-sm font-medium text-custom-noir"><span id="totalResults">0</span>
-                                    résultats</span>
-                            </div>
-                            <div class="flex items-center gap-4 text-xs text-custom-gris">
-                                <div class="flex items-center gap-1">
-                                    <i data-lucide="clock" class="h-3 w-3"></i>
-                                    <span id="searchTime">0</span>s
-                                </div>
-                                <div class="flex items-center gap-1">
-                                    <i data-lucide="file-text" class="h-3 w-3"></i>
-                                    <span id="sourcesCount">0</span> sources
-                                </div>
-                            </div>
-                            <div id="searchQueryBadge"
-                                class="inline-block px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full">
-                            </div>
-                        </div>
+              <hr class="border-custom-clair-2" />
+
+              <!-- Advanced Filters -->
+              <div class="space-y-3">
+                <button
+                  id="advancedToggle"
+                  class="flex items-center justify-between w-full p-2 hover:bg-custom-clair-3 rounded-md transition-colors"
+                >
+                  <span class="font-medium text-sm text-custom-noir"
+                    >Filtres avancés</span
+                  >
+                  <i
+                    data-lucide="chevron-down"
+                    class="h-4 w-4 transition-transform"
+                    id="advancedChevron"
+                  ></i>
+                </button>
+                <div id="advancedContent" class="space-y-3 hidden">
+                  
+                  <!-- Catégorie -->
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-custom-noir"
+                      >Catégorie</label
+                    >
+                    <div class="relative">
+                      <select
+                        id="categorieDropdown"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple
+                      >
+                        <option value="2016431">Containers aménagés</option>
+                        <option value="2008670">Stations de lavage</option>
+                        <option value="2007702">Ponts élévateurs</option>
+                        <option value="2003445">Chambres froides</option>
+                        <option value="2017735">Ascenseurs privatifs</option>
+                        <option value="1002167">Montes-charges</option>
+                        <option value="2013765">Monnayeurs</option>
+                        <option value="2019606">
+                          Distributeurs automatique multi-produits
+                        </option>
+                        <option value="2004590">Balayeuse de voirie</option>
+                        <option value="2002944">
+                          Barrières anti-inondation
+                        </option>
+                        <option value="2008035">
+                          Groupes électrogènes industriels
+                        </option>
+                      </select>
                     </div>
+                  </div>
 
-                    <!-- Search Results -->
-                    <div id="searchResultsContainer" class="space-y-3 hidden">
-                        <div class="flex items-center gap-2 text-sm">
-                            <i data-lucide="trending-up" class="h-4 w-4 text-custom-bleu"></i>
-                            <span class="font-medium text-custom-noir">Triés par pertinence</span>
-                        </div>
-                        <div id="searchResultsList" class="space-y-3"></div>
+                  <!-- Fournisseur -->
+                  <div class="space-y-2">
+                    <label class="text-sm font-medium text-custom-noir"
+                      >Fournisseur</label
+                    >
+                    <div class="relative">
+                      <select
+                        id="fournisseurDropdown"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple
+                      >
+                        <option value="5005">Alsace Manutention</option>
+                        <option value="133281">GRUSE</option>
+                        <option value="690010">ETNA FRANCE</option>
+                        <option value="4007">ORONA - ALMA</option>
+                        <option value="734333">DWS</option>
+                        <option value="2060318">XL INDUSTRIE</option>
+                        <option value="1676291">
+                          Midilev : Ascenseur Toulouse
+                        </option>
+                        <option value="2209995">LIFT SYSTEME</option>
+                        <option value="2176756">
+                          ABRIAL ACCES ETAGES SARL
+                        </option>
+                        <option value="2253146">EdmoLift Solutions</option>
+                        <option value="1608643">PEITHO</option>
+                        <option value="2224298">ASCENSEURS M&P</option>
+                        <option value="2231054">MP Ascenceurs</option>
+                        <option value="2399788">Interlift</option>
+                        <option value="2407221">MEMA</option>
+                        <option value="950932">
+                          Proelevation - HIDRAL France
+                        </option>
+                        <option value="2085274">ASCENSEURS PAOLI</option>
+                        <option value="2085258">ACCES ELEVATION</option>
+                        <option value="1037129">
+                          Ascenseurs et Automatismes de Gascogne
+                        </option>
+                        <option value="2421700">Robles Eleser, S.L.</option>
+                        <option value="2169049">CAPITAL SALUD AND</option>
+                        <option value="2040553">BKG FRANCE</option>
+                        <option value="2085283">3MC</option>
+                        <option value="2421655">Electroelsa Srl</option>
+                        <option value="2421722">
+                          RAFAEL ACCESSIBILITE FERMETURES-R.A.F.
+                        </option>
+                        <option value="2223781">ADS ELEVATEURS</option>
+                        <option value="662661">EdmoLift Solutions</option>
+                        <option value="238846">SACHOT ASCENSEURS</option>
+                        <option value="1303716">G.B.G. Concept (SARL)</option>
+                        <option value="766171">ATOUT'ETAGE</option>
+                        <option value="1351514">SYCA SYSTEMS</option>
+                        <option value="2421759">
+                          GRUPPO MILLEPIANI S.P.A.
+                        </option>
+                        <option value="1300411">LORALTEC S.A.S.</option>
+                        <option value="1478849">CAURET</option>
+                        <option value="2478238">DIANAR</option>
+                        <option value="2426326">Schindler France</option>
+                        <option value="2398509">
+                          KLEEMANN HELLAS MECHANICAL CONSTRUCTIONS
+                        </option>
+                        <option value="798727">HAMON</option>
+                        <option value="2495197">
+                          GEDA-Dechentreiter GmbH & Co.KG
+                        </option>
+                        <option value="2470580">Hidral</option>
+                        <option value="2495214">CMC MONTE CHARGES</option>
+                        <option value="2495220">Liftech, S.A.</option>
+                        <option value="2495239">Imem</option>
+                        <option value="2495250">
+                          Xiamen Wellift Elevator Co., Ltd.
+                        </option>
+                        <option value="2581852">ZONZINI SRL</option>
+                        <option value="2426316">ASA</option>
+                        <option value="2785997">Ma�a �l�vation</option>
+                        <option value="1579025">Protoumat</option>
+                        <option value="2469699">Vinca</option>
+                        <option value="2040554">
+                          ARATAL ATTRACTIVE MOBILITY
+                        </option>
+                        <option value="1731">MSEI Environnement</option>
+                        <option value="1376">Hydroconcept</option>
+                        <option value="636940">RCY</option>
+                        <option value="1733450">
+                          ORISQUES DISTRIBUTION SAS
+                        </option>
+                        <option value="1713419">MEGASECUR.EUROPE</option>
+                        <option value="2072500">
+                          COLLAD'EAU SYSTEME PROTECT PNEUMATIQUE
+                        </option>
+                        <option value="1409276">COLUREX</option>
+                        <option value="94658">INTERALLIANCE</option>
+                        <option value="24219">
+                          M.S.U ( Mat�riel de S�curit� Urbaine )
+                        </option>
+                        <option value="2174517">FRANCE OBTURATEUR</option>
+                        <option value="2431449">floodsax</option>
+                        <option value="2402296">FEUGIER ENVIRONNEMENT</option>
+                        <option value="2431398">
+                          BERGTEC International AG
+                        </option>
+                        <option value="1609835">AXESS INDUSTRIES</option>
+                        <option value="1846687">GED Event</option>
+                        <option value="2617681">Centrale Brico</option>
+                        <option value="274591">ESTHI</option>
+                        <option value="95479">AGEC</option>
+                        <option value="257020">RGTE</option>
+                        <option value="272819">DT Froid</option>
+                        <option value="626816">AM PRO</option>
+                        <option value="156491">MOOV & COOK</option>
+                        <option value="627052">MAT SUP EQUIPEMENTS</option>
+                        <option value="190872">MODULFROID SERVICE</option>
+                        <option value="773118">SARL LEGOFF</option>
+                        <option value="1837479">CHR Discount</option>
+                        <option value="1947237">KRISTAL FROID MACHINES</option>
+                        <option value="167930">Infrico mgd</option>
+                        <option value="190994">REFTRADE FRANCE</option>
+                        <option value="283203">Bonnet N�v�</option>
+                        <option value="283827">FRIMA CONCEPT</option>
+                        <option value="370630">TIBBLOC</option>
+                        <option value="410619">Noma Cool Nord</option>
+                        <option value="565979">PROCOLD</option>
+                        <option value="1193860">Froid 77</option>
+                        <option value="1369845">MATERIELS DIRECT</option>
+                        <option value="21204">ISOCAB FRANCE</option>
+                        <option value="2045191">ERIDES</option>
+                        <option value="2052590">
+                          FROID ET MACHINES CONCESSIONNAIRE
+                        </option>
+                        <option value="2042218">Remorques du midi</option>
+                        <option value="1769866">SARL LAMBERTIN</option>
+                        <option value="2052765">
+                          SYNERGIES AGENCEMENTS REFRIGERATION CUISSON
+                        </option>
+                        <option value="1983104">FMF SERVICES</option>
+                        <option value="2176541">EASY FROID</option>
+                        <option value="1277631">
+                          SOCIETE CHRISTIAN RAGE SARL
+                        </option>
+                        <option value="1675973">PLANETE FROID SARL</option>
+                        <option value="1762756">COLDINNOV</option>
+                        <option value="2092430">GASTROMASTRO</option>
+                        <option value="167902">Furnotel</option>
+                        <option value="893513">Pro Inox France</option>
+                        <option value="2281412">MV CUISINES</option>
+                        <option value="2386166">PROVENCE FROID</option>
+                        <option value="2469602">Kide</option>
+                        <option value="1527592">HENGEL</option>
+                        <option value="1059723">Viessmann France SAS</option>
+                        <option value="2526101">Incold</option>
+                        <option value="2471538">Stock Direct CHR</option>
+                        <option value="2571426">ALMIA</option>
+                        <option value="2578087">Chahed</option>
+                        <option value="2578809">Impafri S.L.</option>
+                        <option value="2456142">ICEPROD.JM, ICE-SHOP</option>
+                        <option value="2429350">iceshop</option>
+                        <option value="896266">PROMOSHOP</option>
+                        <option value="2599196">SFT</option>
+                        <option value="2641435">Indisol</option>
+                        <option value="651455">Dag Concept CHR</option>
+                        <option value="1559522">
+                          CHR MARKET INTERNATIONAL
+                        </option>
+                        <option value="2930512">acierama</option>
+                        <option value="2794898">AM FROID SOLUTIONS</option>
+                        <option value="2822815">FP DISTRIBUTION</option>
+                        <option value="2835899">EQUIPE CUISINE</option>
+                        <option value="2582811">Odimer</option>
+                        <option value="1522441">EUROFROID CALADE</option>
+                        <option value="2893531">BC FROID</option>
+                        <option value="2552343">METRO</option>
+                        <option value="2328935">TBS PRO FRANCE</option>
+                        <option value="2864077">SOLARIS NORTH POLE</option>
+                        <option value="2835611">CM PACK</option>
+                        <option value="1764934">
+                          STL SARL - Materiels-cuisine.com
+                        </option>
+                        <option value="2951114">PARLAPAPA</option>
+                        <option value="2920317">ICI, c'est le Bon Choix</option>
+                        <option value="2989299">Esolve-SDC</option>
+                        <option value="2052610">DAP DISTRIBUTION</option>
+                        <option value="2419091">
+                          ELECTRO-CLIMAT BAILLY ECB
+                        </option>
+                        <option value="2886452">Groupe JLC</option>
+                        <option value="133287">AUSA France</option>
+                        <option value="809868">MERCURYS</option>
+                        <option value="76005">APP ENVIRONNEMENT</option>
+                        <option value="178553">ARVEL SNOWTEC</option>
+                        <option value="524123">PRODIM</option>
+                        <option value="201758">DANIEL PERIE</option>
+                        <option value="150548">EXPERT NETT</option>
+                        <option value="163270">Semat</option>
+                        <option value="135897">
+                          GROUPE CLEAN - CLEAN MATERIEL
+                        </option>
+                        <option value="2169014">
+                          BILLY - MATERIEL DE NETTOYAGE
+                        </option>
+                        <option value="2207834">CMN SAV</option>
+                        <option value="2191451">
+                          LOCATION VOIRIE ENVIRONNEMENT
+                        </option>
+                        <option value="1353709">DELTA SUD</option>
+                        <option value="150847">SAML</option>
+                        <option value="2204788">LOCA LAV</option>
+                        <option value="2216222">MECA CLEAN</option>
+                        <option value="808829">AMV</option>
+                        <option value="1585348">
+                          Mat�riels Techniques de Nettoyage
+                        </option>
+                        <option value="1199817">Bryn</option>
+                        <option value="2460407">EOW</option>
+                        <option value="1492038">BOSCHUNG ENVIRONNEMENT</option>
+                        <option value="2460324">Piquersa</option>
+                        <option value="150448">CMAR</option>
+                        <option value="6620">Bucher municipal</option>
+                        <option value="2519464">
+                          TENAX INTERNATIONAL s.r.l.
+                        </option>
+                        <option value="2257790">ROS ROCA</option>
+                        <option value="73439">DULEVO-FRANCE</option>
+                        <option value="2464509">Aebi Schmidt</option>
+                        <option value="1498633">SERGE MONOD EQUIPEMENT</option>
+                        <option value="2519973">
+                          Dulevo International S.p.A.
+                        </option>
+                        <option value="2519919">SARL Lemonnier</option>
+                        <option value="571369">Europe Service</option>
+                        <option value="1244165">AFRELEC INDUSTRIE - RPA</option>
+                        <option value="2156772">SKAPNET</option>
+                        <option value="134502">HAKO</option>
+                        <option value="2977541">DB EQUIPMENT</option>
+                        <option value="1059660">Faun SA</option>
+                        <option value="631025">Euro-expos</option>
+                        <option value="1353120">Finkbeiner</option>
+                        <option value="249285">MAHA FRANCE</option>
+                        <option value="1367000">EUROOUEST</option>
+                        <option value="249115">NUSSBAUM</option>
+                        <option value="1582719">CCG Sarl</option>
+                        <option value="1619709">CELETTE FRANCE</option>
+                        <option value="1352039">Torros</option>
+                        <option value="2174471">SEG</option>
+                        <option value="2047976">VALENCE NORD AUTOMOBILE</option>
+                        <option value="1097301">FRANCE MANUTENTION</option>
+                        <option value="1590586">PRP Machines</option>
+                        <option value="2393238">Tyre Bay Direct France</option>
+                        <option value="2399746">OMER</option>
+                        <option value="2416685">LAUNCHPRO FRANCE</option>
+                        <option value="1623101">sr-distribution</option>
+                        <option value="1582720">IFI HOLDING</option>
+                        <option value="2168782">MAT AUTO</option>
+                        <option value="2174594">RR EQUIPEMENTS</option>
+                        <option value="1582715">
+                          Twin Busch GARAGE EQUIPMENT - FRANCE
+                        </option>
+                        <option value="2575064">
+                          Qingdao GG Lifters Co.,Ltd
+                        </option>
+                        <option value="2416679">ACTIA</option>
+                        <option value="2416676">AUTOMOTIVE EQUIPMENT</option>
+                        <option value="1587074">PiecesEtPneus</option>
+                        <option value="2636911">Helloshop26</option>
+                        <option value="2399470">
+                          TEA � Tout Equipement Atelier
+                        </option>
+                        <option value="2399748">GEDAUTO DESARROLLO S.L</option>
+                        <option value="2416670">CNO</option>
+                        <option value="2399768">UNIC Industrie</option>
+                        <option value="2207308">LE COIN DU GARAGISTE</option>
+                        <option value="2208261">MECATECHNIC SAS</option>
+                        <option value="2778147">Locateck Services</option>
+                        <option value="2407194">
+                          MATEXPERT SOLUTIONS (SAS)
+                        </option>
+                        <option value="2905474">HELLOPRO DEMO MHP</option>
+                        <option value="154599">OPTIMACHINES</option>
+                        <option value="1680260">Global-Tools</option>
+                        <option value="881464">OreikO</option>
+                        <option value="514203">DEMA</option>
+                        <option value="216213">PG ENERGIES</option>
+                        <option value="238832">APPLANAT</option>
+                        <option value="1335400">GELEC</option>
+                        <option value="170411">Commagen</option>
+                        <option value="1719396">SE2M</option>
+                        <option value="591351">Gbknives</option>
+                        <option value="21040">Sdmo</option>
+                        <option value="124960">LBO</option>
+                        <option value="128293">WORMS ENTREPRISE</option>
+                        <option value="131898">DIESEL ELECTRIC</option>
+                        <option value="1034549">
+                          Guainville International
+                        </option>
+                        <option value="1034564">SAMLLOC</option>
+                        <option value="1099229">SPATMAT</option>
+                        <option value="1631951">Penouest</option>
+                        <option value="2069633">ELECTRICITE GAY</option>
+                        <option value="216196">MECATLANTIC</option>
+                        <option value="2071679">ETABLISSEMENTS MICHEL</option>
+                        <option value="2071681">D V T M</option>
+                        <option value="378686">neoler energie</option>
+                        <option value="216232">SEMIM</option>
+                        <option value="607988">GESN</option>
+                        <option value="2183647">
+                          PELLEGRINI ENERGIE & MAINTENANCE
+                        </option>
+                        <option value="2219427">SARL CHAGNEAU</option>
+                        <option value="2413718">ATLAS COPCO GONTROLS</option>
+                        <option value="2421900">
+                          XYLEM WATER SOLUTIONS AB
+                        </option>
+                        <option value="2462803">Inmesol</option>
+                        <option value="2462768">Mosa</option>
+                        <option value="2462967">Onis Visa</option>
+                        <option value="2462979">Westerbeke</option>
+                        <option value="2203928">2G ENERGIE S.A.S.</option>
+                        <option value="2462757">Genmac</option>
+                        <option value="2463234">AEM</option>
+                        <option value="2463238">AJ Power</option>
+                        <option value="2462825">Atlas</option>
+                        <option value="2463257">Ausonia</option>
+                        <option value="2462751">Europower / SOFRAM</option>
+                        <option value="2462932">Genelec</option>
+                        <option value="2462841">Genesal Energy</option>
+                        <option value="2462817">Kohler</option>
+                        <option value="2462939">INNIO</option>
+                        <option value="2463274">Generac Mobile</option>
+                        <option value="2463289">HYUNDAI</option>
+                        <option value="2414318">REGUL-ELEC</option>
+                        <option value="1053703">2 H Energy</option>
+                        <option value="2372156">BRICO-ONE SARL</option>
+                        <option value="134580">HIMOINSA France</option>
+                        <option value="1168340">LAYERE LOCATION</option>
+                        <option value="216201">NPS Driven</option>
+                        <option value="2796249">FIX ON</option>
+                        <option value="1586974">GAP MATERIEL</option>
+                        <option value="117129">DEVALLE EAU ET FORCE</option>
+                        <option value="2323728">H2SYS</option>
+                        <option value="1343451">LOXAM</option>
+                        <option value="2906192">H2X ECOSYSTEMS</option>
+                        <option value="1587019">ISERMAT - BATIMENT</option>
+                        <option value="2927140">GROUPE MMO</option>
+                        <option value="2927182">
+                          Compagnie G�n�rale de Location (C.G.L.)
+                        </option>
+                        <option value="2238261">SoloStocks France</option>
+                        <option value="1798852">R.A.M.S.</option>
+                        <option value="1700810">RL-Distrib RACINE</option>
+                        <option value="1683316">EG DISTRI</option>
+                        <option value="2956401">Outilise</option>
+                        <option value="2889971">GENIWATT</option>
+                        <option value="2906671">EO DEV</option>
+                        <option value="2995051">SAROS GROUP NL</option>
+                        <option value="249186">Groupe Lavance</option>
+                        <option value="1637578">RENSON INTERNATIONAL</option>
+                        <option value="2091083">Mix France</option>
+                        <option value="229994">FRANCE NETTOYEURS</option>
+                        <option value="164680">TECNOLEC</option>
+                        <option value="107503">HEURTAUX</option>
+                        <option value="1090767">MONTANIER</option>
+                        <option value="2407339">LAVATECH</option>
+                        <option value="2926923">Wash Equipement</option>
+                        <option value="353649">PETROGEST</option>
+                        <option value="1184813">
+                          ATMOSPHERE DEVELOPPEMENT
+                        </option>
+                        <option value="1301024">DA OUEST</option>
+                        <option value="2150309">BRIGADE</option>
+                        <option value="2419245">OFFICE DIGITAL</option>
+                        <option value="2585968">JBE Consulting</option>
+                        <option value="2412021">EURO COMMERCE 60</option>
+                        <option value="167832">Crisalid</option>
+                        <option value="2218220">OXHOO</option>
+                        <option value="2389369">
+                          TOLE CONCEPT (Cash Defender)
+                        </option>
+                        <option value="2417442">
+                          CALVADOS CAISSE ENREGISTREUSE 1841 RUE DES SOURCES
+                          14200 HEROUVILLE SAINT CLAIR
+                        </option>
+                        <option value="2729174">TACTILE POINT DE VENTES</option>
+                        <option value="2554475">Tactilpad</option>
+                        <option value="2784726">Kilo Bravo / balcom.fr</option>
+                        <option value="2779629">
+                          AU COMPTOIR DE LA CAISSE
+                        </option>
+                        <option value="2871353">YABLEO</option>
+                        <option value="2938992">
+                          POINT EXPERT DEVELOPPEMENT
+                        </option>
+                        <option value="2778063">Innovorder</option>
+                        <option value="1186691">EMMAMAX</option>
+                        <option value="2962738">FRANCE SOLUTION</option>
+                        <option value="1366092">ISKANDER MARINE</option>
+                        <option value="206008">
+                          Bsl - Bertinot Sanitaire Location
+                        </option>
+                        <option value="1540903">STE OXYMONTAGE</option>
+                        <option value="2169215">ACOR</option>
+                        <option value="2345835">Maison Container</option>
+                        <option value="1381362">CONTAINERS SOLUTIONS</option>
+                        <option value="2184493">MON CAMION RESTO</option>
+                        <option value="2402850">Containerama</option>
+                        <option value="2429626">MAISON ECO 3</option>
+                        <option value="1666159">GOLIAT</option>
+                        <option value="2429657">
+                          Maisons Conteneur Highcube
+                        </option>
+                        <option value="2429689">Plein Sud Paysage</option>
+                        <option value="2429551">Ma Maison Container</option>
+                        <option value="2429623">CONTAIN LIFE</option>
+                        <option value="1610926">CONTAINERZ</option>
+                        <option value="2500241">STOCKOBOX</option>
+                        <option value="1421772">123Modules</option>
+                        <option value="1681338">EBF Solutions</option>
+                        <option value="2329513">iZimat</option>
+                        <option value="2793316">Eurobox</option>
+                        <option value="2172454">MOUVBOX</option>
+                        <option value="2896386">WOOKI SMART</option>
+                        <option value="2922854">Ocean containers</option>
+                        <option value="2948680">Bluetainer</option>
+                        <option value="2952234">PYXIS</option>
+                        <option value="2711364">Ecoframe</option>
+                        <option value="2951115">JDK CONCEPT</option>
+                        <option value="2951120">SCEA PIRASTOT</option>
+                        <option value="2789034">BRYT DEVELOPPEMENT</option>
+                        <option value="2976014">ID KUB</option>
+                        <option value="2955039">ARL CONCEPT</option>
+                        <option value="2835618">Module�</option>
+                        <option value="2925483">Duneloft</option>
+                        <option value="914837">Duba Container</option>
+                        <option value="2952140">ESPACES & STRUCTURES</option>
+                        <option value="213459">LARDE</option>
+                        <option value="2976196">KIOSQUE&BOX</option>
+                        <option value="1064719">TAF DIFFUSION</option>
+                        <option value="1153480">DOMOLIFT</option>
+                        <option value="1404322">Pass'rel</option>
+                        <option value="284912">SODIMAS</option>
+                        <option value="1328095">Vimec srl</option>
+                        <option value="2060162">SEMA</option>
+                        <option value="2100210">ACEM</option>
+                        <option value="2085271">WONDER MAKERS</option>
+                        <option value="2169043">EMILEVE</option>
+                        <option value="2071496">SUD ACCESSIBILITE</option>
+                        <option value="2458003">ALT-ACCESS</option>
+                        <option value="2470827">Savaria</option>
+                        <option value="2470828">Slitz</option>
+                        <option value="2470832">Enier</option>
+                        <option value="2426314">still9</option>
+                        <option value="2391714">SODIMAS</option>
+                        <option value="2471019">Fain</option>
+                        <option value="2471010">AEA</option>
+                        <option value="2470826">Arealift</option>
+                        <option value="123141">ETABLISSEMENTS BOURGEOIS</option>
+                        <option value="2449563">AUTOMATISMES CORSE</option>
+                        <option value="2405694">Voltasud 83</option>
+                        <option value="2060193">ALTICA</option>
+                        <option value="2835235">A.M.E. Ouest</option>
+                        <option value="2963581">
+                          le monte escalier breton
+                        </option>
+                        <option value="123139">STANNAH</option>
+                        <option value="2784112">e-thik</option>
+                        <option value="2306486">LEDISTRIB</option>
+                        <option value="2887256">SARL BS Distribution</option>
+                        <option value="2793185">ESPACE DRIVE</option>
+                        <option value="2925956">selflystore.com</option>
+                        <option value="2196732">DISTRIBUTEUR FRANCE</option>
+                        <option value="2925380">GDCLIENTS</option>
+                        <option value="2565304">Digitizme</option>
+                        <option value="2952613">RP SOLUTIONS</option>
+                        <option value="2660320">SASU LDA</option>
+                        <option value="2959781">DISTRI'CLICK</option>
+                      </select>
                     </div>
+                  </div>
 
-                    <!-- Empty State -->
-                    <div id="emptyState" class="bg-white rounded-lg border border-dashed border-custom-gris-blanc">
-                        <div class="flex flex-col items-center justify-center py-16 text-center">
-                            <i data-lucide="sparkles" class="h-16 w-16 text-custom-bleu-light-2 mb-6"></i>
-                            <h3 class="text-xl font-semibold mb-3 text-custom-noir">Recherche RAG Intelligente</h3>
-                            <p class="text-custom-gris mb-6 max-w-lg leading-relaxed">
-                                Utilisez la barre de recherche pour explorer vos données avec l'intelligence
-			artificielle.
-			</p>
-			<div class="flex gap-3">
-				<button id="configureFilters"
-					class="px-4 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors">
-					Configurer les filtres
-				</button>
-				<button id="activateAI"
-					class="px-4 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy transition-colors">
-					Activer l'IA
-                                </button>
-                            </div>
-                        </div>
+                  <!-- État -->
+                  <div class="space-y-2">
+                    <label
+                      class="text-sm font-medium flex items-center gap-2 text-custom-noir"
+                    >
+                      État
+                    </label>
+                    <select
+                      id="etatFilter"
+                      class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                      multiple=""
+                    >
+                      <option value="client">Client</option>
+                      <option value="pause">Pause</option>
+                      <option value="prospect">Prospect</option>
+                    </select>
+                  </div>
+
+                  <!-- Affichage -->
+                  <div class="space-y-2">
+                    <label
+                      class="text-sm font-medium flex items-center gap-2 text-custom-noir"
+                    >
+                      Affichage
+                    </label>
+                    <select
+                      id="affichageFilter"
+                      class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                      multiple
+                    >
+                      <option value="complet">Complet</option>
+                      <option value="restreint">Restreint</option>
+                      <option value="non-visible">Non visible</option>
+                      <option value="decouverte">Découverte</option>
+                    </select>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- LLM Configuration -->
+          <div
+            id="llmConfig"
+            class="bg-white rounded-lg border border-custom-bleu-light-2 shadow-sm hidden"
+          >
+            <div
+              class="p-4 border-b border-custom-clair-2 flex items-center justify-between"
+            >
+              <h3
+                class="text-base font-semibold flex items-center gap-2 text-custom-bleu"
+              >
+                <i data-lucide="sparkles" class="h-4 w-4"></i>
+                Configuration LLM
+              </h3>
+              <button
+                id="closeLlm"
+                class="h-6 w-6 p-0 hover:bg-custom-clair-2 rounded flex items-center justify-center"
+              >
+                <i data-lucide="x" class="h-3 w-3"></i>
+              </button>
+            </div>
+            <div class="p-4 space-y-4">
+              <div class="space-y-2">
+                <label class="text-sm font-medium text-custom-noir"
+                  >Prompt personnalisé</label
+                >
+                <textarea
+                  id="llmPrompt"
+                  placeholder="Entrez votre prompt pour le LLM..."
+                  class="w-full min-h-[160px] px-3 py-2 text-sm border border-custom-gris-blanc rounded-md focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none"
+                ></textarea>
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium text-custom-noir"
+                  >Température</label
+                >
+                <div class="px-2">
+                  <input
+                    type="range"
+                    id="temperatureSlider"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value="0.4"
+                    class="slider w-full"
+                  />
+                  <div
+                    class="flex justify-between text-xs text-custom-gris mt-1"
+                  >
+                    <span>0.0</span>
+                    <span id="temperatureValue" class="font-medium">0.4</span>
+                    <span>1.0</span>
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-2">
+                <label class="text-sm font-medium text-custom-noir"
+                  >Modèle LLM</label
+                >
+                <select
+                  id="llmModel"
+                  class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                >
+                  <option value="google/gemini-flash-1.5" selected="">
+                    Gemini flash 1.5
+                  </option>
+                  <option value="qwen/qwen3-coder:free">
+                    Qwen3 Coder:free
+                  </option>
+                  <option value="qwen/qwen3-coder">Qwen3 Coder</option>
+                  <option value="gpt-4.1-2025-04-14">gpt-4.1-2025-04-14</option>
+                  <!-- <option value="gpt-5-2025-08-07">gpt-5-2025-08-07</option> -->
+                  <option value="gpt-4o-2024-08-06">gpt-4o-2024-08-06</option>
+                  <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
+                  <option value="deepseek">Deepseek chat</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Main Content -->
+        <!-- **CORRECTION 2** : <main> est maintenant un conteneur flexible simple -->
+        <main class="flex-1 min-w-0">
+          <!-- **CORRECTION 3** : Ce div interne contrôle la largeur du contenu pour une meilleure lisibilité -->
+          <div class="max-w-4xl mx-auto space-y-4">
+            <!-- Search Metrics -->
+            <div
+              id="searchMetrics"
+              class="bg-white rounded-lg border border-custom-clair-2 p-3 hidden"
+            >
+              <div id="searchingState" class="flex items-center gap-2">
+                <div
+                  class="animate-spin rounded-full h-4 w-4 border-2 border-custom-bleu border-t-transparent"
+                ></div>
+                <span class="text-sm text-custom-gris"
+                  >Recherche en cours...</span
+                >
+              </div>
+              <div id="metricsContent" class="space-y-2 hidden">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="target" class="h-4 w-4 text-custom-bleu"></i>
+                  <span class="text-sm font-medium text-custom-noir"
+                    ><span id="totalResults">0</span> résultats</span
+                  >
+                </div>
+                <div class="flex items-center gap-4 text-xs text-custom-gris">
+                  <div class="flex items-center gap-1">
+                    <i data-lucide="clock" class="h-3 w-3"></i>
+                    <span id="searchTime">0</span>s
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <i data-lucide="file-text" class="h-3 w-3"></i>
+                    <span id="sourcesCount">0</span> sources
+                  </div>
+                </div>
+                <div
+                  id="searchQueryBadge"
+                  class="inline-block px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full"
+                ></div>
+              </div>
+            </div>
+
+            <!-- Search Results -->
+            <div id="searchResultsContainer" class="space-y-3 hidden">
+              <div id="searchResultsList" class="space-y-3"></div>
+            </div>
+
+            <!-- Empty State -->
+            <div
+              id="emptyState"
+              class="bg-white rounded-lg border border-dashed border-custom-gris-blanc"
+            >
+              <div
+                class="flex flex-col items-center justify-center py-16 text-center"
+              >
+                <i
+                  data-lucide="sparkles"
+                  class="h-16 w-16 text-custom-bleu-light-2 mb-6"
+                ></i>
+                <h3 class="text-xl font-semibold mb-3 text-custom-noir">
+                  Recherche RAG
+                </h3>
+                <p class="text-custom-gris mb-6 max-w-lg leading-relaxed">
+                  Utilisez la barre de recherche pour explorer nos données avec
+                  l'intelligence artificielle.
+                </p>
+              </div>
+            </div>
+
+            <!-- No Results State -->
+            <div
+              id="noResults"
+              class="bg-white rounded-lg border border-dashed border-custom-gris-blanc hidden"
+            >
+              <div
+                class="flex flex-col items-center justify-center py-12 text-center"
+              >
+                <i
+                  data-lucide="search"
+                  class="h-12 w-12 text-custom-clair-1 mb-4"
+                ></i>
+                <h3 class="text-lg font-medium mb-2 text-custom-noir">
+                  Aucun résultat trouvé
+                </h3>
+                <p class="text-custom-gris mb-4 max-w-md">
+                  Essayez de modifier votre recherche ou d'ajuster les filtres
+                  pour obtenir des résultats.
+                </p>
+                <button
+                  id="clearSearch"
+                  class="px-4 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2"
+                >
+                  Effacer la recherche
+                </button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <!-- Results Sidebar -->
+      <aside
+        id="resultsSidebar"
+        class="fixed md:relative inset-y-0 right-0 z-40 md:z-auto w-full sm:w-96 md:w-96 border-l border-custom-clair-2 bg-white/95 md:bg-white flex-shrink-0 backdrop-blur-sm md:backdrop-blur-none flex flex-col slide-in-from-right transform translate-x-full transition-transform duration-300 hidden"
+        style="width: 35rem"
+      >
+        <div class="sticky top-0 md:top-auto h-screen flex flex-col">
+          <div
+            class="flex items-center justify-between p-4 border-b border-custom-clair-2 bg-white/50 flex-shrink-0"
+          >
+            <h2 class="font-semibold flex items-center gap-2 text-custom-noir">
+              <i data-lucide="file-text" class="h-4 w-4"></i>
+              <span>Analyse IA</span>
+            </h2>
+            <div class="flex items-center gap-2">
+              <span
+                id="resultsBadge"
+                class="px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full hidden"
+                >0</span
+              >
+              <button
+                id="closeResults"
+                class="h-6 w-6 p-0 hover:bg-custom-clair-2 rounded flex items-center justify-center flex items-center justify-center"
+                title="Masquer les résultats"
+              >
+                <i data-lucide="x" class="h-3 w-3"></i>
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4">
+            <div
+              id="llmEmptyState"
+              class="flex flex-col items-center justify-center py-16 text-center hidden"
+            >
+              <div
+                style="
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  justify-content: center;
+                  padding-top: 4rem;
+                  padding-bottom: 4rem;
+                  text-align: center;
+                "
+              >
+                <i
+                  data-lucide="sparkles"
+                  class="h-12 w-12 text-custom-bleu-light-2 mb-4"
+                ></i>
+                <h3 class="text-sm font-medium mb-2 text-custom-gris">
+                  Aucune analyse IA
+                </h3>
+                <p class="text-xs text-custom-gris max-w-xs leading-relaxed">
+                  Activez l'IA et lancez une recherche pour obtenir une analyse
+                  approfondie.
+                </p>
+              </div>
+            </div>
+            <div id="llmResponseContainer">
+              <button
+                id="insightsToggle"
+                class="flex items-center justify-between w-full p-3 bg-custom-bleu-light rounded-lg border border-custom-bleu-light-2 hover:border-custom-bleu transition-colors"
+              >
+                <div class="flex items-center gap-2">
+                  <i
+                    data-lucide="sparkles"
+                    class="h-4 w-4 text-custom-bleu"
+                  ></i>
+                  <span class="font-medium text-sm text-custom-noir"
+                    >Analyse IA</span
+                  >
+                  <span
+                    id="modelBadge"
+                    class="px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full"
+                    >GPT-4</span
+                  >
+                </div>
+                <i
+                  data-lucide="chevron-right"
+                  class="h-4 w-4 transition-transform"
+                  id="insightsChevron"
+                ></i>
+              </button>
+              <div id="insightsContent" class="mt-2 hidden">
+                <div
+                  class="bg-white rounded-lg border border-custom-bleu-light-2"
+                >
+                  <div class="p-4">
+                    <!-- MODIFICATION : Conteneur pour le chargement et la réponse -->
+                    <div id="llmLoadingState" class="hidden">
+                      <div
+                        class="flex items-center gap-2 text-sm text-custom-gris p-4"
+                      >
+                        <div
+                          class="animate-spin rounded-full h-4 w-4 border-2 border-custom-bleu border-t-transparent"
+                        ></div>
+                        <span>Génération de l'analyse IA en cours...</span>
+                      </div>
                     </div>
-
-                    <!-- No Results State -->
-                    <div id="noResults"
-                        class="bg-white rounded-lg border border-dashed border-custom-gris-blanc hidden">
-                        <div class="flex flex-col items-center justify-center py-12 text-center">
-                            <i data-lucide="search" class="h-12 w-12 text-custom-clair-1 mb-4"></i>
-                            <h3 class="text-lg font-medium mb-2 text-custom-noir">Aucun résultat trouvé</h3>
-                            <p class="text-custom-gris mb-4 max-w-md">
-                                Essayez de modifier votre recherche ou d'ajuster les filtres pour obtenir des résultats.
-			</p>
-			<button id="clearSearch"
-				class="px-4 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2">
-				Effacer la recherche
-			</button>
-			</div>
-			</div>
-			</div>
-			</main>
-		</div>
-
-		<!-- Results Sidebar -->
-		<aside id="resultsSidebar"
-			class="fixed md:relative inset-y-0 right-0 z-40 md:z-auto w-full sm:w-96 md:w-96 border-l border-custom-clair-2 bg-white/95 md:bg-white flex-shrink-0 backdrop-blur-sm md:backdrop-blur-none flex flex-col slide-in-from-right transform translate-x-full transition-transform duration-300 hidden" style="width: 35rem;">
-			<div class="sticky top-0 md:top-auto h-screen flex flex-col">
-				<div
-					class="flex items-center justify-between p-4 border-b border-custom-clair-2 bg-white/50 flex-shrink-0">
-					<h2 class="font-semibold flex items-center gap-2 text-custom-noir">
-						<i data-lucide="file-text" class="h-4 w-4"></i>
-						<span>Analyse IA</span>
-					</h2>
-					<div class="flex items-center gap-2">
-						<span id="resultsBadge"
-							class="px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full hidden">0</span>
-						<button id="closeResults" class="h-6 w-6 p-0 hover:bg-custom-clair-2 rounded"
-							title="Masquer les résultats">
-							<i data-lucide="x" class="h-3 w-3"></i>
-						</button>
-					</div>
-				</div>
-				<div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4">
-					<div id="llmEmptyState" class="flex flex-col items-center justify-center py-16 text-center hidden">
-						<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 4rem; padding-bottom: 4rem; text-align: center;">
-							<i data-lucide="sparkles" class="h-12 w-12 text-custom-bleu-light-2 mb-4"></i>
-							<h3 class="text-sm font-medium mb-2 text-custom-gris">Aucune analyse IA</h3>
-							<p class="text-xs text-custom-gris max-w-xs leading-relaxed">
-								Activez l'IA et lancez une recherche pour obtenir une analyse approfondie.
-                            </p>
-                        </div>
+                    <div
+                      class="bg-white/50 rounded-lg p-3 border border-custom-clair-2 mb-3"
+                    >
+                      <!-- MODIFICATION : La balise <pre> est devenue une <div> pour interpréter le HTML -->
+                      <div
+                        id="llmResponseText"
+                        class="text-xs leading-relaxed font-sans text-custom-noir max-h-64 overflow-y-auto"
+                      ></div>
                     </div>
-                    <div id="llmResponseContainer">
-                        <button id="insightsToggle"
-                            class="flex items-center justify-between w-full p-3 bg-custom-bleu-light rounded-lg border border-custom-bleu-light-2 hover:border-custom-bleu transition-colors">
-                            <div class="flex items-center gap-2">
-                                <i data-lucide="sparkles" class="h-4 w-4 text-custom-bleu"></i>
-                                <span class="font-medium text-sm text-custom-noir">Analyse IA</span>
-                                <span id="modelBadge"
-                                    class="px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full">GPT-4</span>
-                            </div>
-                            <i data-lucide="chevron-right" class="h-4 w-4 transition-transform"
-                                id="insightsChevron"></i>
+                    <div
+                      class="flex items-center justify-between text-xs text-custom-gris"
+                    >
+                      <div class="space-y-1">
+                        <div>
+                          Température: <span id="usedTemperature">0.4</span>
+                        </div>
+                        <div>Tokens: ~<span id="estimatedTokens">0</span></div>
+                      </div>
+                      <div class="flex gap-1">
+                        <button
+                          class="px-2 py-1 text-xs border border-custom-gris-blanc rounded bg-white hover:bg-custom-clair-2"
+                        >
+                          Copier
                         </button>
-                        <div id="insightsContent" class="mt-2 hidden">
-                            <div class="bg-white rounded-lg border border-custom-bleu-light-2">
-                                <div class="p-4">
-                                    <!-- MODIFICATION : Conteneur pour le chargement et la réponse -->
-                                    <div id="llmLoadingState" class="hidden">
-                                        <div class="flex items-center gap-2 text-sm text-custom-gris p-4">
-                                            <div class="animate-spin rounded-full h-4 w-4 border-2 border-custom-bleu border-t-transparent"></div>
-                                            <span>Génération de l'analyse IA en cours...</span>
-									</div>
-									</div>
-									<div class="bg-white/50 rounded-lg p-3 border border-custom-clair-2 mb-3">
-										<!-- MODIFICATION : La balise <pre> est devenue une <div> pour interpréter le HTML -->
-										<div id="llmResponseText"
-											class="text-xs leading-relaxed font-sans text-custom-noir max-h-64 overflow-y-auto"></div>
-									</div>
-									<div class="flex items-center justify-between text-xs text-custom-gris">
-										<div class="space-y-1">
-											<div>Température: <span id="usedTemperature">0.4</span></div>
-											<div>Sources: <span id="usedSources">0</span></div>
-											<div>Tokens: ~<span id="estimatedTokens">0</span></div>
-										</div>
-										<div class="flex gap-1">
-											<button
-												class="px-2 py-1 text-xs border border-custom-gris-blanc rounded bg-white hover:bg-custom-clair-2">Copier</button>
-											<button
-												class="px-2 py-1 text-xs border border-custom-gris-blanc rounded bg-white hover:bg-custom-clair-2">Exporter</button>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-		</aside>
-	</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
 
-	<script src="{{ url_for('static', path='/js/script.js') }}"></script>
-	<script>
-		// Initialize Lucide icons
-		lucide.createIcons();
-	</script>
-</body>
-
+    <script src="{{ url_for('static', path='/js/script.js') }}"></script>
+    <script>
+      // Initialize Lucide icons
+      lucide.createIcons();
+    </script>
+  </body>
 </html>
