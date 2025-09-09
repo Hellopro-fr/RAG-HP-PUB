@@ -57,7 +57,7 @@ def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"
 def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
     """Charge le modèle CrossEncoder pour le reranking."""
     logger.info(f"Chargement du modèle de reranking '{model_name}'...")
-    model = CrossEncoder(model_name, device='cuda:0', trust_remote_code=True)
+    model = CrossEncoder(model_name, device='cuda', trust_remote_code=True)
     logger.info("Modèle de reranking chargé.")
     return model
 
@@ -323,27 +323,42 @@ async def search_in_milvus_stream(request: SearchRequest):
     if request.options.use_reranker and all_matches_for_reranking:
         yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
         start_rerank_time = time.perf_counter()
+        last_step_time = start_rerank_time
         reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
-        
+        current_time = time.perf_counter()
+        reranker_duration = current_time - last_step_time
+        last_step_time = current_time  # Mettre à jour le marqueur de temps
+        logger.info(f"Temps de chargement du modele : {reranker_duration:.4f} secondes.")
+
         # *** CORRECTION 1 : Utilisation de .get() pour le reranker ***
         start_predict_time = time.perf_counter()
         pairs = [[request.prompt, match["metadata"]["entity"]["text"]] for match in all_matches_for_reranking]
-        pairs_time = time.perf_counter() - start_predict_time
         logger.info(f"top k recherche : {top_k} - top k reranking : {reranking_top_k}")
-        logger.info(f"Temps de pairs du reranker : {pairs_time:.2f} secondes.")
+        current_time = time.perf_counter()
+        pairs_duration = current_time - last_step_time
+        last_step_time = current_time  # Mettre à jour le marqueur de temps
+        logger.info(f"Temps de préparation des paires : {pairs_duration:.4f} secondes.")
+
         scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
-        prediction_time = time.perf_counter() - start_predict_time
-        logger.info(f"Temps de prediction du reranker : {prediction_time:.2f} secondes.")
+        current_time = time.perf_counter()
+        prediction_duration = current_time - last_step_time
+        last_step_time = current_time # Mettre à jour le marqueur de temps
+        logger.info(f"Temps de prédiction du reranker : {prediction_duration:.2f} secondes.")
 
         for match, score in zip(all_matches_for_reranking, scores):
             match["rerank_score"] = float(score)
             match['relevance_score'] = convert_score_to_percentage(float(score), score_type='reranker')
-        relevant_time = time.perf_counter() - start_predict_time
-        logger.info(f"Temps de relevant du reranker : {relevant_time:.2f} secondes.")
+        current_time = time.perf_counter()
+        match_duration = current_time - last_step_time
+        last_step_time = current_time # Mettre à jour le marqueur de temps
+        logger.info(f"Temps de match : {match_duration:.4f} secondes.")
         
         reranked_matches = sorted(all_matches_for_reranking, key=lambda x: x["rerank_score"], reverse=True)
-        sort_time = time.perf_counter() - start_predict_time
-        logger.info(f"Temps de sort du reranker : {sort_time:.2f} secondes.")
+        current_time = time.perf_counter()
+        processing_sort_duration = current_time - last_step_time
+        last_step_time = current_time # Mettre à jour le marqueur de temps
+        logger.info(f"Temps de traitement et tri : {processing_sort_duration:.4f} secondes.")
+        
         final_results = reranked_matches[:top_k]
         rerank_duration = time.perf_counter() - start_rerank_time
         yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": round(rerank_duration, 2)}}
