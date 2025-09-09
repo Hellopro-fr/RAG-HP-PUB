@@ -57,7 +57,7 @@ def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"
 def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
     """Charge le modèle CrossEncoder pour le reranking."""
     logger.info(f"Chargement du modèle de reranking '{model_name}'...")
-    model = CrossEncoder(model_name, trust_remote_code=True)
+    model = CrossEncoder(model_name, device='cuda:0', trust_remote_code=True)
     logger.info("Modèle de reranking chargé.")
     return model
 
