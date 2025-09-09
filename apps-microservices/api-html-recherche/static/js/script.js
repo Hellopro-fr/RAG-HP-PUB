@@ -1087,9 +1087,9 @@ $(function () {
 
     let url = meta.url;
 
-    if(meta.source === 'devis') {
+    if(result.source === 'devis') {
       url = `https://bo.hellopro.fr/admin/gest_com/v2/fiche_lead.php?id_lead=${meta.lead_id}`
-    } else if(meta.source === 'echanges') {
+    } else if(result.source === 'echanges') {
       url = `https://bo.hellopro.fr/admin/service_client_lead/?page=liste_messages&id_lead=${meta.id_demande}&id_categorie=${meta.id_categorie}`;
     }
 
