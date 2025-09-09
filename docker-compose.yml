@@ -135,33 +135,40 @@ services:
     env_file:
       - .env
     
-    # SOLUTION PRINCIPALE : Mémoire partagée pour NCCL
-    shm_size: '8gb'  # Essentiel pour la communication inter-GPU
+    # Mémoire partagée pour NCCL (nécessaire même pour 1 GPU)
+    shm_size: '8gb'
     
-    # Variables d'environnement pour optimiser NCCL et multi-GPU
+    # Variables d'environnement ADAPTATIVES
     environment:
-      - CUDA_VISIBLE_DEVICES=0,1  # Spécifie les 2 GPUs à utiliser
-      - NCCL_DEBUG=INFO           # Debug NCCL pour diagnostiquer les problèmes
-      - NCCL_SHM_DISABLE=0        # Active la mémoire partagée NCCL
-      - NCCL_P2P_DISABLE=0        # Active la communication P2P entre GPUs
-      - NCCL_IB_DISABLE=1         # Désactive InfiniBand (pas nécessaire)
-      - NCCL_SOCKET_IFNAME=eth0   # Interface réseau pour NCCL
-      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512  # Optimise l'allocateur CUDA
-      - TORCH_NCCL_BLOCKING_WAIT=1  # Évite les timeouts NCCL
+      - NCCL_DEBUG=WARN          # Moins verbeux, seulement les erreurs importantes
+      - NCCL_SHM_DISABLE=0       # Active la mémoire partagée NCCL
+      - NCCL_P2P_DISABLE=0       # Active la communication P2P entre GPUs
+      - NCCL_IB_DISABLE=1        # Désactive InfiniBand
+      - NCCL_SOCKET_IFNAME=eth0  # Interface réseau pour NCCL
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512,expandable_segments:True
+      - TORCH_NCCL_BLOCKING_WAIT=1
+      
+      # Variables pour optimiser les performances
+      - VLLM_USE_TRITON_FLASH_ATTN=1
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+      
+      # Variable pour contrôler l'adaptation (optionnel)
+      - AUTO_GPU_DETECTION=true
+      - PREFERRED_GPU_COUNT=2    # Préfère 2 GPUs si disponibles
     
-    # Configuration GPU optimisée
+    # Configuration GPU FLEXIBLE
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0', '1']  # Spécifie exactement les 2 GPUs
+              count: all  # Donne accès à tous les GPUs, Python choisira
               capabilities: [gpu]
     
-    # Optimisations système pour les performances
+    # Optimisations système
     ulimits:
-      memlock: -1      # Pas de limite sur la mémoire verrouillée
-      stack: 67108864  # Stack plus grande pour les threads CUDA
+      memlock: -1
+      stack: 67108864
 
   embedding-service:
     build:
