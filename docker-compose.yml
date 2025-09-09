@@ -127,41 +127,41 @@ services:
       replicas: 4
 
   template-llm-service:
-  build:
-    context: .
-    dockerfile: ./apps-microservices/template-llm-service/Dockerfile
-  container_name: template-llm-service
-  restart: unless-stopped
-  env_file:
-    - .env
-  
-  # SOLUTION PRINCIPALE : Mémoire partagée pour NCCL
-  shm_size: '8gb'  # Essentiel pour la communication inter-GPU
-  
-  # Variables d'environnement pour optimiser NCCL et multi-GPU
-  environment:
-    - CUDA_VISIBLE_DEVICES=0,1  # Spécifie les 2 GPUs à utiliser
-    - NCCL_DEBUG=INFO           # Debug NCCL pour diagnostiquer les problèmes
-    - NCCL_SHM_DISABLE=0        # Active la mémoire partagée NCCL
-    - NCCL_P2P_DISABLE=0        # Active la communication P2P entre GPUs
-    - NCCL_IB_DISABLE=1         # Désactive InfiniBand (pas nécessaire)
-    - NCCL_SOCKET_IFNAME=eth0   # Interface réseau pour NCCL
-    - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512  # Optimise l'allocateur CUDA
-    - TORCH_NCCL_BLOCKING_WAIT=1  # Évite les timeouts NCCL
-  
-  # Configuration GPU optimisée
-  deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            device_ids: ['0', '1']  # Spécifie exactement les 2 GPUs
-            capabilities: [gpu]
-  
-  # Optimisations système pour les performances
-  ulimits:
-    memlock: -1      # Pas de limite sur la mémoire verrouillée
-    stack: 67108864  # Stack plus grande pour les threads CUDA
+    build:
+      context: .
+      dockerfile: ./apps-microservices/template-llm-service/Dockerfile
+    container_name: template-llm-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    
+    # SOLUTION PRINCIPALE : Mémoire partagée pour NCCL
+    shm_size: '8gb'  # Essentiel pour la communication inter-GPU
+    
+    # Variables d'environnement pour optimiser NCCL et multi-GPU
+    environment:
+      - CUDA_VISIBLE_DEVICES=0,1  # Spécifie les 2 GPUs à utiliser
+      - NCCL_DEBUG=INFO           # Debug NCCL pour diagnostiquer les problèmes
+      - NCCL_SHM_DISABLE=0        # Active la mémoire partagée NCCL
+      - NCCL_P2P_DISABLE=0        # Active la communication P2P entre GPUs
+      - NCCL_IB_DISABLE=1         # Désactive InfiniBand (pas nécessaire)
+      - NCCL_SOCKET_IFNAME=eth0   # Interface réseau pour NCCL
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512  # Optimise l'allocateur CUDA
+      - TORCH_NCCL_BLOCKING_WAIT=1  # Évite les timeouts NCCL
+    
+    # Configuration GPU optimisée
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0', '1']  # Spécifie exactement les 2 GPUs
+              capabilities: [gpu]
+    
+    # Optimisations système pour les performances
+    ulimits:
+      memlock: -1      # Pas de limite sur la mémoire verrouillée
+      stack: 67108864  # Stack plus grande pour les threads CUDA
 
   embedding-service:
     build:
