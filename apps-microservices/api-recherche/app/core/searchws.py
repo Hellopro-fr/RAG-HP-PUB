@@ -49,7 +49,7 @@ import_start_time = time.perf_counter()
 @lru_cache(maxsize=None)
 def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"):
     logger.info(f"Chargement initial du modèle d'embedding '{model_name}'...")
-    model = SentenceTransformer(model_name)
+    model = SentenceTransformer(model_name, device='cuda')
     logger.info("Modèle d'embedding chargé.")
     return model
 
