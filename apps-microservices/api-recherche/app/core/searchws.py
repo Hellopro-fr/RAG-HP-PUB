@@ -340,7 +340,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                         "id": hit.id, 
                         "score": hit.distance, 
                         "relevance_score": convert_score_to_percentage(float(hit.distance), score_type='cosine'), 
-                        "metadata": _serialize_entity(hit.entity), 
+                        "metadata": _serialize_entity(hit.entity, source), 
                         "source": source
                     })
         except Exception as e:
