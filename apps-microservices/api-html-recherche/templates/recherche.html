@@ -500,7 +500,7 @@
                     </div>
                     <div id="devisSubfilters" class="pl-6 space-y-3 hidden">
                       <div class="space-y-1">
-                        <label class="text-xs text-custom-gris">Naf</label>
+                        <label class="text-xs text-custom-gris">Naf5</label>
                         <select
                           id="devisNaf"
                           class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
@@ -510,6 +510,17 @@
                           data-pagination="true"
                           data-payload="recup_naf"
                         ></select>
+                      </div>
+                      <div class="space-y-1">
+                          <label class="text-xs text-custom-gris">Naf2</label>
+                          <select 
+                              id="devisNaf2" 
+                              class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                              multiple data-ajax="true"
+                              data-url="https://dev-www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                              data-pagination="true" 
+                              data-payload="recup_naf_2"
+                          ></select>
                       </div>
                       <div class="space-y-1">
                         <label class="text-xs text-custom-gris">Effectif</label>
@@ -1122,9 +1133,9 @@
                       class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
                       multiple=""
                     >
-                      <option value="client">Client</option>
-                      <option value="pause">Pause</option>
-                      <option value="prospect">Prospect</option>
+                      <option value="Client">Client</option>
+                      <option value="Pause">Pause</option>
+                      <option value="Prospect">Prospect</option>
                     </select>
                   </div>
 
@@ -1140,10 +1151,10 @@
                       class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
                       multiple
                     >
-                      <option value="complet">Complet</option>
-                      <option value="restreint">Restreint</option>
-                      <option value="non-visible">Non visible</option>
-                      <option value="decouverte">Découverte</option>
+                      <option value="Complet">Complet</option>
+                      <option value="Restreint">Restreint</option>
+                      <option value="Non visible">Non visible</option>
+                      <option value="D&eacute;couverte">Découverte</option>
                     </select>
                   </div>
 
