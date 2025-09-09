@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 description = """
 API pour vérifier le doublon produit pour le projet RAG Hellopro !
 """
-PROJECT_NAME__    = "API verif doublon"
+PROJECT_NAME__    = "API-HP-RAG"
 PROJECT_VERSION__ = "1.0.0"
 
 

@@ -58,6 +58,11 @@ class MilvusFournisseursCrud:
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
                 FieldSchema(name="page_type", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="domaine", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="domaine2", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="domaine3", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="domaine4", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="domaine5", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="domaine6", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="fournisseur", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="id_fournisseur", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=65535),
@@ -92,6 +97,12 @@ class MilvusFournisseursCrud:
             # collection.create_index(field_name="affichage", index_name="idx_affichage")            
             # collection.create_index(field_name="etat", index_name="idx_etat")            
             # collection.create_index(field_name="page_type", index_name="idx_page_type")            
+            # collection.create_index(field_name="domaine", index_name="idx_domaine")         
+            # collection.create_index(field_name="domaine2", index_name="idx_domaine2")         
+            # collection.create_index(field_name="domaine3", index_name="idx_domaine3")         
+            # collection.create_index(field_name="domaine4", index_name="idx_domaine4")         
+            # collection.create_index(field_name="domaine5", index_name="idx_domaine5")         
+            # collection.create_index(field_name="domaine6", index_name="idx_domaine6")         
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
@@ -274,3 +285,46 @@ class MilvusFournisseursCrud:
             self.logger.error(f"[{model_key}][Fournisseur] Erreur Milvus lors de la récupération : {e}")
         except Exception as e:
             self.logger.error(f"[{model_key}][Fournisseur] Erreur de Récupèration de Fournisseur : {e}", exc_info=True)
+            
+    def get_fournisseur_by_field(self,field_name:str, search_value: str) -> Dict[str, Any]:
+        list_search_value = [search_value]
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+        
+        if not field_name :
+            field_name = "fournisseur"
+        
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée.",
+                    "code": 404
+                }
+
+            if not search_value:
+                return {
+                    "status": "error",
+                    "message": "search_value requise pour la récupération.",
+                    "code" : 400
+                }
+
+            result = self.collection.query(
+                expr=f"{field_name} in {list_search_value}",
+                output_fields=["id"]
+            )
+            #self.collection.flush()
+            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+
+            return {
+                "status": "success",
+                "data": result
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Fournisseur] Erreur Milvus lors de la récupération : {e}")
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Fournisseur] Erreur de Récupèration Fournisseur : {e}", exc_info=True)

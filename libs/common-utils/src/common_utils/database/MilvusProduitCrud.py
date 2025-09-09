@@ -276,7 +276,7 @@ class MilvusProduitsCrud:
             if not id_produit:
                 return {
                     "status": "error",
-                    "message": "Conversation ID requise pour la récupération.",
+                    "message": "id_produit requise pour la récupération.",
                     "code" : 400
                 }
 
@@ -293,6 +293,49 @@ class MilvusProduitsCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}")
+            self.logger.error(f"[{model_key}][Produit] Erreur Milvus lors de la récupération : {e}")
         except Exception as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur de Récupèration du produit : {e}", exc_info=True)
+            self.logger.error(f"[{model_key}][Produit] Erreur de Récupèration du produit : {e}", exc_info=True)
+            
+    def get_produit_by_field(self,field_name:str, search_value: str) -> Dict[str, Any]:
+        list_search_value = [search_value]
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+        
+        if not field_name :
+            field_name = "nom_produit"
+        
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée.",
+                    "code": 404
+                }
+
+            if not search_value:
+                return {
+                    "status": "error",
+                    "message": "search_value requise pour la récupération.",
+                    "code" : 400
+                }
+
+            result = self.collection.query(
+                expr=f"{field_name} in {list_search_value}",
+                output_fields=["id"]
+            )
+            #self.collection.flush()
+            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+
+            return {
+                "status": "success",
+                "data": result
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Produit] Erreur Milvus lors de la récupération : {e}")
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Produit] Erreur de Récupèration du produit : {e}", exc_info=True)
