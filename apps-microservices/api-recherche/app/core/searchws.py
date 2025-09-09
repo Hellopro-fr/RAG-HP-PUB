@@ -13,8 +13,53 @@ import asyncio
 import torch
 from app.core.openrouter import chat_with_openrouter
 
+from optimum.onnxruntime import ORTModelForSequenceClassification
+from transformers import AutoTokenizer
+
 from concurrent.futures import ThreadPoolExecutor
 
+ONNX_MODEL_PATH = "bge-reranker-v2-m3-onnx"
+class ONNXReranker:
+    """
+    Classe optimisée pour le reranking utilisant ONNX Runtime avec un GPU.
+    """
+    def __init__(self, model_path: str, device: str = 'cuda'):
+        logger.info(f"Chargement du modèle ONNX depuis '{model_path}' sur le device '{device}'...")
+        self.device = torch.device(device)
+        # Spécifie le fournisseur d'exécution CUDA pour garantir l'utilisation du GPU
+        self.model = ORTModelForSequenceClassification.from_pretrained(model_path, provider="CUDAExecutionProvider")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.model.to(self.device)
+        logger.info("Modèle ONNX et tokenizer chargés avec succès.")
+
+    def predict(self, pairs: list, batch_size: int = 128, show_progress_bar: bool = False):
+        """
+        Effectue la prédiction sur des paires de textes [question, contexte].
+        Retourne des scores de probabilité (après fonction sigmoïde).
+        """
+        all_scores = []
+        with torch.no_grad(): # Plus efficace que torch.inference_mode() pour la compatibilité
+            for i in range(0, len(pairs), batch_size):
+                batch = pairs[i:i+batch_size]
+                if not batch:
+                    continue
+                
+                features = self.tokenizer(batch, padding=True, truncation=True, return_tensors="pt").to(self.device)
+                
+                # Le modèle ONNX retourne un dictionnaire avec la clé 'logits'
+                model_outputs = self.model(**features)
+                
+                # Appliquer la sigmoïde pour obtenir un score de probabilité, comme le fait CrossEncoder
+                scores = torch.sigmoid(model_outputs.logits).squeeze()
+                
+                # .cpu().tolist() est un moyen efficace de récupérer les résultats
+                all_scores.extend(scores.cpu().tolist())
+
+        # Assure que même un seul résultat est retourné dans une liste
+        if len(pairs) == 1:
+            return [all_scores]
+        return all_scores
+    
 # Créer un pool avec un seul thread pour toutes les opérations CUDA
 # afin de garantir un contexte CUDA stable.
 cuda_executor = ThreadPoolExecutor(max_workers=1)
@@ -58,6 +103,42 @@ def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"
     model = SentenceTransformer(model_name, device='cuda')
     logger.info("Modèle d'embedding chargé.")
     return model
+
+@lru_cache(maxsize=None)
+def get_reranker_onnx_model(model: str = ONNX_MODEL_PATH):
+    """
+    Charge le reranker ONNX optimisé. L'objet est mis en cache pour
+    des accès ultérieurs instantanés.
+    """
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model = ONNXReranker(model, device=device)
+    return model
+
+def prepare_onnx_model(model_id: str = "BAAI/bge-reranker-v2-m3", onnx_path: str = ONNX_MODEL_PATH):
+    """
+    Vérifie si le modèle ONNX existe. S'il n'existe pas, il le télécharge
+    depuis Hugging Face, le convertit et le sauvegarde localement.
+    Cette fonction est conçue pour n'être exécutée qu'une seule fois au démarrage.
+    """
+    if os.path.exists(onnx_path) and os.listdir(onnx_path):
+        logger.info(f"Le modèle ONNX a été trouvé dans '{onnx_path}'. La conversion est ignorée.")
+        return
+
+    logger.warning(f"Le modèle ONNX n'a pas été trouvé. Démarrage du processus de conversion unique...")
+    logger.info(f"Cela peut prendre plusieurs minutes et consommer de la RAM.")
+
+    try:
+        logger.info(f"Téléchargement du modèle '{model_id}' pour conversion...")
+        model = ORTModelForSequenceClassification.from_pretrained(model_id, from_transformers=True, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        logger.info(f"Sauvegarde du modèle converti au format ONNX dans '{onnx_path}'...")
+        model.save_pretrained(onnx_path)
+        tokenizer.save_pretrained(onnx_path)
+        logger.info("Conversion du modèle ONNX terminée avec succès !")
+    except Exception as e:
+        logger.error(f"Une erreur est survenue lors de la conversion ONNX : {e}")
+        raise
 
 @lru_cache(maxsize=None)
 def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
@@ -349,7 +430,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         start_rerank_time = time.perf_counter()
         last_step_time = start_rerank_time
         # reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
-        reranker = await loop.run_in_executor(cuda_executor, get_reranker_model, request.options.reranker_model)
+        reranker = await loop.run_in_executor(cuda_executor, get_reranker_onnx_model, request.options.reranker_model)
         current_time = time.perf_counter()
         reranker_duration = current_time - last_step_time
         last_step_time = current_time  # Mettre à jour le marqueur de temps
