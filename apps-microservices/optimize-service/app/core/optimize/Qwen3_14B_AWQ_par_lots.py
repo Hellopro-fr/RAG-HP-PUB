@@ -15,7 +15,7 @@ class ProductTitleOptimizerBatch:
             "gpu_memory_utilization": 0.85,
             "trust_remote_code": True,
             "dtype": "auto",
-            "max_model_len": 8192
+            "max_model_len": 16384
         }
         self.llm = LLM(**self.llm_args)
         self.tokenizer = self.llm.get_tokenizer()
