@@ -321,14 +321,14 @@ async def search_in_milvus_stream(request: SearchRequest):
 
             if search_results and search_results[0]:
                 for hit in search_results[0]:
+                    entity_data = hit.entity.to_dict()
                     all_matches_for_reranking.append({
                         "id": hit.id, 
                         "score": hit.distance, 
                         "relevance_score": convert_score_to_percentage(float(hit.distance), score_type='cosine'), 
-                        "metadata": dict(hit.entity), 
+                        "metadata": {"entity": entity_data}, 
                         "source": source
                     })
-            
         except Exception as e:
             yield {"type": "error", "payload": f"Error searching in {source}: {e}"}
             all_results[source] = []
