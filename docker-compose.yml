@@ -224,7 +224,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 30
 
   categories-database-qdrant-service:
     build:
