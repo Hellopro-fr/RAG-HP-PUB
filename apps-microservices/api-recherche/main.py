@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     init_tasks = [
         asyncio.to_thread(get_milvus_connection),
         asyncio.to_thread(get_embedding_model),
-        # asyncio.to_thread(get_reranker_model),
+        asyncio.to_thread(get_reranker_model),
         asyncio.to_thread(get_openai_client)
     ]
     
