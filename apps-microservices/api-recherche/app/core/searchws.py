@@ -354,6 +354,8 @@ async def search_in_milvus_stream(request: SearchRequest):
                 show_progress_bar=False,
                 batch_size=128 # Voir Étape 2
             )
+        prediction_duration = time.perf_counter() - start_predict_time
+        logger.info(f"Temps de prédiction du reranker (FP16) : {prediction_duration:.3f} secondes.")
         current_time = time.perf_counter()
         prediction_duration = current_time - last_step_time
         last_step_time = current_time # Mettre à jour le marqueur de temps
