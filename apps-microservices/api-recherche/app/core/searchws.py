@@ -72,7 +72,7 @@ def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
             logger.info("Compilation du modèle avec torch.compile()...")
             # Le mode 'max-autotune' prend plus de temps au premier appel, 
             # mais offre les meilleures performances ensuite.
-            model.model = torch.compile(model.model, mode="max-autotune")
+            model.model = torch.compile(model.model, mode="reduce-overhead")
             logger.info("Modèle compilé avec succès.")
         except Exception as e:
             logger.warning(f"Échec de la compilation du modèle : {e}")
