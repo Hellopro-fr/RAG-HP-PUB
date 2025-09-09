@@ -351,7 +351,7 @@ async def search_in_milvus_stream(request: SearchRequest):
     yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
     
     top_k = int(request.top_k)
-    reranking_top_k = top_k * 3 if request.options.use_reranker else top_k
+    reranking_top_k = top_k * 2 if request.options.use_reranker else top_k
 
     all_results = {}
     context_texts = []
