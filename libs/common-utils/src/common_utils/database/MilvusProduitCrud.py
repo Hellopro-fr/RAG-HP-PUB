@@ -41,6 +41,8 @@ class MilvusProduitsCrud:
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
+        #forcer le nom de la collection pour le moment #TODO a supprimer plus tard
+        collection_name = "produits_2"
         model_key = model_config.model_id
 
         if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
@@ -95,7 +97,8 @@ class MilvusProduitsCrud:
 
             ]
             schema = CollectionSchema(fields, description=f"Collection de chunks de Produit pour {model_key}")
-            
+             #TODO a supprimer plus tard
+            collection_name = "produits_2"
             collection = Collection(
                 collection_name, 
                 schema,

@@ -5,7 +5,7 @@ class CollectionName(str, Enum):
     Enum for the possible collection names.
     The values correspond to the string that the API will accept.
     """
-    PRODUIT = "produits"
+    PRODUIT = "produits_2"
     DEVIS = "devis"
     CATEGORIE = "categories"
     ECHANGE = "echanges"
