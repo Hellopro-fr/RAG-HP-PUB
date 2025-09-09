@@ -175,6 +175,13 @@ def filtre_source (filtre: dict, source: str = "") -> list:
     NUMERIC_DTYPES = {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64, DataType.FLOAT, DataType.DOUBLE}
     for key, val in filtre.items():
         dtype = field_types.get(key)
+        if key == 'id_categorie' and source == 'produits':
+            key = 'categorie'
+        
+        if not dtype:
+            logger.info(f"dtype none {key}")
+            continue
+        
         if dtype in NUMERIC_DTYPES:
             if isinstance(val, list):
                 numeric_vals = [int(v) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(v) for v in val]
@@ -200,18 +207,14 @@ def _serialize_entity(entity, source: str = "produits") -> dict:
     """
     serializable_dict = {}
     fields = get_field_type_map(source)
-    logger.info(fields)
     for key, value in entity.to_dict().items():
         if hasattr(value, '__iter__') and not isinstance(value, (str, bytes, dict)):
             serializable_dict[key] = list(value)
         else:
             if isinstance(value, dict):
                 for sub_key, sub_value in value.items():
-                    logger.info(f"test key '{sub_key}' with value type '{fields.get(sub_key)}'")
                     if fields.get(sub_key) == DataType.ARRAY:
                         value[sub_key] = list(sub_value)
-            else:
-                logger.info(f"Serializing key '{key}' with value type '{type(value)}'")
             serializable_dict[key] = value
     return serializable_dict
 
@@ -311,7 +314,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         if filter_expr:
             filters.append(" and ".join(filter_expr))
         
-        filter_expr_source = filtre_source(filtre) if filtre else ""
+        filter_expr_source = filtre_source(filtre, source) if filtre else ""
         if filter_expr_source:
             filters.append(" and ".join(filter_expr_source))
         
