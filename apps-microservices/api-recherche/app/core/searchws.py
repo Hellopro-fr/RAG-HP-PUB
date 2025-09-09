@@ -191,15 +191,29 @@ def filtre_source (filtre: dict, source: str = "") -> list:
             else:
                 # Format as: field_name == "value"
                 clauses.append(f"{key} == {repr(str(val))}")
-        # if key == "id_categorie" and source == "produits": 
-        #     key = "categorie"
-        # elif key == "id_categorie":
-        #     val = [int(v) for v in val] if isinstance(val, list) else val
-        # if isinstance(val, list):
-        #     clauses.append(f"{key} in {str(val)}")
-        # elif isinstance(val, str):
-        #     clauses.append(f'{key} == {repr(val)}')
     return clauses
+
+def _serialize_entity(entity, source: str = "produits") -> dict:
+    """
+    Converts a Milvus search result entity to a JSON-serializable dictionary.
+    Handles special types like RepeatedScalarContainer for ARRAY fields by converting them to lists.
+    """
+    serializable_dict = {}
+    fields = get_field_type_map(source)
+    logger.info(fields)
+    for key, value in entity.to_dict().items():
+        if hasattr(value, '__iter__') and not isinstance(value, (str, bytes, dict)):
+            serializable_dict[key] = list(value)
+        else:
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    logger.info(f"test key '{sub_key}' with value type '{fields.get(sub_key)}'")
+                    if fields.get(sub_key) == DataType.ARRAY:
+                        value[sub_key] = list(sub_value)
+            else:
+                logger.info(f"Serializing key '{key}' with value type '{type(value)}'")
+            serializable_dict[key] = value
+    return serializable_dict
 
 def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
 	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
@@ -326,7 +340,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                         "id": hit.id, 
                         "score": hit.distance, 
                         "relevance_score": convert_score_to_percentage(float(hit.distance), score_type='cosine'), 
-                        "metadata": {"entity": entity_data}, 
+                        "metadata": _serialize_entity(hit.entity), 
                         "source": source
                     })
         except Exception as e:
@@ -342,7 +356,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
         
         # *** CORRECTION 1 : Utilisation de .get() pour le reranker ***
-        pairs = [[request.prompt, match["metadata"].get("text", "")] for match in all_matches_for_reranking]
+        pairs = [[request.prompt, match["metadata"]["text"]] for match in all_matches_for_reranking]
         scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
         
         for match, score in zip(all_matches_for_reranking, scores):
