@@ -21,19 +21,19 @@ class ProductTitleOptimizerBatch:
         self.tokenizer = self.llm.get_tokenizer()
         self.batch_size = 1000  # Taille des lots
     
-    def clean_html_attributes(self, html_content: str) -> str:
-        """
-        Nettoie les attributs des balises HTML tout en conservant les balises elles-mêmes.
-        """
-        if not html_content:
-            return html_content
+    # def clean_html_attributes(self, html_content: str) -> str:
+    #     """
+    #     Nettoie les attributs des balises HTML tout en conservant les balises elles-mêmes.
+    #     """
+    #     if not html_content:
+    #         return html_content
             
-        pattern = r'<(/?)(\w+)(?:\s+[^>]*)?>'
-        cleaned_content = re.sub(pattern, r'<\1\2>', html_content)
+    #     pattern = r'<(/?)(\w+)(?:\s+[^>]*)?>'
+    #     cleaned_content = re.sub(pattern, r'<\1\2>', html_content)
         
-        return cleaned_content
+    #     return cleaned_content
     
-    def clean_input_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    # def clean_input_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Nettoie les données d'entrée, notamment la description produit.
         """
@@ -78,6 +78,9 @@ class ProductTitleOptimizerBatch:
             - Évite les majuscules excessives (max 40% du titre).
             - Ne pas ajouter d'usage ou avantage commercial sauf si déjà présent.
             - Ne jamais utiliser de balise HTML
+            - Écrire toujours m² (surface) et m³ (volume) avec exposant et espace insécable (ex. : 45 m², 12 m³).
+            - Ne jamais écrire m2, m3 ni ajouter de pluriel aux symboles.
+            - Toujours conserver le type d’acquisition du produit (neuf, occasion, location) présent dans le titre initial.
 
             Exemple 1: Scierie LT15 Wood Mizer - essence ou diesel pour billes jusqu'à 70cm de diamètre et 5,4m de long
             Exemple 2: Bungalow démontable sur mesure de 2 à 12m de long, avec accouplement possible
