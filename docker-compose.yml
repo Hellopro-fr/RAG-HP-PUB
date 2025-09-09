@@ -56,6 +56,7 @@ services:
     # TODO: à supprimer en PROD
     volumes:
       - ./apps-microservices/api-html-recherche:/app:rw
+      - ./libs:/app/libs:rw
     ports:
       - "8550:8550"
     env_file:
