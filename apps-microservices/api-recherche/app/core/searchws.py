@@ -182,7 +182,15 @@ def filtre_source (filtre: dict, source: str = "") -> list:
             logger.info(f"dtype none {key}")
             continue
         
-        if dtype in NUMERIC_DTYPES:
+                if dtype == DataType.ARRAY:
+            if isinstance(val, list):
+                sub_clauses = [f"array_contains({key}, {repr(str(v))})" for v in val]
+                if sub_clauses:
+                    clauses.append(f"({' or '.join(sub_clauses)})")
+            else:
+                clauses.append(f"array_contains({key}, {repr(str(val))})")
+                
+        elif dtype in NUMERIC_DTYPES:
             if isinstance(val, list):
                 numeric_vals = [int(v) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(v) for v in val]
                 clauses.append(f"{key} in {numeric_vals}")
