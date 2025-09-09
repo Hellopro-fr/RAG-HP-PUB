@@ -1100,7 +1100,7 @@ $(function () {
       category: meta.id_categorie || 'N/A',
       supplier: meta.fournisseur || 'N/A',
       snippet: description,
-      confidence: result.score * 100, // S'assure que le score existe
+      confidence: result.rerank_score * 100, // S'assure que le score existe
       url: url || '#',
       id_produit: meta.id_produit,
       chunk_info: `${meta.chunk_id}/${meta.total_chunks}`
