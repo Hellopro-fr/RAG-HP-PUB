@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse, BatchOptimRequest, BatchOptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
 # from app.core.optimize.Qwen3_14B_AWQ_titre import ProductTitleOptimizer
-from app.core.optimize.Qwen3_14B_AWQ_par_lots import ProductTitleOptimizer
+from app.core.optimize.Qwen3_14B_AWQ_par_lots import ProductTitleOptimizerBatch
 from typing import List, Dict, Any
 import time
 import os
@@ -14,9 +14,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # On crée un verrou global pour protéger l'initialisation du service
 service_initialization_lock = threading.Lock()
-qwen_service_instance: ProductTitleOptimizer | None = None
+qwen_service_instance: ProductTitleOptimizerBatch | None = None
 
-def get_qwen_optimize_service() -> ProductTitleOptimizer:
+def get_qwen_optimize_service() -> ProductTitleOptimizerBatch:
     """
     Fonction "thread-safe" qui charge le service (et le modèle LLM) de manière différée.
     Le verrou garantit qu'un seul thread peut initialiser le service à la fois.

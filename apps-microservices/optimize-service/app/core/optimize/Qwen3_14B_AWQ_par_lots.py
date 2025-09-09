@@ -7,7 +7,7 @@ import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 import time
 
-class ProductTitleOptimizer:
+class ProductTitleOptimizerBatch:
     def __init__(self):
         self.llm_args = {
             "model": "Qwen/Qwen3-14B-AWQ",
