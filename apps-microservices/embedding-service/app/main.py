@@ -44,7 +44,7 @@ def main():
         if torch.cuda.device_count() > 1:
             device_id = 1
 
-        device = f'cuda:{device_id}' if torch.cuda.is_available() else 'cpu'
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         model_name = "dangvantuan/sentence-camembert-large"
         

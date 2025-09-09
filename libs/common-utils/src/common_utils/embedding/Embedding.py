@@ -118,7 +118,8 @@ class Embedding:
                 sentences,
                 show_progress_bar=False,
                 normalize_embeddings=True,
-                batch_size=self.config.BATCH_SIZE
+                batch_size=self.config.BATCH_SIZE,
+                device=["cuda:0", "cuda:1"]
             ).tolist()
         except Exception as e:
             self.logger.error(f"Erreur lors de l'encodage des phrases: {e}", exc_info=True)
