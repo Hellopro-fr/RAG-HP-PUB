@@ -140,7 +140,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1 # On demande l'accès à 1 GPU
+              count: all # On demande l'accès à tous les GPUs
               capabilities: [gpu]
 
   embedding-service:
