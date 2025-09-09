@@ -162,7 +162,7 @@ def filtre_source (filtre: dict, source: str = "") -> list:
         if key == "id_categorie" and source == "produits": 
             key = "categorie"
         elif key == "id_categorie":
-            val = [int(v) for v in val.values()] if isinstance(val, list) else val
+            val = [int(v) for v in val] if isinstance(val, list) else val
         if isinstance(val, list):
             clauses.append(f"{key} in {repr(val)}")
         elif isinstance(val, str):
