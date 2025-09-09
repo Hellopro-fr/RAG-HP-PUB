@@ -377,7 +377,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                 lambda: reranker.predict(
                     pairs, 
                     show_progress_bar=False,
-                    batch_size=128
+                    batch_size=256
                 )
             )
         prediction_duration = time.perf_counter() - start_predict_time
