@@ -23,7 +23,7 @@ def main():
     # Configuration optimisée mais compatible avec LLM synchrone
     llm_config = {
         "model": "Qwen/Qwen3-14B-AWQ",
-        "quantization": "awq",
+        "quantization": "awq_marlin",
         "tensor_parallel_size": 2,  # Utilise les 2 GPUs
         "gpu_memory_utilization": 0.95,  # Plus agressif avec AWQ
         "trust_remote_code": True,
