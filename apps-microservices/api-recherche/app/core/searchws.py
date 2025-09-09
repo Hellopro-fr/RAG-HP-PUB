@@ -226,44 +226,6 @@ def _serialize_entity(entity, source: str = "produits") -> dict:
             serializable_dict[key] = value
     return serializable_dict
 
-def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
-	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
-	clauses = []
-
-	# Catégories (ex: 'categorie in ["Bungalows", "Container"]')
-	categorie_dict = data.get("categorie", {})
-	if categorie_dict:
-		vals = [f'"{v}"' for v in categorie_dict.values()] # Ajouter des guillemets pour les chaînes
-		if vals: 
-			clauses.append(f'categorie in [{",".join(vals)}]')
-
-	# Fournisseurs
-	fournisseur_dict = data.get("fournisseur", {})
-	if fournisseur_dict:
-		vals = list(map(lambda v: f'"{v}"', fournisseur_dict.keys() if payload_fournisseur_key == "id_fournisseur" else fournisseur_dict.values()))
-		if vals: 
-			clauses.append(f'{payload_fournisseur_key} in [{",".join(vals)}]')
-
-	# État
-	etat_ids = data.get("etat", [])
-	if etat_ids:
-		vals = [f'"{list_etat[str(e)]}"' for e in etat_ids if str(e) in list_etat]
-		if vals: 
-			clauses.append(f'etat in [{",".join(vals)}]')
-
-	# Affichage
-	affichage_ids = data.get("affichage", [])
-	if affichage_ids:
-		vals = [f'"{list_affichage[str(a)]}"' for a in affichage_ids if str(a) in list_affichage]
-		if vals: 
-			clauses.append(f'affichage in [{",".join(vals)}]')
-
-	# Fournisseur non vide
-	if fournisseur_non_vide:
-		clauses.append(f'{payload_fournisseur_key} != "" and {payload_fournisseur_key} is not null')
-
-	return " and ".join(clauses)
-
 async def search_in_milvus_stream(request: SearchRequest):
     start_total_time = time.perf_counter()
     
@@ -315,9 +277,6 @@ async def search_in_milvus_stream(request: SearchRequest):
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
         
         filters = []
-        # filter_expr = build_milvus_expression(request.filtre, metadata["payload_fournisseur"], "1000000" in request.filtre.get("fournisseur", {}))
-        # if filter_expr:
-        #     filters.append(filter_expr)
         filter_expr = filtre_source(request.filtre, source)
         if filter_expr:
             filters.append(" and ".join(filter_expr))
@@ -367,14 +326,24 @@ async def search_in_milvus_stream(request: SearchRequest):
         reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
         
         # *** CORRECTION 1 : Utilisation de .get() pour le reranker ***
+        start_predict_time = time.perf_counter()
         pairs = [[request.prompt, match["metadata"]["entity"]["text"]] for match in all_matches_for_reranking]
+        pairs_time = time.perf_counter() - start_predict_time
+        logger.info(f"top k recherche : {top_k} - top k reranking : {reranking_top_k}")
+        logger.info(f"Temps de pairs du reranker : {pairs_time:.2f} secondes.")
         scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
-        
+        prediction_time = time.perf_counter() - start_predict_time
+        logger.info(f"Temps de prediction du reranker : {prediction_time:.2f} secondes.")
+
         for match, score in zip(all_matches_for_reranking, scores):
             match["rerank_score"] = float(score)
             match['relevance_score'] = convert_score_to_percentage(float(score), score_type='reranker')
+        relevant_time = time.perf_counter() - start_predict_time
+        logger.info(f"Temps de relevant du reranker : {relevant_time:.2f} secondes.")
         
         reranked_matches = sorted(all_matches_for_reranking, key=lambda x: x["rerank_score"], reverse=True)
+        sort_time = time.perf_counter() - start_predict_time
+        logger.info(f"Temps de sort du reranker : {sort_time:.2f} secondes.")
         final_results = reranked_matches[:top_k]
         rerank_duration = time.perf_counter() - start_rerank_time
         yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": round(rerank_duration, 2)}}
