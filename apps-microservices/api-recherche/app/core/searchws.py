@@ -13,6 +13,12 @@ import asyncio
 import torch
 from app.core.openrouter import chat_with_openrouter
 
+from concurrent.futures import ThreadPoolExecutor
+
+# Créer un pool avec un seul thread pour toutes les opérations CUDA
+# afin de garantir un contexte CUDA stable.
+cuda_executor = ThreadPoolExecutor(max_workers=1)
+
 class DeepSeek:
 	def __init__(self, config=None):
 		config = config or {}
@@ -240,18 +246,24 @@ def _serialize_entity(entity, source: str = "produits") -> dict:
 
 async def search_in_milvus_stream(request: SearchRequest):
     start_total_time = time.perf_counter()
+    loop = asyncio.get_running_loop()
     
     try:
-        await asyncio.to_thread(get_milvus_connection)
+        # await asyncio.to_thread(get_milvus_connection)
+        await loop.run_in_executor(cuda_executor, get_milvus_connection)
     except Exception as e:
         yield {"type": "error", "payload": f"Milvus connexion avec erreur: {e}"}
         return
     
-    embedding_model = await asyncio.to_thread(get_embedding_model)
+    # embedding_model = await asyncio.to_thread(get_embedding_model)
+    embedding_model = await loop.run_in_executor(cuda_executor, get_embedding_model)
     yield {"type": "status", "payload": "Chargement modèle d'embedding avec succès..."}
     start_embed = time.perf_counter()
-    query_vector = await asyncio.to_thread(
-        embedding_model.encode, request.prompt, normalize_embeddings=True
+    # query_vector = await asyncio.to_thread(
+    #     embedding_model.encode, request.prompt, normalize_embeddings=True
+    # )
+    query_vector = await loop.run_in_executor(
+        cuda_executor, lambda: embedding_model.encode(request.prompt, normalize_embeddings=True)
     )
     query_vector_list = [query_vector.tolist()]
     embed_duration = time.perf_counter() - start_embed
@@ -336,7 +348,8 @@ async def search_in_milvus_stream(request: SearchRequest):
         yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
         start_rerank_time = time.perf_counter()
         last_step_time = start_rerank_time
-        reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
+        # reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
+        reranker = await loop.run_in_executor(cuda_executor, get_reranker_model, request.options.reranker_model)
         current_time = time.perf_counter()
         reranker_duration = current_time - last_step_time
         last_step_time = current_time  # Mettre à jour le marqueur de temps
@@ -353,11 +366,19 @@ async def search_in_milvus_stream(request: SearchRequest):
 
         # scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
         with torch.inference_mode(), torch.autocast("cuda"):
-            scores = await asyncio.to_thread(
-                reranker.predict, 
-                pairs, 
-                show_progress_bar=False,
-                batch_size=128 # Voir Étape 2
+            # scores = await asyncio.to_thread(
+            #     reranker.predict, 
+            #     pairs, 
+            #     show_progress_bar=False,
+            #     batch_size=128 # Voir Étape 2
+            # )
+            scores = await loop.run_in_executor(
+                cuda_executor,
+                lambda: reranker.predict(
+                    pairs, 
+                    show_progress_bar=False,
+                    batch_size=128
+                )
             )
         prediction_duration = time.perf_counter() - start_predict_time
         logger.info(f"Temps de prédiction du reranker (FP16) : {prediction_duration:.3f} secondes.")
