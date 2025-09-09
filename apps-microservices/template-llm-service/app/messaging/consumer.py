@@ -25,8 +25,7 @@ class Consumer:
         self.prefetch_count = 16
         self.channel.basic_qos(prefetch_count=self.prefetch_count)
 
-        self.max_workers = 8
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
 
         self._setup_channel()
         print(f"✅ Consumer initialisé en mode haute performance (prefetch={self.prefetch_count}, workers={self.max_workers}).")
@@ -57,7 +56,6 @@ class Consumer:
             url = message.get("data", {}).get("url", "URL Inconnue")
             print(f"\n📥 Worker thread: Début du traitement pour {url}")
 
-            # La logique métier est appelée ici, de manière isolée.
             output_message = classify_page_template(self.llm, self.tokenizer, self.llm_config, message)
             
             # La publication du résultat est également faite par le worker.

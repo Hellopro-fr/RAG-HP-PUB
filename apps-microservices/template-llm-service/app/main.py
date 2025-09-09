@@ -68,7 +68,7 @@ def main():
         exit(1)
 
     try:
-        publisher = Publisher(connection)
+        publisher = Publisher()
         consumer = Consumer(connection, publisher, llm, tokenizer, llm_config)
         consumer.start_consuming()
     except KeyboardInterrupt:
