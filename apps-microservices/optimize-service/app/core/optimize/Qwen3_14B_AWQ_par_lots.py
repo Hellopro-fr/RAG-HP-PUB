@@ -322,7 +322,8 @@ class ProductTitleOptimizerBatch:
         Optimise un lot de produits en utilisant la génération par lot de vLLM.
         """
         try:
-            print(f"Traitement d'un lot de {len(batch_products)} produits avec vLLM batch generation")
+            print(f"---")
+            print(f"Lancement de l'optimize pour le lot de {len(batch_products)} produits")
             
             # Préparation des prompts
             formatted_prompts = []
@@ -361,10 +362,8 @@ class ProductTitleOptimizerBatch:
             
             start_time = time.time()
             outputs = self.llm.generate(formatted_prompts, sampling_params)
-            end_time = time.time()
-            
-            print(f"Génération par lot terminée en {end_time - start_time:.2f} secondes")
-            
+            print(f"Optimize terminée, traitement des résultats...")
+
             # Traitement des résultats
             results = []
             for i, output in enumerate(outputs):
@@ -398,7 +397,8 @@ class ProductTitleOptimizerBatch:
                         "id_produit_scrapping": product_id,
                         "error": f"Erreur de traitement: {str(e)}"
                     })
-            
+            end_time = time.time()
+            print(f"Génération du lot terminée en {end_time - start_time:.2f} secondes")
             return results
             
         except Exception as e:
@@ -420,7 +420,8 @@ class ProductTitleOptimizerBatch:
         if not products_data:
             return []
         
-        print(f"Début du traitement de {len(products_data)} produits par lots de {self.batch_size}")
+        print(f"<<<<<<<<<<< >>>>>>>>>>>")
+        print(f"Début du traitement de {len(products_data)} produits par lots de 200")
         
         all_results = []
         total_batches = (len(products_data) + self.batch_size - 1) // self.batch_size
@@ -429,16 +430,14 @@ class ProductTitleOptimizerBatch:
             batch_num = i // self.batch_size + 1
             batch = products_data[i:i + self.batch_size]
             
-            print(f"Traitement du lot {batch_num}/{total_batches} ({len(batch)} produits)")
-            
             try:
                 batch_results = self.optimize_batch_vllm(batch)
                 all_results.extend(batch_results)
                 
-                print(f"Lot {batch_num} terminé avec succès")
+                # print(f"Lot {batch_num} terminé avec succès")
                 
             except Exception as e:
-                error_msg = f"Erreur lors du traitement du lot {batch_num}: {str(e)}"
+                error_msg = f"Erreur lors du lancement du lot {batch_num}: {str(e)}"
                 print(error_msg)
                 logging.error(error_msg)
                 
