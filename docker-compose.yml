@@ -203,16 +203,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=GPU-493e746c-de91-8e73-db3d-f00ef32a5c08
     deploy:
       replicas: 4
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1 # On demande l'accès à 1 GPU
-              capabilities: [gpu]
 
   categories-database-qdrant-service:
     build:
