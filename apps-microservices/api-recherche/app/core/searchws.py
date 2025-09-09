@@ -10,7 +10,7 @@ from pymilvus import connections, Collection, utility, DataType
 from app.core.credentials import settings, model_settings
 from app.schemas.search import SearchRequestWs as SearchRequest, LLMOptions
 import asyncio
-
+import torch
 from app.core.openrouter import chat_with_openrouter
 
 class DeepSeek:
@@ -55,9 +55,16 @@ def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"
 
 @lru_cache(maxsize=None)
 def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
-    """Charge le modèle CrossEncoder pour le reranking."""
+    """Charge le modèle CrossEncoder pour le reranking sur GPU si disponible."""
     logger.info(f"Chargement du modèle de reranking '{model_name}'...")
-    model = CrossEncoder(model_name, device='cuda', trust_remote_code=True)
+    
+    # Détecte si un GPU est disponible, sinon utilise le CPU
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    logger.info(f"Utilisation du device : {device} pour le reranking.")
+    
+    # Si vous êtes sur CPU, 7 secondes est normal. Sur GPU, ce sera bien plus rapide.
+    model = CrossEncoder(model_name, device=device, trust_remote_code=True)
+    
     logger.info("Modèle de reranking chargé.")
     return model
 
@@ -358,7 +365,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         processing_sort_duration = current_time - last_step_time
         last_step_time = current_time # Mettre à jour le marqueur de temps
         logger.info(f"Temps de traitement et tri : {processing_sort_duration:.4f} secondes.")
-        
+
         final_results = reranked_matches[:top_k]
         rerank_duration = time.perf_counter() - start_rerank_time
         yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": round(rerank_duration, 2)}}

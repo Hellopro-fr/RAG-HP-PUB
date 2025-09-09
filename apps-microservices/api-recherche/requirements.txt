@@ -8,3 +8,4 @@ pymilvus
 pydantic-settings
 requests
 sentencepiece
+torch
