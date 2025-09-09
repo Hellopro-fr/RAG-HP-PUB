@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Polices de caractères via Google Fonts et Boxicons via CDN -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css">
+
+    <!-- CSS via CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.4.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap4-theme@1.0.0/dist/select2-bootstrap4.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.20/css/dataTables.bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-multiselect/0.9.15/css/bootstrap-multiselect.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.css">
+
+    <!-- Vos CSS internes ( chemins conservés ) -->
+    <link rel="stylesheet" href="https://www.hellopro.fr/design_system/css/css_general_v1.css?v=1725530313">
+    <link rel="stylesheet" type="text/css" href="https://www.hellopro.fr/admin/css/colors.css?v=250905095833">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', path='/css/recherche.css') }}">
+
+    <!-- JS via CDN (jQuery doit être chargé en premier) -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.4.1/js/bootstrap.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.full.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/i18n/fr.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/locales/bootstrap-datepicker.fr.min.js"></script>
+    <script defer src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
+    <script defer src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-multiselect/0.9.15/js/bootstrap-multiselect.js"></script>
+    
+    <!-- Vos JS internes (chemins conservés) -->
+    <script defer src="https://www.hellopro.fr/design_system/js/js_general_v1.js?v=1725530313"></script>
+    <!-- <script defer src="https://www.hellopro.fr/admin/js/bootstrap/bootstrap-datetimepicker.min.js"></script> -->
+
+    <title>Recherche RAG PROD</title>
+</head>
+
+<body>
+	<header id="header-projet" class="d-flex justify-content-space-between bg-color-white">
+		<div class="">
+			<a id="header-logo" class="d-flex" href="https://www.hellopro.fr">
+				<img src="https://www.hellopro.fr/hellopro_fr/images/hp-logo.svg" style="width: 120px;">
+			</a>
+		</div>
+		<div class="d-flex gp-14">
+			<div class="d-flex gp-16 align-items-center font-weight-bold pseudo-h3">
+				Recherche RAG PROD
+			</div>
+		</div>
+	</header>
+
+	<script>
+		var default_filter = {};
+        var sources = {
+            "produits": "Produits"
+        }
+	</script>
+	<div class="container-fluid">
+		<div class="row">
+			<script>
+				const statut_admin = '2';
+			</script>
+		</div>
+		<div class="row">
+			<div class="col-no-padding-left col-no-padding-right w-100" id="contenu_page">
+				<div class="row " id="bloc_contenu" style=" padding-right: 0;">
+
+					<!-- <div class="header-list-recherche w-100 font-14 justify-content-space-between gp-16">
+						<input type="hidden" id="sql_req_ach">
+						<div class="d-flex w-100 gp-16">
+							<input type="text" placeholder="Votre recherche" id="search-prompt" style="width: 300px;">
+							<button class="btn btn-primary btn-bleu font-weight-700" id="send_prompt"> Lancer la
+								recherche</button>
+						</div>
+					</div> -->
+					<div class="lefter-righter-list d-flex w-100">
+						<div class="lefter-list-head">
+							<div class="no-filter d-flex flex-d-column align-items-center font-12 font-weight-500">
+								<i class='bx bx-right-arrow-circle'></i>
+								<span>Filtrer</span>
+							</div>
+							<div class="list-filter ml-16 mr-16 d-none bg-color-white border-radius-4">
+								<div class="d-flex font-weight-500 w-100 justify-content-end mb-32 hide-filter">
+									Cacher les filtres&nbsp;<i class='bx bx-left-arrow-circle'></i>
+								</div>
+								<div>
+                                    <div class="filter-name-container d-flex align-items-center gp-4 border-radius-4  mb-24 " data-old-filter="" data-champs="search-prompt">  
+                                        <i class="bx bx-search ml-8"></i>
+                                        <input type="text" id="search-prompt" name="search-prompt" autocomplete="off" value="chambre froide" placeholder="Votre recherche" class="border-0 w-100">
+                                    </div>
+                                    <div class="font-weight-600">Top K</div>
+                                    <div class="filter-top-k-container d-flex align-items-center gp-4 border-radius-4  mb-48 flex-d-column" data-old-filter="" data-champs="top_k">  
+                                        <input type="number" id="top_k" name="top_k" autocomplete="off" placeholder="Nombre de résultat" class="border-0 w-100" value="10" min="1" max="100">
+                                    </div>
+									<div class="font-weight-600">Filter par champs</div>
+									<div
+										class="search-champs-container d-flex align-items-center gp-4 border-radius-4 mt-8 mb-24 w-100">
+										<input type="text" id="search_champs" name="search_champs" autocomplete="off"
+											placeholder="Rechercher" class="border-0 w-100">
+										<i class='bx bx-x ml-8 mr-12'></i>
+									</div>
+								</div>
+								<div class="list-champs">
+
+								</div>
+								<div class="send-filter-container d-flex flex-d-column align-items-center gp-8"
+									style="margin-top: auto;">
+									<input type="hidden" id="has_filter" value="0" />
+									<button class="btn btn-primary btn-bleu font-weight-700" id="send_filter"> Appliquer
+										les filtres</button>
+									<span class="font-color-gris font-12 text-underline" id="reset_filter">
+										Réinitialiser </i></span>
+								</div>
+								<div id="send-filter-observer"></div>
+							</div>
+
+						</div>
+						<div class="righter-list-head d-flex flex-d-column ">
+							<div class="tableau-up d-flex align-items-center w-100 justify-content-space-between ">
+								<div class="d-flex gp-12 align-items-center justify-content-center">
+									<div class="total-recherches ">
+										<span><span class="font-weight-400 font-12 font-color-noir">Total recherches :
+											</span> <span id="nombre-recherches"
+												class="font-weight-600 font-color-noir font-12"><img
+													src="{{ url_for('static', path='/image/loading_action.gif') }}"
+													alt=""></span></span>
+										<span id="selected-recherches" style="display:none;"
+											class="font-weight-400 font-12 font-color-noir"> <span
+												id="nb-selected-recherche">1 recherche sélectionné</span> (<u
+												id="clear-selected-recherche" style="cursor: pointer;">effacer la
+												sélection</u>) </span>
+									</div>
+									<div class="d-flex align-items-center justify-content-center gp-4">
+										<span class="cout-titre font-weight-400 font-12">Coût total : </span>
+										<span class="cout-valeur font-weight-600 font-12"><img
+												src="{{ url_for('static', path='/image/loading_action.gif') }}"
+												alt=""></span></span>
+									</div>
+								</div>
+							</div>
+							<!-- TABLEAU -->
+							<div class="table-container-recherche">
+								<table class="">
+									<thead class="font-12 font-weight-400 font-color-noir">
+										<tr>
+											<th class="table-default-vue"><input id="select-all-checkbox"
+													type="checkbox"></th>
+											<th data-champs="pertinence" class="table-default-vue" data-id="pertinence">
+												<span class="table-th-title" data-title='Pertinence'>Pertinence</span><i
+													class='bx bx-menu'></i></th>
+											<th data-champs="source" class="table-default-vue" data-id="source"><span
+													class="table-th-title" data-title='Source de données'>Source de
+													données</span></th>
+											<th data-champs="url" class="table-default-vue" data-id="url"><span
+													class="table-th-title" data-title='URL'>URL</span><i
+													class='bx bx-menu'></i></th>
+											<th data-champs="page_type" class="table-default-vue"
+												data-id="page_type"><span class="table-th-title"
+													data-title='Modèle de page'>Modèle de page</span><i
+													class='bx bx-menu'></i></th>
+											<th data-champs="id_categorie" style='min-width: 150px'
+												class="table-default-vue" data-id="id_categorie"><span
+													class="table-th-title" data-title='Catégorie'>Catégorie</span></th>
+											<th data-champs="fournisseur" style='min-width: 150px'
+												class="table-default-vue" data-id="fournisseur"><span
+													class="table-th-title" data-title='Fournisseur'>Fournisseur</span>
+											</th>
+											<th data-champs="etat" class="table-default-vue"
+												data-id="etat"><span class="table-th-title"
+													data-title='Etat'>Etat</span></th>
+											<th data-champs="affichage" class="table-default-vue" data-id="affichage">
+												<span class="table-th-title" data-title='Affichage'>Affichage</span>
+											</th>
+											<th data-champs="texte" style='min-width: 150px' class="table-default-vue"
+												data-id="texte"><span class="table-th-title"
+													data-title='Texte'>Texte</span><i class='bx bx-menu'></i></th>
+
+											<th class="table-default-vue" data-toggle="modal"></th>
+										</tr>
+									</thead>
+									<tbody id="tbody-data-content" class="font-12 font-color-gris">
+									</tbody>
+								</table>
+								<div id="loading-table-content"
+									class="font-color-gris loading-content align-items-center gp-8 mt-24">
+									<img style="height: 24px;"
+										src="{{ url_for('static', path='/image/loading-ps.svg') }}">
+									<span>Chargement...</span>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Modal pour gérer les colonnes -->
+	<div class="modal fade" id="gerer-colonne-modal" tabindex="-1" role="dialog" aria-labelledby="modalDetails">
+		<div class="modal-dialog" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
+							aria-hidden="true">&times;</span></button>
+					<h4 class="modal-title" id="myModalLabel">Gérer les colonnes</h4>
+				</div>
+				<div class="modal-body">
+					<!-- pour la recherche -->
+					<div class="filter-colonne d-flex align-items-center gp-4 border-radius-4  mb-24">
+						<i class="bx bx-search ml-8"></i>
+						<input type="text" id="filtrer_colonne" name="gerer-colonne-name" autocomplete="off"
+							placeholder="Rechercher" class="border-0 w-100">
+					</div>
+					<div id="loading-colonne-recherche" class="loading-content">
+						<img style="height: 24px;"
+							src="{{ url_for('static', path='/image/loading-ps.svg') }}">
+					</div>
+					<div id="modal-content-gerer-colonne"></div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-default" data-dismiss="modal">Annuler</button>
+					<button id="enregistrer_order_colonne" type="submit" class="btn bg-color-bleu">Enregistrer</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!-- fin Modal -->
+
+	<!-- Modal pour gérer les détails colonne -->
+	<div class="modal fade afficher-details" id="afficher-details" tabindex="-1" role="dialog"
+		aria-labelledby="modalDetails">
+		<div class="modal-dialog" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
+							aria-hidden="true">&times;</span></button>
+					<h4 class="modal-title" id="modalDetails">Les Détails</h4>
+				</div>
+				<div class="modal-body">
+					<div id="loading-detail-content" class="loading-content">
+						<img style="height: 24px;"
+							src="{{ url_for('static', path='/image/loading-ps.svg') }}">
+					</div>
+					<div id="modal-detail-content" class="font-12"></div>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-default" data-dismiss="modal">Fermer</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<!-- fin Modal -->
+
+	<div class="backdrop none" id="backdrop"></div>
+	<div class="hp-modal with-content from-bottom" id="modal_info_recherche">
+		<div class="hp-modal-dialog">
+			<div class="hp-modal-header">
+				<div class="hp-modal-title">
+					Modal recherche
+				</div>
+				<div class="hp-modal-close" data-modal="hide" data-target="modal_info_recherche">
+					<i class="bx bx-x bx-border-circle"></i>
+				</div>
+			</div>
+			<div
+				class="align-items-center d-flex flex-d-column hp-modal-content info-reponse justify-content-center w-90 gp-20">
+				<div id="loading-detail-content" class="loading-content">
+					<img style="height: 24px;"
+						src="{{ url_for('static', path='/image/loading-ps.svg') }}">
+				</div>
+			</div>
+		</div>
+	</div>
+	<div id="zone-extraction" class="d-none"></div>
+	<div id="fixed-scrollbar"
+		style="overflow-x: scroll;position: fixed;bottom: 0px;right: 15px;width: 1338px;z-index: 10000;display: none;">
+		<div style="height: 1px;"></div>
+	</div>
+	<script>
+		let value_filtre_champs = {
+			"est": "Est",
+			"est_vide": "Est Vide",
+			"egal": "\u00e9gal",
+			"sup_ou_egal": "Sup\u00e9rieur ou \u00e9gal",
+			"sup_strict": "Sup\u00e9rieur stricte",
+			"inf_ou_egal": "Inf\u00e9rieur ou \u00e9gal",
+			"inf_strict": "Inf\u00e9rieur stricte",
+			"entre": "Entre",
+			"n_est_pas_entre": "N'est pas entr\u00e9",
+			"avant": "Avant",
+			"apres": "Apr\u00e8s",
+			"n_est_pas": "N'est pas",
+			"n_est_pas_vide": "N'est pas Vide",
+			"contient": "Contient"
+		};
+		let type_champ_filtre = {
+			"0": {
+				"type": "text"
+			},
+			"1": {
+				"type": "select2",
+				"multiple": false
+			},
+			"2": {
+				"type": "select2",
+				"multiple": true
+			},
+			"3": {
+				"type": "datepicker"
+			},
+			"4": {
+				"type": "number"
+			}
+		};
+		let list_header = {
+			"pertinence": {
+				"title": "Pertinence",
+				"type": 0,
+				"champ": "pertinence",
+				"no_filter": 1,
+				"class": "table-default-vue",
+				"recherche": [
+					"est"
+				]
+			},
+			"source": {
+				"title": "Source de donn\u00e9es",
+				"type": 2,
+				"order": false,
+				"champ": "source",
+				"class": "table-default-vue",
+				"value": {
+					"produits": "Produits"
+				},
+				"recherche": [
+					"est",
+					"n_est_pas"
+				]
+			},
+			"url": {
+				"title": "URL",
+				"type": 0,
+				"champ": "url",
+				"no_filter": 1,
+				"class": "table-default-vue",
+				"recherche": [
+					"est"
+				]
+			},
+			"page_type": {
+				"title": "Mod\u00e8le de page",
+				"type": 0,
+				"champ": "page_type",
+				"no_filter": 1,
+				"class": "table-default-vue",
+				"recherche": [
+					"est"
+				]
+			},
+			
+			"id_categorie": {
+				"title": "Cat\u00e9gorie", // TODO: modifier id_categorie en categorie
+				"type": 2,
+				"champ": "id_categorie",
+				"class": "table-default-vue",
+				"min-width": "150px",
+				"order": false,
+				"ajax": "/admin/repertoire_test/moulinettes_interne/process_prospects/rag_prod/ajax_filter_historique.php",
+				"payload": {
+					"action": "recup_rub_historique"
+				},
+				"recherche": [
+					"est"
+				]
+			},
+			"fournisseur": {
+				"title": "Fournisseur",
+				"type": 2,
+				"champ": "fournisseur",
+				"class": "table-default-vue",
+				"min-width": "150px",
+				"order": false,
+				"ajax": "/admin/repertoire_test/moulinettes_interne/process_prospects/rag_prod/ajax_filter_historique.php",
+				"payload": {
+					"action": "recup_rub_historique"
+				},
+				"recherche": [
+					"est"
+				]
+			},
+			"etat": {
+				"title": "Etat",
+				"type": 2,
+				"order": false,
+				"champ": "etat",
+				"class": "table-default-vue",
+				"value": {
+					"1": "Client",
+					"2": "Pause",
+					"3": "Prospect"
+				},
+				"recherche": [
+					"est",
+					"n_est_pas"
+				]
+			},
+			"affichage": {
+				"title": "Affichage",
+				"type": 2,
+				"order": false,
+				"champ": "affichage",
+				"class": "table-default-vue",
+				"value": {
+					"1": "Complet",
+					"2": "Restreint",
+					"3": "D\u00e9couverte",
+					"4": "Non visible"
+				},
+				"recherche": [
+					"est",
+					"n_est_pas"
+				]
+			},
+			"text": {
+				"title": "",
+				"type": 0,
+				"champ": "text",
+				"min-width": "150px",
+				"no_filter": 1,
+				"class": "table-default-vue",
+				"recherche": [
+					"est"
+				]
+			},
+			"model_reranker": {
+				"title": "Utiliser reranker mod\u00e8le",
+				"type": 1,
+				"order": false,
+				"est_filtre": true,
+				"champ": "model_reranker",
+				"value": {
+					"BAAI/bge-reranker-v2-m3": "BAAI/bge-reranker-v2-m3",
+					"jinaai/jina-reranker-v2-base-multilingual": "jinaai/jina-reranker-v2-base-multilingual"
+				},
+				"recherche": [
+					"est"
+				]
+			}
+		};
+		// TODO: modifier id_categorie en categorie
+		var ORDRE_COLONNE = Object.keys(list_header);
+	</script>
+	<script defer src="{{ url_for('static', path='/js/recherche.js') }}" type="text/javascript"></script>
+</body>
+
+</html>

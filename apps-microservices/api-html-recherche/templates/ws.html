@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Interface WebSocket Search</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #1a1a1a;
+            --primary-color: #007bff;
+            --primary-hover-color: #0056b3;
+            /* --- NOUVELLE COULEUR POUR LE BOUTON SECONDAIRE --- */
+            --secondary-color: #6c757d;
+            --secondary-hover-color: #5a6268;
+            --border-color: #e0e0e0;
+            --card-bg-color: #f9f9f9;
+            --input-bg-color: #ffffff;
+            --code-bg-color: #f0f0f0;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --error-color: #dc3545;
+            --shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        body.dark-mode {
+            --bg-color: #1a1a1a;
+            --text-color: #f0f0f0;
+            --primary-color: #3b82f6;
+            --primary-hover-color: #2563eb;
+            --secondary-color: #8f9ca9;
+            --secondary-hover-color: #6b7280;
+            --border-color: #3a3a3a;
+            --card-bg-color: #2a2a2a;
+            --input-bg-color: #3a3a3a;
+            --code-bg-color: #252525;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 2rem;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .form-container {
+            flex: 1;
+            min-width: 400px;
+            background-color: var(--card-bg-color);
+            padding: 2rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow);
+            align-self: flex-start;
+        }
+
+        .results-container {
+            flex: 2;
+            min-width: 500px;
+        }
+        
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1, h2 {
+            color: var(--text-color);
+        }
+        
+        h1 { font-size: 1.8rem; }
+        h2 { font-size: 1.4rem; margin-bottom: 1rem; }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        input[type="text"],
+        input[type="url"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--input-bg-color);
+            color: var(--text-color);
+            font-size: 1rem;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        button {
+            flex-grow: 1; /* Pour que les boutons partagent l'espace */
+            padding: 0.8rem 1.5rem;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        button.primary-btn {
+            background-color: var(--primary-color);
+        }
+        button.primary-btn:hover {
+            background-color: var(--primary-hover-color);
+        }
+
+        /* --- NOUVEAU STYLE POUR LE BOUTON SECONDAIRE --- */
+        button.secondary-btn {
+            background-color: var(--secondary-color);
+        }
+        button.secondary-btn:hover {
+            background-color: var(--secondary-hover-color);
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        /* --- NOUVEAU CONTENEUR POUR LES BOUTONS --- */
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .checkbox-group, .radio-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .checkbox-item, .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .slider-group input[type="range"] {
+            flex-grow: 1;
+        }
+
+        .result-section {
+            margin-bottom: 2rem;
+            background-color: var(--card-bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        #status-log {
+            font-family: monospace;
+            font-size: 0.9rem;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: var(--code-bg-color);
+            padding: 1rem;
+            border-radius: 6px;
+        }
+        
+        #status-log p { margin-bottom: 0.5em; }
+        .status-info { color: var(--text-color); }
+        .status-warn { color: var(--warning-color); }
+        .status-error { color: var(--error-color); font-weight: bold; }
+        .status-success { color: var(--success-color); }
+
+        #llm-response-container {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.7;
+        }
+
+        .search-result-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            background-color: var(--bg-color);
+            box-shadow: var(--shadow);
+        }
+        
+        .search-result-card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 0.75rem;
+            color: var(--primary-color);
+        }
+
+        .search-result-card h3 a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .search-result-card h3 a:hover {
+            text-decoration: underline;
+        }
+
+        .card-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .card-meta-item {
+            background-color: var(--code-bg-color);
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+        }
+
+        .card-description {
+            font-size: 0.95rem;
+            color: var(--text-color);
+            opacity: 0.9;
+            margin-bottom: 1rem;
+        }
+        
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: #888;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        #summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+        }
+        
+        .summary-item {
+            background-color: var(--code-bg-color);
+            padding: 1rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .summary-item .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .summary-item .label {
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+        
+        .theme-switcher {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .switch input { display: none; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--primary-color); }
+        input:checked + .slider:before { transform: translateX(26px); }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="form-container">
+            <header>
+                <h1>Contrôles</h1>
+                <div class="theme-switcher">
+                    <span>☀️</span>
+                    <label class="switch">
+                        <input type="checkbox" id="theme-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span>🌙</span>
+                </div>
+            </header>
+            
+            <form id="search-form">
+                <div class="form-group">
+                    <label for="ws-url">URL du WebSocket</label>
+                    <input type="url" id="ws-url" value="ws://localhost:8000/ws/search" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="prompt">Prompt</label>
+                    <textarea id="prompt" required>Quelle est la meilleure solution pour une toiture de bungalow ?</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Action par défaut</label>
+                    <div class="radio-group">
+                        <div class="radio-item">
+                            <input type="radio" id="action-search" name="action" value="1" checked>
+                            <label for="action-search">Recherche simple</label>
+                        </div>
+                        <div class="radio-item">
+                            <input type="radio" id="action-generate" name="action" value="2">
+                            <label for="action-generate">Recherche + Génération LLM</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Sources</label>
+                    <div class="checkbox-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="source-produits" name="source" value="produits" checked>
+                            <label for="source-produits">produits</label>
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="source-devis" name="source" value="devis_poc">
+                            <label for="source-devis">devis_poc</label>
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="source-siteweb" name="source" value="siteweb_poc">
+                            <label for="source-siteweb">siteweb_poc</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="nombre_resultat">Nombre de résultats: <span id="nombre-resultat-value">10</span></label>
+                    <div class="slider-group">
+                        <span>1</span>
+                        <input type="range" id="nombre_resultat" min="1" max="50" value="10">
+                        <span>50</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="temperature">Température LLM: <span id="temperature-value">0.4</span></label>
+                    <div class="slider-group">
+                        <span>0.0</span>
+                        <input type="range" id="temperature" min="0" max="2" step="0.1" value="0.4">
+                        <span>2.0</span>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="chat_model">Modèle de Chat</label>
+                    <select id="chat_model">
+                        <option value="gpt-4o">gpt-4o</option>
+                        <option value="gpt-4-turbo">gpt-4-turbo</option>
+                        <option value="deepseek-chat">deepseek-chat</option>
+                        <option value="mistralai/mixtral-8x7b-instruct">Mixtral 8x7B (OpenRouter)</option>
+                        <option value="google/gemini-pro">Gemini Pro (OpenRouter)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="use_reranker">
+                        <input type="checkbox" id="use_reranker" checked>
+                        Utiliser le Reranker
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label for="template_prompt">Template Prompt (utilisez `{chunks}` et `{recherche}`)</label>
+                    <textarea id="template_prompt">En te basant sur les informations suivantes :
+
+{chunks}
+
+Réponds à la question : "{recherche}"</textarea>
+                </div>
+
+                <!-- NOUVEAU : Groupe de boutons -->
+                <div class="button-group">
+                    <button type="submit" id="submit-btn" class="primary-btn">Lancer la recherche</button>
+                    <button type="button" id="generate-summary-btn" class="secondary-btn">Générer un résumé (LLM)</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="results-container">
+            <header>
+                <h1>Résultats</h1>
+            </header>
+
+            <div id="results-content">
+                <div class="result-section">
+                    <h2>Journal des Événements</h2>
+                    <div id="status-log">
+                        <p class="status-info">En attente d'une nouvelle recherche...</p>
+                    </div>
+                </div>
+
+                <div class="result-section" id="llm-section" style="display: none;">
+                    <h2>Réponse du LLM</h2>
+                    <div id="llm-response-container"></div>
+                </div>
+
+                <div class="result-section" id="search-results-section" style="display: none;">
+                    <h2>Résultats de la Recherche</h2>
+                    <div id="search-results"></div>
+                </div>
+
+                <div class="result-section" id="summary-section" style="display: none;">
+                    <h2>Résumé des Performances</h2>
+                    <div id="summary-grid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('search-form');
+            const submitBtn = document.getElementById('submit-btn');
+            // --- NOUVEAU : Récupération du bouton secondaire ---
+            const generateSummaryBtn = document.getElementById('generate-summary-btn');
+
+            const statusLog = document.getElementById('status-log');
+            const llmSection = document.getElementById('llm-section');
+            const llmResponseContainer = document.getElementById('llm-response-container');
+            const searchResultsSection = document.getElementById('search-results-section');
+            const searchResults = document.getElementById('search-results');
+            const summarySection = document.getElementById('summary-section');
+            const summaryGrid = document.getElementById('summary-grid');
+            
+            const nombreResultatSlider = document.getElementById('nombre_resultat');
+            const nombreResultatValue = document.getElementById('nombre-resultat-value');
+            const temperatureSlider = document.getElementById('temperature');
+            const temperatureValue = document.getElementById('temperature-value');
+            const themeToggle = document.getElementById('theme-toggle');
+
+            let socket = null;
+
+            nombreResultatSlider.addEventListener('input', () => nombreResultatValue.textContent = nombreResultatSlider.value);
+            temperatureSlider.addEventListener('input', () => temperatureValue.textContent = temperatureSlider.value);
+            themeToggle.addEventListener('change', () => {
+                document.body.classList.toggle('dark-mode', themeToggle.checked);
+            });
+
+            function logStatus(message, type = 'info') {
+                const p = document.createElement('p');
+                p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                p.className = `status-${type}`;
+                statusLog.appendChild(p);
+                statusLog.scrollTop = statusLog.scrollHeight;
+            }
+
+            function clearResults() {
+                statusLog.innerHTML = '';
+                llmResponseContainer.innerHTML = '';
+                searchResults.innerHTML = '';
+                summaryGrid.innerHTML = '';
+                llmSection.style.display = 'none';
+                searchResultsSection.style.display = 'none';
+                summarySection.style.display = 'none';
+            }
+
+            // --- REFACTORING : La logique de recherche est maintenant dans sa propre fonction ---
+            function startSearch(actionValue) {
+                clearResults();
+                
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.close();
+                }
+
+                const wsUrl = document.getElementById('ws-url').value;
+                logStatus(`Connexion à ${wsUrl}...`);
+                
+                try {
+                    socket = new WebSocket(wsUrl);
+                } catch (error) {
+                    logStatus(`Erreur de connexion WebSocket: ${error.message}`, 'error');
+                    return;
+                }
+
+                socket.onopen = () => {
+                    logStatus('WebSocket connecté.', 'success');
+                    submitBtn.disabled = true;
+                    generateSummaryBtn.disabled = true; // Désactiver les deux boutons
+                    submitBtn.textContent = 'En cours...';
+
+                    const sources = Array.from(document.querySelectorAll('input[name="source"]:checked')).map(el => el.value);
+                    
+                    const searchRequest = {
+                        prompt: document.getElementById('prompt').value,
+                        source: sources,
+                        nombre_resultat: nombreResultatSlider.value,
+                        action: actionValue, // Utilise la valeur passée en argument
+                        temperature: temperatureSlider.value,
+                        template_prompt: document.getElementById('template_prompt').value,
+                        chat_model: document.getElementById('chat_model').value,
+                        use_reranker: document.getElementById('use_reranker').checked,
+                        categorie: {},
+                        fournisseur: {},
+                        etat: [],
+                        affichage: [],
+                        params: {}
+                    };
+
+                    socket.send(JSON.stringify(searchRequest));
+                    logStatus('Requête de recherche envoyée.');
+                };
+
+                socket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    switch (data.type) {
+                        case 'status': logStatus(data.payload, 'info'); break;
+                        case 'warning': logStatus(data.payload, 'warn'); break;
+                        case 'error': logStatus(data.payload, 'error'); break;
+                        case 'embedding_complete': logStatus(`Embedding terminé en ${data.payload.duration}s.`, 'success'); break;
+                        case 'rerank_complete':
+                            logStatus(`Reranking terminé en ${data.payload.duration}s.`, 'success');
+                            displaySearchResults(data.payload.results);
+                            break;
+                        case 'llm_start':
+                            llmSection.style.display = 'block';
+                            logStatus('Le LLM commence à générer la réponse...', 'info');
+                            break;
+                        case 'llm_chunk': llmResponseContainer.innerHTML += data.payload; break;
+                        case 'end_of_stream':
+                            logStatus('Flux terminé.', 'success');
+                            displaySummary(data.payload);
+                            socket.close();
+                            break;
+                        default: logStatus(`Message inconnu reçu: ${data.type}`, 'warn');
+                    }
+                };
+
+                const reEnableButtons = () => {
+                    submitBtn.disabled = false;
+                    generateSummaryBtn.disabled = false;
+                    submitBtn.textContent = 'Lancer la recherche';
+                };
+
+                socket.onerror = (error) => {
+                    logStatus(`Erreur WebSocket: ${error.message || 'Une erreur est survenue.'}`, 'error');
+                    reEnableButtons();
+                };
+
+                socket.onclose = (event) => {
+                    if (event.wasClean) {
+                        logStatus(`Connexion fermée proprement, code=${event.code}, raison=${event.reason || 'Aucune'}`, 'info');
+                    } else {
+                        logStatus('La connexion a été interrompue.', 'warn');
+                    }
+                    reEnableButtons();
+                };
+            }
+
+            // Le bouton de soumission principal lit la valeur du radio button
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const selectedAction = parseInt(document.querySelector('input[name="action"]:checked').value, 10);
+                startSearch(selectedAction);
+            });
+
+            // --- NOUVEAU : Le bouton secondaire force l'action à 2 ---
+            generateSummaryBtn.addEventListener('click', () => {
+                startSearch(2); // Force l'action de génération LLM
+            });
+
+            function displaySearchResults(results) {
+                if (!results || results.length === 0) {
+                    searchResultsSection.style.display = 'none';
+                    return;
+                }
+                
+                searchResultsSection.style.display = 'block';
+                searchResults.innerHTML = '';
+
+                results.forEach(result => {
+                    const card = document.createElement('div');
+                    card.className = 'search-result-card';
+                    
+                    const meta = result.metadata.entity;
+                    const score = result.rerank_score !== undefined 
+                        ? `Rerank: ${result.rerank_score.toFixed(4)}` 
+                        : `Vector: ${result.score.toFixed(4)}`;
+
+                    let title = meta.id_produit || 'Titre non disponible';
+                    let description = meta.text || 'Aucune description.';
+
+                    if (meta.text) {
+                        const titleMatch = meta.text.match(/nom_produit:(.*?)(?=\s*categorie:|description:|$)/);
+                        if (titleMatch && titleMatch[1]) {
+                            title = titleMatch[1].trim();
+                        }
+                        
+                        const descMatch = meta.text.match(/description:(.*)/s);
+                        if (descMatch && descMatch[1]) {
+                            description = descMatch[1].trim().replace(/^P>/, '');
+                        }
+                    }
+                    
+                    const url = meta.url || '#';
+                    const prix = meta.prix_ht ? `${meta.prix_ht} € HT` : 'N/A';
+
+                    card.innerHTML = `
+                        <h3><a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a></h3>
+                        <div class="card-meta-grid">
+                            <div class="card-meta-item"><strong>Fournisseur:</strong> ${meta.fournisseur || 'N/A'}</div>
+                            <div class="card-meta-item"><strong>Catégorie:</strong> ${meta.id_categorie || 'N/A'}</div>
+                            <div class="card-meta-item"><strong>Prix:</strong> ${prix}</div>
+                            <div class="card-meta-item"><strong>Type:</strong> ${meta.type_produit || 'N/A'}</div>
+                            <div class="card-meta-item"><strong>ID Produit:</strong> ${meta.id_produit || 'N/A'}</div>
+                            <div class="card-meta-item"><strong>SKU:</strong> ${meta.sku || 'N/A'}</div>
+                        </div>
+                        <p class="card-description">${description.substring(0, 400)}${description.length > 400 ? '...' : ''}</p>
+                        <div class="card-footer">
+                            <span>Source: ${result.source}</span>
+                            <span>Score: ${score}</span>
+                        </div>
+                    `;
+                    searchResults.appendChild(card);
+                });
+            }
+
+            function displaySummary(summary) {
+                summarySection.style.display = 'block';
+                summaryGrid.innerHTML = '';
+                
+                const timings = summary.timings || {};
+                const metrics = {
+                    "Total": `${timings.total_process || 0}s`,
+                    "Embedding": `${timings.embedding || 0}s`,
+                    "Recherche Vect.": `${timings.vector_search || 0}s`,
+                    "Rerank": `${timings.rerank || 0}s`,
+                    "LLM": `${timings.llm_execution || 0}s`,
+                    "Résultats": summary.result_count || 0
+                };
+
+                for (const [label, value] of Object.entries(metrics)) {
+                    const item = document.createElement('div');
+                    item.className = 'summary-item';
+                    item.innerHTML = `
+                        <div class="value">${value}</div>
+                        <div class="label">${label}</div>
+                    `;
+                    summaryGrid.appendChild(item);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
