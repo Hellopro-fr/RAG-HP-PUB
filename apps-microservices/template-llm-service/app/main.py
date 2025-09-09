@@ -19,18 +19,36 @@ def main():
 
     print("🚀 template-llm-service: Démarrage...")
     print("🧠 Chargement du modèle LLM (cela peut prendre plusieurs minutes)...")
+    
+    # Configuration optimisée mais compatible avec LLM synchrone
     llm_config = {
         "model": "Qwen/Qwen3-14B-AWQ",
-        "quantization": "awq",
-        "gpu_memory_utilization": 0.85,
+        "quantization": "awq_marlin",
+        "tensor_parallel_size": 2,  # Utilise les 2 GPUs
+        "gpu_memory_utilization": 0.95,  # Plus agressif avec AWQ
         "trust_remote_code": True,
         "dtype": "auto",
-        "max_model_len": 4096
+        "max_model_len": 4096,
+        "swap_space": 4,  # GB de swap pour gérer les pics
+        "max_num_seqs": 64,  # Réduit pour éviter les timeouts
+        "max_num_batched_tokens": 4096,  # Plus conservateur
+        "enable_prefix_caching": True,  # Cache les préfixes communs
+        "disable_log_stats": True,  # Réduit l'overhead
     }
+    
     try:
+        # Utilise le LLM synchrone standard (plus simple)
         llm = LLM(**llm_config)
-        tokenizer = llm.get_tokenizer()
-        print("✅ Modèle LLM chargé avec succès.")
+        tokenizer = llm.get_tokenizer()  # ✅ Maintenant défini
+        print("✅ Modèle LLM chargé avec succès sur 2 GPUs.")
+        
+        # Warmup simple
+        print("🔥 Préchauffage du modèle...")
+        from vllm import SamplingParams
+        warmup_params = SamplingParams(temperature=0.7, max_tokens=10)
+        llm.generate("Hello", warmup_params)
+        print("✅ Modèle préchauffé.")
+        
     except Exception as e:
         print(f"❌ ERREUR CRITIQUE: Impossible de charger le modèle LLM. Arrêt du service. Erreur: {e}")
         exit(1)
@@ -61,4 +79,9 @@ def main():
             print("✅ template-llm-service: Connexion RabbitMQ fermée.")
 
 if __name__ == '__main__':
+    # Optimisations PyTorch
+    import torch
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    
     main()

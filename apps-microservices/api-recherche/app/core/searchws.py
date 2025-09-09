@@ -3,12 +3,10 @@ import time
 import os
 import logging
 from functools import lru_cache
-from qdrant_client import QdrantClient, models
-from qdrant_client.http.models import Filter, FieldCondition, MatchValue, IsNullCondition, MatchAny
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer, CrossEncoder
-from pymilvus import connections, Collection, utility
+from pymilvus import connections, Collection, utility, DataType
 from app.core.credentials import settings, model_settings
 from app.schemas.search import SearchRequestWs as SearchRequest, LLMOptions
 import asyncio
@@ -74,6 +72,21 @@ def get_milvus_connection():
     except Exception as e:
         logger.error(f"❌ Erreur de connexion à Milvus: {e}")
         raise e
+    
+@lru_cache(maxsize=32)
+def get_field_type_map(collection_name: str) -> dict:
+    """
+    Retrieves the schema for a given collection and returns a dictionary
+    mapping field names to their pymilvus DataType.
+    """
+    try:
+        collection = Collection(name=collection_name)
+        return {field.name: field.dtype for field in collection.schema.fields}
+    except Exception as e:
+        # Log the error and return an empty map if the collection doesn't exist
+        # This prevents crashes if a non-existent source is requested.
+        logger.error(f"Could not retrieve schema for collection '{collection_name}': {e}")
+        return {}
 
 @lru_cache(maxsize=None)
 def get_openai_client():
@@ -156,14 +169,37 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
         yield f"\n\n--- ERREUR --- \n{e}"
 
 
-def filtre_source (filtre: dict) -> str:
+def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
+    field_types = get_field_type_map(source)
+    NUMERIC_DTYPES = {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64, DataType.FLOAT, DataType.DOUBLE}
     for key, val in filtre.items():
-        if isinstance(val, list):
-            clauses.append(f"{key} in [{','.join(val)}]")
-        elif isinstance(val, str):
-            clauses.append(f'{key} == "{val}"')
-    return " and ".join(clauses)
+        dtype = field_types.get(key)
+        if dtype in NUMERIC_DTYPES:
+            if isinstance(val, list):
+                numeric_vals = [int(v) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(v) for v in val]
+                clauses.append(f"{key} in {numeric_vals}")
+            else:
+                # Format as: field_name == 123
+                numeric_val = int(val) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(val)
+                clauses.append(f"{key} == {numeric_val}")
+        else:
+            if isinstance(val, list):
+                # Format as: field_name in ["val1", "val2"]
+                quoted_vals = [repr(str(v)) for v in val]
+                clauses.append(f"{key} in [{', '.join(quoted_vals)}]")
+            else:
+                # Format as: field_name == "value"
+                clauses.append(f"{key} == {repr(str(val))}")
+        # if key == "id_categorie" and source == "produits": 
+        #     key = "categorie"
+        # elif key == "id_categorie":
+        #     val = [int(v) for v in val] if isinstance(val, list) else val
+        # if isinstance(val, list):
+        #     clauses.append(f"{key} in {str(val)}")
+        # elif isinstance(val, str):
+        #     clauses.append(f'{key} == {repr(val)}')
+    return clauses
 
 def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
 	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
@@ -254,12 +290,16 @@ async def search_in_milvus_stream(request: SearchRequest):
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
         
         filters = []
-        filter_expr = build_milvus_expression(request.filtre, metadata["payload_fournisseur"], "1000000" in request.filtre.get("fournisseur", {}))
+        # filter_expr = build_milvus_expression(request.filtre, metadata["payload_fournisseur"], "1000000" in request.filtre.get("fournisseur", {}))
+        # if filter_expr:
+        #     filters.append(filter_expr)
+        filter_expr = filtre_source(request.filtre, source)
         if filter_expr:
-            filters.append(filter_expr)
+            filters.append(" and ".join(filter_expr))
+        
         filter_expr_source = filtre_source(filtre) if filtre else ""
         if filter_expr_source:
-            filters.append(filter_expr_source)
+            filters.append(" and ".join(filter_expr_source))
         
         filter_expr = " and ".join(filters) if filters else ""
         
@@ -281,14 +321,14 @@ async def search_in_milvus_stream(request: SearchRequest):
 
             if search_results and search_results[0]:
                 for hit in search_results[0]:
+                    entity_data = hit.entity.to_dict()
                     all_matches_for_reranking.append({
                         "id": hit.id, 
                         "score": hit.distance, 
                         "relevance_score": convert_score_to_percentage(float(hit.distance), score_type='cosine'), 
-                        "metadata": dict(hit.entity), 
+                        "metadata": {"entity": entity_data}, 
                         "source": source
                     })
-            
         except Exception as e:
             yield {"type": "error", "payload": f"Error searching in {source}: {e}"}
             all_results[source] = []

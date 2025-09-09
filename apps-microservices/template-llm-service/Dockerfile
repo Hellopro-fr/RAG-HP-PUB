@@ -11,18 +11,18 @@ WORKDIR /app
 # Définir le PYTHONPATH est crucial pour que les imports fonctionnent
 ENV PYTHONPATH=/app
 
-# --- CORRECTION ICI ---
+# On copie la lib partagée
+COPY libs/common-utils /app/libs/common-utils
+RUN pip install -e /app/libs/common-utils
+
 # Copier uniquement le fichier des dépendances en utilisant le chemin complet depuis la racine
 COPY apps-microservices/template-llm-service/requirements.txt .
-# --- FIN DE LA CORRECTION ---
 
 # Installer les dépendances
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- CORRECTION ICI ---
 # Copier le code source de l'application en utilisant le chemin complet depuis la racine
 COPY apps-microservices/template-llm-service/app /app/template_llm_service
-# --- FIN DE LA CORRECTION ---
 
 # La commande finale pour lancer le worker
 CMD ["python", "-u", "-m", "template_llm_service.main"]

@@ -33,6 +33,8 @@ class Publisher:
                     body=json.dumps(message_dict).encode('utf-8'),
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
+                print(f"exchange : {self.exchange_name}")
+                print(f"routing_key : {self.routing_key}")
                 print(f"   📤 Message traité et publié pour embedding.")
                 break  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:

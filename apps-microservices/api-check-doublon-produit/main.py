@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from app.router import check_doublon as check_doublon_router
 
+from app.core.check_doublon import get_milvus_connection
+
 
 import logging
 import asyncio

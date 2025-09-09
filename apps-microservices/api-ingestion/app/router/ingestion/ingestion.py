@@ -26,6 +26,9 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
             return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
 
     exchange_name = f"data_exchange_{payload.collection}"
+    # if payload.collection == "produits_2":
+    #     exchange_name = f"data_exchange_produits"
+        
     routing_key = routing_key_collection(payload.collection)
     
     success = publish_message(
@@ -73,6 +76,8 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
 
     for payload in payloads:
         exchange_name = f"data_exchange_{payload.collection}"
+        # if payload.collection == "produits_2":
+        #     exchange_name = f"data_exchange_produits"
         routing_key = routing_key_collection(payload.collection)
         
         success = publish_message(
