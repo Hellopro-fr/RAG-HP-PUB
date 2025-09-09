@@ -46,62 +46,77 @@ Contenu en entrée (Markdown) :
 {content}
 """
 
-def classify_page_template(llm_instance: LLM, tokenizer, llm_config: dict, message: dict) -> dict:
+def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict, messages: list[dict]) -> list[dict]:
     """
-    Prend un message, nettoie son contenu, le classifie avec le LLM,
-    et retourne le message enrichi.
+    Prend une liste de messages, les nettoie, les envoie en batch au LLM,
+    et retourne la liste de messages enrichis.
     """
-    data_payload = message.get("data", {})
-    url = data_payload.get("url", "URL non fournie")
-    content = data_payload.get("text", "")
-
-    if not content:
-        print("   -> Contenu vide, message ignoré.")
-        raise ValueError("Le champ 'text' est vide ou manquant dans les données.")
-
-    # Troncature par Tokens pour éviter les erreurs de dépassement
+    prompts = []
+    truncated_contents = []
+    
     max_model_len = llm_config.get("max_model_len", 4096)
-    max_content_tokens = max_model_len - 1024 # Marge de sécurité pour le prompt
-    content_tokens = tokenizer.encode(content)
-    if len(content_tokens) > max_content_tokens:
-        truncated_tokens = content_tokens[:max_content_tokens]
-        truncated_content = tokenizer.decode(truncated_tokens)
-    else:
-        truncated_content = content
-
-    # Génération avec le LLM
-    sampling_params = SamplingParams(max_tokens=250, temperature=0.1)
-    user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=truncated_content)
-    conversation = [{"role": "user", "content": user_prompt}]
+    max_content_tokens = max_model_len - 1024  # marge pour prompt
     
-    formatted_prompt = tokenizer.apply_chat_template(
-        conversation, 
-        tokenize=False, 
-        add_generation_prompt=True,
-        enable_thinking=False
-    )
-    
-    outputs = llm_instance.generate([formatted_prompt], sampling_params)
-    raw_text = outputs[0].outputs[0].text.strip()
+    for message in messages:
+        data_payload = message.get("data", {})
+        url = data_payload.get("url", "URL non fournie")
+        content = data_payload.get("text", "")
+        
+        if not content:
+            raise ValueError(f"Message sans contenu : {message}")
 
-    # Parsing robuste du résultat
-    try:
-        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-        if match:
-            json_string = match.group(0)
-            result = json.loads(json_string)
-            
-            page_type = result.get("page_type", None)
-            
-            if not page_type:
-                raise ValueError(f"Le champ 'page_type' est manquant dans le JSON ou est vide. Sortie brute: '{raw_text}'")
+        # tronquer
+        content_tokens = tokenizer.encode(content)
+        if len(content_tokens) > max_content_tokens:
+            truncated_tokens = content_tokens[:max_content_tokens]
+            truncated_content = tokenizer.decode(truncated_tokens)
         else:
-            raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM. Sortie brute: '{raw_text}'")
-    except Exception as e:
-        raise ValueError(f"--- ERREUR DE PARSING JSON --- \nErreur: {e} \nSortie brute: '{raw_text}'")
+            truncated_content = content
 
-    print(f"   -> Classification terminée : {page_type}")
-    
-    # Enrichissement du message original
-    message["data"]["page_type"] = page_type
-    return message
+        truncated_contents.append(truncated_content)
+
+        # créer prompt
+        user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=truncated_content)
+        conversation = [{"role": "user", "content": user_prompt}]
+        formatted_prompt = tokenizer.apply_chat_template(
+            conversation,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False
+        )
+        prompts.append(formatted_prompt)
+
+    # Génération batchée
+    from vllm import SamplingParams
+    sampling_params = SamplingParams(max_tokens=250, temperature=0.1)
+    outputs = llm_instance.generate(prompts, sampling_params)
+
+    enriched_messages = []
+    for message, output in zip(messages, outputs):
+        raw_text = output.outputs[0].text.strip()
+
+        try:
+            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if match:
+                json_string = match.group(0)
+                result = json.loads(json_string)
+
+                page_type = result.get("page_type")
+                if not page_type:
+                    raise ValueError(f"page_type manquant. Sortie brute: '{raw_text}'")
+            else:
+                raise ValueError(f"Aucun JSON trouvé. Sortie brute: '{raw_text}'")
+
+            message["data"]["page_type"] = page_type
+            enriched_messages.append(message)
+
+            print(f"   -> Classification batch OK : {page_type}")
+
+        except Exception as e:
+            print(f"❌ Erreur parsing batch : {e}")
+            # tu peux choisir de mettre page_type="autre" par défaut si tu veux éviter de drop
+            message["data"]["page_type"] = "autre"
+            enriched_messages.append(message)
+
+    return enriched_messages
+
