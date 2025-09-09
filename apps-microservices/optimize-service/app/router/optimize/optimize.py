@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 import time
 import os
 import threading
+import traceback
 
 router = APIRouter()
 
@@ -77,7 +78,8 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
     try:
         start_time = time.time()
         
-        print(f"Début du traitement par lots de {len(payload.products)} produits")
+        print(f"<<<<<<<<<<< >>>>>>>>>>>")
+        print(f"Reception de {len(payload.products)} produits")
         
         optimizing_service = get_qwen_optimize_service()
         
@@ -90,7 +92,7 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
         end_time = time.time()
         processing_time = end_time - start_time
         
-        print(f"Traitement par lots terminé en {processing_time:.2f} secondes")
+        print(f"Fin traitement en {processing_time:.2f} secondes")
         
         # Calcul des statistiques
         success_count = sum(1 for result in batch_results if "success" in result)
@@ -110,9 +112,10 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
         return response
         
     except Exception as e:
-        error_msg = f"Erreur lors du traitement par lots: {str(e)}"
+        error_msg = f"Erreur lors du traitement par lots: {type(e).__name__}: {str(e)}"
+        debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
         response_error = {
             "ERROR": error_msg
         }
-        print(response_error)
+        print(debug_msg)
         return response_error

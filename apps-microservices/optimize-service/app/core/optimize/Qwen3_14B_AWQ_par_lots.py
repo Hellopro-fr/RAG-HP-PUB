@@ -6,6 +6,7 @@ from vllm import LLM, SamplingParams
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 import time
+import traceback
 
 class ProductTitleOptimizerBatch:
     def __init__(self):
@@ -175,7 +176,7 @@ class ProductTitleOptimizerBatch:
             json.loads(json_str)
             return json_str
         except json.JSONDecodeError as e:
-            print(f"Tentative de réparation du JSON: {str(e)}")
+            print(f"Tentative de réparation du JSON: {type(e).__name__}: {str(e)}")
             
             lines = json_str.split('\n')
             fixed_lines = []
@@ -223,7 +224,7 @@ class ProductTitleOptimizerBatch:
                     print(f"JSON parsé avec succès à la tentative {i + 1}")
                 return result
             except json.JSONDecodeError as e:
-                print(f"Tentative {i + 1} échouée: {str(e)}")
+                print(f"Tentative {i + 1} échouée: {type(e).__name__}: {str(e)}")
                 if i < len(attempts) - 1:
                     continue
                 else:
@@ -246,7 +247,8 @@ class ProductTitleOptimizerBatch:
                 return result
             
         except Exception as e:
-            print(f"Erreur lors de l'extraction manuelle: {str(e)}")
+            print(f"Erreur lors de l'extraction manuelle: {type(e).__name__}: {str(e)}")
+            
         
         return None
     
@@ -309,8 +311,9 @@ class ProductTitleOptimizerBatch:
             }
             
         except Exception as e:
-            error_msg = f"Erreur lors du traitement du produit {product_id}: {str(e)}"
-            print(error_msg)
+            error_msg = f"Erreur lors du traitement du produit {product_id}: {type(e).__name__}: {str(e)}"
+            debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
+            print(debug_msg)
             logging.error(error_msg)
             return {
                 "id_produit_scrapping": product_id,
@@ -395,15 +398,16 @@ class ProductTitleOptimizerBatch:
                 except Exception as e:
                     results.append({
                         "id_produit_scrapping": product_id,
-                        "error": f"Erreur de traitement: {str(e)}"
+                        "error": f"Erreur de traitement: {type(e).__name__}: {str(e)}"
                     })
             end_time = time.time()
             print(f"Génération du lot terminée en {end_time - start_time:.2f} secondes")
             return results
             
         except Exception as e:
-            error_msg = f"Erreur lors du traitement du lot: {str(e)}"
-            print(error_msg)
+            error_msg = f"Erreur lors du traitement du lot: {type(e).__name__}: {str(e)}"
+            debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
+            print(debug_msg)
             logging.error(error_msg)
             # Retourner des erreurs pour tous les produits du lot
             return [
@@ -420,8 +424,7 @@ class ProductTitleOptimizerBatch:
         if not products_data:
             return []
         
-        print(f"<<<<<<<<<<< >>>>>>>>>>>")
-        print(f"Début du traitement de {len(products_data)} produits par lots de 200")
+        print(f"Début du traitement de {len(products_data)} produits")
         
         all_results = []
         total_batches = (len(products_data) + self.batch_size - 1) // self.batch_size
@@ -437,8 +440,9 @@ class ProductTitleOptimizerBatch:
                 # print(f"Lot {batch_num} terminé avec succès")
                 
             except Exception as e:
-                error_msg = f"Erreur lors du lancement du lot {batch_num}: {str(e)}"
-                print(error_msg)
+                error_msg = f"Erreur lors du lancement du lot {batch_num}: {type(e).__name__}: {str(e)}"
+                debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
+                print(debug_msg)
                 logging.error(error_msg)
                 
                 # Ajouter des erreurs pour tous les produits du lot
@@ -450,7 +454,7 @@ class ProductTitleOptimizerBatch:
                 ]
                 all_results.extend(batch_errors)
         
-        print(f"Traitement terminé. {len(all_results)} résultats générés.")
+        # print(f"Traitement terminé. {len(all_results)} résultats générés.")
         return all_results
 
     # Maintien de la compatibilité avec l'ancienne méthode
