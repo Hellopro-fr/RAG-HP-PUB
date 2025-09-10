@@ -1161,6 +1161,7 @@ $(function () {
     switch (result.source) {
       case "produits_3":
         title = meta.nom_produit || title;
+        result.source = "Produits"
         break;
       case "devis":
         title = meta.lead_id || title;
