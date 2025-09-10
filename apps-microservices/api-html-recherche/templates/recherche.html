@@ -1062,6 +1062,25 @@
                         >MCF & HelloPro</label
                       >
                     </div>
+                    <div id="echangesSubfilters" class="pl-6 space-y-3 hidden">
+                      <div class="space-y-2">
+                        <label class="text-sm font-medium text-custom-noir"
+                          >Fournisseur MCF</label
+                        >
+                        <div class="relative">
+                          <select
+                            id="fournisseurMcf"
+                            class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                            multiple
+                            data-ajax="true"
+                            data-url="https://dev-www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                            data-pagination="true"
+                            data-payload="recup_fournisseur"
+                          >
+                          </select>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Site Web -->
@@ -1113,6 +1132,46 @@
                           <option value="references_clients">Réferences clients</option>
                           <option value="Savoir_faire">Savoir faire</option>
                           <option value="autre">Autre</option>
+                        </select>
+                      </div>
+                      <div class="space-y-1">
+                        <label class="text-xs text-custom-gris"
+                          >Fournisseur Siteweb</label
+                        >
+                        <select
+                          id="fournisseurSiteweb"
+                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                          multiple
+                        >
+                          <option value="BLEUTEC SYSTEM">BLEUTEC SYSTEM</option>
+                          <option value="IMER FRANCE">IMER FRANCE</option>
+                          <option value="ACCES ELEVATION">ACCES ELEVATION</option>
+                          <option value="Menlog">Menlog</option>
+                          <option value="Le casier français">Le casier français</option>
+                          <option value="Ultratactile">Ultratactile</option>
+                          <option value="Fain">Fain</option>
+                          <option value="FRISION Sarl">FRISION Sarl</option>
+                          <option value="OLLIVIER">OLLIVIER</option>
+                          <option value="H2SYS">H2SYS</option>
+                          <option value="Dulevo International S.p.A.">Dulevo International S.p.A.</option>
+                          <option value="EASY FROID">EASY FROID</option>
+                          <option value="BONGARD">BONGARD</option>
+                          <option value="MYD'L">MYD'L</option>
+                          <option value="HEURTAUX">HEURTAUX</option>
+                          <option value="Vimec srl">Vimec srl</option>
+                          <option value="KONE SA">KONE SA</option>
+                          <option value="EasyVoirie">EasyVoirie</option>
+                          <option value="IN'BOX CONTAINER">IN'BOX CONTAINER</option>
+                          <option value="S.A.S. SEDIPEC">S.A.S. SEDIPEC</option>
+                          <option value="Netbox Containers">Netbox Containers</option>
+                          <option value="point2vente">point2vente</option>
+                          <option value="Remorques du midi">Remorques du midi</option>
+                          <option value="TEKNISS">TEKNISS</option>
+                          <option value="MOUVBOX">MOUVBOX</option>
+                          <option value="SALTI">SALTI</option>
+                          <option value="SOLFAB CONSTRUCTIONS MODULAIRES">SOLFAB CONSTRUCTIONS MODULAIRES</option>
+                          <option value="CAPSA CONTAINER">CAPSA CONTAINER</option>
+                          <option value="ASCIER">ASCIER</option>
                         </select>
                       </div>
                     </div>

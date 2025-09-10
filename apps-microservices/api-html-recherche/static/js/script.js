@@ -1288,9 +1288,9 @@ $(function () {
               if (devisNaf2.length > 0) filtreSpecifique.naf2 = devisNaf2;
               if (devisEffectif.length > 0) filtreSpecifique.effectif = devisEffectif;
 
-              if (state.selectedNomFournisseurs && state.selectedNomFournisseurs.length > 0) {
-                filtreSpecifique.liste_frns = state.selectedNomFournisseurs;
-              }
+              // if (state.selectedNomFournisseurs && state.selectedNomFournisseurs.length > 0) {
+              //   filtreSpecifique.liste_frns = state.selectedNomFournisseurs;
+              // }
 
               const date_value = $("#date-general").val();
               const date_debut = $("#date-debut").val();
@@ -1321,6 +1321,16 @@ $(function () {
               const sitewebModele = $('#sitewebModele').val() || [];
               if (sitewebModele.length > 0) {
                 filtreSpecifique.page_type = sitewebModele;
+              }
+              const fournisseurSiteweb = $("#fournisseurSiteweb").val() || [];
+              if (fournisseurSiteweb.length > 0) {
+                filtreSpecifique.fournisseur = fournisseurSiteweb;
+              }
+              break;
+            case 'echanges':
+              const fournisseurMcf = $("#fournisseurMcf").val() || [];
+              if (fournisseurMcf.length > 0) {
+                filtreSpecifique.id_fournisseur = fournisseurMcf;
               }
               break;
           }
