@@ -9,7 +9,7 @@ $(function () {
   // Global state
   const state = {
     searchQuery: "",
-    topK: 10,
+    topK: 30,
     temperature: 0.4,
     // NOUVEAU: Ajout des champs pour correspondre au schéma
     templatePrompt: $("#llmPrompt").val(),
@@ -17,11 +17,11 @@ $(function () {
     rerankerModel: "BAAI/bge-reranker-v2-m3",
     selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
     isFilterOpen: true,
-    isLlmEnabled: true,
-    isSidebarOpen: true,
+    isLlmEnabled: false,
+    isSidebarOpen: false,
     isResultSuccess: false,
     selectedSources: {
-      produits: false,
+      produits: true,
       devis: false,
       mcf: false,
       siteweb: false,
@@ -74,6 +74,7 @@ $(function () {
     llmResponseContainer: $("#llmResponseContainer"),
     llmResponseText: $("#llmResponseText"),
     llmEmptyState: $("#llmEmptyState"),
+    llmAnalyzeState: $("#llmAnalyzeState"),
     searchMetrics: $("#searchMetrics"),
     searchingState: $("#searchingState"),
     metricsContent: $("#metricsContent"),
@@ -889,6 +890,13 @@ $(function () {
 
   function toggleLLM() {
     state.isLlmEnabled = !state.isLlmEnabled;
+    if(state.isLlmEnabled && !state.isSidebarOpen) {
+      state.isSidebarOpen = true;
+    } else if(!state.isLlmEnabled && state.isSidebarOpen) {
+      state.isSidebarOpen = false;
+    } else if(state.isLlmEnabled && state.isSidebarOpen) {
+      state.isSidebarOpen = true;
+    }
     updateUI();
   }
   function toggleFilters() {
@@ -957,11 +965,10 @@ $(function () {
       elements.searchResultsContainer.show();
       elements.searchMetrics.show();
       elements.searchingState.hide();
+      elements.llmAnalyzeState.hide();
       elements.metricsContent.show();
       $("#totalResults").text(state.searchMetrics.totalResults);
       $("#searchTime").text(state.searchMetrics.searchTime);
-      $("#sourcesCount").text(state.searchMetrics.sourcesUsed.length);
-      $("#searchQueryBadge").text(`"${state.searchQuery}"`);
       renderSearchResults();
     } else if (state.isSearching) {
       elements.emptyState.hide();
@@ -969,6 +976,8 @@ $(function () {
       elements.searchResultsContainer.show();
       elements.searchMetrics.show();
       elements.searchingState.show();
+      elements.llmEmptyState.hide();
+      elements.llmAnalyzeState.show();
       elements.metricsContent.hide();
     } else if (state.searchQuery) {
       elements.emptyState.hide();
@@ -984,15 +993,13 @@ $(function () {
     if (state.isLlmEnabled) {
       elements.llmConfig.slideDown(200);
       elements.llmToggle
-        .addClass("bg-custom-bleu text-white")
+        .addClass("bg-custom-orange text-white")
         .removeClass("border-custom-gris-blanc hover:bg-custom-clair-2");
-      elements.llmToggleText.text("LLM");
     } else {
       elements.llmConfig.slideUp(200);
       elements.llmToggle
-        .removeClass("bg-custom-bleu text-white")
+        .removeClass("bg-custom-orange text-white")
         .addClass("border-custom-gris-blanc hover:bg-custom-clair-2");
-      elements.llmToggleText.text("IA");
     }
     state.isFilterOpen
       ? elements.filterSidebar.show()
@@ -1042,7 +1049,9 @@ $(function () {
       $("#estimatedTokens").text(Math.floor(state.llmResponse.length / 4));
     } else {
       elements.llmResponseContainer.hide();
-      elements.llmEmptyState.show();
+      if(!state.isSearching) {
+        elements.llmEmptyState.show();
+      }
     }
     state.searchResults.length > 0
       ? $("#resultsBadge").show().text(state.searchResults.length)
@@ -1131,6 +1140,14 @@ $(function () {
    */
   async function executeSearch() {
     if (!state.searchQuery.trim() || state.isSearching) return;
+
+    if(state.isLlmEnabled) {
+      if(elements.templatePrompt.val().trim() === "") {
+        $('#errorPromptNull').show(100).delay(3000).hide(100);
+        document.querySelector('#errorPromptNull').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
 
     state.isSearching = true;
     state.searchResults = [];
