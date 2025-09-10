@@ -87,13 +87,7 @@ class ProductTitleOptimizerBatch:
             Exemple 2: Bungalow démontable sur mesure de 2 à 12m de long, avec accouplement possible
             Exemple 3: Chaîne à galets d'accumulation en acier, avec maillon raccord
 
-            # FORMAT DE SORTIE OBLIGATOIRE =
-            Tu dois répondre **uniquement** en JSON, sans aucune introduction ni commentaire, avec le format suivant :
-            {{{{
-            "Titre": "Ton titre généré ici"
-            }}}}
-
-            # FORMAT DE SORTIE TRES IMPORTANT : 
+            # FORMAT DE SORTIE TRES IMPORTANT ET OBLIGATOIRE : 
             Ta réponse doit être un JSON strictement valide, sans aucun texte avant ou après, sans balises Markdown, sans ```json, sans commentaire, sans indentation inutile. Exemple :
             {{"Titre": "Titre généré ici"}}
 
