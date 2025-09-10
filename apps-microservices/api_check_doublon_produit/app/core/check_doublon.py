@@ -83,11 +83,14 @@ async def search_in_milvus(request: SearchRequest):
             "nombre_resultat": "10"
         }        
         response = requests.post(url_query, json=payload)
+        print(response)
         
         if response.status_code != 200:
             logger.info(f"[MILVUS] Erreur API recherche: {response.status_code} - {response.text}")
         else:
             data = response.json()
+            print(data)
+            
             produits = data.get("results", {}).get("matches", {}).get("produits", [])                
             for produit in produits:
                 if produit["score"] >= seuil_score_doublon:
