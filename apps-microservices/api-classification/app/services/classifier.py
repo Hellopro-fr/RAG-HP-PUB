@@ -5,7 +5,6 @@ import logging
 from typing import Dict, Any, List, Tuple, Optional
 from collections import defaultdict
 
-from pymilvus import MilvusClient
 from .llm_client import LLMClient
 from .search_api import call_search_api, get_product_details
 from ..utils.text_processing import clean_text
