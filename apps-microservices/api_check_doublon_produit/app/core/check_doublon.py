@@ -3,7 +3,7 @@ from pymilvus import connections, Collection, utility
 
 from app.core.credentials import settings
 
-from common_utils.database.MilvusProduitCrud import MilvusProduitCrud
+from common_utils.database.MilvusProduitCrud import MilvusProduitsCrud
 from common_utils.database.MilvusFournisseursCrud import MilvusFournisseursCrud
 
 import logging
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 async def search_in_milvus(request: SearchRequest):
     logger.info(f"[MILVUS] Recherche: nom_produit='{request.nom_produit}...', domaine={request.domaine[:50]}")
     
-    bv_produit      = MilvusProduitCrud()
+    bv_produit      = MilvusProduitsCrud()
     bv_fournisseurs = MilvusFournisseursCrud()
     
     res_p = bv_produit.get_produit_by_field(field_name="nom_produit", search_value= request.nom_produit)
