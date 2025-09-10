@@ -298,7 +298,13 @@ def filtre_source (filtre: dict, source: str = "") -> list:
                 numeric_val = int(val) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(val)
                 clauses.append(f"{key} == {numeric_val}")
         else:
-            if isinstance(val, list):
+            if isinstance(val, dict):
+                if val.operator:
+                    if val.operator == 'entre' and val.values.start and val.values.end:
+                        clauses.append(f"{key} >= {val.values.start} and {key} <= {val.values.end}")
+                    else:
+                        clauses.append(f"{key} {val.operator}")
+            elif isinstance(val, list):
                 # Format as: field_name in ["val1", "val2"]
                 quoted_vals = [repr(str(v)) for v in val]
                 clauses.append(f"{key} in [{', '.join(quoted_vals)}]")
