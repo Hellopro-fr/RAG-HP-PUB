@@ -33,9 +33,9 @@ class Settings(BaseSettings):
     bge_reranker_model: str = "BAAI/bge-reranker-v2-m3"
     
     # Default Parameters
-    default_n_similar   : int = int("DEFAULT_N_SIMILAR", "50")
-    default_m_categories: int = int("DEFAULT_M_CATEGORIES", "10")
-    default_k_products  : int = int("DEFAULT_K_PRODUCTS", "5")
+    default_n_similar   : int = 30
+    default_m_categories: int = 10
+    default_k_products  : int = 5
     
     # Search Parameters
     initial_search_k: int = 20
