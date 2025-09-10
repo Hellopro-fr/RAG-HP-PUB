@@ -12,7 +12,13 @@
 # --- Étape 1: Détecter le nombre de GPUs disponibles ---
 # On utilise nvidia-smi, l'outil standard de NVIDIA, pour compter les GPUs.
 # La commande est conçue pour être robuste et ne retourner qu'un nombre.
-NUM_GPUS=$(nvidia-smi --query-gpu=count --format=csv,noheader)
+NUM_GPUS=$(nvidia-smi --query-gpu=count --format=csv,noheader | head -n 1)
+
+# Sécurité : vérifier si NUM_GPUS est bien un nombre.
+if ! [[ "$NUM_GPUS" =~ ^[0-9]+$ ]]; then
+    echo "ERREUR CRITIQUE: Impossible de déterminer le nombre de GPUs. Sortie de nvidia-smi invalide."
+    exit 1
+fi
 
 echo "INFO: Détection du matériel... Nombre de GPUs trouvés: ${NUM_GPUS}"
 
