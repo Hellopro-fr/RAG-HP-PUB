@@ -34,13 +34,13 @@ async def websocket_search(websocket: WebSocket):
             await websocket.send_json(update)
 
     except WebSocketDisconnect:
-        logger.warning("Client {websocket.client} disconnected.")
+        logger.warning(f"Client {websocket.client} disconnected.")
     except Exception as e:
         logger.error(f"An error occurred in the WebSocket pour {websocket.client}: {e}", exc_info=True)
         # Send an error message to the client before closing
         error_payload  = {"type": "error", "payload": str(e)}
         await manager.send_personal_message(error_payload, websocket)
     finally:
-        logger.info("Closing WebSocket connection pour {websocket.client}.")
+        logger.info(f"Closing WebSocket connection pour {websocket.client}.")
         manager.disconnect(websocket)
         # await websocket.close()
