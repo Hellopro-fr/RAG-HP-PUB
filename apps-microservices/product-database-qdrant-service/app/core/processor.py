@@ -105,11 +105,11 @@ def insertion_data(produits_data: dict) -> dict:
                     else:
                         reason = "source BO existe déjà"
                         
-                    logging.info("Le produit ID %s : %s. Insertion ignorée.", id_produit, reason)
+                    print("Le produit ID %s : %s. Insertion ignorée.", id_produit, reason)
                     result = data
                 else:
                     # Aucune des conditions d'exclusion n'est remplie → Insertion
-                    logging.info("Le produit ID %s existe avec sources '%s' (pas de BO). Insertion autorisée.", 
+                    print("Le produit ID %s existe avec sources '%s' (pas de BO). Insertion autorisée.", 
                                id_produit, list(existing_sources_set))
                     result = func(produits)
                     if not result:
