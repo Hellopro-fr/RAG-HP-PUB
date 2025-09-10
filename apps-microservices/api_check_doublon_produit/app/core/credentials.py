@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     ZILLIZ_API_KEY: str
     RABBITMQ_URL: str
     KEY_WEBHOOK: str
-    OPENAI_API_KEY: str
-    OPENROUTER_API_KEY: str
-    DEEPSEEK_API_KEY: str
+    # OPENAI_API_KEY: str
+    # OPENROUTER_API_KEY: str
+    # DEEPSEEK_API_KEY: str
     M_PARAMS: str
     EF_PARAMS: str
     

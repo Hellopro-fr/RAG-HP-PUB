@@ -28,15 +28,15 @@ class MilvusFournisseursCrud:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
-        # if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_API_KEY:
-        if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_PORT:
+        if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_API_KEY:
+        # if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_PORT:
             raise ValueError("Zilliz Cloud URI and API Key must be set in the environment.")
         self.logger = kwargs.get('logger', logging)
         
     def _connect_to_milvus(self):
         self.logger.info("Connexion sur Zilliz cloud...")
-        # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
-        connections.connect("default", host=self.config.ZILLIZ_URI, port=self.config.ZILLIZ_PORT)
+        connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
+        # connections.connect("default", host=self.config.ZILLIZ_URI, port=self.config.ZILLIZ_PORT)
         self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
     
     # TODO : modification pour les autres collections
