@@ -8,10 +8,10 @@ class Settings(BaseSettings):
 
     QDRANT_URL: str = ""
     QDRANT_HOST_URL: str
-    QDRANT_PORT: str
+    # QDRANT_PORT: str
     QDRANT_API_KEY: str
     ZILLIZ_URI: str
-    ZILLIZ_PORT: str
+    # ZILLIZ_PORT: str
     ZILLIZ_API_KEY: str
     RABBITMQ_URL: str
     KEY_WEBHOOK: str
