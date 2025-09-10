@@ -3,5 +3,3 @@ uvicorn
 python-dotenv
 pymilvus
 requests
-
--e libs/common-utils/src
