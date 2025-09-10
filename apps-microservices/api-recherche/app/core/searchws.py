@@ -291,7 +291,7 @@ def filtre_source (filtre: dict, source: str = "") -> list:
                 
         elif dtype in NUMERIC_DTYPES:
             if isinstance(val, dict):
-                if ['operator', 'values'] in val.keys():
+                if 'operator' in val and 'values' in val:
                     operator = val['operator']
                     values = val['values'] 
                     if operator == 'entre' and isinstance(values, dict) and 'start' in values and 'end' in values:
@@ -310,7 +310,7 @@ def filtre_source (filtre: dict, source: str = "") -> list:
                 clauses.append(f"{key} == {numeric_val}")
         else:
             if isinstance(val, dict):
-                if ['operator', 'values'] in val.keys():
+                if 'operator' in val and 'values' in val:
                     operator = val['operator']
                     values = val['values'] 
                     if operator == 'entre' and isinstance(values, dict) and 'start' in values and 'end' in values:
