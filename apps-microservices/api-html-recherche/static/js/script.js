@@ -1171,8 +1171,9 @@ $(function () {
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
             case 'produits':
+              sourceName = 'produit_3';
               const produitsSource = $('#produitsSource').val();
-              if (produitsSource) {
+              if (produitsSource.length > 0) {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
                 filtreSpecifique.source = produitsSource;
               }
@@ -1206,7 +1207,7 @@ $(function () {
 
       // Si aucune source n'est sélectionnée, utiliser la valeur par défaut du schéma
       if (sourcesAvecFiltres.length === 0) {
-        sourcesAvecFiltres = [{ source: "produits", filtre: {} }];
+        sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
       }
 
       // 2. Construire le filtre global (filtre principal)
