@@ -745,13 +745,11 @@ $(function () {
    * @returns {string} Le code HTML du badge.
    */
   function getSourceBadge(sourceName) {
-    const HELLOPRO_LOGO_URL = "https://static.hellopro.fr/img/hp-favicon.png";
-
     switch (sourceName) {
       case "siteweb":
         return `
             <span class="flex items-center gap-2 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
-                <img src="${HELLOPRO_LOGO_URL}" class="h-4 w-4 rounded-full" alt="Logo HelloPro">
+                <i data-lucide="package" class="h-3 w-3"></i>
                 <span>Site Web</span>
             </span>`;
       case "produits":
