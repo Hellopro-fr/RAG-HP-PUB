@@ -1088,7 +1088,21 @@ $(function () {
     // Le score de confiance est le rerank_score s'il existe, sinon le score vectoriel.
     const score = result.rerank_score !== undefined ? result.rerank_score : result.score;
 
+    
     let title = meta.id_produit || 'Titre non disponible';
+    switch (source) {
+      case "produits_3":
+        title = meta.nom_produit || title;
+        break;
+      case "devis":
+        title = meta.lead_id || title;
+      case "echanges":
+        title = meta.conversation_id || title;
+      case "siteweb":
+        title = meta.url || title;
+      default:
+        break;
+    }
     let description = meta.text || 'Aucune description.';
 
     // Logique d'extraction du titre et de la description depuis le texte brut
