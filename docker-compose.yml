@@ -171,7 +171,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: all  # Spécifie exactement les 2 GPUs
+              count: all
               capabilities: [gpu]
     
     # Optimisations système pour les performances
