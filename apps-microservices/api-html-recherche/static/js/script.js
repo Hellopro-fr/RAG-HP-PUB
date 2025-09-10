@@ -697,29 +697,29 @@ $(function () {
 
     if (percentage > 80) {
       config = {
-        bgColor: "bg-custom-vert-light",
-        textColor: "text-green-800",
+        bgColor: "bg-green-50",
+        textColor: "text-green-600",
         icon: "trending-up",
         label: "Très pertinent",
       };
     } else if (percentage > 60) {
       config = {
-        bgColor: "bg-blue-100",
-        textColor: "text-blue-700",
+        bgColor: "bg-blue-50",
+        textColor: "text-blue-600",
         icon: "trending-up",
         label: "Pertinent",
       };
     } else if (percentage > 30) {
       config = {
-        bgColor: "bg-amber-100",   
-        textColor: "text-amber-700", 
+        bgColor: "bg-amber-50",   
+        textColor: "text-amber-600", 
         icon: "bar-chart-horizontal",            
         label: "Pertinence moyenne",
       };
     } else {
       config = {
-        bgColor: "bg-custom-rouge-light",
-        textColor: "text-red-800",
+        bgColor: "bg-red-50",
+        textColor: "text-red-600",
         icon: "trending-down",
         label: "Faible pertinence",
       };
@@ -1049,17 +1049,21 @@ $(function () {
     if (state.isLlmEnabled) {
       elements.llmConfig.slideDown(200);
       elements.llmToggle
-        .addClass("bg-custom-orange text-white")
+        .addClass("bg-orange-200 text-orange-800 hover:bg-orange-300")
         .removeClass("border-custom-gris-blanc hover:bg-custom-clair-2");
     } else {
       elements.llmConfig.slideUp(200);
       elements.llmToggle
-        .removeClass("bg-custom-orange text-white")
+        .removeClass("bg-orange-200 text-orange-800 hover:bg-orange-300")
         .addClass("border-custom-gris-blanc hover:bg-custom-clair-2");
     }
-    state.isFilterOpen
-      ? elements.filterSidebar.show()
-      : elements.filterSidebar.hide();
+    if(state.isFilterOpen) {
+      elements.filterSidebar.show()
+      elements.filterToggle.addClass('bg-custom-clair-2 hover:bg-gray-400').removeClass('hover:bg-custom-clair-2');
+    } else {
+      elements.filterSidebar.hide();
+      elements.filterToggle.addClass('hover:bg-custom-clair-2').removeClass('bg-custom-clair-2 hover:bg-gray-400');
+    }
     if (state.isSidebarOpen) {
       elements.resultsSidebar
         .removeClass("hidden translate-x-full")
@@ -1067,6 +1071,7 @@ $(function () {
       $("#resultsToggleIcon").html(
         '<i data-lucide="panel-right-close" class="h-4 w-4"></i>'
       );
+      elements.resultsToggle.addClass('bg-custom-clair-2 hover:bg-gray-400').removeClass('hover:bg-custom-clair-2');
     } else {
       elements.resultsSidebar
         .removeClass("translate-x-0")
@@ -1077,6 +1082,7 @@ $(function () {
       $("#resultsToggleIcon").html(
         '<i data-lucide="panel-right-open" class="h-4 w-4"></i>'
       );
+      elements.resultsToggle.addClass('hover:bg-custom-clair-2').removeClass('bg-custom-clair-2 hover:bg-gray-400');
     }
 
     if (state.isSidebarOpen) {
@@ -1493,11 +1499,11 @@ $(function () {
   }
 
   function renderSearchResults() {
-    console.log("Rendering state:", state);
     elements.searchResultsList.empty();
     state.searchResults.forEach((result) => {
       const relevanceHtml = getRelevanceCard(result.confidence / 100);
       const sourceBadgeHtml = getSourceBadge(result.source);
+      const class_supplier = result.source == "devis" ? "hidden" : ""
 
       const resultCardHtml = `
         <div class="bg-white rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
@@ -1514,7 +1520,7 @@ $(function () {
                     <i data-lucide="tag" class="h-3 w-3"></i>
                     <span>${result.category}</span>
                   </span>
-                  <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
+                  <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full ${class_supplier}">
                     <i data-lucide="building-2" class="h-3 w-3"></i>
                     <span>${result.supplier}</span>
                   </span>
