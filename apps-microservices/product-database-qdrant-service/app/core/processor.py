@@ -17,9 +17,6 @@ def insertion_data(produits_data: dict) -> dict:
     
     Retourne: Un dictionnaire prêt à être publié.
     """
-    print("====================================info prodct data avant insertion======================")
-    print(produits_data)
-    print('=================================================================================================')
     produits   = produits_data.get("data",[])
     collection = produits_data.get("collection", CollectionName.PRODUIT)
     bdd        = produits_data.get("database", "qdrant")
