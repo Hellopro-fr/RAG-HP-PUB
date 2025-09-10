@@ -1022,7 +1022,6 @@ $(function () {
       elements.searchResultsContainer.show();
       elements.searchMetrics.show();
       elements.searchingState.hide();
-      elements.llmAnalyzeState.hide();
       elements.metricsContent.show();
       $("#totalResults").text(state.searchMetrics.totalResults);
       $("#searchTime").text(state.searchMetrics.searchTime);
@@ -1227,7 +1226,7 @@ $(function () {
           updateUI()
         }
         $('#errorPromptNull').show(100).delay(5000).hide(100);
-        document.querySelector('#errorPromptNull').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.querySelector('#llmConfig').scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
     }
@@ -1424,13 +1423,11 @@ $(function () {
           $('#llmResponseContainer').show();
           $('#resultsSidebar').css('width', '550px');
           $('#insightsContent').show();
-          $('#llmLoadingState').show();
           // $('#llmResponseText').parent().hide(); // Cache le conteneur avec la bordure
           updateUI(); // Met à jour l'interface pour montrer que le LLM a commencé
           break;
         case 'llm_chunk':
           // MODIFICATION : Cacher le loader et afficher la zone de texte au premier chunk
-          $('#llmLoadingState').hide();
           // $('#llmResponseText').parent().show();
           state.llmResponse += data.payload;
           // Met à jour uniquement le panneau latéral pour une meilleure performance
@@ -1448,6 +1445,7 @@ $(function () {
 
           // La recherche est terminée
           state.isSearching = false;
+          elements.llmAnalyzeState.hide();  
           updateUI(); // Met à jour l'interface une dernière fois
           socket.close(); // Ferme la connexion
           break;
