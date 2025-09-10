@@ -732,8 +732,7 @@ $(function () {
       <div class="flex items-center gap-2 p-2 rounded-lg ${config.bgColor} ${config.textColor}">
           <i data-lucide="${config.icon}" class="h-4 w-4"></i>
           <div class="flex flex-col">
-              <span class="text-xs font-bold">${config.label}</span>
-              <span class="text-xs">${percentage}% de confiance</span>
+              <span class="text-xs">${percentage}% : <span class="text-xs font-bold">${config.label}</span></span>
           </div>
       </div>
     `;
