@@ -1222,7 +1222,11 @@ $(function () {
 
     if(state.isLlmEnabled) {
       if(elements.templatePrompt.val().trim() === "") {
-        $('#errorPromptNull').show(100).delay(3000).hide(100);
+        if(!state.isFilterOpen) {
+          state.isFilterOpen = true
+          updateUI()
+        }
+        $('#errorPromptNull').show(100).delay(5000).hide(100);
         document.querySelector('#errorPromptNull').scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
