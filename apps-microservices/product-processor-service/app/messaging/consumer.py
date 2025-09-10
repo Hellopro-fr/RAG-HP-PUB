@@ -38,9 +38,6 @@ class Consumer:
         """
         print("📥 Product-Processor: Message reçu.")
         data = json.loads(body)
-        print('=====================Data original entree=============================')
-        print(data)
-        print("=========================================================================")
         product_data = data.get('data', {})
         bdd = data.get('database', "qdrant")
         origin = data.get('origin', 'bo')

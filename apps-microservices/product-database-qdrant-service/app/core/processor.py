@@ -17,7 +17,9 @@ def insertion_data(produits_data: dict) -> dict:
     
     Retourne: Un dictionnaire prêt à être publié.
     """
-
+    print("====================================info prodct data avant insertion======================")
+    print(produits_data)
+    print('=================================================================================================')
     produits   = produits_data.get("data",[])
     collection = produits_data.get("collection", CollectionName.PRODUIT)
     bdd        = produits_data.get("database", "qdrant")
@@ -105,12 +107,11 @@ def insertion_data(produits_data: dict) -> dict:
                     else:
                         reason = "source BO existe déjà"
                         
-                    print("Le produit ID %s : %s. Insertion ignorée.", id_produit, reason)
+                    print(f"Le produit ID {id_produit} : {reason}. Insertion ignorée.")
                     result = data
                 else:
                     # Aucune des conditions d'exclusion n'est remplie → Insertion
-                    print("Le produit ID %s existe avec sources '%s' (pas de BO). Insertion autorisée.", 
-                               id_produit, list(existing_sources_set))
+                    print(f"Le produit ID {id_produit} existe avec sources '{list(existing_sources_set)}' (pas de BO). Insertion autorisée.")
                     result = func(produits)
                     if not result:
                         id_produit_milvus = ""
