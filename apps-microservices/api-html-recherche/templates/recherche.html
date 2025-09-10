@@ -259,7 +259,7 @@
           extend: {
             colors: {
               "custom-orange": "var(--color-orange)",
-              "custom-orange-light": "var(--color-orange-light)",
+              "custom-orange-light": "#f59e0b",
               "custom-orange-heavy": "var(--color-orange-heavy)",
               "custom-bleu": "var(--color-bleu)",
               "custom-bleu-light": "var(--color-bleu-light)",
@@ -339,7 +339,7 @@
               class="hidden lg:flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors"
             >
               <i data-lucide="sparkles" class="h-4 w-4"></i>
-              <span id="llmToggleText">IA</span>
+              <span id="llmToggleText">LLM</span>
             </button>
 
             <!-- Desktop search button -->
@@ -419,14 +419,14 @@
                     id="topKSlider"
                     min="1"
                     max="200"
-                    value="10"
+                    value="30"
                     class="slider w-full"
                   />
                   <div
                     class="flex justify-between text-xs text-custom-gris mt-1"
                   >
                     <span>1</span>
-                    <span id="topKValue" class="font-medium">10</span>
+                    <span id="topKValue" class="font-medium">30</span>
                     <span>200</span>
                   </div>
                 </div>
@@ -533,6 +533,39 @@
                           data-pagination="true"
                           data-payload="recup_effectif"
                         ></select>
+                      </div>
+                      <div class="space-y-1">
+                          <label class="text-xs text-custom-gris">Date de demande</label>
+                          <div class="mb-4">
+                            <label for="operation" class="block text-gray-700 font-bold mb-2">Opération :</label>
+                            <select id="operation" name="operation"
+                                class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm">
+                                <option value=">">Supérieur à</option>
+                                <option value=">=">Supérieur ou égal à</option>
+                                <option value="<">Inférieur à</option>
+                                <option value="<=">Inférieur ou égal à</option>
+                                <option value="entre">Entre</option>
+                            </select>
+                        </div>
+                        <div id="date-general-container" class="mb-4">
+                            <label for="date-general" class="block text-gray-700 font-bold mb-2">Date :</label>
+                            <input type="date" id="date-general" name="date-general"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+
+                        <!-- Conteneur pour la plage de dates (initialement masqué) -->
+                        <div id="date-range-container" class="hidden">
+                            <div class="mb-4">
+                                <label for="date-debut" class="block text-gray-700 font-bold mb-2">Date de début :</label>
+                                <input type="date" id="date-debut" name="date-debut"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                            <div class="mb-4">
+                                <label for="date-fin" class="block text-gray-700 font-bold mb-2">Date de fin :</label>
+                                <input type="date" id="date-fin" name="date-fin"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1166,13 +1199,13 @@
           <!-- LLM Configuration -->
           <div
             id="llmConfig"
-            class="bg-white rounded-lg border border-custom-bleu-light-2 shadow-sm hidden"
+            class="bg-white rounded-lg border border-custom-orange-light shadow-sm hidden"
           >
             <div
               class="p-4 border-b border-custom-clair-2 flex items-center justify-between"
             >
               <h3
-                class="text-base font-semibold flex items-center gap-2 text-custom-bleu"
+                class="text-base font-semibold flex items-center gap-2 text-custom-orange-light"
               >
                 <i data-lucide="sparkles" class="h-4 w-4"></i>
                 Configuration LLM
@@ -1187,13 +1220,16 @@
             <div class="p-4 space-y-4">
               <div class="space-y-2">
                 <label class="text-sm font-medium text-custom-noir"
-                  >Prompt personnalisé</label
+                  >Prompt personnalisé <span class="text-custom-orange-light">*</span></label
                 >
-                <textarea
-                  id="llmPrompt"
-                  placeholder="Entrez votre prompt pour le LLM..."
-                  class="w-full min-h-[160px] px-3 py-2 text-sm border border-custom-gris-blanc rounded-md focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none"
-                ></textarea>
+                <div class="flex flex-col">
+                  <textarea
+                    id="llmPrompt"
+                    placeholder="Entrez votre prompt pour le LLM..."
+                    class="w-full min-h-[160px] px-3 py-2 text-sm border border-custom-gris-blanc rounded-md focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none"
+                  ></textarea>
+                  <span id="errorPromptNull" class="text-sm text-red-600 font-bold mt-1 hidden">Ce champ est obligatoire</span>
+                </div>
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium text-custom-noir"
@@ -1274,15 +1310,7 @@
                     <i data-lucide="clock" class="h-3 w-3"></i>
                     <span id="searchTime">0</span>s
                   </div>
-                  <div class="flex items-center gap-1">
-                    <i data-lucide="file-text" class="h-3 w-3"></i>
-                    <span id="sourcesCount">0</span> sources
-                  </div>
                 </div>
-                <div
-                  id="searchQueryBadge"
-                  class="inline-block px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full"
-                ></div>
               </div>
             </div>
 
@@ -1374,6 +1402,16 @@
             </div>
           </div>
           <div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4">
+            <div id="llmAnalyzeState" class="flex items-center gap-2 hidden">
+              <div class="flex flex-col gap-2 items-center justify-center p-[4em]">
+                <div
+                  class="animate-spin rounded-full h-8 w-8 border-2 border-custom-bleu border-t-transparent"
+                ></div>
+                <span class="text-sm text-custom-gris"
+                  >Analyse en cours</span
+                >
+              </div>
+            </div>
             <div
               id="llmEmptyState"
               class="flex flex-col items-center justify-center py-16 text-center hidden"

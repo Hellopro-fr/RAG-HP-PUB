@@ -2,5 +2,9 @@ fastapi[all]
 uvicorn
 python-dotenv
 pydantic
-pika
 pydantic-settings
+requests
+openai
+python-multipart
+tenacity
+ftfy
