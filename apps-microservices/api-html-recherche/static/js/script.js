@@ -1156,6 +1156,7 @@ $(function () {
 
     
     let title = meta.id_produit || 'Titre non disponible';
+    let categorie = meta.categorie || meta.id_categorie || 'N/A';
     switch (result.source) {
       case "produits_3":
         title = meta.nom_produit || title;
@@ -1197,7 +1198,7 @@ $(function () {
       id: meta.sku || Math.random().toString(36).substring(7), // L'UI a besoin d'un ID unique
       title: title,
       source: result.source,
-      category: meta.id_categorie || 'N/A',
+      category: categorie,
       supplier: meta.fournisseur || 'N/A',
       snippet: description,
       confidence: result.score * 100, // S'assure que le score existe
