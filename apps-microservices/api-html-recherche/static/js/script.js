@@ -1277,6 +1277,7 @@ $(function () {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
                 filtreSpecifique.source = produitsSource;
               }
+              if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
@@ -1317,8 +1318,8 @@ $(function () {
               console.log("Filtres Devis appliqués:", filtreSpecifique);
               break;
             case 'siteweb':
-              const sitewebModele = $('#sitewebModele').val();
-              if (sitewebModele) {
+              const sitewebModele = $('#sitewebModele').val() || [];
+              if (sitewebModele.length > 0) {
                 filtreSpecifique.page_type = sitewebModele;
               }
               break;
@@ -1338,8 +1339,22 @@ $(function () {
       const filtreGlobal = {};
       if (state.selectedEtat && state.selectedEtat.length > 0) filtreGlobal.etat = state.selectedEtat;
       if (state.selectedAffichage && state.selectedAffichage.length > 0) filtreGlobal.affichage = state.selectedAffichage;
-      if (state.selectedCategories && state.selectedCategories.length > 0) filtreGlobal.id_categorie = state.selectedCategories;
-      if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreGlobal.id_fournisseur = state.selectedFournisseurs;
+      if (state.selectedCategories && state.selectedCategories.length > 0) filtreGlobal.id_categorie = state.selectedCategories; else {
+        filtreGlobal.id_categorie = [
+          "2016431",
+          "2008670",
+          "2007702",
+          "2003445",
+          "2017735",
+          "1002167",
+          "2013765",
+          "2019606",
+          "2004590",
+          "2002944",
+          "2008035"
+        ];
+      };
+      // if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreGlobal.id_fournisseur = state.selectedFournisseurs;
 
       // 3. Construire l'objet de requête final
       const searchRequest = {
