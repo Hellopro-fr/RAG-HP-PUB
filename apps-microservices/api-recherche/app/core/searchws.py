@@ -293,10 +293,10 @@ def filtre_source (filtre: dict, source: str = "") -> list:
             if isinstance(val, dict):
                 if "operator" in val.keys():
                     logger.info("val", val)
-                    if val.get("operator") == 'entre' and val.get("values").get("start") and val.get("values").get("end"):
-                        clauses.append(f"{key} >= {val.get("values").get("start")} and {key} <= {val.get("values").get("end")}")
+                    if val.operator == 'entre' and val.values.start and val.values.end:
+                        clauses.append(f"{key} >= {val.values.start} and {key} <= {val.values.end}")
                     else:
-                        clauses.append(f"{key} {val.get("operator")}")
+                        clauses.append(f"{key} {val.operator}")
             elif isinstance(val, list):
                 numeric_vals = [int(v) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(v) for v in val]
                 clauses.append(f"{key} in {numeric_vals}")
