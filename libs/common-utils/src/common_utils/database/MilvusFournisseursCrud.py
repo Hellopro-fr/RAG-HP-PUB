@@ -66,6 +66,7 @@ class MilvusFournisseursCrud:
                 FieldSchema(name="fournisseur", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="id_fournisseur", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(name="fichier_source", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="etat", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="affichage", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="nom_categorie_phare_1", dtype=DataType.VARCHAR, max_length=65535),
