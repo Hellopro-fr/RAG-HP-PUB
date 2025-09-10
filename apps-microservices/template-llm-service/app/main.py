@@ -18,13 +18,23 @@ def main():
         exit(1)
 
     print("🚀 template-llm-service: Démarrage...")
+    
+    # On lit la configuration du parallélisme tensoriel depuis la variable d'environnement
+    # définie par le script start.sh. On met '1' comme valeur par défaut par sécurité.
+    tensor_parallel_size = int(os.environ.get("TENSOR_PARALLEL_SIZE", "1"))
+    
+    if tensor_parallel_size > 1:
+        print(f"🧠 Configuration détectée : Mode Multi-GPU (Tensor Parallel Size = {tensor_parallel_size}).")
+    else:
+        print("🧠 Configuration détectée : Mode Mono-GPU.")
+    
     print("🧠 Chargement du modèle LLM (cela peut prendre plusieurs minutes)...")
     
     # Configuration optimisée mais compatible avec LLM synchrone
     llm_config = {
         "model": "Qwen/Qwen3-14B-AWQ",
         "quantization": "awq",
-        "tensor_parallel_size": 2,  # Utilise les 2 GPUs
+        "tensor_parallel_size": tensor_parallel_size,
         "gpu_memory_utilization": 0.90,  # Plus agressif avec AWQ
         "trust_remote_code": True,
         "dtype": "auto",

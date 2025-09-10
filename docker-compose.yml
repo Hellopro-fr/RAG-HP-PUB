@@ -157,7 +157,6 @@ services:
     
     # Variables d'environnement pour optimiser NCCL et multi-GPU
     environment:
-      - CUDA_VISIBLE_DEVICES=0,1  # Spécifie les 2 GPUs à utiliser
       - NCCL_DEBUG=INFO           # Debug NCCL pour diagnostiquer les problèmes
       - NCCL_SHM_DISABLE=0        # Active la mémoire partagée NCCL
       - NCCL_P2P_DISABLE=0        # Active la communication P2P entre GPUs
@@ -172,7 +171,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0', '1']  # Spécifie exactement les 2 GPUs
+              device_ids: all  # Spécifie exactement les 2 GPUs
               capabilities: [gpu]
     
     # Optimisations système pour les performances
