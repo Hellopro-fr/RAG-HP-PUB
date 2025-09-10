@@ -647,10 +647,17 @@ $(function () {
       };
     } else if (percentage > 60) {
       config = {
-        bgColor: "bg-custom-orange-light",
-        textColor: "text-orange-800",
-        icon: "bar-chart-horizontal",
+        bgColor: "bg-blue-100",
+        textColor: "text-blue-700",
+        icon: "trending-up",
         label: "Pertinent",
+      };
+    } else if (percentage > 30) {
+      config = {
+        bgColor: "bg-amber-100",   
+        textColor: "text-amber-700", 
+        icon: "bar-chart-horizontal",            
+        label: "Pertinence moyenne",
       };
     } else {
       config = {
@@ -1050,6 +1057,25 @@ $(function () {
     }
   }
 
+    function handleSearchResultsPayload(payload) {
+    // Met à jour les résultats de recherche dans l'état, en les adaptant
+    state.searchResults = payload.results.map(adaptSearchResult);
+    console.log("Mise à jour de l'état avec les résultats :", state.searchResults);
+
+    // 1. Extraire les IDs des résultats qui sont des produits
+    const id_produits_a_chercher = state.searchResults
+      .filter(result => result.source === 'produits' && result.id_produit)
+      .map(result => result.id_produit);
+
+    // 2. Si on a des produits, on va chercher leurs infos détaillées
+    if (id_produits_a_chercher.length > 0) {
+      // La fonction `get_info_produit` mettra à jour l'UI dans son callback `complete`
+      get_info_produit(id_produits_a_chercher);
+    } else {
+      // S'il n'y a aucun produit, on affiche directement les résultats
+      updateUI();
+    }
+  }
   // --- DÉBUT DE LA SECTION FUSIONNÉE ---
 
   /**
@@ -1062,7 +1088,21 @@ $(function () {
     // Le score de confiance est le rerank_score s'il existe, sinon le score vectoriel.
     const score = result.rerank_score !== undefined ? result.rerank_score : result.score;
 
+    
     let title = meta.id_produit || 'Titre non disponible';
+    switch (result.source) {
+      case "produits_3":
+        title = meta.nom_produit || title;
+        break;
+      case "devis":
+        title = meta.lead_id || title;
+      case "echanges":
+        title = meta.conversation_id || title;
+      case "siteweb":
+        title = meta.url || title;
+      default:
+        break;
+    }
     let description = meta.text || 'Aucune description.';
 
     // Logique d'extraction du titre et de la description depuis le texte brut
@@ -1078,6 +1118,14 @@ $(function () {
       }
     }
 
+    let url = meta.url;
+
+    if(result.source === 'devis') {
+      url = `https://bo.hellopro.fr/admin/gest_com/v2/fiche_lead.php?id_lead=${meta.lead_id}`
+    } else if(result.source === 'echanges') {
+      url = `https://bo.hellopro.fr/admin/service_client_lead/?page=liste_messages&id_lead=${meta.id_demande}&id_categorie=${meta.id_categorie}`;
+    }
+
     return {
       id: meta.sku || Math.random().toString(36).substring(7), // L'UI a besoin d'un ID unique
       title: title,
@@ -1086,8 +1134,9 @@ $(function () {
       supplier: meta.fournisseur || 'N/A',
       snippet: description,
       confidence: result.score * 100, // S'assure que le score existe
-      url: meta.url || '#',
+      url: url || '#',
       id_produit: meta.id_produit,
+      chunk_info: `${meta.chunk_id}/${meta.total_chunks}`
     };
   }
 
@@ -1136,17 +1185,22 @@ $(function () {
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
             case 'produits':
+              sourceName = 'produits_3';
               const produitsSource = $('#produitsSource').val();
-              if (produitsSource) {
+              if (produitsSource.length > 0) {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
-                // filtreSpecifique.source = produitsSource;
+                filtreSpecifique.source = produitsSource;
               }
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
+              const devisNaf2 = $('#devisNaf2').val();
               const devisEffectif = $('#devisEffectif').val();
-              if (devisNaf > 0) filtreSpecifique.naf = devisNaf;
-              if (devisEffectif > 0) filtreSpecifique.effectif = devisEffectif;
+
+              if (devisNaf.length > 0) filtreSpecifique.naf5 = devisNaf;
+              if (devisNaf2.length > 0) filtreSpecifique.naf2 = devisNaf2;
+              if (devisEffectif.length > 0) filtreSpecifique.effectif = devisEffectif;
+
               if (state.selectedNomFournisseurs && state.selectedNomFournisseurs.length > 0) {
                 filtreSpecifique.liste_frns = state.selectedNomFournisseurs;
               }
@@ -1155,7 +1209,7 @@ $(function () {
             case 'siteweb':
               const sitewebModele = $('#sitewebModele').val();
               if (sitewebModele) {
-                filtreSpecifique.modele = sitewebModele;
+                filtreSpecifique.page_type = sitewebModele;
               }
               break;
           }
@@ -1167,7 +1221,7 @@ $(function () {
 
       // Si aucune source n'est sélectionnée, utiliser la valeur par défaut du schéma
       if (sourcesAvecFiltres.length === 0) {
-        sourcesAvecFiltres = [{ source: "produits", filtre: {} }];
+        sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
       }
 
       // 2. Construire le filtre global (filtre principal)
@@ -1215,23 +1269,29 @@ $(function () {
         case 'error':
           console.error(`[WS Error] ${data.payload}`);
           break;
+        case 'initial_results':
+          console.log("Réception des résultats initiaux (pré-reranking).");
+          // On utilise notre nouvelle fonction helper pour traiter les résultats
+          handleSearchResultsPayload(data.payload);
+          break;
         case 'rerank_complete':
           // Met à jour les résultats de recherche dans l'état, en les adaptant
-          state.searchResults = data.payload.results.map(adaptSearchResult);
+          handleSearchResultsPayload(data.payload);
+          // state.searchResults = data.payload.results.map(adaptSearchResult);
 
-          // 1. Extraire les IDs des résultats qui sont des produits
-          const id_produits_a_chercher = state.searchResults
-            .filter(result => result.source === 'produits' && result.id_produit)
-            .map(result => result.id_produit);
+          // // 1. Extraire les IDs des résultats qui sont des produits
+          // const id_produits_a_chercher = state.searchResults
+          //   .filter(result => result.source === 'produits' && result.id_produit)
+          //   .map(result => result.id_produit);
 
-          console.log(`IDs de produits à chercher:`, id_produits_a_chercher);
-          // 2. Si on a des produits, on va chercher leurs infos détaillées
-          if (id_produits_a_chercher.length > 0) {
-            get_info_produit(id_produits_a_chercher);
-          } else {
-            // S'il n'y a aucun produit, on affiche directement les résultats
-            updateUI();
-          }
+          // console.log(`IDs de produits à chercher:`, id_produits_a_chercher);
+          // // 2. Si on a des produits, on va chercher leurs infos détaillées
+          // if (id_produits_a_chercher.length > 0) {
+          //   get_info_produit(id_produits_a_chercher);
+          // } else {
+          //   // S'il n'y a aucun produit, on affiche directement les résultats
+          //   updateUI();
+          // }
           break;
         case 'llm_start':
           state.llmResponse = ''; // S'assure que la réponse est vide au début du streaming
@@ -1334,10 +1394,11 @@ $(function () {
       }
     });
   }
+
   function renderSearchResults() {
+    console.log("Rendering state:", state);
     elements.searchResultsList.empty();
     state.searchResults.forEach((result) => {
-      // Le score de confiance est maintenant en pourcentage
       const relevanceHtml = getRelevanceCard(result.confidence / 100);
       const sourceBadgeHtml = getSourceBadge(result.source);
 
@@ -1345,9 +1406,9 @@ $(function () {
         <div class="bg-white rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
               <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold text-base leading-tight text-custom-noir group-hover:text-custom-bleu transition-colors" data-id_produit="${result.id_produit}">${result.title}</h3>
-                  <a href="${result.url}" target="_blank" rel="noopener noreferrer" class="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-custom-clair-2">
-                    <i data-lucide="external-link" class="h-4 w-4 text-custom-gris"></i>
+                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${result.title}</h3>
+                  <a href="${result.url}" target="_blank" rel="noopener noreferrer" class="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-blue-100">
+                    <i data-lucide="external-link" class="h-4 w-4 text-custom-gris group-hover:text-blue-700"></i>
                   </a>
               </div>
               <div class="flex flex-wrap gap-2">
@@ -1360,11 +1421,15 @@ $(function () {
                     <i data-lucide="building-2" class="h-3 w-3"></i>
                     <span>${result.supplier}</span>
                   </span>
+                  <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
+                    <i data-lucide="building-2" class="h-3 w-3"></i>
+                    <span>Chunk : ${result.chunk_info}</span>
+                  </span>
               </div>
               <div>
-                <p id="snippet-${result.id}" class="text-sm text-custom-gris leading-relaxed line-clamp-3 transition-all duration-300">${result.snippet}</p>
+                <p id="snippet-${result.id}" class="text-sm text-custom-gris leading-relaxed line-clamp-3 transition-all duration-300">${result.snippet || ""}</p>
                 <button 
-                  class="toggle-snippet text-sm font-semibold text-custom-bleu hover:text-custom-bleu-heavy mt-2 flex items-center gap-1" 
+                  class="toggle-snippet text-sm font-semibold text-custom-bleu hover:text-custom-bleu-heavy mt-2 flex items-center gap-1 hidden" 
                   data-target="#snippet-${result.id}">
                   <span class="button-text">Voir plus</span>
                   <i data-lucide="chevron-down" class="h-4 w-4 button-icon transition-transform duration-200"></i>
@@ -1375,10 +1440,26 @@ $(function () {
             ${relevanceHtml}
           </div>
         </div>`;
+
       elements.searchResultsList.append(resultCardHtml);
     });
+
+    // Vérifier après rendu si le texte est tronqué
+    elements.searchResultsList.find("p[id^='snippet-']").each(function () {
+      const $p = $(this);
+      const $btn = $p.next("button.toggle-snippet");
+
+      const fullHeight = this.scrollHeight;                  // hauteur réelle du contenu
+      const visibleHeight = $p[0].getBoundingClientRect().height; // hauteur affichée
+
+      if (fullHeight > visibleHeight + 1) { // on tolère 1px d'arrondi
+        $btn.removeClass("hidden"); // texte tronqué → bouton affiché
+      }
+    });
+
     lucide.createIcons();
   }
+
 
   // Initialisation de l'application
   initializeFormState();

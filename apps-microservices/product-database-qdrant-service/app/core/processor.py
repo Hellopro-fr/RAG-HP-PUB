@@ -38,8 +38,10 @@ def insertion_data(produits_data: dict) -> dict:
     result = []
 
     if func and len(produits) > 0:
-        id_produit = produits[0].get('id_produit', 'ID produit inconnu')
-        res = base_vectorielle.get_produit(id_produit=id_produit)
+        produit_0              = produits[0]
+        id_produit             = produit_0.get('id_produit', 'ID produit inconnu')
+        is_source_bo           = produit_0.get('source', '') == "BO"
+        res                    = base_vectorielle.get_produit(id_produit=id_produit)
         correspondance_produit = MilvusProduitInserer()
 
         status = res.get("status")
@@ -83,7 +85,7 @@ def insertion_data(produits_data: dict) -> dict:
                 }
 
         elif status == "success":
-            if len(data) > 0:
+            if len(data) > 0 and is_source_bo:
                 logging.info("Le produit ID  %s existe déjà dans la base de données. Insertion ignorée.", id_produit)
                 result = data
             else:
