@@ -654,6 +654,7 @@ $(function () {
         if (selectedOperation === 'entre') {
             if (!$("#date-general-container").hasClass("hidden")) {
               $("#date-general-container").addClass('hidden');
+              $("#date-general").val("");
             }
             if ($("#date-range-container").hasClass("hidden")) {
               $("#date-range-container").removeClass('hidden');
@@ -664,6 +665,8 @@ $(function () {
             }
             if (!$("#date-range-container").hasClass("hidden")) {
               $("#date-range-container").addClass('hidden');
+              $("#date-debut").val("");
+              $("#date-fin").val("");
             }
         }
     }
