@@ -68,7 +68,7 @@ def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict,
         data_payload = message.get("data", {})
         url = data_payload.get("url", "URL non fournie")
         content = data_payload.get("text")
-    
+
         # Sécurité : Tronquer le contenu si trop long pour éviter les erreurs du modèle.
         # On garde une marge de sécurité (1024 tokens) pour le template du prompt lui-même.
         max_model_len = llm_config.get("max_model_len", 4096)
@@ -129,4 +129,8 @@ def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict,
         processed_messages.append(original_message)
     
     print(f"   -> Classification en batch terminée pour {len(processed_messages)} messages.")
+    # Afficher les types de pages détectés pour chaque message
+    for msg in processed_messages:
+        print(f"      • URL: {msg['data'].get('url', 'N/A')} => Type de page: {msg['data'].get('page_type', 'N/A')}")
+        
     return processed_messages
