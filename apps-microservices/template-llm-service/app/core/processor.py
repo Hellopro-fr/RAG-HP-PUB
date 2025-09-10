@@ -120,8 +120,7 @@ def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict,
                  raise ValueError("Aucun bloc JSON trouvé dans la sortie du LLM.")
         except Exception as e:
             # Si le parsing échoue, on assigne un type d'erreur pour ne pas bloquer le flux.
-            print(f"   -> ⚠️  Erreur de parsing JSON pour un message. Sortie brute: '{raw_text}'. Erreur: {e}")
-            page_type = "erreur_parsing"
+            raise ValueError(f"   -> ⚠️  Erreur de parsing JSON pour un message. Sortie brute: '{raw_text}'. Erreur: {e}")
 
         # On enrichit le message original avec le résultat de la classification
         # et on l'ajoute à notre liste de résultats.
