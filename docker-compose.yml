@@ -46,6 +46,21 @@ services:
       - "8566:8566"
     env_file:
       - .env
+  
+  api-html-recherche-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-html-recherche/Dockerfile
+    container_name: api-html-recherche-service
+    restart: unless-stopped
+    # TODO: à supprimer en PROD
+    volumes:
+      - ./apps-microservices/api-html-recherche:/app:rw
+      - ./libs:/app/libs:rw
+    ports:
+      - "8550:8550"
+    env_file:
+      - .env
 
   api-gateway-service:
     build:
@@ -162,7 +177,7 @@ services:
     ulimits:
       memlock: -1      # Pas de limite sur la mémoire verrouillée
       stack: 67108864  # Stack plus grande pour les threads CUDA
-
+              
   embedding-service:
     build:
       context: .
@@ -224,7 +239,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 30
+      replicas: 20
 
   categories-database-qdrant-service:
     build:

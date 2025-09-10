@@ -8,3 +8,5 @@ pymilvus
 pydantic-settings
 requests
 sentencepiece
+torch
+optimum[onnxruntime-gpu]
