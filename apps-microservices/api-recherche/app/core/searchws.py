@@ -282,7 +282,13 @@ def filtre_source (filtre: dict, source: str = "") -> list:
             continue
         
         if dtype == DataType.ARRAY:
-            if isinstance(val, list):
+            if isinstance(val, dict):
+                if val.operator:
+                    if val.operator == 'entre' and val.values.start and val.values.end:
+                        clauses.append(f"{key} >= {val.values.start} and {key} <= {val.values.end}")
+                    else:
+                        clauses.append(f"{key} {val.operator}")
+            elif isinstance(val, list):
                 sub_clauses = [f"array_contains({key}, {repr(str(v))})" for v in val]
                 if sub_clauses:
                     clauses.append(f"({' or '.join(sub_clauses)})")
