@@ -67,7 +67,10 @@ def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict,
     for message in messages:
         data_payload = message.get("data", {})
         url = data_payload.get("url", "URL non fournie")
-        content = data_payload.get("text", "")
+        content = data_payload.get("text")
+        
+        if not content:
+            raise ValueError("Le champ 'text' est vide ou manquant dans les données d'entrées.")
 
         # Sécurité : Tronquer le contenu si trop long pour éviter les erreurs du modèle.
         # On garde une marge de sécurité (1024 tokens) pour le template du prompt lui-même.
