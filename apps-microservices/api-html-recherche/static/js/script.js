@@ -629,6 +629,62 @@ $(function () {
     });
   }
 
+  function dateToTimestamp(dateString, position = 'start') {
+    if (!dateString) return null; // Retourne null si le champ est vide
+
+    // Pour la date de fin, on veut inclure toute la journée.
+    const timeSuffix = (position === 'end') ? 'T23:59:59' : 'T00:00:00';
+    
+    const date = new Date(dateString + timeSuffix);
+    
+    // getTime() retourne des millisecondes, on divise par 1000 pour les secondes.
+    return Math.floor(date.getTime() / 1000);
+  }
+
+  function initializeDatePicker() {
+    const today = new Date().toISOString().split('T')[0];
+    $(`input[type="date"]`).each(function (i, item) {
+      $(item).prop('max', today);
+      // let est_date_condition_general = $(item).hasClass("date-general");
+    });
+    function toggleDateFields() {
+        const selectedOperation = $("#operation").val();
+
+        if (selectedOperation === 'entre') {
+            if (!$("#date-general-container").hasClass("hidden")) {
+              $("#date-general-container").addClass('hidden');
+            }
+            if ($("#date-range-container").hasClass("hidden")) {
+              $("#date-range-container").removeClass('hidden');
+            }
+        } else {
+            if ($("#date-general-container").hasClass("hidden")) {
+              $("#date-general-container").removeClass('hidden');
+            }
+            if (!$("#date-range-container").hasClass("hidden")) {
+              $("#date-range-container").addClass('hidden');
+            }
+        }
+    }
+
+    $(document).on('change', "#date-debut", function() {
+        // La date de fin ne peut pas être antérieure à la date de début choisie
+        if (this.value) {
+            $("#date-fin").prop('min', this.value);
+        }
+    });
+
+    $(document).on('change', "#date-fin", function() {
+        // La date de début ne peut pas être postérieure à la date de fin choisie
+        if (this.value) {
+            $("#date-debut").prop('max', this.value);
+        }
+    });
+
+    $(document).on('change', "#operation", toggleDateFields);
+    toggleDateFields();
+  }
+
   /**
    * Génère une carte de pertinence avec un code couleur, une icône et un texte.
    * @param {number} confidence - Le score de confiance entre 0 et 1.
@@ -1204,6 +1260,30 @@ $(function () {
               if (state.selectedNomFournisseurs && state.selectedNomFournisseurs.length > 0) {
                 filtreSpecifique.liste_frns = state.selectedNomFournisseurs;
               }
+
+              const date_value = $("#date-general").val();
+              const date_debut = $("#date-debut").val();
+              const date_fin   = $("#date-fin").val();
+              const operation  = $("#operation").val();
+
+              let filter_date = {}
+              let avec_filtre_date = false;
+              if (date_value != "") {
+                filter_date.date = dateToTimestamp(date_value)
+                avec_filtre_date = true;
+              } else if (date_debut != "" && date_fin != "") {
+                avec_filtre_date = true;
+                filter_date.start = dateToTimestamp(date_debut)
+                filter_date.end   = dateToTimestamp(date_fin)
+              }
+
+              if (avec_filtre_date) {
+                filtreSpecifique.date_du_lead = {
+                  "operator": operation,
+                  "values": filter_date
+                }
+              }
+
               console.log("Filtres Devis appliqués:", filtreSpecifique);
               break;
             case 'siteweb':
@@ -1464,6 +1544,7 @@ $(function () {
   // Initialisation de l'application
   initializeFormState();
   initializeSelect2();
+  initializeDatePicker();
   initializeEventListeners();
   updateUI();
   lucide.createIcons();
