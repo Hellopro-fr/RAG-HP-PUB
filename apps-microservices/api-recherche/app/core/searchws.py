@@ -282,13 +282,7 @@ def filtre_source (filtre: dict, source: str = "") -> list:
             continue
         
         if dtype == DataType.ARRAY:
-            if isinstance(val, dict):
-                if val.operator:
-                    if val.operator == 'entre' and val.values.start and val.values.end:
-                        clauses.append(f"{key} >= {val.values.start} and {key} <= {val.values.end}")
-                    else:
-                        clauses.append(f"{key} {val.operator}")
-            elif isinstance(val, list):
+            if isinstance(val, list):
                 sub_clauses = [f"array_contains({key}, {repr(str(v))})" for v in val]
                 if sub_clauses:
                     clauses.append(f"({' or '.join(sub_clauses)})")
@@ -296,7 +290,13 @@ def filtre_source (filtre: dict, source: str = "") -> list:
                 clauses.append(f"array_contains({key}, {repr(str(val))})")
                 
         elif dtype in NUMERIC_DTYPES:
-            if isinstance(val, list):
+            if isinstance(val, dict):
+                if val.operator:
+                    if val.operator == 'entre' and val.values.start and val.values.end:
+                        clauses.append(f"{key} >= {val.values.start} and {key} <= {val.values.end}")
+                    else:
+                        clauses.append(f"{key} {val.operator}")
+            elif isinstance(val, list):
                 numeric_vals = [int(v) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(v) for v in val]
                 clauses.append(f"{key} in {numeric_vals}")
             else:
