@@ -1090,7 +1090,7 @@ $(function () {
 
     
     let title = meta.id_produit || 'Titre non disponible';
-    switch (source) {
+    switch (result.source) {
       case "produits_3":
         title = meta.nom_produit || title;
         break;
