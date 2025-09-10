@@ -147,11 +147,13 @@ services:
       dockerfile: ./apps-microservices/template-llm-service/Dockerfile
     container_name: template-llm-service
     restart: unless-stopped
+    volumes:
+      - ./apps-microservices/template-llm-service/app:/app/template_llm_service:rw
     env_file:
       - .env
     
     # SOLUTION PRINCIPALE : Mémoire partagée pour NCCL
-    shm_size: '8gb'  # Essentiel pour la communication inter-GPU
+    shm_size: '16gb'  # Essentiel pour la communication inter-GPU
     
     # Variables d'environnement pour optimiser NCCL et multi-GPU
     environment:
