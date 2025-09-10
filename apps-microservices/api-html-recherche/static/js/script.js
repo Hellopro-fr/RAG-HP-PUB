@@ -654,6 +654,7 @@ $(function () {
         if (selectedOperation === 'entre') {
             if (!$("#date-general-container").hasClass("hidden")) {
               $("#date-general-container").addClass('hidden');
+              $("#date-general").val("");
             }
             if ($("#date-range-container").hasClass("hidden")) {
               $("#date-range-container").removeClass('hidden');
@@ -664,6 +665,8 @@ $(function () {
             }
             if (!$("#date-range-container").hasClass("hidden")) {
               $("#date-range-container").addClass('hidden');
+              $("#date-debut").val("");
+              $("#date-fin").val("");
             }
         }
     }
@@ -742,13 +745,11 @@ $(function () {
    * @returns {string} Le code HTML du badge.
    */
   function getSourceBadge(sourceName) {
-    const HELLOPRO_LOGO_URL = "https://static.hellopro.fr/img/hp-favicon.png";
-
     switch (sourceName) {
       case "siteweb":
         return `
             <span class="flex items-center gap-2 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
-                <img src="${HELLOPRO_LOGO_URL}" class="h-4 w-4 rounded-full" alt="Logo HelloPro">
+                <i data-lucide="package" class="h-3 w-3"></i>
                 <span>Site Web</span>
             </span>`;
       case "produits":
@@ -1161,9 +1162,11 @@ $(function () {
 
     
     let title = meta.id_produit || 'Titre non disponible';
+    let categorie = meta.categorie || meta.id_categorie || 'N/A';
     switch (result.source) {
       case "produits_3":
         title = meta.nom_produit || title;
+        result.source = "Produits"
         break;
       case "devis":
         title = meta.lead_id || title;
@@ -1201,7 +1204,7 @@ $(function () {
       id: meta.sku || Math.random().toString(36).substring(7), // L'UI a besoin d'un ID unique
       title: title,
       source: result.source,
-      category: meta.id_categorie || 'N/A',
+      category: categorie,
       supplier: meta.fournisseur || 'N/A',
       snippet: description,
       confidence: result.score * 100, // S'assure que le score existe

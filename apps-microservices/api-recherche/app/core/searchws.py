@@ -290,7 +290,18 @@ def filtre_source (filtre: dict, source: str = "") -> list:
                 clauses.append(f"array_contains({key}, {repr(str(val))})")
                 
         elif dtype in NUMERIC_DTYPES:
-            if isinstance(val, list):
+            if isinstance(val, dict):
+                if 'operator' in val and 'values' in val:
+                    operator = val['operator']
+                    values = val['values'] 
+                    if operator == 'entre' and isinstance(values, dict) and 'start' in values and 'end' in values:
+                        start_val = values['start']
+                        end_val = values['end']
+                        clauses.append(f"{key} >= {start_val} and {key} <= {end_val}")
+                    else:
+                        actual_value = next(iter(values.values()))
+                        clauses.append(f"{key} {operator} {actual_value}")
+            elif isinstance(val, list):
                 numeric_vals = [int(v) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(v) for v in val]
                 clauses.append(f"{key} in {numeric_vals}")
             else:
@@ -299,11 +310,16 @@ def filtre_source (filtre: dict, source: str = "") -> list:
                 clauses.append(f"{key} == {numeric_val}")
         else:
             if isinstance(val, dict):
-                if val.operator:
-                    if val.operator == 'entre' and val.values.start and val.values.end:
-                        clauses.append(f"{key} >= {val.values.start} and {key} <= {val.values.end}")
+                if 'operator' in val and 'values' in val:
+                    operator = val['operator']
+                    values = val['values'] 
+                    if operator == 'entre' and isinstance(values, dict) and 'start' in values and 'end' in values:
+                        start_val = values['start']
+                        end_val = values['end']
+                        clauses.append(f"{key} >= {start_val} and {key} <= {end_val}")
                     else:
-                        clauses.append(f"{key} {val.operator}")
+                        actual_value = next(iter(values.values()))
+                        clauses.append(f"{key} {operator} {actual_value}")
             elif isinstance(val, list):
                 # Format as: field_name in ["val1", "val2"]
                 quoted_vals = [repr(str(v)) for v in val]

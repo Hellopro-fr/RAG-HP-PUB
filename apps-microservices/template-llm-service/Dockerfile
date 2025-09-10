@@ -24,5 +24,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copier le code source de l'application en utilisant le chemin complet depuis la racine
 COPY apps-microservices/template-llm-service/app /app/template_llm_service
 
-# La commande finale pour lancer le worker
-CMD ["python", "-u", "-m", "template_llm_service.main"]
+# On copie le script de démarrage dans le conteneur.
+COPY apps-microservices/template-llm-service/start.sh /app/start.sh
+
+# On rend le script exécutable.
+RUN chmod +x /app/start.sh
+
+# La commande finale pour lancer le conteneur est maintenant notre script adaptatif.
+CMD ["/app/start.sh"]

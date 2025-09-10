@@ -46,25 +46,36 @@ class Consumer:
             return
 
         print(f"\n📥 Website-Processor: Message reçu")
-
-        # 1. Appelle la logique métier PURE
-        output_message = process_website_data_for_embedding(website_data,bdd)
         
-        # 2. Vérification du message de sortie par rapport au type de page pour définir la prochaine étape
-        if not output_message.get("data", {}).get("page_type",""):
-            # Modifier la route de publication vers "data.ready_for_template_check"
-            self.publisher.routing_key = 'data.ready_for_templating'
-            print("🔄 Website-Processor: Redirection du message vers la vérification de template")
-        else:
-            # Remettre la route par défaut pour l'embedding
-            self.publisher.routing_key = 'data.ready_for_embedding'
-            print("➡️ Website-Processor: Message prêt pour l'embedding")
-        
-        # 2. Utilise le publisher pour envoyer le résultat
-        self.publisher.publish_message(output_message)
+        try:
+            # 1. Appelle la logique métier PURE
+            output_message = process_website_data_for_embedding(website_data,bdd)
+            
+            # 2. Vérification du message de sortie par rapport au type de page pour définir la prochaine étape
+            if not output_message.get("data", {}).get("page_type",""):
+                # Modifier la route de publication vers "data.ready_for_template_check"
+                self.publisher.routing_key = 'data.ready_for_templating'
+                print("🔄 Website-Processor: Redirection du message vers la vérification de template")
+            else:
+                # Remettre la route par défaut pour l'embedding
+                self.publisher.routing_key = 'data.ready_for_embedding'
+                print("➡️ Website-Processor: Message prêt pour l'embedding")
+            
+            try:
+                # 2. Utilise le publisher pour envoyer le résultat
+                self.publisher.publish_message(output_message)
 
-        # 3. Acquitte le message original
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+                # 3. Acquitte le message original
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception as e:
+                print(f"   -> ❌ Erreur de publication pour message {method.delivery_tag}. NACK. Erreur: {e}")
+                # Si la publication échoue, on NACK le message pour qu'il soit retraité.
+                self.channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            
+        except Exception as e:
+            print(f"❌ Website-Processor: Erreur lors du traitement des données du site web: {e}")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)  # Ne pas remettre en queue pour éviter les boucles infinies
+            return
 
     def start_consuming(self):
         for i in range(3):
