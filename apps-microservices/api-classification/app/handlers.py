@@ -5,7 +5,6 @@ import logging
 from typing import Dict, Any, Optional
 from fastapi import HTTPException
 from openai import OpenAIError, RateLimitError as OpenAIRateLimit
-from pymilvus.exceptions import MilvusException
 import requests
 
 from .exceptions import *
