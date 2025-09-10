@@ -25,7 +25,7 @@ def main():
         "model": "Qwen/Qwen3-14B-AWQ",
         "quantization": "awq",
         "tensor_parallel_size": 2,  # Utilise les 2 GPUs
-        "gpu_memory_utilization": 0.95,  # Plus agressif avec AWQ
+        "gpu_memory_utilization": 0.90,  # Plus agressif avec AWQ
         "trust_remote_code": True,
         "dtype": "auto",
         "max_model_len": 4096,

@@ -68,10 +68,7 @@ def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict,
         data_payload = message.get("data", {})
         url = data_payload.get("url", "URL non fournie")
         content = data_payload.get("text")
-        
-        if not content:
-            raise ValueError("Le champ 'text' est vide ou manquant dans les données d'entrées.")
-
+    
         # Sécurité : Tronquer le contenu si trop long pour éviter les erreurs du modèle.
         # On garde une marge de sécurité (1024 tokens) pour le template du prompt lui-même.
         max_model_len = llm_config.get("max_model_len", 4096)
@@ -90,7 +87,7 @@ def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict,
         # apply_chat_template est la méthode recommandée pour formater le prompt
         # pour les modèles de type "chat".
         formatted_prompt = tokenizer.apply_chat_template(
-            conversation, tokenize=False, add_generation_prompt=True
+            conversation, tokenize=False, add_generation_prompt=True, enable_thinking=False
         )
         prompts.append(formatted_prompt)
 

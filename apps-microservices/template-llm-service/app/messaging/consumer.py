@@ -72,18 +72,51 @@ class Consumer:
         current_batch = list(self.message_buffer)
         self.message_buffer.clear()
 
-        messages = [json.loads(item[1]) for item in current_batch]
-        
+        # --- ÉTAPE DE VALIDATION ET FILTRAGE ---
+        valid_batch_items = []
+        invalid_batch_items = []
+
+        for item in current_batch:
+            delivery_tag, body = item
+            try:
+                # On essaie de parser le JSON et de vérifier la présence du contenu.
+                message_data = json.loads(body)
+                content = message_data.get("data", {}).get("text")
+                if content: # La clé "text" existe et n'est pas vide/None
+                    valid_batch_items.append(item)
+                else:
+                    # Le message est invalide car le contenu est manquant.
+                    invalid_batch_items.append(item)
+            except json.JSONDecodeError:
+                # Le message est invalide car le body n'est pas un JSON valide.
+                invalid_batch_items.append(item)
+
+        # --- Traitement des messages invalides ---
+        if invalid_batch_items:
+            print(f"🗑️  {len(invalid_batch_items)} message(s) invalide(s) détecté(s) (contenu manquant ou JSON corrompu).")
+            for delivery_tag, body in invalid_batch_items:
+                # On désacquitte (NACK) ces messages pour les supprimer définitivement de la file d'attente.
+                # C'est la solution pour casser la boucle de retraitement.
+                print(f"   -> Suppression du message invalide (tag: {delivery_tag}).")
+                self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
+
+        # --- Traitement des messages valides (s'il y en a) ---
+        if not valid_batch_items:
+            print("   -> Aucun message valide dans ce batch. Attente du suivant.")
+            self.last_batch_time = time.time()
+            return
+
+        print(f"⚙️  Traitement d'un batch de {len(valid_batch_items)} message(s) valide(s)...")
+        messages = [json.loads(item[1]) for item in valid_batch_items]
+
         try:
-            # Appel à la fonction de traitement qui gère une liste de messages.
             processed_messages = classify_page_template_batch(self.llm, self.tokenizer, self.llm_config, messages)
             
             # --- Gestion granulaire des ACKs/NACKs pour la résilience ---
             # On parcourt chaque résultat pour l'acquitter individuellement.
             # Si un seul message échoue, les autres ne sont pas impactés.
             for i, output_message in enumerate(processed_messages):
-                original_delivery_tag = current_batch[i][0]
-                
+                original_delivery_tag = valid_batch_items[i][0]
                 try:
                     # On publie le message traité.
                     self.publisher.publish_message(output_message)
@@ -94,15 +127,15 @@ class Consumer:
                     print(f"   -> ❌ Erreur de publication pour message {original_delivery_tag}. NACK. Erreur: {pub_e}")
                     # Si la publication échoue, on NACK le message pour qu'il soit retraité.
                     self.channel.basic_nack(delivery_tag=original_delivery_tag, requeue=True)
-            
-            print(f"   -> Batch traité avec succès (acquittements granulaires).")
+
+            print(f"   -> Batch valide traité avec succès.")
 
         except Exception as e:
             # Ceci est une erreur catastrophique (ex: le modèle vLLM a crashé).
             # Dans ce cas, on ne peut pas savoir quels messages ont réussi.
             # La stratégie la plus sûre est de NACK tout le batch pour un retraitement ultérieur.
-            print(f"❌ ERREUR CATASTROPHIQUE du batch : {e}. NACK de tout le batch.")
-            for item in current_batch:
+            print(f"❌ ERREUR CATASTROPHIQUE sur le batch valide : {e}. NACK de tout le batch valide.")
+            for item in valid_batch_items:
                 self.channel.basic_nack(delivery_tag=item[0], requeue=True)
         
         finally:
