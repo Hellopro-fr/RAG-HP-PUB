@@ -276,6 +276,8 @@ def filtre_source (filtre: dict, source: str = "") -> list:
         dtype = field_types.get(key)
         if key == 'id_categorie' and source == 'produits':
             key = 'categorie'
+        elif key == 'id_categorie' and source == 'siteweb':
+            continue
         
         if not dtype:
             logger.info(f"dtype none {key}")
