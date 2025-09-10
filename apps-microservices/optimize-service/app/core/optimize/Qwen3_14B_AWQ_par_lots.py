@@ -89,7 +89,7 @@ class ProductTitleOptimizerBatch:
 
             # FORMAT DE SORTIE TRES IMPORTANT ET OBLIGATOIRE : 
             Ta réponse doit être un JSON strictement valide, sans aucun texte avant ou après, sans balises Markdown, sans ```json, sans commentaire, sans indentation inutile. Exemple :
-            {{"Titre": "Titre généré ici"}}
+            {{{{"Titre": "Titre généré ici"}}}}
 
             # INPUTS :
             CATEGORIE PRODUIT = {data.get('categorie_produit', '')}
