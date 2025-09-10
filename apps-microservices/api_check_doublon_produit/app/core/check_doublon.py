@@ -83,12 +83,17 @@ async def search_in_milvus(request: SearchRequest):
             "nombre_resultat": "10"
         }        
         response = requests.post(url_query, json=payload)
-        produits = response["results"]["matches"]["produits"]
-        for produit in produits:
-            if produit["score"] >= seuil_score_doublon:
-                FROM_SIMILARTIY = True
-                SCORE           = produit["score"]
-                break
+        
+        if response.status_code != 200:
+            logger.info(f"[MILVUS] Erreur API recherche: {response.status_code} - {response.text}")
+        else:
+            data = response.json()
+            produits = data.get("results", {}).get("matches", {}).get("produits", [])                
+            for produit in produits:
+                if produit["score"] >= seuil_score_doublon:
+                    FROM_SIMILARTIY = True
+                    SCORE           = produit["score"]
+                    break
         
     return {
         "is_doublon"     : IS_DOUBLON,
