@@ -1314,8 +1314,8 @@ $(function () {
               console.log("Filtres Devis appliqués:", filtreSpecifique);
               break;
             case 'siteweb':
-              const sitewebModele = $('#sitewebModele').val();
-              if (sitewebModele) {
+              const sitewebModele = $('#sitewebModele').val() || [];
+              if (sitewebModele.length > 0) {
                 filtreSpecifique.page_type = sitewebModele;
               }
               break;
