@@ -1171,7 +1171,7 @@ $(function () {
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
             case 'produits':
-              sourceName = 'produit_3';
+              sourceName = 'produits_3';
               const produitsSource = $('#produitsSource').val();
               if (produitsSource.length > 0) {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
