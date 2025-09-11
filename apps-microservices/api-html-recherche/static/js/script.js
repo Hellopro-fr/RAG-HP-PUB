@@ -1291,8 +1291,8 @@ $(function () {
       socket.close();
     }
 
-    const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici VM1
-    // const wsUrl = "ws://34.34.166.5:8510/ws/search"; // L'URL est maintenant ici
+    // const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici VM1
+    const wsUrl = "ws://34.34.166.5:8510/ws/search"; // L'URL est maintenant ici
     console.log(`Connexion à ${wsUrl}...`);
 
     try {
