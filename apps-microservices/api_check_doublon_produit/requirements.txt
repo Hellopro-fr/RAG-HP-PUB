@@ -3,3 +3,4 @@ uvicorn
 python-dotenv
 pymilvus
 requests
+httpx
