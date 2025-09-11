@@ -72,30 +72,26 @@ async def search_in_milvus(request: SearchRequest):
     if not IS_DOUBLON :
         # to do query api recherche
         seuil_score_doublon = settings.SEUIL_SCORE_DOUBLON
-        print(seuil_score_doublon)
+                
         # url_query           = f"{settings.ADRESSE_VM}:{settings.PORT_API_RECHERCHE}/milvus/search"
-        url_query           = "http://34.90.162.9:8500/search-service/milvus/search"
-        # url_query           = "http://34.67.7.126:8500/search-service/milvus/search" #vm2
-        
-        COLLECTION_produit_name = "produits_3"
+        # url_query           = "http://34.90.162.9:8500/search-service/milvus/search"
+        # url_query           = "http://34.67.7.126:8500/search-service/milvus/search" #vm2        
         
         payload = {
             "prompt": request.nom_produit,
             "source": [
-                COLLECTION_produit_name
+                settings.COLLECTION_PRODUIT_NAME
             ],
             "nombre_resultat": "10"
         }        
-        response = requests.post(url_query, json=payload)
-        print(response)
+        response = requests.post(settings.URL_QUERY_API_RECHERCHE, json=payload)        
         
         if response.status_code != 200:
             logger.info(f"[MILVUS] Erreur API recherche: {response.status_code} - {response.text}")
         else:
             data = response.json()
-            print(data)
             
-            produits = data.get("results", {}).get("matches", {}).get(COLLECTION_produit_name, [])                
+            produits = data.get("results", {}).get("matches", {}).get(settings.COLLECTION_PRODUIT_NAME, [])                
             for produit in produits:
                 if produit["score"] >= seuil_score_doublon:
                     FROM_SIMILARTIY = True
