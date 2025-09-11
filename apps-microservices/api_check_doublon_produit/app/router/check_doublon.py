@@ -28,13 +28,13 @@ async def milvus_search_endpoint(request: SearchRequest = Body(...)):
         logger.error(f"Erreur interne du serveur (500): {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
     
-@router.post("/check-doublon-lot", summary="Vérifie le doublon pour plusieurs produits à la fois dans Milvus")
+@router.post("/check-doublon-lot", response_model=SearchResponseLot, summary="Vérifie le doublon pour plusieurs produits à la fois dans Milvus")
 async def bulk_milvus_search_endpoint(requests: List[SearchRequest]):
     all_results = []
     
     for request in requests:
         try:
-            logger.info(f"Requête en cours de traitement sur /check-doublon-lot pour nom : {request.nom_produit}")
+            logger.info(f"Requête en cours de traitement sur /bulk-check-doublon pour nom : {request.nom_produit}")
             
             # Validation des données pour chaque élément
             if not request.nom_produit.strip():
@@ -50,7 +50,9 @@ async def bulk_milvus_search_endpoint(requests: List[SearchRequest]):
             
         except ValueError as ve:
             logger.error(f"Erreur de validation (400) pour une des requêtes: {ve}")
-            # Vous pouvez choisir de continuer même en cas d'erreur sur un des éléments
+            # Ajout d'une réponse d'erreur pour cet élément
+            # Note : Ce format d'erreur n'est pas validé par le schéma SearchReponse,
+            # mais il est utile pour le débogage.
             all_results.append({
                 "error": True,
                 "message": str(ve),
@@ -65,4 +67,5 @@ async def bulk_milvus_search_endpoint(requests: List[SearchRequest]):
                 "post": request.dict()
             })
             
-    return all_results
+    # Retourne l'objet de réponse de masse
+    return SearchResponseLot(results=all_results)
