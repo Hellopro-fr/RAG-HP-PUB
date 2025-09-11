@@ -1291,8 +1291,8 @@ $(function () {
       socket.close();
     }
 
-    // const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici
-    const wsUrl = "ws://34.34.166.5:8510/ws/search"; // L'URL est maintenant ici
+    const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici VM1
+    // const wsUrl = "ws://34.34.166.5:8510/ws/search"; // L'URL est maintenant ici
     console.log(`Connexion à ${wsUrl}...`);
 
     try {
@@ -1585,7 +1585,11 @@ $(function () {
 
       state.copiedContent += `
       --------------------------------
-      ${result.snippet || ""}
+      Titre : ${result.title}
+      Source : ${result.source}
+      Fournisseur : ${result.supplier}
+      Catégorie : ${result.category}
+      Texte : ${result.snippet || ""}
       `;
       const resultCardHtml = `
         <div class="bg-white rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
@@ -1649,12 +1653,13 @@ $(document).on('click', '#copier-texte', function() {
     const separator = '-------------------------------------\n';
     let formattedText = '';
 
-    $('.data-texte-ws').each(function() {
-        const text = $(this).text().trim();
-        formattedText += separator;
-        formattedText += text + '\n';
-    });
+    // $('.data-texte-ws').each(function() {
+    //     const text = $(this).text().trim();
+    //     formattedText += separator;
+    //     formattedText += text + '\n';
+    // });
     formattedText += separator.trim();
+    formattedText = state.copiedContent;
     console.log("Texte qui sera copié :\n" + formattedText);
     copyTextToClipboard(formattedText);
 });
