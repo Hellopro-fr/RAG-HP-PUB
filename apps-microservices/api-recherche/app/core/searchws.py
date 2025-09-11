@@ -411,6 +411,9 @@ def _serialize_entity(entity, source: str = "produits") -> dict:
 async def search_in_milvus_stream(request: SearchRequest):
     start_total_time = time.perf_counter()
     loop = asyncio.get_running_loop()
+    query_vector = None
+    scores = None
+    pairs = None
     try:
         try:
             # await asyncio.to_thread(get_milvus_connection)
