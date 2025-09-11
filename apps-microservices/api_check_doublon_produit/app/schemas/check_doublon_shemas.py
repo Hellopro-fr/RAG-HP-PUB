@@ -3,11 +3,13 @@ from typing import Optional, Annotated
 from typing import List
 
 class SearchRequest(BaseModel):
+    id_produit : str
     nom_produit: str
     domaine    : str
     description: Optional[str] = ""
     
 class SearchResponse(BaseModel):
+    id_produit     : str
     is_doublon     : bool
     from_similarity: bool = False
     score          : float = 0.0

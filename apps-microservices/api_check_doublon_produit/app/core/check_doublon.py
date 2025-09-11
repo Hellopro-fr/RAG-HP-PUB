@@ -99,6 +99,7 @@ async def search_in_milvus(request: SearchRequest):
                     break
         
     return {
+        "id_produit"     : request.id_produit,
         "is_doublon"     : IS_DOUBLON,
         "from_similarity": FROM_SIMILARTIY,
         "score"          : SCORE
