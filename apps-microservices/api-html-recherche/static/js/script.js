@@ -37,6 +37,7 @@ $(function () {
     llmResponse: "",
     searchMetrics: { totalResults: 0, searchTime: 0, sourcesUsed: [] },
     expandedSections: { sources: true, categories: false, insights: true },
+    copiedContent: ""
   };
 
   // DOM elements
@@ -700,29 +701,29 @@ $(function () {
 
     if (percentage > 80) {
       config = {
-        bgColor: "bg-custom-vert-light",
-        textColor: "text-green-800",
+        bgColor: "bg-green-50",
+        textColor: "text-green-600",
         icon: "trending-up",
         label: "Très pertinent",
       };
     } else if (percentage > 60) {
       config = {
-        bgColor: "bg-blue-100",
-        textColor: "text-blue-700",
+        bgColor: "bg-blue-50",
+        textColor: "text-blue-600",
         icon: "trending-up",
         label: "Pertinent",
       };
     } else if (percentage > 30) {
       config = {
-        bgColor: "bg-amber-100",   
-        textColor: "text-amber-700", 
+        bgColor: "bg-amber-50",   
+        textColor: "text-amber-600", 
         icon: "bar-chart-horizontal",            
         label: "Pertinence moyenne",
       };
     } else {
       config = {
-        bgColor: "bg-custom-rouge-light",
-        textColor: "text-red-800",
+        bgColor: "bg-red-50",
+        textColor: "text-red-600",
         icon: "trending-down",
         label: "Faible pertinence",
       };
@@ -732,8 +733,7 @@ $(function () {
       <div class="flex items-center gap-2 p-2 rounded-lg ${config.bgColor} ${config.textColor}">
           <i data-lucide="${config.icon}" class="h-4 w-4"></i>
           <div class="flex flex-col">
-              <span class="text-xs font-bold">${config.label}</span>
-              <span class="text-xs">${percentage}% de confiance</span>
+              <span class="text-xs">${percentage}% : <span class="text-xs font-bold">${config.label}</span></span>
           </div>
       </div>
     `;
@@ -745,13 +745,11 @@ $(function () {
    * @returns {string} Le code HTML du badge.
    */
   function getSourceBadge(sourceName) {
-    const HELLOPRO_LOGO_URL = "https://static.hellopro.fr/img/hp-favicon.png";
-
     switch (sourceName) {
       case "siteweb":
         return `
             <span class="flex items-center gap-2 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
-                <img src="${HELLOPRO_LOGO_URL}" class="h-4 w-4 rounded-full" alt="Logo HelloPro">
+                <i data-lucide="package" class="h-3 w-3"></i>
                 <span>Site Web</span>
             </span>`;
       case "produits":
@@ -1024,7 +1022,6 @@ $(function () {
       elements.searchResultsContainer.show();
       elements.searchMetrics.show();
       elements.searchingState.hide();
-      elements.llmAnalyzeState.hide();
       elements.metricsContent.show();
       $("#totalResults").text(state.searchMetrics.totalResults);
       $("#searchTime").text(state.searchMetrics.searchTime);
@@ -1052,17 +1049,21 @@ $(function () {
     if (state.isLlmEnabled) {
       elements.llmConfig.slideDown(200);
       elements.llmToggle
-        .addClass("bg-custom-orange text-white")
+        .addClass("bg-orange-200 text-orange-800 hover:bg-orange-300")
         .removeClass("border-custom-gris-blanc hover:bg-custom-clair-2");
     } else {
       elements.llmConfig.slideUp(200);
       elements.llmToggle
-        .removeClass("bg-custom-orange text-white")
+        .removeClass("bg-orange-200 text-orange-800 hover:bg-orange-300")
         .addClass("border-custom-gris-blanc hover:bg-custom-clair-2");
     }
-    state.isFilterOpen
-      ? elements.filterSidebar.show()
-      : elements.filterSidebar.hide();
+    if(state.isFilterOpen) {
+      elements.filterSidebar.show()
+      elements.filterToggle.addClass('bg-custom-clair-2 hover:bg-gray-400').removeClass('hover:bg-custom-clair-2');
+    } else {
+      elements.filterSidebar.hide();
+      elements.filterToggle.addClass('hover:bg-custom-clair-2').removeClass('bg-custom-clair-2 hover:bg-gray-400');
+    }
     if (state.isSidebarOpen) {
       elements.resultsSidebar
         .removeClass("hidden translate-x-full")
@@ -1070,6 +1071,7 @@ $(function () {
       $("#resultsToggleIcon").html(
         '<i data-lucide="panel-right-close" class="h-4 w-4"></i>'
       );
+      elements.resultsToggle.addClass('bg-custom-clair-2 hover:bg-gray-400').removeClass('hover:bg-custom-clair-2');
     } else {
       elements.resultsSidebar
         .removeClass("translate-x-0")
@@ -1080,6 +1082,7 @@ $(function () {
       $("#resultsToggleIcon").html(
         '<i data-lucide="panel-right-open" class="h-4 w-4"></i>'
       );
+      elements.resultsToggle.addClass('hover:bg-custom-clair-2').removeClass('bg-custom-clair-2 hover:bg-gray-400');
     }
 
     if (state.isSidebarOpen) {
@@ -1158,6 +1161,7 @@ $(function () {
 
     
     let title = meta.id_produit || 'Titre non disponible';
+    let categorie = meta.categorie || meta.id_categorie || 'N/A';
     switch (result.source) {
       case "produits_3":
         title = meta.nom_produit || title;
@@ -1199,7 +1203,7 @@ $(function () {
       id: meta.sku || Math.random().toString(36).substring(7), // L'UI a besoin d'un ID unique
       title: title,
       source: result.source,
-      category: meta.id_categorie || 'N/A',
+      category: categorie,
       supplier: meta.fournisseur || 'N/A',
       snippet: description,
       confidence: result.score * 100, // S'assure que le score existe
@@ -1217,8 +1221,12 @@ $(function () {
 
     if(state.isLlmEnabled) {
       if(elements.templatePrompt.val().trim() === "") {
-        $('#errorPromptNull').show(100).delay(3000).hide(100);
-        document.querySelector('#errorPromptNull').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if(!state.isFilterOpen) {
+          state.isFilterOpen = true
+          updateUI()
+        }
+        $('#errorPromptNull').show(100).delay(5000).hide(100);
+        document.querySelector('#llmConfig').scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
     }
@@ -1237,7 +1245,8 @@ $(function () {
       socket.close();
     }
 
-    const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici
+    // const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici
+    const wsUrl = "ws://34.34.166.5:8510/ws/search"; // L'URL est maintenant ici
     console.log(`Connexion à ${wsUrl}...`);
 
     try {
@@ -1268,6 +1277,7 @@ $(function () {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
                 filtreSpecifique.source = produitsSource;
               }
+              if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
@@ -1278,9 +1288,9 @@ $(function () {
               if (devisNaf2.length > 0) filtreSpecifique.naf2 = devisNaf2;
               if (devisEffectif.length > 0) filtreSpecifique.effectif = devisEffectif;
 
-              if (state.selectedNomFournisseurs && state.selectedNomFournisseurs.length > 0) {
-                filtreSpecifique.liste_frns = state.selectedNomFournisseurs;
-              }
+              // if (state.selectedNomFournisseurs && state.selectedNomFournisseurs.length > 0) {
+              //   filtreSpecifique.liste_frns = state.selectedNomFournisseurs;
+              // }
 
               const date_value = $("#date-general").val();
               const date_debut = $("#date-debut").val();
@@ -1308,9 +1318,19 @@ $(function () {
               console.log("Filtres Devis appliqués:", filtreSpecifique);
               break;
             case 'siteweb':
-              const sitewebModele = $('#sitewebModele').val();
-              if (sitewebModele) {
+              const sitewebModele = $('#sitewebModele').val() || [];
+              if (sitewebModele.length > 0) {
                 filtreSpecifique.page_type = sitewebModele;
+              }
+              const fournisseurSiteweb = $("#fournisseurSiteweb").val() || [];
+              if (fournisseurSiteweb.length > 0) {
+                filtreSpecifique.domaine = fournisseurSiteweb;
+              }
+              break;
+            case 'echanges':
+              const fournisseurMcf = $("#fournisseurMcf").val() || [];
+              if (fournisseurMcf.length > 0) {
+                filtreSpecifique.id_fournisseur = fournisseurMcf;
               }
               break;
           }
@@ -1329,8 +1349,22 @@ $(function () {
       const filtreGlobal = {};
       if (state.selectedEtat && state.selectedEtat.length > 0) filtreGlobal.etat = state.selectedEtat;
       if (state.selectedAffichage && state.selectedAffichage.length > 0) filtreGlobal.affichage = state.selectedAffichage;
-      if (state.selectedCategories && state.selectedCategories.length > 0) filtreGlobal.id_categorie = state.selectedCategories;
-      if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreGlobal.id_fournisseur = state.selectedFournisseurs;
+      if (state.selectedCategories && state.selectedCategories.length > 0) filtreGlobal.id_categorie = state.selectedCategories; else {
+        filtreGlobal.id_categorie = [
+          "2016431",
+          "2008670",
+          "2007702",
+          "2003445",
+          "2017735",
+          "1002167",
+          "2013765",
+          "2019606",
+          "2004590",
+          "2002944",
+          "2008035"
+        ];
+      };
+      // if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreGlobal.id_fournisseur = state.selectedFournisseurs;
 
       // 3. Construire l'objet de requête final
       const searchRequest = {
@@ -1400,13 +1434,11 @@ $(function () {
           $('#llmResponseContainer').show();
           $('#resultsSidebar').css('width', '550px');
           $('#insightsContent').show();
-          $('#llmLoadingState').show();
           // $('#llmResponseText').parent().hide(); // Cache le conteneur avec la bordure
           updateUI(); // Met à jour l'interface pour montrer que le LLM a commencé
           break;
         case 'llm_chunk':
           // MODIFICATION : Cacher le loader et afficher la zone de texte au premier chunk
-          $('#llmLoadingState').hide();
           // $('#llmResponseText').parent().show();
           state.llmResponse += data.payload;
           // Met à jour uniquement le panneau latéral pour une meilleure performance
@@ -1424,6 +1456,7 @@ $(function () {
 
           // La recherche est terminée
           state.isSearching = false;
+          elements.llmAnalyzeState.hide();  
           updateUI(); // Met à jour l'interface une dernière fois
           socket.close(); // Ferme la connexion
           break;
@@ -1497,12 +1530,17 @@ $(function () {
   }
 
   function renderSearchResults() {
-    console.log("Rendering state:", state);
     elements.searchResultsList.empty();
+    state.copiedContent = "";
     state.searchResults.forEach((result) => {
       const relevanceHtml = getRelevanceCard(result.confidence / 100);
       const sourceBadgeHtml = getSourceBadge(result.source);
+      const class_supplier = result.source == "devis" ? "hidden" : ""
 
+      state.copiedContent += `
+      --------------------------------
+      ${result.snippet || ""}
+      `;
       const resultCardHtml = `
         <div class="bg-white rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
@@ -1518,7 +1556,7 @@ $(function () {
                     <i data-lucide="tag" class="h-3 w-3"></i>
                     <span>${result.category}</span>
                   </span>
-                  <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
+                  <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full ${class_supplier}">
                     <i data-lucide="building-2" class="h-3 w-3"></i>
                     <span>${result.supplier}</span>
                   </span>
@@ -1528,7 +1566,7 @@ $(function () {
                   </span>
               </div>
               <div>
-                <p id="snippet-${result.id}" class="text-sm text-custom-gris leading-relaxed line-clamp-3 transition-all duration-300">${result.snippet || ""}</p>
+                <p id="snippet-${result.id}" class="data-texte-ws text-sm text-custom-gris leading-relaxed line-clamp-3 transition-all duration-300">${result.snippet || ""}</p>
                 <button 
                   class="toggle-snippet text-sm font-semibold text-custom-bleu hover:text-custom-bleu-heavy mt-2 flex items-center gap-1 hidden" 
                   data-target="#snippet-${result.id}">
@@ -1561,6 +1599,79 @@ $(function () {
     lucide.createIcons();
   }
 
+$(document).on('click', '#copier-texte', function() {
+    const separator = '-------------------------------------\n';
+    let formattedText = '';
+
+    $('.data-texte-ws').each(function() {
+        const text = $(this).text().trim();
+        formattedText += separator;
+        formattedText += text + '\n';
+    });
+    formattedText += separator.trim();
+    console.log("Texte qui sera copié :\n" + formattedText);
+    copyTextToClipboard(formattedText);
+});
+
+
+/**
+ * Fonction pour copier du texte dans le presse-papiers.
+ * Tente d'utiliser l'API moderne (navigator.clipboard) et se rabat
+ * sur l'ancienne méthode (document.execCommand) si nécessaire.
+ * @param {string} text Le texte à copier.
+ */
+function copyTextToClipboard(text) {
+    // Utilise l'API moderne si elle est disponible (contexte sécurisé HTTPS ou localhost)
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            console.log('Texte copié avec succès (méthode moderne) !');
+            // Affichez un message de succès à l'utilisateur ici
+            // par exemple : showToast_('Texte copié!', 'success');
+        }).catch(function(err) {
+            console.error('Échec de la copie (méthode moderne) : ', err);
+            // Si la méthode moderne échoue, on essaie l'ancienne
+            fallbackCopyTextToClipboard(text);
+        });
+    } else {
+        // Si l'API moderne n'est pas disponible, utilise la méthode de repli
+        console.log("API Clipboard non disponible, utilisation de la méthode de repli.");
+        fallbackCopyTextToClipboard(text);
+    }
+}
+
+/**
+ * Fonction de repli (fallback) utilisant la méthode dépréciée document.execCommand.
+ * @param {string} text Le texte à copier.
+ */
+function fallbackCopyTextToClipboard(text) {
+    var textArea = document.createElement("textarea");
+    textArea.value = text;
+    
+    // Rendre l'élément invisible et éviter de faire défiler la page
+    textArea.style.position = "fixed";
+    textArea.style.top = 0;
+    textArea.style.left = 0;
+    textArea.style.opacity = 0;
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        var successful = document.execCommand('copy');
+        if (successful) {
+            console.log('Texte copié avec succès (méthode de repli).');
+            // Affichez un message de succès à l'utilisateur ici
+        } else {
+            console.error('Échec de la copie (méthode de repli).');
+            // Affichez un message d'erreur à l'utilisateur ici
+        }
+    } catch (err) {
+        console.error('Erreur lors de la copie (méthode de repli): ', err);
+    }
+
+    document.body.removeChild(textArea);
+}
 
   // Initialisation de l'application
   initializeFormState();

@@ -16,52 +16,106 @@ from app.core.openrouter import chat_with_openrouter
 from optimum.onnxruntime import ORTModelForSequenceClassification
 from transformers import AutoTokenizer
 
+import concurrent.futures
+from itertools import chain
+
 from concurrent.futures import ThreadPoolExecutor
 
 ONNX_MODEL_PATH = "bge-reranker-v2-m3-onnx"
 class ONNXReranker:
     """
-    Classe optimisée pour le reranking utilisant ONNX Runtime avec un GPU.
+    Classe optimisée pour le reranking utilisant ONNX Runtime sur un GPU SPÉCIFIQUE.
     """
-    def __init__(self, model_path: str, device: str = 'cuda'):
-        logger.info(f"Chargement du modèle ONNX depuis '{model_path}' sur le device '{device}'...")
-        self.device = torch.device(device)
-        # Spécifie le fournisseur d'exécution CUDA pour garantir l'utilisation du GPU
-        self.model = ORTModelForSequenceClassification.from_pretrained(model_path, provider="CUDAExecutionProvider")
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.model.to(self.device)
-        logger.info("Modèle ONNX et tokenizer chargés avec succès.")
+    def __init__(self, model_path: str, device_id: int = 0):
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA n'est pas disponible. Impossible de charger le modèle sur un GPU.")
+        
+        if device_id >= torch.cuda.device_count():
+            raise ValueError(f"ID de GPU invalide: {device_id}. {torch.cuda.device_count()} GPU(s) disponible(s).")
 
-    def predict(self, pairs: list, batch_size: int = 128, show_progress_bar: bool = False):
+        device_str = f'cuda:{device_id}'
+        self.device = torch.device(device_str)
+        
+        logger.info(f"Chargement du modèle ONNX depuis '{model_path}' sur le device '{device_str}'...")
+
+        provider_options = {'device_id': str(device_id)}
+        self.model = ORTModelForSequenceClassification.from_pretrained(
+            model_path, 
+            provider="CUDAExecutionProvider",
+            provider_options=provider_options
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+
+        self.model.to(self.device)
+        
+        logger.info(f"Modèle ONNX et tokenizer chargés avec succès sur {device_str}.")
+
+
+    def predict(self, pairs: list, batch_size: int = 128):
         """
         Effectue la prédiction sur des paires de textes [question, contexte].
         Retourne des scores de probabilité (après fonction sigmoïde).
+        (Le reste de la fonction est identique, mais show_progress_bar est retiré car 
+         il n'est pas utilisé dans la signature de la méthode)
         """
         all_scores = []
-        with torch.no_grad(): # Plus efficace que torch.inference_mode() pour la compatibilité
+        with torch.inference_mode():
             for i in range(0, len(pairs), batch_size):
                 batch = pairs[i:i+batch_size]
                 if not batch:
                     continue
                 
                 features = self.tokenizer(batch, padding=True, truncation=True, return_tensors="pt").to(self.device)
-                
-                # Le modèle ONNX retourne un dictionnaire avec la clé 'logits'
                 model_outputs = self.model(**features)
+                scores = torch.sigmoid(model_outputs.logits).squeeze(-1)
                 
-                # Appliquer la sigmoïde pour obtenir un score de probabilité, comme le fait CrossEncoder
-                scores = torch.sigmoid(model_outputs.logits).squeeze()
-                
-                # .cpu().tolist() est un moyen efficace de récupérer les résultats
                 all_scores.extend(scores.cpu().tolist())
-
-        # Assure que même un seul résultat est retourné dans une liste
-        if len(pairs) == 1:
+        if not isinstance(all_scores, list):
             return [all_scores]
         return all_scores
     
-# Créer un pool avec un seul thread pour toutes les opérations CUDA
-# afin de garantir un contexte CUDA stable.
+class RerankerONNXPool:
+    """
+    Gère un pool de modèles ONNXReranker, un par GPU, pour effectuer
+    des prédictions en parallèle sur plusieurs GPUs.
+    """
+    def __init__(self, model_path: str = ONNX_MODEL_PATH):
+        self.model_path = model_path
+        self.rerankers = []
+        self.num_devices = 0
+
+        if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+            self.num_devices = torch.cuda.device_count()
+            logger.info(f"Création d'un pool de {self.num_devices} rerankers ONNX, un pour chaque GPU.")
+            self.rerankers = [ONNXReranker(model_path, device_id=i) for i in range(self.num_devices)]
+        else:
+            logger.warning("Aucun GPU CUDA trouvé. Le reranking ONNX sera désactivé ou échouera.")
+            return
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.num_devices)
+
+    def predict(self, pairs: list, batch_size: int = 128):
+        """
+        Effectue le reranking en parallèle sur tous les GPUs disponibles.
+        """
+        if not self.rerankers:
+            logger.error("Aucun reranker n'est disponible dans le pool.")
+            return [0.0] * len(pairs)
+        
+        if self.num_devices == 1:
+            return self.rerankers[0].predict(pairs, batch_size=batch_size)
+        chunk_size = (len(pairs) + self.num_devices - 1) // self.num_devices
+        chunks = [pairs[i:i + chunk_size] for i in range(0, len(pairs), chunk_size)]
+        futures = []
+        for i, chunk in enumerate(chunks):
+            if chunk:
+                reranker_instance = self.rerankers[i]
+                future = self.executor.submit(reranker_instance.predict, chunk, batch_size=batch_size)
+                futures.append(future)
+        results_list_of_lists = [future.result() for future in futures]
+        all_scores = list(chain.from_iterable(results_list_of_lists))
+        
+        return all_scores
+    
 cuda_executor = ThreadPoolExecutor(max_workers=1)
 
 class DeepSeek:
@@ -90,11 +144,9 @@ class DeepSeek:
 	def set_temperature(self, temperature):
 		self.TEMPERATURE = float(temperature)
 
-# Configuration du logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Mesurer le temps d'import initial
 import_start_time = time.perf_counter()
 
 @lru_cache(maxsize=None)
@@ -113,6 +165,17 @@ def get_reranker_onnx_model(model: str = ONNX_MODEL_PATH):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = ONNXReranker(model, device=device)
     return model
+
+@lru_cache(maxsize=None)
+def get_reranker_onnx_pool(model_path: str = ONNX_MODEL_PATH):
+    """
+    Charge le pool de rerankers ONNX optimisés. L'objet est mis en cache pour
+    des accès ultérieurs instantanés.
+    """
+    if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
+        logger.warning("Reranker ONNX Pool non créé car aucun GPU n'a été détecté.")
+        return None
+    return RerankerONNXPool(model_path=model_path)
 
 def prepare_onnx_model(model_id: str = "BAAI/bge-reranker-v2-m3", onnx_path: str = ONNX_MODEL_PATH):
     """
@@ -140,25 +203,21 @@ def prepare_onnx_model(model_id: str = "BAAI/bge-reranker-v2-m3", onnx_path: str
         logger.error(f"Une erreur est survenue lors de la conversion ONNX : {e}")
         raise
 
-@lru_cache(maxsize=None)
-def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
-    """Charge le modèle CrossEncoder pour le reranking sur GPU si disponible."""
-    logger.info(f"Chargement du modèle de reranking '{model_name}'...")
-    
-    # Détecte si un GPU est disponible, sinon utilise le CPU
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    logger.info(f"Utilisation du device : {device} pour le reranking.")
-    
-    # Si vous êtes sur CPU, 7 secondes est normal. Sur GPU, ce sera bien plus rapide.
-    model = CrossEncoder(model_name, device=device, trust_remote_code=True)
-    try:
-        model.model = torch.compile(model.model, mode="reduce-overhead")
-        logger.info("Modèle de reranking compilé avec torch.compile() pour une performance optimale.")
-    except Exception as e:
-        logger.warning(f"Impossible de compiler le modèle avec torch.compile : {e}")
-    logger.info("Modèle de reranking chargé.")
+# @lru_cache(maxsize=None)
+# def get_reranker_model(model_name: str = "BAAI/bge-reranker-v2-m3"):
+#     """Charge le modèle CrossEncoder pour le reranking sur GPU si disponible."""
+#     logger.info(f"Chargement du modèle de reranking '{model_name}'...")
+#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#     logger.info(f"Utilisation du device : {device} pour le reranking.")
+#     model = CrossEncoder(model_name, device=device, trust_remote_code=True)
+#     try:
+#         model.model = torch.compile(model.model, mode="reduce-overhead")
+#         logger.info("Modèle de reranking compilé avec torch.compile() pour une performance optimale.")
+#     except Exception as e:
+#         logger.warning(f"Impossible de compiler le modèle avec torch.compile : {e}")
+#     logger.info("Modèle de reranking chargé.")
 
-    return model
+#     return model
 
 def get_milvus_connection():
     alias = "default"
@@ -182,8 +241,6 @@ def get_field_type_map(collection_name: str) -> dict:
         collection = Collection(name=collection_name)
         return {field.name: field.dtype for field in collection.schema.fields}
     except Exception as e:
-        # Log the error and return an empty map if the collection doesn't exist
-        # This prevents crashes if a non-existent source is requested.
         logger.error(f"Could not retrieve schema for collection '{collection_name}': {e}")
         return {}
 
@@ -276,6 +333,8 @@ def filtre_source (filtre: dict, source: str = "") -> list:
         dtype = field_types.get(key)
         if key == 'id_categorie' and source == 'produits':
             key = 'categorie'
+        elif key == 'id_categorie' and source == 'siteweb':
+            continue
         
         if not dtype:
             logger.info(f"dtype none {key}")
@@ -458,7 +517,12 @@ async def search_in_milvus_stream(request: SearchRequest):
         start_rerank_time = time.perf_counter()
         last_step_time = start_rerank_time
         # reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
-        reranker = await loop.run_in_executor(cuda_executor, get_reranker_onnx_model, request.options.reranker_model)
+        # reranker = await loop.run_in_executor(cuda_executor, get_reranker_onnx_model, request.options.reranker_model)
+        reranker = await loop.run_in_executor(None, get_reranker_onnx_pool, request.options.reranker_model)
+        if not reranker:
+            yield {"type": "error", "payload": "Le pool de reranking n'a pas pu être initialisé (pas de GPU?)."}
+            return
+        
         current_time = time.perf_counter()
         reranker_duration = current_time - last_step_time
         last_step_time = current_time  # Mettre à jour le marqueur de temps
@@ -482,15 +546,16 @@ async def search_in_milvus_stream(request: SearchRequest):
             #     batch_size=128 # Voir Étape 2
             # )
             scores = await loop.run_in_executor(
-                cuda_executor,
+                None,
                 lambda: reranker.predict(
                     pairs, 
-                    show_progress_bar=False,
+                    # show_progress_bar=False,
                     batch_size=256
                 )
             )
         prediction_duration = time.perf_counter() - start_predict_time
         logger.info(f"Temps de prédiction du reranker (FP16) : {prediction_duration:.3f} secondes.")
+        logger.info(f"Temps de prédiction du reranker sur {reranker.num_devices} GPU(s) : {prediction_duration:.3f} secondes.")
         current_time = time.perf_counter()
         prediction_duration = current_time - last_step_time
         last_step_time = current_time # Mettre à jour le marqueur de temps
@@ -524,7 +589,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         yield {"type": "status", "payload": f"Génération de la réponse avec le LLM : {request.llm.chat_model}..."}
         
         # *** CORRECTION 2 : Utilisation de .get() pour le contexte du LLM ***
-        context_texts = [res["metadata"]["entity"].get("text", "") for res in final_results]
+        context_texts = [res["metadata"]["entity"]["text"] for res in final_results]
         
         yield {"type": "llm_start"}
         llm_generation_started = True
