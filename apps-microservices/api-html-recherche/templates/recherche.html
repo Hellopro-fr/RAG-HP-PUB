@@ -1350,11 +1350,22 @@
                 >
               </div>
               <div id="metricsContent" class="space-y-2 hidden">
-                <div class="flex items-center gap-2">
-                  <i data-lucide="target" class="h-4 w-4 text-custom-bleu"></i>
-                  <span class="text-sm font-medium text-custom-noir"
-                    ><span id="totalResults">0</span> résultats</span
-                  >
+                <div class="flex item-center gap-2 justify-between">
+                  <div class="flex items-center gap-2">
+                    <i data-lucide="target" class="h-4 w-4 text-custom-bleu"></i>
+                    <span class="text-sm font-medium text-custom-noir"
+                      ><span id="totalResults">0</span> résultats</span
+                    >
+                  </div>
+                  <div class="flex gap-1">
+                    <button
+                      class="md:flex items-center gap-2 px-2 py-1 text-xs border border-custom-gris-blanc rounded bg-white hover:bg-custom-clair-2"
+                      id="copier-texte"
+                    >
+                      <i data-lucide="clipboard" class="h-4 w-4"></i>
+                      Copier
+                    </button>
+                  </div>
                 </div>
                 <div class="flex items-center gap-4 text-xs text-custom-gris">
                   <div class="flex items-center gap-1">
