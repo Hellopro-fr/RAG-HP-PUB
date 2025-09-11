@@ -74,7 +74,8 @@ async def search_in_milvus(request: SearchRequest):
         seuil_score_doublon = settings.SEUIL_SCORE_DOUBLON
         print(seuil_score_doublon)
         # url_query           = f"{settings.ADRESSE_VM}:{settings.PORT_API_RECHERCHE}/milvus/search"
-        url_query           = "http://34.90.162.9:8500/search-service/milvus/search"
+        # url_query           = "http://34.90.162.9:8500/search-service/milvus/search"
+        url_query           = "http://34.67.7.126:8500/search-service/milvus/search" #vm2
         
         payload = {
             "prompt": request.nom_produit,
