@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Annotated
+from typing import List
 
 class SearchRequest(BaseModel):
     nom_produit: str
@@ -17,3 +18,7 @@ class SearchReponse(BaseModel):
     # TODO:
     # à supprimer les données en entrées pour vérification
     post:  Annotated[SearchRequest, Field(title="Contient l'objet de la REQUETE")]
+    
+# Nouvelle réponse pour les requêtes multiples
+class SearchResponseLot(BaseModel):
+    results: List[SearchReponse]
