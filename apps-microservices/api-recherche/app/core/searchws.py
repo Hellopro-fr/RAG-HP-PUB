@@ -1,8 +1,10 @@
+import gc
 import math
 import time
 import os
 import logging
 from functools import lru_cache
+from typing import final
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer, CrossEncoder
@@ -409,209 +411,230 @@ def _serialize_entity(entity, source: str = "produits") -> dict:
 async def search_in_milvus_stream(request: SearchRequest):
     start_total_time = time.perf_counter()
     loop = asyncio.get_running_loop()
-    
+    query_vector = None
+    scores = None
+    pairs = None
     try:
-        # await asyncio.to_thread(get_milvus_connection)
-        await loop.run_in_executor(cuda_executor, get_milvus_connection)
-    except Exception as e:
-        yield {"type": "error", "payload": f"Milvus connexion avec erreur: {e}"}
-        return
-    
-    # embedding_model = await asyncio.to_thread(get_embedding_model)
-    embedding_model = await loop.run_in_executor(cuda_executor, get_embedding_model)
-    yield {"type": "status", "payload": "Chargement modèle d'embedding avec succès..."}
-    start_embed = time.perf_counter()
-    # query_vector = await asyncio.to_thread(
-    #     embedding_model.encode, request.prompt, normalize_embeddings=True
-    # )
-    query_vector = await loop.run_in_executor(
-        cuda_executor, lambda: embedding_model.encode(request.prompt, normalize_embeddings=True)
-    )
-    query_vector_list = [query_vector.tolist()]
-    embed_duration = time.perf_counter() - start_embed
-    yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
-    
-    top_k = int(request.top_k)
-    reranking_top_k = top_k * 2 if request.options.use_reranker else top_k
-
-    all_results = {}
-    context_texts = []
-    
-    collection_metadata = {
-        "produits": {"payload_fournisseur": "id_fournisseur"},
-    }
-    
-    all_matches_for_reranking = []
-    
-    start_search = time.perf_counter()
-    for item in request.source:
-        source = item.source
-        filtre = item.filtre
-        logger.info(f"Processing source: '{source}' with filtre: {filtre}")
-        
-        yield {"type": "status", "payload": f"Recherche dans {source}..."}
-
-        if not utility.has_collection(source):
-            yield {"type": "warning", "payload": f"Collection '{source}' n'existe pas."}
-            all_results[source] = []
-            continue
-
-        collection = Collection(name=source)
-        collection.load()
-
-        search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(reranking_top_k)}}
-        metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
-        
-        filters = []
-        filter_expr = filtre_source(request.filtre, source)
-        if filter_expr:
-            filters.append(" and ".join(filter_expr))
-        
-        filter_expr_source = filtre_source(filtre, source) if filtre else ""
-        if filter_expr_source:
-            filters.append(" and ".join(filter_expr_source))
-        
-        filter_expr = " and ".join(filters) if filters else ""
-        
-        logger.info(f"Filtre expression : {filter_expr}")
-        
-        all_fields = [field.name for field in collection.schema.fields]
-        fields_without_embedding = [f for f in all_fields if f != "embedding"]
-
         try:
-            search_results = await asyncio.to_thread(
-                collection.search,
-                data=query_vector_list,
-                anns_field="embedding",
-                param=search_params,
-                limit=reranking_top_k,
-                expr=filter_expr,
-                output_fields=fields_without_embedding
-            )
-
-            if search_results and search_results[0]:
-                for hit in search_results[0]:
-                    entity_data = hit.entity.to_dict()
-                    all_matches_for_reranking.append({
-                        "id": hit.id, 
-                        "score": hit.distance, 
-                        "relevance_score": convert_score_to_percentage(float(hit.distance), score_type='cosine'), 
-                        "metadata": _serialize_entity(hit.entity, source), 
-                        "source": source
-                    })
+            # await asyncio.to_thread(get_milvus_connection)
+            await loop.run_in_executor(cuda_executor, get_milvus_connection)
         except Exception as e:
-            yield {"type": "error", "payload": f"Error searching in {source}: {e}"}
-            all_results[source] = []
-
-    search_duration = time.perf_counter() - start_search
-    rerank_duration = 0
-    final_results = []
-
-    initial_matches = sorted(all_matches_for_reranking, key=lambda x: x['score'], reverse=True)
-    initial_results = initial_matches[:top_k]
-    if initial_results:
-        yield {"type": "initial_results", "payload": {"results": initial_results, "duration": round(search_duration, 2)}}
-
-    if request.options.use_reranker and all_matches_for_reranking:
-        yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
-        start_rerank_time = time.perf_counter()
-        last_step_time = start_rerank_time
-        # reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
-        # reranker = await loop.run_in_executor(cuda_executor, get_reranker_onnx_model, request.options.reranker_model)
-        reranker = await loop.run_in_executor(None, get_reranker_onnx_pool, request.options.reranker_model)
-        if not reranker:
-            yield {"type": "error", "payload": "Le pool de reranking n'a pas pu être initialisé (pas de GPU?)."}
+            yield {"type": "error", "payload": f"Milvus connexion avec erreur: {e}"}
             return
         
-        current_time = time.perf_counter()
-        reranker_duration = current_time - last_step_time
-        last_step_time = current_time  # Mettre à jour le marqueur de temps
-        logger.info(f"Temps de chargement du modele : {reranker_duration:.4f} secondes.")
+        # embedding_model = await asyncio.to_thread(get_embedding_model)
+        embedding_model = await loop.run_in_executor(cuda_executor, get_embedding_model)
+        yield {"type": "status", "payload": "Chargement modèle d'embedding avec succès..."}
+        start_embed = time.perf_counter()
+        # query_vector = await asyncio.to_thread(
+        #     embedding_model.encode, request.prompt, normalize_embeddings=True
+        # )
+        query_vector = await loop.run_in_executor(
+            cuda_executor, lambda: embedding_model.encode(request.prompt, normalize_embeddings=True)
+        )
+        query_vector_list = [query_vector.tolist()]
+        embed_duration = time.perf_counter() - start_embed
+        yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
+        
+        top_k = int(request.top_k)
+        reranking_top_k = top_k * 2 if request.options.use_reranker else top_k
 
-        # *** CORRECTION 1 : Utilisation de .get() pour le reranker ***
-        start_predict_time = time.perf_counter()
-        pairs = [[request.prompt, match["metadata"]["entity"]["text"]] for match in all_matches_for_reranking]
-        logger.info(f"top k recherche : {top_k} - top k reranking : {reranking_top_k}")
-        current_time = time.perf_counter()
-        pairs_duration = current_time - last_step_time
-        last_step_time = current_time  # Mettre à jour le marqueur de temps
-        logger.info(f"Temps de préparation des paires : {pairs_duration:.4f} secondes.")
+        all_results = {}
+        context_texts = []
+        
+        collection_metadata = {
+            "produits": {"payload_fournisseur": "id_fournisseur"},
+        }
+        
+        all_matches_for_reranking = []
+        
+        start_search = time.perf_counter()
+        for item in request.source:
+            source = item.source
+            filtre = item.filtre
+            logger.info(f"Processing source: '{source}' with filtre: {filtre}")
+            
+            yield {"type": "status", "payload": f"Recherche dans {source}..."}
 
-        # scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
-        with torch.inference_mode(), torch.autocast("cuda"):
-            # scores = await asyncio.to_thread(
-            #     reranker.predict, 
-            #     pairs, 
-            #     show_progress_bar=False,
-            #     batch_size=128 # Voir Étape 2
-            # )
-            scores = await loop.run_in_executor(
-                None,
-                lambda: reranker.predict(
-                    pairs, 
-                    # show_progress_bar=False,
-                    batch_size=256
+            if not utility.has_collection(source):
+                yield {"type": "warning", "payload": f"Collection '{source}' n'existe pas."}
+                all_results[source] = []
+                continue
+
+            collection = Collection(name=source)
+            collection.load()
+
+            search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(reranking_top_k)}}
+            metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
+            
+            filters = []
+            filter_expr = filtre_source(request.filtre, source)
+            if filter_expr:
+                filters.append(" and ".join(filter_expr))
+            
+            filter_expr_source = filtre_source(filtre, source) if filtre else ""
+            if filter_expr_source:
+                filters.append(" and ".join(filter_expr_source))
+            
+            filter_expr = " and ".join(filters) if filters else ""
+            
+            logger.info(f"Filtre expression : {filter_expr}")
+            
+            all_fields = [field.name for field in collection.schema.fields]
+            fields_without_embedding = [f for f in all_fields if f != "embedding"]
+
+            try:
+                search_results = await asyncio.to_thread(
+                    collection.search,
+                    data=query_vector_list,
+                    anns_field="embedding",
+                    param=search_params,
+                    limit=reranking_top_k,
+                    expr=filter_expr,
+                    output_fields=fields_without_embedding
                 )
-            )
-        prediction_duration = time.perf_counter() - start_predict_time
-        logger.info(f"Temps de prédiction du reranker (FP16) : {prediction_duration:.3f} secondes.")
-        logger.info(f"Temps de prédiction du reranker sur {reranker.num_devices} GPU(s) : {prediction_duration:.3f} secondes.")
-        current_time = time.perf_counter()
-        prediction_duration = current_time - last_step_time
-        last_step_time = current_time # Mettre à jour le marqueur de temps
-        logger.info(f"Temps de prédiction du reranker : {prediction_duration:.2f} secondes.")
 
-        for match, score in zip(all_matches_for_reranking, scores):
-            match["rerank_score"] = float(score)
-            match['relevance_score'] = convert_score_to_percentage(float(score), score_type='reranker')
-        current_time = time.perf_counter()
-        match_duration = current_time - last_step_time
-        last_step_time = current_time # Mettre à jour le marqueur de temps
-        logger.info(f"Temps de match : {match_duration:.4f} secondes.")
-        
-        reranked_matches = sorted(all_matches_for_reranking, key=lambda x: x["rerank_score"], reverse=True)
-        current_time = time.perf_counter()
-        processing_sort_duration = current_time - last_step_time
-        last_step_time = current_time # Mettre à jour le marqueur de temps
-        logger.info(f"Temps de traitement et tri : {processing_sort_duration:.4f} secondes.")
+                if search_results and search_results[0]:
+                    for hit in search_results[0]:
+                        entity_data = hit.entity.to_dict()
+                        all_matches_for_reranking.append({
+                            "id": hit.id, 
+                            "score": hit.distance, 
+                            "relevance_score": convert_score_to_percentage(float(hit.distance), score_type='cosine'), 
+                            "metadata": _serialize_entity(hit.entity, source), 
+                            "source": source
+                        })
+            except Exception as e:
+                yield {"type": "error", "payload": f"Error searching in {source}: {e}"}
+                all_results[source] = []
 
-        final_results = reranked_matches[:top_k]
-        rerank_duration = time.perf_counter() - start_rerank_time
-        yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": round(rerank_duration, 2)}}
-    else:
-        all_matches_for_reranking.sort(key=lambda x: x['score'], reverse=True)
-        final_results = all_matches_for_reranking[:top_k]
-        yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": 0}}
+        search_duration = time.perf_counter() - start_search
+        rerank_duration = 0
+        final_results = []
+
+        initial_matches = sorted(all_matches_for_reranking, key=lambda x: x['score'], reverse=True)
+        initial_results = initial_matches[:top_k]
+        if initial_results:
+            yield {"type": "initial_results", "payload": {"results": initial_results, "duration": round(search_duration, 2)}}
+
+        if request.options.use_reranker and all_matches_for_reranking:
+            yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
+            start_rerank_time = time.perf_counter()
+            last_step_time = start_rerank_time
+            # reranker = await asyncio.to_thread(get_reranker_model, request.options.reranker_model)
+            # reranker = await loop.run_in_executor(cuda_executor, get_reranker_onnx_model, request.options.reranker_model)
+            reranker = await loop.run_in_executor(None, get_reranker_onnx_pool, request.options.reranker_model)
+            if not reranker:
+                yield {"type": "error", "payload": "Le pool de reranking n'a pas pu être initialisé (pas de GPU?)."}
+                return
+            
+            current_time = time.perf_counter()
+            reranker_duration = current_time - last_step_time
+            last_step_time = current_time  # Mettre à jour le marqueur de temps
+            logger.info(f"Temps de chargement du modele : {reranker_duration:.4f} secondes.")
+
+            # *** CORRECTION 1 : Utilisation de .get() pour le reranker ***
+            start_predict_time = time.perf_counter()
+            pairs = [[request.prompt, match["metadata"]["entity"]["text"]] for match in all_matches_for_reranking]
+            logger.info(f"top k recherche : {top_k} - top k reranking : {reranking_top_k}")
+            current_time = time.perf_counter()
+            pairs_duration = current_time - last_step_time
+            last_step_time = current_time  # Mettre à jour le marqueur de temps
+            logger.info(f"Temps de préparation des paires : {pairs_duration:.4f} secondes.")
+
+            # scores = await asyncio.to_thread(reranker.predict, pairs, show_progress_bar=False)
+            with torch.inference_mode(), torch.autocast("cuda"):
+                # scores = await asyncio.to_thread(
+                #     reranker.predict, 
+                #     pairs, 
+                #     show_progress_bar=False,
+                #     batch_size=128 # Voir Étape 2
+                # )
+                scores = await loop.run_in_executor(
+                    None,
+                    lambda: reranker.predict(
+                        pairs, 
+                        # show_progress_bar=False,
+                        batch_size=256
+                    )
+                )
+            prediction_duration = time.perf_counter() - start_predict_time
+            logger.info(f"Temps de prédiction du reranker (FP16) : {prediction_duration:.3f} secondes.")
+            logger.info(f"Temps de prédiction du reranker sur {reranker.num_devices} GPU(s) : {prediction_duration:.3f} secondes.")
+            current_time = time.perf_counter()
+            prediction_duration = current_time - last_step_time
+            last_step_time = current_time # Mettre à jour le marqueur de temps
+            logger.info(f"Temps de prédiction du reranker : {prediction_duration:.2f} secondes.")
+
+            for match, score in zip(all_matches_for_reranking, scores):
+                match["rerank_score"] = float(score)
+                match['relevance_score'] = convert_score_to_percentage(float(score), score_type='reranker')
+            current_time = time.perf_counter()
+            match_duration = current_time - last_step_time
+            last_step_time = current_time # Mettre à jour le marqueur de temps
+            logger.info(f"Temps de match : {match_duration:.4f} secondes.")
+            
+            reranked_matches = sorted(all_matches_for_reranking, key=lambda x: x["rerank_score"], reverse=True)
+            current_time = time.perf_counter()
+            processing_sort_duration = current_time - last_step_time
+            last_step_time = current_time # Mettre à jour le marqueur de temps
+            logger.info(f"Temps de traitement et tri : {processing_sort_duration:.4f} secondes.")
+
+            final_results = reranked_matches[:top_k]
+            rerank_duration = time.perf_counter() - start_rerank_time
+            yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": round(rerank_duration, 2)}}
+        else:
+            all_matches_for_reranking.sort(key=lambda x: x['score'], reverse=True)
+            final_results = all_matches_for_reranking[:top_k]
+            yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": 0}}
+            
+        llm_generation_started = False
+        llm_duration = 0
+        if request.action == 2 and final_results:
+            yield {"type": "status", "payload": f"Génération de la réponse avec le LLM : {request.llm.chat_model}..."}
+            
+            # *** CORRECTION 2 : Utilisation de .get() pour le contexte du LLM ***
+            context_texts = [res["metadata"]["entity"]["text"] for res in final_results]
+            
+            yield {"type": "llm_start"}
+            llm_generation_started = True
+            start_llm_time = time.perf_counter()
+            
+            token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            
+            for token in token_generator:
+                yield {"type": "llm_chunk", "payload": token}
+            
+            llm_duration = time.perf_counter() - start_llm_time
         
-    llm_generation_started = False
-    llm_duration = 0
-    if request.action == 2 and final_results:
-        yield {"type": "status", "payload": f"Génération de la réponse avec le LLM : {request.llm.chat_model}..."}
+        total_duration = time.perf_counter() - start_total_time
+            
+        final_summary = {
+            "timings": {
+                "embedding": round(embed_duration, 2),
+                "vector_search": round(search_duration, 2),
+                "rerank": round(rerank_duration, 2),
+                "llm_execution": round(llm_duration, 2) if llm_generation_started else 0,
+                "total_process": round(total_duration, 2),
+            },
+            "result_count": len(final_results)
+        }
+        yield {"type": "end_of_stream", "payload": final_summary}
+    finally:
+        logger.info("Début du nettoyage de fin de requête...")
+
+        # 1. Supprimer les références aux grands tenseurs et listes
+        del query_vector
+        del scores
+        del pairs
+        # Ajoutez ici d'autres variables lourdes si nécessaire
         
-        # *** CORRECTION 2 : Utilisation de .get() pour le contexte du LLM ***
-        context_texts = [res["metadata"]["entity"]["text"] for res in final_results]
+        # 2. Appeler le garbage collector de Python
+        gc.collect()
         
-        yield {"type": "llm_start"}
-        llm_generation_started = True
-        start_llm_time = time.perf_counter()
+        # 3. Vider le cache CUDA de PyTorch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("Cache GPU CUDA vidé.")
         
-        token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
-        
-        for token in token_generator:
-            yield {"type": "llm_chunk", "payload": token}
-        
-        llm_duration = time.perf_counter() - start_llm_time
-    
-    total_duration = time.perf_counter() - start_total_time
-        
-    final_summary = {
-        "timings": {
-            "embedding": round(embed_duration, 2),
-            "vector_search": round(search_duration, 2),
-            "rerank": round(rerank_duration, 2),
-            "llm_execution": round(llm_duration, 2) if llm_generation_started else 0,
-            "total_process": round(total_duration, 2),
-        },
-        "result_count": len(final_results)
-    }
-    yield {"type": "end_of_stream", "payload": final_summary}
+        logger.info("Nettoyage de fin de requête terminé.")

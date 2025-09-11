@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 # TODO:
 # centraliser la configuration du logging dans un module dédié
-from app.core.searchws import get_milvus_connection, get_embedding_model, get_reranker_model, get_openai_client, prepare_onnx_model, get_reranker_onnx_model
+from app.core.searchws import get_milvus_connection, get_embedding_model, get_openai_client, prepare_onnx_model, get_reranker_onnx_model
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
