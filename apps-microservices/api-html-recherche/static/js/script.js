@@ -193,6 +193,32 @@ $(function () {
     });
   }
 
+  function generate_error_message(message) {
+    if (!message) {
+        message = "Une erreur a été rencontrée. Veuillez réessayer s'il vous plaît !";
+    }
+    
+    return `
+        <div class="flex items-center gap-4 text-xs">
+            <i data-lucide="circle-x" class="h-4 w-4"></i>
+            <span class="font-weight-700 font-14">${message}</span>
+        </div>
+    `;
+  }
+
+  function generate_succes_message(message) {
+    if (!message) {
+        message = "Action effectué avec succès";
+    }
+    
+    return `
+        <div class="flex items-center gap-4 text-xs">
+            <i data-lucide="circle-check" class="h-4 w-4"></i>
+            <span class="font-weight-700 font-14">${message}</span>
+        </div>
+    `;
+  }
+
   function data_select2(data = {}) {
     return function (params) {
       let option = Object.assign({}, data);
@@ -780,6 +806,26 @@ $(function () {
   }
 
   const lucide = { createIcons: () => window.lucide?.createIcons() };
+
+  function show_toast(content, type) {
+    let options = {
+      "text": content,
+      "textAlign": "center",
+      "loader": false,
+      "hideAfter": 5000,
+      "showHideTransition": "slide",
+      "allowToastClose": false,
+      "position": "bottom-center"
+    };
+
+    if (type == "success") {
+      options.bgColor = "#05A47A";
+    } else if (type == "error") {
+      options.bgColor = "#EA1F38";
+    }
+    $.toast(options);
+    lucide.createIcons()
+  }
 
   function initializeEventListeners() {
     elements.searchInput.on("keydown", (e) => {
@@ -1627,6 +1673,7 @@ function copyTextToClipboard(text) {
             console.log('Texte copié avec succès (méthode moderne) !');
             // Affichez un message de succès à l'utilisateur ici
             // par exemple : showToast_('Texte copié!', 'success');
+            show_toast(generate_succes_message("Copié dans le presse papier"), "success")
         }).catch(function(err) {
             console.error('Échec de la copie (méthode moderne) : ', err);
             // Si la méthode moderne échoue, on essaie l'ancienne
@@ -1661,13 +1708,16 @@ function fallbackCopyTextToClipboard(text) {
         var successful = document.execCommand('copy');
         if (successful) {
             console.log('Texte copié avec succès (méthode de repli).');
+            show_toast(generate_succes_message("Copié dans le presse papier"), "success")
             // Affichez un message de succès à l'utilisateur ici
         } else {
             console.error('Échec de la copie (méthode de repli).');
+            show_toast(generate_error_message("Erreur de copie dans le presse papier"), "error")
             // Affichez un message d'erreur à l'utilisateur ici
         }
     } catch (err) {
         console.error('Erreur lors de la copie (méthode de repli): ', err);
+        show_toast(generate_error_message("Erreur de copie dans le presse papier"), "error")
     }
 
     document.body.removeChild(textArea);
