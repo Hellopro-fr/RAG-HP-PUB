@@ -77,10 +77,12 @@ async def search_in_milvus(request: SearchRequest):
         # url_query           = "http://34.90.162.9:8500/search-service/milvus/search"
         url_query           = "http://34.67.7.126:8500/search-service/milvus/search" #vm2
         
+        COLLECTION_produit_name = "produits_3"
+        
         payload = {
             "prompt": request.nom_produit,
             "source": [
-                "produits_3"
+                COLLECTION_produit_name
             ],
             "nombre_resultat": "10"
         }        
@@ -93,7 +95,7 @@ async def search_in_milvus(request: SearchRequest):
             data = response.json()
             print(data)
             
-            produits = data.get("results", {}).get("matches", {}).get("produits", [])                
+            produits = data.get("results", {}).get("matches", {}).get(COLLECTION_produit_name, [])                
             for produit in produits:
                 if produit["score"] >= seuil_score_doublon:
                     FROM_SIMILARTIY = True
