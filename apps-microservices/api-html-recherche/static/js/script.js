@@ -1322,7 +1322,7 @@ $(function () {
               }
               const fournisseurSiteweb = $("#fournisseurSiteweb").val() || [];
               if (fournisseurSiteweb.length > 0) {
-                filtreSpecifique.fournisseur = fournisseurSiteweb;
+                filtreSpecifique.domaine = fournisseurSiteweb;
               }
               break;
             case 'echanges':
