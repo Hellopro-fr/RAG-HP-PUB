@@ -439,6 +439,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         top_k = int(request.top_k)
         reranking_top_k = top_k * 2 if request.options.use_reranker and not request.options.rrf else top_k
         
+        logger.info(f"Requête du client : {request}")
         if request.options.rrf:
             ranker = Function(
             name="rrf",
