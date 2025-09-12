@@ -8,7 +8,7 @@ from typing import final
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer, CrossEncoder
-from pymilvus import connections, Collection, utility, DataType
+from pymilvus import connections, Collection, utility, DataType, Function, FunctionType
 from app.core.credentials import settings, model_settings
 from app.schemas.search import SearchRequestWs as SearchRequest, LLMOptions
 import asyncio
@@ -437,7 +437,18 @@ async def search_in_milvus_stream(request: SearchRequest):
         yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
         
         top_k = int(request.top_k)
-        reranking_top_k = top_k * 2 if request.options.use_reranker else top_k
+        reranking_top_k = top_k * 2 if request.options.use_reranker and not request.options.rrf else top_k
+        
+        if request.options.rrf:
+            ranker = Function(
+            name="rrf",
+            input_field_names=[], # Must be an empty list
+            function_type=FunctionType.RERANK,
+            params={
+                "reranker": "rrf", 
+                # "k": top_k * 2 # piste pour options
+            }
+        )
 
         all_results = {}
         context_texts = []
@@ -484,15 +495,27 @@ async def search_in_milvus_stream(request: SearchRequest):
             fields_without_embedding = [f for f in all_fields if f != "embedding"]
 
             try:
-                search_results = await asyncio.to_thread(
-                    collection.search,
-                    data=query_vector_list,
-                    anns_field="embedding",
-                    param=search_params,
-                    limit=reranking_top_k,
-                    expr=filter_expr,
-                    output_fields=fields_without_embedding
-                )
+                if not request.options.rrf:
+                    search_results = await asyncio.to_thread(
+                        collection.search,
+                        data=query_vector_list,
+                        anns_field="embedding",
+                        param=search_params,
+                        limit=reranking_top_k,
+                        expr=filter_expr,
+                        output_fields=fields_without_embedding
+                    )
+                else:
+                    search_results = await asyncio.to_thread(
+                        collection.search,
+                        data=query_vector_list,
+                        anns_field="embedding",
+                        param=search_params,
+                        limit=top_k,
+                        expr=filter_expr,
+                        output_fields=fields_without_embedding,
+                        ranker=ranker
+                    )
 
                 if search_results and search_results[0]:
                     for hit in search_results[0]:
@@ -517,7 +540,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         if initial_results:
             yield {"type": "initial_results", "payload": {"results": initial_results, "duration": round(search_duration, 2)}}
 
-        if request.options.use_reranker and all_matches_for_reranking:
+        if request.options.use_reranker and all_matches_for_reranking and not request.options.rrf:
             yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
             start_rerank_time = time.perf_counter()
             last_step_time = start_rerank_time
