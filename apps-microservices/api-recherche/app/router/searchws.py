@@ -30,7 +30,7 @@ async def websocket_search(websocket: WebSocket):
         search_request = SearchRequest(**request_data)
         
         # Call the streaming search function and send updates
-        if search_request.option.rrf:
+        if search_request.options.rrf:
             async for update in search_in_milvus_reranker(search_request):
                 await websocket.send_json(update)
         else:
