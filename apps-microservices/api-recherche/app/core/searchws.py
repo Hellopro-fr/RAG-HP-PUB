@@ -709,7 +709,7 @@ async def search_in_milvus_reranker(request: SearchRequest):
                     anns_field="embedding",
                     param=search_params,
                     limit=reranking_top_k,
-                    expr=f"PHRASE(text, {repr(request.prompt)}, 2) {' and {filter_expr}' if filter_expr else ''}",
+                    expr=f"PHRASE(text, {repr(request.prompt)}, 2) {f' and {filter_expr}' if filter_expr else ''}",
                     output_fields=fields_without_embedding,
                     rerank=RRFRanker()
                 )
