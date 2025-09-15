@@ -547,8 +547,8 @@ async def search_in_milvus(request: SearchRequest):
         source = item.source
         filtre = item.filtre
         _source = source
-        if _search_params_verification:
-            _source = f"{source}{_search_params_verification['source']}" 
+        # if _search_params_verification:
+        #     _source = f"{source}{_search_params_verification['source']}" 
             
         
         if not utility.has_collection(_source):
