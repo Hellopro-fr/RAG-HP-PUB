@@ -205,22 +205,22 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
     llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
     if request.action == 2 and context_texts:
         context = "\n-----\n\n\n".join(context_texts)
-        full_user_prompt = request.template_prompt.format(chunks=context, recherche=request.prompt)
+        full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
         
-        type_prompt = next((key for key, values in model_settings.items() if request.chat_model in values), "openai")
+        type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
             
         start_llm_time = time.perf_counter()
         if type_prompt == "openai":
-            if request.chat_model == "deepseek":
+            if request.llm.chat_model == "deepseek":
                 deepseek = DeepSeek()
-                deepseek.set_temperature(request.temperature)
+                deepseek.set_temperature(request.llm.temperature)
                 llm_response = deepseek.chat(full_user_prompt)['content']
             else:
                 openai_client = get_openai_client()
                 completion = openai_client.chat.completions.create(
-                    model=request.chat_model,
+                    model=request.llm.chat_model,
                     messages=[{"role": "user", "content": full_user_prompt}],
-                    temperature=float(request.temperature)
+                    temperature=float(request.llm.temperature)
                 )
                 llm_response = completion.choices[0].message.content
         else:
@@ -230,7 +230,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
             )
             completion = client_or.chat.completions.create(
                 extra_body={},
-                model=request.chat_model,
+                model=request.llm.chat_model,
                 messages=[
                     {
                         "role": "user",
