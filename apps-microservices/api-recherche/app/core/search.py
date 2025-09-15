@@ -521,11 +521,11 @@ async def search_in_milvus(request: SearchRequest):
     embed_duration = time.perf_counter() - start_embed
 
     top_k = int(request.top_k)
-    _search_params_verification = _search_params(request)
+    # _search_params_verification = _search_params(request)
     _top_k = top_k
-    if _search_params_verification:
-        _top_k = int(_search_params_verification["ef"])
-        logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
+    # if _search_params_verification:
+    #     _top_k = int(_search_params_verification["ef"])
+    #     logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
         
     reranking_top_k = top_k
     if request.options.use_reranker:
