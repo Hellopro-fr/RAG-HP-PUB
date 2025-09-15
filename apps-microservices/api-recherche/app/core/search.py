@@ -642,17 +642,17 @@ async def search_in_milvus(request: SearchRequest):
     search_duration = time.perf_counter() - start_search
     
     rerank_duration = 0
-    if request.use_reranker:
+    if request.options.use_reranker:
         logger.info("Début du reranking...")
         start_rerank_time = time.perf_counter()
-        reranker = get_reranker_model(request.reranker_model)
+        reranker = get_reranker_model(request.options.reranker_model)
         reranked_results = {}
         for source, matches in all_results.items():
             if not matches:
                 reranked_results[source] = []
                 continue
 
-            pairs = [[request.prompt, match["metadata"].get("text", "")] for match in matches]
+            pairs = [[request.prompt, match["metadata"]["entity"]["text"]] for match in matches]
 
             scores = reranker.predict(pairs, show_progress_bar=False)
             
@@ -688,8 +688,8 @@ async def search_in_milvus(request: SearchRequest):
         "embedding": round(embed_duration, 2),
         "fournisseur_non_vide": None, # Non implémenté pour Milvus dans le code d'origine
         "full_user_prompt": llm_req.full_user_prompt,
-        "chat_model": request.chat_model,
-        "temperature": request.temperature,
+        "chat_model": request.llm.chat_model,
+        "temperature": request.llm.temperature,
         "vector_search": round(search_duration, 2),
         "total_process": round(total_duration, 2),
         "llm_execution": round(llm_req.llm_duration, 2),
