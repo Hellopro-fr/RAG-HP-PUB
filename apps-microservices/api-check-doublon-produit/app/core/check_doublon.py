@@ -51,7 +51,7 @@ async def search_in_milvus(request: SearchRequest):
                 data = response.json()
                 domaine_existe = data.get("domaine_existe", False)
         except httpx.RequestError as e:
-            logger.error(f"[MILVUS] Erreur requête API recherche: {e}")
+            logger.error(f"[REQ RECUP FRS] Erreur requête info fournisseurs BO: {e}")
         
     # === Cas doublon exact ===
     if nom_produit_existe and domaine_existe:
