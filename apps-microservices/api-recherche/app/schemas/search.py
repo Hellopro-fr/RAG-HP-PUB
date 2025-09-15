@@ -71,4 +71,4 @@ class SearchReponse(BaseModel):
     results: Annotated[SearchResponse, Field(title="Contient l'objet du résultat depuis les recherches")]
     # TODO:
     # à supprimer les données en entrées pour vérification
-    post:  Annotated[SearchRequest, Field(title="Contient l'objet de la requête depuis les recherches")]
+    post:  Annotated[SearchRequestWs, Field(title="Contient l'objet de la requête depuis les recherches")]
