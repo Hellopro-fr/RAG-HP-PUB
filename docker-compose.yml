@@ -57,7 +57,7 @@ services:
     volumes:
       - ./apps-microservices/api-classification-v2:/app:rw
     ports:
-      - "8566:8566"
+      - "8520:8520"
     env_file:
       - .env
   
