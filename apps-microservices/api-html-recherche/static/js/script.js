@@ -37,7 +37,8 @@ $(function () {
     llmResponse: "",
     searchMetrics: { totalResults: 0, searchTime: 0, sourcesUsed: [] },
     expandedSections: { sources: true, categories: false, insights: true },
-    copiedContent: ""
+    copiedContent: "",
+    selectedCategoriesRubrique: {}
   };
 
   // DOM elements
@@ -296,7 +297,8 @@ $(function () {
         );
       }
 
-      if (data.children) {
+      var param_children = "";
+      if (typeof data.children != "undefined") {
         let allSelected = true;
         $.each(data.children, function (index, option) {
           if (
@@ -312,6 +314,7 @@ $(function () {
         var data_param = "";
         if (typeof data.param_data != "undefined") {
           $.each(data.param_data, function (index, option) {
+            if (Array.isArray(option)) option = option.join(option);
             data_param += ` data-${index}="${option}" `;
           });
         }
@@ -323,7 +326,7 @@ $(function () {
           (allSelected ? " checked" : " ") +
           '><span class="checkmark"><i class="bx bx-check"></i></span> Tous sélectionner</label>';
         let groupLabel = $(
-          '<label class="d-flex justify-content-space-between group-info" ' +
+          '<label class="group-info flex gap-4 group-info" ' +
           data_param +
           ' ><span class="group-titre">' +
           data.text +
@@ -395,6 +398,8 @@ $(function () {
           '.opt-checkbox input[type="checkbox"]'
         );
 
+
+
         // Check/uncheck "Select All" based on child checkboxes
         childCheckboxes.on("change", function () {
           let isChecked = true;
@@ -420,6 +425,13 @@ $(function () {
           .find('option[value="' + data.id + '"]')
           .is(":selected");
         let checkbox = "";
+        var data_param = "";
+        if (typeof data.param_data != "undefined") {
+          $.each(data.param_data, function (index, option) {
+            if (Array.isArray(option)) option = option.join(",");
+            data_param += ` data-${index}="${option}" `;
+          });
+        }
         if (config.unique) {
           checkbox = $(
             '<label class="bloc-ckeck opt-checkbox' +
@@ -431,17 +443,11 @@ $(function () {
             "</label>"
           );
         } else {
-          checkbox = $(
-            '<label class="bloc-ckeck opt-checkbox' +
-            (selected ? " checked" : " ") +
-            "\" data-id='" +
-            data.id +
-            '\' ><input type="checkbox" ' +
-            (selected ? " checked" : " ") +
-            '><span class="checkmark"><i class="bx bx-check"></i></span> ' +
-            data.text +
-            "</label>"
-          );
+          checkbox = $(`
+          <label class="bloc-ckeck opt-checkbox' ${selected ? " checked" : " "} ${data_param}>
+            <input type="checkbox" ${selected ? " checked" : " "}><span class="checkmark"><i class="bx bx-check"></i></span>${data.text}
+          </label>
+          `)
         }
         return checkbox;
       }
@@ -494,8 +500,20 @@ $(function () {
         processResults: function (data, params) {
           var page = params.page || 1;
 
+          var processedData = $.map(data.results, function (group) {
+            if (group.children) {
+              group.children = $.map(group.children, function (child) {
+                // On retourne l'objet enfant tel quel. Select2 détectera la clé 'ids'
+                // et créera automatiquement un attribut data-ids.
+                return child;
+              });
+            }
+            return group;
+          });
+
           let resultats = {
-            results: data.results || data.all,
+            // results: data.results || data.all,
+            results: processedData,
           };
 
           if (config.pagination) {
@@ -517,13 +535,8 @@ $(function () {
     elem.select2(options);
 
     $(elem).on("select2:unselect", function (e) {
-      if ($(this).attr("id") == "societe-naf") {
-        $('.naf-item[data-code_naf="' + e.params.data.id + '"]').removeClass(
-          "active"
-        );
-        $('.naf-item[data-code_naf="' + e.params.data.id + '"] > i')
-          .removeClass("bxs-check-circle")
-          .addClass("bxs-plus-circle cursor-pointer");
+      if (typeof e.params != "undefined" && typeof e.params.data != "undefined" && typeof e.params.data.param_data != "undefined" && typeof e.params.data.param_data.ids != "undefined") {
+        delete state.selectedCategoriesRubrique[e.params.data.id];
       }
       $(this)
         .find('option[value="' + e.params.data.id + '"]')
@@ -533,51 +546,10 @@ $(function () {
     });
 
     $(elem).on("select2:select", function (e) {
-      if (typeof $(this).data("item") !== "undefined") {
-        let element = `.${$(this).data("item")}-container`;
-        let block = `.${$(this).data("item")}-block`;
-        if ($(this).val().length > 0) {
-          if ($(block).hasClass("d-none")) {
-            $(block).removeClass("d-none");
-          }
-          let action = $(element).data("action");
-          let ids = $(this).val().join(",");
-        } else {
-          if (!$(block).hasClass("d-none")) {
-            $(block).addClass("d-none");
-          }
-        }
-        var all_hidden = true;
-        $(".list-criteres > div").each(function () {
-          // Check if the current div does not have the 'd-none' class
-          if (!$(this).hasClass("d-none")) {
-            all_hidden = false; // Set flag to false if any div is not hidden
-            return false; // Exit the loop early since not all divs are hidden
-          }
-        });
-
-        if (!all_hidden) {
-          if (!$(".info-critere-vide").hasClass("d-none")) {
-            $(".info-critere-vide").addClass("d-none");
-          }
-        } else {
-          if ($(".info-critere-vide").hasClass("d-none")) {
-            $(".info-critere-vide").removeClass("d-none");
-          }
-        }
-
-        if ($(elem).parent().find(".badge-danger").length) {
-          if ($(elem).val().join(",") == "") {
-            if ($(elem).parent().find(".badge-danger").hasClass("d-none")) {
-              $(elem).parent().find(".badge-danger").removeClass("d-none");
-            }
-          } else {
-            if (!$(elem).parent().find(".badge-danger").hasClass("d-none")) {
-              $(elem).parent().find(".badge-danger").addClass("d-none");
-            }
-          }
-        }
+      if (typeof e.params != "undefined" && typeof e.params.data != "undefined" && typeof e.params.data.param_data != "undefined" && typeof e.params.data.param_data.ids != "undefined") {
+        state.selectedCategoriesRubrique[e.params.data.id] = e.params.data.param_data.ids;
       }
+      console.log(state.selectedCategoriesRubrique)
     });
   }
 
@@ -615,8 +587,14 @@ $(function () {
             return (data.text = "");
           }
         });
+        return data.text;
       }
-      return data.text;
+      var $result = $("<span></span>");
+      $result.text(data.text);
+      if (typeof data.ids != "undefined") {
+        $result.data("ids", data.ids.join(","));
+      }
+      return $result;
     };
   }
 
@@ -650,7 +628,7 @@ $(function () {
             // --- FIN DES CORRECTIONS ---
 
             // Personnalisation de la configuration et des options pour AJAX
-            config.templateResult = templateResult_with_optgroup_sans_selectall_select2;
+            // config.templateResult = templateResult_with_optgroup_sans_selectall_select2;
             config.pagination = $item.data("pagination") === true;
             
             options.allowClear = true; // Permet de vider la sélection
@@ -1406,21 +1384,21 @@ $(function () {
       const filtreGlobal = {};
       if (state.selectedEtat && state.selectedEtat.length > 0) filtreGlobal.etat = state.selectedEtat;
       if (state.selectedAffichage && state.selectedAffichage.length > 0) filtreGlobal.affichage = state.selectedAffichage;
-      if (state.selectedCategories && state.selectedCategories.length > 0) filtreGlobal.id_categorie = state.selectedCategories; else {
-        filtreGlobal.id_categorie = [
-          "2016431",
-          "2008670",
-          "2007702",
-          "2003445",
-          "2017735",
-          "1002167",
-          "2013765",
-          "2019606",
-          "2004590",
-          "2002944",
-          "2008035"
-        ];
-      };
+      if (state.selectedCategoriesRubrique && !$.isEmptyObject(state.selectedCategoriesRubrique)) {
+        $.each(state.selectedCategoriesRubrique, (_, val) => {
+          $.each(val, (j, id_feuille) => {
+            state.selectedCategories.push(id_feuille);
+          });
+        });
+        let selectedCategorie = []
+        $.each(state.selectedCategories, (_, i) => {
+          if (!i.includes("r_")) {
+            selectedCategorie.push(i);
+          }
+        });
+        state.selectedCategories = [...new Set(selectedCategorie)]
+      }
+      if (state.selectedCategories && state.selectedCategories.length > 0) filtreGlobal.id_categorie = state.selectedCategories;
       // if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreGlobal.id_fournisseur = state.selectedFournisseurs;
 
       // 3. Construire l'objet de requête final
@@ -1470,21 +1448,6 @@ $(function () {
         case 'rerank_complete':
           // Met à jour les résultats de recherche dans l'état, en les adaptant
           handleSearchResultsPayload(data.payload);
-          // state.searchResults = data.payload.results.map(adaptSearchResult);
-
-          // // 1. Extraire les IDs des résultats qui sont des produits
-          // const id_produits_a_chercher = state.searchResults
-          //   .filter(result => result.source === 'produits' && result.id_produit)
-          //   .map(result => result.id_produit);
-
-          // console.log(`IDs de produits à chercher:`, id_produits_a_chercher);
-          // // 2. Si on a des produits, on va chercher leurs infos détaillées
-          // if (id_produits_a_chercher.length > 0) {
-          //   get_info_produit(id_produits_a_chercher);
-          // } else {
-          //   // S'il n'y a aucun produit, on affiche directement les résultats
-          //   updateUI();
-          // }
           break;
         case 'llm_start':
           state.llmResponse = ''; // S'assure que la réponse est vide au début du streaming
@@ -1665,11 +1628,6 @@ $(document).on('click', '#copier-texte', function() {
     const separator = '-------------------------------------\n';
     let formattedText = '';
 
-    // $('.data-texte-ws').each(function() {
-    //     const text = $(this).text().trim();
-    //     formattedText += separator;
-    //     formattedText += text + '\n';
-    // });
     formattedText += separator.trim();
     formattedText = state.copiedContent;
     console.log("Texte qui sera copié :\n" + formattedText);
@@ -1688,8 +1646,6 @@ function copyTextToClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(function() {
             console.log('Texte copié avec succès (méthode moderne) !');
-            // Affichez un message de succès à l'utilisateur ici
-            // par exemple : showToast_('Texte copié!', 'success');
             show_toast(generate_succes_message("Copié dans le presse papier"), "success")
         }).catch(function(err) {
             console.error('Échec de la copie (méthode moderne) : ', err);
