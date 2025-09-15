@@ -39,15 +39,19 @@ async def search_in_milvus(request: SearchRequest):
     else:
         #webhook temporaire pour simuler l'existence du domaine.
         # /!\ juste pour attendre l'ingestion des fournisseurs dans milvus
-        payload = {
-            "nom_domaine": request.domaine
-        }
-        response = await client.post("https://www.hellopro.fr/partenaires_externes/info_produit/get_info_fournisseur.php", json=payload)
-        if response.status_code != 200:
-            logger.error(f"[GET FRS] Erreur get domaine dans base BO frs: {response.status_code} - {response.text}")
-        else:
-            data = response.json()
-            domaine_existe = data.get("domaine_existe", False)        
+        try:
+            payload = {
+                "nom_domaine": request.domaine
+            }
+            async with httpx.AsyncClient(timeout=10) as client:            
+                response = await client.post("https://www.hellopro.fr/partenaires_externes/info_produit/get_info_fournisseur.php", json=payload)
+            if response.status_code != 200:
+                logger.error(f"[GET FRS] Erreur get domaine dans base BO frs: {response.status_code} - {response.text}")
+            else:
+                data = response.json()
+                domaine_existe = data.get("domaine_existe", False)
+        except httpx.RequestError as e:
+            logger.error(f"[MILVUS] Erreur requête API recherche: {e}")
         
     # === Cas doublon exact ===
     if nom_produit_existe and domaine_existe:
