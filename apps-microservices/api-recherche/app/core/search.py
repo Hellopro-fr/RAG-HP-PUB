@@ -688,8 +688,8 @@ async def search_in_milvus(request: SearchRequest):
         "embedding": round(embed_duration, 2),
         "fournisseur_non_vide": None, # Non implémenté pour Milvus dans le code d'origine
         "full_user_prompt": llm_req.full_user_prompt,
-        "chat_model": request.llm.chat_model,
-        "temperature": request.llm.temperature,
+        "chat_model": request.llm.chat_model if request.llm.chat_model else "",
+        "temperature": request.llm.temperature if request.llm.temperature else "",
         "vector_search": round(search_duration, 2),
         "total_process": round(total_duration, 2),
         "llm_execution": round(llm_req.llm_duration, 2),
