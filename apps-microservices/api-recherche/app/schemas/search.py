@@ -40,7 +40,7 @@ class SearchRequestWs(BaseModel):
     top_k: Optional[int] = 10
     filtre: Optional[Dict[str, Any]] = {}
     filtre_source: Optional[Dict[str, List[str]]] = {}
-    llm: Optional[LLMOptions] = {}
+    llm: Optional[LLMOptions] = LLMOptions(chat_model="gpt-4.1-2025-04-14", temperature=0.0)
     options: Optional[RerankerOptions] = RerankerOptions()
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
@@ -55,7 +55,7 @@ class SearchResponse(BaseModel):
     fournisseur_non_vide: Optional[bool] = None
     full_user_prompt: Optional[str] = ""
     chat_model: Optional[str] = None
-    temperature: str
+    temperature: float = ""
     vector_search: float
     total_process: float
     llm_execution: float
@@ -71,4 +71,4 @@ class SearchReponse(BaseModel):
     results: Annotated[SearchResponse, Field(title="Contient l'objet du résultat depuis les recherches")]
     # TODO:
     # à supprimer les données en entrées pour vérification
-    post:  Annotated[SearchRequest, Field(title="Contient l'objet de la requête depuis les recherches")]
+    post:  Annotated[SearchRequestWs, Field(title="Contient l'objet de la requête depuis les recherches")]
