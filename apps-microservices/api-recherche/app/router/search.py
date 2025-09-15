@@ -6,7 +6,7 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/search", response_model=SearchReponse, tags=["Recherche - MILVUS"])
+@router.post("/search", tags=["Recherche - MILVUS"])
 async def milvus_search_endpoint(request: SearchRequest = Body(...)):
     try:
         logger.info(f"Requête reçue sur /milvus/search pour les sources: {request.source}")
