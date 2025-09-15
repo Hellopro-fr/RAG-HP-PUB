@@ -204,7 +204,7 @@ services:
     volumes:
       - ./apps-microservices/embedding-service/app:/app/embedding_service:rw
     deploy:
-      replicas: 6
+      replicas: 1
       resources:
         reservations:
           devices:
