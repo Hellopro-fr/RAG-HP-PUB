@@ -289,9 +289,6 @@ services:
       dockerfile: ./apps-microservices/api-check-doublon-produit/Dockerfile
     container_name: api-check-doublon-produit
     restart: unless-stopped
-    # TODO: à supprimer en PROD
-    volumes:
-      - ./apps-microservices/api-check-doublon-produit:/app:rw
     ports:
       - "8516:8516"
     env_file:
