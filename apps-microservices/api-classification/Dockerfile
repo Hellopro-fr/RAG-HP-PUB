@@ -12,12 +12,12 @@ COPY libs/common-utils /app/libs/common-utils
 RUN pip install -e /app/libs/common-utils
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service
-COPY apps-microservices/api-classification-v2/requirements.txt .
+COPY apps-microservices/api-classification/requirements.txt .
 RUN pip install -r requirements.txt
 
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
-COPY apps-microservices/api-classification-v2 .
+COPY apps-microservices/api-classification .
 
 # Étape 4: Exposer le port
 EXPOSE 8520
