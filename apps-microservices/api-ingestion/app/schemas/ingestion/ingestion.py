@@ -1,4 +1,4 @@
-from typing import Annotated, Dict
+from typing import Annotated, Dict, Optional
 import uuid
 from pydantic import ConfigDict, BaseModel, Field
 from app.schemas.base import GetBase as Base
@@ -11,6 +11,10 @@ class BaseIngestion(BaseModel):
         Field(title="Nom de la collection de destination")
     ] = CollectionName.PRODUIT
     database: Annotated[str, Field(title="Nom de la base de données", description="La base de données dans laquelle les données seront stockées. Par défaut, c'est 'qdrant'.")] = "qdrant"
+    origin: Annotated[Optional[str], Field(
+        title="Origine des données produits",
+        description="Indique l'origine ou la source des données produits uniquement. Champ non obligatoire."
+    )] = None
 
 
 class BaseIngestionReponse(BaseModel):

@@ -18,7 +18,8 @@ def embed_input_data(input_data: dict, model: SentenceTransformer, **kwargs) -> 
     output_message = {
         "collection": collection,
         "data": result_embedding,
-        "database": input_data.get("database", "qdrant")  # Par défaut, on utilise Qdrant
+        "database": input_data.get("database", "qdrant"), # Par défaut, on utilise Qdrant
+        "origin": input_data.get('origin' , "") 
     }
     
     return output_message

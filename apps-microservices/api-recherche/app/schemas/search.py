@@ -31,6 +31,7 @@ class LLMOptions(BaseModel):
 class RerankerOptions(BaseModel):
     use_reranker: bool = True
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    rrf: bool = False
 
 class SearchRequestWs(BaseModel):
     prompt: str

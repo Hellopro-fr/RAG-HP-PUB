@@ -37,6 +37,7 @@ $(function () {
     llmResponse: "",
     searchMetrics: { totalResults: 0, searchTime: 0, sourcesUsed: [] },
     expandedSections: { sources: true, categories: false, insights: true },
+    copiedContent: ""
   };
 
   // DOM elements
@@ -146,6 +147,17 @@ $(function () {
     minimumInputLength: 0,
   };
 
+  function GetURLParameter(sParam) {
+    var sPageURL = window.location.search.substring(1);
+    var sURLVariables = sPageURL.split('&');
+    for (var i = 0; i < sURLVariables.length; i++) {
+      var sParameterName = sURLVariables[i].split('=');
+      if (sParameterName[0] == sParam) {
+        return sParameterName[1];
+      }
+    }
+  }
+
   function initializeFormState() {
     // Boucle sur les sources définies dans l'état initial
     for (const source in state.selectedSources) {
@@ -190,6 +202,32 @@ $(function () {
         }
       }
     });
+  }
+
+  function generate_error_message(message) {
+    if (!message) {
+        message = "Une erreur a été rencontrée. Veuillez réessayer s'il vous plaît !";
+    }
+    
+    return `
+        <div class="flex items-center gap-4 text-xs">
+            <i data-lucide="circle-x" class="h-4 w-4"></i>
+            <span class="font-weight-700 font-14">${message}</span>
+        </div>
+    `;
+  }
+
+  function generate_succes_message(message) {
+    if (!message) {
+        message = "Action effectué avec succès";
+    }
+    
+    return `
+        <div class="flex items-center gap-4 text-xs">
+            <i data-lucide="circle-check" class="h-4 w-4"></i>
+            <span class="font-weight-700 font-14">${message}</span>
+        </div>
+    `;
   }
 
   function data_select2(data = {}) {
@@ -732,8 +770,7 @@ $(function () {
       <div class="flex items-center gap-2 p-2 rounded-lg ${config.bgColor} ${config.textColor}">
           <i data-lucide="${config.icon}" class="h-4 w-4"></i>
           <div class="flex flex-col">
-              <span class="text-xs font-bold">${config.label}</span>
-              <span class="text-xs">${percentage}% de confiance</span>
+              <span class="text-xs">${percentage}% : <span class="text-xs font-bold">${config.label}</span></span>
           </div>
       </div>
     `;
@@ -780,6 +817,26 @@ $(function () {
   }
 
   const lucide = { createIcons: () => window.lucide?.createIcons() };
+
+  function show_toast(content, type) {
+    let options = {
+      "text": content,
+      "textAlign": "center",
+      "loader": false,
+      "hideAfter": 5000,
+      "showHideTransition": "slide",
+      "allowToastClose": false,
+      "position": "bottom-center"
+    };
+
+    if (type == "success") {
+      options.bgColor = "#05A47A";
+    } else if (type == "error") {
+      options.bgColor = "#EA1F38";
+    }
+    $.toast(options);
+    lucide.createIcons()
+  }
 
   function initializeEventListeners() {
     elements.searchInput.on("keydown", (e) => {
@@ -1247,7 +1304,8 @@ $(function () {
       socket.close();
     }
 
-    const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici
+    // const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici VM1
+    const wsUrl = "ws://34.34.166.5:8510/ws/search"; // L'URL est maintenant ici
     console.log(`Connexion à ${wsUrl}...`);
 
     try {
@@ -1325,7 +1383,7 @@ $(function () {
               }
               const fournisseurSiteweb = $("#fournisseurSiteweb").val() || [];
               if (fournisseurSiteweb.length > 0) {
-                filtreSpecifique.fournisseur = fournisseurSiteweb;
+                filtreSpecifique.domaine = fournisseurSiteweb;
               }
               break;
             case 'echanges':
@@ -1345,7 +1403,7 @@ $(function () {
       if (sourcesAvecFiltres.length === 0) {
         sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
       }
-
+      
       // 2. Construire le filtre global (filtre principal)
       const filtreGlobal = {};
       if (state.selectedEtat && state.selectedEtat.length > 0) filtreGlobal.etat = state.selectedEtat;
@@ -1383,6 +1441,7 @@ $(function () {
         options: {
           use_reranker: state.useReranker,
           reranker_model: state.rerankerModel,
+          rrf: GetURLParameter("rrf") == 1
         }
       };
 
@@ -1532,11 +1591,20 @@ $(function () {
 
   function renderSearchResults() {
     elements.searchResultsList.empty();
+    state.copiedContent = "";
     state.searchResults.forEach((result) => {
       const relevanceHtml = getRelevanceCard(result.confidence / 100);
       const sourceBadgeHtml = getSourceBadge(result.source);
       const class_supplier = result.source == "devis" ? "hidden" : ""
 
+      state.copiedContent += `
+      --------------------------------
+      Titre : ${result.title}
+      Source : ${result.source}
+      Fournisseur : ${result.supplier}
+      Catégorie : ${result.category}
+      Texte : ${result.snippet || ""}
+      `;
       const resultCardHtml = `
         <div class="bg-white rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
@@ -1562,7 +1630,7 @@ $(function () {
                   </span>
               </div>
               <div>
-                <p id="snippet-${result.id}" class="text-sm text-custom-gris leading-relaxed line-clamp-3 transition-all duration-300">${result.snippet || ""}</p>
+                <p id="snippet-${result.id}" class="data-texte-ws text-sm text-custom-gris leading-relaxed line-clamp-3 transition-all duration-300">${result.snippet || ""}</p>
                 <button 
                   class="toggle-snippet text-sm font-semibold text-custom-bleu hover:text-custom-bleu-heavy mt-2 flex items-center gap-1 hidden" 
                   data-target="#snippet-${result.id}">
@@ -1595,6 +1663,84 @@ $(function () {
     lucide.createIcons();
   }
 
+$(document).on('click', '#copier-texte', function() {
+    const separator = '-------------------------------------\n';
+    let formattedText = '';
+
+    // $('.data-texte-ws').each(function() {
+    //     const text = $(this).text().trim();
+    //     formattedText += separator;
+    //     formattedText += text + '\n';
+    // });
+    formattedText += separator.trim();
+    formattedText = state.copiedContent;
+    console.log("Texte qui sera copié :\n" + formattedText);
+    copyTextToClipboard(formattedText);
+});
+
+
+/**
+ * Fonction pour copier du texte dans le presse-papiers.
+ * Tente d'utiliser l'API moderne (navigator.clipboard) et se rabat
+ * sur l'ancienne méthode (document.execCommand) si nécessaire.
+ * @param {string} text Le texte à copier.
+ */
+function copyTextToClipboard(text) {
+    // Utilise l'API moderne si elle est disponible (contexte sécurisé HTTPS ou localhost)
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            console.log('Texte copié avec succès (méthode moderne) !');
+            // Affichez un message de succès à l'utilisateur ici
+            // par exemple : showToast_('Texte copié!', 'success');
+            show_toast(generate_succes_message("Copié dans le presse papier"), "success")
+        }).catch(function(err) {
+            console.error('Échec de la copie (méthode moderne) : ', err);
+            // Si la méthode moderne échoue, on essaie l'ancienne
+            fallbackCopyTextToClipboard(text);
+        });
+    } else {
+        // Si l'API moderne n'est pas disponible, utilise la méthode de repli
+        console.log("API Clipboard non disponible, utilisation de la méthode de repli.");
+        fallbackCopyTextToClipboard(text);
+    }
+}
+
+/**
+ * Fonction de repli (fallback) utilisant la méthode dépréciée document.execCommand.
+ * @param {string} text Le texte à copier.
+ */
+function fallbackCopyTextToClipboard(text) {
+    var textArea = document.createElement("textarea");
+    textArea.value = text;
+    
+    // Rendre l'élément invisible et éviter de faire défiler la page
+    textArea.style.position = "fixed";
+    textArea.style.top = 0;
+    textArea.style.left = 0;
+    textArea.style.opacity = 0;
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        var successful = document.execCommand('copy');
+        if (successful) {
+            console.log('Texte copié avec succès (méthode de repli).');
+            show_toast(generate_succes_message("Copié dans le presse papier"), "success")
+            // Affichez un message de succès à l'utilisateur ici
+        } else {
+            console.error('Échec de la copie (méthode de repli).');
+            show_toast(generate_error_message("Erreur de copie dans le presse papier"), "error")
+            // Affichez un message d'erreur à l'utilisateur ici
+        }
+    } catch (err) {
+        console.error('Erreur lors de la copie (méthode de repli): ', err);
+        show_toast(generate_error_message("Erreur de copie dans le presse papier"), "error")
+    }
+
+    document.body.removeChild(textArea);
+}
 
   // Initialisation de l'application
   initializeFormState();
