@@ -207,6 +207,7 @@ def _process_batch_classification(task_id: str, products: list):
 
 @router.get("/classify/batch/status/{task_id}")
 async def get_batch_status(task_id: str):
+    global task_results
     """Récupère le statut d'une tâche de classification en lot"""
     if task_id not in task_results:
         raise HTTPException(status_code=404, detail="Tâche non trouvée")
@@ -222,6 +223,7 @@ async def get_batch_status(task_id: str):
 
 @router.get("/classify/batch/result/{task_id}", response_model=BatchClassificationResponse)
 async def get_batch_result(task_id: str):
+    global task_results
     """Récupère le résultat complet d'une tâche terminée"""
     if task_id not in task_results:
         raise HTTPException(status_code=404, detail="Tâche non trouvée")
@@ -248,6 +250,7 @@ async def get_batch_result(task_id: str):
 
 @router.delete("/classify/batch/task/{task_id}")
 async def delete_batch_task(task_id: str):
+    global task_results
     """Supprime une tâche du cache"""
     if task_id not in task_results:
         raise HTTPException(status_code=404, detail="Tâche non trouvée")
@@ -257,6 +260,7 @@ async def delete_batch_task(task_id: str):
 
 @router.get("/classify/batch/tasks")
 async def list_batch_tasks():
+    global task_results
     """Liste toutes les tâches avec leur statut"""
     tasks_summary = {}
     for task_id, task_info in task_results.items():
