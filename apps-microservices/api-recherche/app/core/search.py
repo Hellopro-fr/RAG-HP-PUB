@@ -671,7 +671,7 @@ async def search_in_milvus(request: SearchRequest):
         context_texts = []
         for source, matches in all_results.items():
             for match in matches:
-                context_texts.append(match["metadata"]["text"])
+                context_texts.append(match["metadata"]["entity"]["texte"])
 
     # TODO complété: Logique LLM pour Milvus
     llm_req = llm_prompt(request, context_texts)
