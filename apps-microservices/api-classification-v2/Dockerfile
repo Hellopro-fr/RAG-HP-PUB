@@ -19,8 +19,6 @@ RUN pip install -r requirements.txt
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
 COPY apps-microservices/api-classification-v2 .
 
-RUN python convert.py
-
 # Étape 4: Exposer le port
 EXPOSE 8520
 
