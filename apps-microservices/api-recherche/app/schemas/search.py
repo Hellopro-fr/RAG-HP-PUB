@@ -55,7 +55,7 @@ class SearchResponse(BaseModel):
     fournisseur_non_vide: Optional[bool] = None
     full_user_prompt: Optional[str] = ""
     chat_model: Optional[str] = None
-    temperature: str
+    temperature: float = ""
     vector_search: float
     total_process: float
     llm_execution: float
