@@ -70,7 +70,7 @@ class ProductTitleOptimizerBatch:
             2. Générer un nouveau titre produit en suivant **scrupuleusement** les règles de "CONSIGNES TITRE PRODUIT".
 
             # CONSIGNES POUR LE TITRE =
-            - Longueur entre 30 et 130 caractères.
+            - La longueur du titre doit être comprise **strictement** entre 30 et 130 caractères (espaces inclus).
             - Tu dois uniquement réagencer ou enrichir le titre **avec des informations déjà présentes** dans "TITRE PRODUIT" ou "DESCRIPTION PRODUIT".
             - Ne JAMAIS inventer, supposer ou extrapoler.
             - Ne pas supprimer d'information du titre initial, sauf si clairement non pertinente (ex : "trtrtrtr","\\\\",...).
@@ -98,17 +98,17 @@ class ProductTitleOptimizerBatch:
             """
         return prompt
 
-    def escape_for_prompt(self, text: str) -> str:
-        """Échapper les caractères spéciaux pour éviter les problèmes dans le prompt."""
-        if not text:
-            return ""
+    # def escape_for_prompt(self, text: str) -> str:
+    #     """Échapper les caractères spéciaux pour éviter les problèmes dans le prompt."""
+    #     if not text:
+    #         return ""
         
-        text = text.replace('\n', ' ').replace('\r', ' ')
-        text = text.replace('\t', ' ')
-        text = re.sub(r'\s+', ' ', text)
-        text = text.strip()
+    #     text = text.replace('\n', ' ').replace('\r', ' ')
+    #     text = text.replace('\t', ' ')
+    #     text = re.sub(r'\s+', ' ', text)
+    #     text = text.strip()
         
-        return text
+    #     return text
 
     def extract_json_from_text(self, text: str) -> str:
         """Extrait le JSON de la réponse du modèle avec plusieurs stratégies."""
@@ -162,8 +162,8 @@ class ProductTitleOptimizerBatch:
         json_str = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', json_str)
         json_str = json_str.strip()
         
-        json_str = re.sub(r'//.*$', '', json_str, flags=re.MULTILINE)
-        json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL)
+        json_str = re.sub(r'//.*$', '', json_str, flags=re.MULTILINE) #suppression de commentaire en une seule ligne
+        json_str = re.sub(r'/\*.*?\*/', '', json_str, flags=re.DOTALL) #suppression des commentaires mutltilignes
         
         return json_str
 
@@ -232,6 +232,7 @@ class ProductTitleOptimizerBatch:
     def extract_manually(self, text: str) -> Dict[str, Any]:
         """Extraction manuelle en cas d'échec du parsing JSON."""
         try:
+            print("passage à l'extraction manuelle...")
             titre_match = re.search(r'"Titre"\s*:\s*"([^"]*(?:\\.[^"]*)*)"', text, re.DOTALL)
             
             result = {}
@@ -249,73 +250,73 @@ class ProductTitleOptimizerBatch:
         
         return None
     
-    def optimize_single_product(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Optimise uniquement le titre d'un seul produit.
-        """
-        product_id = product_data.get('id_produit_scrapping', 'unknown')
+    # def optimize_single_product(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
+    #     """
+    #     Optimise uniquement le titre d'un seul produit.
+    #     """
+    #     product_id = product_data.get('id_produit_scrapping', 'unknown')
         
-        try:
-            prompt = self.generate_prompt(product_data)
-            sampling_params = SamplingParams(
-                max_tokens=256,
-                temperature=0.1,
-                repetition_penalty=1.05,
-                top_k=40,
-                top_p=0.9,
-                stop=["}", "}}", "}\n}"]
-            )
+    #     try:
+    #         prompt = self.generate_prompt(product_data)
+    #         sampling_params = SamplingParams(
+    #             max_tokens=256,
+    #             temperature=0.1,
+    #             repetition_penalty=1.05,
+    #             top_k=40,
+    #             top_p=0.9,
+    #             stop=["}", "}}", "}\n}"]
+    #         )
             
-            conversation = [{"role": "user", "content": prompt}]
-            formatted_prompt = self.tokenizer.apply_chat_template(
-                conversation, 
-                tokenize=False, 
-                add_generation_prompt=True,
-                enable_thinking=False
-            )
+    #         conversation = [{"role": "user", "content": prompt}]
+    #         formatted_prompt = self.tokenizer.apply_chat_template(
+    #             conversation, 
+    #             tokenize=False, 
+    #             add_generation_prompt=True,
+    #             enable_thinking=False
+    #         )
             
-            final_prompt_tokens = self.tokenizer.encode(formatted_prompt)
-            prompt_tokens = len(final_prompt_tokens)
+    #         final_prompt_tokens = self.tokenizer.encode(formatted_prompt)
+    #         prompt_tokens = len(final_prompt_tokens)
 
-            if prompt_tokens >= self.llm_args["max_model_len"]:
-                print(f"--- ERREUR : Prompt trop long ({prompt_tokens} tokens) pour le produit {product_id} ---")
-                return {
-                    "id_produit_scrapping": product_id,
-                    "error": "erreur_prompt_trop_long"
-                }
+    #         if prompt_tokens >= self.llm_args["max_model_len"]:
+    #             print(f"--- ERREUR : Prompt trop long ({prompt_tokens} tokens) pour le produit {product_id} ---")
+    #             return {
+    #                 "id_produit_scrapping": product_id,
+    #                 "error": "erreur_prompt_trop_long"
+    #             }
             
-            outputs = self.llm.generate([formatted_prompt], sampling_params)
-            raw_text = outputs[0].outputs[0].text.strip()
+    #         outputs = self.llm.generate([formatted_prompt], sampling_params)
+    #         raw_text = outputs[0].outputs[0].text.strip()
             
-            json_str = self.extract_json_from_text(raw_text)
-            result = self.parse_json_safely(json_str)
+    #         json_str = self.extract_json_from_text(raw_text)
+    #         result = self.parse_json_safely(json_str)
             
-            if result is None:
-                return {
-                    "id_produit_scrapping": product_id,
-                    "error": f"Impossible de parser le JSON pour le produit {product_id}"
-                }
+    #         if result is None:
+    #             return {
+    #                 "id_produit_scrapping": product_id,
+    #                 "error": f"Impossible de parser le JSON pour le produit {product_id}"
+    #             }
             
-            if "Titre" not in result:
-                return {
-                    "id_produit_scrapping": product_id,
-                    "error": f"Titre manquant dans la réponse pour le produit {product_id}"
-                }
+    #         if "Titre" not in result:
+    #             return {
+    #                 "id_produit_scrapping": product_id,
+    #                 "error": f"Titre manquant dans la réponse pour le produit {product_id}"
+    #             }
             
-            return {
-                "id_produit_scrapping": product_id,
-                "success": result
-            }
+    #         return {
+    #             "id_produit_scrapping": product_id,
+    #             "success": result
+    #         }
             
-        except Exception as e:
-            error_msg = f"Erreur lors du traitement du produit {product_id}: {type(e).__name__}: {str(e)}"
-            debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
-            print(debug_msg)
-            logging.error(error_msg)
-            return {
-                "id_produit_scrapping": product_id,
-                "error": error_msg
-            }
+    #     except Exception as e:
+    #         error_msg = f"Erreur lors du traitement du produit {product_id}: {type(e).__name__}: {str(e)}"
+    #         debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
+    #         print(debug_msg)
+    #         logging.error(error_msg)
+    #         return {
+    #             "id_produit_scrapping": product_id,
+    #             "error": error_msg
+    #         }
 
     def optimize_batch_vllm(self, batch_products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -379,7 +380,7 @@ class ProductTitleOptimizerBatch:
                 try:
                     raw_text = output.outputs[0].text.strip()
                     json_str = self.extract_json_from_text(raw_text)
-                    result = self.parse_json_safely(json_str)
+                    result = self.extract_manually(json_str)
                     
                     if result is None or "Titre" not in result:
                         results.append({
@@ -455,8 +456,8 @@ class ProductTitleOptimizerBatch:
         return all_results
 
     # Maintien de la compatibilité avec l'ancienne méthode
-    def optimize_product(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Optimise uniquement le titre du produit (version legacy pour compatibilité).
-        """
-        return self.optimize_single_product(product_data)
+    # def optimize_product(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
+    #     """
+    #     Optimise uniquement le titre du produit (version legacy pour compatibilité).
+    #     """
+    #     return self.optimize_single_product(product_data)
