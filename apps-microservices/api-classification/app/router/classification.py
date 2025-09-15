@@ -168,6 +168,7 @@ async def classify_batch_products_async(
 
 def _process_batch_classification(task_id: str, products: list):
     """Traite la classification en arrière-plan"""
+    global task_results
     try:
         # Marquer comme en cours
         task_results[task_id] = {
