@@ -32,7 +32,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
- 
+
+
   api-classification-service:
     build:
       context: .
@@ -42,20 +43,6 @@ services:
     # TODO: à supprimer en PROD
     volumes:
       - ./apps-microservices/api-classification:/app:rw
-    ports:
-      - "8566:8566"
-    env_file:
-      - .env
-
-  api-classification-v2-service:
-    build:
-      context: .
-      dockerfile: ./apps-microservices/api-classification-v2/Dockerfile
-    container_name: api-classification-v2-service
-    restart: unless-stopped
-    # TODO: à supprimer en PROD
-    volumes:
-      - ./apps-microservices/api-classification-v2:/app:rw
     ports:
       - "8520:8520"
     env_file:

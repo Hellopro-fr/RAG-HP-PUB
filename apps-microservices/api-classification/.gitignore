@@ -1,8 +1,0 @@
-.env
-.venv/
-__pycache__/
-app/logs/
-app/output/
-logs/
-CACHED
-ERROR
