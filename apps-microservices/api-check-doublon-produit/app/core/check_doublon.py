@@ -25,16 +25,30 @@ async def search_in_milvus(request: SearchRequest):
 
     # === Vérification domaine (multi champs) ===
     domaine_existe = False
-    champs_domaine = ["domaine"] + [f"domaine{i}" for i in range(2, 7)]
+    
+    if settings.IS_BASE_FRS_EXISTE :    
+        champs_domaine = ["domaine"] + [f"domaine{i}" for i in range(2, 7)]
 
-    for field in champs_domaine:
-        res_f = bv_fournisseurs.get_fournisseur_by_field(field, request.domaine)
-        if res_f.get("status") == "success" and len(res_f.get("data", [])) > 0:
-            domaine_existe = True
-            break
-        elif res_f.get("status") == "error":
-            logger.warning(f"[MILVUS] Erreur lors de la vérification {field}='{request.domaine}' → {res_f.get('message')}")
-
+        for field in champs_domaine:
+            res_f = bv_fournisseurs.get_fournisseur_by_field(field, request.domaine)
+            if res_f.get("status") == "success" and len(res_f.get("data", [])) > 0:
+                domaine_existe = True
+                break
+            elif res_f.get("status") == "error":
+                logger.warning(f"[MILVUS] Erreur lors de la vérification {field}='{request.domaine}' → {res_f.get('message')}")
+    else:
+        #webhook temporaire pour simuler l'existence du domaine.
+        # /!\ juste pour attendre l'ingestion des fournisseurs dans milvus
+        payload = {
+            "nom_domaine": request.domaine
+        }
+        response = await client.post("https://www.hellopro.fr/partenaires_externes/info_produit/get_info_fournisseur.php", json=payload)
+        if response.status_code != 200:
+            logger.error(f"[GET FRS] Erreur get domaine dans base BO frs: {response.status_code} - {response.text}")
+        else:
+            data = response.json()
+            domaine_existe = data.get("domaine_existe", False)        
+        
     # === Cas doublon exact ===
     if nom_produit_existe and domaine_existe:
         return {

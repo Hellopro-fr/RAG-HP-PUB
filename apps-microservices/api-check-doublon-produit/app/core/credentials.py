@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     
     URL_QUERY_API_RECHERCHE  : str  = f"{ADRESSE_VM_API_RECHERCHE}:{PORT_API_RECHERCHE}/search-service/milvus/search"
     
+    IS_BASE_FRS_EXISTE  : bool  = False
+    
     class Config:
         env_file = ".env"
 
