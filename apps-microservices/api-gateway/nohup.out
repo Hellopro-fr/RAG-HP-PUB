@@ -1,0 +1,116 @@
+INFO:     Will watch for changes in these directories: ['/home/devhp/RAG-HP-PUB/apps-microservices/api-gateway']
+INFO:     Uvicorn running on http://0.0.0.0:8500 (Press CTRL+C to quit)
+INFO:     Started reloader process [633365] using WatchFiles
+INFO:     Started server process [633367]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+http://34.90.162.9:8510/milvus/search
+INFO:     213.182.35.29:64126 - "POST /search-service/milvus/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/milvus/search
+INFO:     213.182.35.29:52370 - "POST /search-service/milvus/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:56032 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/milvus/search
+INFO:     213.182.35.29:50288 - "POST /search-service/milvus/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:58556 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:58770 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/milvus/search
+INFO:     213.182.35.29:58776 - "POST /search-service/milvus/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/milvus/search
+INFO:     213.182.35.29:54160 - "POST /search-service/milvus/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:52260 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:33124 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:40000 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:47322 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:39162 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:46584 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:35450 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:45234 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:51172 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:48954 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:39558 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:40402 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:40412 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:51176 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:36192 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:36206 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:54154 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:63442 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:48482 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+WARNING:  Invalid HTTP request received.
+INFO:     206.168.34.202:55482 - "GET / HTTP/1.1" 404 Not Found
+INFO:     206.168.34.202:39570 - "GET / HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     206.168.34.202:39622 - "GET /sitemap.xml HTTP/1.1" 307 Temporary Redirect
+WARNING:  Invalid HTTP request received.
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:36390 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:53224 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+INFO:     35.203.210.54:51929 - "GET / HTTP/1.0" 404 Not Found
+INFO:     35.203.210.54:62986 - "GET / HTTP/1.1" 404 Not Found
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:56858 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:55228 - "POST /search-service/qdrant/search HTTP/1.1" 500 Internal Server Error
+http://34.90.162.9:8510/qdrant/search
+INFO:     213.182.35.29:55242 - "POST /search-service/qdrant/search HTTP/1.1" 200 OK
+INFO:     35.203.211.212:49883 - "GET / HTTP/1.0" 404 Not Found
+INFO:     35.203.211.212:64248 - "GET / HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     206.168.34.117:60758 - "GET / HTTP/1.1" 404 Not Found
+INFO:     147.185.132.163:54863 - "GET / HTTP/1.0" 404 Not Found
+INFO:     147.185.132.163:61420 - "GET / HTTP/1.1" 404 Not Found
+INFO:     45.156.128.171:39179 - "GET / HTTP/1.1" 404 Not Found
+INFO:     45.156.128.168:60995 - "GET / HTTP/1.1" 404 Not Found
+INFO:     45.156.128.171:33877 - "GET /cf_scripts/scripts/ajax/ckeditor/ckeditor.js HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     104.234.115.139:49228 - "GET / HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:40470 - "GET /manage/account/login HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:51348 - "GET /admin/index.html HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:51352 - "GET /index.html HTTP/1.1" 307 Temporary Redirect
+INFO:     104.234.115.139:48472 - "GET /%2BCSCOE%2B/logon.html HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:48482 - "GET /cgi-bin/login.cgi HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:48490 - "GET /login.htm HTTP/1.1" 307 Temporary Redirect
+INFO:     104.234.115.139:48496 - "GET /login.html HTTP/1.1" 307 Temporary Redirect
+INFO:     104.234.115.139:48502 - "GET /login.jsp HTTP/1.1" 307 Temporary Redirect
+INFO:     104.234.115.139:48516 - "GET /login HTTP/1.1" 307 Temporary Redirect
+INFO:     104.234.115.139:48524 - "GET /doc/index.html HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:48528 - "GET /remote/login HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:48540 - "GET //admin/login.asp HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:48554 - "GET /web/ HTTP/1.1" 404 Not Found
+INFO:     104.234.115.139:48560 - "GET //webpages/login.html HTTP/1.1" 404 Not Found
+INFO:     167.71.22.242:34214 - "GET / HTTP/1.0" 404 Not Found
+INFO:     172.236.228.208:11210 - "GET / HTTP/1.1" 404 Not Found
+INFO:     35.203.210.108:53788 - "GET / HTTP/1.0" 404 Not Found
+INFO:     35.203.210.108:65350 - "GET / HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     206.168.34.67:55902 - "GET / HTTP/1.1" 404 Not Found
+INFO:     206.168.34.67:55678 - "GET / HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     206.168.34.67:60364 - "GET /login HTTP/1.1" 307 Temporary Redirect
+INFO:     147.185.133.130:56665 - "GET / HTTP/1.0" 404 Not Found
+INFO:     147.185.133.130:62288 - "GET / HTTP/1.1" 404 Not Found

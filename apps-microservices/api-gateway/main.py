@@ -5,6 +5,7 @@ from fastapi.responses import Response
 from app.core.settings import settings, SERVICE_MAP
 import httpx
 import websockets
+import logging
 
 app = FastAPI(
     title="API Gateway",
