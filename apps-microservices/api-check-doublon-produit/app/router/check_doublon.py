@@ -1,3 +1,6 @@
+from common_utils.database.MilvusProduitCrud import MilvusProduitsCrud
+from common_utils.database.MilvusFournisseursCrud import MilvusFournisseursCrud
+
 from fastapi import APIRouter, HTTPException, Body
 from app.schemas.check_doublon_shemas import SearchRequest, SearchResponse, SearchReponse, SearchResponseLot
 
