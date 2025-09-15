@@ -20,39 +20,17 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str
     M_PARAMS: str
     EF_PARAMS: str
-
-    # MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
-    #     "devis_poc": [
-    #         "chunk_id", "lead_id", "message", "message_hellopro", "categorie", "id_categorie", "effectif",
-    #         "prof_ou_part", "naf2", "naf5", "departement", "region", "pays", "critere", "societe_acheteur",
-    #         "siren", "siret", "date_du_lead", "liste_frns", "nb_mec", "appreciation_lead", "source", "page_type",
-    #         "id_produit", "text"
-    #     ],
-    #     "siteweb_poc": [
-    #         "chunk_id", "source", "url", "page_type", "domaine", "id_categorie", "categorie", "vf_id_categorie",
-    #         "vf_nom_categorie", "id_fournisseur", "fournisseur", "etat", "affichage", "text"
-    #     ],
-    #     "echanges_poc": [
-    #         "chunk_id", "id_demande", "produit", "id_produit", "categorie", "id_categorie", "fournisseur",
-    #         "id_fournisseur", "etat", "affichage", "acheteur", "id_acheteur", "text", "conversation_id"
-    #     ]
-    # }
-
+    
+    SEUIL_SCORE_DOUBLON      : float = 0.75
+    ADRESSE_VM_API_RECHERCHE : str   = "http://34.90.162.9"
+    PORT_API_RECHERCHE       : int   = 8500
+    COLLECTION_PRODUIT_NAME  : str   = "produits_3"
+    
+    URL_QUERY_API_RECHERCHE  : str  = f"{ADRESSE_VM_API_RECHERCHE}:{PORT_API_RECHERCHE}/search-service/milvus/search"
+    
+    IS_BASE_FRS_EXISTE  : bool  = False
+    
     class Config:
         env_file = ".env"
-
-# model_settings = {
-#     "openai": [
-#         "gpt-4.1-2025-04-14",
-#         "gpt-4o-2024-08-06",
-#         "gpt-4o-2024-11-20",
-#         "deepseek"
-#     ],
-#     "or": [
-#         "qwen/qwen3-coder:free", 
-#         "qwen/qwen3-coder", 
-#         "google/gemini-flash-1.5"
-#     ]
-# }
 
 settings = Settings()
