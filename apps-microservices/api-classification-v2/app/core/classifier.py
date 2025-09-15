@@ -43,7 +43,8 @@ class ProductClassifier:
             if api_key:
                 self.deepseek_client = openai.OpenAI(
                     api_key=api_key,
-                    base_url="https://api.deepseek.com"
+                    base_url="https://api.deepseek.com",
+                    timeout=60
                 )
                 logger.info("Client DeepSeek configuré")
             else:
