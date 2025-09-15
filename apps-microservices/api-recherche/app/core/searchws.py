@@ -8,7 +8,7 @@ from typing import final
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer, CrossEncoder
-from pymilvus import connections, Collection, utility, DataType
+from pymilvus import connections, Collection, utility, DataType, RRFRanker
 from app.core.credentials import settings, model_settings
 from app.schemas.search import SearchRequestWs as SearchRequest, LLMOptions
 import asyncio
@@ -517,7 +517,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         if initial_results:
             yield {"type": "initial_results", "payload": {"results": initial_results, "duration": round(search_duration, 2)}}
 
-        if request.options.use_reranker and all_matches_for_reranking:
+        if request.options.use_reranker and all_matches_for_reranking and not request.options.rrf:
             yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
             start_rerank_time = time.perf_counter()
             last_step_time = start_rerank_time
@@ -555,7 +555,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                     lambda: reranker.predict(
                         pairs, 
                         # show_progress_bar=False,
-                        batch_size=256
+                        batch_size=64
                     )
                 )
             prediction_duration = time.perf_counter() - start_predict_time
@@ -594,6 +594,156 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "status", "payload": f"Génération de la réponse avec le LLM : {request.llm.chat_model}..."}
             
             # *** CORRECTION 2 : Utilisation de .get() pour le contexte du LLM ***
+            context_texts = [res["metadata"]["entity"]["text"] for res in final_results]
+            
+            yield {"type": "llm_start"}
+            llm_generation_started = True
+            start_llm_time = time.perf_counter()
+            
+            token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            
+            for token in token_generator:
+                yield {"type": "llm_chunk", "payload": token}
+            
+            llm_duration = time.perf_counter() - start_llm_time
+        
+        total_duration = time.perf_counter() - start_total_time
+            
+        final_summary = {
+            "timings": {
+                "embedding": round(embed_duration, 2),
+                "vector_search": round(search_duration, 2),
+                "rerank": round(rerank_duration, 2),
+                "llm_execution": round(llm_duration, 2) if llm_generation_started else 0,
+                "total_process": round(total_duration, 2),
+            },
+            "result_count": len(final_results)
+        }
+        yield {"type": "end_of_stream", "payload": final_summary}
+    finally:
+        logger.info("Début du nettoyage de fin de requête...")
+
+        # 1. Supprimer les références aux grands tenseurs et listes
+        del query_vector
+        del scores
+        del pairs
+        # Ajoutez ici d'autres variables lourdes si nécessaire
+        
+        # 2. Appeler le garbage collector de Python
+        gc.collect()
+        
+        # 3. Vider le cache CUDA de PyTorch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("Cache GPU CUDA vidé.")
+        
+        logger.info("Nettoyage de fin de requête terminé.")
+        
+async def search_in_milvus_reranker(request: SearchRequest):
+    start_total_time = time.perf_counter()
+    loop = asyncio.get_running_loop()
+    query_vector = None
+    scores = None
+    pairs = None
+    try:
+        try:
+            await loop.run_in_executor(cuda_executor, get_milvus_connection)
+        except Exception as e:
+            yield {"type": "error", "payload": f"Milvus connexion avec erreur: {e}"}
+            return
+        
+        embedding_model = await loop.run_in_executor(cuda_executor, get_embedding_model)
+        yield {"type": "status", "payload": "Chargement modèle d'embedding avec succès..."}
+        start_embed = time.perf_counter()
+        query_vector = await loop.run_in_executor(
+            cuda_executor, lambda: embedding_model.encode(request.prompt, normalize_embeddings=True)
+        )
+        query_vector_list = [query_vector.tolist()]
+        embed_duration = time.perf_counter() - start_embed
+        yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
+        
+        top_k = int(request.top_k)
+        reranking_top_k = top_k * 2 if request.options.use_reranker else top_k
+
+        all_results = {}
+        context_texts = []
+        
+        all_matches_for_reranking = []
+        search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(reranking_top_k)}}
+
+        start_search = time.perf_counter()
+        for item in request.source:
+            source = item.source
+            filtre = item.filtre
+            logger.info(f"Processing source: '{source}' with filtre: {filtre}")
+            
+            yield {"type": "status", "payload": f"Recherche dans {source}..."}
+
+            if not utility.has_collection(source):
+                yield {"type": "warning", "payload": f"Collection '{source}' n'existe pas."}
+                all_results[source] = []
+                continue
+
+            collection = Collection(name=source)
+            collection.load()                        
+            filters = []
+            filter_expr = filtre_source(request.filtre, source)
+            if filter_expr:
+                filters.append(" and ".join(filter_expr))
+            
+            filter_expr_source = filtre_source(filtre, source) if filtre else ""
+            if filter_expr_source:
+                filters.append(" and ".join(filter_expr_source))
+            
+            filter_expr = " and ".join(filters) if filters else ""
+            
+            logger.info(f"Filtre expression : {filter_expr}")
+            
+            all_fields = [field.name for field in collection.schema.fields]
+            fields_without_embedding = [f for f in all_fields if f != "embedding"]
+
+            try:
+                search_results = await asyncio.to_thread(
+                    collection.search,
+                    data=query_vector_list,
+                    anns_field="embedding",
+                    param=search_params,
+                    limit=reranking_top_k,
+                    # expr=f"PHRASE(text, {repr(request.prompt)}, 2) {f' and {filter_expr}' if filter_expr else ''}",
+                    expr=filter_expr,
+                    output_fields=fields_without_embedding,
+                    rerank=RRFRanker()
+                )
+
+                if search_results and search_results[0]:
+                    for hit in search_results[0]:
+                        entity_data = hit.entity.to_dict()
+                        all_matches_for_reranking.append({
+                            "id": hit.id, 
+                            "score": hit.distance, 
+                            "relevance_score": convert_score_to_percentage(float(hit.distance), score_type='cosine'), 
+                            "metadata": _serialize_entity(hit.entity, source), 
+                            "source": source
+                        })
+            except Exception as e:
+                yield {"type": "error", "payload": f"Error searching in {source}: {e}"}
+                all_results[source] = []
+
+        search_duration = time.perf_counter() - start_search
+        rerank_duration = 0
+        final_results = []
+
+        initial_matches = sorted(all_matches_for_reranking, key=lambda x: x['score'], reverse=True)
+
+        all_matches_for_reranking.sort(key=lambda x: x['score'], reverse=True)
+        final_results = all_matches_for_reranking[:top_k]
+        yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": 0}}
+            
+        llm_generation_started = False
+        llm_duration = 0
+        if request.action == 2 and final_results:
+            yield {"type": "status", "payload": f"Génération de la réponse avec le LLM : {request.llm.chat_model}..."}
+            
             context_texts = [res["metadata"]["entity"]["text"] for res in final_results]
             
             yield {"type": "llm_start"}

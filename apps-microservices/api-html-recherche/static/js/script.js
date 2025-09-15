@@ -147,6 +147,17 @@ $(function () {
     minimumInputLength: 0,
   };
 
+  function GetURLParameter(sParam) {
+    var sPageURL = window.location.search.substring(1);
+    var sURLVariables = sPageURL.split('&');
+    for (var i = 0; i < sURLVariables.length; i++) {
+      var sParameterName = sURLVariables[i].split('=');
+      if (sParameterName[0] == sParam) {
+        return sParameterName[1];
+      }
+    }
+  }
+
   function initializeFormState() {
     // Boucle sur les sources définies dans l'état initial
     for (const source in state.selectedSources) {
@@ -1390,7 +1401,7 @@ $(function () {
       if (sourcesAvecFiltres.length === 0) {
         sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
       }
-
+      
       // 2. Construire le filtre global (filtre principal)
       const filtreGlobal = {};
       if (state.selectedEtat && state.selectedEtat.length > 0) filtreGlobal.etat = state.selectedEtat;
@@ -1428,6 +1439,7 @@ $(function () {
         options: {
           use_reranker: state.useReranker,
           reranker_model: state.rerankerModel,
+          rrf: GetURLParameter("rrf") == 1
         }
       };
 
