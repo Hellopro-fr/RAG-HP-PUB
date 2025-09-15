@@ -40,7 +40,7 @@ class SearchRequestWs(BaseModel):
     top_k: Optional[int] = 10
     filtre: Optional[Dict[str, Any]] = {}
     filtre_source: Optional[Dict[str, List[str]]] = {}
-    llm: Optional[LLMOptions] = LLMOptions
+    llm: Optional[LLMOptions] = LLMOptions(chat_model="gpt-4.1-2025-04-14", temperature=0.0)
     options: Optional[RerankerOptions] = RerankerOptions()
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
