@@ -7,9 +7,9 @@ from qdrant_client.http.models import Filter, FieldCondition, MatchValue, IsNull
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
 from sentence_transformers import SentenceTransformer, CrossEncoder
-from pymilvus import connections, Collection, utility
+from pymilvus import connections, Collection, utility, DataType, RRFRanker
 from app.core.credentials import settings, model_settings
-from app.schemas.search import SearchRequest, LLMPipeline
+from app.schemas.search import SearchRequestWs as SearchRequest, LLMPipeline
 
 from app.core.openrouter import chat_with_openrouter
 
@@ -43,6 +43,19 @@ logger = logging.getLogger(__name__)
 # Mesurer le temps d'import initial
 import_start_time = time.perf_counter()
 
+@lru_cache(maxsize=32)
+def get_field_type_map(collection_name: str) -> dict:
+    """
+    Retrieves the schema for a given collection and returns a dictionary
+    mapping field names to their pymilvus DataType.
+    """
+    try:
+        collection = Collection(name=collection_name)
+        return {field.name: field.dtype for field in collection.schema.fields}
+    except Exception as e:
+        logger.error(f"Could not retrieve schema for collection '{collection_name}': {e}")
+        return {}
+    
 @lru_cache(maxsize=None)
 def get_embedding_model(model_name: str = "dangvantuan/sentence-camembert-large"):
     logger.info(f"Chargement initial du modèle d'embedding '{model_name}'...")
@@ -77,6 +90,87 @@ def get_milvus_connection():
     except Exception as e:
         logger.error(f"❌ Erreur de connexion à Milvus: {e}")
         raise e
+
+def filtre_source (filtre: dict, source: str = "") -> list:
+    clauses = []
+    field_types = get_field_type_map(source)
+    NUMERIC_DTYPES = {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64, DataType.FLOAT, DataType.DOUBLE}
+    for key, val in filtre.items():
+        dtype = field_types.get(key)
+        if key == 'id_categorie' and source == 'produits':
+            key = 'categorie'
+        elif key == 'id_categorie' and source == 'siteweb':
+            continue
+        
+        if not dtype:
+            logger.info(f"dtype none {key}")
+            continue
+        
+        if dtype == DataType.ARRAY:
+            if isinstance(val, list):
+                sub_clauses = [f"array_contains({key}, {repr(str(v))})" for v in val]
+                if sub_clauses:
+                    clauses.append(f"({' or '.join(sub_clauses)})")
+            else:
+                clauses.append(f"array_contains({key}, {repr(str(val))})")
+                
+        elif dtype in NUMERIC_DTYPES:
+            if isinstance(val, dict):
+                if 'operator' in val and 'values' in val:
+                    operator = val['operator']
+                    values = val['values'] 
+                    if operator == 'entre' and isinstance(values, dict) and 'start' in values and 'end' in values:
+                        start_val = values['start']
+                        end_val = values['end']
+                        clauses.append(f"{key} >= {start_val} and {key} <= {end_val}")
+                    else:
+                        actual_value = next(iter(values.values()))
+                        clauses.append(f"{key} {operator} {actual_value}")
+            elif isinstance(val, list):
+                numeric_vals = [int(v) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(v) for v in val]
+                clauses.append(f"{key} in {numeric_vals}")
+            else:
+                # Format as: field_name == 123
+                numeric_val = int(val) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(val)
+                clauses.append(f"{key} == {numeric_val}")
+        else:
+            if isinstance(val, dict):
+                if 'operator' in val and 'values' in val:
+                    operator = val['operator']
+                    values = val['values'] 
+                    if operator == 'entre' and isinstance(values, dict) and 'start' in values and 'end' in values:
+                        start_val = values['start']
+                        end_val = values['end']
+                        clauses.append(f"{key} >= {start_val} and {key} <= {end_val}")
+                    else:
+                        actual_value = next(iter(values.values()))
+                        clauses.append(f"{key} {operator} {actual_value}")
+            elif isinstance(val, list):
+                # Format as: field_name in ["val1", "val2"]
+                quoted_vals = [repr(str(v)) for v in val]
+                clauses.append(f"{key} in [{', '.join(quoted_vals)}]")
+            else:
+                # Format as: field_name == "value"
+                clauses.append(f"{key} == {repr(str(val))}")
+    return clauses
+
+def _serialize_entity(entity, source: str = "produits") -> dict:
+    """
+    Converts a Milvus search result entity to a JSON-serializable dictionary.
+    Handles special types like RepeatedScalarContainer for ARRAY fields by converting them to lists.
+    """
+    serializable_dict = {}
+    fields = get_field_type_map(source)
+    for key, value in entity.to_dict().items():
+        if hasattr(value, '__iter__') and not isinstance(value, (str, bytes, dict)):
+            serializable_dict[key] = list(value)
+        else:
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    if fields.get(sub_key) == DataType.ARRAY:
+                        value[sub_key] = list(sub_value)
+            serializable_dict[key] = value
+    return serializable_dict
 
 @lru_cache(maxsize=None)
 def get_openai_client():
@@ -155,262 +249,262 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         llm_duration = time.perf_counter() - start_llm_time
     return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
 
-def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_vide: bool):
-    must_conditions = []
-    must_not_conditions = []
-    should_conditions = []
+# def build_qdrant_filters(data: dict, payload_fournisseur: str, fournisseur_non_vide: bool):
+#     must_conditions = []
+#     must_not_conditions = []
+#     should_conditions = []
     
-    categorie = data.get("categorie", {})
-    if categorie:
-        must_conditions.append(FieldCondition(key="categorie", match=MatchAny(any=list(categorie.values()))))
+#     categorie = data.get("categorie", {})
+#     if categorie:
+#         must_conditions.append(FieldCondition(key="categorie", match=MatchAny(any=list(categorie.values()))))
 
-    etat_ids = data.get("etat", [])
-    if etat_ids:
-        noms_etat = [list_etat[str(e)] for e in etat_ids if str(e) in list_etat]
-        if noms_etat:
-            must_conditions.append(FieldCondition(key="etat", match=MatchAny(any=noms_etat)))
+#     etat_ids = data.get("etat", [])
+#     if etat_ids:
+#         noms_etat = [list_etat[str(e)] for e in etat_ids if str(e) in list_etat]
+#         if noms_etat:
+#             must_conditions.append(FieldCondition(key="etat", match=MatchAny(any=noms_etat)))
 
-    affichage_ids = data.get("affichage", [])
-    if affichage_ids:
-        noms_affichage = [list_affichage[str(a)] for a in affichage_ids if str(a) in list_affichage]
-        if noms_affichage:
-            must_conditions.append(FieldCondition(key="affichage", match=MatchAny(any=noms_affichage)))
+#     affichage_ids = data.get("affichage", [])
+#     if affichage_ids:
+#         noms_affichage = [list_affichage[str(a)] for a in affichage_ids if str(a) in list_affichage]
+#         if noms_affichage:
+#             must_conditions.append(FieldCondition(key="affichage", match=MatchAny(any=noms_affichage)))
             
-    liste_page_types = data.get("page_type", [])
-    if liste_page_types:
-        must_conditions.append(FieldCondition(key="page_type", match=MatchAny(any=liste_page_types)))
+#     liste_page_types = data.get("page_type", [])
+#     if liste_page_types:
+#         must_conditions.append(FieldCondition(key="page_type", match=MatchAny(any=liste_page_types)))
 
-    if fournisseur_non_vide:
-        if payload_fournisseur == 'id_fournisseur':
-            must_not_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value="")))
-        elif payload_fournisseur == 'liste_frns':
-            should_conditions.append(
-                FieldCondition(
-                    key="liste_frns",
-                    match=models.MatchText(text="")
-                )
-            )
-        # must_not_conditions.append(FieldCondition(key=payload_fournisseur, is_null=IsNullCondition(is_null=True)))
-    else:
-        fournisseur = data.get("fournisseur", {})
-        if fournisseur:
-            for key, value in fournisseur.items():
-                if value:
-                    if payload_fournisseur == 'id_fournisseur':
-                        must_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value=key)))
-                    elif payload_fournisseur == 'liste_frns':
-                        should_conditions.append(
-                            FieldCondition(
-                                key="liste_frns",
-                                match=models.MatchText(text=value)
-                            )
-                        )
+#     if fournisseur_non_vide:
+#         if payload_fournisseur == 'id_fournisseur':
+#             must_not_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value="")))
+#         elif payload_fournisseur == 'liste_frns':
+#             should_conditions.append(
+#                 FieldCondition(
+#                     key="liste_frns",
+#                     match=models.MatchText(text="")
+#                 )
+#             )
+#         # must_not_conditions.append(FieldCondition(key=payload_fournisseur, is_null=IsNullCondition(is_null=True)))
+#     else:
+#         fournisseur = data.get("fournisseur", {})
+#         if fournisseur:
+#             for key, value in fournisseur.items():
+#                 if value:
+#                     if payload_fournisseur == 'id_fournisseur':
+#                         must_conditions.append(FieldCondition(key=payload_fournisseur, match=MatchValue(value=key)))
+#                     elif payload_fournisseur == 'liste_frns':
+#                         should_conditions.append(
+#                             FieldCondition(
+#                                 key="liste_frns",
+#                                 match=models.MatchText(text=value)
+#                             )
+#                         )
 
-    if must_conditions or must_not_conditions or should_conditions:
-        return Filter(
-            must=must_conditions if must_conditions else None,
-            must_not=must_not_conditions if must_not_conditions else None,
-            should=should_conditions if should_conditions else None
-        )
-    return None
+#     if must_conditions or must_not_conditions or should_conditions:
+#         return Filter(
+#             must=must_conditions if must_conditions else None,
+#             must_not=must_not_conditions if must_not_conditions else None,
+#             should=should_conditions if should_conditions else None
+#         )
+#     return None
 
-async def search_in_qdrant(request: SearchRequest):
-    logger.info(f"Recherche Qdrant: prompt='{request.prompt[:50]}...', sources={request.source}")
-    start_total_time = time.perf_counter()
+# async def search_in_qdrant(request: SearchRequest):
+#     logger.info(f"Recherche Qdrant: prompt='{request.prompt[:50]}...', sources={request.source}")
+#     start_total_time = time.perf_counter()
     
-    # 1. Obtenir les ressources nécessaires (elles seront chargées si c'est le premier appel)
-    qdrant_client = get_qdrant_client()
-    embedding_model = get_embedding_model()
+#     # 1. Obtenir les ressources nécessaires (elles seront chargées si c'est le premier appel)
+#     qdrant_client = get_qdrant_client()
+#     embedding_model = get_embedding_model()
     
-    start_embed = time.perf_counter()
-    query_vector = embedding_model.encode(request.prompt, normalize_embeddings=True).tolist()
-    embed_duration = time.perf_counter() - start_embed
+#     start_embed = time.perf_counter()
+#     query_vector = embedding_model.encode(request.prompt, normalize_embeddings=True).tolist()
+#     embed_duration = time.perf_counter() - start_embed
 
-    top_k = int(request.nombre_resultat)
-    _search_params_verification = _search_params(request)
-    _top_k = top_k
-    if _search_params_verification:
-        _top_k = int(_search_params_verification["ef"])
-        logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
+#     top_k = int(request.nombre_resultat)
+#     _search_params_verification = _search_params(request)
+#     _top_k = top_k
+#     if _search_params_verification:
+#         _top_k = int(_search_params_verification["ef"])
+#         logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
         
-    reranking_top_k = top_k
-    if request.use_reranker:
-        reranking_top_k = top_k * 3 
-        logger.info(f"Reranker activé. Récupération de {_top_k} documents pour reranker à {top_k}.")
+#     reranking_top_k = top_k
+#     if request.use_reranker:
+#         reranking_top_k = top_k * 3 
+#         logger.info(f"Reranker activé. Récupération de {_top_k} documents pour reranker à {top_k}.")
 
-    search_params = models.SearchParams(hnsw_ef=_ef_search(_top_k), exact=False)
+#     search_params = models.SearchParams(hnsw_ef=_ef_search(_top_k), exact=False)
     
-    all_results = {}
-    context_texts = []
-    collection_metadata = {
-        "devis_poc": {"payload_fournisseur": "liste_frns"},
-        "siteweb_poc": {"payload_fournisseur": "id_fournisseur"},
-        "echanges_poc": {"payload_fournisseur": "id_fournisseur"}
-    }
+#     all_results = {}
+#     context_texts = []
+#     collection_metadata = {
+#         "devis_poc": {"payload_fournisseur": "liste_frns"},
+#         "siteweb_poc": {"payload_fournisseur": "id_fournisseur"},
+#         "echanges_poc": {"payload_fournisseur": "id_fournisseur"}
+#     }
     
-    start_search = time.perf_counter()
-    fournisseur_non_vide = "1000000" in request.fournisseur
-    search_filter = None
+#     start_search = time.perf_counter()
+#     fournisseur_non_vide = "1000000" in request.fournisseur
+#     search_filter = None
 
-    for source in request.source:
-        metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
-        payload_fournisseur = metadata["payload_fournisseur"]
-        search_filter = build_qdrant_filters(request.dict(), payload_fournisseur, fournisseur_non_vide)
+#     for source in request.source:
+#         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
+#         payload_fournisseur = metadata["payload_fournisseur"]
+#         search_filter = build_qdrant_filters(request.dict(), payload_fournisseur, fournisseur_non_vide)
         
-        _source = source
-        if _search_params_verification:
-            _source = f"{source}{_search_params_verification['source']}"
+#         _source = source
+#         if _search_params_verification:
+#             _source = f"{source}{_search_params_verification['source']}"
         
-        hits = qdrant_client.search(
-            collection_name=_source,
-            query_vector=query_vector,
-            limit=reranking_top_k,
-            with_payload=True,
-            query_filter=search_filter,
-            search_params=search_params
-        )
+#         hits = qdrant_client.search(
+#             collection_name=_source,
+#             query_vector=query_vector,
+#             limit=reranking_top_k,
+#             with_payload=True,
+#             query_filter=search_filter,
+#             search_params=search_params
+#         )
         
-        matches_info = []
-        processed_lead_ids = set()
-        for hit in hits:
-            payload = hit.payload
-            total_chunks = payload.get("total_chunks", 1)
-            lead_id = payload.get("lead_id")
-            if source == "devis_poc" and lead_id and lead_id in processed_lead_ids:
-                continue
+#         matches_info = []
+#         processed_lead_ids = set()
+#         for hit in hits:
+#             payload = hit.payload
+#             total_chunks = payload.get("total_chunks", 1)
+#             lead_id = payload.get("lead_id")
+#             if source == "devis_poc" and lead_id and lead_id in processed_lead_ids:
+#                 continue
 
-            final_text = payload.get("text", "")
+#             final_text = payload.get("text", "")
             
-            # TODO complété: Logique de reconstruction des chunks pour 'devis_poc'
-            # correction : indexation du champ lead_id
-            # if source == "devis_poc" and total_chunks > 1 and lead_id:
-            if source == "devis_poc____" and total_chunks > 1 and lead_id:
-                logger.info(f"Reconstruction pour lead_id: {lead_id}")
-                sibling_chunks, _ = qdrant_client.scroll(
-                    collection_name=source,
-                    scroll_filter=models.Filter(must=[models.FieldCondition(key="lead_id", match=models.MatchValue(value=lead_id))]),
-                    # TODO : à vérifier
-                    # scroll_filter=Filter(must=[
-                    #     FieldCondition(key="lead_id", match=MatchValue(value=lead_id))
-                    # ]),
-                    limit=total_chunks,
-                    with_payload=True
-                )
-                if len(sibling_chunks) == total_chunks:
-                    sorted_chunks = sorted(sibling_chunks, key=lambda c: c.payload.get("chunk_number", 0))
-                    final_text = "".join([chunk.payload.get("text", "") for chunk in sorted_chunks])
-                    payload["text"] = final_text
-                else:
-                    logger.warning(f"Reconstruction échouée pour {lead_id}. Chunks trouvés: {len(sibling_chunks)}/{total_chunks}")
+#             # TODO complété: Logique de reconstruction des chunks pour 'devis_poc'
+#             # correction : indexation du champ lead_id
+#             # if source == "devis_poc" and total_chunks > 1 and lead_id:
+#             if source == "devis_poc____" and total_chunks > 1 and lead_id:
+#                 logger.info(f"Reconstruction pour lead_id: {lead_id}")
+#                 sibling_chunks, _ = qdrant_client.scroll(
+#                     collection_name=source,
+#                     scroll_filter=models.Filter(must=[models.FieldCondition(key="lead_id", match=models.MatchValue(value=lead_id))]),
+#                     # TODO : à vérifier
+#                     # scroll_filter=Filter(must=[
+#                     #     FieldCondition(key="lead_id", match=MatchValue(value=lead_id))
+#                     # ]),
+#                     limit=total_chunks,
+#                     with_payload=True
+#                 )
+#                 if len(sibling_chunks) == total_chunks:
+#                     sorted_chunks = sorted(sibling_chunks, key=lambda c: c.payload.get("chunk_number", 0))
+#                     final_text = "".join([chunk.payload.get("text", "") for chunk in sorted_chunks])
+#                     payload["text"] = final_text
+#                 else:
+#                     logger.warning(f"Reconstruction échouée pour {lead_id}. Chunks trouvés: {len(sibling_chunks)}/{total_chunks}")
 
-            if not request.use_reranker:
-                context_texts.append(final_text)
-            # TODO: à vérifier
-            # context_texts.append(f"{final_text}\n-----\n")
-            matches_info.append({"id": hit.id, "score": hit.score, "id_lead": lead_id, "metadata": payload})
+#             if not request.use_reranker:
+#                 context_texts.append(final_text)
+#             # TODO: à vérifier
+#             # context_texts.append(f"{final_text}\n-----\n")
+#             matches_info.append({"id": hit.id, "score": hit.score, "id_lead": lead_id, "metadata": payload})
             
-            if source == "devis_poc" and lead_id:
-                processed_lead_ids.add(lead_id)
+#             if source == "devis_poc" and lead_id:
+#                 processed_lead_ids.add(lead_id)
 
-        all_results[source] = matches_info
-    search_duration = time.perf_counter() - start_search
+#         all_results[source] = matches_info
+#     search_duration = time.perf_counter() - start_search
     
-    rerank_duration = 0
-    if request.use_reranker:
-        logger.info("Début du reranking...")
-        start_rerank_time = time.perf_counter()
-        reranker = get_reranker_model(request.reranker_model)
-        reranked_results = {}
-        for source, matches in all_results.items():
-            if not matches:
-                reranked_results[source] = []
-                continue
+#     rerank_duration = 0
+#     if request.use_reranker:
+#         logger.info("Début du reranking...")
+#         start_rerank_time = time.perf_counter()
+#         reranker = get_reranker_model(request.reranker_model)
+#         reranked_results = {}
+#         for source, matches in all_results.items():
+#             if not matches:
+#                 reranked_results[source] = []
+#                 continue
             
-            # Créer les paires [requête, texte_document] pour le cross-encoder
-            pairs = [[request.prompt, match["metadata"]["text"]] for match in matches]
+#             # Créer les paires [requête, texte_document] pour le cross-encoder
+#             pairs = [[request.prompt, match["metadata"]["text"]] for match in matches]
             
-            # Obtenir les scores du reranker
-            scores = reranker.predict(pairs, show_progress_bar=False)
+#             # Obtenir les scores du reranker
+#             scores = reranker.predict(pairs, show_progress_bar=False)
             
-            # Ajouter les scores de reranking aux résultats
-            for match, score in zip(matches, scores):
-                match["rerank_score"] = float(score)
+#             # Ajouter les scores de reranking aux résultats
+#             for match, score in zip(matches, scores):
+#                 match["rerank_score"] = float(score)
             
-            # Trier les résultats par le nouveau score et garder le top_k
-            reranked_matches = sorted(matches, key=lambda x: x["rerank_score"], reverse=True)
-            reranked_results[source] = reranked_matches[:top_k]
+#             # Trier les résultats par le nouveau score et garder le top_k
+#             reranked_matches = sorted(matches, key=lambda x: x["rerank_score"], reverse=True)
+#             reranked_results[source] = reranked_matches[:top_k]
         
-        all_results = reranked_results # Remplacer les résultats par les résultats rerankés
-        rerank_duration = time.perf_counter() - start_rerank_time
-        logger.info(f"Reranking terminé en {rerank_duration:.2f}s.")
+#         all_results = reranked_results # Remplacer les résultats par les résultats rerankés
+#         rerank_duration = time.perf_counter() - start_rerank_time
+#         logger.info(f"Reranking terminé en {rerank_duration:.2f}s.")
 
-        # ### AJOUT ###: Reconstruire le contexte à partir des résultats (potentiellement rerankés)
-        context_texts = []
-        for source, matches in all_results.items():
-            for match in matches:
-                # La logique de reconstruction pour 'devis_poc' est complexe à intégrer post-reranking.
-                # Pour l'instant, nous utilisons le texte du chunk qui a été reranké.
-                context_texts.append(match["metadata"].get("text", ""))
+#         # ### AJOUT ###: Reconstruire le contexte à partir des résultats (potentiellement rerankés)
+#         context_texts = []
+#         for source, matches in all_results.items():
+#             for match in matches:
+#                 # La logique de reconstruction pour 'devis_poc' est complexe à intégrer post-reranking.
+#                 # Pour l'instant, nous utilisons le texte du chunk qui a été reranké.
+#                 context_texts.append(match["metadata"].get("text", ""))
 
-    llm_req = llm_prompt(request, context_texts)
+#     llm_req = llm_prompt(request, context_texts)
 
-    total_duration = time.perf_counter() - start_total_time
+#     total_duration = time.perf_counter() - start_total_time
     
-    return {
-        "database": "qdrant",
-        "user_query": request.prompt,
-        "filter": search_filter.dict() if search_filter else "",
-        "matches": all_results,
-        "context": llm_req.context,
-        "response": llm_req.llm_response,
-        "embedding": round(embed_duration, 2),
-        "fournisseur_non_vide": fournisseur_non_vide,
-        "full_user_prompt": llm_req.full_user_prompt,
-        "chat_model": request.chat_model,
-        "temperature": request.temperature,
-        "vector_search": round(search_duration, 2),
-        "total_process": round(total_duration, 2),
-        "llm_execution": round(llm_req.llm_duration, 2),
-        "import_duration": round(import_duration, 2)
-    }
+#     return {
+#         "database": "qdrant",
+#         "user_query": request.prompt,
+#         "filter": search_filter.dict() if search_filter else "",
+#         "matches": all_results,
+#         "context": llm_req.context,
+#         "response": llm_req.llm_response,
+#         "embedding": round(embed_duration, 2),
+#         "fournisseur_non_vide": fournisseur_non_vide,
+#         "full_user_prompt": llm_req.full_user_prompt,
+#         "chat_model": request.chat_model,
+#         "temperature": request.temperature,
+#         "vector_search": round(search_duration, 2),
+#         "total_process": round(total_duration, 2),
+#         "llm_execution": round(llm_req.llm_duration, 2),
+#         "import_duration": round(import_duration, 2)
+#     }
 
-def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
-	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
-	clauses = []
+# def build_milvus_expression(data: dict, payload_fournisseur_key: str, fournisseur_non_vide: bool) -> str:
+# 	"""Traduit les filtres de la requête en une chaîne d'expression pour Milvus."""
+# 	clauses = []
 
-	# Catégories (ex: 'categorie in ["Bungalows", "Container"]')
-	categorie_dict = data.get("categorie", {})
-	if categorie_dict:
-		vals = [f'"{v}"' for v in categorie_dict.values()] # Ajouter des guillemets pour les chaînes
-		if vals: 
-			clauses.append(f'categorie in [{",".join(vals)}]')
+# 	# Catégories (ex: 'categorie in ["Bungalows", "Container"]')
+# 	categorie_dict = data.get("categorie", {})
+# 	if categorie_dict:
+# 		vals = [f'"{v}"' for v in categorie_dict.values()] # Ajouter des guillemets pour les chaînes
+# 		if vals: 
+# 			clauses.append(f'categorie in [{",".join(vals)}]')
 
-	# Fournisseurs
-	fournisseur_dict = data.get("fournisseur", {})
-	if fournisseur_dict:
-		vals = list(map(lambda v: f'"{v}"', fournisseur_dict.keys() if payload_fournisseur_key == "id_fournisseur" else fournisseur_dict.values()))
-		if vals: 
-			clauses.append(f'{payload_fournisseur_key} in [{",".join(vals)}]')
+# 	# Fournisseurs
+# 	fournisseur_dict = data.get("fournisseur", {})
+# 	if fournisseur_dict:
+# 		vals = list(map(lambda v: f'"{v}"', fournisseur_dict.keys() if payload_fournisseur_key == "id_fournisseur" else fournisseur_dict.values()))
+# 		if vals: 
+# 			clauses.append(f'{payload_fournisseur_key} in [{",".join(vals)}]')
 
-	# État
-	etat_ids = data.get("etat", [])
-	if etat_ids:
-		vals = [f'"{list_etat[str(e)]}"' for e in etat_ids if str(e) in list_etat]
-		if vals: 
-			clauses.append(f'etat in [{",".join(vals)}]')
+# 	# État
+# 	etat_ids = data.get("etat", [])
+# 	if etat_ids:
+# 		vals = [f'"{list_etat[str(e)]}"' for e in etat_ids if str(e) in list_etat]
+# 		if vals: 
+# 			clauses.append(f'etat in [{",".join(vals)}]')
 
-	# Affichage
-	affichage_ids = data.get("affichage", [])
-	if affichage_ids:
-		vals = [f'"{list_affichage[str(a)]}"' for a in affichage_ids if str(a) in list_affichage]
-		if vals: 
-			clauses.append(f'affichage in [{",".join(vals)}]')
+# 	# Affichage
+# 	affichage_ids = data.get("affichage", [])
+# 	if affichage_ids:
+# 		vals = [f'"{list_affichage[str(a)]}"' for a in affichage_ids if str(a) in list_affichage]
+# 		if vals: 
+# 			clauses.append(f'affichage in [{",".join(vals)}]')
 
-	# Fournisseur non vide
-	if fournisseur_non_vide:
-		clauses.append(f'{payload_fournisseur_key} != "" and {payload_fournisseur_key} is not null')
+# 	# Fournisseur non vide
+# 	if fournisseur_non_vide:
+# 		clauses.append(f'{payload_fournisseur_key} != "" and {payload_fournisseur_key} is not null')
 
-	return " and ".join(clauses)
+# 	return " and ".join(clauses)
 
 async def search_in_milvus(request: SearchRequest):
     # Implémentation complète de la recherche Milvus
@@ -426,7 +520,7 @@ async def search_in_milvus(request: SearchRequest):
     query_vector = [embedding_model.encode(request.prompt, normalize_embeddings=True).tolist()]
     embed_duration = time.perf_counter() - start_embed
 
-    top_k = int(request.nombre_resultat)
+    top_k = int(request.top_k)
     _search_params_verification = _search_params(request)
     _top_k = top_k
     if _search_params_verification:
@@ -434,7 +528,7 @@ async def search_in_milvus(request: SearchRequest):
         logger.info(f"Utilisation des paramètres de recherche personnalisés: {_search_params_verification}")
         
     reranking_top_k = top_k
-    if request.use_reranker:
+    if request.options.use_reranker:
         reranking_top_k = top_k * 3
         logger.info(f"Reranker activé. Récupération de {_top_k} documents pour reranker à {top_k}.")
         
@@ -449,7 +543,9 @@ async def search_in_milvus(request: SearchRequest):
     }
 
     start_search = time.perf_counter()
-    for source in request.source:
+    for item in request.source:
+        source = item.source
+        filtre = item.filtre
         _source = source
         if _search_params_verification:
             _source = f"{source}{_search_params_verification['source']}" 
@@ -460,18 +556,30 @@ async def search_in_milvus(request: SearchRequest):
             all_results[source] = []
             continue
 
-        print(_source)
         collection = Collection(name=_source)
         collection.load()
 
         # search_params = {"metric_type": "COSINE", "params": {"ef": _top_k if _search_params_verification else _ef_search(top_k)}}
-        search_params = {"metric_type": "COSINE", "params": {"ef": 300}}
+        search_params = {"metric_type": "COSINE", "params": {"ef": _ef_search(reranking_top_k)}}
         
         output_fields = settings.MILVUS_OUTPUT_FIELDS_CONFIG.get(source, ["*"])
 
         metadata = collection_metadata.get(source, {"payload_fournisseur": "id_fournisseur"})
-        filter_expr = build_milvus_expression(request.dict(), metadata["payload_fournisseur"], "1000000" in request.fournisseur)
+        # filter_expr = build_milvus_expression(request.dict(), metadata["payload_fournisseur"], "1000000" in request.fournisseur)
 
+        filters = []
+        filter_expr = filtre_source(request.filtre, source)
+        if filter_expr:
+            filters.append(" and ".join(filter_expr))
+        
+        filter_expr_source = filtre_source(filtre, source) if filtre else ""
+        if filter_expr_source:
+            filters.append(" and ".join(filter_expr_source))
+        
+        filter_expr = " and ".join(filters) if filters else ""
+        
+        logger.info(f"Filtre expression : {filter_expr}")
+            
         all_fields = [field.name for field in collection.schema.fields]
         fields_without_embedding = [f for f in all_fields if f != "embedding"]
         
@@ -528,7 +636,7 @@ async def search_in_milvus(request: SearchRequest):
                 entity = {field: hit.entity.get(field) for field in fields_without_embedding}
                 context_texts.append(entity.get("text", ""))
                 matches_info.append({
-                    "id": hit.id, "score": hit.distance, "id_lead": entity.get("lead_id"), "metadata": entity
+                    "id": hit.id, "score": hit.distance, "id_lead": entity.get("lead_id"), "metadata": _serialize_entity(hit.entity, source)
                 })
         all_results[source] = matches_info
     search_duration = time.perf_counter() - start_search
