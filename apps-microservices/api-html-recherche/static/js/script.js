@@ -1231,6 +1231,8 @@ $(function () {
       }
     }
 
+    document.querySelector('body').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
     state.isSearching = true;
     state.searchResults = [];
     state.llmResponse = ""; // Réinitialiser la réponse LLM
