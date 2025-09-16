@@ -5,6 +5,9 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 
+from app.core.api_rest_milvus import get_milvus_connection
+
+
 logger = logging.getLogger(__name__)
 
 description = """
