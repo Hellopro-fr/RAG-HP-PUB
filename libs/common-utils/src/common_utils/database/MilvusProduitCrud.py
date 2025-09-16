@@ -401,7 +401,8 @@ class MilvusProduitsCrud:
                 "status": "success",
                 "filters": {
                     "id_produit_milvus": id_produit_milvus,
-                    "metadata": metadata
+                    "metadata": metadata,
+                    "expr" : expr
                 },
                 "data": results
             }
