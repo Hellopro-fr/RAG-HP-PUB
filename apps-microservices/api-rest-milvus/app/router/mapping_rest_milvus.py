@@ -15,6 +15,6 @@ MILVUS_CRUD_REGISTRY = {
     "fournisseurs": MilvusFournisseursCrud.MilvusFournisseursCrud,
     "devis": MilvusDevisCrud.MilvusDevisCrud,
     "websites": MilvusWebsiteCrud.MilvusWebsiteCrud,
-    "categories": MilvusCategoriesCrud.MilvusCategorieCrud,
+    "categories": MilvusCategoriesCrud.MilvusCategoriesCrud,
     "echanges": MilvusEchangeCrud.MilvusEchangeCrud
 }
