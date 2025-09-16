@@ -8,7 +8,6 @@ router = APIRouter()
 async def get_ressource(
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
     id_ressource: str = Path(..., description="ID unique de la ressource"),
-    database: Optional[str] = Query(None, description="Nom de la base Milvus"),
     metadata: Optional[str] = Query(None, description="Données additionnelles au format JSON")
 ):
     try:
@@ -21,7 +20,6 @@ async def get_ressource(
     result = {
         "collection": collection_milvus,
         "id": id_ressource,
-        "database": database or "default",
         "metadata": parsed_metadata
     }
 

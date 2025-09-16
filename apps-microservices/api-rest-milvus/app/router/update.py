@@ -7,7 +7,6 @@ router = APIRouter()
 async def update_ressource(
     collection_milvus: str = Path(...),
     id_ressource: str = Path(...),
-    database: Optional[str] = Query(None),
     body: dict = Body(...)
 ):
     try:

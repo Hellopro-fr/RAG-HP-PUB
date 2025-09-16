@@ -7,7 +7,7 @@ from .delete import router as delete_router
 
 api_router = APIRouter()
 
-api_router.include_router(create_router, tags=["POST"])
 api_router.include_router(read_router, tags=["GET"])
+api_router.include_router(create_router, tags=["POST"])
 api_router.include_router(update_router, tags=["PUT"])
 api_router.include_router(delete_router, tags=["DELETE"])

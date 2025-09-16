@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 description = """
 API REST MILVUS !
 """
-PROJECT_NAME__    = "API-HP-RAG"
+PROJECT_NAME__    = "API-HP-RAG REST MILVUS"
 PROJECT_VERSION__ = "1.0.0"
 
 

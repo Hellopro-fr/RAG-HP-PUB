@@ -7,7 +7,6 @@ router = APIRouter()
 @router.post("/{collection_milvus}")
 async def create_ressource(
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
-    database: Optional[str] = Query(None, description="Base de données cible"),
     body: dict = Body(...)
 ):
     try:
