@@ -2,4 +2,4 @@ from enum import Enum
 
 
 class RouterTags:
-    rest_milvus = ["rest-milvus"]
+    rest-milvus = ["rest-milvus"]
