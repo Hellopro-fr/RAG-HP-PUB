@@ -28,44 +28,53 @@ async def milvus_search_endpoint(request: SearchRequest = Body(...)):
         raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
 
 # Nouveau point de terminaison pour les requêtes multiples
-@router.post("/check-doublon-lot", response_model=SearchResponseLot, summary="Vérifie le doublon pour plusieurs produits à la fois dans Milvus")
+@router.post("/check-doublon-lot", summary="Vérifie le doublon pour plusieurs produits à la fois dans Milvus")
 async def bulk_milvus_search_endpoint(requests: List[SearchRequest]):
     all_results = []
-    
+
     for request in requests:
         try:
-            logger.info(f"Requête en cours de traitement sur /bulk-check-doublon pour nom : {request.nom_produit}")
-            
-            # Validation des données pour chaque élément
+            logger.info(f"Requête en cours de traitement sur /bulk-check-doublon pour id_produit : {request.id_produit}")
+
+            # Validation basique
             if not request.nom_produit.strip():
                 raise ValueError("Le nom ne peut pas être vide.")
             if not request.domaine:
                 raise ValueError("Le domaine ne peut pas être vide.")
-            
-            # Appel de la fonction existante pour chaque requête individuelle
-            results = await search_in_milvus(request)
-            
-            # Ajout du résultat à la liste
-            all_results.append(SearchReponse(results))
-            
-        except ValueError as ve:
-            logger.error(f"Erreur de validation (400) pour une des requêtes: {ve}")
-            # Ajout d'une réponse d'erreur pour cet élément
-            # Note : Ce format d'erreur n'est pas validé par le schéma SearchReponse,
-            # mais il est utile pour le débogage.
+
+            # Appel de ta fonction de recherche (qui retourne un résultat formaté)
+            result = await search_in_milvus(request)
+
+            # ⚡️ Au lieu d'empiler un tableau dans un tableau, 
+            # on ajoute directement le dict du produit
             all_results.append({
+                "id_produit": request.id_produit,
+                "is_doublon": result.is_doublon,
+                "from_similarity": result.from_similarity,
+                "score": result.score
+            })
+
+        except ValueError as ve:
+            logger.error(f"Erreur de validation pour {request.id_produit}: {ve}")
+            all_results.append({
+                "id_produit": request.id_produit,
                 "error": True,
                 "message": str(ve),
-                "post": request.dict()
+                "is_doublon": None,
+                "from_similarity": None,
+                "score": None
             })
+
         except Exception as e:
-            logger.error(f"Erreur interne du serveur (500) pour une des requêtes: {e}", exc_info=True)
-            # Ajout d'une réponse d'erreur pour cet élément
+            logger.error(f"Erreur interne pour {request.id_produit}: {e}", exc_info=True)
             all_results.append({
+                "id_produit": request.id_produit,
                 "error": True,
                 "message": f"Erreur interne du serveur: {e}",
-                "post": request.dict()
+                "is_doublon": None,
+                "from_similarity": None,
+                "score": None
             })
-            
-    # Retourne l'objet de réponse de masse
-    return SearchResponseLot(results=all_results)
+
+    # Retourne une seule liste bien aplatie
+    return {"results": all_results}
