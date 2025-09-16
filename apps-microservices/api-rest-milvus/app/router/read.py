@@ -18,7 +18,7 @@ async def get_ressource(
     
     # Logique pour récupérer les données depuis Milvus
     MP_Crud = MilvusProduitsCrud()
-    result = MP_Crud.get_produit_rest(id_ressource, collection_milvus, parsed_metadata)
+    result = MP_Crud.get_produit_rest(id_ressource, parsed_metadata)
     # Exemple simplifié :
     # result = {
     #     "collection": collection_milvus,
