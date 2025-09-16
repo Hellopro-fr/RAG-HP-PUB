@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 logger = logging.getLogger(__name__)
 
 description = """
-API pour vérifier le doublon produit pour le projet RAG Hellopro !
+API REST MILVUS !
 """
 PROJECT_NAME__    = "API-HP-RAG"
 PROJECT_VERSION__ = "1.0.0"
