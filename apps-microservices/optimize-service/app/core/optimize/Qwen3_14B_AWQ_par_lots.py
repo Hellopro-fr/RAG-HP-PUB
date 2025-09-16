@@ -13,7 +13,7 @@ class ProductTitleOptimizerBatch:
         self.llm_args = {
             "model": "Qwen/Qwen3-14B-AWQ",
             "quantization": "awq",
-            "gpu_memory_utilization": 0.85,
+            "gpu_memory_utilization": 0.95,
             "trust_remote_code": True,
             "dtype": "auto",
             "max_model_len": 16384
@@ -70,7 +70,7 @@ class ProductTitleOptimizerBatch:
             2. Générer un nouveau titre produit en suivant **scrupuleusement** les règles de "CONSIGNES TITRE PRODUIT".
 
             # CONSIGNES POUR LE TITRE =
-            - Longueur entre 30 et 130 caractères
+            - La longueur du titre doit être comprise **strictement** entre 30 et 130 caractères (espaces inclus).
             - Tu dois uniquement réagencer ou enrichir le titre **avec des informations déjà présentes** dans "TITRE PRODUIT" ou "DESCRIPTION PRODUIT".
             - Ne JAMAIS inventer, supposer ou extrapoler.
             - Ne pas supprimer d'information du titre initial, sauf si clairement non pertinente (ex : "trtrtrtr","\\\\",...).
@@ -221,7 +221,7 @@ class ProductTitleOptimizerBatch:
                     print(f"JSON parsé avec succès à la tentative {i + 1}")
                 return result
             except json.JSONDecodeError as e:
-                print(f"Tentative {i + 1} échouée: {type(e).__name__}: {str(e)}")
+                # print(f"Tentative {i + 1} échouée: {type(e).__name__}: {str(e)}")
                 if i < len(attempts) - 1:
                     continue
                 else:
