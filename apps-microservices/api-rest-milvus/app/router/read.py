@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Path
 from typing import Optional
-from common_utils.database.MilvusProduitCrud import MilvusProduitsCrud
+from common_utils.database.mapping_rest_milvus import MILVUS_CRUD_REGISTRY
+
 import json
 
 router = APIRouter()
@@ -16,17 +17,19 @@ async def get_ressource(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Paramètre 'metadata' invalide. Doit être un JSON valide.")
     
-    # Logique pour récupérer les données depuis Milvus
-    MP_Crud = MilvusProduitsCrud()
-    result = MP_Crud.get_produit_rest(id_ressource, parsed_metadata)
+    # Obtenir la classe CRUD à partir du mapping
+    crud_class = MILVUS_CRUD_REGISTRY.get(collection_milvus)
+    if not crud_class:
+        raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
 
+    try:
+        crud_instance = crud_class()
+        result = crud_instance.get_ressource_rest(id_ressource, parsed_metadata)
 
-    print("Result from MilvusProduitsCrud:", result)
-    # Exemple simplifié :
-    # result = {
-    #     "collection": collection_milvus,
-    #     "id": id_ressource,
-    #     "metadata": parsed_metadata 
-    # }
+        if not result:
+            raise HTTPException(status_code=404, detail="Ressource non trouvée.")
 
-    return result
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")

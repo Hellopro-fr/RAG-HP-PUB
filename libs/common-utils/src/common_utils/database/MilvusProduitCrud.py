@@ -340,11 +340,7 @@ class MilvusProduitsCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][Produit] Erreur de Récupèration du produit : {e}", exc_info=True)
 
-    def get_produit_rest(self, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        
-
-        print("get_produit_rest - id_produit_milvus:", id_produit_milvus)
-        print("get_produit_rest - metadata:", metadata)
+    def get_ressource_rest(self, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
         model_config = ModelConfig()
         model_key = model_config.model_id
@@ -373,7 +369,6 @@ class MilvusProduitsCrud:
                         expr_parts.append(f'{key} == "{value}"')
                     else:
                         expr_parts.append(f"{key} == {value}")
-            print("expr_parts:", expr_parts)
             # Aucun filtre fourni ?
             if not expr_parts:
                 return {
@@ -397,11 +392,7 @@ class MilvusProduitsCrud:
                 "chunk_id"
             ]
 
-            print(f"[{model_key}] Requête Milvus : {expr}")
-
             results = self.collection.query(expr=expr, output_fields=output_fields)
-
-            print(results)
 
             return {
                 "status": "success",
