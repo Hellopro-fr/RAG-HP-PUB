@@ -2,5 +2,3 @@ fastapi[all]
 uvicorn
 python-dotenv
 pymilvus
-requests
-httpx

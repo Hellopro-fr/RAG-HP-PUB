@@ -1,12 +1,12 @@
 from app.utils.router.tags import RouterTags as Tags
 
-from app.router.rest-milvus.rest-milvus import router as rest-milvusRouter
+from app.router.ingestion.ingestion import router as IngestionRouter
 
 params = [
     [
-        rest-milvusRouter,
-        f"/rest-milvus",
-        Tags.rest-milvus,
+        IngestionRouter,
+        f"/check-doublon",
+        Tags.check_doublon,
         True
     ]
 ]

@@ -22,11 +22,11 @@ class Settings(BaseSettings):
     EF_PARAMS: str
     
     SEUIL_SCORE_DOUBLON      : float = 0.90
-    ADRESSE_VM_API_RECHERCHE : str   = "http://34.90.162.9"
+    ADRESSE_VM_API_RECHERCHE : str   = "http://34.34.166.5"
     PORT_API_RECHERCHE       : int   = 8500
     COLLECTION_PRODUIT_NAME  : str   = "produits_3"
     
-    URL_QUERY_API_RECHERCHE  : str  = f"{ADRESSE_VM_API_RECHERCHE}:{PORT_API_RECHERCHE}/search-service/milvus/search"
+    URL_QUERY_API_RECHERCHE  : str  = f"{ADRESSE_VM_API_RECHERCHE}:{PORT_API_RECHERCHE}/search-service/search"
     
     IS_BASE_FRS_EXISTE  : bool  = False
     

@@ -1,10 +1,8 @@
 fastapi[all]
 uvicorn
-python-dotenv
 pydantic
-pydantic-settings
 requests
 openai
+python-dotenv
+tqdm
 python-multipart
-tenacity
-ftfy

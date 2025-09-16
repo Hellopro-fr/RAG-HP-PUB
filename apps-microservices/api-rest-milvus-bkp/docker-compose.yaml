@@ -1,11 +1,11 @@
-version: "3.8"
+version: "2.38"
 services:
-  api-classification:
+  fastapi-rag:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8566:8566"
+      - "8502:8502"
     volumes:
       - .:/app
     tty: true

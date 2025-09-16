@@ -1,21 +1,63 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
-from milvus_client import execute_query
+from app.router.api_router import api_router
 
+import logging
+import asyncio
+from contextlib import asynccontextmanager
+
+from app.core.api_rest_milvus import get_milvus_connection
+
+
+logger = logging.getLogger(__name__)
 
 description = """
-API rest-milvus pour le projet RAG Hellopro 🚀
+API REST MILVUS !
 """
+PROJECT_NAME__    = "API-HP-RAG REST MILVUS"
+PROJECT_VERSION__ = "1.0.0"
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Handles application startup and shutdown events.
+    """
+    logger.info("--- Application Startup ---")
+    
+    # Create a list of async tasks for pre-loading resources.
+    # We run the synchronous, blocking model-loading code in a separate thread
+    # to avoid blocking the asyncio event loop.
+    init_tasks = [
+        asyncio.to_thread(get_milvus_connection),
+    ]
+    
+    logger.info("Pre-loading models and establishing database connection...")
+    # asyncio.gather runs all our initialization tasks concurrently
+    await asyncio.gather(*init_tasks)
+    
+    logger.info("--- Startup Complete. Application is ready. ---")
+    
+    yield
+    
+    # --- Shutdown Logic ---
+    # You can add cleanup code here if needed, like closing connections.
+    logger.info("--- Application Shutdown ---")
 
-class QueryRequest(BaseModel):
-    collection_name: str
-    query: dict  # paramètre générique pour la requête
 
-@app.post("/execute")
-def execute(req: QueryRequest):
-    result = execute_query(req.collection_name, req.query)
-    return {"result": result}
+app = FastAPI(
+    title       = PROJECT_NAME__,
+    version     = PROJECT_VERSION__,
+    description = description,
+    lifespan=lifespan
+)
+
+@app.get("/", tags=["Monitoring"])
+def read_root():    
+    return {"message": f"Bienvenue sur l'API {PROJECT_NAME__} v{PROJECT_VERSION__}"}
+
+@app.get("/health", tags=["Monitoring"])
+def health_check():
+    return {"status": "ok"}
+
+app.include_router(api_router)
 

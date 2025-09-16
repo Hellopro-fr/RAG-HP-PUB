@@ -32,7 +32,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
- 
+
+
   api-classification-service:
     build:
       context: .
@@ -43,7 +44,7 @@ services:
     volumes:
       - ./apps-microservices/api-classification:/app:rw
     ports:
-      - "8566:8566"
+      - "8520:8520"
     env_file:
       - .env
   
@@ -190,7 +191,7 @@ services:
     volumes:
       - ./apps-microservices/embedding-service/app:/app/embedding_service:rw
     deploy:
-      replicas: 6
+      replicas: 4
       resources:
         reservations:
           devices:

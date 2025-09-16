@@ -339,3 +339,92 @@ class MilvusProduitsCrud:
             self.logger.error(f"[{model_key}][Produit] Erreur Milvus lors de la récupération : {e}")
         except Exception as e:
             self.logger.error(f"[{model_key}][Produit] Erreur de Récupèration du produit : {e}", exc_info=True)
+
+    def get_produit_rest(self, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        
+
+        print("get_produit_rest - id_produit_milvus:", id_produit_milvus)
+        print("get_produit_rest - metadata:", metadata)
+
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée.",
+                    "code": 404
+                }
+
+            expr_parts = []
+
+            # Filtrage par ID (clé primaire)
+            if id_produit_milvus is not None:
+                expr_parts.append(f"id == {id_produit_milvus}")
+
+            # Filtrage par metadata (clé=valeur)
+            if metadata:
+                for key, value in metadata.items():
+                    if isinstance(value, str):
+                        expr_parts.append(f'{key} == "{value}"')
+                    else:
+                        expr_parts.append(f"{key} == {value}")
+            print("expr_parts:", expr_parts)
+            # Aucun filtre fourni ?
+            if not expr_parts:
+                return {
+                    "status": "error",
+                    "message": "Aucun critère de recherche fourni (id_produit_milvus ou metadata).",
+                    "code": 400
+                }
+
+            # Construction de l'expression finale
+            expr = " and ".join(expr_parts)
+
+            # Champs à retourner (tu peux les adapter)
+            output_fields = [
+                "id",
+                "id_produit",
+                "nom_produit",
+                "id_fournisseur",
+                "fournisseur",
+                "id_categorie",
+                "categorie",
+                "chunk_id"
+            ]
+
+            print(f"[{model_key}] Requête Milvus : {expr}")
+
+            results = self.collection.query(expr=expr, output_fields=output_fields)
+
+            print(results)
+
+            return {
+                "status": "success",
+                "filters": {
+                    "id_produit_milvus": id_produit_milvus,
+                    "metadata": metadata,
+                    "expr" : expr
+                },
+                "data": results
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}] Erreur Milvus lors de la récupération : {e}")
+            return {
+                "status": "error",
+                "message": str(e),
+                "code": 500
+            }
+
+        except Exception as e:
+            self.logger.error(f"[{model_key}] Erreur interne : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+                "code": 500
+            }
