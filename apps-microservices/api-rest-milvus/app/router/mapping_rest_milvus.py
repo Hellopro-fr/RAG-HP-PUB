@@ -5,7 +5,7 @@ from common_utils.database import (
     MilvusFournisseursCrud,
     MilvusDevisCrud,
     MilvusWebsiteCrud,
-    MilvusCategorieCrud,
+    MilvusCategoriesCrud,
     MilvusEchangeCrud
 )
 
@@ -15,6 +15,6 @@ MILVUS_CRUD_REGISTRY = {
     "fournisseurs": MilvusFournisseursCrud.MilvusFournisseursCrud,
     "devis": MilvusDevisCrud.MilvusDevisCrud,
     "websites": MilvusWebsiteCrud.MilvusWebsiteCrud,
-    "categories": MilvusCategorieCrud.MilvusCategorieCrud,
+    "categories": MilvusCategoriesCrud.MilvusCategorieCrud,
     "echanges": MilvusEchangeCrud.MilvusEchangeCrud
 }
