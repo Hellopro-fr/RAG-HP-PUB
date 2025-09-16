@@ -5,10 +5,10 @@ import json
 
 router = APIRouter()
 
-@router.get("/{collection_milvus}/{id_ressource}")
+@router.get("/{collection_milvus}")
 async def get_ressource(
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
-    id_ressource: Optional[str] = Path(..., description="ID unique de la ressource"),
+    id_ressource: Optional[str] = Query(None, description="ID unique de la ressource"),
     metadata: Optional[str] = Query(None, description="Données additionnelles au format JSON")
 ):
     try:
@@ -18,12 +18,12 @@ async def get_ressource(
     
     # Logique pour récupérer les données depuis Milvus
     MP_Crud = MilvusProduitsCrud()
-    result = MP_Crud.get_produit_rest(id_ressource, collection_milvus, parsed_metadata)
+    result = MP_Crud.get_produit_rest(id_ressource, parsed_metadata)
     # Exemple simplifié :
     # result = {
     #     "collection": collection_milvus,
     #     "id": id_ressource,
-    #     "metadata": parsed_metadata
+    #     "metadata": parsed_metadata 
     # }
 
     return result
