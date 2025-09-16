@@ -34,12 +34,13 @@ async def websocket_search(websocket: WebSocket):
         if search_request.options.rrf:
             async for update in search_in_milvus_reranker(search_request):
                 await websocket.send_json(update)
-        elif search_request.option.grpc:
+        # elif search_request.option.grpc:
+        else:
             async for update in search(search_request):
                 await websocket.send_json(update)
-        else:
-            async for update in search_in_milvus_stream(search_request):
-                await websocket.send_json(update)
+        # else:
+        #     async for update in search_in_milvus_stream(search_request):
+        #         await websocket.send_json(update)
 
     except WebSocketDisconnect:
         logger.warning(f"Client {websocket.client} disconnected.")

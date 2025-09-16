@@ -47,7 +47,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.PROJECT_VERSION,
     description="API pour interroger Qdrant ou Milvus et générer des réponses avec des LLMs.",
-    lifespan=lifespan
+    # lifespan=lifespan
 )
 
 @app.on_event("startup")
@@ -61,10 +61,10 @@ def startup():
     
     # Étape 1: S'assure que le modèle ONNX existe sur le disque.
     # Cette opération est longue UNIQUEMENT au tout premier lancement.
-    prepare_onnx_model()
+    # prepare_onnx_model()
     
     logger.info("Pré-chargement du modèle de reranking ONNX...")
-    get_reranker_onnx_model()
+    # get_reranker_onnx_model()
     
     logger.info("--- MODÈLES PRÊTS : LE SERVEUR EST OPÉRATIONNEL ---")
 
