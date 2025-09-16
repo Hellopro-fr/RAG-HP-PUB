@@ -1,0 +1,11 @@
+grpcio
+grpcio-tools
+protobuf
+asyncio
+uvloop
+python-dotenv
+# Dépendances pour le client Triton et la tokenization
+tritonclient[all]
+sentence-transformers
+sentencepiece
+numpy

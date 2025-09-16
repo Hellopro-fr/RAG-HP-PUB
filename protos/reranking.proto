@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package reranking;
+
+service RerankingService {
+  // TODO: Sécuriser ce flux (authentification, validation des entrées)
+  rpc Rerank(RerankRequest) returns (RerankResponse);
+}
+
+message RerankRequest {
+  string query = 1;
+  repeated string documents = 2;
+}
+
+message RerankResponse {
+  repeated string ranked_documents = 1;
+}

@@ -1,6 +1,122 @@
 version: '3.8'
 
 services:
+  model-builder:
+    build:
+      context: .
+      dockerfile: ./model-optimizer/Dockerfile
+    volumes:
+      # Monte le répertoire local pour que les modèles ONNX y soient écrits
+      - ./triton-model-repo:/output
+    # Exécute les deux scripts l'un après l'autre. Le conteneur s'arrêtera après.
+    command: /bin/bash -c "python export_embedding_to_onnx.py && python export_reranker_to_onnx.py"
+  vllm-server:
+    image: vllm/vllm-openai:latest
+    command: >
+      --model Qwen/Qwen1.5-7B-Chat-AWQ
+      --quantization awq
+      --trust-remote-code
+      --max-model-len 4096
+      --gpu-memory-utilization 0.75
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              # count: all
+              capabilities: [gpu]
+    volumes:
+      - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
+    networks:
+      - services-net
+
+  triton-server:
+    image: nvcr.io/nvidia/tritonserver:24.01-py3 # Utilisez une image récente
+    command: tritonserver --model-repository=/models --log-verbose=1
+    ports:
+      - "8001:8001" # Port gRPC de Triton
+      - "8002:8002" # Port de métriques
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              # count: all
+              capabilities: [gpu]
+    volumes:
+      - ./triton-model-repo:/models
+    networks:
+      - services-net
+
+  # --- Services Applicatifs (Clients) ---
+
+  llm-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/llm-service/Dockerfile
+    environment:
+      - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
+    depends_on:
+      - vllm-server
+    networks:
+      - services-net
+
+  embedding-model-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/embedding-model-service/Dockerfile
+    # Le GPU n'est plus nécessaire ici, Triton s'en charge !
+    environment:
+      - TRITON_URL=triton-server:8001
+    depends_on:
+      - triton-server
+    networks:
+      - services-net
+
+  reranking-model-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/reranking-model-service/Dockerfile
+    # Le GPU n'est plus nécessaire ici
+    environment:
+      - TRITON_URL=triton-server:8001
+    depends_on:
+      - triton-server
+    networks:
+      - services-net
+
+  database-recherche-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/database-recherche-service/Dockerfile
+    env_file:
+      - .env
+    networks:
+      - services-net
+
+  api-model-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-model-service/Dockerfile
+    ports:
+      - "8599:8599"
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - RERANKING_SERVICE_URL=reranking-model-service:50053
+      - DATABASE_SERVICE_URL=database-recherche-service:50054
+    depends_on:
+      - llm-service
+      - embedding-model-service
+      - reranking-model-service
+      - database-recherche-service
+    networks:
+      - services-net
+
   api-ingestion-service:
     build:
       context: .
@@ -294,3 +410,7 @@ services:
       - "8516:8516"
     env_file:
       - .env
+
+networks:
+  services-net:
+    driver: bridge

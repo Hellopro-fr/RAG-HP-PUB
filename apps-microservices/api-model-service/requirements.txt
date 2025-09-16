@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+grpcio
+grpcio-tools
+protobuf
+httpx
+python-dotenv
+jinja2
+googleapis-common-protos

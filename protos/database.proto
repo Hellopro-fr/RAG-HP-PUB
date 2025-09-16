@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package database;
+import "google/protobuf/struct.proto";
+
+service DatabaseSearchService {
+  // TODO: Sécuriser ce flux (authentification, validation des entrées)
+  rpc Search(SearchRequest) returns (SearchResponse);
+}
+
+message SearchRequest {
+  string collection_name = 1; // Nom de la collection Milvus à interroger
+  repeated float query_embedding = 2;
+  int32 top_k = 3;
+  optional string filter_expression = 4;
+  repeated string output_fields = 5;
+}
+
+message SearchResult {
+  string id = 1;
+  float score = 2;
+  google.protobuf.Struct metadata = 3;
+  string source = 4;
+}
+
+message SearchResponse {
+  repeated SearchResult results = 1;
+}
