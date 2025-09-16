@@ -68,10 +68,15 @@ async def search_in_milvus(request: SearchRequest):
     SCORE = 0.0
 
     seuil_score_doublon = settings.SEUIL_SCORE_DOUBLON
-    payload = {
+        
+    payload= {
         "prompt": request.nom_produit,
-        "source": [settings.COLLECTION_PRODUIT_NAME],
-        "nombre_resultat": "10"
+        "source": [
+            {
+                "source": settings.COLLECTION_PRODUIT_NAME,
+            }
+        ],        
+        "top_k": 10,
     }
 
     try:
