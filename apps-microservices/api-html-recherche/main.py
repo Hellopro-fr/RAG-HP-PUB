@@ -1,31 +1,78 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
+import httpx
+import logging
+import os
+
+from middlewares.auth import AuthMiddleware
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Config logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("auth")
+
+# Static & templates
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Your original route for dynamic pages
+# ORDRE IMPORTANT : SessionMiddleware EN PREMIER, puis AuthMiddleware
+app.add_middleware(AuthMiddleware)
+app.add_middleware(SessionMiddleware, secret_key=os.environ.get("JWT_SECRET"))
+
+# --- ROUTES ---
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    error = request.session.pop("error", None)
+    username = request.session.pop("username", "")
+
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "error": error, "username": username}
+    )
+
+@app.post("/login")
+async def login_action(request: Request, username: str = Form(...), password: str = Form(...)):
+    async with httpx.AsyncClient() as client:
+        response = await client.post("https://dev-www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php", data={"login": username, "password": password})
+
+    logger.info(f"XHR status={response.status_code}, raw={response.text}")
+
+    try:
+        res = response.json()
+    except Exception as e:
+        logger.error(f"Impossible de parser le JSON: {e}")
+        request.session["error"] = "Erreur d'authentification"
+        return RedirectResponse(url="/login", status_code=303)
+
+    if response.status_code == 200 and res.get("success"):
+        request.session["user"] = {
+            "display_name": res.get("display_name"), 
+            "email": res.get("email"), 
+            "token": res.get("token")
+        }
+
+        return RedirectResponse(url="/recherche", status_code=303)
+
+    request.session["error"] = "Login / Mot de passe invalide"
+    request.session["username"] = username
+    return RedirectResponse(url="/login", status_code=303)
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=303)
+
 @app.get("/pages/{item_id}", response_class=HTMLResponse)
 async def read_item(request: Request, item_id: str):
-    context = {
-        "request": request,
-        "item_id": item_id,
-        "item_name": "Awesome Gadget",
-        "description": "A very useful tool for everyday tasks."
-    }
-    return templates.TemplateResponse(f"{item_id}.html", context)
+    return templates.TemplateResponse(f"{item_id}.html", {"request": request})
 
-# --- ADD THIS NEW ROUTE ---
-# A specific route for the search page
+# Route générique à la fin
 @app.get("/{page}", response_class=HTMLResponse)
-async def get_search_page(request: Request, page: str):
-    context = {
-        "request": request,
-        # You can add any specific data for the search page here
-    }
-    # We hardcode the template name since this route is specific
-    return templates.TemplateResponse(f"{page}.html", context)
+async def get_page(request: Request, page: str):
+    user = request.session.get("user")
+    return templates.TemplateResponse(f"{page}.html", {"request": request, "user": user})

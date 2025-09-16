@@ -383,6 +383,29 @@
               <!-- <span class="hidden sm:inline">Résultats</span> -->
             </button>
           </div>
+
+          <div class="relative dropdown mr-auto">
+              <button id="avatarDropdown" class="flex items-center space-x-2 focus:outline-none">
+                  <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                      <i data-lucide="user" class="w-5 h-5 text-indigo-600"></i>
+                  </div>
+                  <!-- <span class="hidden md:inline text-gray-700">Jean Dupont</span> -->
+                  <!-- <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500"></i> -->
+              </button>
+              
+              <div id="dropdownMenu" class="hidden absolute right-0 mt-2 bg-white rounded-md shadow-lg py-1 z-10">
+                  <span class="block px-4 py-2 text-sm text-gray-700 font-semibold flex items-center">
+                      <i data-lucide="user" class="w-4 h-4 mr-2"></i> {{ user.display_name }}
+                  </span>
+                  <span class="block px-4 py-2 text-sm text-gray-700 flex items-center">
+                      <i data-lucide="mail" class="w-4 h-4 mr-2"></i> {{ user.email }}
+                  </span>
+                  <div class="border-t border-gray-100 my-1"></div>
+                  <a href="/logout" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center">
+                      <i data-lucide="log-out" class="w-4 h-4 mr-2"></i> Déconnexion
+                  </a>
+              </div>
+          </div>
         </div>
       </div>
     </header>
@@ -1571,6 +1594,27 @@
     <script>
       // Initialize Lucide icons
       lucide.createIcons();
+
+      document.addEventListener('DOMContentLoaded', function() {
+          const dropdownButton = document.getElementById('avatarDropdown');
+          const dropdownMenu = document.getElementById('dropdownMenu');
+
+          // Toggle dropdown on click
+          dropdownButton.addEventListener('click', function(e) {
+              e.stopPropagation();
+              dropdownMenu.classList.toggle('hidden');
+          });
+
+          // Close dropdown when clicking outside
+          document.addEventListener('click', function() {
+              dropdownMenu.classList.add('hidden');
+          });
+
+          // Prevent dropdown from closing when clicking inside
+          dropdownMenu.addEventListener('click', function(e) {
+              e.stopPropagation();
+          });
+      });
     </script>
   </body>
 </html>
