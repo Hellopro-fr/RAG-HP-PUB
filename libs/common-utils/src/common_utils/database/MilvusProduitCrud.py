@@ -382,7 +382,16 @@ class MilvusProduitsCrud:
             expr = " and ".join(expr_parts)
 
             # Champs à retourner (tu peux les adapter)
-            output_fields = ["id", "id_produit", "nom_produit"]
+            output_fields = [
+                "id",
+                "id_produit",
+                "nom_produit",
+                "id_fournisseur",
+                "fournisseur",
+                "id_categorie",
+                "categorie",
+                "chunk_id"
+            ]
 
             self.logger.info(f"[{model_key}] Requête Milvus : {expr}")
 
