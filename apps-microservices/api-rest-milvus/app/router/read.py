@@ -23,7 +23,7 @@ async def get_ressource(
     # result = {
     #     "collection": collection_milvus,
     #     "id": id_ressource,
-    #     "metadata": parsed_metadata
+    #     "metadata": parsed_metadata 
     # }
 
     return result
