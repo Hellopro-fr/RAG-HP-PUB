@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Path
 from typing import Optional
+from common_utils.database.MilvusProduitCrud import MilvusProduitsCrud
 import json
 
 router = APIRouter()
@@ -16,11 +17,13 @@ async def get_ressource(
         raise HTTPException(status_code=400, detail="Paramètre 'metadata' invalide. Doit être un JSON valide.")
     
     # Logique pour récupérer les données depuis Milvus
+    MP_Crud = MilvusProduitsCrud()
+    result = MP_Crud.get_produit_rest(id_ressource, collection_milvus, parsed_metadata)
     # Exemple simplifié :
-    result = {
-        "collection": collection_milvus,
-        "id": id_ressource,
-        "metadata": parsed_metadata
-    }
+    # result = {
+    #     "collection": collection_milvus,
+    #     "id": id_ressource,
+    #     "metadata": parsed_metadata
+    # }
 
     return result
