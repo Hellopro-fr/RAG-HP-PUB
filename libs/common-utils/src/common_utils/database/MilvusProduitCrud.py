@@ -401,6 +401,8 @@ class MilvusProduitsCrud:
 
             results = self.collection.query(expr=expr, output_fields=output_fields)
 
+            print(results)
+
             return {
                 "status": "success",
                 "filters": {
