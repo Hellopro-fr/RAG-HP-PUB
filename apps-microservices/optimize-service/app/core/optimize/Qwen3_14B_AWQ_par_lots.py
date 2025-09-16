@@ -13,7 +13,7 @@ class ProductTitleOptimizerBatch:
         self.llm_args = {
             "model": "Qwen/Qwen3-14B-AWQ",
             "quantization": "awq",
-            "gpu_memory_utilization": 0.95,
+            "gpu_memory_utilization": 0.85,
             "trust_remote_code": True,
             "dtype": "auto",
             "max_model_len": 16384
@@ -173,7 +173,7 @@ class ProductTitleOptimizerBatch:
             json.loads(json_str)
             return json_str
         except json.JSONDecodeError as e:
-            print(f"Tentative de réparation du JSON: {type(e).__name__}: {str(e)}")
+            # print(f"Tentative de réparation du JSON: {type(e).__name__}: {str(e)}")
             
             lines = json_str.split('\n')
             fixed_lines = []
