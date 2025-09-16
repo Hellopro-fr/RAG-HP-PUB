@@ -16,7 +16,7 @@ class BatchOptimRequest(BaseModel):
         ..., 
         description="Liste des produits à optimiser",
         min_items=1,
-        max_items=1000  # Limite raisonnable pour éviter les timeouts
+        max_items=5000  # Limite raisonnable pour éviter les timeouts
     )
 
 class BatchMetadata(BaseModel):
