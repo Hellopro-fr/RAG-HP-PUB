@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     M_PARAMS: str
     EF_PARAMS: str
     
-    SEUIL_SCORE_DOUBLON      : float = 0.90
     ADRESSE_VM_API_RECHERCHE : str   = "http://34.34.166.5"
     PORT_API_RECHERCHE       : int   = 8500
     COLLECTION_PRODUIT_NAME  : str   = "produits_3"
