@@ -1,7 +1,11 @@
 # apps-microservices/api-ingestion/Dockerfile
 
 FROM python:3.10-slim
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+
+COPY protos /app/protos
 
 # Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
 ENV PYTHONPATH=/app
