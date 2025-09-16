@@ -19,7 +19,7 @@ async def milvus_search_endpoint(request: SearchRequest = Body(...)):
             raise ValueError("Le domaine ne peut pas être vide.")
         
         results = await search_in_milvus(request)
-        return SearchReponse(results)
+        return SearchReponse(result = results)
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
         raise HTTPException(status_code=400, detail=str(ve))

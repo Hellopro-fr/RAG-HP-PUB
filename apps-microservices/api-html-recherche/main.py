@@ -38,7 +38,7 @@ async def login_page(request: Request):
 @app.post("/login")
 async def login_action(request: Request, username: str = Form(...), password: str = Form(...)):
     async with httpx.AsyncClient() as client:
-        response = await client.post("https://dev-www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php", data={"login": username, "password": password})
+        response = await client.post("https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php", data={"login": username, "password": password})
 
     logger.info(f"XHR status={response.status_code}, raw={response.text}")
 
