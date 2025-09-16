@@ -342,6 +342,10 @@ class MilvusProduitsCrud:
 
     def get_produit_rest(self, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         
+
+        print("get_produit_rest - id_produit_milvus:", id_produit_milvus)
+        print("get_produit_rest - metadata:", metadata)
+
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -369,7 +373,7 @@ class MilvusProduitsCrud:
                         expr_parts.append(f'{key} == "{value}"')
                     else:
                         expr_parts.append(f"{key} == {value}")
-
+            print("expr_parts:", expr_parts)
             # Aucun filtre fourni ?
             if not expr_parts:
                 return {
