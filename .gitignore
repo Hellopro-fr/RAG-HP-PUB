@@ -112,3 +112,5 @@ local/*
 
 # Environnement virtuel de python
 .venv
+
+triton-model-repo
