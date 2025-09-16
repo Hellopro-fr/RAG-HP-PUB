@@ -16,7 +16,7 @@ class SearchResponse(BaseModel):
     
     
 class SearchReponse(BaseModel):
-    Annotated[SearchResponse, Field(title="Contient l'objet du RESULTAT")]
+    result : Annotated[SearchResponse, Field(title="Contient l'objet du RESULTAT")]
     # TODO:
     # à supprimer les données en entrées pour vérification
     # post:  Annotated[SearchRequest, Field(title="Contient l'objet de la REQUETE")]
