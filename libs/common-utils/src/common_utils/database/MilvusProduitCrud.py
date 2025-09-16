@@ -397,7 +397,7 @@ class MilvusProduitsCrud:
                 "chunk_id"
             ]
 
-            self.logger.info(f"[{model_key}] Requête Milvus : {expr}")
+            print(f"[{model_key}] Requête Milvus : {expr}")
 
             results = self.collection.query(expr=expr, output_fields=output_fields)
 
