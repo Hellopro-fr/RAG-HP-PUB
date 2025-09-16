@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, Path
 from typing import Optional
-from common_utils.database.mapping_rest_milvus import MILVUS_CRUD_REGISTRY
+from .mapping_rest_milvus import MILVUS_CRUD_REGISTRY
 
 import json
 
