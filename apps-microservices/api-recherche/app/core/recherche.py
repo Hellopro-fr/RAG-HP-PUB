@@ -376,7 +376,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
         # --- ÉTAPE 2: RÉCUPÉRATION (VECTOR SEARCH) ---
         start_search = time.perf_counter()
         top_k_final = int(request.top_k)
-        top_k_retrieval = top_k_final * 3 if request.options.use_reranker else top_k_final
+        top_k_retrieval = top_k_final * 2 if request.options.use_reranker else top_k_final
         
         all_results = {} # Dictionnaire pour stocker les résultats par source, comme l'original
 
@@ -411,7 +411,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             all_results[source_name] = [MessageToDict(res) for res in source_results]
         
         search_duration = time.perf_counter() - start_search
-
+        logger.info(f"all results : {all_results}")
         # --- ÉTAPE 3: RERANKING (Optionnel, par source comme l'original) ---
         if request.options.use_reranker and all_results:
             
