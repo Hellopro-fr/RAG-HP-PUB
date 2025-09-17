@@ -1,4 +1,5 @@
 import json
+from numpy import empty
 from pymilvus import connections
 from fastapi import APIRouter, HTTPException, Query, Path
 from typing import Any, Dict, Optional
@@ -93,11 +94,13 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
 
             # Champs à retourner (tu peux les adapter)
             # output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
-
-            results = collection.delete(expr=expr)
+            if not empty(expr_parts):
+                results = collection.delete(expr=expr)
 
             if values_to_delete_in_correspondance is not None:
-                collection_correspondance = Collection("correspondance_" + collection_name + "_bo_milvus")
+
+                collection_correspondance_name = "correspondance_" + collection_name + "_bo_milvus"
+                collection_correspondance = Collection(collection_correspondance_name)
                 collection_correspondance.load()
                 values_to_delete_in_correspondance = [doc.get(unique_field) for doc in existings.get("data", [])]
 
@@ -105,8 +108,9 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
                 string_values = [f'"{v}"' for v in values_to_delete_in_correspondance]
                 expr = f'{unique_field} in [{", ".join(string_values)}]'
 
-                res = collection.delete(expr=expr)
-                print(f"Suppression dans la collection de correspondance avec l'expression: {expr}")
+                if not empty(string_values):
+                    res = collection_correspondance.delete(expr=expr)
+                    print(f"Suppression dans la collection de correspondance avec l'expression: {expr} - {collection_correspondance_name}")
 
             return {
                 "status": "success",
@@ -115,7 +119,7 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
                     "metadata": metadata,
                     "expr" : expr
                 },
-                "data": "results"
+                "data": results or [],
             }
 
         except MilvusException as e:

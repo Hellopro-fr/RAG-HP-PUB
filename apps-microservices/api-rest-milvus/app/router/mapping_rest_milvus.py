@@ -12,7 +12,6 @@ MILVUS_COLLECTIONS_DEFAULT_FIELDS = {
     "produits": [
         "id",
         "id_produit",
-        "nom_produit",
         "id_fournisseur",
         "fournisseur",
         "id_categorie",
