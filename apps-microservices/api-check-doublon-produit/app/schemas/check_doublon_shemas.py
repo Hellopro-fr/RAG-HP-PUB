@@ -8,6 +8,16 @@ class SearchRequest(BaseModel):
     description: Optional[str] = ""
     id_produit : str
     
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "nom_produit": "Armoire d'atelier à tiroirs T 736 - 555 x 736 x 819 mm - 2 blocs de 3 tiroirs avec fermetures distinctes",
+                "domaine": "bedrunka-hirth.de",
+                "description": "",
+                "id_produit": "12345"
+            }
+        }
+    
 class SearchResponse(BaseModel):
     etat           : str
     is_doublon     : bool

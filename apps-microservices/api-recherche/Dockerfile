@@ -21,7 +21,7 @@ COPY libs/grpc-stubs /app/libs/grpc-stubs
 RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
 
 COPY protos /app/protos
-RUN find ./protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I./app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
+RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
 # RUN touch ./protos/__init__.py
 RUN pip install -e /app/libs/grpc-stubs
 

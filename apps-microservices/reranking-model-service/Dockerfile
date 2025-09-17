@@ -1,19 +1,23 @@
 FROM python:3.10-slim
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
-# MODIFIÉ: Le chemin est maintenant relatif à la racine du projet
-COPY protos /app/protos
-
-# MODIFIÉ: Le chemin est maintenant relatif à la racine du projet
-COPY apps-microservices/reranking-model-service/requirements.txt .
-
+COPY apps-microservices/api-recherche/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=. ./protos/reranking.proto
 
-# MODIFIÉ: On copie uniquement le code source de ce service spécifique
-COPY apps-microservices/reranking-model-service /app
+# --- Installation des Dépendances ---
+COPY libs /app/libs
+COPY protos /app/protos
+RUN python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src /app/protos/grpc_stubs/*.proto
+RUN pip install -e /app/libs/grpc-stubs
+RUN pip install -e /app/libs/common-utils
+
+# --- Copie du Code Source ---
+COPY apps-microservices/reranking-model-service/app ./app
+COPY apps-microservices/reranking-model-service/application ./application
+COPY apps-microservices/reranking-model-service/infrastructure ./infrastructure
 
 EXPOSE 50053
-
 CMD ["python", "-m", "app.main"]
