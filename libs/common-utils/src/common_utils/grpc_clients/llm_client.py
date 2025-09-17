@@ -23,3 +23,17 @@ async def stream_llm_chat(message: str):
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service LLM: {e.details()}")
         yield f"[ERREUR_API: {e.details()}]"
+
+async def get_llm_chat_response(message: str) -> str:
+    """
+    Appelle le service gRPC LLM pour obtenir une réponse complète (non-streamée).
+    """
+    try:
+        async with grpc.aio.insecure_channel(LLM_SERVICE_URL) as channel:
+            stub = llm_pb2_grpc.LLMServiceStub(channel)
+            request = llm_pb2.ChatRequest(message=message)
+            response = await stub.Chat(request)
+            return response.full_message
+    except grpc.aio.AioRpcError as e:
+        logging.error(f"Erreur gRPC en appelant le service LLM (non-streamé): {e.details()}")
+        return f"[ERREUR_CLIENT: {e.details()}]"

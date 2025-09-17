@@ -6,6 +6,29 @@ service EmbeddingService {
   // MODIFIÉ: La méthode accepte maintenant une requête contenant plusieurs textes.
   // Le nom est au pluriel pour refléter le traitement par lots.
   rpc GetEmbeddings(EmbeddingsRequest) returns (EmbeddingsResponse);
+  rpc Tokenize(TokenizeRequest) returns (TokenizeResponse);
+  rpc Detokenize(DetokenizeRequest) returns (DetokenizeResponse);
+}
+
+message TokenizeRequest {
+  repeated string texts = 1;
+}
+
+message TokenizedOutput {
+  repeated int32 tokens = 1;
+}
+
+message DetokenizeRequest {
+  repeated TokenizedOutput tokenized_texts = 1;
+}
+
+message DetokenizeResponse {
+  repeated string texts = 1;
+}
+
+message TokenizeResponse {
+  // Retourne une liste de listes de tokens, une pour chaque texte en entrée.
+  repeated TokenizedOutput tokenized_texts = 1;
 }
 
 // Un message pour encapsuler un seul vecteur.
