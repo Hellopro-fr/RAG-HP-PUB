@@ -314,19 +314,28 @@ services:
       dockerfile: ./apps-microservices/embedding-service/Dockerfile
     # container_name: embedding-service
     restart: unless-stopped
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - RERANKING_SERVICE_URL=reranking-model-service:50053
+      - DATABASE_SERVICE_URL=database-recherche-service:50054
+    depends_on:
+      - embedding-model-service
     env_file:
       - .env
     volumes:
       - ./apps-microservices/embedding-service/app:/app/embedding_service:rw
     deploy:
       replicas: 4
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              #count: all
-              device_ids: ['0']
-              capabilities: [gpu]
+      # resources:
+      #   reservations:
+      #     devices:
+      #       - driver: nvidia
+      #         #count: all
+      #         device_ids: ['0']
+      #         capabilities: [gpu]
+    networks:
+      - services-net
 
   di-database-qdrant-service:
     build:
