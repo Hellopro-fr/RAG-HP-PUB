@@ -3,8 +3,8 @@ import os
 import logging
 from typing import List, Optional
 
-import database_pb2
-import database_pb2_grpc
+from grpc_stubs import database_pb2
+from grpc_stubs import database_pb2_grpc
 
 DATABASE_SERVICE_URL = os.getenv("DATABASE_SERVICE_URL", "database-recherche-service:50054")
 

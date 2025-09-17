@@ -3,8 +3,8 @@ import os
 import logging
 from typing import List
 
-import embedding_pb2
-import embedding_pb2_grpc
+from grpc_stubs import  embedding_pb2
+from grpc_stubs import  embedding_pb2_grpc
 
 EMBEDDING_SERVICE_URL = os.getenv("EMBEDDING_SERVICE_URL", "embedding-model-service:50052")
 

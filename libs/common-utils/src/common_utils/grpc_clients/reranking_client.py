@@ -3,8 +3,8 @@ import os
 import logging
 from typing import List
 
-import reranking_pb2
-import reranking_pb2_grpc
+from grpc_stubs import reranking_pb2
+from grpc_stubs import reranking_pb2_grpc
 
 RERANKING_SERVICE_URL = os.getenv("RERANKING_SERVICE_URL", "reranking-model-service:50053")
 

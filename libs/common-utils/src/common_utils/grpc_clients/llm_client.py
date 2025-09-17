@@ -3,8 +3,8 @@ import os
 import logging
 import asyncio
 
-import llm_pb2
-import llm_pb2_grpc
+from grpc_stubs import  llm_pb2
+from grpc_stubs import  llm_pb2_grpc
 
 LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "llm-service:50051")
 
