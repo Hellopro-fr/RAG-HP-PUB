@@ -1,3 +1,4 @@
+import time
 from fastapi import FastAPI
 from app.router import search as search_router
 from app.router import searchws as search_ws_router
@@ -13,6 +14,8 @@ from app.core.searchws import get_milvus_connection, get_embedding_model, get_op
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+time.sleep(120)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,7 +50,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.PROJECT_VERSION,
     description="API pour interroger Qdrant ou Milvus et générer des réponses avec des LLMs.",
-    lifespan=lifespan
+    # lifespan=lifespan
 )
 
 @app.on_event("startup")
@@ -61,10 +64,10 @@ def startup():
     
     # Étape 1: S'assure que le modèle ONNX existe sur le disque.
     # Cette opération est longue UNIQUEMENT au tout premier lancement.
-    prepare_onnx_model()
+    # prepare_onnx_model()
     
     logger.info("Pré-chargement du modèle de reranking ONNX...")
-    get_reranker_onnx_model()
+    # get_reranker_onnx_model()
     
     logger.info("--- MODÈLES PRÊTS : LE SERVEUR EST OPÉRATIONNEL ---")
 

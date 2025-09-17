@@ -1,0 +1,11 @@
+fastapi[all]
+uvicorn
+vllm
+python-dotenv
+pydantic
+pydantic-settings
+openai
+torch
+transformers
+accelerate
+bitsandbytes

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package embedding;
+
+service EmbeddingService {
+  // MODIFIÉ: La méthode accepte maintenant une requête contenant plusieurs textes.
+  // Le nom est au pluriel pour refléter le traitement par lots.
+  rpc GetEmbeddings(EmbeddingsRequest) returns (EmbeddingsResponse);
+}
+
+// Un message pour encapsuler un seul vecteur.
+// C'est plus propre qu'un "repeated repeated float".
+message EmbeddingVector {
+  repeated float vector = 1;
+}
+
+message EmbeddingsRequest {
+  // Accepte une liste de textes.
+  repeated string texts = 1;
+}
+
+message EmbeddingsResponse {
+  // Retourne une liste de vecteurs, dans le même ordre que les textes en entrée.
+  repeated EmbeddingVector embeddings = 1;
+}

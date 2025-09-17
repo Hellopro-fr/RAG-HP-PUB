@@ -1,20 +1,55 @@
-# common_utils/database/milvus_router_registry.py
-
-from common_utils.database import (
-    MilvusProduitCrud,
-    MilvusFournisseursCrud,
-    MilvusDevisCrud,
-    MilvusWebsiteCrud,
-    MilvusCategorieCrud,
-    MilvusEchangeCrud
-)
-
 # Dictionnaire centralisé pour toutes les opérations CRUD
-MILVUS_CRUD_REGISTRY = {
-    "produits": MilvusProduitCrud.MilvusProduitsCrud,
-    "fournisseurs": MilvusFournisseursCrud.MilvusFournisseursCrud,
-    "devis": MilvusDevisCrud.MilvusDevisCrud,
-    "websites": MilvusWebsiteCrud.MilvusWebsiteCrud,
-    "categories": MilvusCategorieCrud.MilvusCategorieCrud,
-    "echanges": MilvusEchangeCrud.MilvusEchangeCrud
+MILVUS_COLLECTIONS = {
+    "produits": "produits_3",
+    "fournisseurs": "fournisseurs",
+    "devis": "devis",
+    "siteweb": "siteweb",
+    "categories": "categories",
+    "echanges": "echanges"
+}
+
+MILVUS_COLLECTIONS_DEFAULT_FIELDS = {
+    "produits_3": [
+        "id",
+        "id_produit",
+        "nom_produit",
+        "id_fournisseur",
+        "fournisseur",
+        "id_categorie",
+        "categorie",
+        "chunk_id"
+    ],
+    "fournisseurs": [
+
+    ],
+    "devis"       : [
+        "id",
+        "lead_id",
+        "message",
+        "id_categorie",
+        "societe_acheteur",
+        "date_du_lead",
+        "liste_frns"
+    ],
+    "siteweb"    : [
+        "id",
+        "url",
+        "page_type",
+        "domaine",
+        "text",
+        "source",
+        "chunk_id",
+        "total_chunks"
+    ],
+    "categories"  : [
+        "id",
+        "id_categorie",
+        "categorie",
+        "text"
+    ],
+    "echanges"    : [
+        "id",
+        "conversation_id",
+        "text"
+    ],
 }
