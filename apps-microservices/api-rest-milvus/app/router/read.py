@@ -34,6 +34,9 @@ async def get_ressource(
     
     # Obtenir la classe CRUD à partir du mapping
     collection_name = MILVUS_COLLECTIONS.get(collection_milvus)
+
+
+
     if not collection_name:
         raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
 
@@ -51,6 +54,7 @@ async def get_ressource(
 
 def get_ressource_rest(self, collection_name: str, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
+        print(f"get_ressource_rest - collection_name: {collection_name}, id_produit_milvus: {id_produit_milvus}, metadata: {metadata}")
 
         try:
             _connect_to_milvus()
