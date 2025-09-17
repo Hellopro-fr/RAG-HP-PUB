@@ -7,7 +7,7 @@ from unittest import result
 from google.protobuf.json_format import MessageToDict
 
 # Import des clients gRPC de notre architecture
-from app.grpc_clients import (
+from common_utils.grpc_clients import (
     embedding_client,
     database_client,
     llm_client,
