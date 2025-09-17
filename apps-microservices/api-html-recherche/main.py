@@ -4,6 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 import httpx
 import logging
@@ -15,6 +17,10 @@ from middlewares.auth import AuthMiddleware
 
 app = FastAPI()
 
+app.add_middleware(HTTPSRedirectMiddleware)
+app.add_middleware(
+    TrustedHostMiddleware, allowed_hosts=["*.hellopro.eu"]
+)
 # Config logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("auth")
