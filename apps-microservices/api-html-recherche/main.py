@@ -41,7 +41,6 @@ async def login_action(request: Request, username: str = Form(...), password: st
         response = await client.post("https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php", data={"login": username, "password": password})
 
     logger.info(f"XHR status={response.status_code}, raw={response.text}")
-    logger.info(f"XHR status 2={response}")
 
     try:
         res = response.json()
