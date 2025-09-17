@@ -56,19 +56,6 @@ def get_openai_client():
     logger.info("Client OpenAI initialisé.")
     return client
 
-@lru_cache(maxsize=32)
-def get_field_type_map(collection_name: str) -> dict:
-    """
-    Retrieves the schema for a given collection and returns a dictionary
-    mapping field names to their pymilvus DataType.
-    """
-    try:
-        collection = Collection(name=collection_name)
-        return {field.name: field.dtype for field in collection.schema.fields}
-    except Exception as e:
-        logger.error(f"Could not retrieve schema for collection '{collection_name}': {e}")
-        return {}
-
 def llm_prompt_stream(request: SearchRequest, context_texts):
     """
     Génère une réponse LLM en streaming et yield chaque token.
@@ -159,9 +146,9 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         llm_duration = time.perf_counter() - start_llm_time
     return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
 
-def filtre_source (filtre: dict, source: str = "") -> list:
+async def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
-    field_types = get_field_type_map(source)
+    field_types = await database_client.get_collection_schema(source)
     NUMERIC_DTYPES = {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64, DataType.FLOAT, DataType.DOUBLE}
     for key, val in filtre.items():
         dtype = field_types.get(key)
@@ -264,11 +251,11 @@ async def search_in_milvus_stream(request: SearchRequest):
             start_search_source = time.perf_counter()
 
             filters = []
-            filter_expr = filtre_source(request.filtre, source_name)
+            filter_expr = await filtre_source(request.filtre, source_name)
             if filter_expr:
                 filters.append(" and ".join(filter_expr))
             
-            filter_expr_source = filtre_source(filtre, source_name) if filtre else ""
+            filter_expr_source = await filtre_source(filtre, source_name) if filtre else ""
             if filter_expr_source:
                 filters.append(" and ".join(filter_expr_source))
 
@@ -399,11 +386,11 @@ async def search_in_milvus(request: SearchRequest) -> dict:
 
             # Construction de l'expression de filtre
             filters = []
-            filter_expr_global = filtre_source(request.filtre, source_name)
+            filter_expr_global = await filtre_source(request.filtre, source_name)
             if filter_expr_global:
                 filters.append(" and ".join(filter_expr_global))
             
-            filter_expr_source = filtre_source(filtre, source_name) if filtre else []
+            filter_expr_source = await filtre_source(filtre, source_name) if filtre else []
             if filter_expr_source:
                 filters.append(" and ".join(filter_expr_source))
             
