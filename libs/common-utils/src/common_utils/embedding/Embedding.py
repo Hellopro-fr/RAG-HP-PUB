@@ -213,7 +213,9 @@ class Embedding:
             return []
         
         try:
+            logger.info(f'chunkks : {chunks}')
             all_embeddings = await self.embed(chunks)
+            logger.info(f'all embeddings : {all_embeddings}')
             
             total_chunks = len(chunks)
             
