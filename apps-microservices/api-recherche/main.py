@@ -1,3 +1,4 @@
+import time
 from fastapi import FastAPI
 from app.router import search as search_router
 from app.router import searchws as search_ws_router
@@ -9,39 +10,39 @@ from contextlib import asynccontextmanager
 
 # TODO:
 # centraliser la configuration du logging dans un module dédié
-from app.core.searchws import get_milvus_connection, get_embedding_model, get_openai_client, prepare_onnx_model, get_reranker_onnx_model
+# from app.core.searchws import get_milvus_connection, get_embedding_model, get_openai_client, prepare_onnx_model, get_reranker_onnx_model
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Handles application startup and shutdown events.
-    """
-    logger.info("--- Application Startup ---")
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     """
+#     Handles application startup and shutdown events.
+#     """
+#     logger.info("--- Application Startup ---")
     
-    # Create a list of async tasks for pre-loading resources.
-    # We run the synchronous, blocking model-loading code in a separate thread
-    # to avoid blocking the asyncio event loop.
-    init_tasks = [
-        asyncio.to_thread(get_milvus_connection),
-        asyncio.to_thread(get_embedding_model),
-        # asyncio.to_thread(get_reranker_model),
-        asyncio.to_thread(get_openai_client)
-    ]
+#     # Create a list of async tasks for pre-loading resources.
+#     # We run the synchronous, blocking model-loading code in a separate thread
+#     # to avoid blocking the asyncio event loop.
+#     init_tasks = [
+#         asyncio.to_thread(get_milvus_connection),
+#         asyncio.to_thread(get_embedding_model),
+#         # asyncio.to_thread(get_reranker_model),
+#         asyncio.to_thread(get_openai_client)
+#     ]
     
-    logger.info("Pre-loading models and establishing database connection...")
-    # asyncio.gather runs all our initialization tasks concurrently
-    await asyncio.gather(*init_tasks)
+#     logger.info("Pre-loading models and establishing database connection...")
+#     # asyncio.gather runs all our initialization tasks concurrently
+#     await asyncio.gather(*init_tasks)
     
-    logger.info("--- Startup Complete. Application is ready. ---")
+#     logger.info("--- Startup Complete. Application is ready. ---")
     
-    yield
+#     yield
     
-    # --- Shutdown Logic ---
-    # You can add cleanup code here if needed, like closing connections.
-    logger.info("--- Application Shutdown ---")
+#     # --- Shutdown Logic ---
+#     # You can add cleanup code here if needed, like closing connections.
+#     logger.info("--- Application Shutdown ---")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

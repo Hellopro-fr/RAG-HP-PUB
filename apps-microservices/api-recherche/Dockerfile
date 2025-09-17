@@ -5,8 +5,6 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 
 WORKDIR /app
 
-COPY protos ./protos
-
 # Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
 ENV PYTHONPATH=/app
 
@@ -19,11 +17,19 @@ RUN pip install -e /app/libs/common-utils
 COPY apps-microservices/api-recherche/requirements.txt .
 RUN pip install -r requirements.txt
 
-RUN find ./protos -name "*.proto" | xargs python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=.
+COPY libs/grpc-stubs /app/libs/grpc-stubs
+RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
+
+COPY protos /app/protos
+RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
+# RUN touch ./protos/__init__.py
+RUN pip install -e /app/libs/grpc-stubs
 
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
-COPY apps-microservices/api-recherche .
+# COPY apps-microservices/api-recherche .
+COPY apps-microservices/api-recherche/app ./app
+COPY apps-microservices/api-recherche/main.py .
 
 # RUN python convert.py
 

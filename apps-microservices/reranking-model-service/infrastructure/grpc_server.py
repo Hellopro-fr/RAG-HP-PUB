@@ -2,8 +2,8 @@ import grpc
 import logging
 from concurrent import futures
 
-import reranking_pb2
-import reranking_pb2_grpc
+from grpc_stubs import reranking_pb2
+from grpc_stubs import reranking_pb2_grpc
 
 from application.reranking_use_case import RerankingUseCase
 

@@ -4,8 +4,8 @@ from concurrent import futures
 from google.protobuf import struct_pb2
 import json 
 
-import database_pb2
-import database_pb2_grpc
+from grpc_stubs import database_pb2
+from grpc_stubs import database_pb2_grpc
 
 from application.search_use_case import SearchUseCase
 
@@ -54,7 +54,20 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details("Erreur interne lors de la recherche dans la base de données.")
             return database_pb2.SearchResponse()
-
+    async def GetSchema(self, request, context):
+        """
+        Implémentation de la méthode RPC GetSchema.
+        """
+        logging.info(f"Requête GetSchema reçue pour la collection '{request.collection_name}'")
+        try:
+            schema_map = self.use_case.get_collection_schema(request.collection_name)
+            return database_pb2.GetSchemaResponse(fields=schema_map)
+        except Exception as e:
+            logging.error(f"Erreur dans GetSchema: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("Erreur interne lors de la récupération du schéma.")
+            return database_pb2.GetSchemaResponse()
+        
 async def serve(use_case: SearchUseCase):
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=50))
     database_pb2_grpc.add_DatabaseSearchServiceServicer_to_server(DatabaseSearchServiceImpl(use_case), server)

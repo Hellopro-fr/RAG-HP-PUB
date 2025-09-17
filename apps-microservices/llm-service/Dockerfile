@@ -1,21 +1,24 @@
 FROM python:3.10-slim
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
-# MODIFIÉ: Le chemin est maintenant relatif à la racine du projet (le contexte de build)
-COPY protos /app/protos
-
-# MODIFIÉ: Le chemin est maintenant relatif à la racine du projet
 COPY apps-microservices/llm-service/requirements.txt .
-
-# Installation des dépendances et génération des stubs gRPC
 RUN pip install --no-cache-dir -r requirements.txt
-RUN python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=. ./protos/llm.proto
 
-# MODIFIÉ: On copie uniquement le code source de ce service spécifique
-COPY apps-microservices/llm-service /app
+# --- Installation des Dépendances ---
+COPY libs /app/libs
+COPY protos /app/protos
+RUN python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src /app/protos/grpc_stubs/*.proto
+RUN pip install -e /app/libs/grpc-stubs
+# Ce service n'est pas un client, donc common-utils n'est pas strictement nécessaire, mais on le garde pour la cohérence.
+RUN pip install -e /app/libs/common-utils
 
-# Le port 50051 est le port standard pour gRPC
+# --- Copie du Code Source ---
+COPY apps-microservices/llm-service/app ./app
+COPY apps-microservices/llm-service/application ./application
+COPY apps-microservices/llm-service/infrastructure ./infrastructure
+
 EXPOSE 50051
-
 CMD ["python", "-m", "app.main"]
