@@ -29,6 +29,45 @@ class EmbeddingServiceImpl(embedding_pb2_grpc.EmbeddingServiceServicer):
             context.set_details("Erreur interne lors de la génération des embeddings.")
             return embedding_pb2.EmbeddingsResponse()
 
+    async def Tokenize(self, request, context):
+        """
+        Implémentation de la méthode RPC Tokenize.
+        """
+        num_texts = len(request.texts)
+        logging.info(f"Requête Tokenize reçue pour {num_texts} textes.")
+        try:
+            list_of_token_lists = self.use_case.tokenize_texts(list(request.texts))
+            
+            response_tokenized = [
+                embedding_pb2.TokenizedOutput(tokens=tokens) for tokens in list_of_token_lists
+            ]
+            
+            return embedding_pb2.TokenizeResponse(tokenized_texts=response_tokenized)
+        except Exception as e:
+            logging.error(f"Erreur dans Tokenize: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("Erreur interne lors de la tokenization.")
+            return embedding_pb2.TokenizeResponse()
+        
+    async def Detokenize(self, request, context):
+        """
+        Implémentation de la méthode RPC Detokenize.
+        """
+        num_lists = len(request.tokenized_texts)
+        logging.info(f"Requête Detokenize reçue pour {num_lists} listes de tokens.")
+        try:
+            # On reconstruit la liste de listes d'entiers
+            list_of_token_lists = [list(t.tokens) for t in request.tokenized_texts]
+            
+            decoded_texts = self.use_case.detokenize_texts(list_of_token_lists)
+            
+            return embedding_pb2.DetokenizeResponse(texts=decoded_texts)
+        except Exception as e:
+            logging.error(f"Erreur dans Detokenize: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("Erreur interne lors de la détokenization.")
+            return embedding_pb2.DetokenizeResponse()
+        
 async def serve(use_case: EmbeddingUseCase):
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=50))
     embedding_pb2_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceImpl(use_case), server)

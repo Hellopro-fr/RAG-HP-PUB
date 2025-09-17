@@ -5,12 +5,13 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from logging.handlers import TimedRotatingFileHandler
 
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from transformers import AutoTokenizer # pour encoder du modèle d'embedding
+# from transformers import AutoTokenizer # pour encoder du modèle d'embedding
 
 import re
+from common_utils.grpc_clients import embedding_client
 
 # --- CONFIGURATION ---
 
@@ -86,14 +87,15 @@ class Embedding:
         self.logger = kwargs.get("logger",logger)
         self.time_logger = kwargs.get("time_logger", time_logger)
         
-        self.tokenizer = kwargs.get("tokenizer") if kwargs.get("tokenizer") else None
+        # self.tokenizer = kwargs.get("tokenizer") if kwargs.get("tokenizer") else None
         
-        try:
-            self.model: Optional[SentenceTransformer] = kwargs.get("model", "")
-            self.logger.info("Modèle chargé avec succès")
-        except Exception as e:
-            self.logger.error(f"Failed to load model '{self.model_name}': {e}", exc_info=True)
-            self.model = None # Ensure model is None if loading fails
+        # try:
+        #     self.logger.info(f"Chargement du tokenizer pour le chunking: {self.model_name}")
+        #     # self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        #     self.logger.info("Tokenizer chargé avec succès.")
+        # except Exception as e:
+        #     self.logger.error(f"Failed to load model '{self.model_name}': {e}", exc_info=True)
+        #     self.model = None # Ensure model is None if loading fails
             # You might want to raise the exception here to stop the service from starting
             # raise e
     
@@ -104,22 +106,31 @@ class Embedding:
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(f"total_time: {elapsed:.4f}s\n")
 
-    def embed(self, sentences: list[str]) -> list[list[float]]:
-        if not self.model:
-            self.logger.error("Modèle non chargé, impossible de vectoriser les données.")
-            # Return an empty list of the correct shape or handle the error appropriately
-            return [[] for _ in sentences]
+    async def embed(self, sentences: list[str]) -> list[list[float]]:
+        # if not self.model:
+        #     self.logger.error("Modèle non chargé, impossible de vectoriser les données.")
+        #     # Return an empty list of the correct shape or handle the error appropriately
+        #     return [[] for _ in sentences]
+        
+        if not sentences:
+            return []
         
         start_time = time.perf_counter()
         # The model is already loaded, just use it.
         # Note: We now process a list of sentences for better batching.
         try:
-            vector = self.model.encode(
-                sentences,
-                show_progress_bar=False,
-                normalize_embeddings=True,
-                batch_size=self.config.BATCH_SIZE
-            ).tolist()
+            vectors = await embedding_client.get_embeddings(sentences)
+            
+            if not vectors or len(vectors) != len(sentences):
+                self.logger.error("Le service d'embedding a retourné un nombre incorrect de vecteurs.")
+                # Retourner une structure de données cohérente en cas d'erreur
+                return [[] for _ in sentences]
+            # vector = self.model.encode(
+            #     sentences,
+            #     show_progress_bar=False,
+            #     normalize_embeddings=True,
+            #     batch_size=self.config.BATCH_SIZE
+            # ).tolist()
         except Exception as e:
             self.logger.error(f"Erreur lors de l'encodage des phrases: {e}", exc_info=True)
 
@@ -128,7 +139,7 @@ class Embedding:
         # Sauvegarde des stats dans le fichier (en écrasant le contenu)
         self._append_time_log(elapsed)
 
-        return vector
+        return vectors
     
 
     ### FONCTION MODIFIÉE AVEC CORRECTION D'ENCODAGE ###
@@ -163,21 +174,67 @@ class Embedding:
         # Étape 2 : Normaliser les espaces (comme avant)
         return re.sub(r'\s+', ' ', cleaned_text).strip()
 
-    def _create_chunks(self, text: str, template: str) -> List[str]:
+    async def _create_chunks(self, text: str, template: str) -> List[str]:
         strategy = self.config.CHUNK_STRATEGIES.get(template, self.config.DEFAULT_CHUNK_STRATEGY)
+        chunk_size = strategy["chunk_size"]
+        chunk_overlap = strategy["chunk_overlap"]
         
-        def hf_length_function(text: str) -> int:
-            """Compte les tokens avec CamemBERT"""
-            return len(self.tokenizer.encode(text, add_special_tokens=False))
+        if not text:
+            return []
+        
+        # def hf_length_function(text: str) -> int:
+        #     """Compte les tokens avec CamemBERT"""
+        #     return len(self.tokenizer.encode(text, add_special_tokens=False))
 
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=strategy["chunk_size"],
-            chunk_overlap=strategy["chunk_overlap"],
-            length_function=hf_length_function  # basé sur tokens CamemBERT
-        )
-        return text_splitter.split_text(text)
+        # text_splitter = RecursiveCharacterTextSplitter(
+        #     chunk_size=strategy["chunk_size"],
+        #     chunk_overlap=strategy["chunk_overlap"],
+        #     length_function=hf_length_function  # basé sur tokens CamemBERT
+        # )
+        # return text_splitter.split_text(text)
+        if chunk_overlap >= chunk_size:
+            self.logger.warning(f"Le chevauchement ({chunk_overlap}) est plus grand ou égal à la taille du chunk ({chunk_size}). Il sera ignoré.")
+            chunk_overlap = 0
 
-    def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:
+        try:
+            # 1. Tokenize le texte entier en un seul appel réseau (inchangé)
+            token_lists = await embedding_client.tokenize([text])
+            if not token_lists or not token_lists[0]:
+                self.logger.warning("La tokenization du texte a retourné une liste vide.")
+                return []
+            tokens = token_lists[0]
+
+            logger.info(f"token lists : {token_lists}")
+            # 2. Créer les chunks de tokens avec chevauchement (logique corrigée)
+            token_chunks = []
+            start_index = 0
+            # Le pas (step) pour avancer dans la liste de tokens
+            step = chunk_size - chunk_overlap
+            
+            while start_index < len(tokens):
+                end_index = start_index + chunk_size
+                token_chunks.append(tokens[start_index:end_index])
+                
+                # Si le pas est de 0 ou moins, on arrête pour éviter une boucle infinie
+                if step <= 0:
+                    break
+                
+                start_index += step
+            
+            if not token_chunks:
+                return []
+
+            # 3. Détokenizer tous les chunks en un seul appel réseau (inchangé)
+            text_chunks = await embedding_client.detokenize(token_chunks)
+            logger.info(f"text chunks : {text_chunks}")
+            
+            return text_chunks
+
+        except Exception as e:
+            self.logger.error(f"Erreur durant le processus de chunking par token: {e}", exc_info=True)
+            return []
+
+    async def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:
         batch_to_insert = []
         
         if not data_to_embed.get("text",""):
@@ -193,19 +250,23 @@ class Embedding:
             return []
 
         # Vérifier si le type de page est renseigné
-        chunks = self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
+        chunks = await self._create_chunks(data_clean, data_to_embed.get("type_page", "autre"))
         
         if not chunks:
             self.logger.warning(f"Aucun chunk créé pour le texte donné.")
-            self.logger.warning(f"Data: {data_clean}")
+            # self.logger.warning(f"Data: {data_clean}")
             return []
         
         try:
-            all_embeddings = self.embed(chunks)
+            all_embeddings = await self.embed(chunks)
             
             total_chunks = len(chunks)
             
             for i, (chunk_text, chunk_embedding) in enumerate(zip(chunks, all_embeddings)):
+                if not chunk_embedding:
+                    self.logger.warning(f"Chunk {i+1}/{total_chunks} n'a pas pu être vectorisé. Il sera ignoré.")
+                    continue
+                
                 data_tmp = data_to_embed.copy()
                 data_tmp.pop("text", None)
                 

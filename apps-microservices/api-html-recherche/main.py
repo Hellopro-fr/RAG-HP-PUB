@@ -3,6 +3,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
 import httpx
 import logging
 import os
@@ -10,6 +14,7 @@ import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 
 from middlewares.auth import AuthMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 app = FastAPI()
 
@@ -21,9 +26,16 @@ logger = logging.getLogger("auth")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 # ORDRE IMPORTANT : SessionMiddleware EN PREMIER, puis AuthMiddleware
 app.add_middleware(AuthMiddleware)
 app.add_middleware(SessionMiddleware, secret_key=os.environ.get("JWT_SECRET"))
+
+# app.add_middleware(HTTPSRedirectMiddleware)
+# app.add_middleware(
+#     TrustedHostMiddleware, allowed_hosts=["*.hellopro.eu"]
+# )
 
 # --- ROUTES ---
 
@@ -102,4 +114,11 @@ async def read_item(request: Request, item_id: str):
 @app.get("/{page}", response_class=HTMLResponse)
 async def get_page(request: Request, page: str):
     user = request.session.get("user")
-    return templates.TemplateResponse(f"{page}.html", {"request": request, "user": user})
+
+    template_path = f"{page}.html"
+
+    # Vérifie si le template existe
+    if not os.path.exists(os.path.join("templates", template_path)):
+        return templates.TemplateResponse("404.html", {"request": request}, status_code=404)
+
+    return templates.TemplateResponse(template_path, {"request": request, "user": user})

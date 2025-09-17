@@ -23,4 +23,4 @@ EXPOSE 8550
 # Étape 5: Définir la commande de lancement directement
 # On lance Uvicorn en lui disant de trouver le module 'main' dans le paquet 'api_ingestion_service'
 # Le port est défini dynamiquement par la variable $PORT de Render, avec une valeur par défaut de 8509.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8550"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8550", "--proxy-headers"]

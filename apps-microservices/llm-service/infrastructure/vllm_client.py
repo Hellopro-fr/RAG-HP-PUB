@@ -56,4 +56,41 @@ class VLLMClient:
         except Exception as e:
             logging.error(f"Erreur inattendue dans VLLMClient: {e}")
             yield "[ERREUR: Une erreur interne est survenue]"
+            
+    async def chat(self, message_history) -> str:
+        """
+        Envoie une requête de chat non-streamée au serveur vLLM et retourne la réponse complète.
+        
+        Args:
+            message_history (list): L'historique de la conversation.
+        
+        Returns:
+            str: La réponse complète du modèle.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client: # Timeout raisonnable
+                request_payload = {
+                    "model": MODEL_NAME,
+                    "messages": message_history,
+                    "stream": False, # La différence clé est ici
+                    "max_tokens": 2048,
+                }
+                response = await client.post(VLLM_API_URL, json=request_payload)
+                response.raise_for_status()
+                
+                response_data = response.json()
+                if 'choices' in response_data and len(response_data['choices']) > 0:
+                    message = response_data['choices'][0].get('message', {})
+                    content = message.get('content', '')
+                    return content
+                else:
+                    logging.warning("La réponse de vLLM n'a pas le format attendu.")
+                    return "[ERREUR: Réponse inattendue du service LLM]"
+
+        except httpx.RequestError as e:
+            logging.error(f"Erreur de requête non-streamée vers vLLM: {e}")
+            return "[ERREUR: Le service LLM est indisponible]"
+        except Exception as e:
+            logging.error(f"Erreur inattendue dans VLLMClient (non-streamé): {e}")
+            return "[ERREUR: Une erreur interne est survenue]"
 

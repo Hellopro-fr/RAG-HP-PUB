@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Introuvable | 404</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .bg-blue-wave {
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNDQwIDMyMCI+PHBhdGggZmlsbD0iI2ViZjRmZiIgZmlsbC1vcGFjaXR5PSIxIiBkPSJNMCwyNTYuMUMxNDQuMSwzMjAgMzU5LjksMzIwIDU3NiwyNTZjMjE2LjEtNjQgNDMwLjktNjQgNzIwLDY0djY0SDBWMjU2LjF6Ii8+PC9zdmc+');
+            background-size: cover;
+            background-position: bottom;
+            background-repeat: no-repeat;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+            100% { transform: translateY(0px); }
+        }
+        .floating {
+            animation: float 6s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-white font-sans">
+    <div class="min-h-screen flex flex-col">
+        <!-- Wave Background -->
+        <div class="flex-grow bg-blue-50 flex items-center justify-center relative overflow-hidden">
+            <div class="absolute inset-0 bg-blue-wave opacity-20"></div>
+            
+            <!-- Content -->
+            <div class="container mx-auto px-6 py-16 z-10 text-center">
+                <div class="flex flex-col items-center justify-center space-y-3">
+                    <!-- Floating Illustration -->
+                    <div class="floating mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-alert-circle">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                    </div>
+                    <h1 class="text-6xl font-bold text-blue-600 mb-4">404</h1>
+                    <h2 class="text-3xl font-semibold text-gray-800 mb-6">Page Introuvable</h2>
+                    <p class="text-gray-600 mb-8 text-lg">La page que vous recherchez n'existe pas ou a été déplacée.</p>
+                    
+                    <!-- Action Button -->
+                    <div class="flex justify-center">
+                        <a href="/login" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition duration-300 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-home mr-2">
+                                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                            </svg>
+                            Retour à l'accueil
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
