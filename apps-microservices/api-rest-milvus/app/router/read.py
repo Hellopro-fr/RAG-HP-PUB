@@ -41,7 +41,7 @@ async def get_ressource(
         raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
 
     try:
-        result = get_ressource_rest(collection_name = collection_name, id_produit_milvus = id_ressource, metadata = parsed_metadata)
+        result = get_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata)
 
         if not result:
             raise HTTPException(status_code=404, detail="Ressource non trouvée.")
@@ -51,10 +51,9 @@ async def get_ressource(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
+def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
-def get_ressource_rest(collection_name: str, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-
-        print(f"get_ressource_rest - collection_name: {collection_name}, id_produit_milvus: {id_produit_milvus}, metadata: {metadata}")
+        print(f"get_ressource_rest - collection_name: {collection_name}, id_milvus: {id_milvus}, metadata: {metadata}")
 
         try:
             _connect_to_milvus()
@@ -65,8 +64,8 @@ def get_ressource_rest(collection_name: str, id_produit_milvus: Optional[int] = 
             expr_parts = []
 
             # Filtrage par ID (clé primaire)
-            if id_produit_milvus is not None:
-                expr_parts.append(f"id == {id_produit_milvus}")
+            if id_milvus is not None:
+                expr_parts.append(f"id == {id_milvus}")
 
             # Filtrage par metadata (clé=valeur)
             if metadata:
@@ -79,7 +78,7 @@ def get_ressource_rest(collection_name: str, id_produit_milvus: Optional[int] = 
             if not expr_parts:
                 return {
                     "status": "error",
-                    "message": "Aucun critère de recherche fourni (id_produit_milvus ou metadata).",
+                    "message": "Aucun critère de recherche fourni (id_milvus ou metadata).",
                     "code": 400
                 }
 
@@ -95,7 +94,7 @@ def get_ressource_rest(collection_name: str, id_produit_milvus: Optional[int] = 
             return {
                 "status": "success",
                 "filters": {
-                    "id_produit_milvus": id_produit_milvus,
+                    "id_milvus": id_milvus,
                     "metadata": metadata,
                     "expr" : expr
                 },

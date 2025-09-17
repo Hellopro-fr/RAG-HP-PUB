@@ -2,7 +2,8 @@ import json
 from pymilvus import connections
 from fastapi import APIRouter, HTTPException, Query, Path
 from typing import Any, Dict, Optional
-from .mapping_rest_milvus import MILVUS_COLLECTIONS, MILVUS_COLLECTIONS_DEFAULT_FIELDS
+from .mapping_rest_milvus import MILVUS_COLLECTIONS, MILVUS_COLLECTIONS_DEFAULT_FIELDS, MILVUS_COLLECTIONS_UNIQUE_FIELD
+from .read import get_ressource_rest
 
 
 from common_utils.database.config.settings import Configuration
@@ -40,7 +41,7 @@ async def delete_ressource(
         raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
 
     try:
-        result = delete_ressource_rest(collection_name = collection_name, id_produit_milvus = id_ressource, metadata = parsed_metadata)
+        result = delete_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata)
 
         if not result:
             raise HTTPException(status_code=404, detail="Ressource non trouvée.")
@@ -50,9 +51,9 @@ async def delete_ressource(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
-def delete_ressource_rest(collection_name: str, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
-        print(f"delete_ressource_rest - collection_name: {collection_name}, id_produit_milvus: {id_produit_milvus}, metadata: {metadata}")
+        print(f"delete_ressource_rest - collection_name: {collection_name}, id_milvus: {id_milvus}, metadata: {metadata}")
 
         try:
             _connect_to_milvus()
@@ -61,10 +62,16 @@ def delete_ressource_rest(collection_name: str, id_produit_milvus: Optional[int]
             collection.load()
 
             expr_parts = []
+            values_to_delete_in_correspondance = None
+            if collection_name in MILVUS_COLLECTIONS_UNIQUE_FIELD:
+                existings = get_ressource_rest(collection_name, id_milvus, metadata)
+                unique_field = MILVUS_COLLECTIONS_UNIQUE_FIELD.get(collection_name)
+                values_to_delete_in_correspondance = list({doc.get(unique_field) for doc in existings.get("data", [])})
+
 
             # Filtrage par ID (clé primaire)
-            if id_produit_milvus is not None:
-                expr_parts.append(f"id == {id_produit_milvus}")
+            if id_milvus is not None:
+                expr_parts.append(f"id == {id_milvus}")
 
             # Filtrage par metadata (clé=valeur)
             if metadata:
@@ -77,7 +84,7 @@ def delete_ressource_rest(collection_name: str, id_produit_milvus: Optional[int]
             if not expr_parts:
                 return {
                     "status": "error",
-                    "message": "Aucun critère de recherche fourni (id_produit_milvus ou metadata).",
+                    "message": "Aucun critère de recherche fourni (id_milvus ou metadata).",
                     "code": 400
                 }
 
@@ -87,13 +94,24 @@ def delete_ressource_rest(collection_name: str, id_produit_milvus: Optional[int]
             # Champs à retourner (tu peux les adapter)
             # output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
 
-
             results = collection.delete(expr=expr)
+
+            if values_to_delete_in_correspondance is not None:
+                collection_correspondance = Collection("correspondance_" + collection_name + "_bo_milvus")
+                collection_correspondance.load()
+                values_to_delete_in_correspondance = [doc.get(unique_field) for doc in existings.get("data", [])]
+
+                # Ensure they are strings for Milvus expr
+                string_values = [f'"{v}"' for v in values_to_delete_in_correspondance]
+                expr = f'{unique_field} in [{", ".join(string_values)}]'
+
+                res = collection.delete(expr=expr)
+                print(f"Suppression dans la collection de correspondance avec l'expression: {expr}")
 
             return {
                 "status": "success",
                 "filters": {
-                    "id_produit_milvus": id_produit_milvus,
+                    "id_milvus": id_milvus,
                     "metadata": metadata,
                     "expr" : expr
                 },
