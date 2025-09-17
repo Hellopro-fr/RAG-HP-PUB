@@ -53,3 +53,10 @@ MILVUS_COLLECTIONS_DEFAULT_FIELDS = {
         "text"
     ],
 }
+
+MILVUS_COLLECTIONS_UNIQUE_FIELD  = {
+    "produits": "id_produit",
+    "devis": "lead_id",
+    "categories": "id_categorie",
+    "echanges": "conversation_id"
+}
