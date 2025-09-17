@@ -38,7 +38,7 @@ async def get_ressource(
         raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
 
     try:
-        result = get_ressource_rest(id_ressource, parsed_metadata, collection_name)
+        result = get_ressource_rest(collection_name, id_ressource, parsed_metadata)
 
         if not result:
             raise HTTPException(status_code=404, detail="Ressource non trouvée.")
@@ -49,7 +49,7 @@ async def get_ressource(
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
 
-def get_ressource_rest(self, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, collection_name: str) -> Dict[str, Any]:
+def get_ressource_rest(self, collection_name: str, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
 
         try:
