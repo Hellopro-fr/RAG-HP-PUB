@@ -3,8 +3,8 @@ import logging
 from concurrent import futures
 
 # Import des stubs générés
-import llm_pb2
-import llm_pb2_grpc
+from grpc_stubs import llm_pb2
+from grpc_stubs import llm_pb2_grpc
 
 from application.chat_service import ChatApplicationService
 
