@@ -13,7 +13,7 @@ services:
   vllm-server:
     image: vllm/vllm-openai:latest
     command: >
-      --model Qwen/Qwen1.5-7B-Chat-AWQ
+      --model Qwen/Qwen3-14B-AWQ
       --quantization awq
       --trust-remote-code
       --max-model-len 4096
@@ -324,7 +324,8 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              #count: all
+              device_ids: ['0']
               capabilities: [gpu]
 
   di-database-qdrant-service:
@@ -441,7 +442,8 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              device_ids: ['1']
+              # count: all
               capabilities: [gpu]
 networks:
   services-net:

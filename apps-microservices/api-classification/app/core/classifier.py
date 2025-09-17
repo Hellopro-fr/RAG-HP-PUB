@@ -340,6 +340,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'id_categorie': chosen_category['id'],
                 'nom_categorie': chosen_category['name'],
                 'score_llm': score,
+                'deepseek_response': llm_result,
                 'processing_time': time.time() - start_time
             }
             

@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from jwt import ExpiredSignatureError, InvalidTokenError
 
 JWT_SECRET = os.environ.get("JWT_SECRET")
-JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE") 
+JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE")
 JWT_ALGO = os.environ.get("JWT_ALGO")
 
 # Config logger
