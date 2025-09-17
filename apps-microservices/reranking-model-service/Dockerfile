@@ -4,15 +4,15 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 WORKDIR /app
 ENV PYTHONPATH=/app
 
+COPY apps-microservices/api-recherche/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 # --- Installation des Dépendances ---
 COPY libs /app/libs
 COPY protos /app/protos
 RUN python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src /app/protos/grpc_stubs/*.proto
 RUN pip install -e /app/libs/grpc-stubs
 RUN pip install -e /app/libs/common-utils
-
-COPY apps-microservices/reranking-model-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
 # --- Copie du Code Source ---
 COPY apps-microservices/reranking-model-service/app ./app
