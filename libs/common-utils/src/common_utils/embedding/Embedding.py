@@ -178,7 +178,7 @@ class Embedding:
         """
         Délègue le chunking au microservice d'embedding.
         """
-        await self._ensure_model_info()
+        # await self._ensure_model_info()
 
         strategy = self.config.CHUNK_STRATEGIES.get(template, self.config.DEFAULT_CHUNK_STRATEGY)
         
