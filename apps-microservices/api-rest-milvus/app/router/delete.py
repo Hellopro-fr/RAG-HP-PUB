@@ -97,7 +97,7 @@ def delete_ressource_rest(collection_name: str, id_produit_milvus: Optional[int]
                     "metadata": metadata,
                     "expr" : expr
                 },
-                "data": results
+                "data": "results"
             }
 
         except MilvusException as e:
