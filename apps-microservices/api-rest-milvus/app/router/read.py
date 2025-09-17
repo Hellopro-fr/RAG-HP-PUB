@@ -52,13 +52,12 @@ async def get_ressource(
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
 
-def get_ressource_rest(self, collection_name: str, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_ressource_rest(collection_name: str, id_produit_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
 
         print(f"get_ressource_rest - collection_name: {collection_name}, id_produit_milvus: {id_produit_milvus}, metadata: {metadata}")
 
         try:
             _connect_to_milvus()
-            # self.collection = self._get_or_create_collection(model_config)
             
             collection = Collection(collection_name)
             collection.load()
