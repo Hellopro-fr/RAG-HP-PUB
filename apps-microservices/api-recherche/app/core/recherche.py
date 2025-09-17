@@ -248,7 +248,7 @@ async def search_in_milvus_stream(request: SearchRequest):
             all_source_results.extend(source_results)
 
         # On trie tous les résultats par score de similarité initial
-        initial_matches = sorted(all_source_results, key=lambda x: x.get('score', 0.0), reverse=True)
+        initial_matches = sorted(all_source_results, key=lambda x: x['score'], reverse=True)
         
         # Envoi des résultats initiaux (avant reranking)
         yield {"type": "initial_results", "payload": {"results": initial_matches[:top_k_final], "duration": round(search_duration, 2)}}
