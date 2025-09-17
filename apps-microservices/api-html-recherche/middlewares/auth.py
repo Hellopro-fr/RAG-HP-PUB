@@ -57,7 +57,4 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.session.clear()
             return RedirectResponse(url="/login")
 
-        if path == "/login":
-            return RedirectResponse(url="/recherche")
-
         return await call_next(request)
