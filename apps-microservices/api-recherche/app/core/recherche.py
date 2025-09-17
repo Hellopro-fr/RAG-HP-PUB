@@ -437,6 +437,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
                     f"Temps de reranking : {round((time.perf_counter() - start_reranking), 2)}"
                 )
                 # Reconstruction de la liste de résultats dans le nouvel ordre
+                result_map = {res['metadata']['entity']['text']: res for res in matches}
                 start_reconstruction = time.perf_counter()
                 reranked_results_by_source[source] = [
                     result_map[text] for text in ranked_texts if text in result_map
