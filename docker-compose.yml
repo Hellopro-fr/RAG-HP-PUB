@@ -135,8 +135,8 @@ services:
     container_name: api-recherche-service
     restart: unless-stopped
     # TODO: à supprimer en PROD
-    volumes:
-      - ./apps-microservices/api-recherche:/app:rw
+    # volumes:
+    #   - ./apps-microservices/api-recherche:/app:rw
     ports:
       - "8510:8510"
     environment:
