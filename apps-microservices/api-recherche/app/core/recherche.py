@@ -228,7 +228,7 @@ async def search_in_milvus_stream(request: SearchRequest):
         if not query_vector:
             yield {"type": "error", "payload": "Impossible de générer l'embedding pour la requête."}
             return
-        logger.info(f'embedding : {query_vector}')
+        # logger.info(f'embedding : {query_vector}')
         yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
 
         # --- ÉTAPE 2: RÉCUPÉRATION (VECTOR SEARCH) ---
@@ -411,7 +411,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             all_results[source_name] = [MessageToDict(res) for res in source_results]
         
         search_duration = time.perf_counter() - start_search
-        logger.info(f"all results : {all_results}")
+        # logger.info(f"all results : {all_results}")
         # --- ÉTAPE 3: RERANKING (Optionnel, par source comme l'original) ---
         if request.options.use_reranker and all_results:
             

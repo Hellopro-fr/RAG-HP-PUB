@@ -9,3 +9,4 @@ tritonclient[all]
 sentence-transformers
 sentencepiece
 numpy
+langchain-text-splitters

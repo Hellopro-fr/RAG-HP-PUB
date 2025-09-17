@@ -8,6 +8,7 @@ service EmbeddingService {
   rpc GetEmbeddings(EmbeddingsRequest) returns (EmbeddingsResponse);
   rpc Tokenize(TokenizeRequest) returns (TokenizeResponse);
   rpc Detokenize(DetokenizeRequest) returns (DetokenizeResponse);
+  rpc ChunkText(ChunkRequest) returns (ChunkResponse);
 }
 
 message TokenizeRequest {
@@ -45,4 +46,14 @@ message EmbeddingsRequest {
 message EmbeddingsResponse {
   // Retourne une liste de vecteurs, dans le même ordre que les textes en entrée.
   repeated EmbeddingVector embeddings = 1;
+}
+
+message ChunkRequest {
+  string text = 1;
+  int32 chunk_size = 2;
+  int32 chunk_overlap = 3;
+}
+
+message ChunkResponse {
+  repeated string chunks = 1;
 }

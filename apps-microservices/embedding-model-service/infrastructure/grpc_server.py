@@ -68,6 +68,24 @@ class EmbeddingServiceImpl(embedding_pb2_grpc.EmbeddingServiceServicer):
             context.set_details("Erreur interne lors de la détokenization.")
             return embedding_pb2.DetokenizeResponse()
         
+    async def ChunkText(self, request, context):
+        """
+        Implémentation de la méthode RPC ChunkText.
+        """
+        logging.info(f"Requête ChunkText reçue.")
+        try:
+            chunks = self.use_case.chunk_text(
+                text=request.text,
+                chunk_size=request.chunk_size,
+                chunk_overlap=request.chunk_overlap
+            )
+            return embedding_pb2.ChunkResponse(chunks=chunks)
+        except Exception as e:
+            logging.error(f"Erreur dans ChunkText: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("Erreur interne lors du chunking du texte.")
+            return embedding_pb2.ChunkResponse()
+        
 async def serve(use_case: EmbeddingUseCase):
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=50))
     embedding_pb2_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceImpl(use_case), server)

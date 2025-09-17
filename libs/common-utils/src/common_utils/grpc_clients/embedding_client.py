@@ -72,3 +72,24 @@ async def detokenize(token_lists: List[List[int]]) -> List[str]:
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service de Detokenization: {e.details()}")
         return ["" for _ in token_lists]
+    
+
+async def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
+    """
+    Appelle le service gRPC pour découper un texte en chunks.
+    """
+    if not text:
+        return []
+    try:
+        async with grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL) as channel:
+            stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
+            request = embedding_pb2.ChunkRequest(
+                text=text,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+            response = await stub.ChunkText(request)
+            return list(response.chunks)
+    except grpc.aio.AioRpcError as e:
+        logging.error(f"Erreur gRPC en appelant le service de Chunking: {e.details()}")
+        return []

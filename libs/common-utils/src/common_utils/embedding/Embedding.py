@@ -3,7 +3,7 @@ import time
 import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from logging.handlers import TimedRotatingFileHandler
+# from logging.handlers import TimedRotatingFileHandler
 
 # from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -175,64 +175,19 @@ class Embedding:
         return re.sub(r'\s+', ' ', cleaned_text).strip()
 
     async def _create_chunks(self, text: str, template: str) -> List[str]:
+        """
+        Délègue le chunking au microservice d'embedding.
+        """
+        await self._ensure_model_info()
+
         strategy = self.config.CHUNK_STRATEGIES.get(template, self.config.DEFAULT_CHUNK_STRATEGY)
-        chunk_size = strategy["chunk_size"]
+        
+        # On valide la taille du chunk par rapport au contexte du modèle
+        chunk_size = min(strategy["chunk_size"], self._context_length)
         chunk_overlap = strategy["chunk_overlap"]
-        
-        if not text:
-            return []
-        
-        # def hf_length_function(text: str) -> int:
-        #     """Compte les tokens avec CamemBERT"""
-        #     return len(self.tokenizer.encode(text, add_special_tokens=False))
 
-        # text_splitter = RecursiveCharacterTextSplitter(
-        #     chunk_size=strategy["chunk_size"],
-        #     chunk_overlap=strategy["chunk_overlap"],
-        #     length_function=hf_length_function  # basé sur tokens CamemBERT
-        # )
-        # return text_splitter.split_text(text)
-        if chunk_overlap >= chunk_size:
-            self.logger.warning(f"Le chevauchement ({chunk_overlap}) est plus grand ou égal à la taille du chunk ({chunk_size}). Il sera ignoré.")
-            chunk_overlap = 0
-
-        try:
-            # 1. Tokenize le texte entier en un seul appel réseau (inchangé)
-            token_lists = await embedding_client.tokenize([text])
-            if not token_lists or not token_lists[0]:
-                self.logger.warning("La tokenization du texte a retourné une liste vide.")
-                return []
-            tokens = token_lists[0]
-
-            logger.info(f"token lists : {token_lists}")
-            # 2. Créer les chunks de tokens avec chevauchement (logique corrigée)
-            token_chunks = []
-            start_index = 0
-            # Le pas (step) pour avancer dans la liste de tokens
-            step = chunk_size - chunk_overlap
-            
-            while start_index < len(tokens):
-                end_index = start_index + chunk_size
-                token_chunks.append(tokens[start_index:end_index])
-                
-                # Si le pas est de 0 ou moins, on arrête pour éviter une boucle infinie
-                if step <= 0:
-                    break
-                
-                start_index += step
-            
-            if not token_chunks:
-                return []
-
-            # 3. Détokenizer tous les chunks en un seul appel réseau (inchangé)
-            text_chunks = await embedding_client.detokenize(token_chunks)
-            logger.info(f"text chunks : {text_chunks}")
-            
-            return text_chunks
-
-        except Exception as e:
-            self.logger.error(f"Erreur durant le processus de chunking par token: {e}", exc_info=True)
-            return []
+        # Un seul appel gRPC pour faire tout le travail de chunking.
+        return await embedding_client.chunk_text(text, chunk_size, chunk_overlap)
 
     async def embed_data_clean(self, data_to_embed: Dict[str, Any]) -> List[Dict[str, Any]]:
         batch_to_insert = []
