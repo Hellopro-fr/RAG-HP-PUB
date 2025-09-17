@@ -183,7 +183,7 @@ class Embedding:
         strategy = self.config.CHUNK_STRATEGIES.get(template, self.config.DEFAULT_CHUNK_STRATEGY)
         
         # On valide la taille du chunk par rapport au contexte du modèle
-        chunk_size = min(strategy["chunk_size"], self._context_length)
+        chunk_size = strategy["chunk_size"]
         chunk_overlap = strategy["chunk_overlap"]
 
         # Un seul appel gRPC pour faire tout le travail de chunking.
