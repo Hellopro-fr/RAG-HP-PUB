@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 WORKDIR /app
 ENV PYTHONPATH=/app
 
-COPY apps-microservices/api-recherche/requirements.txt .
+COPY apps-microservices/reranking-model-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # --- Installation des Dépendances ---
