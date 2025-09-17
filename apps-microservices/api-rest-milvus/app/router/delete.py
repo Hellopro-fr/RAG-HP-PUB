@@ -118,7 +118,10 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
                     "metadata": metadata,
                     "expr" : expr
                 },
-                "data": results,
+                "data": {
+                    "delete_count": results.delete_count,
+                    "primary_keys": list(results.primary_keys) if results.primary_keys else []
+                },
             }
 
         except MilvusException as e:
