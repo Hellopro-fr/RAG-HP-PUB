@@ -82,7 +82,8 @@ async def search_in_milvus(request: SearchRequest):
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(settings.URL_QUERY_API_RECHERCHE, json=payload)
+            response = await client.post(settings.URL_QUERY_API_RECHERCHE, json=payload)            
+            FROM_SIMILARITY = True
 
         if response.status_code != 200:
             logger.error(f"[MILVUS] Erreur API recherche: {response.status_code} - {response.text}")
@@ -93,7 +94,6 @@ async def search_in_milvus(request: SearchRequest):
             for produit in produits:
                 score = produit.get("score", 0.0)
                 if score >= seuil_score_doublon:
-                    FROM_SIMILARITY = True
                     SCORE = score
                     IS_DOUBLON = True
                     break
