@@ -4,7 +4,7 @@ import os
 
 # Importer les modules nécessaires
 import torch
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 
 # Importer les modules locaux
 from embedding_service.messaging.consumer import Consumer
