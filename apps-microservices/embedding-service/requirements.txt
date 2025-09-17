@@ -1,13 +1,8 @@
 torch
-sentence-transformers 
 langchain_text_splitters
 pytest
 pika
-protobuf
-tiktoken
-sentencepiece
 python-dotenv
-transformers
 grpcio
 grpcio-tools
 protobuf
