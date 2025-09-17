@@ -262,7 +262,7 @@ async def search_in_milvus_stream(request: SearchRequest):
 
             # Préparation des documents pour le reranker
             # HYPOTHÈSE: Le texte est dans metadata.text
-            docs_to_rerank = [res.get("metadata", {}).get('entity', {}).get("text") for res in initial_matches]
+            docs_to_rerank = [res['metadata']['entity']['text'] for res in initial_matches]
             
             # Appel au microservice de reranking
             ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
