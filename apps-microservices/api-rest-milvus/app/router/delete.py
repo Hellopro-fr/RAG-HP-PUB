@@ -99,8 +99,8 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
 
             if values_to_delete_in_correspondance is not None:
 
-                collection_correspondance_name = "correspondance_" + collection_name + "_bo_milvus"
-                collection_correspondance = Collection(collection_correspondance_name)
+                # collection_correspondance_name = 
+                collection_correspondance = Collection("correspondance_" + collection_name + "_bo_milvus")
                 collection_correspondance.load()
                 values_to_delete_in_correspondance = [doc.get(unique_field) for doc in existings.get("data", [])]
 
@@ -110,7 +110,7 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
 
                 if not empty(string_values):
                     res = collection_correspondance.delete(expr=expr)
-                    print(f"Suppression dans la collection de correspondance avec l'expression: {expr} - {collection_correspondance_name}")
+                    # print(f"Suppression dans la collection de correspondance avec l'expression: {expr} - {collection_correspondance_name}")
 
             return {
                 "status": "success",
@@ -119,7 +119,7 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
                     "metadata": metadata,
                     "expr" : expr
                 },
-                "data": results or [],
+                "data": results,
             }
 
         except MilvusException as e:
