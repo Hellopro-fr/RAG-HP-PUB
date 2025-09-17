@@ -26,6 +26,12 @@ async def search_in_milvus(request: SearchRequest):
     # === Vérification domaine (multi champs) ===
     domaine_existe = False
     
+    etat = "SUCCESS"
+    error_E = ""
+    if res_p.get("status") == "error":        
+        etat = "ERROR"
+        error_E = str(res_p.get('message'))
+        
     if settings.IS_BASE_FRS_EXISTE :    
         champs_domaine = ["domaine"] + [f"domaine{i}" for i in range(2, 7)]
 
@@ -36,6 +42,8 @@ async def search_in_milvus(request: SearchRequest):
                 break
             elif res_f.get("status") == "error":
                 logger.warning(f"[MILVUS] Erreur lors de la vérification {field}='{request.domaine}' → {res_f.get('message')}")
+                etat = "ERROR"
+                error_E = str(res_f.get('message'))
     else:
         #webhook temporaire pour simuler l'existence du domaine.
         # /!\ juste pour attendre l'ingestion des fournisseurs dans milvus
@@ -52,16 +60,22 @@ async def search_in_milvus(request: SearchRequest):
                 domaine_existe = data.get("domaine_existe", False)
         except httpx.RequestError as e:
             logger.error(f"[REQ RECUP FRS] Erreur requête info fournisseurs BO: {e}")
+            etat = "ERROR"
+            error_E = str(e)
         
     # === Cas doublon exact ===
     if nom_produit_existe and domaine_existe:
-        return {
-            "etat" : "SUCCESS",
+        return_data =  {
+            "etat" : etat,
             "is_doublon": True,
             "from_similarity": False,
             "score": 1.0,  # score max si doublon exact
             "id_produit": request.id_produit,
         }
+        if error_E:
+            return_data["error"] = error_E
+        
+        return return_data
 
     # === Sinon, recherche vectorielle ===
     IS_DOUBLON = False
@@ -100,13 +114,21 @@ async def search_in_milvus(request: SearchRequest):
 
     except httpx.RequestError as e:
         logger.error(f"[MILVUS] Erreur requête API recherche: {e}")
+        return {
+            "etat" : "ERROR",
+            "is_doublon": False,
+            "from_similarity": False,
+            "score": 0.0,
+            "error": str(e),
+            "id_produit": request.id_produit,
+        }
 
     return {
         "etat" : "SUCCESS",
-        "id_produit": request.id_produit,
         "is_doublon": IS_DOUBLON,
         "from_similarity": FROM_SIMILARITY,
-        "score": SCORE
+        "score": SCORE,
+        "id_produit": request.id_produit,
     }
 
 async def search_in_milvus_me(request: SearchRequest):
