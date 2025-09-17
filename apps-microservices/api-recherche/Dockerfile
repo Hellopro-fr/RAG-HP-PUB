@@ -19,7 +19,7 @@ RUN pip install -r requirements.txt
 
 COPY protos ./protos
 RUN find ./protos -name "*.proto" | xargs python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=.
-RUN touch ./app/protos/__init__.py
+# RUN touch ./protos/__init__.py
 
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
