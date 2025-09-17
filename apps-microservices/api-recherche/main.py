@@ -15,8 +15,6 @@ from app.core.searchws import get_milvus_connection, get_embedding_model, get_op
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-time.sleep(120)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
