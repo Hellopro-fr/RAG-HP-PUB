@@ -4,6 +4,7 @@ import logging
 import asyncio
 from typing import List
 from unittest import result
+from google.protobuf.json_format import MessageToDict
 
 # Import des clients gRPC de notre architecture
 from app.grpc_clients import (
@@ -375,12 +376,17 @@ async def search_in_milvus(request: SearchRequest) -> dict:
                 filter_expr=final_filter_expr
             )
             
-            all_results[source_name] = source_results or []
+            all_results[source_name] = [MessageToDict(res) for res in source_results]
         
         search_duration = time.perf_counter() - start_search
 
         # --- ÉTAPE 3: RERANKING (Optionnel, par source comme l'original) ---
-        if request.options.use_reranker:
+        if request.options.use_reranker and all_results:
+            
+            docs_to_rerank = []
+            result_map = {}
+            start_get_texte = time.perf_counter()
+            
             logger.info("Début du reranking...")
             start_rerank_time = time.perf_counter()
             reranked_results_by_source = {}
@@ -389,19 +395,43 @@ async def search_in_milvus(request: SearchRequest) -> dict:
                 if not matches:
                     reranked_results_by_source[source] = []
                     continue
+                
+                for res in matches:
+                    doc_text = res.get("metadata", {}).get('entity', {}).get("text")
+                    
+                    if doc_text:
+                        docs_to_rerank.append(doc_text)
+                        # On mappe le texte à son résultat complet pour pouvoir le reconstruire après
+                        result_map[doc_text] = res
+                        logging.info(
+                            f"Temps de récupération : {round((time.perf_counter() - start_get_texte), 2)}"
+                        )
+                if not docs_to_rerank:
+                    logging.warning(
+                        "Reranking demandé mais aucun champ 'text' trouvé dans les métadonnées des résultats."
+                    )
+                    continue
 
                 # Préparation des documents pour le reranker pour cette source
-                docs_to_rerank = [match['metadata']['entity']['text'] for match in matches]
+                # docs_to_rerank = [match['metadata']['entity']['text'] for match in matches]
                 
                 # Appel au microservice de reranking
+                logging.info(
+                    f"Phase 2 (Rerank): Envoi de {len(docs_to_rerank)} documents au service de reranking."
+                )
+                start_reranking = time.perf_counter()
                 ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
-                
+                logging.info(
+                    f"Temps de reranking : {round((time.perf_counter() - start_reranking), 2)}"
+                )
                 # Reconstruction de la liste de résultats dans le nouvel ordre
-                result_map = {match['metadata']['entity']['text']: match for match in matches}
-                final_ranked_matches = [result_map[text] for text in ranked_texts if text in result_map]
-                
-                # Conserver uniquement le top_k final après reranking
-                reranked_results_by_source[source] = final_ranked_matches[:top_k_final]
+                start_reconstruction = time.perf_counter()
+                reranked_results_by_source[source] = [
+                    result_map[text] for text in ranked_texts if text in result_map
+                ]
+                logging.info(
+                    f"Temps de reconstruction : {round((time.perf_counter() - start_reconstruction), 2)}"
+                )
 
             all_results = reranked_results_by_source
             rerank_duration = time.perf_counter() - start_rerank_time
