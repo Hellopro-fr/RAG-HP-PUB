@@ -1,4 +1,3 @@
-torch
 langchain_text_splitters
 pytest
 pika
