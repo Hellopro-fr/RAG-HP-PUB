@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 
 WORKDIR /app
 
-COPY protos /app/protos
+COPY protos ./protos
 
 # Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
 ENV PYTHONPATH=/app
