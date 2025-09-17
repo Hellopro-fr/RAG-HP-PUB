@@ -1,6 +1,8 @@
 # apps-microservices/api-ingestion/Dockerfile
 
 FROM python:3.10-slim
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
@@ -15,11 +17,17 @@ RUN pip install -e /app/libs/common-utils
 COPY apps-microservices/api-recherche/requirements.txt .
 RUN pip install -r requirements.txt
 
+COPY protos ./protos
+RUN find ./protos -name "*.proto" | xargs python -m grpc_tools.protoc -I./protos --python_out=. --grpc_python_out=.
+# RUN touch ./protos/__init__.py
+
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
-COPY apps-microservices/api-recherche .
+# COPY apps-microservices/api-recherche .
+COPY apps-microservices/api-recherche/app ./app
+COPY apps-microservices/api-recherche/main.py .
 
-RUN python convert.py
+# RUN python convert.py
 
 # Étape 4: Exposer le port
 EXPOSE 8510

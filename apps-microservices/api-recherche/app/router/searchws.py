@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.core.searchws import search_in_milvus_reranker, search_in_milvus_stream  # We will create this new streaming function
 from app.schemas.search import SearchRequestWs as SearchRequest
+from app.core.recherche import search_in_milvus_stream as search
 from app.core.ConnexionManager import manager
 
 router = APIRouter()
@@ -33,9 +34,13 @@ async def websocket_search(websocket: WebSocket):
         if search_request.options.rrf:
             async for update in search_in_milvus_reranker(search_request):
                 await websocket.send_json(update)
+        # elif search_request.option.grpc:
         else:
-            async for update in search_in_milvus_stream(search_request):
+            async for update in search(search_request):
                 await websocket.send_json(update)
+        # else:
+        #     async for update in search_in_milvus_stream(search_request):
+        #         await websocket.send_json(update)
 
     except WebSocketDisconnect:
         logger.warning(f"Client {websocket.client} disconnected.")

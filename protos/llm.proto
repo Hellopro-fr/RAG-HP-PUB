@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package llm;
+
+service LLMService {
+  // RPC de streaming bi-directionnel pour une conversation interactive.
+  // TODO: Sécuriser ce flux (authentification, validation des entrées pour éviter les injections)
+  rpc ChatStream(stream ChatRequest) returns (stream ChatResponse);
+}
+
+message ChatRequest {
+  string message = 1;
+}
+
+message ChatResponse {
+  string chunk = 1;
+}

@@ -1,0 +1,8 @@
+grpcio
+grpcio-tools
+protobuf
+pymilvus
+asyncio
+uvloop
+python-dotenv
+googleapis-common-protos

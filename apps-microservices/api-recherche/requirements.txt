@@ -10,3 +10,7 @@ requests
 sentencepiece
 torch
 optimum[onnxruntime-gpu]
+grpcio
+grpcio-tools
+protobuf
+googleapis-common-protos
