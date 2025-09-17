@@ -14,13 +14,10 @@ import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 
 from middlewares.auth import AuthMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 app = FastAPI()
 
-app.add_middleware(HTTPSRedirectMiddleware)
-app.add_middleware(
-    TrustedHostMiddleware, allowed_hosts=["*.hellopro.eu"]
-)
 # Config logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("auth")
@@ -29,9 +26,16 @@ logger = logging.getLogger("auth")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 # ORDRE IMPORTANT : SessionMiddleware EN PREMIER, puis AuthMiddleware
 app.add_middleware(AuthMiddleware)
 app.add_middleware(SessionMiddleware, secret_key=os.environ.get("JWT_SECRET"))
+
+# app.add_middleware(HTTPSRedirectMiddleware)
+# app.add_middleware(
+#     TrustedHostMiddleware, allowed_hosts=["*.hellopro.eu"]
+# )
 
 # --- ROUTES ---
 
