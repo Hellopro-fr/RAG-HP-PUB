@@ -8,3 +8,7 @@ tiktoken
 sentencepiece
 python-dotenv
 transformers
+grpcio
+grpcio-tools
+protobuf
+googleapis-common-protos

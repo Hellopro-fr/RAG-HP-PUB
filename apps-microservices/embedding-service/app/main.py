@@ -38,29 +38,7 @@ def main():
         # 1. Créer une instance du publisher
         publisher = Publisher(connection)
         
-        # Spécifier l'ID du GPU à utiliser (0 si un seul GPU est disponible)
-        device_id = 0
-        
-        if torch.cuda.device_count() > 1:
-            device_id = 1
-
-        device = f'cuda:{device_id}' if torch.cuda.is_available() else 'cpu'
-
-        model_name = "dangvantuan/sentence-camembert-large"
-        
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-        # def hf_length_function(text: str) -> int:
-        #     """Compte les tokens avec CamemBERT"""
-        #     return len(tokenizer.encode(text, add_special_tokens=False))
-
-        print(f"🔍 Chargement du modèle '{model_name}' sur le device '{device}'...")
-
-        model = SentenceTransformer(model_name, device=device)
-        
-        
-        # 3. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher, model=model, tokenizer=tokenizer)
+        consumer = Consumer(connection, publisher)
         
         # 4. Lancer l'écoute
         consumer.start_consuming()

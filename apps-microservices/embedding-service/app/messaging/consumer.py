@@ -3,11 +3,10 @@ import json
 from embedding_service.messaging.publisher import Publisher  # Importe notre publisher local
 from embedding_service.core.processor import embed_input_data # Importe la logique métier
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
-
-from sentence_transformers import SentenceTransformer
+import asyncio
 
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher, model: SentenceTransformer, **kwargs):
+    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher, **kwargs):
         """
         Initialise le consumer.
         Il a besoin d'une connexion ET d'une instance du publisher.
@@ -22,7 +21,7 @@ class Consumer:
         # Todo: à vérifier si le nom de la queue est correct
         self.queue_name = 'embedding_queue'
         self.rabbitmq_connection = RabbitMQConnection()
-        self.model = model
+        # self.model = model
         
         # ajout de tokenizer pour chunking
         self.tokenizer = kwargs.get("tokenizer") if kwargs.get("tokenizer") else None
@@ -49,7 +48,7 @@ class Consumer:
         print(f"\n📥 Embedding-Product-Processor: Message reçu pre embedding.")
 
         # 1. Appelle la logique métier PURE
-        output_message = embed_input_data(input_data, model=self.model, tokenizer=self.tokenizer)
+        output_message = asyncio.run(embed_input_data(input_data))
         
         # 2. Utilise le publisher pour envoyer le résultat
         self.publisher.publish_message(output_message)

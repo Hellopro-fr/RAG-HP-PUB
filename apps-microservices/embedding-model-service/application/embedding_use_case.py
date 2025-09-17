@@ -15,6 +15,31 @@ class EmbeddingUseCase:
         logging.info(f"Chargement du tokenizer: {tokenizer_name}")
         self.tokenizer = SentenceTransformer(tokenizer_name).tokenizer
         self.triton_client = InferenceServerClient(url=TRITON_URL)
+        
+    def tokenize_texts(self, texts: List[str]) -> List[List[int]]:
+        """
+        Tokenize une liste de textes en utilisant le tokenizer du service.
+        """
+        if not texts:
+            return []
+        try:
+            # On ne veut que les IDs, sans tokens spéciaux pour le comptage de longueur.
+            return self.tokenizer(texts, add_special_tokens=False).input_ids
+        except Exception as e:
+            logging.error(f"Erreur lors de la tokenization: {e}", exc_info=True)
+            return [[] for _ in texts]
+    
+    def detokenize_texts(self, token_lists: List[List[int]]) -> List[str]:
+        """
+        Décode une liste de listes de tokens en chaînes de caractères.
+        """
+        if not token_lists:
+            return []
+        try:
+            return self.tokenizer.batch_decode(token_lists, skip_special_tokens=True)
+        except Exception as e:
+            logging.error(f"Erreur lors de la détokenization: {e}", exc_info=True)
+            return ["" for _ in token_lists]
 
     def mean_pooling(self, model_output, attention_mask):
         token_embeddings = torch.from_numpy(model_output)

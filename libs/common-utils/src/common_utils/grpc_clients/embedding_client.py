@@ -37,3 +37,38 @@ async def get_embedding(text: str) -> List[float]:
     """
     results = await get_embeddings([text])
     return results[0] if results else []
+
+async def tokenize(texts: List[str]) -> List[List[int]]:
+    """
+    Appelle le service gRPC pour tokenizer une liste de textes.
+    """
+    if not texts:
+        return []
+    try:
+        async with grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL) as channel:
+            stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
+            request = embedding_pb2.TokenizeRequest(texts=texts)
+            response = await stub.Tokenize(request)
+            return [list(t.tokens) for t in response.tokenized_texts]
+    except grpc.aio.AioRpcError as e:
+        logging.error(f"Erreur gRPC en appelant le service de Tokenization: {e.details()}")
+        return [[] for _ in texts]
+    
+async def detokenize(token_lists: List[List[int]]) -> List[str]:
+    """
+    Appelle le service gRPC pour détokenizer une liste de listes de tokens.
+    """
+    if not token_lists:
+        return []
+    try:
+        async with grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL) as channel:
+            stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
+            # On reconstruit le message de requête
+            tokenized_outputs = [embedding_pb2.TokenizedOutput(tokens=tokens) for tokens in token_lists]
+            request = embedding_pb2.DetokenizeRequest(tokenized_texts=tokenized_outputs)
+            
+            response = await stub.Detokenize(request)
+            return list(response.texts)
+    except grpc.aio.AioRpcError as e:
+        logging.error(f"Erreur gRPC en appelant le service de Detokenization: {e.details()}")
+        return ["" for _ in token_lists]
