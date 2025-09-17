@@ -8,7 +8,7 @@ from google.protobuf.json_format import MessageToDict
 from typing import List, Optional
 
 # Import des clients gRPC
-from app.grpc_clients import (
+from common_utils.grpc_clients import (
     embedding_client,
     database_client,
     llm_client,
@@ -134,7 +134,7 @@ async def search_database(
     return {"results": results_list}
 
 
-@app.post("/llm/chat")
+@app.post("/llm/chat/stream")
 async def llm_chat_endpoint(data: TextInput):
     # TODO: Sécuriser cet endpoint
     # Retourne une réponse en streaming
@@ -142,6 +142,11 @@ async def llm_chat_endpoint(data: TextInput):
         llm_client.stream_llm_chat(data.input), media_type="text/event-stream"
     )
 
+@app.post("/llm/chat")
+async def llm_chat_endpoint(data: TextInput):
+    # Utilise le nouveau client partagé non-streamé
+    response_message = await llm_client.get_llm_chat_response(data.input)
+    return {"response": response_message}
 
 @app.get("/recherche.html", response_class=HTMLResponse)
 async def get_test_page(request: Request):

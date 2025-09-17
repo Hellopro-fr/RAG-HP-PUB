@@ -29,6 +29,20 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             logging.error(f"Erreur dans ChatStream: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Une erreur interne est survenue: {e}")
+            
+    async def Chat(self, request, context):
+        """
+        Implémentation de la méthode RPC unaire Chat.
+        """
+        logging.info(f"Nouvelle requête Chat reçue pour le message: '{request.message[:50]}...'")
+        try:
+            full_message = await self.chat_service.handle_chat_completion(request.message)
+            return llm_pb2.FullChatResponse(full_message=full_message)
+        except Exception as e:
+            logging.error(f"Erreur dans Chat: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Une erreur interne est survenue: {e}")
+            return llm_pb2.FullChatResponse()
 
 async def serve(chat_service: ChatApplicationService):
     """
