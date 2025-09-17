@@ -231,7 +231,7 @@ async def search_in_milvus_stream(request: SearchRequest):
 
             # Appel au microservice de recherche en base de données
             # Le client gRPC gère la conversion en dictionnaire
-            source_results = await database_client.search_vector_and_convert(
+            source_results = await database_client.search_vector(
                 collection=source_name,
                 vector=query_vector,
                 k=top_k_retrieval,
@@ -368,7 +368,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             logger.info(f"Recherche dans '{source_name}' avec le filtre: {final_filter_expr}")
 
             # Appel au microservice de base de données
-            source_results = await database_client.search_vector_and_convert(
+            source_results = await database_client.search_vector(
                 collection=source_name,
                 vector=query_vector,
                 k=top_k_retrieval,
