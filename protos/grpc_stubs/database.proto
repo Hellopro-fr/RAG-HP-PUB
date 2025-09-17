@@ -6,6 +6,7 @@ import "google/protobuf/struct.proto";
 service DatabaseSearchService {
   // TODO: Sécuriser ce flux (authentification, validation des entrées)
   rpc Search(SearchRequest) returns (SearchResponse);
+  rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
 }
 
 message SearchRequest {
@@ -25,4 +26,12 @@ message SearchResult {
 
 message SearchResponse {
   repeated SearchResult results = 1;
+}
+
+message GetSchemaRequest {
+  string collection_name = 1;
+}
+
+message GetSchemaResponse {
+  map<string, string> fields = 1;
 }

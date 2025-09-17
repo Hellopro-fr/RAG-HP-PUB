@@ -6,6 +6,8 @@ from starlette.middleware.sessions import SessionMiddleware
 import httpx
 import logging
 import os
+import jwt
+from jwt import ExpiredSignatureError, InvalidTokenError
 
 from middlewares.auth import AuthMiddleware
 
@@ -25,8 +27,33 @@ app.add_middleware(SessionMiddleware, secret_key=os.environ.get("JWT_SECRET"))
 
 # --- ROUTES ---
 
+JWT_SECRET = os.environ.get("JWT_SECRET")
+JWT_ALGO = os.environ.get("JWT_ALGO")
+JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE")
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
+    user = request.session.get("user")
+    
+    if user and "token" in user:
+        token = user["token"]
+        try:
+            # Vérification du token JWT
+            jwt.decode(
+                token,
+                JWT_SECRET,
+                algorithms=[JWT_ALGO],
+                audience=JWT_AUDIENCE
+            )
+            # ✅ Token valide → redirection vers /recherche
+            return RedirectResponse(url="/recherche", status_code=303)
+        except ExpiredSignatureError:
+            # Token expiré → on nettoie la session
+            request.session.clear()
+        except InvalidTokenError:
+            # Token invalide → on nettoie la session
+            request.session.clear()
+
     error = request.session.pop("error", None)
     username = request.session.pop("username", "")
 
@@ -41,7 +68,6 @@ async def login_action(request: Request, username: str = Form(...), password: st
         response = await client.post("https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php", data={"login": username, "password": password})
 
     logger.info(f"XHR status={response.status_code}, raw={response.text}")
-    logger.info(f"XHR status 2={response}")
 
     try:
         res = response.json()

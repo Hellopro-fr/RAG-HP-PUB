@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
     <title>Authentification - HELLOPRO</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <style>
@@ -42,7 +44,7 @@
                         </div>
                         <input id="username" name="username" type="username" required 
                             class="input-field block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="votre nom d'utilisateur" value="{{ username if username else '' }}">
+                            placeholder="Votre nom d'utilisateur" value="{{ username if username else '' }}">
                     </div>
                 </div>
 
