@@ -204,6 +204,7 @@ class Embedding:
                 return []
             tokens = token_lists[0]
 
+            logger.info(f"token lists : {token_lists}")
             # 2. Créer les chunks de tokens avec chevauchement (logique corrigée)
             token_chunks = []
             start_index = 0
@@ -225,6 +226,7 @@ class Embedding:
 
             # 3. Détokenizer tous les chunks en un seul appel réseau (inchangé)
             text_chunks = await embedding_client.detokenize(token_chunks)
+            logger.info(f"text chunks : {text_chunks}")
             
             return text_chunks
 
@@ -237,14 +239,14 @@ class Embedding:
         
         if not data_to_embed.get("text",""):
             self.logger.warning(f"Le texte à vectoriser est vide")
-            # self.logger.warning(f"Data: {data_to_embed}")
+            self.logger.warning(f"Data: {data_to_embed}")
             return []
         
         data_clean = self._clean_text(data_to_embed.get("text", ""))
         
         if not data_clean:
             self.logger.warning(f"Le texte à vectoriser est vide après nettoyage")
-            # self.logger.warning(f"Data: {data_clean}")
+            self.logger.warning(f"Data: {data_clean}")
             return []
 
         # Vérifier si le type de page est renseigné
