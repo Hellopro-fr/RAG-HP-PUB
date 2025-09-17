@@ -2,8 +2,8 @@ import grpc
 import logging
 from concurrent import futures
 
-import embedding_pb2
-import embedding_pb2_grpc
+from grpc_stubs import embedding_pb2
+from grpc_stubs import embedding_pb2_grpc
 
 from application.embedding_use_case import EmbeddingUseCase
 

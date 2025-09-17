@@ -4,8 +4,8 @@ from concurrent import futures
 from google.protobuf import struct_pb2
 import json 
 
-import database_pb2
-import database_pb2_grpc
+from grpc_stubs import database_pb2
+from grpc_stubs import database_pb2_grpc
 
 from application.search_use_case import SearchUseCase
 
