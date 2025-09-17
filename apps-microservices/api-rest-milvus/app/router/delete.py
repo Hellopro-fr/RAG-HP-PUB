@@ -105,7 +105,7 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
                 string_values = [f'"{v}"' for v in values_to_delete_in_correspondance]
                 expr = f'{unique_field} in [{", ".join(string_values)}]'
 
-                res = collection.delete(expr=expr)
+                res = collection_correspondance.delete(expr=expr)
                 print(f"Suppression dans la collection de correspondance avec l'expression: {expr}")
 
             return {
