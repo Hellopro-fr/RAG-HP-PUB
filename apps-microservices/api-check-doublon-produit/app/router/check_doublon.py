@@ -6,17 +6,22 @@ from app.core.check_doublon import search_in_milvus
 import logging
 from typing import List
 
+import asyncio
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+def validate_request(req: SearchRequest):
+    if not req.nom_produit or not req.nom_produit.strip():
+        raise ValueError("Le nom ne peut pas être vide.")
+    if not req.domaine:
+        raise ValueError("Le domaine ne peut pas être vide.")
 
 @router.post("/check-doublon", response_model=SearchReponse , summary="Vérifie le doublon produit dans Milvus")
 async def milvus_search_endpoint(request: SearchRequest = Body(...)):
     try:
         logger.info(f"Requête reçue sur /check-doublon pour nom : {request.nom_produit}")
-        if not request.nom_produit.strip():
-            raise ValueError("Le nom ne peut pas être vide.")
-        if not request.domaine:
-            raise ValueError("Le domaine ne peut pas être vide.")
+        validate_request(request)
         
         results = await search_in_milvus(request)
         return SearchReponse(result = results)
@@ -30,51 +35,36 @@ async def milvus_search_endpoint(request: SearchRequest = Body(...)):
 # Nouveau point de terminaison pour les requêtes multiples
 @router.post("/check-doublon-lot", summary="Vérifie le doublon pour plusieurs produits à la fois dans Milvus")
 async def bulk_milvus_search_endpoint(requests: List[SearchRequest]):
-    all_results = []
-
-    for request in requests:
+    tasks = []
+    for req in requests:
         try:
-            logger.info(f"Requête en cours de traitement sur /bulk-check-doublon pour id_produit : {request.id_produit}")
-
-            # Validation basique
-            if not request.nom_produit.strip():
-                raise ValueError("Le nom ne peut pas être vide.")
-            if not request.domaine:
-                raise ValueError("Le domaine ne peut pas être vide.")
-
-            # Appel de ta fonction de recherche (qui retourne un résultat formaté)
-            result = await search_in_milvus(request)
-
-            # ⚡️ Au lieu d'empiler un tableau dans un tableau, 
-            # on ajoute directement le dict du produit
-            all_results.append({
-                "id_produit": request.id_produit,
-                "is_doublon": result.is_doublon,
-                "from_similarity": result.from_similarity,
-                "score": result.score
-            })
-
-        except ValueError as ve:
-            logger.error(f"Erreur de validation pour {request.id_produit}: {ve}")
-            all_results.append({
-                "id_produit": request.id_produit,
-                "error": True,
-                "message": str(ve),
-                "is_doublon": None,
-                "from_similarity": None,
-                "score": None
-            })
-
+            validate_request(req)
+            tasks.append(search_in_milvus(req))
         except Exception as e:
-            logger.error(f"Erreur interne pour {request.id_produit}: {e}", exc_info=True)
-            all_results.append({
-                "id_produit": request.id_produit,
-                "error": True,
-                "message": f"Erreur interne du serveur: {e}",
-                "is_doublon": None,
-                "from_similarity": None,
-                "score": None
-            })
+            logger.error(f"Erreur validation pour {req.id_produit}: {e}")
+            tasks.append(e)  # On met directement une erreur
+    
+    raw_results = await asyncio.gather(*[t if not isinstance(t, Exception) else asyncio.sleep(0, result=t) for t in tasks], return_exceptions=True)
+    
+    all_results = []
+    for req, res in zip(requests, raw_results):
+        if isinstance(res, Exception):
+            logger.error(f"Erreur interne pour {req.id_produit}: {res}", exc_info=True)
+            all_results.append(SearchResponse(
+                etat            = "ERROR",
+                is_doublon      = False,
+                from_similarity = False,
+                score           = 0.0,
+                error           = str(res),
+                id_produit      = req.id_produit,
+            ))
+        else:
+            all_results.append(SearchResponse(
+                etat            = "SUCCESS",
+                is_doublon      = res.get("is_doublon", False),
+                from_similarity = res.get("from_similarity", False),
+                score           = res.get("score", 0.0),
+                id_produit      = req.id_produit,
+            ))
 
-    # Retourne une seule liste bien aplatie
-    return {"results": all_results}
+    return SearchResponseLot(results=all_results)
