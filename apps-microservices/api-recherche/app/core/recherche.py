@@ -3,6 +3,7 @@ import time
 import logging
 import asyncio
 from typing import List
+from unittest import result
 
 # Import des clients gRPC de notre architecture
 from app.grpc_clients import (
@@ -14,7 +15,7 @@ from app.grpc_clients import (
 from pymilvus import DataType, Collection
 
 # Import des schémas Pydantic (à adapter si les chemins ont changé)
-from app.schemas.search import SearchRequestWs as SearchRequest
+from app.schemas.search import LLMPipeline, SearchReponse, SearchRequestWs as SearchRequest, SearchResponse
 from app.core.credentials import settings, model_settings
 from openai import OpenAI
 
@@ -47,6 +48,13 @@ class DeepSeek:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+@lru_cache(maxsize=None)
+def get_openai_client():
+    logger.info("Initialisation du client OpenAI...")
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    logger.info("Client OpenAI initialisé.")
+    return client
+
 @lru_cache(maxsize=32)
 def get_field_type_map(collection_name: str) -> dict:
     """
@@ -59,6 +67,54 @@ def get_field_type_map(collection_name: str) -> dict:
     except Exception as e:
         logger.error(f"Could not retrieve schema for collection '{collection_name}': {e}")
         return {}
+
+def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
+    llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
+    if request.action == 2 and context_texts:
+        context = "\n-----\n\n\n".join(context_texts)
+        full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
+        
+        type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
+            
+        start_llm_time = time.perf_counter()
+        if type_prompt == "openai":
+            if request.llm.chat_model == "deepseek":
+                deepseek = DeepSeek()
+                deepseek.set_temperature(request.llm.temperature)
+                llm_response = deepseek.chat(full_user_prompt)['content']
+            else:
+                openai_client = get_openai_client()
+                completion = openai_client.chat.completions.create(
+                    model=request.llm.chat_model,
+                    messages=[{"role": "user", "content": full_user_prompt}],
+                    temperature=float(request.llm.temperature)
+                )
+                llm_response = completion.choices[0].message.content
+        else:
+            client_or = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=settings.OPENROUTER_API_KEY,
+            )
+            completion = client_or.chat.completions.create(
+                extra_body={},
+                model=request.llm.chat_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": full_user_prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+            llm_response = completion.choices[0].message.content
+            # llm_response = chat_with_openrouter(request.chat_model, full_user_prompt).choices[0].message.content
+            
+        llm_duration = time.perf_counter() - start_llm_time
+    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
 
 def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
@@ -175,7 +231,7 @@ async def search_in_milvus_stream(request: SearchRequest):
 
             # Appel au microservice de recherche en base de données
             # Le client gRPC gère la conversion en dictionnaire
-            source_results = await database_client.search_vector_and_convert(
+            source_results = await database_client.search_vector(
                 collection=source_name,
                 vector=query_vector,
                 k=top_k_retrieval,
@@ -205,13 +261,13 @@ async def search_in_milvus_stream(request: SearchRequest):
 
             # Préparation des documents pour le reranker
             # HYPOTHÈSE: Le texte est dans metadata.text
-            docs_to_rerank = [res.get("metadata", {}).get("text", "") for res in initial_matches]
+            docs_to_rerank = [res['metadata']['entity']['text'] for res in initial_matches]
             
             # Appel au microservice de reranking
             ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
             
             # Reconstruction de la liste de résultats dans le nouvel ordre
-            result_map = {res.get("metadata", {}).get("text", ""): res for res in initial_matches}
+            result_map = {res['metadata']['entity']['text']: res for res in initial_matches}
             final_results = [result_map[text] for text in ranked_texts if text in result_map]
             
             rerank_duration = time.perf_counter() - start_rerank_time
@@ -223,7 +279,7 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "status", "payload": f"Génération de la réponse avec le LLM..."}
             
             # Préparation du contexte pour le LLM
-            context_texts = [res.get("metadata", {}).get("text", "") for res in final_results[:top_k_final]]
+            context_texts = [res['metadata']['entity']['text'] for res in final_results[:top_k_final]]
             context = "\n-----\n".join(context_texts)
             full_user_prompt = f"Contexte:\n{context}\n\nQuestion:\n{request.prompt}" # Template simplifié
 
@@ -257,3 +313,170 @@ async def search_in_milvus_stream(request: SearchRequest):
         # Le nettoyage de la mémoire GPU n'est plus nécessaire ici,
         # car il est géré par les microservices dédiés.
         logger.info("Flux de recherche terminé.")
+        
+        
+# ... (le reste de vos imports et fonctions reste inchangé) ...
+
+async def search_in_milvus(request: SearchRequest) -> dict:
+    """
+    Orchestre une recherche complète en utilisant les microservices gRPC,
+    et retourne un dictionnaire structuré comme l'implémentation originale.
+    """
+    logger.info(f"[gRPC] Recherche (non-stream): prompt='{request.prompt[:50]}...', sources={[s.source for s in request.source]}")
+    start_total_time = time.perf_counter()
+
+    # Initialisation des variables pour le dictionnaire de retour
+    embed_duration, search_duration, rerank_duration, llm_duration = 0, 0, 0, 0
+    llm_response_content = ""
+    context = ""
+    full_user_prompt = ""
+    final_filter_expr_str = "" # Pour stocker une représentation du filtre appliqué
+
+    try:
+        # --- ÉTAPE 1: EMBEDDING ---
+        start_embed = time.perf_counter()
+        query_vector = await embedding_client.get_embedding(request.prompt)
+        embed_duration = time.perf_counter() - start_embed
+        if not query_vector:
+            raise ValueError("Impossible de générer l'embedding pour la requête.")
+
+        # --- ÉTAPE 2: RÉCUPÉRATION (VECTOR SEARCH) ---
+        start_search = time.perf_counter()
+        top_k_final = int(request.top_k)
+        top_k_retrieval = top_k_final * 3 if request.options.use_reranker else top_k_final
+        
+        all_results = {} # Dictionnaire pour stocker les résultats par source, comme l'original
+
+        # Boucle sur les sources demandées
+        for item in request.source:
+            source_name = item.source
+            filtre = item.filtre
+
+            # Construction de l'expression de filtre
+            filters = []
+            filter_expr_global = filtre_source(request.filtre, source_name)
+            if filter_expr_global:
+                filters.append(" and ".join(filter_expr_global))
+            
+            filter_expr_source = filtre_source(filtre, source_name) if filtre else []
+            if filter_expr_source:
+                filters.append(" and ".join(filter_expr_source))
+            
+            final_filter_expr = " and ".join(filters) if filters else ""
+            final_filter_expr_str = final_filter_expr # Sauvegarde pour le retour
+
+            logger.info(f"Recherche dans '{source_name}' avec le filtre: {final_filter_expr}")
+
+            # Appel au microservice de base de données
+            source_results = await database_client.search_vector(
+                collection=source_name,
+                vector=query_vector,
+                k=top_k_retrieval,
+                filter_expr=final_filter_expr
+            )
+            
+            all_results[source_name] = source_results or []
+        
+        search_duration = time.perf_counter() - start_search
+
+        # --- ÉTAPE 3: RERANKING (Optionnel, par source comme l'original) ---
+        if request.options.use_reranker:
+            logger.info("Début du reranking...")
+            start_rerank_time = time.perf_counter()
+            reranked_results_by_source = {}
+
+            for source, matches in all_results.items():
+                if not matches:
+                    reranked_results_by_source[source] = []
+                    continue
+
+                # Préparation des documents pour le reranker pour cette source
+                docs_to_rerank = [match['metadata']['entity']['text'] for match in matches]
+                
+                # Appel au microservice de reranking
+                ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
+                
+                # Reconstruction de la liste de résultats dans le nouvel ordre
+                result_map = {match['metadata']['entity']['text']: match for match in matches}
+                final_ranked_matches = [result_map[text] for text in ranked_texts if text in result_map]
+                
+                # Conserver uniquement le top_k final après reranking
+                reranked_results_by_source[source] = final_ranked_matches[:top_k_final]
+
+            all_results = reranked_results_by_source
+            rerank_duration = time.perf_counter() - start_rerank_time
+            logger.info(f"Reranking terminé en {rerank_duration:.2f}s.")
+        else:
+            # Si pas de reranker, on tronque simplement les résultats de chaque source
+            for source, matches in all_results.items():
+                sorted_matches = sorted(matches, key=lambda x: x.get('score', 0.0), reverse=True)
+                all_results[source] = sorted_matches[:top_k_final]
+
+
+        # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
+        # Reconstruire le contexte à partir des résultats finaux (potentiellement rerankés)
+        context_texts = []
+        for source, matches in all_results.items():
+            for match in matches:
+                context_texts.append(match['metadata']['entity']['text'])
+
+        # if request.action == 2 and context_texts:
+        #     logger.info("Début de la génération de réponse par le LLM...")
+        #     start_llm_time = time.perf_counter()
+            
+        #     context = "\n-----\n".join(context_texts)
+        #     full_user_prompt = f"Contexte:\n{context}\n\nQuestion:\n{request.prompt}"
+
+        #     # Appel au microservice LLM et agrégation de la réponse
+        #     response_chunks = []
+        #     async for token in llm_client.stream_llm_chat(full_user_prompt):
+        #         response_chunks.append(token)
+        #     llm_response_content = "".join(response_chunks)
+            
+        #     llm_duration = time.perf_counter() - start_llm_time
+        #     logger.info(f"Génération LLM terminée en {llm_duration:.2f}s.")
+        llm_req = llm_prompt(request, context_texts)
+
+        # --- FIN: Construction du dictionnaire de retour ---
+        total_duration = time.perf_counter() - start_total_time
+        
+        return {
+            "database": "milvus",
+            "user_query": request.prompt,
+            "filter": final_filter_expr_str,
+            "matches": all_results,
+            "context": llm_req.context,
+            "response": llm_req.llm_response,
+            "embedding": round(embed_duration, 2),
+            "fournisseur_non_vide": llm_req.full_user_prompt, # Maintenu de l'original
+            "full_user_prompt": full_user_prompt,
+            "chat_model": request.llm.chat_model,
+            "temperature": request.llm.temperature,
+            "vector_search": round(search_duration, 2),
+            "rerank_duration": round(rerank_duration, 2), # Ajout pour information
+            "llm_execution": round(llm_req.llm_duration, 2),
+            "total_process": round(total_duration, 2),
+            "import_duration": 0, # Maintenu de l'original, non calculé ici
+        }
+
+    except Exception as e:
+        logger.error(f"Une erreur majeure est survenue dans la recherche (non-stream): {e}", exc_info=True)
+        # En cas d'erreur, retourner une structure similaire mais avec une erreur
+        return {
+            "database": "milvus",
+            "user_query": request.prompt,
+            "filter": "",
+            "matches": {},
+            "context": "",
+            "response": f"Erreur serveur: {e}",
+            "embedding": round(embed_duration, 2),
+            "fournisseur_non_vide": None,
+            "full_user_prompt": "",
+            "chat_model": request.llm.chat_model,
+            "temperature": request.llm.temperature,
+            "vector_search": round(search_duration, 2),
+            "rerank_duration": round(rerank_duration, 2),
+            "llm_execution": round(llm_duration, 2),
+            "total_process": round(time.perf_counter() - start_total_time, 2),
+            "import_duration": 0,
+        }

@@ -56,10 +56,11 @@ async def search_in_milvus(request: SearchRequest):
     # === Cas doublon exact ===
     if nom_produit_existe and domaine_existe:
         return {
-            "id_produit": request.id_produit,
+            "etat" : "SUCCESS",
             "is_doublon": True,
             "from_similarity": False,
-            "score": 1.0  # score max si doublon exact
+            "score": 1.0,  # score max si doublon exact
+            "id_produit": request.id_produit,
         }
 
     # === Sinon, recherche vectorielle ===
@@ -81,7 +82,8 @@ async def search_in_milvus(request: SearchRequest):
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.post(settings.URL_QUERY_API_RECHERCHE, json=payload)
+            response = await client.post(settings.URL_QUERY_API_RECHERCHE, json=payload)            
+            FROM_SIMILARITY = True
 
         if response.status_code != 200:
             logger.error(f"[MILVUS] Erreur API recherche: {response.status_code} - {response.text}")
@@ -92,7 +94,6 @@ async def search_in_milvus(request: SearchRequest):
             for produit in produits:
                 score = produit.get("score", 0.0)
                 if score >= seuil_score_doublon:
-                    FROM_SIMILARITY = True
                     SCORE = score
                     IS_DOUBLON = True
                     break
@@ -101,6 +102,7 @@ async def search_in_milvus(request: SearchRequest):
         logger.error(f"[MILVUS] Erreur requête API recherche: {e}")
 
     return {
+        "etat" : "SUCCESS",
         "id_produit": request.id_produit,
         "is_doublon": IS_DOUBLON,
         "from_similarity": FROM_SIMILARITY,

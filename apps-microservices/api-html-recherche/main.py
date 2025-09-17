@@ -44,8 +44,7 @@ async def login_action(request: Request, username: str = Form(...), password: st
     logger.info(f"XHR status 2={response}")
 
     try:
-        res = git status
-        
+        res = response.json()
     except Exception as e:
         logger.error(f"Impossible de parser le JSON: {e}")
         request.session["error"] = "Erreur d'authentification"
