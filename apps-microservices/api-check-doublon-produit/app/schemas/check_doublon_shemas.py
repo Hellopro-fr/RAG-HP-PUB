@@ -3,10 +3,10 @@ from typing import Optional, Annotated
 from typing import List
 
 class SearchRequest(BaseModel):
-    id_produit : str
     nom_produit: str
     domaine    : str
     description: Optional[str] = ""
+    id_produit : str
     
 class SearchResponse(BaseModel):
     etat           : str
