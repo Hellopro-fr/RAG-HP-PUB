@@ -121,157 +121,157 @@ async def classify_batch_products(batch_input: BatchProductsInput):
         logger.error(f"Erreur classification batch: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/classify/batch/async")
-async def classify_batch_products_async(
-    batch_input: BatchProductsInput, 
-    background_tasks: BackgroundTasks
-):
-    """Lance une classification en lot en arrière-plan (pour de gros volumes)"""
-    try:
-        if not classifier.is_llm_configured():
-            raise HTTPException(status_code=503, detail="LLM non configuré")
+# @router.post("/classify/batch/async")
+# async def classify_batch_products_async(
+#     batch_input: BatchProductsInput, 
+#     background_tasks: BackgroundTasks
+# ):
+#     """Lance une classification en lot en arrière-plan (pour de gros volumes)"""
+#     try:
+#         if not classifier.is_llm_configured():
+#             raise HTTPException(status_code=503, detail="LLM non configuré")
         
-        if len(batch_input.produits) == 0:
-            raise HTTPException(status_code=400, detail="Liste de produits vide")
+#         if len(batch_input.produits) == 0:
+#             raise HTTPException(status_code=400, detail="Liste de produits vide")
         
-        # Génération d'un ID de tâche
-        task_id = f"batch_{int(time.time())}"
+#         # Génération d'un ID de tâche
+#         task_id = f"batch_{int(time.time())}"
         
-        # Conversion des modèles Pydantic en dicts
-        products_dict = []
-        for product in batch_input.produits:
-            products_dict.append({
-                'id_produit': product.id_produit,
-                'nom_produit': product.nom_produit,
-                'description': product.description,
-                'id_categorie_attendue': product.id_categorie_attendue
-            })
+#         # Conversion des modèles Pydantic en dicts
+#         products_dict = []
+#         for product in batch_input.produits:
+#             products_dict.append({
+#                 'id_produit': product.id_produit,
+#                 'nom_produit': product.nom_produit,
+#                 'description': product.description,
+#                 'id_categorie_attendue': product.id_categorie_attendue
+#             })
         
-        # Lancement de la tâche en arrière-plan
-        background_tasks.add_task(
-            _process_batch_classification,
-            task_id,
-            products_dict
-        )
+#         # Lancement de la tâche en arrière-plan
+#         background_tasks.add_task(
+#             _process_batch_classification,
+#             task_id,
+#             products_dict
+#         )
         
-        return {
-            "task_id": task_id,
-            "message": f"Classification de {len(products_dict)} produits lancée en arrière-plan",
-            "total_products": len(products_dict)
-        }
+#         return {
+#             "task_id": task_id,
+#             "message": f"Classification de {len(products_dict)} produits lancée en arrière-plan",
+#             "total_products": len(products_dict)
+#         }
         
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Erreur classification batch async: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         logger.error(f"Erreur classification batch async: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
-def _process_batch_classification(task_id: str, products: list):
-    """Traite la classification en arrière-plan"""
-    global task_results
-    try:
-        # Marquer comme en cours
-        task_results[task_id] = {
-            "status": "PROCESSING",
-            "progress": 0,
-            "total_products": len(products),
-            "start_time": time.time()
-        }
+# def _process_batch_classification(task_id: str, products: list):
+#     """Traite la classification en arrière-plan"""
+#     global task_results
+#     try:
+#         # Marquer comme en cours
+#         task_results[task_id] = {
+#             "status": "PROCESSING",
+#             "progress": 0,
+#             "total_products": len(products),
+#             "start_time": time.time()
+#         }
         
-        logger.info(f"Début traitement batch {task_id} - {len(products)} produits")
-        result = classifier.classify_batch(products)
+#         logger.info(f"Début traitement batch {task_id} - {len(products)} produits")
+#         result = classifier.classify_batch(products)
         
-        # Sauvegarder le résultat complet
-        task_results[task_id] = {
-            "status": "COMPLETED",
-            "progress": 100,
-            "total_products": len(products),
-            "start_time": task_results[task_id]["start_time"],
-            "end_time": time.time(),
-            "result": result
-        }
+#         # Sauvegarder le résultat complet
+#         task_results[task_id] = {
+#             "status": "COMPLETED",
+#             "progress": 100,
+#             "total_products": len(products),
+#             "start_time": task_results[task_id]["start_time"],
+#             "end_time": time.time(),
+#             "result": result
+#         }
         
-        logger.info(f"Fin traitement batch {task_id} - {result['success_count']} succès, {result['error_count']} erreurs")
+#         logger.info(f"Fin traitement batch {task_id} - {result['success_count']} succès, {result['error_count']} erreurs")
         
-    except Exception as e:
-        # Marquer comme échoué
-        task_results[task_id] = {
-            "status": "FAILED",
-            "progress": 0,
-            "total_products": len(products),
-            "start_time": task_results[task_id]["start_time"],
-            "end_time": time.time(),
-            "error": str(e)
-        }
-        logger.error(f"Erreur traitement batch {task_id}: {e}")
+#     except Exception as e:
+#         # Marquer comme échoué
+#         task_results[task_id] = {
+#             "status": "FAILED",
+#             "progress": 0,
+#             "total_products": len(products),
+#             "start_time": task_results[task_id]["start_time"],
+#             "end_time": time.time(),
+#             "error": str(e)
+#         }
+#         logger.error(f"Erreur traitement batch {task_id}: {e}")
 
-@router.get("/classify/batch/status/{task_id}")
-async def get_batch_status(task_id: str):
-    global task_results
-    """Récupère le statut d'une tâche de classification en lot"""
-    if task_id not in task_results:
-        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+# @router.get("/classify/batch/status/{task_id}")
+# async def get_batch_status(task_id: str):
+#     global task_results
+#     """Récupère le statut d'une tâche de classification en lot"""
+#     if task_id not in task_results:
+#         raise HTTPException(status_code=404, detail="Tâche non trouvée")
     
-    task_info = task_results[task_id].copy()
+#     task_info = task_results[task_id].copy()
     
-    # Ajouter des infos calculées
-    if "start_time" in task_info:
-        elapsed_time = time.time() - task_info["start_time"]
-        task_info["elapsed_time"] = round(elapsed_time, 2)
+#     # Ajouter des infos calculées
+#     if "start_time" in task_info:
+#         elapsed_time = time.time() - task_info["start_time"]
+#         task_info["elapsed_time"] = round(elapsed_time, 2)
     
-    return task_info
+#     return task_info
 
-@router.get("/classify/batch/result/{task_id}", response_model=BatchClassificationResponse)
-async def get_batch_result(task_id: str):
-    global task_results
-    """Récupère le résultat complet d'une tâche terminée"""
-    if task_id not in task_results:
-        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+# @router.get("/classify/batch/result/{task_id}", response_model=BatchClassificationResponse)
+# async def get_batch_result(task_id: str):
+#     global task_results
+#     """Récupère le résultat complet d'une tâche terminée"""
+#     if task_id not in task_results:
+#         raise HTTPException(status_code=404, detail="Tâche non trouvée")
     
-    task_info = task_results[task_id]
+#     task_info = task_results[task_id]
     
-    if task_info["status"] == "PROCESSING":
-        raise HTTPException(status_code=202, detail="Tâche en cours de traitement")
-    elif task_info["status"] == "FAILED":
-        raise HTTPException(status_code=500, detail=f"Tâche échouée: {task_info.get('error', 'Erreur inconnue')}")
-    elif task_info["status"] != "COMPLETED":
-        raise HTTPException(status_code=400, detail=f"Statut de tâche invalide: {task_info['status']}")
+#     if task_info["status"] == "PROCESSING":
+#         raise HTTPException(status_code=202, detail="Tâche en cours de traitement")
+#     elif task_info["status"] == "FAILED":
+#         raise HTTPException(status_code=500, detail=f"Tâche échouée: {task_info.get('error', 'Erreur inconnue')}")
+#     elif task_info["status"] != "COMPLETED":
+#         raise HTTPException(status_code=400, detail=f"Statut de tâche invalide: {task_info['status']}")
     
-    result = task_info["result"]
-    classification_results = [ClassificationResult(**res) for res in result['resultats']]
+#     result = task_info["result"]
+#     classification_results = [ClassificationResult(**res) for res in result['resultats']]
     
-    return BatchClassificationResponse(
-        total_produits=result['total_produits'],
-        success_count=result['success_count'],
-        error_count=result['error_count'],
-        resultats=classification_results,
-        processing_time_total=result['processing_time_total']
-    )
+#     return BatchClassificationResponse(
+#         total_produits=result['total_produits'],
+#         success_count=result['success_count'],
+#         error_count=result['error_count'],
+#         resultats=classification_results,
+#         processing_time_total=result['processing_time_total']
+#     )
 
-@router.delete("/classify/batch/task/{task_id}")
-async def delete_batch_task(task_id: str):
-    global task_results
-    """Supprime une tâche du cache"""
-    if task_id not in task_results:
-        raise HTTPException(status_code=404, detail="Tâche non trouvée")
+# @router.delete("/classify/batch/task/{task_id}")
+# async def delete_batch_task(task_id: str):
+#     global task_results
+#     """Supprime une tâche du cache"""
+#     if task_id not in task_results:
+#         raise HTTPException(status_code=404, detail="Tâche non trouvée")
     
-    del task_results[task_id]
-    return {"message": f"Tâche {task_id} supprimée"}
+#     del task_results[task_id]
+#     return {"message": f"Tâche {task_id} supprimée"}
 
-@router.get("/classify/batch/tasks")
-async def list_batch_tasks():
-    global task_results
-    """Liste toutes les tâches avec leur statut"""
-    tasks_summary = {}
-    for task_id, task_info in task_results.items():
-        tasks_summary[task_id] = {
-            "status": task_info["status"],
-            "progress": task_info.get("progress", 0),
-            "total_products": task_info.get("total_products", 0),
-            "elapsed_time": round(time.time() - task_info["start_time"], 2) if "start_time" in task_info else None
-        }
+# @router.get("/classify/batch/tasks")
+# async def list_batch_tasks():
+#     global task_results
+#     """Liste toutes les tâches avec leur statut"""
+#     tasks_summary = {}
+#     for task_id, task_info in task_results.items():
+#         tasks_summary[task_id] = {
+#             "status": task_info["status"],
+#             "progress": task_info.get("progress", 0),
+#             "total_products": task_info.get("total_products", 0),
+#             "elapsed_time": round(time.time() - task_info["start_time"], 2) if "start_time" in task_info else None
+#         }
     
-    return {"tasks": tasks_summary, "total_tasks": len(tasks_summary)}
+#     return {"tasks": tasks_summary, "total_tasks": len(tasks_summary)}
 
 @router.get("/test")
 async def test_classification():
