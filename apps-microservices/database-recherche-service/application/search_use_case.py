@@ -24,3 +24,12 @@ class SearchUseCase:
             search_kwargs['fields'] = output_fields
 
         return self.db_client.search(collection_name, vector, top_k, **search_kwargs)
+    
+    def get_collection_schema(
+        self, 
+        collection_name: str
+    ) -> dict[str, str]:
+        """
+        Cas d'utilisation pour récupérer le schéma d'une collection.
+        """
+        return self.db_client.get_field_type_map(collection_name)

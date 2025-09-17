@@ -135,8 +135,8 @@ services:
     container_name: api-recherche-service
     restart: unless-stopped
     # TODO: à supprimer en PROD
-    volumes:
-      - ./apps-microservices/api-recherche:/app:rw
+    # volumes:
+    #   - ./apps-microservices/api-recherche:/app:rw
     ports:
       - "8510:8510"
     environment:
@@ -144,6 +144,11 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+    depends_on:
+      - llm-service
+      - embedding-model-service
+      - reranking-model-service
+      - database-recherche-service
     env_file:
       - .env
     deploy:
@@ -153,6 +158,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    networks:
+      - services-net
 
 
   api-classification-service:
