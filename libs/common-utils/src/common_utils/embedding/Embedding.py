@@ -3,10 +3,10 @@ import time
 import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-# from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 
 # from sentence_transformers import SentenceTransformer
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+# from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # from transformers import AutoTokenizer # pour encoder du modèle d'embedding
 
