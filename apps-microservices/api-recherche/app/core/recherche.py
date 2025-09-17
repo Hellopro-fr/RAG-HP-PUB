@@ -245,7 +245,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                 yield {"type": "warning", "payload": f"Erreur lors de la recherche dans la source '{source_name}'."}
                 continue
             
-            all_source_results.extend(source_results)
+            all_source_results.extend([MessageToDict(res) for res in source_results])
 
         # On trie tous les résultats par score de similarité initial
         initial_matches = sorted(all_source_results, key=lambda x: x['score'], reverse=True)
