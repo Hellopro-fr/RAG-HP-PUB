@@ -39,7 +39,7 @@ class ProductClassifier:
                 raise ValueError("OPENAI_API_KEY manquante")
                 
         elif self.llm_choice == 'DeepSeek':
-            api_key = os.getenv('DEEPSEEK_API_KEY', "sk-6981c921e302498aaa85a13df198d6b3")
+            api_key = os.getenv('DEEPSEEK_API_KEY')
             if api_key:
                 self.deepseek_client = openai.OpenAI(
                     api_key=api_key,
