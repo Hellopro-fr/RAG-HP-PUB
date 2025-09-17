@@ -478,8 +478,8 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             "context": llm_req.context,
             "response": llm_req.llm_response,
             "embedding": round(embed_duration, 2),
-            "fournisseur_non_vide": llm_req.full_user_prompt, # Maintenu de l'original
-            "full_user_prompt": full_user_prompt,
+            "fournisseur_non_vide": None, # Maintenu de l'original
+            "full_user_prompt": llm_req.full_user_prompt,
             "chat_model": request.llm.chat_model,
             "temperature": request.llm.temperature,
             "vector_search": round(search_duration, 2),
