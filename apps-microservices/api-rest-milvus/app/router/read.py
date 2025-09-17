@@ -41,7 +41,7 @@ async def get_ressource(
         raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
 
     try:
-        result = get_ressource_rest(collection_name, id_ressource, parsed_metadata)
+        result = get_ressource_rest(collection_name = collection_name, id_produit_milvus = id_ressource, metadata = parsed_metadata)
 
         if not result:
             raise HTTPException(status_code=404, detail="Ressource non trouvée.")
