@@ -261,13 +261,13 @@ async def search_in_milvus_stream(request: SearchRequest):
 
             # Préparation des documents pour le reranker
             # HYPOTHÈSE: Le texte est dans metadata.text
-            docs_to_rerank = [res.get("metadata", {}).get("text", "") for res in initial_matches]
+            docs_to_rerank = [res['metadata']['entity']['text'] for res in initial_matches]
             
             # Appel au microservice de reranking
             ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
             
             # Reconstruction de la liste de résultats dans le nouvel ordre
-            result_map = {res.get("metadata", {}).get("text", ""): res for res in initial_matches}
+            result_map = {res['metadata']['entity']['text']: res for res in initial_matches}
             final_results = [result_map[text] for text in ranked_texts if text in result_map]
             
             rerank_duration = time.perf_counter() - start_rerank_time
@@ -279,7 +279,7 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "status", "payload": f"Génération de la réponse avec le LLM..."}
             
             # Préparation du contexte pour le LLM
-            context_texts = [res.get("metadata", {}).get("text", "") for res in final_results[:top_k_final]]
+            context_texts = [res['metadata']['entity']['text'] for res in final_results[:top_k_final]]
             context = "\n-----\n".join(context_texts)
             full_user_prompt = f"Contexte:\n{context}\n\nQuestion:\n{request.prompt}" # Template simplifié
 
@@ -391,13 +391,13 @@ async def search_in_milvus(request: SearchRequest) -> dict:
                     continue
 
                 # Préparation des documents pour le reranker pour cette source
-                docs_to_rerank = [match.get("metadata", {}).get("text", "") for match in matches]
+                docs_to_rerank = [match['metadata']['entity']['text'] for match in matches]
                 
                 # Appel au microservice de reranking
                 ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
                 
                 # Reconstruction de la liste de résultats dans le nouvel ordre
-                result_map = {match.get("metadata", {}).get("text", ""): match for match in matches}
+                result_map = {match['metadata']['entity']['text']: match for match in matches}
                 final_ranked_matches = [result_map[text] for text in ranked_texts if text in result_map]
                 
                 # Conserver uniquement le top_k final après reranking
@@ -418,7 +418,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
         context_texts = []
         for source, matches in all_results.items():
             for match in matches:
-                context_texts.append(match.get("metadata", {}).get("text", ""))
+                context_texts.append(match['metadata']['entity']['text'])
 
         # if request.action == 2 and context_texts:
         #     logger.info("Début de la génération de réponse par le LLM...")
