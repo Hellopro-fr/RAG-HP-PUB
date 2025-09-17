@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Body
 from app.schemas.search import SearchRequestWs as SearchRequest, SearchResponse, SearchReponse
-from app.core.search import search_in_milvus
+# from app.core.search import search_in_milvus
 from app.core.recherche import search_in_milvus as search
 import logging
 
