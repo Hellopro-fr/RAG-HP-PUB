@@ -10,3 +10,4 @@ sentence-transformers
 sentencepiece
 numpy
 langchain-text-splitters
+transformers

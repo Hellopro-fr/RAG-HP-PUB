@@ -6,6 +6,7 @@ from sentence_transformers import SentenceTransformer
 from tritonclient.grpc.aio import InferenceServerClient, InferInput, InferRequestedOutput
 import torch
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from transformers import AutoTokenizer
 
 TRITON_URL = os.getenv("TRITON_URL", "localhost:8001")
 MODEL_NAME = "camembert-embedding"
@@ -15,6 +16,7 @@ class EmbeddingUseCase:
         tokenizer_name = "dangvantuan/sentence-camembert-large"
         logging.info(f"Chargement du tokenizer: {tokenizer_name}")
         self.tokenizer = SentenceTransformer(tokenizer_name).tokenizer
+        self.tokenizer_pre = AutoTokenizer.from_pretrained(tokenizer_name)
         self.triton_client = InferenceServerClient(url=TRITON_URL)
         
     def tokenize_texts(self, texts: List[str]) -> List[List[int]]:
@@ -95,7 +97,7 @@ class EmbeddingUseCase:
 
         # La fonction de longueur utilise le tokenizer interne au service.
         def hf_length_function(text_to_count: str) -> int:
-            return len(self.tokenizer.encode(text_to_count, add_special_tokens=False))
+            return len(self.tokenizer_pre.encode(text_to_count, add_special_tokens=False))
 
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
