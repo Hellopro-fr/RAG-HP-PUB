@@ -56,10 +56,11 @@ async def search_in_milvus(request: SearchRequest):
     # === Cas doublon exact ===
     if nom_produit_existe and domaine_existe:
         return {
-            "id_produit": request.id_produit,
+            "etat" : "SUCCESS",
             "is_doublon": True,
             "from_similarity": False,
-            "score": 1.0  # score max si doublon exact
+            "score": 1.0,  # score max si doublon exact
+            "id_produit": request.id_produit,
         }
 
     # === Sinon, recherche vectorielle ===
@@ -101,6 +102,7 @@ async def search_in_milvus(request: SearchRequest):
         logger.error(f"[MILVUS] Erreur requête API recherche: {e}")
 
     return {
+        "etat" : "SUCCESS",
         "id_produit": request.id_produit,
         "is_doublon": IS_DOUBLON,
         "from_similarity": FROM_SIMILARITY,

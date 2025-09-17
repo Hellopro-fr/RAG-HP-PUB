@@ -9,18 +9,20 @@ class SearchRequest(BaseModel):
     description: Optional[str] = ""
     
 class SearchResponse(BaseModel):
-    id_produit     : str
+    etat           : str
     is_doublon     : bool
     from_similarity: bool = False
     score          : float = 0.0
+    error          : Optional[str] = None
+    id_produit     : str
     
     
 class SearchReponse(BaseModel):
     result : Annotated[SearchResponse, Field(title="Contient l'objet du RESULTAT")]
-    # TODO:
+    # # TODO:
     # à supprimer les données en entrées pour vérification
     # post:  Annotated[SearchRequest, Field(title="Contient l'objet de la REQUETE")]
 
 # Nouvelle réponse pour les requêtes multiples
 class SearchResponseLot(BaseModel):
-    results: List[SearchReponse]
+    results: List[SearchResponse]
