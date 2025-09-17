@@ -88,7 +88,7 @@ def delete_ressource_rest(collection_name: str, id_produit_milvus: Optional[int]
             # output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
 
 
-            results = collection.delete(expr=expr)
+            #results = collection.delete(expr=expr)
 
             return {
                 "status": "success",
