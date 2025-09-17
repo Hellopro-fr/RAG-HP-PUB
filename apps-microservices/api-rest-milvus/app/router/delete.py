@@ -1,5 +1,4 @@
 import json
-from numpy import empty
 from pymilvus import connections
 from fastapi import APIRouter, HTTPException, Query, Path
 from typing import Any, Dict, Optional
@@ -94,7 +93,7 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
 
             # Champs à retourner (tu peux les adapter)
             # output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
-            if not empty(expr_parts):
+            if expr_parts:
                 results = collection.delete(expr=expr)
 
             if values_to_delete_in_correspondance is not None:
@@ -108,7 +107,7 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
                 string_values = [f'"{v}"' for v in values_to_delete_in_correspondance]
                 expr = f'{unique_field} in [{", ".join(string_values)}]'
 
-                if not empty(string_values):
+                if string_values:
                     res = collection_correspondance.delete(expr=expr)
                     # print(f"Suppression dans la collection de correspondance avec l'expression: {expr} - {collection_correspondance_name}")
 
