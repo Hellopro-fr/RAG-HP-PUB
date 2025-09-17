@@ -1,6 +1,6 @@
 # Dictionnaire centralisé pour toutes les opérations CRUD
 MILVUS_COLLECTIONS = {
-    "produits": "produits_3",
+    "produits": "produits",
     "fournisseurs": "fournisseurs",
     "devis": "devis",
     "siteweb": "siteweb",
@@ -9,7 +9,7 @@ MILVUS_COLLECTIONS = {
 }
 
 MILVUS_COLLECTIONS_DEFAULT_FIELDS = {
-    "produits_3": [
+    "produits": [
         "id",
         "id_produit",
         "nom_produit",
