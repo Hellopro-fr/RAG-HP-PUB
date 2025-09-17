@@ -10,7 +10,7 @@ import torch
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
 
-from transformers import AutoTokenizer # pour encoder du modèle d'embedding
+# from transformers import AutoTokenizer # pour encoder du modèle d'embedding
 
 def main():
     """
