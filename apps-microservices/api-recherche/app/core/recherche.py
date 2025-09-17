@@ -69,6 +69,48 @@ def get_field_type_map(collection_name: str) -> dict:
         logger.error(f"Could not retrieve schema for collection '{collection_name}': {e}")
         return {}
 
+def llm_prompt_stream(request: SearchRequest, context_texts):
+    """
+    Génère une réponse LLM en streaming et yield chaque token.
+    """
+    context = "\n-----\n\n\n".join(context_texts)
+    full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
+    
+    type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
+
+    try:
+        if type_prompt == "openai":
+            if request.llm.chat_model == "deepseek":
+                deepseek = DeepSeek()
+                deepseek.set_temperature(request.llm.temperature)
+                stream = deepseek.chat(full_user_prompt, stream=True)
+            else:
+                openai_client = get_openai_client()
+                stream = openai_client.chat.completions.create(
+                    model=request.llm.chat_model,
+                    messages=[{"role": "user", "content": full_user_prompt}],
+                    temperature=float(request.llm.temperature),
+                    stream=True
+                )
+        else: # OpenRouter
+            client_or = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=settings.OPENROUTER_API_KEY,
+            )
+            stream = client_or.chat.completions.create(
+                model=request.llm.chat_model,
+                messages=[{"role": "user", "content": full_user_prompt}],
+                stream=True
+            )
+
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
+
+    except Exception as e:
+        logger.error(f"Erreur durant le streaming LLM: {e}")
+        yield f"\n\n--- ERREUR --- \n{e}"
+        
 def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
     llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
     if request.action == 2 and context_texts:
@@ -288,11 +330,11 @@ async def search_in_milvus_stream(request: SearchRequest):
             start_llm_time = time.perf_counter()
             
             # Appel au microservice LLM en streaming
-            async for token in llm_client.stream_llm_chat(full_user_prompt):
+            async for token in llm_prompt_stream(request, context_texts):
                 yield {"type": "llm_chunk", "payload": token}
             
             llm_duration = time.perf_counter() - start_llm_time
-
+        
         # --- FIN DU FLUX ---
         total_duration = time.perf_counter() - start_total_time
         final_summary = {
@@ -392,28 +434,8 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             reranked_results_by_source = {}
 
             for source, matches in all_results.items():
-                if not matches:
-                    reranked_results_by_source[source] = []
-                    continue
-                
-                for res in matches:
-                    doc_text = res.get("metadata", {}).get('entity', {}).get("text")
-                    
-                    if doc_text:
-                        docs_to_rerank.append(doc_text)
-                        # On mappe le texte à son résultat complet pour pouvoir le reconstruire après
-                        result_map[doc_text] = res
-                if not docs_to_rerank:
-                    logging.warning(
-                        "Reranking demandé mais aucun champ 'text' trouvé dans les métadonnées des résultats."
-                    )
-                    continue
-                logging.info(
-                    f"Temps de récupération : {round((time.perf_counter() - start_get_texte), 2)}"
-                )
-
                 # Préparation des documents pour le reranker pour cette source
-                # docs_to_rerank = [match['metadata']['entity']['text'] for match in matches]
+                docs_to_rerank = [match['metadata']['entity']['text'] for match in matches]
                 
                 # Appel au microservice de reranking
                 logging.info(
