@@ -42,7 +42,7 @@ class MilvusClient:
         """
         try:
             collection = Collection(name=collection_name)
-            return {field.name: field.dtype for field in collection.schema.fields}
+            return {str(field.name): str(field.dtype) for field in collection.schema.fields}
         except Exception as e:
             logging.error(f"Erreur lors de la récupération de champs de la collection '{collection_name}': {e}", exc_info=True)
             return {}
