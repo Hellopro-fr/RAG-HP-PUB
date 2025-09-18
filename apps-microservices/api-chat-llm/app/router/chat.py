@@ -16,7 +16,7 @@ async def chat_completion_llm(request: ChatRequest = Body(...)):
         if not request.prompt.strip():
             raise ValueError("Le promt ne peut pas être vide.")        
         
-        results = get_chat_completion_response(request)
+        results = await get_chat_completion_response(request)
         logger.info(f"Résultats de la chat complesion: {results}")
         return chatResponse(response=results["response"], chat_model=request.chat_model , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None))
     except ValueError as ve:

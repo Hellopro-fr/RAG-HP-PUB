@@ -20,14 +20,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=None)
-def get_chat_completion_response(request: ChatRequest):
+async def get_chat_completion_response(request: ChatRequest):
 
     start_time = time.perf_counter()
 
     prompt = request.prompt
 
     # Appeler le service LLM via gRPC pour obtenir la réponse
-    response = llm_client.get_llm_chat_response(prompt)
+    response = await llm_client.get_llm_chat_response(prompt)
 
     logger.info("LLM response received. \nResponse: %s", response)
 
