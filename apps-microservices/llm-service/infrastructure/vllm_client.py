@@ -6,7 +6,7 @@ import logging
 # Configuration du client vLLM qui expose une API compatible OpenAI
 VLLM_API_URL = os.getenv("VLLM_API_URL", "http://vllm-server:8000/v1/chat/completions")
 # MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-14B-AWQ")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen1.5-7B-Chat-AWQ")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-14B-AWQ")
 
 class VLLMClient:
     """
