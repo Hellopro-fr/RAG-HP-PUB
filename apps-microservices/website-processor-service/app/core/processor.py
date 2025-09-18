@@ -21,8 +21,9 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     if not isinstance(website_data, dict):
         raise ValueError("Les données doivent être un dictionnaire.")
     
-    # Étape 2: Vérifier si la présence du page_type == "header_footer" sinon on procède normalement
-    if website_data.get("page_type","") == "header_footer":
+    # Étape 2: Vérifier si la présence du page_type == "header" ou page_type == "footer" sinon on procède normalement
+    if website_data.get("page_type","") == "header" or website_data.get("page_type","") == "footer":
+        page_type = str(website_data.get("page_type",""))
         log = "l'embedding"
         # Étape 2.1: Extraire le header et footer
         try:
@@ -30,15 +31,18 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             if not isinstance(extractor.soup, BeautifulSoup):
                 raise ValueError("Le contenu HTML est invalide ou vide.")
             
-            header = extractor.extract_header(extractor.soup)
-            footer = extractor.extract_footer(extractor.soup)
+            if page_type == "header":
+                text_to_embed = extractor.extract_header(extractor.soup)
+                if not text_to_embed:
+                    raise ValueError("Aucun header extrait.")
+            else:
+                text_to_embed = extractor.extract_footer(extractor.soup)
+                if not text_to_embed:
+                    raise ValueError("Aucun footer extrait.")
             
-            if not header and not footer:
-                raise ValueError("Aucun header ou footer extrait.")
-            
-            text_to_embed_clean = f"{header} {footer}".strip()
+            text_to_embed_clean = text_to_embed.strip()
         except Exception as e:
-            raise ValueError(f"Erreur lors de l'extraction des Headers - Footer: {e}")
+            raise ValueError(f"Erreur lors de l'extraction du {page_type.capitalize()}: {e}")
     else:  
         # Étape 2.1: Préparer le texte à embedder (À voir avec l'équipe en charge)
         info = {
