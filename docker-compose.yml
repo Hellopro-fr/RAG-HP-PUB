@@ -151,13 +151,30 @@ services:
       - database-recherche-service
     env_file:
       - .env
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    networks:
+      - services-net
+
+  api-chat-llm-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-chat-llm/Dockerfile
+    container_name: api-chat-llm-service
+    restart: unless-stopped
+    ports:
+      - "8540:8540"
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    depends_on:
+      - llm-service
+    env_file:
+      - .env
     networks:
       - services-net
 
