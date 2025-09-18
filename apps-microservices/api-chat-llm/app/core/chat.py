@@ -19,7 +19,7 @@ from app.schemas.chat import ChatRequest, chatResponse
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-@lru_cache(maxsize=None)
+# @lru_cache(maxsize=None)
 async def get_chat_completion_response(request: ChatRequest):
 
     start_time = time.perf_counter()
