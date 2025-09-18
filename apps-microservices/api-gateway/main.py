@@ -6,6 +6,7 @@ from app.core.settings import settings, SERVICE_MAP
 import httpx
 import websockets
 import logging
+import asyncio
 
 app = FastAPI(
     title="API Gateway",
@@ -17,39 +18,60 @@ app = FastAPI(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Proxy requests to backend services
+EXCLUDED_HEADERS = {
+    "host", "content-length", "transfer-encoding", "connection"
+}
+
 @app.api_route("/{service}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"], include_in_schema=False)
 async def proxy(service: str, path: str, request: Request):
     base_url = SERVICE_MAP.get(f"/{service}")
     if not base_url:
         return JSONResponse(status_code=404, content={"detail": "Service not found"})
 
-    url = f"{base_url}/{path}"
-    print(url)
-    method = request.method
-    headers = dict(request.headers)
+    # 1. Construire l'URL de destination en conservant les query parameters
+    target_url = f"{base_url}/{path}"
+    if request.query_params:
+        target_url += "?" + str(request.query_params)
+
+    # 2. Propager les headers du client, en excluant ceux qui sont spécifiques à la connexion
     headers = {
-        "accept": "*/*",
-        "user-agent": "Mozilla/5.0 (api-gateway)",
-        "referer": base_url,
-        "origin": base_url,
+        name: value for name, value in request.headers.items() if name.lower() not in EXCLUDED_HEADERS
     }
 
+    # 3. Lire le corps de la requête
     body = await request.body()
 
+    # 4. Utiliser un client httpx pour faire la requête au service final
     async with httpx.AsyncClient() as client:
-        response = await client.request(
-            method, url, headers=headers, content=body, timeout=None
-        )
+        try:
+            response = await client.request(
+                request.method,
+                target_url,
+                headers=headers,
+                content=body,
+                timeout=30.0  # Il est toujours bon de mettre un timeout
+            )
+        except httpx.RequestError as e:
+            # Gérer les erreurs de connexion au service (service down, etc.)
+            logger.error(f"Impossible de contacter le service {service}: {e}")
+            return JSONResponse(
+                status_code=503, # Service Unavailable
+                content={"detail": f"Le service '{service}' est indisponible."}
+            )
 
-    if response.status_code == 403:
-        print("403 error body:", response.text)
-    # Forward the response content and headers directly
+    # 5. Renvoyer la réponse du service au client
+    # On propage également les headers de la réponse du service
+    response_headers = {
+        name: value for name, value in response.headers.items() if name.lower() not in EXCLUDED_HEADERS
+    }
+
     return Response(
         content=response.content,
         status_code=response.status_code,
+        headers=response_headers,
         media_type=response.headers.get("content-type")
     )
+    
     
 @app.websocket("/{service}/{path:path}")
 async def websocket_proxy(service: str, path: str, websocket: WebSocket):
@@ -62,40 +84,47 @@ async def websocket_proxy(service: str, path: str, websocket: WebSocket):
     ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://")
     target_url = f"{ws_url}/{path}"
     
-    # --- AJOUT CRUCIAL : Transmettre les query parameters ---
     if websocket.url.query:
         target_url += "?" + websocket.url.query
         
     logger.info(f"[GW] Connexion client acceptée pour {websocket.url.path}")
     await websocket.accept()
 
+    EXCLUDED_WS_HEADERS = {
+        "connection", "upgrade", "host", "sec-websocket-key", 
+        "sec-websocket-version", "sec-websocket-protocol", "sec-websocket-extensions",
+    }
+
     try:
         logger.info(f"[GW] Tentative de connexion au backend : {target_url}")
-        # Transmettre les en-têtes est aussi vital
-        async with websockets.connect(target_url, extra_headers=websocket.headers.raw_items()) as backend_ws:
+        
+        forwarded_headers = [
+            (name, value)
+            for name, value in websocket.headers.items()
+            if name.lower() not in EXCLUDED_WS_HEADERS
+        ]
+        
+        async with websockets.connect(target_url, extra_headers=forwarded_headers) as backend_ws:
             logger.info("[GW] Connexion au backend réussie. Démarrage du relais.")
             
-            # Tâche pour relayer les messages du client vers le backend
             async def forward_to_backend():
                 try:
                     while True:
                         data = await websocket.receive_text()
-                        logger.info(f"[GW] Client -> Backend: {data[:200]}...")
+                        # logger.info(f"[GW] Client -> Backend: {data[:200]}...")
                         await backend_ws.send(data)
                 except WebSocketDisconnect:
                     logger.info("[GW] Le client s'est déconnecté.")
 
-            # Tâche pour relayer les messages du backend vers le client
             async def forward_to_client():
                 try:
                     while True:
                         data = await backend_ws.recv()
-                        logger.info(f"[GW] Backend -> Client: {data[:200]}...")
+                        # logger.info(f"[GW] Backend -> Client: {data[:200]}...")
                         await websocket.send_text(data)
                 except websockets.exceptions.ConnectionClosed:
                     logger.info("[GW] Le backend a fermé la connexion.")
 
-            # Lancer et attendre que l'une des deux connexions se termine
             client_task = asyncio.create_task(forward_to_backend())
             backend_task = asyncio.create_task(forward_to_client())
             done, pending = await asyncio.wait(
@@ -109,8 +138,11 @@ async def websocket_proxy(service: str, path: str, websocket: WebSocket):
     except Exception as e:
         logger.error(f"[GW] ERREUR inattendue dans le proxy WebSocket : {e}", exc_info=True)
     finally:
-        logger.info("[GW] Nettoyage et fermeture de la connexion.")
-        await websocket.close()
+        # Laisser le framework gérer la fermeture de la connexion client.
+        # Le `async with` gère déjà la fermeture de la connexion backend.
+        logger.info("[GW] Nettoyage et fin du proxy pour cette connexion.")
+        # --- LIGNE SUPPRIMÉE ---
+        # await websocket.close()
 
 
 # Combine all OpenAPI schemas
