@@ -51,7 +51,7 @@ class ClassificationResult(BaseModel):
     nom_categorie: Optional[str] = Field(None, description="Nom de la catégorie assignée") 
     score_llm: Optional[int] = Field(None, description="Score de confiance (0 ou 1)")
     processing_time: float = Field(..., description="Temps de traitement en secondes")
-    llm_response: Optional[Dict[str, Any]] = Field(None, description="Réponse brute de DeepSeek (si applicable)")
+    llm_response: Optional[List[Dict[str, Any]]] = Field(None, description="Réponses brutes de DeepSeek/OpenAI pour chaque produit")
     error: Optional[str] = Field(None, description="Message d'erreur si échec")
 
 class BatchClassificationResponse(BaseModel):
@@ -59,8 +59,7 @@ class BatchClassificationResponse(BaseModel):
     total_produits: int = Field(..., description="Nombre total de produits traités")
     success_count: int = Field(..., description="Nombre de succès")
     error_count: int = Field(..., description="Nombre d'erreurs")
-    resultats: List[ClassificationResult] = Field(..., description="Résultats détaillés")
-    llm_response: Optional[Dict[str, Any]] = Field(None, description="Réponse brute de DeepSeek (si applicable)")
+    resultats: List[ClassificationResult] = Field(..., description="Résultats détaillés")    
     processing_time_total: float = Field(..., description="Temps total de traitement")
 
 class ConfigurationRequest(BaseModel):

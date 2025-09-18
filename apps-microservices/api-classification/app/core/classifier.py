@@ -331,8 +331,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_produit': product['id_produit'],
                     'status': 'ERROR',
                     'error': f'Catégorie {chosen_id} introuvable',
-                    'llm_response': llm_result,
-                    'processing_time': time.time() - start_time
+                    'processing_time': time.time() - start_time,
+                    'llm_response': llm_result
                 }
             
             # Résultat final
@@ -342,8 +342,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'id_categorie': chosen_category['id'],
                 'nom_categorie': chosen_category['name'],
                 'score_llm': score,
-                'llm_response': llm_result,
-                'processing_time': time.time() - start_time
+                'processing_time': time.time() - start_time,
+                'llm_response': llm_result
             }
             
         except Exception as e:
@@ -377,6 +377,5 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             'success_count': success_count,
             'error_count': error_count,
             'resultats': results,
-            'llm_response': [r.get('llm_response') for r in results if 'llm_response' in r],
             'processing_time_total': time.time() - start_time
         }
