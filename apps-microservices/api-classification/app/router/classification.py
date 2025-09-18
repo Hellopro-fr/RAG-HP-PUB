@@ -112,6 +112,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
             success_count=result['success_count'],
             error_count=result['error_count'],
             resultats=classification_results,
+            llm_type=result.get('llm_type'),
             processing_time_total=result['processing_time_total']
         )
         

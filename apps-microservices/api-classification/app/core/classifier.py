@@ -323,6 +323,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_produit': product['id_produit'],
                     'status': 'ERROR',
                     'error': 'Réponse LLM invalide',
+                    'llm_type': self.llm_choice,
                     'llm_response': [raw_llm.model_dump()],
                     'processing_time': time.time() - start_time
                 }
@@ -334,6 +335,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_produit': product['id_produit'],
                     'status': 'ERROR',
                     'error': f'Catégorie {chosen_id} introuvable',
+                    'llm_type': self.llm_choice,
                     'processing_time': time.time() - start_time,
                     'llm_response': [raw_llm.model_dump()]
                 }
@@ -345,6 +347,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'id_categorie': chosen_category['id'],
                 'nom_categorie': chosen_category['name'],
                 'score_llm': score,
+                'llm_type': self.llm_choice,
                 'processing_time': time.time() - start_time,
                 'llm_response': [raw_llm.model_dump()]
             }
@@ -380,5 +383,6 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             'success_count': success_count,
             'error_count': error_count,
             'resultats': results,
+            'llm_type': self.llm_choice,
             'processing_time_total': time.time() - start_time
         }
