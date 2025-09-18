@@ -313,7 +313,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             # Construction du prompt et appel LLM
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
             raw_llm = self.query_llm(prompt)
-            llm_result = json.loads(llm_result.choices[0].message.content)
+            llm_result = json.loads(raw_llm.choices[0].message.content)
             
             chosen_id = llm_result.get('id_categorie')
             score = llm_result.get('score', -1)
@@ -323,7 +323,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_produit': product['id_produit'],
                     'status': 'ERROR',
                     'error': 'Réponse LLM invalide',
-                    'llm_response': llm_result,
+                    'llm_response': raw_llm,
                     'processing_time': time.time() - start_time
                 }
             
@@ -335,7 +335,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'status': 'ERROR',
                     'error': f'Catégorie {chosen_id} introuvable',
                     'processing_time': time.time() - start_time,
-                    'llm_response': llm_result
+                    'llm_response': raw_llm
                 }
             
             # Résultat final
@@ -346,7 +346,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'nom_categorie': chosen_category['name'],
                 'score_llm': score,
                 'processing_time': time.time() - start_time,
-                'llm_response': llm_result
+                'llm_response': raw_llm
             }
             
         except Exception as e:
