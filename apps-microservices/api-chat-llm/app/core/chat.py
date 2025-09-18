@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=None)
-def get_next_questinon(request: ChatRequest):
+def get_chat_completion_response(request: ChatRequest):
 
     start_time = time.perf_counter()
 
