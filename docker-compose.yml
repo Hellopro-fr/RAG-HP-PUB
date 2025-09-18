@@ -471,6 +471,18 @@ services:
               device_ids: ['1']
               # count: all
               capabilities: [gpu]
+    
+  api-pdf-to-text:
+  build:
+    context: .
+    dockerfile: ./apps-microservices/api-pdf-to-text/Dockerfile
+  container_name: api-pdf-to-text
+  restart: unless-stopped
+  ports:
+    - "8569:8569"
+  env_file:
+    - .env
+    
 networks:
   services-net:
     driver: bridge
