@@ -263,7 +263,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     temperature=0,
                     response_format={"type": "json_object"}
                 )
-                return json.loads(response.choices[0].message.content)
+                #return json.loads(response.choices[0].message.content)
+                return response
                 
             elif self.llm_choice == 'DeepSeek' and self.deepseek_client:
                 response = self.deepseek_client.chat.completions.create(
@@ -272,7 +273,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     temperature=0,
                     response_format={"type": "json_object"}
                 )
-                return json.loads(response.choices[0].message.content)
+                #return json.loads(response.choices[0].message.content)
+                return response
             else:
                 raise ValueError(f"LLM {self.llm_choice} non configuré")
                 
@@ -310,7 +312,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             
             # Construction du prompt et appel LLM
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
-            llm_result = self.query_llm(prompt)
+            raw_llm = self.query_llm(prompt)
+            llm_result = json.loads(llm_result.choices[0].message.content)
             
             chosen_id = llm_result.get('id_categorie')
             score = llm_result.get('score', -1)
