@@ -1284,7 +1284,7 @@ $(function () {
 
     // const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici VM1
     let wsUrl = "ws://34.34.166.5:8500/search-service/ws/search"; // L'URL est maintenant ici
-    if (GetURLParameter("domain")) {
+    if (GetURLParameter("domain") == 1) {
       wsUrl = "wss://api.hellopro.eu/search-service/ws/search";
     }
     console.log(`Connexion à ${wsUrl}...`);
