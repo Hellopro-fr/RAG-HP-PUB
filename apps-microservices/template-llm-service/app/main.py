@@ -1,7 +1,6 @@
 import pika
 import time
 import os
-from vllm import LLM
 
 # On utilise des imports absolus basés sur le nom du module qui sera dans le PYTHONPATH
 from template_llm_service.messaging.consumer import Consumer
@@ -18,50 +17,6 @@ def main():
         exit(1)
 
     print("🚀 template-llm-service: Démarrage...")
-    
-    # On lit la configuration du parallélisme tensoriel depuis la variable d'environnement
-    # définie par le script start.sh. On met '1' comme valeur par défaut par sécurité.
-    tensor_parallel_size = int(os.environ.get("TENSOR_PARALLEL_SIZE", "1"))
-    
-    if tensor_parallel_size > 1:
-        print(f"🧠 Configuration détectée : Mode Multi-GPU (Tensor Parallel Size = {tensor_parallel_size}).")
-    else:
-        print("🧠 Configuration détectée : Mode Mono-GPU.")
-    
-    print("🧠 Chargement du modèle LLM (cela peut prendre plusieurs minutes)...")
-    
-    # Configuration optimisée mais compatible avec LLM synchrone
-    llm_config = {
-        "model": "Qwen/Qwen3-14B-AWQ",
-        "quantization": "awq",
-        "tensor_parallel_size": tensor_parallel_size,
-        "gpu_memory_utilization": 0.90,  # Plus agressif avec AWQ
-        "trust_remote_code": True,
-        "dtype": "auto",
-        "max_model_len": 4096,
-        "swap_space": 4,  # GB de swap pour gérer les pics
-        "max_num_seqs": 64,  # Réduit pour éviter les timeouts
-        "max_num_batched_tokens": 4096,  # Plus conservateur
-        "enable_prefix_caching": True,  # Cache les préfixes communs
-        "disable_log_stats": True,  # Réduit l'overhead
-    }
-    
-    try:
-        # Utilise le LLM synchrone standard (plus simple)
-        llm = LLM(**llm_config)
-        tokenizer = llm.get_tokenizer()  # ✅ Maintenant défini
-        print("✅ Modèle LLM chargé avec succès sur 2 GPUs.")
-        
-        # Warmup simple
-        print("🔥 Préchauffage du modèle...")
-        from vllm import SamplingParams
-        warmup_params = SamplingParams(temperature=0.7, max_tokens=10)
-        llm.generate("Hello", warmup_params)
-        print("✅ Modèle préchauffé.")
-        
-    except Exception as e:
-        print(f"❌ ERREUR CRITIQUE: Impossible de charger le modèle LLM. Arrêt du service. Erreur: {e}")
-        exit(1)
 
     connection = None
     for i in range(10):
@@ -79,7 +34,7 @@ def main():
 
     try:
         publisher = Publisher(connection)
-        consumer = Consumer(connection, publisher, llm, tokenizer, llm_config)
+        consumer = Consumer(connection, publisher)
         consumer.start_consuming()
     except KeyboardInterrupt:
         print("\n🛑 template-llm-service: Arrêt demandé.")
@@ -89,9 +44,4 @@ def main():
             print("✅ template-llm-service: Connexion RabbitMQ fermée.")
 
 if __name__ == '__main__':
-    # Optimisations PyTorch
-    import torch
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-    
     main()

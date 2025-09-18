@@ -1,7 +1,8 @@
 import pika
 import json
 import time
-from vllm import LLM
+import asyncio
+
 from template_llm_service.messaging.publisher import Publisher
 # On importe la nouvelle fonction de traitement par batch
 from template_llm_service.core.processor import classify_page_template_batch
@@ -19,12 +20,9 @@ BATCH_SIZE = 32
 BATCH_TIMEOUT_SECONDS = 2.0
 
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher, llm: LLM, tokenizer, llm_config: dict):
+    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
         self.channel = connection.channel()
         self.publisher = publisher
-        self.llm = llm
-        self.tokenizer = tokenizer
-        self.llm_config = llm_config
         
         self.exchange_name = 'processed_data_exchange'
         self.routing_key = 'data.ready_for_templating'
@@ -110,7 +108,7 @@ class Consumer:
         messages = [json.loads(item[1]) for item in valid_batch_items]
 
         try:
-            processed_messages = classify_page_template_batch(self.llm, self.tokenizer, self.llm_config, messages)
+            processed_messages = classify_page_template_batch(messages)
             
             # --- Gestion granulaire des ACKs/NACKs pour la résilience ---
             # On parcourt chaque résultat pour l'acquitter individuellement.

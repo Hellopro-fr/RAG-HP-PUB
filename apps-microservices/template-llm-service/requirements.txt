@@ -1,7 +1,4 @@
-vllm
-torch
 transformers
-accelerate
 numpy
 beautifulsoup4
 pika

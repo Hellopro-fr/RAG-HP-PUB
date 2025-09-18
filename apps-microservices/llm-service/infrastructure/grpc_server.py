@@ -43,6 +43,21 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Une erreur interne est survenue: {e}")
             return llm_pb2.FullChatResponse()
+        
+    async def ChatBatch(self, request, context):
+        """
+        Implémentation de la méthode RPC unaire ChatBatch.
+        """
+        num_messages = len(request.messages)
+        logging.info(f"Nouvelle requête ChatBatch reçue pour {num_messages} messages.")
+        try:
+            responses = await self.chat_service.handle_chat_batch_completion(list(request.messages))
+            return llm_pb2.ChatBatchResponse(full_messages=responses)
+        except Exception as e:
+            logging.error(f"Erreur dans ChatBatch: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Une erreur interne est survenue: {e}")
+            return llm_pb2.ChatBatchResponse()
 
 async def serve(chat_service: ChatApplicationService):
     """
