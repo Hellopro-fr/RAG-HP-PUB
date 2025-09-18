@@ -269,7 +269,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                 collection=source_name,
                 vector=query_vector,
                 k=top_k_retrieval,
-                filter_expr=filter_expr # Le filtre est passé directement
+                filter_expr=" and ".join(filters) if filters else "" # Le filtre est passé directement
             )
             
             search_duration += time.perf_counter() - start_search_source
