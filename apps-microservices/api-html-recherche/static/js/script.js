@@ -1827,7 +1827,8 @@ $(document).on('click', '#copier-texte', function() {
     };
 
     transcriptionSocket.onclose = (event) => {
-      console.log(`Transcription WebSocket connection closed: ${event.code}`);
+      // console.log(`Transcription WebSocket connection closed: ${event.code}`);
+      show_toast(generate_succes_message(`Transcription terminée`), "success");
       stopTranscription(false);
     };
   };
