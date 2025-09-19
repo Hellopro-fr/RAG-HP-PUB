@@ -200,7 +200,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-transcription-service/Dockerfile
-    container_name: api-classification-service
+    container_name: api-transcription-service
     restart: unless-stopped
     ports:
       - "8515:8515"
