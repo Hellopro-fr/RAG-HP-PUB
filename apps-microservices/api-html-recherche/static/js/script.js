@@ -1946,5 +1946,6 @@ function fallbackCopyTextToClipboard(text) {
   initializeDatePicker();
   initializeEventListeners();
   updateUI();
+  setupTranscriptionButton("start");
   lucide.createIcons();
 });
