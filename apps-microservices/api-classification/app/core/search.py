@@ -6,7 +6,7 @@ from typing import Any, Optional, List, Dict
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-SEARCH_API_URL = "http://34.34.166.5:8510/search"
+SEARCH_API_URL = "http:/localhost:8510/search"
 EXTERNAL_PRODUCT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_produit.php"
 EXTERNAL_CATEGORY_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_categorie.php"
 
