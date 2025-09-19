@@ -16,10 +16,8 @@ class VLLMClient:
                     "stream": True,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
-                    "extra_body": {
-                        "chat_template_kwargs": {
-                            "enable_thinking": enable_thinking
-                        }
+                    "chat_template_kwargs": {
+                        "enable_thinking": enable_thinking
                     }
                 }
                 async with client.stream("POST", VLLM_API_URL, json=request_payload) as response:
@@ -52,10 +50,8 @@ class VLLMClient:
                     "stream": False,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
-                    "extra_body": {
-                        "chat_template_kwargs": {
-                            "enable_thinking": enable_thinking
-                        }
+                    "chat_template_kwargs": {
+                        "enable_thinking": enable_thinking
                     }
                 }
                 response = await client.post(VLLM_API_URL, json=request_payload)
