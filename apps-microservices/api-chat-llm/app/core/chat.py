@@ -25,10 +25,8 @@ async def get_chat_completion_response(request: ChatRequest):
 
     start_time = time.perf_counter()
 
-    prompt = request.prompt
-
     # Appeler le service LLM via gRPC pour obtenir la réponse
-    response = await llm_client.get_llm_chat_response(prompt)
+    response = await llm_client.get_llm_chat_response(request)
 
     logger.info("LLM response received. \nResponse: %s", response)
 
