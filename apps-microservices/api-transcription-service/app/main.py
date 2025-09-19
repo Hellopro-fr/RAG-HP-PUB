@@ -15,9 +15,9 @@ app = FastAPI(
 app.include_router(endpoints.router)
 
 # Mount the 'static' directory to serve frontend files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/", include_in_schema=False)
-async def read_index():
-    """Serves the main HTML page for testing the WebSocket."""
-    return FileResponse('static/index.html')
+# @app.get("/", include_in_schema=False)
+# async def read_index():
+#     """Serves the main HTML page for testing the WebSocket."""
+#     return FileResponse('static/index.html')
