@@ -83,6 +83,7 @@ $(function () {
     mainContentWrapper: $("#mainContentWrapper"),
     categorieFilter: $("#categorieDropdown"),
     fournisseurFilter: $("#fournisseurDropdown"),
+    btnTranscription: $("#btn-trancription")
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -856,6 +857,15 @@ $(function () {
     elements.temperatureSlider.on("input", function () {
       state.temperature = parseFloat($(this).val());
       $("#temperatureValue").text(state.temperature);
+    });
+
+    elements.btnTranscription.on("click", () => {
+      // On vérifie l'état via l'attribut data
+      if (elements.btnTranscription.data("action") === "start") {
+        startTranscription();
+      } else {
+        stopTranscription(true); // Arrêt manuel, donc "graceful"
+      }
     });
 
     // NOUVEAU: Écouteurs pour les nouveaux champs
@@ -1642,194 +1652,186 @@ $(document).on('click', '#copier-texte', function() {
 /**
  * transcription audio via google speech to text
  */
-// --- Sélection des éléments avec jQuery ---
-    // Il est courant de préfixer les variables jQuery avec un '$'
-const $btnTranscription = $('#btn-transcription');
+  let transcriptionAudioContext;
+  let transcriptionMediaStream;
+  let transcriptionScriptProcessor;
+  let transcriptionAnimationFrameId;
+  let transcriptionTimeoutId;
+  let transcriptionSilenceTimeoutId;
 
-const AUTH_TOKEN = "h3ll0pro2k25-stt356";
-const WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/google/transcription?token=${AUTH_TOKEN}`;
+  const TRANSCRIPTION_AUTH_TOKEN = "h3ll0pro2k25-stt356";
+  const TRANSCRIPTION_WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/google/transcription?token=${TRANSCRIPTION_AUTH_TOKEN}`;
 
-let websocket;
-let audioContext;
-let mediaStream;
-let scriptProcessor;
+  const transcriptionStartColor = { r: 51, g: 83, b: 255, a: 1 };
+  const transcriptionEndColor = { r: 253, g: 187, b: 155, a: 1 };
 
-let animationFrameId;
-let transcriptionTimeoutId;
-let silenceTimeoutId;
-
-const startColor = { r: 51, g: 83, b: 255, a: 1 };
-const endColor = { r: 253, g: 187, b: 155, a: 1 };
-
-function interpolateColor(index, totalBars) {
+  function transcriptionInterpolateColor(index, totalBars) {
     const ratio = totalBars > 1 ? index / (totalBars - 1) : 0;
-    const r = Math.round(startColor.r + (endColor.r - startColor.r) * ratio);
-    const g = Math.round(startColor.g + (endColor.g - startColor.g) * ratio);
-    const b = Math.round(startColor.b + (endColor.b - startColor.b) * ratio);
-    const a = startColor.a + (endColor.a - startColor.a) * ratio;
-    return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
+    const r = Math.round(transcriptionStartColor.r + (transcriptionEndColor.r - transcriptionStartColor.r) * ratio);
+    const g = Math.round(transcriptionStartColor.g + (transcriptionEndColor.g - transcriptionStartColor.g) * ratio);
+    const b = Math.round(transcriptionStartColor.b + (transcriptionEndColor.b - transcriptionStartColor.b) * ratio);
+    return `rgba(${r}, ${g}, ${b}, 1)`;
+  }
 
-const setupButton = (action) => {
-    if (action === 'start') {
-        // Utilisation de .data() pour les attributs data-* et .html() pour le contenu
-        $btnTranscription.data('action', 'start');
-        $btnTranscription.html(`<i data-lucide="play" class="h-4 w-4"></i>`);
+  const setupTranscriptionButton = (action) => {
+    if (action === "start") {
+      elements.btnTranscription.data("action", "start");
+      elements.btnTranscription.html(`<i data-lucide="play" class="h-4 w-4"></i>`);
     } else {
-        $btnTranscription.data('action', 'stop');
-
-        const totalBars = 5;
-        const barsHtml = Array.from({ length: totalBars }, (_, i) => {
-            const color = interpolateColor(i, totalBars);
-            return `<div class="bar" style="height: 2px; background-color: ${color};" data-current-height="2"></div>`;
-        }).join('');
-
-        $btnTranscription.html(`<div class="audio-visualizer">${barsHtml}</div><i data-lucide="square" class="h-4 w-4"></i>`);
+      elements.btnTranscription.data("action", "stop");
+      const totalBars = 5;
+      const barsHtml = Array.from({ length: totalBars }, (_, i) => {
+        const color = transcriptionInterpolateColor(i, totalBars);
+        return `<div class="bar" style="height: 2px; background-color: ${color};" data-current-height="2"></div>`;
+      }).join("");
+      elements.btnTranscription.html(`<div class="audio-visualizer">${barsHtml}</div><i data-lucide="square" class="h-4 w-4"></i>`);
     }
     lucide.createIcons();
-};
+  };
 
-setupButton('start');
-
-const updateStatus = (isConnected, message = 'Déconnecté') => {
-    const statusHtml = isConnected
-        ? `<span class="status-indicator bg-green-500"></span> Connecté`
-        : `<span class="status-indicator bg-red-500"></span> ${message}`;
-    console.log(statusHtml);
-};
-
-const startTranscription = async () => {
-    // Utilisation de .prop() pour les propriétés comme 'disabled' et .text() pour le texte
-    $btnTranscription.prop('disabled', true);
+  const startTranscription = async () => {
+    elements.btnTranscription.prop("disabled", true);
     try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const source = audioContext.createMediaStreamSource(mediaStream);
-        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        source.connect(analyser);
-        scriptProcessor.onaudioprocess = (event) => {
-            const inputData = event.inputBuffer.getChannelData(0);
-            const int16Buffer = new Int16Array(inputData.length);
-            for (let i = 0; i < inputData.length; i++) {
-                int16Buffer[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
-            }
-            const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(int16Buffer.buffer)));
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                websocket.send(JSON.stringify({ audio: base64 }));
-            }
-        };
-        source.connect(scriptProcessor);
-        scriptProcessor.connect(audioContext.destination);
-        connectWebSocket();
-        setupButton('stop');
+      transcriptionMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      transcriptionAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = transcriptionAudioContext.createMediaStreamSource(transcriptionMediaStream);
+      transcriptionScriptProcessor = transcriptionAudioContext.createScriptProcessor(4096, 1, 1);
+      const analyser = transcriptionAudioContext.createAnalyser();
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      source.connect(analyser);
 
-        startSmoothAudioVisualizer(analyser, dataArray);
+      transcriptionScriptProcessor.onaudioprocess = (event) => {
+        const inputData = event.inputBuffer.getChannelData(0);
+        const int16Buffer = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          int16Buffer[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+        }
+        const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(int16Buffer.buffer)));
+        if (transcriptionSocket && transcriptionSocket.readyState === WebSocket.OPEN) {
+          transcriptionSocket.send(JSON.stringify({ audio: base64 }));
+        }
+      };
 
-        transcriptionTimeoutId = setTimeout(() => {
-            console.log("Limite de 1 minute atteinte.");
-            // $errorDiv.text("Limite de 1 minute atteinte.");
-            show_toast(generate_error_message("Limite de 1 minute atteinte."), "error")
-            stopTranscription(true);
-        }, 60000);
+      source.connect(transcriptionScriptProcessor);
+      transcriptionScriptProcessor.connect(transcriptionAudioContext.destination);
+
+      connectTranscriptionWebSocket();
+      setupTranscriptionButton("stop");
+      startSmoothAudioVisualizer(analyser, dataArray);
+
+      transcriptionTimeoutId = setTimeout(() => {
+        show_toast(generate_error_message("Limite de 1 minute atteinte."), "error");
+        stopTranscription(true);
+      }, 60000);
 
     } catch (err) {
-        console.error('Error accessing microphone:', err);
-        // $errorDiv.text('Erreur: Impossible d\'accéder au microphone.');
-        show_toast(generate_succes_message("Erreur: Impossible d\'accéder au microphone."), "error")
-        setupButton('start');
+      console.error("Error accessing microphone:", err);
+      show_toast(generate_error_message("Erreur: Impossible d’accéder au microphone."), "error");
+      setupTranscriptionButton("start");
     } finally {
-        $btnTranscription.prop('disabled', false);
+      elements.btnTranscription.prop("disabled", false);
     }
-};
+  };
 
-const stopTranscription = (isGraceful = true) => {
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+  /**
+   * CORRECTION MAJEURE: Fonction d'arrêt sécurisée pour la transcription.
+   */
+  const stopTranscription = (isGraceful = true) => {
+    // Nettoie tous les timers
+    if (transcriptionAnimationFrameId) cancelAnimationFrame(transcriptionAnimationFrameId);
     if (transcriptionTimeoutId) clearTimeout(transcriptionTimeoutId);
-    if (silenceTimeoutId) clearTimeout(silenceTimeoutId);
-    animationFrameId = null;
+    if (transcriptionSilenceTimeoutId) clearTimeout(transcriptionSilenceTimeoutId);
+    transcriptionAnimationFrameId = null;
     transcriptionTimeoutId = null;
-    silenceTimeoutId = null;
+    transcriptionSilenceTimeoutId = null;
 
-    if (isGraceful && websocket && websocket.readyState === WebSocket.OPEN) {
-        websocket.send(JSON.stringify({ command: 'end_stream' }));
-    }
-    if (websocket) {
-        setTimeout(() => websocket.close(), 100);
-        websocket = null;
-    }
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-        mediaStream = null;
-    }
-    if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close();
-        audioContext = null;
-    }
-    if (scriptProcessor) {
-        scriptProcessor.disconnect();
-        scriptProcessor = null;
-    }
-    setupButton('start');
-};
+    // Capture la socket actuelle pour éviter les problèmes de scope
+    const socketToClose = transcriptionSocket;
 
-const connectWebSocket = () => {
-    websocket = new WebSocket(WEBSOCKET_URL);
-    websocket.onopen = () => {
-        console.log('WebSocket connection established.');
-        updateStatus(true);
-        console.log(`Sending config with sample rate: ${audioContext.sampleRate}`);
-        websocket.send(JSON.stringify({
-            config: {
-                sampleRate: audioContext.sampleRate,
-                languageCode: 'fr-FR',
-                enablePunctuation: true,
-                interimResults: true
-            }
-        }));
-    };
-    websocket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'transcript' && data.transcript) {
-            // Utilisation de .val() pour définir la valeur d'un input
-            elements.searchInput.val(data.transcript);
-            // console.log(data.transcript);
-        } else if (data.type === 'error') {
-            console.error('Server error:', data.error);
-            // $errorDiv.text(`Erreur du serveur: ${data.error}`);
-            show_toast(generate_error_message(`Erreur du serveur: ${data.error}`), "error")
-            stopTranscription(false);
-          } else if (data.type === 'end_stream') {
-            show_toast(generate_succes_message(`Fin de transcription`), "success")
-            console.log('Stream ended by server:', data.message);
-            stopTranscription(true);
+    // Si la socket n'existe pas, il n'y a rien à faire
+    if (!socketToClose) {
+      // S'assurer que l'UI est propre même si la socket est déjà nulle
+      setupTranscriptionButton('start');
+      return;
+    }
+
+    // 1. Envoyer la commande de fin si nécessaire
+    if (isGraceful && socketToClose.readyState === WebSocket.OPEN) {
+      socketToClose.send(JSON.stringify({ command: "end_stream" }));
+    }
+
+    // 2. Fermer la connexion si elle n'est pas déjà en train de se fermer ou fermée
+    // readyState: 0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED
+    if (socketToClose.readyState < 2) {
+      socketToClose.close();
+    }
+
+    // 3. Mettre la variable globale à null IMMÉDIATEMENT
+    transcriptionSocket = null;
+
+    // 4. Nettoyer les ressources audio
+    if (transcriptionMediaStream) {
+      transcriptionMediaStream.getTracks().forEach((track) => track.stop());
+      transcriptionMediaStream = null;
+    }
+    if (transcriptionAudioContext && transcriptionAudioContext.state !== "closed") {
+      transcriptionAudioContext.close();
+      transcriptionAudioContext = null;
+    }
+    if (transcriptionScriptProcessor) {
+      transcriptionScriptProcessor.disconnect();
+      transcriptionScriptProcessor = null;
+    }
+
+    // 5. Mettre à jour l'UI
+    setupTranscriptionButton("start");
+  };
+
+  const connectTranscriptionWebSocket = () => {
+    transcriptionSocket = new WebSocket(TRANSCRIPTION_WEBSOCKET_URL);
+
+    transcriptionSocket.onopen = () => {
+      console.log("Transcription WebSocket connection established.");
+      websocket.send(JSON.stringify({
+        config: {
+          sampleRate: transcriptionAudioContext.sampleRate,
+          languageCode: 'fr-FR',
+          enablePunctuation: true,
+          interimResults: true
         }
+      }));
     };
-    websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        // $errorDiv.text('Erreur de connexion WebSocket.');
-        show_toast(generate_error_message("Erreur de connexion WebSocket."), "error")
-        updateStatus(false, 'Erreur');
-    };
-    websocket.onclose = (event) => {
-        console.log('WebSocket connection closed:', event.reason, event.code);
-        if (event.code === 1008) {
-            updateStatus(false, 'Non autorisé');
-            // $errorDiv.text('Authentification échouée. Vérifiez votre token.');
-            show_toast(generate_error_message("Authentification échouée. Vérifiez votre token."), "error")
-        } else {
-            updateStatus(false);
-        }
+
+    transcriptionSocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "transcript" && data.transcript) {
+        elements.searchInput.val(data.transcript);
+      } else if (data.type === "error") {
+        show_toast(generate_error_message(`Erreur du serveur: ${data.error}`), "error");
         stopTranscription(false);
+      } else if (data.type === "end_stream") {
+        show_toast(generate_succes_message(`Fin de transcription`), "success");
+        stopTranscription(true);
+      }
     };
-};
 
-const startSmoothAudioVisualizer = (analyser, dataArray) => {
-    // Sélection des barres avec jQuery
-    const $visualizerBars = $('.audio-visualizer .bar');
+    transcriptionSocket.onerror = (error) => {
+      console.error("Transcription WebSocket error:", error);
+      show_toast(generate_error_message("Erreur de connexion WebSocket."), "error");
+    };
+
+    transcriptionSocket.onclose = (event) => {
+      console.log(`Transcription WebSocket connection closed: ${event.code}`);
+      // L'appel à stopTranscription gère déjà toute la logique de nettoyage.
+      // On s'assure juste que l'état est propre.
+      stopTranscription(false);
+    };
+  };
+
+  const startSmoothAudioVisualizer = (analyser, dataArray) => {
+    const $visualizerBars = $(".audio-visualizer .bar");
     if ($visualizerBars.length === 0) return;
 
     const bufferLength = analyser.frequencyBinCount;
@@ -1838,56 +1840,40 @@ const startSmoothAudioVisualizer = (analyser, dataArray) => {
     const SILENCE_DURATION = 5000;
 
     function draw() {
-        animationFrameId = requestAnimationFrame(draw);
-        analyser.getByteFrequencyData(dataArray);
+      transcriptionAnimationFrameId = requestAnimationFrame(draw);
+      analyser.getByteFrequencyData(dataArray);
 
-        let volumeSum = 0;
-        for (let i = 0; i < bufferLength; i++) {
-            volumeSum += dataArray[i];
+      let volumeSum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        volumeSum += dataArray[i];
+      }
+      const averageVolume = volumeSum / bufferLength;
+
+      if (averageVolume > SILENCE_THRESHOLD) {
+        if (transcriptionSilenceTimeoutId) clearTimeout(transcriptionSilenceTimeoutId);
+        transcriptionSilenceTimeoutId = null;
+      } else {
+        if (!transcriptionSilenceTimeoutId) {
+          transcriptionSilenceTimeoutId = setTimeout(() => {
+            show_toast(generate_error_message("Silence détecté, arrêt de la transcription."), "error");
+            stopTranscription(true);
+          }, SILENCE_DURATION);
         }
-        const averageVolume = volumeSum / bufferLength;
+      }
 
-        if (averageVolume > SILENCE_THRESHOLD) {
-            if (silenceTimeoutId) clearTimeout(silenceTimeoutId);
-            silenceTimeoutId = null;
-        } else {
-            if (!silenceTimeoutId) {
-                silenceTimeoutId = setTimeout(() => {
-                    console.log(`Silence détecté pendant ${SILENCE_DURATION / 1000}s. Arrêt.`);
-                    // $errorDiv.text("Silence détecté, arrêt de la transcription.");
-                    show_toast(generate_error_message("Silence détecté, arrêt de la transcription."), "error")
-                    stopTranscription(true);
-                }, SILENCE_DURATION);
-            }
-        }
-
-        const barHeightMultiplier = 20 / 255;
-        // Utilisation de .each() pour itérer sur les éléments jQuery
-        $visualizerBars.each(function (i) {
-            const $bar = $(this); // $(this) fait référence à l'élément DOM actuel
-            const barIndex = Math.floor(i * (bufferLength / $visualizerBars.length));
-            const targetHeight = Math.max(2, dataArray[barIndex] * barHeightMultiplier);
-
-            // Utilisation de .data() pour lire et écrire les data-attributes
-            let currentHeight = $bar.data('current-height');
-            currentHeight = currentHeight * smoothingFactor + targetHeight * (1 - smoothingFactor);
-
-            // Utilisation de .css() pour modifier le style
-            $bar.css('height', `${currentHeight}px`);
-            $bar.data('current-height', currentHeight);
-        });
+      const barHeightMultiplier = 20 / 255;
+      $visualizerBars.each(function (i) {
+        const $bar = $(this);
+        const barIndex = Math.floor(i * (bufferLength / $visualizerBars.length));
+        const targetHeight = Math.max(2, dataArray[barIndex] * barHeightMultiplier);
+        let currentHeight = $bar.data("current-height");
+        currentHeight = currentHeight * smoothingFactor + targetHeight * (1 - smoothingFactor);
+        $bar.css("height", `${currentHeight}px`);
+        $bar.data("current-height", currentHeight);
+      });
     }
     draw();
-};
-
-// --- Remplacement de addEventListener par .on('click', ...) ---
-$btnTranscription.on('click', () => {
-    if ($btnTranscription.data('action') === 'start') {
-        startTranscription();
-    } else {
-        stopTranscription(true);
-    }
-});
+  };
 /**
  * fin transcription
  */
