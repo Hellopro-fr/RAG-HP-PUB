@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Body
-from app.schemas.chat import ChatRequest, chatResponse
+from app.schemas.chat import  chatResponse
+from common_utils.grpc_clients.schemas.chat import ChatRequest
 # from app.core.search import search_in_milvus
 from app.core.chat import get_chat_completion_response 
 
