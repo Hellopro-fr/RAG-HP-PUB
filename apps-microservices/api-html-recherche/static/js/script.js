@@ -1680,7 +1680,7 @@ $(document).on('click', '#copier-texte', function() {
   const setupTranscriptionButton = (action) => {
     if (action === "start") {
       elements.btnTranscription.data("action", "start");
-      elements.btnTranscription.html(`<i data-lucide="play" class="h-4 w-4"></i>`);
+      elements.btnTranscription.html(`<i data-lucide="mic" class="h-4 w-4"></i>`);
     } else {
       elements.btnTranscription.data("action", "stop");
       const totalBars = 5;
