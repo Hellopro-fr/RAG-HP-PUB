@@ -195,6 +195,17 @@ services:
       - .env
     networks:
       - services-net
+
+  api-transcription-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-transcription-service/Dockerfile
+    container_name: api-classification-service
+    restart: unless-stopped
+    ports:
+      - "8515:8515"
+    env_file:
+      - .env
   
   api-html-recherche-service:
     build:

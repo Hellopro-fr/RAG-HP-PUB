@@ -1,21 +1,20 @@
-# Use an official Python runtime as a parent image
 FROM python:3.10-slim
-
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy the requirements file into the container at /app
-COPY ./requirements.txt /app/requirements.txt
+# Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
+ENV PYTHONPATH=/app
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
+COPY apps-microservices/api-transcription-service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application's code into the container
-COPY . /app
+# Étape 3: Copier le code source de manière propre
+# On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
+COPY apps-microservices/api-transcription-service/app /app/app
 
-# Expose the port the app runs on
-EXPOSE 8000
+# Étape 4: Exposer le port
+EXPOSE 8515
 
-# Command to run the application using uvicorn
-# The host 0.0.0.0 makes the server accessible from outside the container
+# Étape 5: Définir la commande de lancement directement
+# On lance Uvicorn en lui disant de trouver le module 'main' dans le paquet 'api_ingestion_service'
+# Le port est défini dynamiquement par la variable $PORT de Render, avec une valeur par défaut de 8509.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8515"]
