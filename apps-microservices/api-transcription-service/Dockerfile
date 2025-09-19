@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
-COPY apps-microservices/api-transcription-service/app /app/app
+COPY apps-microservices/api-transcription-service/ /app/
 
 # Étape 4: Exposer le port
 EXPOSE 8515
