@@ -83,7 +83,7 @@ $(function () {
     mainContentWrapper: $("#mainContentWrapper"),
     categorieFilter: $("#categorieDropdown"),
     fournisseurFilter: $("#fournisseurDropdown"),
-    btnTranscription: $("#btn-trancription")
+    btnTranscription: $("#btn-transcription")
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
