@@ -30,7 +30,7 @@ class VLLMClient:
                     "model": MODEL_NAME,
                     "messages": message_history,
                     "stream": True,
-                    "max_tokens": 2048, # Paramètre ajustable
+                    "max_tokens": 1024, # Paramètre ajustable
                 }
                 async with client.stream("POST", VLLM_API_URL, json=request_payload) as response:
                     response.raise_for_status()
@@ -75,7 +75,7 @@ class VLLMClient:
                     "model": MODEL_NAME,
                     "messages": message_history,
                     "stream": False, # La différence clé est ici
-                    "max_tokens": 2048,
+                    "max_tokens": 1024,
                 }
                 response = await client.post(VLLM_API_URL, json=request_payload)
                 response.raise_for_status()
