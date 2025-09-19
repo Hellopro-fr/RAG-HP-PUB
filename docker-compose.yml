@@ -17,7 +17,7 @@ services:
       --quantization awq
       --trust-remote-code
       --max-model-len 4096
-      --gpu-memory-utilization 0.75
+      --gpu-memory-utilization 0.90
     ports:
       - "8000:8000"
     deploy:

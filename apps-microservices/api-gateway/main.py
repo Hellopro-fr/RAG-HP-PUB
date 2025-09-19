@@ -64,6 +64,10 @@ async def proxy(service: str, path: str, request: Request):
     response_headers = {
         name: value for name, value in response.headers.items() if name.lower() not in EXCLUDED_HEADERS
     }
+    
+    response_headers["X-Content-Type-Options"] = "nosniff"
+    response_headers["X-Frame-Options"] = "DENY"
+    response_headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
     return Response(
         content=response.content,
