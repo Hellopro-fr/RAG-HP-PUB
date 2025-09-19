@@ -193,6 +193,8 @@ services:
       - "8520:8520"
     env_file:
       - .env
+    networks:
+      - services-net
   
   api-html-recherche-service:
     build:
