@@ -1645,7 +1645,6 @@ $(document).on('click', '#copier-texte', function() {
 // --- Sélection des éléments avec jQuery ---
     // Il est courant de préfixer les variables jQuery avec un '$'
 const $btnTranscription = $('#btn-transcription');
-const $searchInput = state.searchInput;
 
 const AUTH_TOKEN = "h3ll0pro2k25-stt356";
 const WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/google/transcription?token=${AUTH_TOKEN}`;
@@ -1796,8 +1795,8 @@ const connectWebSocket = () => {
         const data = JSON.parse(event.data);
         if (data.type === 'transcript' && data.transcript) {
             // Utilisation de .val() pour définir la valeur d'un input
-            // $searchInput.val(data.transcript);
-            console.log(data.transcript);
+            elements.searchInput.val(data.transcript);
+            // console.log(data.transcript);
         } else if (data.type === 'error') {
             console.error('Server error:', data.error);
             // $errorDiv.text(`Erreur du serveur: ${data.error}`);
