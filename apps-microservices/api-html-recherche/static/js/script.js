@@ -1648,7 +1648,7 @@ const $btnTranscription = $('#btn-transcription');
 const $searchInput = state.searchInput;
 
 const AUTH_TOKEN = "h3ll0pro2k25-stt356";
-const WEBSOCKET_URL = `ws://172.18.6.40:8515/api/ws/transcribe?token=${AUTH_TOKEN}`;
+const WEBSOCKET_URL = `ws://172.18.6.40:8515/ws/google/transcription?token=${AUTH_TOKEN}`;
 
 let websocket;
 let audioContext;

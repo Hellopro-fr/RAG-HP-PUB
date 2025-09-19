@@ -12,7 +12,7 @@ app = FastAPI(
 )
 
 # Include the WebSocket router
-app.include_router(endpoints.router, prefix="/api")
+app.include_router(endpoints.router)
 
 # Mount the 'static' directory to serve frontend files
 app.mount("/static", StaticFiles(directory="static"), name="static")

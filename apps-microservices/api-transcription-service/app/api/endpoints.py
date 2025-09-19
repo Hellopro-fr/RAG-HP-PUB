@@ -28,7 +28,7 @@ def get_websocket_manager(
 
 # --- WebSocket Endpoint ---
 
-@router.websocket("/ws/transcribe")
+@router.websocket("/ws/google/transcription")
 async def websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(...),
