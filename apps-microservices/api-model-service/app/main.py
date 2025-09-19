@@ -3,7 +3,7 @@ import time
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from google.protobuf.json_format import MessageToDict
 from typing import List, Optional
 
@@ -14,6 +14,7 @@ from common_utils.grpc_clients import (
     llm_client,
     reranking_client,
 )
+from common_utils.grpc_clients.schemas.chat import ChatRequest
 from common_utils.grpc_clients.embedding_client import get_embeddings, get_embedding
 
 logging.basicConfig(level=logging.INFO)
@@ -143,9 +144,9 @@ async def llm_chat_endpoint(data: TextInput):
     )
 
 @app.post("/llm/chat")
-async def llm_chat_endpoint(data: TextInput):
+async def llm_chat_endpoint(data: ChatRequest):
     # Utilise le nouveau client partagé non-streamé
-    response_message = await llm_client.get_llm_chat_response(data.input)
+    response_message = await llm_client.get_llm_chat_response(data)
     return {"response": response_message}
 
 @app.get("/recherche.html", response_class=HTMLResponse)

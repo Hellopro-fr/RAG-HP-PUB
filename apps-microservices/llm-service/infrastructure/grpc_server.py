@@ -1,27 +1,15 @@
 import grpc
 import logging
 from concurrent import futures
-
-# Import des stubs générés
-from grpc_stubs import llm_pb2
-from grpc_stubs import llm_pb2_grpc
-
+from grpc_stubs import llm_pb2, llm_pb2_grpc
 from application.chat_service import ChatApplicationService
 
 class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
-    """
-    Implémentation du service gRPC.
-    Elle délègue la logique métier à la couche application.
-    """
     def __init__(self, chat_service: ChatApplicationService):
         self.chat_service = chat_service
 
     async def ChatStream(self, request_iterator, context):
-        """
-        Implémentation de la méthode RPC de streaming.
-        """
         logging.info("Nouvelle connexion ChatStream initiée.")
-        # TODO: Sécuriser ce flux (authentification, validation des entrées pour éviter les injections)
         try:
             async for chunk in self.chat_service.handle_chat_stream(request_iterator):
                 yield llm_pb2.ChatResponse(chunk=chunk)
@@ -29,14 +17,17 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             logging.error(f"Erreur dans ChatStream: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Une erreur interne est survenue: {e}")
-            
+
     async def Chat(self, request, context):
-        """
-        Implémentation de la méthode RPC unaire Chat.
-        """
-        logging.info(f"Nouvelle requête Chat reçue pour le message: '{request.message[:50]}...'")
+        logging.info(f"Nouvelle requête Chat reçue.")
         try:
-            full_message = await self.chat_service.handle_chat_completion(request.message)
+            temperature = request.temperature if request.HasField('temperature') else 0.7
+            max_tokens = request.max_tokens if request.HasField('max_tokens') else 1024
+            enable_thinking = request.enable_thinking if request.HasField('enable_thinking') else False
+
+            full_message = await self.chat_service.handle_chat_completion(
+                request.message, temperature, max_tokens, enable_thinking
+            )
             return llm_pb2.FullChatResponse(full_message=full_message)
         except Exception as e:
             logging.error(f"Erreur dans Chat: {e}", exc_info=True)
@@ -45,9 +36,6 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             return llm_pb2.FullChatResponse()
 
 async def serve(chat_service: ChatApplicationService):
-    """
-    Démarre le serveur gRPC asynchrone.
-    """
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=100))
     llm_pb2_grpc.add_LLMServiceServicer_to_server(LLMServiceImpl(chat_service), server)
     server.add_insecure_port('[::]:50051')
