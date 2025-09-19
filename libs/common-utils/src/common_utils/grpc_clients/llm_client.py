@@ -6,7 +6,7 @@ import asyncio
 from grpc_stubs import  llm_pb2
 from grpc_stubs import  llm_pb2_grpc
 
-from schemas.chat import ChatRequest
+from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "llm-service:50051")
 
