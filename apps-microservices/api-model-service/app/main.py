@@ -14,7 +14,7 @@ from common_utils.grpc_clients import (
     llm_client,
     reranking_client,
 )
-from app.grpc_clients.embedding_client import get_embeddings, get_embedding
+from common_utils.grpc_clients.embedding_client import get_embeddings, get_embedding
 
 logging.basicConfig(level=logging.INFO)
 
