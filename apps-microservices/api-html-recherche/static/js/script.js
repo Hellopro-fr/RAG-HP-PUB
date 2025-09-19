@@ -1673,10 +1673,10 @@ $(document).on('click', '#copier-texte', function() {
     return `rgba(${r}, ${g}, ${b}, 1)`;
   }
 
-  const setupTranscriptionButton = (action) => {
+  let setupTranscriptionButton = (action) => {
     if (action === "start") {
       elements.btnTranscription.data("action", "start");
-      elements.btnTranscription.html(`<i data-lucide="play" class="h-4 w-4"></i>`);
+      elements.btnTranscription.html(`<i data-lucide="mic" class="h-4 w-4"></i>`);
     } else {
       elements.btnTranscription.data("action", "stop");
       const totalBars = 5;
