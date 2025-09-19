@@ -3,8 +3,12 @@ $(function () {
 
   // Variable globale pour la connexion WebSocket
   let socket = null;
+  let websocket = null;
 
   // --- FIN DE LA SECTION FUSIONNÉE ---
+
+  // NOUVEAU: Variable globale pour la connexion WebSocket de TRANSCRIPTION
+  let transcriptionSocket = null;
 
   // Global state
   const state = {
@@ -1673,10 +1677,10 @@ $(document).on('click', '#copier-texte', function() {
     return `rgba(${r}, ${g}, ${b}, 1)`;
   }
 
-  let setupTranscriptionButton = (action) => {
+  const setupTranscriptionButton = (action) => {
     if (action === "start") {
       elements.btnTranscription.data("action", "start");
-      elements.btnTranscription.html(`<i data-lucide="mic" class="h-4 w-4"></i>`);
+      elements.btnTranscription.html(`<i data-lucide="play" class="h-4 w-4"></i>`);
     } else {
       elements.btnTranscription.data("action", "stop");
       const totalBars = 5;
@@ -1735,11 +1739,7 @@ $(document).on('click', '#copier-texte', function() {
     }
   };
 
-  /**
-   * CORRECTION MAJEURE: Fonction d'arrêt sécurisée pour la transcription.
-   */
   const stopTranscription = (isGraceful = true) => {
-    // Nettoie tous les timers
     if (transcriptionAnimationFrameId) cancelAnimationFrame(transcriptionAnimationFrameId);
     if (transcriptionTimeoutId) clearTimeout(transcriptionTimeoutId);
     if (transcriptionSilenceTimeoutId) clearTimeout(transcriptionSilenceTimeoutId);
@@ -1747,31 +1747,23 @@ $(document).on('click', '#copier-texte', function() {
     transcriptionTimeoutId = null;
     transcriptionSilenceTimeoutId = null;
 
-    // Capture la socket actuelle pour éviter les problèmes de scope
     const socketToClose = transcriptionSocket;
 
-    // Si la socket n'existe pas, il n'y a rien à faire
     if (!socketToClose) {
-      // S'assurer que l'UI est propre même si la socket est déjà nulle
       setupTranscriptionButton('start');
       return;
     }
 
-    // 1. Envoyer la commande de fin si nécessaire
     if (isGraceful && socketToClose.readyState === WebSocket.OPEN) {
       socketToClose.send(JSON.stringify({ command: "end_stream" }));
     }
 
-    // 2. Fermer la connexion si elle n'est pas déjà en train de se fermer ou fermée
-    // readyState: 0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED
     if (socketToClose.readyState < 2) {
       socketToClose.close();
     }
 
-    // 3. Mettre la variable globale à null IMMÉDIATEMENT
     transcriptionSocket = null;
 
-    // 4. Nettoyer les ressources audio
     if (transcriptionMediaStream) {
       transcriptionMediaStream.getTracks().forEach((track) => track.stop());
       transcriptionMediaStream = null;
@@ -1785,8 +1777,11 @@ $(document).on('click', '#copier-texte', function() {
       transcriptionScriptProcessor = null;
     }
 
-    // 5. Mettre à jour l'UI
     setupTranscriptionButton("start");
+
+    // --- CORRECTION 2 (SÉCURITÉ) ---
+    // S'assure que le bouton de recherche est dans le bon état à la fin
+    updateSearchButtons();
   };
 
   const connectTranscriptionWebSocket = () => {
@@ -1794,7 +1789,10 @@ $(document).on('click', '#copier-texte', function() {
 
     transcriptionSocket.onopen = () => {
       console.log("Transcription WebSocket connection established.");
-      websocket.send(JSON.stringify({
+
+      // --- CORRECTION 1 ---
+      // Remplacement de 'websocket' par 'transcriptionSocket'
+      transcriptionSocket.send(JSON.stringify({
         config: {
           sampleRate: transcriptionAudioContext.sampleRate,
           languageCode: 'fr-FR',
@@ -1808,6 +1806,12 @@ $(document).on('click', '#copier-texte', function() {
       const data = JSON.parse(event.data);
       if (data.type === "transcript" && data.transcript) {
         elements.searchInput.val(data.transcript);
+
+        // --- CORRECTION 2 ---
+        // Mettre à jour l'état et l'UI du bouton de recherche
+        state.searchQuery = data.transcript;
+        updateSearchButtons();
+
       } else if (data.type === "error") {
         show_toast(generate_error_message(`Erreur du serveur: ${data.error}`), "error");
         stopTranscription(false);
@@ -1824,8 +1828,6 @@ $(document).on('click', '#copier-texte', function() {
 
     transcriptionSocket.onclose = (event) => {
       console.log(`Transcription WebSocket connection closed: ${event.code}`);
-      // L'appel à stopTranscription gère déjà toute la logique de nettoyage.
-      // On s'assure juste que l'état est propre.
       stopTranscription(false);
     };
   };
