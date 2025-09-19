@@ -1797,6 +1797,7 @@ const connectWebSocket = () => {
         if (data.type === 'transcript' && data.transcript) {
             // Utilisation de .val() pour définir la valeur d'un input
             $searchInput.val(data.transcript);
+            console.log(data.transcript);
         } else if (data.type === 'error') {
             console.error('Server error:', data.error);
             // $errorDiv.text(`Erreur du serveur: ${data.error}`);
