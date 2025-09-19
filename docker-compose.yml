@@ -14,10 +14,11 @@ services:
     image: vllm/vllm-openai:latest
     command: >
       --model Qwen/Qwen3-14B-AWQ
-      --quantization awq
+      --quantization awq_marlin
       --trust-remote-code
       --max-model-len 4096
       --gpu-memory-utilization 0.90
+      --max-num-seqs 256
     ports:
       - "8000:8000"
     deploy:
