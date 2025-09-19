@@ -136,15 +136,15 @@ async def search_database(
 
 
 @app.post("/llm/chat/stream")
-async def llm_chat_endpoint(data: TextInput):
+async def llm_chat_endpoint(data: ChatRequest):
     # TODO: Sécuriser cet endpoint
     # Retourne une réponse en streaming
     return StreamingResponse(
-        llm_client.stream_llm_chat(data.input), media_type="text/event-stream"
+        llm_client.stream_llm_chat(data), media_type="text/event-stream"
     )
 
 @app.post("/llm/chat")
-async def llm_chat_endpoint(data: ChatRequest):
+async def llm_chat_endpoint_chat(data: ChatRequest):
     # Utilise le nouveau client partagé non-streamé
     response_message = await llm_client.get_llm_chat_response(data)
     return {"response": response_message}
