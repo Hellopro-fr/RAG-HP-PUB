@@ -68,7 +68,9 @@ class VLLMClient:
             str: La réponse complète du modèle.
         """
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client: # Timeout raisonnable
+            # mettre le timeout à 5 minutes : 300s
+            # avant c'est 60s un timeout raisonnable
+            async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0)) as client: # Timeout raisonnable
                 request_payload = {
                     "model": MODEL_NAME,
                     "messages": message_history,
