@@ -78,12 +78,14 @@ async def get_chatgpt_chat_completion_response(request: ChatRequest):
 
     # Appel chat completion avec Chatgpt , model fixe pour l'instant
     openai_client = get_openai_client()
-    response = openai_client.chat.completions.create(
+    tab_response = openai_client.chat.completions.create(
         model="gpt-4.1-2025-04-14",
         messages=[{"role": "user", "content": request.prompt}],
         temperature=float(request.temperature),
         stream=False
     )
+
+    response = tab_response.choices[0].message.content
 
     logger.info("ChatGPT response received. \nResponse: %s", response)
 
@@ -99,7 +101,8 @@ async def get_deepseek_chat_completion_response(request: ChatRequest):
     # Appel chat completion avec Deepseek
     deepseek = DeepSeek()
     deepseek.set_temperature(request.temperature)
-    response = deepseek.chat(request.prompt , stream=False)
+    tab_response = deepseek.chat(request.prompt , stream=False)
+    response = tab_response['content']
 
     logger.info("Deepseek response received. \nResponse: %s", response)
 
