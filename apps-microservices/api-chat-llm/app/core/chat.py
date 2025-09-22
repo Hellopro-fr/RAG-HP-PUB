@@ -79,7 +79,7 @@ async def get_chatgpt_chat_completion_response(request: ChatRequest):
     # Appel chat completion avec Chatgpt , model fixe pour l'instant
     openai_client = get_openai_client()
     tab_response = openai_client.chat.completions.create(
-        model="GPT-4o-2024-11-20",
+        model="gpt-4o-2024-11-20",
         messages=[{"role": "user", "content": request.prompt}],
         temperature=float(request.temperature),
         stream=False

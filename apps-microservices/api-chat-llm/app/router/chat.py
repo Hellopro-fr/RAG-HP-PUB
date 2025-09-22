@@ -36,7 +36,7 @@ async def chatgpt_chat_completion_llm(request: ChatRequest = Body(...)):
         
         results = await get_chatgpt_chat_completion_response(request)
         logger.info(f"Résultats de la chat complesion: {results}")
-        return chatResponse(response=results["response"], chat_model="GPT-4o-2024-11-20" , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None))
+        return chatResponse(response=results["response"], chat_model="gpt-4o-2024-11-20" , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None))
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
         raise HTTPException(status_code=400, detail=str(ve))
