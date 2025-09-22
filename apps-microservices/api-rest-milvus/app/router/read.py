@@ -32,13 +32,8 @@ async def get_ressource(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Paramètre 'metadata' invalide. Doit être un JSON valide.")
     
-    # Obtenir la classe CRUD à partir du mapping
-    collection_name = MILVUS_COLLECTIONS.get(collection_milvus)
-
-
-
-    if not collection_name:
-        raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
+    # Utiliser directement le nom de collection fourni (suppression de la contrainte de mapping)
+    collection_name = collection_milvus
 
     try:
         result = get_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata)
@@ -57,7 +52,15 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
 
         try:
             _connect_to_milvus()
-            
+
+            # Vérifier si la collection existe dans Milvus
+            if not utility.has_collection(collection_name):
+                return {
+                    "status": "error",
+                    "message": f"La collection '{collection_name}' n'existe pas dans Milvus.",
+                    "code": 404
+                }
+
             collection = Collection(collection_name)
             collection.load()
 
@@ -85,7 +88,7 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
             # Construction de l'expression finale
             expr = " and ".join(expr_parts)
 
-            # Champs à retourner (tu peux les adapter)
+            # Champs à retourner - utilise les champs par défaut du mapping s'ils existent, sinon tous les champs
             output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
 
 
