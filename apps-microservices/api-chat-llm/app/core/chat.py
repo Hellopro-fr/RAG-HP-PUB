@@ -15,6 +15,7 @@ from common_utils.grpc_clients import (
 # Import des schémas Pydantic (à adapter si les chemins ont changé)
 from app.schemas.chat import  chatResponse 
 from common_utils.grpc_clients.schemas.chat import ChatRequest
+from app.core.credentials import settings
 from openai import OpenAI
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
