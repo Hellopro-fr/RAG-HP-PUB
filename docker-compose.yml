@@ -449,7 +449,7 @@ services:
       container_name: api-rest-milvus
       restart: unless-stopped
       ports:
-        - "8515:8515"
+        - "8517:8517"
       env_file:
         - .env
 
