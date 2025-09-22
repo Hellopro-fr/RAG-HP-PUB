@@ -4,3 +4,8 @@ beautifulsoup4
 pika
 pytest
 pytest-mock
+python-dotenv
+grpcio
+grpcio-tools
+protobuf
+googleapis-common-protos
