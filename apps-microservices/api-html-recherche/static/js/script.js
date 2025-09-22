@@ -1376,9 +1376,13 @@ $(function () {
               if (sitewebModele.length > 0) {
                 filtreSpecifique.page_type = sitewebModele;
               }
+              const fournisseurDomaine = $("#fournisseurDomaine").val() || [];
+              if (fournisseurDomaine.length > 0) {
+                filtreSpecifique.domaine = fournisseurDomaine;
+              }
               const fournisseurSiteweb = $("#fournisseurSiteweb").val() || [];
               if (fournisseurSiteweb.length > 0) {
-                filtreSpecifique.domaine = fournisseurSiteweb;
+                filtreSpecifique.id_fournisseur = fournisseurSiteweb;
               }
               break;
             case 'echanges':
