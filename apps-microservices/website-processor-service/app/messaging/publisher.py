@@ -33,7 +33,7 @@ class Publisher:
                     body=json.dumps(message_dict).encode('utf-8'),
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
-                print(f"   📤 Message traité et publié pour embedding.")
+                print(f"   📤 Message traité et publié pour la prochaine étape.")
                 break  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
                 print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")

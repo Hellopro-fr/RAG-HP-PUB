@@ -71,5 +71,5 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     print(f"🔍Website-Processor: Message prêt pour {log}: {json.dumps(output_message, indent=2)}")
     
     # Étape 5: Retourner le message prêt à être publié
-    print(f"📦 Website-Processor: Website traité pour embedding.")
+    print(f"📦 Website-Processor: Website traité pour {log}.")
     return output_message

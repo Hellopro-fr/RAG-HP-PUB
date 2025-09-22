@@ -108,7 +108,7 @@ class Consumer:
         messages = [json.loads(item[1]) for item in valid_batch_items]
 
         try:
-            processed_messages = classify_page_template_batch(messages)
+            processed_messages = asyncio.run(classify_page_template_batch(messages))
             
             # --- Gestion granulaire des ACKs/NACKs pour la résilience ---
             # On parcourt chaque résultat pour l'acquitter individuellement.
