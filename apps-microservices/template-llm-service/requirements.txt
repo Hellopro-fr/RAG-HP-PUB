@@ -10,3 +10,4 @@ grpcio-tools
 protobuf
 googleapis-common-protos
 pydantic
+jinja2
