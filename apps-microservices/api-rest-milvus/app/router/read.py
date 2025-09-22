@@ -27,7 +27,8 @@ async def get_ressource(
     id_ressource: Optional[str] = Query(None, description="ID unique de la ressource"),
     metadata: Optional[str] = Query(None, description="Données additionnelles au format JSON"),
     limit: Optional[int] = Query(1000, description="Limite du nombre de résultats (max 10000)"),
-    offset: Optional[int] = Query(0, description="Nombre d'éléments à ignorer (pagination)")
+    offset: Optional[int] = Query(0, description="Nombre d'éléments à ignorer (pagination)"),
+    fields: Optional[str] = Query(None, description="Champs à retourner, séparés par des virgules (ex: 'id,name,type')")
 ):
     try:
         parsed_metadata = json.loads(metadata) if metadata else {}
@@ -37,8 +38,13 @@ async def get_ressource(
     # Utiliser directement le nom de collection fourni (suppression de la contrainte de mapping)
     collection_name = collection_milvus
 
+    # Parser les champs demandés
+    parsed_fields = None
+    if fields:
+        parsed_fields = [field.strip() for field in fields.split(',') if field.strip()]
+
     try:
-        result = get_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata, limit = limit, offset = offset)
+        result = get_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata, limit = limit, offset = offset, fields = parsed_fields)
 
         if not result:
             raise HTTPException(status_code=404, detail="Ressource non trouvée.")
@@ -48,7 +54,7 @@ async def get_ressource(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
-def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, limit: int = 1000, offset: int = 0) -> Dict[str, Any]:
+def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, limit: int = 1000, offset: int = 0, fields: Optional[list] = None) -> Dict[str, Any]:
 
         print(f"get_ressource_rest - collection_name: {collection_name}, id_milvus: {id_milvus}, metadata: {metadata}")
 
@@ -96,8 +102,13 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
 
             # Si aucun filtre fourni, récupérer tous les documents avec pagination
             if not expr_parts:
+                # Déterminer les champs à retourner
+                if fields:
+                    output_fields = fields
+                else:
+                    output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
+
                 # Récupération de tous les documents avec offset et limit
-                output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
                 results = collection.query(expr="", output_fields=output_fields, limit=limit, offset=offset)
 
                 return {
@@ -105,7 +116,8 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                     "filters": {
                         "get_all": True,
                         "limit": limit,
-                        "offset": offset
+                        "offset": offset,
+                        "fields": fields or "default"
                     },
                     "pagination": {
                         "current_page": (offset // limit) + 1,
@@ -120,9 +132,11 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
             # Construction de l'expression finale
             expr = " and ".join(expr_parts)
 
-            # Champs à retourner - utilise les champs par défaut du mapping s'ils existent, sinon tous les champs
-            output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
-
+            # Déterminer les champs à retourner
+            if fields:
+                output_fields = fields
+            else:
+                output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
 
             results = collection.query(expr=expr, output_fields=output_fields, limit=limit, offset=offset)
 
@@ -133,7 +147,8 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                     "metadata": metadata,
                     "expr" : expr,
                     "limit": limit,
-                    "offset": offset
+                    "offset": offset,
+                    "fields": fields or "default"
                 },
                 "pagination": {
                     "current_page": (offset // limit) + 1,
