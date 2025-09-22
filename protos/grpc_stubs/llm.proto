@@ -31,6 +31,9 @@ message FullChatResponse {
 
 message ChatBatchRequest {
   repeated string messages = 1;
+  optional float temperature = 2;
+  optional int32 max_tokens = 3;
+  optional bool enable_thinking = 4;
 }
 
 message ChatBatchResponse {

@@ -97,7 +97,12 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
     valid_prompts = [p for p in prompts if p != "PROMPT_TOO_LONG"]
     batch_outputs = []
     if valid_prompts:
-        batch_outputs = await llm_client.get_llm_chat_batch_response(valid_prompts)
+        batch_outputs = await llm_client.get_llm_chat_batch_response(
+            messages=valid_prompts,
+            temperature=0.7,
+            max_tokens=1024, # Assez pour une réponse JSON de classification
+            enable_thinking=False
+        )
         
     # --- Étape 3: Traitement des résultats ---
     processed_messages = []

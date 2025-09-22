@@ -55,7 +55,7 @@ async def get_llm_chat_response(
         logging.error(f"Erreur gRPC en appelant le service LLM (non-streamé): {e.details()}")
         return f"[ERREUR_CLIENT: {e.details()}]"
     
-async def get_llm_chat_batch_response(messages: List[str]) -> List[str]:
+async def get_llm_chat_batch_response(messages: List[str], temperature: float, max_tokens: int, enable_thinking: bool) -> List[str]:
     """
     Appelle le service gRPC LLM pour obtenir des réponses complètes pour un lot de messages.
     """
@@ -64,7 +64,12 @@ async def get_llm_chat_batch_response(messages: List[str]) -> List[str]:
     try:
         async with grpc.aio.insecure_channel(LLM_SERVICE_URL) as channel:
             stub = llm_pb2_grpc.LLMServiceStub(channel)
-            request = llm_pb2.ChatBatchRequest(messages=messages)
+            request = llm_pb2.ChatBatchRequest(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                enable_thinking=enable_thinking
+            )
             response = await stub.ChatBatch(request)
             return list(response.full_messages)
     except grpc.aio.AioRpcError as e:
