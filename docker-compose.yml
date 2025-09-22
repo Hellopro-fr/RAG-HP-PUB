@@ -14,10 +14,11 @@ services:
     image: vllm/vllm-openai:latest
     command: >
       --model Qwen/Qwen3-14B-AWQ
-      --quantization awq
+      --quantization awq_marlin
       --trust-remote-code
       --max-model-len 4096
-      --gpu-memory-utilization 0.75
+      --gpu-memory-utilization 0.90
+      --max-num-seqs 256
     ports:
       - "8000:8000"
     deploy:
@@ -151,13 +152,30 @@ services:
       - database-recherche-service
     env_file:
       - .env
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    networks:
+      - services-net
+
+  api-chat-llm-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-chat-llm/Dockerfile
+    container_name: api-chat-llm-service
+    restart: unless-stopped
+    ports:
+      - "8540:8540"
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    depends_on:
+      - llm-service
+    env_file:
+      - .env
     networks:
       - services-net
 
@@ -173,6 +191,19 @@ services:
       - ./apps-microservices/api-classification:/app:rw
     ports:
       - "8520:8520"
+    env_file:
+      - .env
+    networks:
+      - services-net
+
+  api-transcription-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-transcription-service/Dockerfile
+    container_name: api-transcription-service
+    restart: unless-stopped
+    ports:
+      - "8515:8515"
     env_file:
       - .env
   
@@ -434,6 +465,18 @@ services:
               device_ids: ['1']
               # count: all
               capabilities: [gpu]
+    
+  api-pdf-to-text:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-pdf-to-text/Dockerfile
+    container_name: api-pdf-to-text
+    restart: unless-stopped
+    ports:
+      - "8569:8569"
+    env_file:
+      - .env
+    
 networks:
   services-net:
     driver: bridge

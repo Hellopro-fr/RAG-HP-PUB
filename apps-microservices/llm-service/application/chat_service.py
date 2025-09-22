@@ -2,61 +2,49 @@ import asyncio
 from infrastructure.vllm_client import VLLMClient
 
 class ChatApplicationService:
-    """
-    Couche application qui orchestre la logique de chat.
-    Elle utilise un client (VLLMClient) pour interagir avec l'infrastructure externe (le serveur vLLM).
-    """
     def __init__(self, vllm_client: VLLMClient):
         self.vllm_client = vllm_client
 
     async def handle_chat_stream(self, request_iterator):
-        """
-        Gère un flux de conversation bi-directionnel.
-        
-        Args:
-            request_iterator: Un itérateur asynchrone de requêtes gRPC.
-        
-        Yields:
-            str: Un chunk de la réponse générée par le modèle.
-        """
-        # Pour ce cas, nous construisons un historique simple.
-        # Dans une application réelle, cet historique pourrait être géré par session.
         message_history = [{"role": "system", "content": "You are a helpful assistant."}]
         
-        async for request in request_iterator:
-            message_history.append({"role": "user", "content": request.message})
+        try:
+            first_request = await anext(request_iterator)
+            temperature = first_request.temperature if first_request.HasField('temperature') else 0.7
+            max_tokens = first_request.max_tokens if first_request.HasField('max_tokens') else 1024
+            enable_thinking = first_request.enable_thinking if first_request.HasField('enable_thinking') else False
+            message_history.append({"role": "user", "content": first_request.message})
+        except StopAsyncIteration:
+            return
+
+        while True:
+            response_generator = self.vllm_client.stream_chat(
+                message_history, temperature, max_tokens, enable_thinking
+            )
             
-            # Le client vLLM gère le streaming de la réponse
-            response_generator = self.vllm_client.stream_chat(message_history)
-            
-            full_response = ""
+            full_response_buffer = ""
             async for chunk in response_generator:
                 yield chunk
-                full_response += chunk
+                full_response_buffer += chunk
             
-            # Ajoute la réponse complète de l'assistant à l'historique pour le prochain tour
-            message_history.append({"role": "assistant", "content": full_response})
+            message_history.append({"role": "assistant", "content": full_response_buffer})
 
-    async def handle_chat_completion(self, message: str) -> str:
-        """
-        Gère une simple requête de chat et retourne la réponse complète.
-        
-        Args:
-            message (str): Le message de l'utilisateur.
-        
-        Returns:
-            str: La réponse complète du modèle.
-        """
-        # Pour un appel unique, l'historique est simple.
+            try:
+                next_request = await anext(request_iterator)
+                message_history.append({"role": "user", "content": next_request.message})
+            except StopAsyncIteration:
+                break
+
+    async def handle_chat_completion(self, message: str, temperature: float, max_tokens: int, enable_thinking: bool) -> str:
         message_history = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": message}
         ]
         
-        # Le client vLLM gère l'appel non-streamé
-        full_response = await self.vllm_client.chat(message_history)
-        return full_response
-    
+        return await self.vllm_client.get_chat_completion(
+            message_history, temperature, max_tokens, enable_thinking
+        )
+
     async def handle_chat_batch_completion(self, messages: list[str]) -> list[str]:
         """
         Gère une liste de requêtes de chat en parallèle et retourne les réponses complètes.

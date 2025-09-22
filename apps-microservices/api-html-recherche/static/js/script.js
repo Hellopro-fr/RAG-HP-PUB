@@ -3,8 +3,12 @@ $(function () {
 
   // Variable globale pour la connexion WebSocket
   let socket = null;
+  let websocket = null;
 
   // --- FIN DE LA SECTION FUSIONNÉE ---
+
+  // NOUVEAU: Variable globale pour la connexion WebSocket de TRANSCRIPTION
+  let transcriptionSocket = null;
 
   // Global state
   const state = {
@@ -83,6 +87,7 @@ $(function () {
     mainContentWrapper: $("#mainContentWrapper"),
     categorieFilter: $("#categorieDropdown"),
     fournisseurFilter: $("#fournisseurDropdown"),
+    btnTranscription: $("#btn-transcription")
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -858,6 +863,15 @@ $(function () {
       $("#temperatureValue").text(state.temperature);
     });
 
+    elements.btnTranscription.on("click", () => {
+      // On vérifie l'état via l'attribut data
+      if (elements.btnTranscription.data("action") === "start") {
+        startTranscription();
+      } else {
+        stopTranscription(true); // Arrêt manuel, donc "graceful"
+      }
+    });
+
     // NOUVEAU: Écouteurs pour les nouveaux champs
     elements.templatePrompt.on("input", function () {
       state.templatePrompt = $(this).val();
@@ -1283,7 +1297,10 @@ $(function () {
     }
 
     // const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici VM1
-    const wsUrl = "ws://34.34.166.5:8510/ws/search"; // L'URL est maintenant ici
+    // let wsUrl = "ws://34.34.166.5:8500/search-service/ws/search"; // L'URL est maintenant ici
+    // if (GetURLParameter("domain") == 1) {
+    let wsUrl = "wss://api.hellopro.eu/search-service/ws/search";
+    // }
     console.log(`Connexion à ${wsUrl}...`);
 
     try {
@@ -1636,6 +1653,234 @@ $(document).on('click', '#copier-texte', function() {
     copyTextToClipboard(formattedText);
 });
 
+/**
+ * transcription audio via google speech to text
+ */
+  let transcriptionAudioContext;
+  let transcriptionMediaStream;
+  let transcriptionScriptProcessor;
+  let transcriptionAnimationFrameId;
+  let transcriptionTimeoutId;
+  let transcriptionSilenceTimeoutId;
+
+  const TRANSCRIPTION_AUTH_TOKEN = "h3ll0pro2k25-stt356";
+  const TRANSCRIPTION_WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/google/transcription?token=${TRANSCRIPTION_AUTH_TOKEN}`;
+
+  const transcriptionStartColor = { r: 51, g: 83, b: 255, a: 1 };
+  const transcriptionEndColor = { r: 253, g: 187, b: 155, a: 1 };
+
+  function transcriptionInterpolateColor(index, totalBars) {
+    const ratio = totalBars > 1 ? index / (totalBars - 1) : 0;
+    const r = Math.round(transcriptionStartColor.r + (transcriptionEndColor.r - transcriptionStartColor.r) * ratio);
+    const g = Math.round(transcriptionStartColor.g + (transcriptionEndColor.g - transcriptionStartColor.g) * ratio);
+    const b = Math.round(transcriptionStartColor.b + (transcriptionEndColor.b - transcriptionStartColor.b) * ratio);
+    return `rgba(${r}, ${g}, ${b}, 1)`;
+  }
+
+  const setupTranscriptionButton = (action) => {
+    if (action === "start") {
+      elements.btnTranscription.data("action", "start");
+      elements.btnTranscription.html(`<i data-lucide="mic" class="h-4 w-4"></i>`);
+    } else {
+      elements.btnTranscription.data("action", "stop");
+      const totalBars = 5;
+      const barsHtml = Array.from({ length: totalBars }, (_, i) => {
+        const color = transcriptionInterpolateColor(i, totalBars);
+        return `<div class="bar" style="height: 2px; background-color: ${color};" data-current-height="2"></div>`;
+      }).join("");
+      elements.btnTranscription.html(`<div class="audio-visualizer">${barsHtml}</div><i data-lucide="square" class="h-4 w-4"></i>`);
+    }
+    lucide.createIcons();
+  };
+
+  const startTranscription = async () => {
+    elements.btnTranscription.prop("disabled", true);
+    try {
+      transcriptionMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      transcriptionAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = transcriptionAudioContext.createMediaStreamSource(transcriptionMediaStream);
+      transcriptionScriptProcessor = transcriptionAudioContext.createScriptProcessor(4096, 1, 1);
+      const analyser = transcriptionAudioContext.createAnalyser();
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      source.connect(analyser);
+
+      transcriptionScriptProcessor.onaudioprocess = (event) => {
+        const inputData = event.inputBuffer.getChannelData(0);
+        const int16Buffer = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          int16Buffer[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+        }
+        const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(int16Buffer.buffer)));
+        if (transcriptionSocket && transcriptionSocket.readyState === WebSocket.OPEN) {
+          transcriptionSocket.send(JSON.stringify({ audio: base64 }));
+        }
+      };
+
+      source.connect(transcriptionScriptProcessor);
+      transcriptionScriptProcessor.connect(transcriptionAudioContext.destination);
+
+      connectTranscriptionWebSocket();
+      setupTranscriptionButton("stop");
+      startSmoothAudioVisualizer(analyser, dataArray);
+
+      transcriptionTimeoutId = setTimeout(() => {
+        show_toast(generate_error_message("Limite de 1 minute atteinte."), "error");
+        stopTranscription(true);
+      }, 60000);
+
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      show_toast(generate_error_message("Erreur: Impossible d’accéder au microphone."), "error");
+      setupTranscriptionButton("start");
+    } finally {
+      elements.btnTranscription.prop("disabled", false);
+    }
+  };
+
+  const stopTranscription = (isGraceful = true) => {
+    if (transcriptionAnimationFrameId) cancelAnimationFrame(transcriptionAnimationFrameId);
+    if (transcriptionTimeoutId) clearTimeout(transcriptionTimeoutId);
+    if (transcriptionSilenceTimeoutId) clearTimeout(transcriptionSilenceTimeoutId);
+    transcriptionAnimationFrameId = null;
+    transcriptionTimeoutId = null;
+    transcriptionSilenceTimeoutId = null;
+
+    const socketToClose = transcriptionSocket;
+
+    if (!socketToClose) {
+      setupTranscriptionButton('start');
+      return;
+    }
+
+    if (isGraceful && socketToClose.readyState === WebSocket.OPEN) {
+      socketToClose.send(JSON.stringify({ command: "end_stream" }));
+    }
+
+    if (socketToClose.readyState < 2) {
+      socketToClose.close();
+    }
+
+    transcriptionSocket = null;
+
+    if (transcriptionMediaStream) {
+      transcriptionMediaStream.getTracks().forEach((track) => track.stop());
+      transcriptionMediaStream = null;
+    }
+    if (transcriptionAudioContext && transcriptionAudioContext.state !== "closed") {
+      transcriptionAudioContext.close();
+      transcriptionAudioContext = null;
+    }
+    if (transcriptionScriptProcessor) {
+      transcriptionScriptProcessor.disconnect();
+      transcriptionScriptProcessor = null;
+    }
+
+    setupTranscriptionButton("start");
+
+    // --- CORRECTION 2 (SÉCURITÉ) ---
+    // S'assure que le bouton de recherche est dans le bon état à la fin
+    updateSearchButtons();
+  };
+
+  const connectTranscriptionWebSocket = () => {
+    transcriptionSocket = new WebSocket(TRANSCRIPTION_WEBSOCKET_URL);
+
+    transcriptionSocket.onopen = () => {
+      console.log("Transcription WebSocket connection established.");
+
+      // --- CORRECTION 1 ---
+      // Remplacement de 'websocket' par 'transcriptionSocket'
+      transcriptionSocket.send(JSON.stringify({
+        config: {
+          sampleRate: transcriptionAudioContext.sampleRate,
+          languageCode: 'fr-FR',
+          enablePunctuation: true,
+          interimResults: true
+        }
+      }));
+    };
+
+    transcriptionSocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "transcript" && data.transcript) {
+        elements.searchInput.val(data.transcript);
+
+        // --- CORRECTION 2 ---
+        // Mettre à jour l'état et l'UI du bouton de recherche
+        state.searchQuery = data.transcript;
+        updateSearchButtons();
+
+      } else if (data.type === "error") {
+        show_toast(generate_error_message(`Erreur du serveur: ${data.error}`), "error");
+        stopTranscription(false);
+      } else if (data.type === "end_stream") {
+        show_toast(generate_succes_message(`Fin de transcription`), "success");
+        stopTranscription(true);
+      }
+    };
+
+    transcriptionSocket.onerror = (error) => {
+      console.error("Transcription WebSocket error:", error);
+      show_toast(generate_error_message("Erreur de connexion WebSocket."), "error");
+    };
+
+    transcriptionSocket.onclose = (event) => {
+      // console.log(`Transcription WebSocket connection closed: ${event.code}`);
+      show_toast(generate_succes_message(`Transcription terminée`), "success");
+      stopTranscription(false);
+    };
+  };
+
+  const startSmoothAudioVisualizer = (analyser, dataArray) => {
+    const $visualizerBars = $(".audio-visualizer .bar");
+    if ($visualizerBars.length === 0) return;
+
+    const bufferLength = analyser.frequencyBinCount;
+    const smoothingFactor = 0.8;
+    const SILENCE_THRESHOLD = 5;
+    const SILENCE_DURATION = 5000;
+
+    function draw() {
+      transcriptionAnimationFrameId = requestAnimationFrame(draw);
+      analyser.getByteFrequencyData(dataArray);
+
+      let volumeSum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        volumeSum += dataArray[i];
+      }
+      const averageVolume = volumeSum / bufferLength;
+
+      if (averageVolume > SILENCE_THRESHOLD) {
+        if (transcriptionSilenceTimeoutId) clearTimeout(transcriptionSilenceTimeoutId);
+        transcriptionSilenceTimeoutId = null;
+      } else {
+        if (!transcriptionSilenceTimeoutId) {
+          transcriptionSilenceTimeoutId = setTimeout(() => {
+            show_toast(generate_error_message("Silence détecté, arrêt de la transcription."), "error");
+            stopTranscription(true);
+          }, SILENCE_DURATION);
+        }
+      }
+
+      const barHeightMultiplier = 20 / 255;
+      $visualizerBars.each(function (i) {
+        const $bar = $(this);
+        const barIndex = Math.floor(i * (bufferLength / $visualizerBars.length));
+        const targetHeight = Math.max(2, dataArray[barIndex] * barHeightMultiplier);
+        let currentHeight = $bar.data("current-height");
+        currentHeight = currentHeight * smoothingFactor + targetHeight * (1 - smoothingFactor);
+        $bar.css("height", `${currentHeight}px`);
+        $bar.data("current-height", currentHeight);
+      });
+    }
+    draw();
+  };
+/**
+ * fin transcription
+ */
+
 
 /**
  * Fonction pour copier du texte dans le presse-papiers.
@@ -1704,5 +1949,6 @@ function fallbackCopyTextToClipboard(text) {
   initializeDatePicker();
   initializeEventListeners();
   updateUI();
+  setupTranscriptionButton("start");
   lucide.createIcons();
 });

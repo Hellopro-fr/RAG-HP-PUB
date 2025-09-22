@@ -6,7 +6,7 @@ from typing import Any, Optional, List, Dict
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-SEARCH_API_URL = "http://34.34.166.5:8510/search"
+SEARCH_API_URL = "http://api-recherche-service:8510/search"
 EXTERNAL_PRODUCT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_produit.php"
 EXTERNAL_CATEGORY_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_categorie.php"
 
@@ -103,7 +103,7 @@ def call_search_api(prompt: str, num_results: int, use_reranker: bool = True, re
 
     try:
         logger.info(f"Envoi requête à l'API de recherche: {SEARCH_API_URL} avec prompt='{prompt}'")
-        response = requests.post(SEARCH_API_URL, headers=search_headers, data=json.dumps(search_payload))
+        response = requests.post(SEARCH_API_URL, headers=search_headers, data=json.dumps(search_payload), timeout=30)
         response.raise_for_status()
 
         results_data = response.json()
@@ -129,10 +129,10 @@ def test_search_api_connection() -> bool:
             'options': {'use_reranker': False, 'rrf': False}
         }
         response = requests.post(
-            SEARCH_API_URL, 
-            headers={'Content-Type': 'application/json'}, 
+            SEARCH_API_URL,
+            headers={'Content-Type': 'application/json'},
             data=json.dumps(test_payload),
-            timeout=5
+            timeout=30
         )
         return response.status_code == 200
     except Exception as e:

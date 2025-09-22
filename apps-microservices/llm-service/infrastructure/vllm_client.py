@@ -3,34 +3,22 @@ import json
 import os
 import logging
 
-# Configuration du client vLLM qui expose une API compatible OpenAI
 VLLM_API_URL = os.getenv("VLLM_API_URL", "http://vllm-server:8000/v1/chat/completions")
-# MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-14B-AWQ")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen1.5-7B-Chat-AWQ")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-14B-AWQ")
 
 class VLLMClient:
-    """
-    Client asynchrone pour communiquer avec le serveur vLLM via son API
-    compatible OpenAI. Gère le streaming des réponses.
-    """
-    async def stream_chat(self, message_history):
-        """
-        Envoie une requête de chat en streaming au serveur vLLM et yield les chunks de réponse.
-        
-        Args:
-            message_history (list): Une liste de dictionnaires représentant l'historique de la conversation.
-        
-        Yields:
-            str: Un chunk de la réponse du modèle.
-        """
-        # TODO: Ajouter une gestion plus fine des erreurs (timeouts, 5xx, etc.)
+    async def stream_chat(self, message_history, temperature: float, max_tokens: int, enable_thinking: bool):
         try:
             async with httpx.AsyncClient(timeout=None) as client:
                 request_payload = {
                     "model": MODEL_NAME,
                     "messages": message_history,
                     "stream": True,
-                    "max_tokens": 2048, # Paramètre ajustable
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "chat_template_kwargs": {
+                        "enable_thinking": enable_thinking
+                    }
                 }
                 async with client.stream("POST", VLLM_API_URL, json=request_payload) as response:
                     response.raise_for_status()
@@ -47,50 +35,34 @@ class VLLMClient:
                                     if content:
                                         yield content
                             except json.JSONDecodeError:
-                                logging.warning(f"Impossible de décoder le chunk JSON: {data_str}")
                                 continue
         except httpx.RequestError as e:
-            logging.error(f"Erreur de requête vers vLLM: {e}")
-            # Propager une erreur ou retourner un message d'erreur au client gRPC
+            logging.error(f"Erreur de requête streamée vers vLLM: {e}")
             yield "[ERREUR: Le service LLM est indisponible]"
-        except Exception as e:
-            logging.error(f"Erreur inattendue dans VLLMClient: {e}")
-            yield "[ERREUR: Une erreur interne est survenue]"
-            
-    async def chat(self, message_history) -> str:
-        """
-        Envoie une requête de chat non-streamée au serveur vLLM et retourne la réponse complète.
-        
-        Args:
-            message_history (list): L'historique de la conversation.
-        
-        Returns:
-            str: La réponse complète du modèle.
-        """
+
+    async def get_chat_completion(self, message_history, temperature: float, max_tokens: int, enable_thinking: bool) -> str:
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client: # Timeout raisonnable
+            timeout_config = httpx.Timeout(300.0, connect=10.0)
+            async with httpx.AsyncClient(timeout=timeout_config) as client:
                 request_payload = {
                     "model": MODEL_NAME,
                     "messages": message_history,
-                    "stream": False, # La différence clé est ici
-                    "max_tokens": 2048,
+                    "stream": False,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "chat_template_kwargs": {
+                        "enable_thinking": enable_thinking
+                    }
                 }
                 response = await client.post(VLLM_API_URL, json=request_payload)
                 response.raise_for_status()
-                
                 response_data = response.json()
                 if 'choices' in response_data and len(response_data['choices']) > 0:
-                    message = response_data['choices'][0].get('message', {})
-                    content = message.get('content', '')
-                    return content
-                else:
-                    logging.warning("La réponse de vLLM n'a pas le format attendu.")
-                    return "[ERREUR: Réponse inattendue du service LLM]"
-
+                    return response_data['choices'][0].get('message', {}).get('content', '')
+                return "[ERREUR: Réponse inattendue du service LLM]"
+        except httpx.TimeoutException:
+            logging.error(f"Timeout dépassé lors de la requête non-streamée vers vLLM.")
+            return "[ERREUR: La génération de la réponse a pris trop de temps]"
         except httpx.RequestError as e:
             logging.error(f"Erreur de requête non-streamée vers vLLM: {e}")
             return "[ERREUR: Le service LLM est indisponible]"
-        except Exception as e:
-            logging.error(f"Erreur inattendue dans VLLMClient (non-streamé): {e}")
-            return "[ERREUR: Une erreur interne est survenue]"
-
