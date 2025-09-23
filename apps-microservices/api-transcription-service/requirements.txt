@@ -4,3 +4,4 @@ websockets
 google-cloud-speech
 pydantic-settings
 pytest
+openai
