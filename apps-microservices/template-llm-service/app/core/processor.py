@@ -15,7 +15,7 @@ json
 {{ "page_type": "valeur" }}
 Si la page ne correspond à aucun type → retourne :
 json
-{{ "page_type": "autre", "commentaire_si_autre": "explication en 15 mots max" }}
+{{ "page_type": "autre" }}
 Critère clé : ne te base pas uniquement sur les balises Markdown.
 Analyse le but de la page pour l’utilisateur final : s’informer, comparer, acheter, demander un devis, découvrir une offre locale, etc.
 Voici les types de pages possibles :
@@ -38,7 +38,6 @@ Voici les types de pages possibles :
 "politique_confidentialite" : politique de confidentialité ou cookies, RGPD, gestion des données personnelles.
 "autre" : si aucun de ces types ne correspond.
 Rappels :
-Si "page_type" ≠ "autre", ne génère pas de champ "commentaire_si_autre".
 Génère seulement le JSON, sans autre texte.
 Ne pas se laisser influencer par les premières balises Markdown (ex : une page “containers à Lyon” n’est ni une fiche produit ni un article, mais une offre localisée = "offre_segment").
 Analyse le but marketing ou fonctionnel de la page.
@@ -100,7 +99,7 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
         batch_outputs = await llm_client.get_llm_chat_batch_response(
             messages=valid_prompts,
             temperature=0.7,
-            max_tokens=4096, # Assez pour une réponse JSON de classification
+            max_tokens=256, # Assez pour une réponse JSON de classification
             enable_thinking=False
         )
         
