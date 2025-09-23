@@ -132,10 +132,10 @@ class OpenAIRealtimeService:
                             "model": "gpt-4o-transcribe",
                             "language": client_state.recognition_config.language_code,
                         },
-                        # "turn_detection": {
-                        #     "type": "server_vad"
-                        # }
-                        "turn_detection": None
+                        "turn_detection": {
+                            "type": "server_vad"
+                        }
+                        # "turn_detection": None
                     }
                 }
                 await openai_ws.send(json.dumps(session_update_payload))
@@ -185,13 +185,8 @@ class OpenAIRealtimeService:
                         "audio": audio_data_base64,
                     }
                     await openai_ws.send(json.dumps(message_to_openai))
-                elif message_from_client and 'command' in message_from_client:
-                    if message_from_client['command'] == 'commit':
-                        self.logger.info("Commande 'commit' reçue, envoi à OpenAI.")
-                        await openai_ws.send(json.dumps({"type": "input_audio_buffer.commit"}))
-                    elif message_from_client['command'] == 'end_stream':
-                        self.logger.info("Commande 'end_stream' reçue, fin de la boucle.")
-                        client_state.end_stream = True
+                if message_from_client and 'command' in message_from_client and message_from_client['command'] == 'end_stream':
+                    client_state.end_stream = True
                 
                 client_state.audio_queue.task_done()
 
