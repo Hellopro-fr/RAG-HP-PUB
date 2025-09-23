@@ -190,7 +190,7 @@ services:
     volumes:
       - ./apps-microservices/api-classification:/app:rw
     ports:
-      - "8520:8520"
+      - "8577:8577"
     env_file:
       - .env
     networks:
