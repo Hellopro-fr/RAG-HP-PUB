@@ -57,6 +57,7 @@ def get_openai_client():
     logger.info("Client OpenAI initialisé.")
     return client
 
+# Chat completion via llm Qwen3 14B
 async def get_chat_completion_response(request: ChatRequest):
 
     start_time = time.perf_counter()
@@ -71,7 +72,7 @@ async def get_chat_completion_response(request: ChatRequest):
 
     return {"response": response , "time_elapsed": time_elapsed}
 
-
+# Chat completion via chatGpt 40
 async def get_chatgpt_chat_completion_response(request: ChatRequest):
 
     start_time = time.perf_counter()
@@ -94,6 +95,7 @@ async def get_chatgpt_chat_completion_response(request: ChatRequest):
 
     return {"response": response , "time_elapsed": time_elapsed}
 
+# Chat completion via Deepseek
 async def get_deepseek_chat_completion_response(request: ChatRequest):
 
     start_time = time.perf_counter()
@@ -110,3 +112,39 @@ async def get_deepseek_chat_completion_response(request: ChatRequest):
     logger.info(f"Temps écoulé pour get_next_questinon: {time_elapsed:.2f} secondes")
 
     return {"response": response , "time_elapsed": time_elapsed}
+
+# Chat completion via Gemini by openrouter
+async def get_gemini_chat_completion_response(request: ChatRequest):
+
+    start_time = time.perf_counter()
+
+    # Appel chat completion avec openrouter de model genini flash 1.5
+    client_or = OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=settings.OPENROUTER_API_KEY,
+            )
+    completion = client_or.chat.completions.create(
+        extra_body={},
+        model="google/gemini-flash-1.5",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": request.prompt
+                    }
+                ]
+            }
+        ]
+    )
+    response = completion.choices[0].message.content
+
+    logger.info("Deepseek response received. \nResponse: %s", response)
+
+    time_elapsed = time.perf_counter() - start_time
+    logger.info(f"Temps écoulé pour get_next_questinon: {time_elapsed:.2f} secondes")
+
+    return {"response": response , "time_elapsed": time_elapsed}
+
+   
