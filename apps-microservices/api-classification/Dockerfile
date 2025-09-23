@@ -11,6 +11,15 @@ ENV PYTHONPATH=/app
 COPY libs/common-utils /app/libs/common-utils
 RUN pip install -e /app/libs/common-utils
 
+# Copier et installer les stubs gRPC
+COPY libs/grpc-stubs /app/libs/grpc-stubs
+RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
+
+# Générer les stubs gRPC à partir des protos
+RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
+
+RUN pip install -e /app/libs/grpc-stubs
+
 # Ensuite, on copie et installe les requirements spécifiques à ce service
 COPY apps-microservices/api-classification/requirements.txt .
 RUN pip install -r requirements.txt

@@ -7,6 +7,9 @@ from collections import defaultdict
 
 import openai
 
+from common_utils.grpc_clients import llm_client
+from common_utils.grpc_clients.schemas.chat import ChatRequest
+
 from .search import (
     call_search_api, 
     get_product_details, 
@@ -49,6 +52,12 @@ class ProductClassifier:
                 logger.info("Client DeepSeek configuré")
             else:
                 raise ValueError("DEEPSEEK_API_KEY manquante")
+
+        elif self.llm_choice == 'Qwen':
+            logger.info("Client gRPC Qwen configuré")
+
+        else:
+            raise ValueError(f"LLM {self.llm_choice} non supporté")
     
     def update_configuration(self, config: Dict[str, Any]):
         """Met à jour la configuration du classificateur"""
@@ -72,7 +81,7 @@ class ProductClassifier:
     
     def is_llm_configured(self) -> bool:
         """Vérifie si un LLM est configuré"""
-        return (self.openai_client is not None) or (self.deepseek_client is not None)
+        return (self.openai_client is not None) or (self.deepseek_client is not None) or (self.llm_choice == 'Qwen')
     
     def search_similar_products(self, title: str, n_results: int = None) -> List[Dict]:
         """Recherche des produits similaires"""
@@ -251,10 +260,10 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 }}
 """
 
-    def query_llm(self, prompt: str) -> Dict:
+    async def query_llm(self, prompt: str) -> Dict:
         """Appel au LLM selon le choix"""
         messages = [{"role": "user", "content": prompt}]
-        
+
         try:
             if self.llm_choice == 'OpenAI' and self.openai_client:
                 response = self.openai_client.chat.completions.create(
@@ -263,9 +272,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     temperature=0,
                     response_format={"type": "json_object"}
                 )
-                #return json.loads(response.choices[0].message.content)
                 return response
-                
+
             elif self.llm_choice == 'DeepSeek' and self.deepseek_client:
                 response = self.deepseek_client.chat.completions.create(
                     model="deepseek-chat",
@@ -273,19 +281,46 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     temperature=0,
                     response_format={"type": "json_object"}
                 )
-                #return json.loads(response.choices[0].message.content)
                 return response
+
+            elif self.llm_choice == 'Qwen':
+                request = ChatRequest(
+                    prompt=prompt,
+                    temperature=0.0,
+                    max_tokens=1024,
+                    enable_thinking=False
+                )
+                response_content = await llm_client.get_llm_chat_response(request)
+
+                # Créer une structure similaire aux réponses OpenAI/DeepSeek pour compatibilité
+                class MockChoice:
+                    def __init__(self, content):
+                        self.message = type('obj', (object,), {'content': content})()
+
+                class MockResponse:
+                    def __init__(self, content):
+                        self.choices = [MockChoice(content)]
+                        self.model = "Qwen/Qwen3-14B-AWQ"
+
+                    def model_dump(self):
+                        return {
+                            "model": self.model,
+                            "choices": [{"message": {"content": self.choices[0].message.content}}]
+                        }
+
+                return MockResponse(response_content)
+
             else:
                 raise ValueError(f"LLM {self.llm_choice} non configuré")
-                
+
         except Exception as e:
             logger.error(f"Erreur LLM: {e}")
             return {"id_categorie": None, "score": -1}
 
-    def classify_single(self, product: Dict) -> Dict:
+    async def classify_single(self, product: Dict) -> Dict:
         """Classifie un seul produit"""
         start_time = time.time()
-        
+
         try:
             # Recherche de produits similaires
             similar_products = self.search_similar_products(product['nom_produit'])
@@ -296,7 +331,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'error': 'Aucun produit similaire trouvé',
                     'processing_time': time.time() - start_time
                 }
-            
+
             # Groupement par catégorie
             categories = self.group_by_category(similar_products)
             if not categories:
@@ -306,13 +341,13 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'error': 'Aucune catégorie trouvée',
                     'processing_time': time.time() - start_time
                 }
-            
+
             # Récupération des descriptions de catégories
             descriptions = self.get_category_descriptions(categories)
-            
+
             # Construction du prompt et appel LLM
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
-            raw_llm = self.query_llm(prompt)
+            raw_llm = await self.query_llm(prompt)
             llm_result = json.loads(raw_llm.choices[0].message.content)
             
             chosen_id = llm_result.get('id_categorie')
@@ -361,15 +396,15 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'processing_time': time.time() - start_time
             }
 
-    def classify_batch(self, products: List[Dict]) -> Dict:
+    async def classify_batch(self, products: List[Dict]) -> Dict:
         """Classifie plusieurs produits en lot"""
         start_time = time.time()
         results = []
         success_count = 0
         error_count = 0
-        
+
         for product in products:
-            result = self.classify_single(product)
+            result = await self.classify_single(product)
             results.append(result)
             
             if result['status'] == 'SUCCESS':

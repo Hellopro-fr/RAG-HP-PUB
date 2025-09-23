@@ -68,8 +68,8 @@ async def classify_single_product(product: ProductInput):
             'id_categorie_attendue': product.id_categorie_attendue
         }
         
-        result = classifier.classify_single(product_dict)
-        
+        result = await classifier.classify_single(product_dict)
+
         # Conversion en modèle de réponse
         return ClassificationResult(**result)
         
@@ -102,8 +102,8 @@ async def classify_batch_products(batch_input: BatchProductsInput):
                 'id_categorie_attendue': product.id_categorie_attendue
             })
         
-        result = classifier.classify_batch(products_dict)
-        
+        result = await classifier.classify_batch(products_dict)
+
         # Conversion en modèle de réponse
         classification_results = [ClassificationResult(**res) for res in result['resultats']]
         
@@ -283,14 +283,45 @@ async def test_classification():
         'description': 'Perceuse électrique professionnelle 750W avec mandrin automatique',
         'id_categorie_attendue': None
     }
-    
+
     try:
         if not classifier.is_llm_configured():
             return {"error": "LLM non configuré", "test_product": test_product}
-        
-        result = classifier.classify_single(test_product)
+
+        result = await classifier.classify_single(test_product)
         return {"test_result": result, "test_product": test_product}
-        
+
     except Exception as e:
         logger.error(f"Erreur test: {e}")
         return {"error": str(e), "test_product": test_product}
+
+@router.get("/test/qwen")
+async def test_qwen_classification():
+    """Endpoint de test spécifique pour Qwen via gRPC"""
+    test_product = {
+        'id_produit': 'test_qwen_001',
+        'nom_produit': 'Marteau pneumatique',
+        'description': 'Marteau pneumatique industriel 25kg pour travaux de démolition',
+        'id_categorie_attendue': None
+    }
+
+    try:
+        # Forcer l'utilisation de Qwen pour ce test
+        original_choice = classifier.llm_choice
+        classifier.llm_choice = 'Qwen'
+
+        if not classifier.is_llm_configured():
+            return {"error": "Qwen gRPC non configuré", "test_product": test_product}
+
+        result = await classifier.classify_single(test_product)
+
+        # Restaurer le choix original
+        classifier.llm_choice = original_choice
+
+        return {"test_result": result, "test_product": test_product, "llm_used": "Qwen"}
+
+    except Exception as e:
+        logger.error(f"Erreur test Qwen: {e}")
+        # Restaurer le choix original en cas d'erreur
+        classifier.llm_choice = original_choice
+        return {"error": str(e), "test_product": test_product, "llm_used": "Qwen"}
