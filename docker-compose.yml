@@ -469,8 +469,8 @@ services:
     container_name: optimize-service
     restart: unless-stopped
     # TODO: à supprimer en PROD
-    volumes:
-      - ./apps-microservices/optimize-service:/app:rw
+    # volumes:
+    #   - ./apps-microservices/optimize-service:/app:rw
     ports:
       - "8563:8563"
     env_file:
@@ -489,7 +489,7 @@ services:
     #           capabilities: [gpu]
     networks:
       - services-net
-      
+
   api-pdf-to-text:
     build:
       context: .
