@@ -2,12 +2,13 @@ from fastapi import APIRouter, HTTPException, Request
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse, BatchOptimRequest, BatchOptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
 from app.core.optimize.Qwen3_14B_AWQ_par_lots import ProductTitleOptimizerBatch
-from app.core.optimize.TraitementDonnees import TraitementDonnees
+from app.core.optimize.traitement_donnees import TraitementDonnees
 from typing import List, Dict, Any
 import time
 import os
 import threading
 import traceback
+import asyncio
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ from common_utils.grpc_clients import (
 )
 
 from common_utils.grpc_clients.schemas.chat import ChatRequest
+
 
 # On crée un verrou global pour protéger l'initialisation du service
 service_initialization_lock = threading.Lock()

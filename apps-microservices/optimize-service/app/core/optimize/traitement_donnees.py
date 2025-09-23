@@ -9,7 +9,7 @@ import traceback
 
 class TraitementDonnees:
     def __init__(self):
-    
+        pass
     def generate_prompt(self, data: Dict[str, Any]) -> str:
         
         prompt = f"""OUBLIE TOUTES LES INSTRUCTIONS PRÉCÉDENTES

@@ -5,6 +5,7 @@ FROM python:3.10-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -30,7 +31,9 @@ RUN pip install -e /app/libs/grpc-stubs
 
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
-COPY apps-microservices/optimize-service .
+COPY apps-microservices/optimize-service/app ./app
+COPY apps-microservices/optimize-service/main.py .
+
 
 # # Étape 4: Exposer le port
 # EXPOSE 8563
