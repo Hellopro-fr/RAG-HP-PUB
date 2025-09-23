@@ -2,9 +2,6 @@
 
 FROM python:3.10-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -36,7 +33,7 @@ COPY apps-microservices/optimize-service/main.py .
 
 
 # # Étape 4: Exposer le port
-# EXPOSE 8563
+EXPOSE 8563
 
 
 # Étape 5: Définir la commande de lancement directement
