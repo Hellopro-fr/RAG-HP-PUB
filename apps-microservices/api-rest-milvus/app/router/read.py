@@ -25,23 +25,26 @@ router = APIRouter()
 async def get_ressource(
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
     id_ressource: Optional[str] = Query(None, description="ID unique de la ressource"),
-    metadata: Optional[str] = Query(None, description="Données additionnelles au format JSON")
+    metadata: Optional[str] = Query(None, description="Données additionnelles au format JSON"),
+    limit: Optional[int] = Query(1000, description="Limite du nombre de résultats (max 10000)"),
+    offset: Optional[int] = Query(0, description="Nombre d'éléments à ignorer (pagination)"),
+    fields: Optional[str] = Query(None, description="Champs à retourner, séparés par des virgules (ex: 'id,name,type')")
 ):
     try:
         parsed_metadata = json.loads(metadata) if metadata else {}
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Paramètre 'metadata' invalide. Doit être un JSON valide.")
     
-    # Obtenir la classe CRUD à partir du mapping
-    collection_name = MILVUS_COLLECTIONS.get(collection_milvus)
+    # Utiliser directement le nom de collection fourni (suppression de la contrainte de mapping)
+    collection_name = collection_milvus
 
-
-
-    if not collection_name:
-        raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
+    # Parser les champs demandés
+    parsed_fields = None
+    if fields:
+        parsed_fields = [field.strip() for field in fields.split(',') if field.strip()]
 
     try:
-        result = get_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata)
+        result = get_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata, limit = limit, offset = offset, fields = parsed_fields)
 
         if not result:
             raise HTTPException(status_code=404, detail="Ressource non trouvée.")
@@ -51,13 +54,21 @@ async def get_ressource(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
-def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, limit: int = 1000, offset: int = 0, fields: Optional[list] = None) -> Dict[str, Any]:
 
         print(f"get_ressource_rest - collection_name: {collection_name}, id_milvus: {id_milvus}, metadata: {metadata}")
 
         try:
             _connect_to_milvus()
-            
+
+            # Vérifier si la collection existe dans Milvus
+            if not utility.has_collection(collection_name):
+                return {
+                    "status": "error",
+                    "message": f"La collection '{collection_name}' n'existe pas dans Milvus.",
+                    "code": 404
+                }
+
             collection = Collection(collection_name)
             collection.load()
 
@@ -74,30 +85,78 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                         expr_parts.append(f'{key} == "{value}"')
                     else:
                         expr_parts.append(f"{key} == {value}")
-            # Aucun filtre fourni ?
-            if not expr_parts:
+            # Validations
+            if limit > 10000:
                 return {
                     "status": "error",
-                    "message": "Aucun critère de recherche fourni (id_milvus ou metadata).",
+                    "message": "La limite ne peut pas dépasser 10000 résultats.",
                     "code": 400
+                }
+
+            if offset < 0:
+                return {
+                    "status": "error",
+                    "message": "L'offset ne peut pas être négatif.",
+                    "code": 400
+                }
+
+            # Si aucun filtre fourni, récupérer tous les documents avec pagination
+            if not expr_parts:
+                # Déterminer les champs à retourner
+                if fields:
+                    output_fields = fields
+                else:
+                    output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
+
+                # Récupération de tous les documents avec offset et limit
+                results = collection.query(expr="", output_fields=output_fields, limit=limit, offset=offset)
+
+                return {
+                    "status": "success",
+                    "filters": {
+                        "get_all": True,
+                        "limit": limit,
+                        "offset": offset,
+                        "fields": fields or "default"
+                    },
+                    "pagination": {
+                        "current_page": (offset // limit) + 1,
+                        "page_size": limit,
+                        "offset": offset,
+                        "returned_count": len(results)
+                    },
+                    "count": len(results),
+                    "data": results
                 }
 
             # Construction de l'expression finale
             expr = " and ".join(expr_parts)
 
-            # Champs à retourner (tu peux les adapter)
-            output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
+            # Déterminer les champs à retourner
+            if fields:
+                output_fields = fields
+            else:
+                output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
 
-
-            results = collection.query(expr=expr, output_fields=output_fields)
+            results = collection.query(expr=expr, output_fields=output_fields, limit=limit, offset=offset)
 
             return {
                 "status": "success",
                 "filters": {
                     "id_milvus": id_milvus,
                     "metadata": metadata,
-                    "expr" : expr
+                    "expr" : expr,
+                    "limit": limit,
+                    "offset": offset,
+                    "fields": fields or "default"
                 },
+                "pagination": {
+                    "current_page": (offset // limit) + 1,
+                    "page_size": limit,
+                    "offset": offset,
+                    "returned_count": len(results)
+                },
+                "count": len(results),
                 "data": results
             }
 

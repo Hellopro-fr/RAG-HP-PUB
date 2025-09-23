@@ -1,17 +1,26 @@
 from fastapi import APIRouter, HTTPException, Request
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse, BatchOptimRequest, BatchOptimResponse
 from app.core.optimize.Optimize import ProductOptimizer
-# from app.core.optimize.Qwen3_14B_AWQ_titre import ProductTitleOptimizer
 from app.core.optimize.Qwen3_14B_AWQ_par_lots import ProductTitleOptimizerBatch
+from app.core.optimize.traitement_donnees import TraitementDonnees
 from typing import List, Dict, Any
 import time
 import os
 import threading
 import traceback
+import asyncio
 
 router = APIRouter()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Import des clients gRPC de notre architecture
+from common_utils.grpc_clients import (
+    llm_client,
+)
+
+from common_utils.grpc_clients.schemas.chat import ChatRequest
+
 
 # On crée un verrou global pour protéger l'initialisation du service
 service_initialization_lock = threading.Lock()
@@ -45,7 +54,6 @@ def optimize(request: OptimRequest):
 
         print(optimize)
 
-        # ⚠️ S'assurer que "data" est bien retourné
         return {"data": [optimize]}
 
     except Exception as e:
@@ -54,16 +62,12 @@ def optimize(request: OptimRequest):
 @router.post("/qwen", response_model=OptimResponse)
 def optimizeQwen(request: Request, payload: OptimRequest):
     try:
-        # tokenizer = request.app.state.qwen_tokenizer
-        # model = request.app.state.qwen_model
 
         optimizing_service = get_qwen_optimize_service()
-        #optimizeQwen = optimizing_service.optimize_product(request.dict())
         response_optimizeQwen = optimizing_service.optimize_product(payload.dict())
 
         print(response_optimizeQwen)
 
-        # ⚠️ S'assurer que "data" est bien retourné
         return {"data": [response_optimizeQwen]}
 
     except Exception as e:
@@ -72,9 +76,6 @@ def optimizeQwen(request: Request, payload: OptimRequest):
 
 @router.post("/qwen/batch", response_model=BatchOptimResponse)
 def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
-    """
-    Endpoint pour optimiser plusieurs produits par lots de 1000.
-    """
     try:
         start_time = time.time()
         
@@ -119,3 +120,19 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
         }
         print(debug_msg)
         return response_error
+
+@router.post("/qwen/v2", response_model=OptimResponse)
+async def optimizeQwen(payload: OptimRequest):
+    try:
+
+        instancetraitement = TraitementDonnees()
+        prompt = instancetraitement.generate_prompt(payload.dict())
+
+        response = await llm_client.get_llm_chat_response(prompt)
+
+        print(response)
+
+        return {"data": [response]}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

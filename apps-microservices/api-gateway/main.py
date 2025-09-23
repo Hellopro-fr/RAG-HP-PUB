@@ -49,7 +49,8 @@ async def proxy(service: str, path: str, request: Request):
                 target_url,
                 headers=headers,
                 content=body,
-                timeout=30.0  # Il est toujours bon de mettre un timeout
+                #timeout=30.0  # Il est toujours bon de mettre un timeout
+                timeout=None # pour la classification des produits
             )
         except httpx.RequestError as e:
             # Gérer les erreurs de connexion au service (service down, etc.)

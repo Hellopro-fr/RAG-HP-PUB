@@ -6,7 +6,7 @@ from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
 
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+# from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 from app.core.credentials import settings
 from app.utils.params import params

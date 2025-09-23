@@ -10,12 +10,14 @@ async def create_ressource(
     body: dict = Body(...)
 ):
     try:
-        # Ici tu peux appeler Milvus pour insérer les données
-        # Exemple de réponse simulée
+        # Utiliser directement le nom de collection fourni (suppression de la contrainte de mapping)
+        collection_name = collection_milvus
+
+        # TODO: Implémenter la logique d'insertion réelle dans Milvus
+        # Exemple de réponse simulée pour le moment
         return {
             "status": "created",
-            "collection": collection_milvus,
-            "database": database or "default",
+            "collection": collection_name,
             "data": body
         }
     except Exception as e:

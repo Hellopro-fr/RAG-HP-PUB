@@ -32,13 +32,8 @@ async def delete_ressource(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Paramètre 'metadata' invalide. Doit être un JSON valide.")
     
-    # Obtenir la classe CRUD à partir du mapping
-    collection_name = MILVUS_COLLECTIONS.get(collection_milvus)
-
-
-
-    if not collection_name:
-        raise HTTPException(status_code=404, detail=f"Collection '{collection_milvus}' non supportée.")
+    # Utiliser directement le nom de collection fourni (suppression de la contrainte de mapping)
+    collection_name = collection_milvus
 
     try:
         result = delete_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata)
@@ -57,7 +52,15 @@ def delete_ressource_rest(collection_name: str, id_milvus: Optional[int] = None,
 
         try:
             _connect_to_milvus()
-            
+
+            # Vérifier si la collection existe dans Milvus
+            if not utility.has_collection(collection_name):
+                return {
+                    "status": "error",
+                    "message": f"La collection '{collection_name}' n'existe pas dans Milvus.",
+                    "code": 404
+                }
+
             collection = Collection(collection_name)
             collection.load()
 
