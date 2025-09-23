@@ -713,18 +713,31 @@
                       </div>
                       <div class="space-y-1">
                         <label class="text-xs text-custom-gris"
-                          >Domaine Siteweb</label
+                        >Fournisseur Siteweb</label
                         >
                         <select
-                          id="fournisseurSiteweb"
-                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                          multiple
-                          data-ajax="true"
-                          data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                          data-pagination="true"
-                          data-payload="recup_domaine"
+                        id="fournisseurSiteweb"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple
+                        data-ajax="true"
+                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                        data-pagination="true"
+                        data-payload="recup_fournisseur_siteweb"
                         >
-                        </select>
+                      </select>
+                      <label class="text-xs text-custom-gris"
+                        >Domaine Siteweb</label
+                      >
+                      <select
+                        id="fournisseurDomaine"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple
+                        data-ajax="true"
+                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                        data-pagination="true"
+                        data-payload="recup_domaine"
+                      >
+                      </select>
                       </div>
                     </div>
                   </div>

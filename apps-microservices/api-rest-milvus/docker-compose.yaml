@@ -5,7 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8515:8515"
+      - "8517:8517"
     volumes:
       - .:/app
     tty: true

@@ -10,12 +10,15 @@ async def update_ressource(
     body: dict = Body(...)
 ):
     try:
-        # Exemple : mettre à jour une ressource dans Milvus
+        # Utiliser directement le nom de collection fourni (suppression de la contrainte de mapping)
+        collection_name = collection_milvus
+
+        # TODO: Implémenter la logique de mise à jour réelle dans Milvus
+        # Exemple de réponse simulée pour le moment
         return {
             "status": "updated",
-            "collection": collection_milvus,
+            "collection": collection_name,
             "id": id_ressource,
-            "database": database or "default",
             "updated_data": body
         }
     except Exception as e:
