@@ -1668,7 +1668,10 @@ $(document).on('click', '#copier-texte', function() {
   let transcriptionSilenceTimeoutId;
 
   const TRANSCRIPTION_AUTH_TOKEN = "h3ll0pro2k25-stt356";
-  const TRANSCRIPTION_WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/google/transcription?token=${TRANSCRIPTION_AUTH_TOKEN}`;
+  let TRANSCRIPTION_WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/google/transcription?token=${TRANSCRIPTION_AUTH_TOKEN}`;
+  if (GetURLParameter("server") == "chatgpt") {
+    TRANSCRIPTION_WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/openai/transcription?token=${TRANSCRIPTION_AUTH_TOKEN}`;
+  }
 
   const transcriptionStartColor = { r: 51, g: 83, b: 255, a: 1 };
   const transcriptionEndColor = { r: 253, g: 187, b: 155, a: 1 };
@@ -1799,7 +1802,7 @@ $(document).on('click', '#copier-texte', function() {
       transcriptionSocket.send(JSON.stringify({
         config: {
           sampleRate: transcriptionAudioContext.sampleRate,
-          languageCode: 'fr-FR',
+          languageCode: (GetURLParameter("server") == "chatgpt") ? 'fr' : 'fr-FR',
           enablePunctuation: true,
           interimResults: true
         }
