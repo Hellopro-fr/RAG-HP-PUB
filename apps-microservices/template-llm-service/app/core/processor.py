@@ -100,7 +100,7 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
         batch_outputs = await llm_client.get_llm_chat_batch_response(
             messages=valid_prompts,
             temperature=0.7,
-            max_tokens=1024, # Assez pour une réponse JSON de classification
+            max_tokens=4096, # Assez pour une réponse JSON de classification
             enable_thinking=False
         )
         
