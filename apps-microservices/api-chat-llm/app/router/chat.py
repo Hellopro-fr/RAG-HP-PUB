@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Body
 from app.schemas.chat import  chatResponse
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 # from app.core.search import search_in_milvus
-from app.core.chat import get_chat_completion_response , get_chatgpt_chat_completion_response , get_deepseek_chat_completion_response
+from app.core.chat import get_chat_completion_response , get_chatgpt_chat_completion_response , get_deepseek_chat_completion_response , get_gemini_chat_completion_response
 
 import logging
 
@@ -54,6 +54,23 @@ async def deepseek_chat_completion_llm(request: ChatRequest = Body(...)):
         results = await get_deepseek_chat_completion_response(request)
         logger.info(f"Résultats de la chat complesion: {results}")
         return chatResponse(response=results["response"], chat_model="deepseek" , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None))
+    except ValueError as ve:
+        logger.error(f"Erreur de validation (400): {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Erreur interne du serveur (500): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
+    
+@router.post("/llm/chat/gemini", tags=["Chat - Gemini"])
+async def deepseek_chat_completion_llm(request: ChatRequest = Body(...)):
+    try:
+        logger.info(f"Requête chat completion sur Gemini : {request.prompt}")
+        if not request.prompt.strip():
+            raise ValueError("Le promt ne peut pas être vide.")        
+        
+        results = await get_gemini_chat_completion_response(request)
+        logger.info(f"Résultats de la chat complesion: {results}")
+        return chatResponse(response=results["response"], chat_model="gemini-flash-1.5" , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None))
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
         raise HTTPException(status_code=400, detail=str(ve))
