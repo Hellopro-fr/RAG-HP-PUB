@@ -475,15 +475,21 @@ services:
       - "8563:8563"
     env_file:
       - .env
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['1']
-              # count: all
-              capabilities: [gpu]
-    
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    depends_on:
+      - llm-service
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           device_ids: ['1']
+    #           # count: all
+    #           capabilities: [gpu]
+    networks:
+      - services-net
+      
   api-pdf-to-text:
     build:
       context: .
