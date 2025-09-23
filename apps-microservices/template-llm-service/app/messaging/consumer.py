@@ -18,15 +18,23 @@ BATCH_SIZE = 32
 # même s'il n'est pas plein. C'est une sécurité pour éviter que des messages
 # ne restent bloqués indéfiniment en période de faible trafic.
 BATCH_TIMEOUT_SECONDS = 2.0
+MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
+RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
 
 class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
         self.channel = connection.channel()
         self.publisher = publisher
         
+        # Noms des composants RabbitMQ
         self.exchange_name = 'processed_data_exchange'
         self.routing_key = 'data.ready_for_templating'
         self.queue_name = 'llm_templating_queue'
+        self.retry_exchange = 'retry_exchange'
+        self.retry_queue_name = f'{self.queue_name}_retry'
+        self.dead_letter_exchange = 'dead_letter_exchange'
+        self.dead_letter_queue_name = f'{self.queue_name}_dlq'
+
 
         self.rabbitmq_connection = RabbitMQConnection()
 
@@ -42,12 +50,33 @@ class Consumer:
 
     def connect(self):
         """
-        Établit la connexion à RabbitMQ et configure la file d'attente et le canal.
+        Établit la connexion et configure le consumer, y compris les queues de retry et de dead-letter.
         """
         self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
         self.channel = self.connection.channel()
+
+        # --- 1. Infrastructure pour les échecs FINALS (Dead-Letter Queue) ---
+        self.channel.exchange_declare(exchange=self.dead_letter_exchange, exchange_type='topic', durable=True)
+        self.channel.queue_declare(queue=self.dead_letter_queue_name, durable=True)
+        self.channel.queue_bind(exchange=self.dead_letter_exchange, queue=self.dead_letter_queue_name, routing_key=self.routing_key)
+
+        # --- 2. Infrastructure pour les tentatives (Retry Queue) ---
+        self.channel.exchange_declare(exchange=self.retry_exchange, exchange_type='topic', durable=True)
+        retry_queue_args = {
+            'x-message-ttl': RETRY_TTL_MS,
+            'x-dead-letter-exchange': self.exchange_name, # Renvoyer au main exchange après TTL
+            'x-dead-letter-routing-key': self.routing_key
+        }
+        self.channel.queue_declare(queue=self.retry_queue_name, durable=True, arguments=retry_queue_args)
+        self.channel.queue_bind(exchange=self.retry_exchange, queue=self.retry_queue_name, routing_key=self.routing_key)
+
+        # --- 3. Configuration de la Queue Principale ---
         self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-        self.channel.queue_declare(queue=self.queue_name, durable=True)
+        main_queue_args = {
+            'x-dead-letter-exchange': self.retry_exchange, # Les échecs vont d'abord vers le retry
+            'x-dead-letter-routing-key': self.routing_key
+        }
+        self.channel.queue_declare(queue=self.queue_name, durable=True, arguments=main_queue_args)
         self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
         
         # 'Quality of Service' : demande à RabbitMQ de ne pas nous envoyer plus de BATCH_SIZE
@@ -55,11 +84,17 @@ class Consumer:
         # distribue mieux la charge entre plusieurs replicas du service.
         self.channel.basic_qos(prefetch_count=BATCH_SIZE)
 
+    def _get_retry_count(self, properties: pika.BasicProperties) -> int:
+        """Inspecte les headers pour compter le nombre de tentatives."""
+        if properties.headers and 'x-death' in properties.headers:
+            # `x-death` est une liste, on prend la première entrée qui correspond à notre retry queue
+            for death in properties.headers['x-death']:
+                if death.get('queue') == self.retry_queue_name:
+                    return death.get('count', 0)
+        return 0
+
     def _process_batch(self):
-        """
-        Orchestre le traitement du batch actuellement dans le buffer.
-        Cette fonction est le cœur de la logique de batching résiliente.
-        """
+        """Orchestre le traitement du batch avec une logique de retry/DLQ."""
         if not self.message_buffer:
             return
 
@@ -70,33 +105,18 @@ class Consumer:
         current_batch = list(self.message_buffer)
         self.message_buffer.clear()
 
-        # --- ÉTAPE DE VALIDATION ET FILTRAGE ---
         valid_batch_items = []
-        invalid_batch_items = []
-
-        for item in current_batch:
-            delivery_tag, body = item
+        for delivery_tag, properties, body in current_batch:
             try:
-                # On essaie de parser le JSON et de vérifier la présence du contenu.
                 message_data = json.loads(body)
-                content = message_data.get("data", {}).get("text")
-                if content: # La clé "text" existe et n'est pas vide/None
-                    valid_batch_items.append(item)
+                if message_data.get("data", {}).get("text"):
+                    valid_batch_items.append((delivery_tag, properties, body))
                 else:
-                    # Le message est invalide car le contenu est manquant.
-                    invalid_batch_items.append(item)
-            except json.JSONDecodeError:
-                # Le message est invalide car le body n'est pas un JSON valide.
-                invalid_batch_items.append(item)
-
-        # --- Traitement des messages invalides ---
-        if invalid_batch_items:
-            print(f"🗑️  {len(invalid_batch_items)} message(s) invalide(s) détecté(s) (contenu manquant ou JSON corrompu).")
-            for delivery_tag, body in invalid_batch_items:
-                # On désacquitte (NACK) ces messages pour les supprimer définitivement de la file d'attente.
-                # C'est la solution pour casser la boucle de retraitement.
-                print(f"   -> Suppression du message invalide (tag: {delivery_tag}).")
-                self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
+                    raise ValueError("Contenu du message ('text') manquant.")
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"🗑️  Message invalide (tag: {delivery_tag}) envoyé directement à la DLQ finale. Erreur: {e}")
+                self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body)
+                self.channel.basic_ack(delivery_tag=delivery_tag)
 
         # --- Traitement des messages valides (s'il y en a) ---
         if not valid_batch_items:
@@ -105,7 +125,7 @@ class Consumer:
             return
 
         print(f"⚙️  Traitement d'un batch de {len(valid_batch_items)} message(s) valide(s)...")
-        messages = [json.loads(item[1]) for item in valid_batch_items]
+        messages = [json.loads(item[2]) for item in valid_batch_items]
 
         try:
             processed_messages = asyncio.run(classify_page_template_batch(messages))
@@ -115,26 +135,25 @@ class Consumer:
             # Si un seul message échoue, les autres ne sont pas impactés.
             for i, output_message in enumerate(processed_messages):
                 original_delivery_tag = valid_batch_items[i][0]
-                try:
-                    # On publie le message traité.
-                    self.publisher.publish_message(output_message)
-                    # Si la publication réussit, on acquitte (ACK) le message original.
-                    # RabbitMQ peut alors le supprimer de la file d'attente.
-                    self.channel.basic_ack(delivery_tag=original_delivery_tag)
-                except Exception as pub_e:
-                    print(f"   -> ❌ Erreur de publication pour message {original_delivery_tag}. NACK. Erreur: {pub_e}")
-                    # Si la publication échoue, on NACK le message pour qu'il soit retraité.
-                    self.channel.basic_nack(delivery_tag=original_delivery_tag, requeue=True)
+                self.publisher.publish_message(output_message)
+                self.channel.basic_ack(delivery_tag=original_delivery_tag)
 
-            print(f"   -> Batch valide traité avec succès.")
+            print("   -> Batch valide traité avec succès.")
 
         except Exception as e:
             # Ceci est une erreur catastrophique (ex: le modèle vLLM a crashé).
             # Dans ce cas, on ne peut pas savoir quels messages ont réussi.
             # La stratégie la plus sûre est de NACK tout le batch pour un retraitement ultérieur.
-            print(f"❌ ERREUR CATASTROPHIQUE sur le batch valide : {e}. NACK de tout le batch valide.")
-            for item in valid_batch_items:
-                self.channel.basic_nack(delivery_tag=item[0], requeue=True)
+            print(f"❌ ERREUR CATASTROPHIQUE sur le batch valide : {e}. Gestion individuelle des messages...")
+            for delivery_tag, properties, body in valid_batch_items:
+                retry_count = self._get_retry_count(properties)
+                if retry_count < MAX_RETRIES:
+                    print(f"   -> NACK du message (tag: {delivery_tag}) pour une nouvelle tentative (essai {retry_count + 1}).")
+                    self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
+                else:
+                    print(f"   -> Échec après {MAX_RETRIES + 1} tentatives (tag: {delivery_tag}). Message envoyé à la DLQ finale.")
+                    self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body)
+                    self.channel.basic_ack(delivery_tag=delivery_tag)
         
         finally:
             # On réinitialise le timer du batch.
@@ -162,7 +181,7 @@ class Consumer:
                 continue
 
             # Un message est arrivé. On l'ajoute à notre buffer.
-            self.message_buffer.append((method_frame.delivery_tag, body))
+            self.message_buffer.append((method_frame.delivery_tag, properties, body))
             
             # Si le buffer a atteint sa taille maximale, on traite le batch immédiatement
             # sans attendre le timeout.
