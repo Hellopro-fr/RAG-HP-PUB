@@ -51,9 +51,12 @@ class MilvusClient:
         Converts a Milvus search result entity to a JSON-serializable dictionary.
         Handles special types like RepeatedScalarContainer for ARRAY fields by converting them to lists.
         """
+        if hasattr(entity, 'to_dict'):
+            entity = entity.to_dict()
+
         serializable_dict = {}
         fields = self.get_field_type_map(source)
-        for key, value in entity.to_dict().items():
+        for key, value in entity.items():
             if hasattr(value, '__iter__') and not isinstance(value, (str, bytes, dict)):
                 serializable_dict[key] = list(value)
             else:
