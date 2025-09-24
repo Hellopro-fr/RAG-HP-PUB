@@ -9,6 +9,8 @@ import os
 import threading
 import traceback
 import asyncio
+import json
+import logging
 
 router = APIRouter()
 
@@ -132,7 +134,7 @@ async def optimizeQwen(payload: OptimRequest):
 
         response = await llm_client.get_llm_chat_response(chat_request)
 
-         try:
+        try:
             parsed_response = json.loads(response)
         except json.JSONDecodeError:
             print("erreur de parsing")
