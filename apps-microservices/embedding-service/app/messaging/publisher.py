@@ -38,11 +38,10 @@ class Publisher:
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
                 
-                print(f"   📤 routing_key : '{self.routing_key}'")
-                print(f"   📤 Message traité et publié post embedding.")
+                print(f"   📤 Message avec embedding pour la collection '{collection}' publié avec la clé '{self.routing_key}'.")
 
                 break  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                print(f"⚠️ Connexion perdue lors de la publication: {e}, tentative de reconnexion...")
                 self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
                 self.channel = self.connection.channel()
