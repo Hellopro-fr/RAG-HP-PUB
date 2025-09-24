@@ -139,9 +139,9 @@ async def optimizeQwen(payload: OptimRequest):
         except json.JSONDecodeError:
             print("erreur de parsing")
 
-        print(response)
+        print(parsed_response)
 
-        return {"data": [response]}
+        return {"data": [parsed_response]}
 
     except Exception as e:
         error_msg = f"Erreur lors du traitement du produit: {type(e).__name__}: {str(e)}"
