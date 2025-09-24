@@ -128,9 +128,9 @@ async def optimizeQwen(payload: OptimRequest):
         instancetraitement = TraitementDonnees()
         prompt = instancetraitement.generate_prompt(payload.dict())
 
-        response = await llm_client.get_llm_chat_response(prompt)
+        chat_request = ChatRequest(prompt=prompt)
 
-       chat_request = ChatRequest(prompt=prompt)
+        response = await llm_client.get_llm_chat_response(chat_request)
 
         print(response)
 
