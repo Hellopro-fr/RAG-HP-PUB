@@ -44,17 +44,21 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         except Exception as e:
             raise ValueError(f"Erreur lors de l'extraction du {page_type.capitalize()}: {e}")
     else:  
-        # Étape 2.1: Préparer le texte à embedder (À voir avec l'équipe en charge)
+        # Étape 2.1: Construction du dictionnaire d'entrée pour le nettoyage
         info = {
             "url": website_data.get("url",""),
             "content": website_data.get("text",""),
             "fetch": False
         }
 
-        # Étape 2.2: Nettoyer les données  
-        trafila = TrafilaturaHp(info)
-        res_clean = trafila.extract(info)
-        text_to_embed_clean = res_clean.content
+        # Étape 2.2: Extraire le contenu nettoyé avec Trafilatura
+        trafilatura = TrafilaturaHp(info)
+        data_extracted = trafilatura.extract(info).content
+        
+        if not data_extracted:
+            raise ValueError("Le contenu extrait est vide ou invalide.")
+        
+        text_to_embed_clean = data_extracted.strip()
         
     # Étape 3: Construire le message de sortie
     output_message = {
