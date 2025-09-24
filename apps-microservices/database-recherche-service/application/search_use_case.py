@@ -33,3 +33,20 @@ class SearchUseCase:
         Cas d'utilisation pour récupérer le schéma d'une collection.
         """
         return self.db_client.get_field_type_map(collection_name)
+    
+    def execute_classic_search(
+        self,
+        collection_name: str,
+        filter_expression: str,
+        top_k: int,
+        output_fields: Optional[List[str]] = None
+    ) -> List[SearchResultEntity]:
+        """
+        Cas d'utilisation pour exécuter une recherche classique par filtre.
+        """
+        return self.db_client.classic_search(
+            collection_name=collection_name,
+            expr=filter_expression,
+            limit=top_k,
+            output_fields=output_fields
+        )

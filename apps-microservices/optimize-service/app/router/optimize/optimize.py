@@ -9,6 +9,8 @@ import os
 import threading
 import traceback
 import asyncio
+import json
+import logging
 
 router = APIRouter()
 
@@ -127,14 +129,25 @@ async def optimizeQwen(payload: OptimRequest):
 
         instancetraitement = TraitementDonnees()
         prompt = instancetraitement.generate_prompt(payload.dict())
-
+ 
         chat_request = ChatRequest(prompt=prompt)
 
         response = await llm_client.get_llm_chat_response(chat_request)
 
-        print(response)
+        try:
+            parsed_response = json.loads(response)
+        except json.JSONDecodeError:
+            print("erreur de parsing")
 
-        return {"data": [response]}
+        print(parsed_response)
+
+        return {"data": [parsed_response]}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = f"Erreur lors du traitement du produit: {type(e).__name__}: {str(e)}"
+        debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
+        response_error = {
+            "ERROR": error_msg
+        }
+        print(debug_msg)
+        return response_error

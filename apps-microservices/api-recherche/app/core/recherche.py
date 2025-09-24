@@ -526,3 +526,191 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             "total_process": round(time.perf_counter() - start_total_time, 2),
             "import_duration": 0,
         }
+        
+async def search_in_milvus_classique_stream(request: SearchRequest):
+    """
+    Orchestre le flux de recherche CLASSIQUE (par filtre) en streaming.
+    """
+    start_total_time = time.perf_counter()
+    
+    try:
+        # --- ÉTAPE 1: PAS D'EMBEDDING ---
+        yield {"type": "status", "payload": "Lancement de la recherche par filtre..."}
+
+        # --- ÉTAPE 2: RÉCUPÉRATION (QUERY) ---
+        top_k_final = int(request.top_k)
+        all_source_results = []
+        search_duration = 0
+
+        for item in request.source:
+            source_name = item.source
+            filtre = item.filtre
+            yield {"type": "status", "payload": f"Recherche classique dans '{source_name}'..."}
+            start_search_source = time.perf_counter()
+
+            filters = []
+            filter_expr_global = await filtre_source(request.filtre, source_name)
+            if filter_expr_global:
+                filters.append(" and ".join(filter_expr_global))
+            
+            filter_expr_source = await filtre_source(filtre, source_name) if filtre else ""
+            if filter_expr_source:
+                filters.append(" and ".join(filter_expr_source))
+            
+            final_filter_expr = " and ".join(filters) if filters else ""
+            # if not final_filter_expr:
+            #      yield {"type": "error", "payload": f"L'expression de filtre est obligatoire pour une recherche classique."}
+            #      return
+
+            # Appel au NOUVEAU client gRPC pour la recherche classique
+            source_results = await database_client.classic_search_vector(
+                collection=source_name,
+                filter_expr=final_filter_expr,
+                k=top_k_final
+            )
+            
+            search_duration += time.perf_counter() - start_search_source
+            
+            if source_results is None:
+                yield {"type": "warning", "payload": f"Erreur lors de la recherche dans '{source_name}'."}
+                continue
+            
+            all_source_results.extend([MessageToDict(res) for res in source_results])
+
+        # --- ÉTAPE 3: PAS DE RERANKING ---
+        # Le reranking n'est pas applicable car il n'y a pas de score de similarité initial.
+        final_results = all_source_results
+        yield {"type": "initial_results", "payload": {"results": final_results, "duration": round(search_duration, 2)}}
+        # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
+        llm_duration = 0
+        if request.action == 2 and final_results:
+            yield {"type": "status", "payload": "Génération de la réponse avec le LLM..."}
+            context_texts = [res['metadata']['entity']['text'] for res in final_results]
+            
+            yield {"type": "llm_start"}
+            start_llm_time = time.perf_counter()
+            
+            token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            
+            for token in token_generator:
+                yield {"type": "llm_chunk", "payload": token}
+            
+            llm_duration = time.perf_counter() - start_llm_time
+        
+        # --- FIN DU FLUX ---
+        total_duration = time.perf_counter() - start_total_time
+        final_summary = {
+            "timings": {
+                "embedding": 0, # Pas d'embedding
+                "vector_search": round(search_duration, 2),
+                "rerank": 0, # Pas de reranking
+                "llm_execution": round(llm_duration, 2),
+                "total_process": round(total_duration, 2),
+            },
+            "result_count": len(final_results)
+        }
+        yield {"type": "end_of_stream", "payload": final_summary}
+
+    except Exception as e:
+        logger.error(f"Erreur majeure dans le flux de recherche classique: {e}", exc_info=True)
+        yield {"type": "error", "payload": f"Erreur serveur: {e}"}
+    finally:
+        logger.info("Flux de recherche classique terminé.")
+        
+async def search_in_milvus_classique(request: SearchRequest) -> dict:
+    """
+    Orchestre une recherche CLASSIQUE complète (non-streamée).
+    """
+    logger.info(f"[gRPC] Recherche classique (non-stream): filtre='{request.filtre}', sources={[s.source for s in request.source]}")
+    start_total_time = time.perf_counter()
+
+    search_duration, llm_duration = 0, 0
+    llm_response_content, context, full_user_prompt, final_filter_expr_str = "", "", "", ""
+
+    try:
+        # --- ÉTAPE 1: PAS D'EMBEDDING ---
+
+        # --- ÉTAPE 2: RÉCUPÉRATION (QUERY) ---
+        start_search = time.perf_counter()
+        top_k_final = int(request.top_k)
+        all_results = {}
+
+        for item in request.source:
+            source_name = item.source
+            filtre = item.filtre
+
+            filters = []
+            filter_expr_global = await filtre_source(request.filtre, source_name)
+            if filter_expr_global:
+                filters.append(" and ".join(filter_expr_global))
+            
+            filter_expr_source = await filtre_source(filtre, source_name) if filtre else []
+            if filter_expr_source:
+                filters.append(" and ".join(filter_expr_source))
+            
+            final_filter_expr = " and ".join(filters) if filters else ""
+            final_filter_expr_str = final_filter_expr
+            # if not final_filter_expr:
+            #     raise ValueError("L'expression de filtre est obligatoire pour une recherche classique.")
+
+            logger.info(f"Recherche classique dans '{source_name}' avec filtre: {final_filter_expr}")
+
+            source_results = await database_client.classic_search_vector(
+                collection=source_name,
+                filter_expr=final_filter_expr,
+                k=top_k_final
+            )
+            
+            all_results[source_name] = [MessageToDict(res) for res in source_results]
+        
+        search_duration = time.perf_counter() - start_search
+
+        # --- ÉTAPE 3: PAS DE RERANKING ---
+
+        # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
+        context_texts = [match['metadata']['entity']['text'] for matches in all_results.values() for match in matches]
+        
+        llm_req = llm_prompt(request, context_texts)
+
+        # --- FIN: Construction du dictionnaire de retour ---
+        total_duration = time.perf_counter() - start_total_time
+        
+        return {
+            "database": "milvus",
+            "user_query": request.prompt,
+            "filter": final_filter_expr_str,
+            "matches": all_results,
+            "context": llm_req.context,
+            "response": llm_req.llm_response,
+            "embedding": 0,
+            "fournisseur_non_vide": None,
+            "full_user_prompt": llm_req.full_user_prompt,
+            "chat_model": request.llm.chat_model,
+            "temperature": request.llm.temperature,
+            "vector_search": round(search_duration, 2),
+            "rerank_duration": 0,
+            "llm_execution": round(llm_req.llm_duration, 2),
+            "total_process": round(total_duration, 2),
+            "import_duration": 0,
+        }
+
+    except Exception as e:
+        logger.error(f"Erreur majeure dans la recherche classique (non-stream): {e}", exc_info=True)
+        return {
+            "database": "milvus",
+            "user_query": request.prompt,
+            "filter": final_filter_expr_str,
+            "matches": {},
+            "context": "",
+            "response": f"Erreur serveur: {e}",
+            "embedding": 0,
+            "fournisseur_non_vide": None,
+            "full_user_prompt": "",
+            "chat_model": request.llm.chat_model,
+            "temperature": request.llm.temperature,
+            "vector_search": round(search_duration, 2),
+            "rerank_duration": 0,
+            "llm_execution": round(llm_duration, 2),
+            "total_process": round(time.perf_counter() - start_total_time, 2),
+            "import_duration": 0,
+        }

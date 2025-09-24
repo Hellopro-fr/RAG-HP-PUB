@@ -6,6 +6,7 @@ import "google/protobuf/struct.proto";
 service DatabaseSearchService {
   // TODO: Sécuriser ce flux (authentification, validation des entrées)
   rpc Search(SearchRequest) returns (SearchResponse);
+  rpc ClassicSearch(ClassicSearchRequest) returns (SearchResponse);
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
 }
 
@@ -15,6 +16,13 @@ message SearchRequest {
   int32 top_k = 3;
   optional string filter_expression = 4;
   repeated string output_fields = 5;
+}
+
+message ClassicSearchRequest {
+  string collection_name = 1;
+  string filter_expression = 2; // Le filtre "expr" de Milvus
+  int32 top_k = 3;
+  repeated string output_fields = 4;
 }
 
 message SearchResult {
