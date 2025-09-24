@@ -36,8 +36,8 @@ class Publisher:
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
                 
-                print(f"   📤 Output Message '{message_dict}'")
-                print(f"   📤 Message traité et publié.")
+                url = message_dict.get('url', 'URL inconnue')
+                print(f"   📤 Message pour l'URL '{url}' traité et publié vers le webhook.")
                 break  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
                 print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")

@@ -21,7 +21,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "siteweb"
+    collection_name: str = "siteweb_2"
     dimension: int = 1024
 
 class MilvusWebsiteCrud:
@@ -96,7 +96,7 @@ class MilvusWebsiteCrud:
             # collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")
             # collection.create_index(field_name="affichage", index_name="idx_affichage")
             # collection.create_index(field_name="etat", index_name="idx_etat")
-            # collection.create_index(field_name="page_type", index_name="idx_page_type")
+            collection.create_index(field_name="page_type", index_name="idx_page_type")
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
@@ -239,8 +239,7 @@ class MilvusWebsiteCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] Suppression : {e}", exc_info=True)
 
-    def get_website(self,url: str) -> Dict[str, Any]:
-        list_url = [url]
+    def get_website(self, url: str, page_type: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
         
@@ -261,9 +260,16 @@ class MilvusWebsiteCrud:
                     "message": "Url requise pour la récupération.",
                     "code" : 400
                 }
+                
+            if not page_type:
+                return {
+                    "status": "error",
+                    "message": "Page type requise pour la récupération.",
+                    "code" : 400
+                }
 
             result = self.collection.query(
-                expr=f"url in {list_url}",
+                expr=f'url == "{url}" && page_type == "{page_type}"',
                 output_fields=["id"]
             )
             # self.collection.flush()
