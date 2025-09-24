@@ -41,6 +41,14 @@ def get_elasticsearch_client():
             time.sleep(i + 1)
     raise ConnectionError("❌ DLQ Archiver: Impossible de se connecter à Elasticsearch.")
 
+def _get_retry_count_from_headers(headers):
+    """Inspecte les headers pour trouver le compte de tentatives de la file de retry."""
+    if headers and 'x-death' in headers:
+        for death in headers['x-death']:
+            if "retry" in death.get('queue', ''):
+                return death.get('count', 0)
+    return 0
+
 def process_message(body, properties):
     """Transforme un message RabbitMQ en document Elasticsearch."""
     try:
@@ -48,23 +56,23 @@ def process_message(body, properties):
     except json.JSONDecodeError:
         original_payload = {"raw_body": body.decode('utf-8', errors='ignore')}
 
-    error_reason, retry_count = "Raison inconnue", 0
-    original_exchange, original_routing_key, original_queue = "N/A", "N/A", "N/A"
+    error_reason = "Raison inconnue"
+    original_exchange = "N/A"
+    original_routing_key = "N/A"
+    original_queue = "N/A"
     
-    if properties.headers and 'x-death' in properties.headers:
-        death_info = properties.headers['x-death'][0]
+    # Extraction des informations de l'en-tête x-death
+    headers = properties.headers or {}
+    if 'x-death' in headers and headers['x-death']:
+        # L'information la plus récente est la première de la liste
+        death_info = headers['x-death'][0]
         error_reason = death_info.get('reason', 'N/A')
         original_exchange = death_info.get('exchange', 'N/A')
         original_routing_key = death_info.get('routing-keys', ['N/A'])[0]
         original_queue = death_info.get('queue', 'N/A')
-        
-        # Le 'count' est spécifique à la queue de retry
-        for death in properties.headers['x-death']:
-            if "retry" in death.get('queue', ''):
-                retry_count = death.get('count', 0)
-                break
-    
-    service_name = original_queue.replace('_queue', '').replace('_dlq', '').replace('_retry', '')
+
+    retry_count = _get_retry_count_from_headers(headers)
+    service_name = original_queue.replace('_queue', '').replace('_retry', '')
 
     document = {
         "_index": ELASTIC_INDEX_NAME,
@@ -81,6 +89,7 @@ def process_message(body, properties):
     return document
 
 def main():
+    """Point d'entrée principal du service d'archivage."""
     print("🚀 DLQ Archiver: Démarrage du service...")
     
     es_client = get_elasticsearch_client()
@@ -89,6 +98,7 @@ def main():
 
     dlq_queues = [q.strip() for q in DLQ_QUEUES_STR.split(',')]
     
+    # Assurer que l'index existe dans Elasticsearch
     if not es_client.indices.exists(index=ELASTIC_INDEX_NAME):
         print(f"Index '{ELASTIC_INDEX_NAME}' non trouvé. Création...")
         es_client.indices.create(index=ELASTIC_INDEX_NAME)
@@ -98,26 +108,21 @@ def main():
     try:
         for queue_name in dlq_queues:
             print(f"👂 DLQ Archiver: Écoute de la queue '{queue_name}'...")
-            channel.queue_declare(queue=queue_name, durable=True)
-            
-        def callback(ch, method, properties, body):
-            doc = process_message(body, properties)
-            documents_buffer.append((method.delivery_tag, doc))
 
-            if len(documents_buffer) >= BATCH_SIZE:
-                archive_and_ack_batch(ch, es_client, documents_buffer)
+        # Consommer de toutes les queues en même temps
+        for method_frame, properties, body in channel.consume(dlq_queues):
+            if method_frame:
+                doc = process_message(body, properties)
+                documents_buffer.append((method_frame.delivery_tag, doc))
 
-        for queue_name in dlq_queues:
-            channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
-
-        while True:
-            # Process events for a short time, then check for batch timeout
-            channel.connection.process_data_events(time_limit=BATCH_TIMEOUT_SECONDS)
-            if documents_buffer:
-                archive_and_ack_batch(channel, es_client, documents_buffer)
+                # Envoyer le buffer à Elasticsearch s'il est plein
+                if len(documents_buffer) >= BATCH_SIZE:
+                    archive_and_ack_batch(channel, es_client, documents_buffer)
 
     except KeyboardInterrupt:
-        print("\n🛑 DLQ Archiver: Arrêt demandé.")
+        print("\n🛑 DLQ Archiver: Arrêt demandé. Archivage des messages restants...")
+        if documents_buffer:
+            archive_and_ack_batch(channel, es_client, documents_buffer)
     except Exception as e:
         print(f"❌ ERREUR CRITIQUE dans le DLQ Archiver: {e}")
     finally:
@@ -126,7 +131,7 @@ def main():
             print("✅ DLQ Archiver: Connexion RabbitMQ fermée.")
 
 def archive_and_ack_batch(channel, es_client, buffer):
-    """Archive a batch of messages and then ACK them."""
+    """Archive un batch de messages et acquitte en cas de succès."""
     if not buffer:
         return
         
@@ -135,13 +140,16 @@ def archive_and_ack_batch(channel, es_client, buffer):
     
     try:
         helpers.bulk(es_client, docs_to_es)
+        # Obtenir le delivery_tag du dernier message du batch
         last_delivery_tag = buffer[-1][0]
+        # Acquitter tous les messages jusqu'au dernier inclus
         channel.basic_ack(delivery_tag=last_delivery_tag, multiple=True)
         print(f"   -> Batch archivé et acquitté avec succès (jusqu'au tag {last_delivery_tag}).")
         buffer.clear()
     except Exception as e:
-        print(f"❌ ERREUR: Impossible d'indexer le batch dans Elasticsearch: {e}. Les messages ne seront pas acquittés.")
-        # We don't clear the buffer and don't ack, so it will be retried on next connection.
+        print(f"❌ ERREUR: Impossible d'indexer le batch dans Elasticsearch: {e}. Les messages ne seront pas acquittés et seront retraités.")
+        # Ne pas acquitter permet de retenter au prochain redémarrage du service
+        # Dans un scénario de production, on pourrait ajouter une logique de retry ici aussi.
 
 if __name__ == "__main__":
     main()
