@@ -77,6 +77,7 @@ class Consumer:
             'x-dead-letter-routing-key': self.routing_key
         }
         self.channel.queue_declare(queue=self.queue_name, durable=True, arguments=main_queue_args)
+        
         self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
         
         # 'Quality of Service' : demande à RabbitMQ de ne pas nous envoyer plus de BATCH_SIZE
@@ -98,7 +99,9 @@ class Consumer:
         if not self.message_buffer:
             return
 
-        print(f"⚙️  Traitement d'un batch de {len(self.message_buffer)} messages...")
+        start_time = time.monotonic()
+        batch_size = len(self.message_buffer)
+        print(f"⚙️  Traitement d'un batch de {batch_size} messages...")
         
         # On copie le buffer actuel pour le traitement et on vide l'original
         # pour qu'il puisse recommencer à se remplir immédiatement.
@@ -156,6 +159,9 @@ class Consumer:
                     self.channel.basic_ack(delivery_tag=delivery_tag)
         
         finally:
+            end_time = time.monotonic()
+            duration = end_time - start_time
+            print(f"🏁 Traitement du batch de {batch_size} message(s) terminé en {duration:.4f} secondes.")
             # On réinitialise le timer du batch.
             self.last_batch_time = time.time()
 
