@@ -444,6 +444,44 @@
               </h3>
             </div>
             <div class="p-4 space-y-4">
+              <!-- Sélection type de recherche -->
+              <fieldset class="space-y-4">
+                <legend class="text-lg font-medium text-gray-900 mb-2">Type de recherche</legend>
+                <div class="flex flex-col gap-6">
+                  <div class="inline-flex items-center">
+                    <label class="relative flex items-center cursor-pointer" for="type-vectorielle">
+                      <input
+                        name="type-recherche"
+                        type="radio"
+                        class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
+                        id="type-vectorielle"
+                        value="1"
+                        checked
+                      />
+                      <span class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
+                    </label>
+                    <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-vectorielle">
+                      Vectorielle
+                    </label>
+                  </div>
+                
+                  <div class="inline-flex items-center">
+                    <label class="relative flex items-center cursor-pointer" for="type-classique">
+                      <input
+                        name="type-recherche"
+                        type="radio"
+                        class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
+                        id="type-classique"
+                        value="2"
+                      />
+                      <span class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
+                    </label>
+                    <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-classique">
+                      Classique
+                    </label>
+                  </div>
+                </div>
+              </fieldset>
               <!-- Top K Results -->
               <div class="space-y-2">
                 <label class="text-sm font-medium text-custom-noir"
