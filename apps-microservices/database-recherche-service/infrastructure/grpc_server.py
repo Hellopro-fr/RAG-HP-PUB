@@ -68,6 +68,41 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             context.set_details("Erreur interne lors de la récupération du schéma.")
             return database_pb2.GetSchemaResponse()
         
+    async def ClassicSearch(self, request, context):
+        logging.info(f"Requête de recherche classique reçue pour '{request.collection_name}' avec le filtre '{request.filter_expression}'")
+        try:
+            results = self.use_case.execute_classic_search(
+                collection_name=request.collection_name,
+                filter_expression=request.filter_expression,
+                top_k=request.top_k,
+                output_fields=list(request.output_fields) if request.output_fields else None
+            )
+            
+            proto_results = []
+            for res in results:
+                metadata_struct = struct_pb2.Struct()
+                if res.metadata:
+                    try:
+                        sanitized_metadata = json.loads(json.dumps(res.metadata, default=str))
+                        metadata_struct.update(sanitized_metadata)
+                    except TypeError as e:
+                        logging.warning(f"Impossible de sérialiser les métadonnées pour l'ID {res.id}: {e}")
+                        metadata_struct.update({"error": "Metadata serialization failed"})
+                
+                proto_results.append(database_pb2.SearchResult(
+                    id=str(res.id),
+                    score=float(res.score),
+                    metadata=metadata_struct,
+                    source=str(res.source)
+                ))
+            
+            return database_pb2.SearchResponse(results=proto_results)
+        except Exception as e:
+            logging.error(f"Erreur dans ClassicSearch: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("Erreur interne lors de la recherche classique.")
+            return database_pb2.SearchResponse()
+        
 async def serve(use_case: SearchUseCase):
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=50))
     database_pb2_grpc.add_DatabaseSearchServiceServicer_to_server(DatabaseSearchServiceImpl(use_case), server)

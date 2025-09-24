@@ -68,6 +68,42 @@ class MilvusClient:
         """Calcule la valeur ef_search pour Qdrant/Milvus en fonction du nombre de chunks."""
         return 300 if nb_chunk <= 150 else nb_chunk * 2
     
+    def classic_search(self, collection_name: str, expr: str, limit: int, output_fields: list[str]) -> list[SearchResultEntity]:
+        """
+        Exécute une requête de type 'query' sur Milvus en utilisant une expression de filtre.
+        """
+        try:
+            if not connections.has_connection("default"):
+                self.__init__()
+
+            collection = self._ensure_collection_loaded(collection_name)
+
+            # Si output_fields n'est pas spécifié, on récupère tout sauf l'embedding
+            if not output_fields:
+                all_fields = [field.name for field in collection.schema.fields]
+                output_fields = [f for f in all_fields if f != "embedding"]
+
+            results = collection.query(
+                expr=expr,
+                limit=limit,
+                output_fields=output_fields
+            )
+
+            # Formatage des résultats en entités du domaine (sans score, car query n'en retourne pas)
+            domain_results = []
+            for hit in results:
+                domain_results.append(SearchResultEntity(
+                    id=hit.pop(collection.primary_field.name, ""), # Gère le cas où la clé primaire est retournée
+                    score=0.0, # Pas de score de similarité pour une requête classique
+                    metadata=self._serialize_entity(hit, collection_name),
+                    source=collection_name
+                ))
+            return domain_results
+
+        except Exception as e:
+            logging.error(f"Erreur lors de la recherche classique dans Milvus sur '{collection_name}': {e}", exc_info=True)
+            return []
+    
     def search(self, collection_name: str, vector: list[float], top_k: int, **kwargs) -> list[SearchResultEntity]:
         try:
             if not connections.has_connection("default"):
