@@ -509,18 +509,13 @@ services:
   dlq-archiver-service:
     build:
       context: .
-      dockerfile: -
-      # Utilisation d'un Dockerfile inline pour ce service simple
-      args:
-        BASE_IMAGE: python:3.10-slim
-        TOOL_DIR: tools
+      dockerfile: tools/Dockerfile
     container_name: dlq-archiver-service
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      # On configure les queues à écouter
-      - DLQ_QUEUES=llm_templating_queue_dlq,website_processing_queue_dlq
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
       - ELASTICSEARCH_URL=http://elasticsearch:9200
     depends_on:
       - elasticsearch
