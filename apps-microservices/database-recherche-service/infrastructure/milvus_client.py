@@ -98,7 +98,7 @@ class MilvusClient:
                 domain_results.append(SearchResultEntity(
                     id=hit.pop(collection.primary_field.name, ""), # Gère le cas où la clé primaire est retournée
                     score=0.0, # Pas de score de similarité pour une requête classique
-                    metadata=self._serialize_entity(hit, collection_name),
+                    metadata={"id": hit.pop(collection_name.primary_field.name, ""), "entity": self._serialize_entity(hit, collection_name)},
                     source=collection_name
                 ))
             return domain_results
