@@ -8,7 +8,7 @@ from elasticsearch import Elasticsearch, helpers
 # --- Configuration ---
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
 # Les queues DLQ à écouter, séparées par des virgules
-DLQ_QUEUES_STR = os.environ.get("DLQ_QUEUES", "llm_templating_queue_dlq,website_processing_queue_dlq")
+DLQ_QUEUES_STR = os.environ.get("DLQ_QUEUES", "embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq")
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
 ELASTIC_INDEX_NAME = "failed_messages_archive"
 BATCH_SIZE = 10 # Nombre de messages à archiver en une seule fois
@@ -114,7 +114,7 @@ def main():
             # Process events for a short time, then check for batch timeout
             channel.connection.process_data_events(time_limit=BATCH_TIMEOUT_SECONDS)
             if documents_buffer:
-                archive_and_ack_batch(ch, es_client, documents_buffer)
+                archive_and_ack_batch(channel, es_client, documents_buffer)
 
     except KeyboardInterrupt:
         print("\n🛑 DLQ Archiver: Arrêt demandé.")
