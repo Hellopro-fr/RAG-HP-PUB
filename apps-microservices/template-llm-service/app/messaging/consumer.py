@@ -118,7 +118,7 @@ class Consumer:
                     raise ValueError("Contenu du message ('text') manquant.")
             except (json.JSONDecodeError, ValueError) as e:
                 print(f"🗑️  Message invalide (tag: {delivery_tag}) envoyé directement à la DLQ finale. Erreur: {e}")
-                self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body)
+                self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=properties)
                 self.channel.basic_ack(delivery_tag=delivery_tag)
 
         # --- Traitement des messages valides (s'il y en a) ---
@@ -155,7 +155,7 @@ class Consumer:
                     self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
                 else:
                     print(f"   -> Échec après {MAX_RETRIES + 1} tentatives (tag: {delivery_tag}). Message envoyé à la DLQ finale.")
-                    self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body)
+                    self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=properties)
                     self.channel.basic_ack(delivery_tag=delivery_tag)
         
         finally:

@@ -101,7 +101,7 @@ class Consumer:
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message ne sera jamais valide.
             print(f"❌ Website-Processor: Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
-            ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body)
+            ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=properties)
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
         except Exception as e:
@@ -112,7 +112,7 @@ class Consumer:
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             else:
                 print(f"❌ Website-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
-                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body)
+                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=properties)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def start_consuming(self):
