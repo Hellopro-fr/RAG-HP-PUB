@@ -130,6 +130,8 @@ async def optimizeQwen(payload: OptimRequest):
 
         response = await llm_client.get_llm_chat_response(prompt)
 
+       chat_request = ChatRequest(prompt=prompt)
+
         print(response)
 
         return {"data": [response]}
