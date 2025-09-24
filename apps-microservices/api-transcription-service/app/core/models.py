@@ -31,3 +31,18 @@ class ClientState(BaseModel):
     class Config:
         # Allow arbitrary types like 'queue.Queue' and 'asyncio.Future'
         arbitrary_types_allowed = True
+
+class OpenAIClientState(BaseModel):
+    """
+    Maintient l'état pour une connexion client WebSocket pour OPENAI.
+    Utilise 'asyncio.Queue' qui est non-bloquante et essentielle pour les coroutines.
+    """
+    client_id: int
+    audio_queue: asyncio.Queue = Field(default_factory=asyncio.Queue)
+    response_queue: asyncio.Queue = Field(default_factory=asyncio.Queue)
+    end_stream: bool = False
+    # On réutilise RecognitionConfig pour la simplicité, même si seul sample_rate et language_code sont utilisés
+    recognition_config: speech.RecognitionConfig
+
+    class Config:
+        arbitrary_types_allowed = True

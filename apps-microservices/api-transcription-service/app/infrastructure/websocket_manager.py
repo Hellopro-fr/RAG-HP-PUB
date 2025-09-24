@@ -11,8 +11,10 @@ from fastapi import WebSocket, WebSocketDisconnect
 from google.cloud import speech
 from pydantic import ValidationError
 
-from app.core.models import ClientState, RecognitionConfigUpdate
+from app.core.models import ClientState, RecognitionConfigUpdate, OpenAIClientState 
 from app.core.services import TranscriptionService
+
+from app.core.services import OpenAIRealtimeService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -98,7 +100,7 @@ class WebSocketManager:
         loop = asyncio.get_running_loop()
 
         while True:
-            if time.time() - start_time >= 120:  # 2-minute limit
+            if time.time() - start_time >= 120:
                 logger.info(f"Stopping transcription for client {client_state.client_id} after 2 minutes.")
                 await websocket.send_json({
                     "type": "end_stream",
@@ -131,4 +133,77 @@ class WebSocketManager:
         try:
             await websocket.send_json({"type": "error", "error": error_message})
         except WebSocketDisconnect:
-            pass # Client already disconnected
+            pass
+
+
+class OpenAIRealtimeWebSocketManager:
+    """
+    Gère les connexions WebSocket pour la transcription avec la NOUVELLE API Realtime d'OpenAI.
+    """
+    def __init__(self, transcription_service: OpenAIRealtimeService):
+        self.service = transcription_service
+        self.clients: Dict[int, OpenAIRealtimeService] = {}
+        self.logger = logging.getLogger(__name__)
+
+    def _create_default_config(self) -> speech.RecognitionConfig:
+        """Crée une configuration par défaut."""
+        return speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=24000, # L'API Realtime recommande 24kHz
+            language_code="fr",
+        )
+
+    async def handle_connection(self, websocket: WebSocket):
+        client_id = id(websocket)
+        self.logger.info(f"Nouveau client OpenAI Realtime connecté (ID: {client_id})")
+
+        config = self._create_default_config()
+        client_state = OpenAIClientState(
+            client_id=client_id,
+            recognition_config=config,
+        )
+        self.clients[client_id] = client_state
+
+        try:
+            openai_bridge_task = asyncio.create_task(
+                self.service.manage_openai_connection(client_state)
+            )
+            consumer_task = asyncio.create_task(self._consume_audio(websocket, client_state))
+            producer_task = asyncio.create_task(self._produce_transcripts(websocket, client_state))
+
+            done, pending = await asyncio.wait(
+                [openai_bridge_task, consumer_task, producer_task], 
+                return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+
+        except WebSocketDisconnect:
+            self.logger.info(f"Client OpenAI Realtime {client_id} déconnecté.")
+        finally:
+            await self._cleanup_client(client_id)
+
+    async def _consume_audio(self, websocket: WebSocket, client_state: OpenAIClientState):
+        async for message in websocket.iter_text():
+            try:
+                data = json.loads(message)
+                await client_state.audio_queue.put(data)
+            except Exception as e:
+                self.logger.error(f"Erreur de consommation (OpenAI Realtime) pour {client_state.client_id}: {e}")
+                break
+
+    async def _produce_transcripts(self, websocket: WebSocket, client_state: OpenAIClientState):
+        while True:
+            response = await client_state.response_queue.get()
+            if response is None:
+                client_state.response_queue.task_done()
+                break
+            await websocket.send_json(response)
+            client_state.response_queue.task_done()
+
+    async def _cleanup_client(self, client_id: int):
+        if client_id in self.clients:
+            client_state = self.clients.pop(client_id)
+            client_state.end_stream = True
+            await client_state.audio_queue.put(None)
+            self.logger.info(f"Ressources nettoyées pour le client OpenAI Realtime {client_id}")
