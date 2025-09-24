@@ -580,7 +580,7 @@ async def search_in_milvus_classique_stream(request: SearchRequest):
         # --- ÉTAPE 3: PAS DE RERANKING ---
         # Le reranking n'est pas applicable car il n'y a pas de score de similarité initial.
         final_results = all_source_results
-        yield {"type": "initial_results", "type": 2, "payload": {"results": final_results, "duration": round(search_duration, 2)}}
+        yield {"type": "initial_results", "payload": {"results": final_results, "duration": round(search_duration, 2)}}
         # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
         llm_duration = 0
         if request.action == 2 and final_results:
