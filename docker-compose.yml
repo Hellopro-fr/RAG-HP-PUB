@@ -16,7 +16,6 @@ services:
       --model Qwen/Qwen3-14B-AWQ
       --quantization awq_marlin
       --trust-remote-code
-      --max-model-len 4096
       --gpu-memory-utilization 0.90
       --max-num-seqs 256
     ports:

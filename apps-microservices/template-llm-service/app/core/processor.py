@@ -84,12 +84,12 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
         )
         
         # Validation de la longueur du prompt avant de l'envoyer
-        if len(TOKENIZER.encode(formatted_prompt)) >= MAX_MODEL_LEN:
-            print(f"   -> ⚠️  Prompt trop long pour l'URL {url}. Marqué comme erreur.")
-            # On met un marqueur pour savoir que ce prompt ne doit pas être envoyé.
-            prompts.append("PROMPT_TOO_LONG")
-        else:
-            prompts.append(formatted_prompt)
+        # if len(TOKENIZER.encode(formatted_prompt)) >= MAX_MODEL_LEN:
+        #     print(f"   -> ⚠️  Prompt trop long pour l'URL {url}. Marqué comme erreur.")
+        #     # On met un marqueur pour savoir que ce prompt ne doit pas être envoyé.
+        #     prompts.append("PROMPT_TOO_LONG")
+        # else:
+        prompts.append(formatted_prompt)
 
     # --- Étape 2: Appel gRPC par lots au service LLM ---
     # On filtre les prompts qui sont trop longs pour ne pas les envoyer.
