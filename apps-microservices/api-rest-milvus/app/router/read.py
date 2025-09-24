@@ -27,23 +27,23 @@ async def get_ressource(
     id_ressource: Optional[str] = Query(None, description="ID unique de la ressource"),
     metadata: Optional[str] = Query(None, description="""Filtres de recherche au format JSON.
 
-Formats supportés:
-• Format simple: {"field": "value"} pour égalité
-• Format avec opérateurs: {"field": {"$operateur": valeur}}
-
-Opérateurs disponibles:
-• $gt → > (supérieur): {"price": {"$gt": 100}}
-• $gte → >= (supérieur ou égal): {"price": {"$gte": 100}}
-• $lt → < (inférieur): {"age": {"$lt": 30}}
-• $lte → <= (inférieur ou égal): {"age": {"$lte": 25}}
-• $eq → == (égal): {"status": {"$eq": "active"}}
-• $ne → != (différent): {"status": {"$ne": "deleted"}}
-• $in → in (dans la liste): {"category": {"$in": ["books", "electronics"]}}
-• $nin → not in (pas dans la liste): {"status": {"$nin": ["deleted", "archived"]}}
-• $like → like (correspondance): {"name": {"$like": "%phone%"}}
-
-Exemples:
-• {"id_produit": "123"} → recherche exacte
+Formats supportés: <br>
+• Format simple: {"field": "value"} pour égalité <br>
+• Format avec opérateurs: {"field": {"$operateur": valeur}} <br>
+<br>
+Opérateurs disponibles: <br>
+• $gt → > (supérieur): {"price": {"$gt": 100}} <br>
+• $gte → >= (supérieur ou égal): {"price": {"$gte": 100}} <br>
+• $lt → < (inférieur): {"age": {"$lt": 30}} <br>
+• $lte → <= (inférieur ou égal): {"age": {"$lte": 25}} <br>
+• $eq → == (égal): {"status": {"$eq": "active"}} <br>
+• $ne → != (différent): {"status": {"$ne": "deleted"}} <br>
+• $in → in (dans la liste): {"category": {"$in": ["books", "electronics"]}} <br>
+• $nin → not in (pas dans la liste): {"status": {"$nin": ["deleted", "archived"]}} <br>
+• $like → like (correspondance): {"name": {"$like": "%phone%"}} <br>
+<br>
+Exemples: <br>
+• {"id_produit": "123"} → recherche exacte <br>
 • {"price": {"$gte": 50}, "category": {"$in": ["electronics"]}} → prix >= 50 ET catégorie electronics"""),
     limit: Optional[int] = Query(1000, description="Limite du nombre de résultats (max 10000)"),
     offset: Optional[int] = Query(0, description="Nombre d'éléments à ignorer (pagination)"),
