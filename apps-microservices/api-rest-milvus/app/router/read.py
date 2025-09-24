@@ -25,7 +25,26 @@ router = APIRouter()
 async def get_ressource(
     collection_milvus: str = Path(..., description="Nom de la collection dans Milvus"),
     id_ressource: Optional[str] = Query(None, description="ID unique de la ressource"),
-    metadata: Optional[str] = Query(None, description="Données additionnelles au format JSON"),
+    metadata: Optional[str] = Query(None, description="""Filtres de recherche au format JSON.
+
+Formats supportés: <br>
+• Format simple: {"field": "value"} pour égalité <br>
+• Format avec opérateurs: {"field": {"$operateur": valeur}} <br>
+<br>
+Opérateurs disponibles: <br>
+• $gt → > (supérieur): {"price": {"$gt": 100}} <br>
+• $gte → >= (supérieur ou égal): {"price": {"$gte": 100}} <br>
+• $lt → < (inférieur): {"age": {"$lt": 30}} <br>
+• $lte → <= (inférieur ou égal): {"age": {"$lte": 25}} <br>
+• $eq → == (égal): {"status": {"$eq": "active"}} <br>
+• $ne → != (différent): {"status": {"$ne": "deleted"}} <br>
+• $in → in (dans la liste): {"category": {"$in": ["books", "electronics"]}} <br>
+• $nin → not in (pas dans la liste): {"status": {"$nin": ["deleted", "archived"]}} <br>
+• $like → like (correspondance): {"name": {"$like": "%phone%"}} <br>
+<br>
+Exemples: <br>
+• {"id_produit": "123"} → recherche exacte <br>
+• {"price": {"$gte": 50}, "category": {"$in": ["electronics"]}} → prix >= 50 ET catégorie electronics"""),
     limit: Optional[int] = Query(1000, description="Limite du nombre de résultats (max 10000)"),
     offset: Optional[int] = Query(0, description="Nombre d'éléments à ignorer (pagination)"),
     fields: Optional[str] = Query(None, description="Champs à retourner, séparés par des virgules (ex: 'id,name,type')")
@@ -54,6 +73,83 @@ async def get_ressource(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
+def _build_metadata_expression(metadata: Dict[str, Any]) -> str:
+    """
+    Construit une expression de filtre Milvus à partir des métadonnées.
+
+    Formats supportés:
+    - Égalité simple: {"field": "value"} → field == "value"
+    - Opérateurs: {"field": {"$gt": 10}} → field > 10
+    - Opérateurs supportés: $gt (>), $gte (>=), $eq (==), $ne (!=), $lt (<), $lte (<=), $in, $nin (not in), $like
+    """
+    expr_parts = []
+
+    for field_name, condition in metadata.items():
+        if isinstance(condition, dict):
+            # Format avec opérateurs: {"field": {"$gt": 10}}
+            for operator, value in condition.items():
+                expr_part = _build_single_condition(field_name, operator, value)
+                if expr_part:
+                    expr_parts.append(expr_part)
+        else:
+            # Format simple: {"field": "value"} → équivaut à {"field": {"$eq": "value"}}
+            expr_part = _build_single_condition(field_name, "$eq", condition)
+            if expr_part:
+                expr_parts.append(expr_part)
+
+    return " and ".join(expr_parts) if expr_parts else ""
+
+def _build_single_condition(field_name: str, operator: str, value: Any) -> Optional[str]:
+    """Construit une condition unique de filtre."""
+
+    # Mapping des opérateurs
+    operator_mapping = {
+        "$gt": ">",
+        "$gte": ">=",
+        "$eq": "==",
+        "$ne": "!=",
+        "$lt": "<",
+        "$lte": "<=",
+        "$in": "in",
+        "$nin": "not in",
+        "$like": "like"
+    }
+
+    if operator not in operator_mapping:
+        return None
+
+    milvus_op = operator_mapping[operator]
+
+    # Formatage selon le type de valeur et l'opérateur
+    if operator in ["$in", "$nin"]:
+        # Pour les opérateurs in/not in, la valeur doit être une liste
+        if not isinstance(value, list):
+            return None
+
+        # Formater chaque élément de la liste selon son type
+        formatted_values = []
+        for item in value:
+            if isinstance(item, str):
+                formatted_values.append(f'"{item}"')
+            else:
+                formatted_values.append(str(item))
+
+        value_str = f"[{', '.join(formatted_values)}]"
+        return f"{field_name} {milvus_op} {value_str}"
+
+    elif operator == "$like":
+        # Pour LIKE, s'assurer que c'est une chaîne
+        if not isinstance(value, str):
+            return None
+        return f'{field_name} {milvus_op} "{value}"'
+
+    else:
+        # Pour les autres opérateurs (>, >=, ==, !=, <, <=)
+        if isinstance(value, str):
+            return f'{field_name} {milvus_op} "{value}"'
+        else:
+            return f"{field_name} {milvus_op} {value}"
+
 def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, limit: int = 1000, offset: int = 0, fields: Optional[list] = None) -> Dict[str, Any]:
 
         print(f"get_ressource_rest - collection_name: {collection_name}, id_milvus: {id_milvus}, metadata: {metadata}")
@@ -78,13 +174,11 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
             if id_milvus is not None:
                 expr_parts.append(f"id == {id_milvus}")
 
-            # Filtrage par metadata (clé=valeur)
+            # Filtrage par metadata avec opérateurs logiques
             if metadata:
-                for key, value in metadata.items():
-                    if isinstance(value, str):
-                        expr_parts.append(f'{key} == "{value}"')
-                    else:
-                        expr_parts.append(f"{key} == {value}")
+                metadata_expr = _build_metadata_expression(metadata)
+                if metadata_expr:
+                    expr_parts.append(metadata_expr)
             # Validations
             if limit > 10000:
                 return {
@@ -100,6 +194,15 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                     "code": 400
                 }
 
+            # Validation de la fenêtre de résultats Milvus (max 16384)
+            # Note: Cette validation est commentée car nous gérons maintenant les gros offsets
+            # if offset + limit > 16384:
+            #     return {
+            #         "status": "error",
+            #         "message": f"La fenêtre de résultats (offset + limit) ne peut pas dépasser 16384. Valeur actuelle: {offset + limit}. Veuillez réduire l'offset ou la limite.",
+            #         "code": 400
+            #     }
+
             # Si aucun filtre fourni, récupérer tous les documents avec pagination
             if not expr_parts:
                 # Déterminer les champs à retourner
@@ -109,7 +212,23 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                     output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
 
                 # Récupération de tous les documents avec offset et limit
-                results = collection.query(expr="", output_fields=output_fields, limit=limit, offset=offset)
+                try:
+                    results = collection.query(expr="", output_fields=output_fields, limit=limit, offset=offset)
+                except MilvusException as e:
+                    if "invalid max query result window" in str(e):
+                        return {
+                            "status": "error",
+                            "message": f"Erreur de pagination Milvus: La fenêtre de résultats (offset + limit = {offset + limit}) dépasse la limite maximale de 16384. Suggestion: utilisez un offset plus petit (maximum recommandé: {16384 - limit}) ou une limite plus petite.",
+                            "code": 400,
+                            "details": {
+                                "max_window": 16384,
+                                "requested_window": offset + limit,
+                                "current_offset": offset,
+                                "current_limit": limit,
+                                "suggested_max_offset": max(0, 16384 - limit)
+                            }
+                        }
+                    raise e
 
                 return {
                     "status": "success",
@@ -138,7 +257,23 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
             else:
                 output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
 
-            results = collection.query(expr=expr, output_fields=output_fields, limit=limit, offset=offset)
+            try:
+                results = collection.query(expr=expr, output_fields=output_fields, limit=limit, offset=offset)
+            except MilvusException as e:
+                if "invalid max query result window" in str(e):
+                    return {
+                        "status": "error",
+                        "message": f"Erreur de pagination Milvus: La fenêtre de résultats (offset + limit = {offset + limit}) dépasse la limite maximale de 16384. Suggestion: utilisez un offset plus petit (maximum recommandé: {16384 - limit}) ou une limite plus petite.",
+                        "code": 400,
+                        "details": {
+                            "max_window": 16384,
+                            "requested_window": offset + limit,
+                            "current_offset": offset,
+                            "current_limit": limit,
+                            "suggested_max_offset": max(0, 16384 - limit)
+                        }
+                    }
+                raise e
 
             return {
                 "status": "success",
@@ -174,6 +309,7 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                 "code": 500
             }
         
+
 def _connect_to_milvus():
         # connections.connect("default", uri=.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
         config = Configuration()
