@@ -558,9 +558,9 @@ async def search_in_milvus_classique_stream(request: SearchRequest):
                 filters.append(" and ".join(filter_expr_source))
             
             final_filter_expr = " and ".join(filters) if filters else ""
-            if not final_filter_expr:
-                 yield {"type": "error", "payload": f"L'expression de filtre est obligatoire pour une recherche classique."}
-                 return
+            # if not final_filter_expr:
+            #      yield {"type": "error", "payload": f"L'expression de filtre est obligatoire pour une recherche classique."}
+            #      return
 
             # Appel au NOUVEAU client gRPC pour la recherche classique
             source_results = await database_client.classic_search_vector(
@@ -650,8 +650,8 @@ async def search_in_milvus_classique(request: SearchRequest) -> dict:
             
             final_filter_expr = " and ".join(filters) if filters else ""
             final_filter_expr_str = final_filter_expr
-            if not final_filter_expr:
-                raise ValueError("L'expression de filtre est obligatoire pour une recherche classique.")
+            # if not final_filter_expr:
+            #     raise ValueError("L'expression de filtre est obligatoire pour une recherche classique.")
 
             logger.info(f"Recherche classique dans '{source_name}' avec filtre: {final_filter_expr}")
 
