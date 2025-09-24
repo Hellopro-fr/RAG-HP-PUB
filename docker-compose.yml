@@ -74,7 +74,7 @@ services:
       - services-net
 
   kibana:
-    image: docker.elastic.co/kibana/kibana:8.11.1
+    image: docker.elastic.co/kibana/kibana:9.1.1
     container_name: kibana
     ports:
       - "5601:5601"
