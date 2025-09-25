@@ -98,7 +98,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
         return {"data": results}
 
     except Exception as e:
-        error_msg = f"Erreur lors du traitement du produit: {type(e).__name__}: {str(e)}"
+        error_msg = f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
         debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
         response_error = {
             "ERROR": error_msg
