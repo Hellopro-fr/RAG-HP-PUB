@@ -340,7 +340,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/template-llm-service/Dockerfile
-    container_name: template-llm-service
+    # container_name: template-llm-service
     restart: unless-stopped
     volumes:
       - ./apps-microservices/template-llm-service/app:/app/template_llm_service:rw
