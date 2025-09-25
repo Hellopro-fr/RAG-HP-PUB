@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
 from app.schemas.optimize.optimize import OptimRequest, OptimResponse, BatchOptimRequest, BatchOptimResponse
-from app.core.optimize.Qwen3_14B_AWQ_par_lots import ProductTitleOptimizerBatch
 from app.core.optimize.traitement_donnees import TraitementDonnees
 from typing import List, Dict, Any
 import time
