@@ -56,23 +56,31 @@ def process_message(body, properties):
     except json.JSONDecodeError:
         original_payload = {"raw_body": body.decode('utf-8', errors='ignore')}
 
-    error_reason = "Raison inconnue"
-    original_exchange = "N/A"
-    original_routing_key = "N/A"
-    original_queue = "N/A"
-    
-    # Extraction des informations de l'en-tête x-death
     headers = properties.headers or {}
-    if 'x-death' in headers and headers['x-death']:
-        # L'information la plus récente est la première de la liste
-        death_info = headers['x-death'][0]
-        error_reason = death_info.get('reason', 'N/A')
-        original_exchange = death_info.get('exchange', 'N/A')
-        original_routing_key = death_info.get('routing-keys', ['N/A'])[0]
-        original_queue = death_info.get('queue', 'N/A')
 
-    retry_count = _get_retry_count_from_headers(headers)
-    service_name = original_queue.replace('_queue', '').replace('_retry', '')
+    # Stratégie 1: Lire les en-têtes personnalisés explicites (préféré)
+    if 'x-service-name' in headers:
+        service_name = headers.get('x-service-name', 'N/A')
+        error_reason = headers.get('x-error-reason', 'Raison inconnue')
+        original_exchange = headers.get('x-original-exchange', 'N/A')
+        original_routing_key = headers.get('x-original-routing-key', 'N/A')
+        retry_count = headers.get('x-retry-count', _get_retry_count_from_headers(headers))
+    # Stratégie 2: Fallback sur l'analyse de x-death (pour anciens messages ou DLX par TTL)
+    else:
+        error_reason = "Raison inconnue"
+        original_exchange = "N/A"
+        original_routing_key = "N/A"
+        original_queue = "N/A"
+        
+        if 'x-death' in headers and headers['x-death']:
+            death_info = headers['x-death'][0]
+            error_reason = death_info.get('reason', 'N/A')
+            original_exchange = death_info.get('exchange', 'N/A')
+            original_routing_key = death_info.get('routing-keys', ['N/A'])[0]
+            original_queue = death_info.get('queue', 'N/A')
+
+        retry_count = _get_retry_count_from_headers(headers)
+        service_name = original_queue.replace('_queue', '').replace('_retry', '')
 
     document = {
         "_index": ELASTIC_INDEX_NAME,

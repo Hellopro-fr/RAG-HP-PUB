@@ -3,6 +3,7 @@ import json
 from website_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from website_processor_service.core.processor import process_website_data_for_embedding # Importe la logique métier
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
+from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
@@ -101,7 +102,8 @@ class Consumer:
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message ne sera jamais valide.
             print(f"❌ Website-Processor: Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
-            ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=properties)
+            dlq_props = DLQProperties.create_dlq_properties(e, 0, method)
+            ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
         except Exception as e:
@@ -112,7 +114,8 @@ class Consumer:
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             else:
                 print(f"❌ Website-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
-                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=properties)
+                dlq_props = DLQProperties.create_dlq_properties(e, MAX_RETRIES, method)
+                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def start_consuming(self):

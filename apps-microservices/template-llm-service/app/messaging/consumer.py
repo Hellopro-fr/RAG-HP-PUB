@@ -3,10 +3,12 @@ import json
 import time
 import asyncio
 
+from unittest.mock import MagicMock
 from template_llm_service.messaging.publisher import Publisher
 # On importe la nouvelle fonction de traitement par batch
 from template_llm_service.core.processor import classify_page_template_batch
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
+from common_utils.autres.DLQProperties import DLQProperties
 
 # --- Configuration du Batching ---
 # Détermine le nombre maximum de messages à traiter en un seul batch.
@@ -118,7 +120,8 @@ class Consumer:
                     raise ValueError("Contenu du message ('text') manquant.")
             except (json.JSONDecodeError, ValueError) as e:
                 print(f"🗑️  Message invalide (tag: {delivery_tag}) envoyé directement à la DLQ finale. Erreur: {e}")
-                self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=properties)
+                dlq_props = DLQProperties.create_dlq_properties(e, 0, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
+                self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
                 self.channel.basic_ack(delivery_tag=delivery_tag)
 
         # --- Traitement des messages valides (s'il y en a) ---
@@ -155,7 +158,8 @@ class Consumer:
                     self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
                 else:
                     print(f"   -> Échec après {MAX_RETRIES + 1} tentatives (tag: {delivery_tag}). Message envoyé à la DLQ finale.")
-                    self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=properties)
+                    dlq_props = DLQProperties.create_dlq_properties(e, MAX_RETRIES, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
+                    self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
                     self.channel.basic_ack(delivery_tag=delivery_tag)
         
         finally:
