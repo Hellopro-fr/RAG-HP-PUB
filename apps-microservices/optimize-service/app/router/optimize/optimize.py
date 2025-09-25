@@ -123,11 +123,14 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
         print(debug_msg)
         return response_error
 
-@router.post("/qwen/v2", response_model=OptimResponse)
-async def optimizeQwen(payload: OptimRequest):
+@router.post("/qwen/v2", response_model=BatchOptimResponse)
+async def optimizeQwen(payload: BatchOptimRequest):
     try:
-
         instancetraitement = TraitementDonnees()
+        
+        products_data = [product.dict() for product in payload.products]
+        print(products_data)
+        
         prompt = instancetraitement.generate_prompt(payload.dict())
  
         chat_request = ChatRequest(prompt=prompt)
