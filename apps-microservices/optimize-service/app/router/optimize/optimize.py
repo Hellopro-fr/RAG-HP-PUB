@@ -22,30 +22,6 @@ from common_utils.grpc_clients import (
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 
-# On crée un verrou global pour protéger l'initialisation du service
-service_initialization_lock = threading.Lock()
-qwen_service_instance: ProductTitleOptimizerBatch | None = None
-
-def get_qwen_optimize_service() -> ProductTitleOptimizerBatch:
-    """
-    Fonction "thread-safe" qui charge le service (et le modèle LLM) de manière différée.
-    Le verrou garantit qu'un seul thread peut initialiser le service à la fois.
-    """
-    global qwen_service_instance
-    # Si l'instance existe déjà, on la retourne directement sans attendre
-    if qwen_service_instance:
-        return qwen_service_instance
-
-    # Le premier thread qui arrive acquiert le verrou. Les autres attendent ici.
-    with service_initialization_lock:
-        # On revérifie si l'instance n'a pas été créée par un autre thread
-        # pendant qu'on attendait le verrou.
-        if qwen_service_instance is None:
-            print("--- LAZY LOADING: Initialisation du ProductTitleOptimizerBatch (chargement du modèle)... ---")
-            qwen_service_instance = ProductTitleOptimizerBatch()
-            print("--- LAZY LOADING: Service initialisé et prêt. ---")
-    return qwen_service_instance
-
 @router.post("/openai", response_model=OptimResponse)
 def optimize(request: OptimRequest):
     try:
