@@ -42,7 +42,8 @@ $(function () {
     searchMetrics: { totalResults: 0, searchTime: 0, sourcesUsed: [] },
     expandedSections: { sources: true, categories: false, insights: true },
     copiedContent: "",
-    selectedCategoriesRubrique: {}
+    selectedCategoriesRubrique: {},
+    typeRecherche: 1
   };
 
   // DOM elements
@@ -87,7 +88,8 @@ $(function () {
     mainContentWrapper: $("#mainContentWrapper"),
     categorieFilter: $("#categorieDropdown"),
     fournisseurFilter: $("#fournisseurDropdown"),
-    btnTranscription: $("#btn-transcription")
+    btnTranscription: $("#btn-transcription"),
+    typeRecherche: $("input[name='type-recherche']")
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -902,6 +904,12 @@ $(function () {
         }).get();
     });
 
+    elements.typeRecherche.on("change", function(e) {
+      e.preventDefault();
+      state.typeRecherche = $(this).val();
+      updateSearchButtons()
+    });
+
 
     // Mise à jour pour correspondre aux noms de sources de `index3.html`
     ["produits", "devis", "siteweb", "echanges"].forEach((source) => {
@@ -1054,14 +1062,25 @@ $(function () {
   }
 
   function updateSearchButtons() {
-    const hasQuery = state.searchQuery.trim().length > 0;
-    const isDisabled = state.isSearching || !hasQuery;
-    elements.searchBtn
-      .add(elements.searchBtnDesktop)
-      .prop("disabled", isDisabled);
-    elements.searchBtnText.text(
-      state.isSearching ? "Recherche..." : "Rechercher"
-    );
+    if (state.typeRecherche == 1) {
+      const hasQuery = state.searchQuery.trim().length > 0;
+      const isDisabled = state.isSearching || !hasQuery;
+      elements.searchBtn
+        .add(elements.searchBtnDesktop)
+        .prop("disabled", isDisabled);
+      elements.searchBtnText.text(
+        state.isSearching ? "Recherche..." : "Rechercher"
+      );
+    } else {
+        const hasQuery = true;
+        const isDisabled = state.isSearching || !hasQuery;
+        elements.searchBtn
+          .add(elements.searchBtnDesktop)
+          .prop("disabled", isDisabled);
+        elements.searchBtnText.text(
+          state.isSearching ? "Recherche..." : "Rechercher"
+        );
+    }
   }
 
   function updateUI() {
@@ -1266,7 +1285,14 @@ $(function () {
    * Remplace la fonction de recherche par le système WebSocket.
    */
   async function executeSearch() {
-    if (!state.searchQuery.trim() || state.isSearching) return;
+    console.log(state.typeRecherche)
+    if (
+      state.typeRecherche == 1
+      && (
+        !state.searchQuery.trim() 
+        || state.isSearching 
+      )
+    ) return;
 
     if(state.isLlmEnabled) {
       if(elements.templatePrompt.val().trim() === "") {
@@ -1441,7 +1467,8 @@ $(function () {
           use_reranker: state.useReranker,
           reranker_model: state.rerankerModel,
           rrf: GetURLParameter("rrf") == 1
-        }
+        },
+        type: $("input[name='type-recherche']:checked").val()
       };
 
       // --- FIN DE LA MODIFICATION ---
@@ -1577,7 +1604,7 @@ $(function () {
     elements.searchResultsList.empty();
     state.copiedContent = "";
     state.searchResults.forEach((result) => {
-      const relevanceHtml = getRelevanceCard(result.confidence / 100);
+      const relevanceHtml = (state.typeRecherche == 1) ? getRelevanceCard(result.confidence / 100) : "";
       const sourceBadgeHtml = getSourceBadge(result.source);
       const class_supplier = result.source == "devis" ? "hidden" : ""
 

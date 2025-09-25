@@ -49,3 +49,29 @@ async def get_collection_schema(
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant GetSchema: {e.details()}")
         return None
+    
+async def classic_search_vector(
+    collection: str,
+    filter_expr: str,
+    k: int,
+    output_fields: Optional[List[str]] = None
+):
+    """
+    Appelle le service gRPC pour effectuer une recherche classique par filtre.
+    """
+    try:
+        async with grpc.aio.insecure_channel(DATABASE_SERVICE_URL) as channel:
+            stub = database_pb2_grpc.DatabaseSearchServiceStub(channel)
+            
+            request = database_pb2.ClassicSearchRequest(
+                collection_name=collection,
+                filter_expression=filter_expr,
+                top_k=k,
+                output_fields=output_fields if output_fields else []
+            )
+            
+            response = await stub.ClassicSearch(request)
+            return response.results
+    except grpc.aio.AioRpcError as e:
+        logging.error(f"Erreur gRPC en appelant ClassicSearch: {e.details()}")
+        return None
