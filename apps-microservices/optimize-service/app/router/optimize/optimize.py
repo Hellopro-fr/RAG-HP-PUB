@@ -148,7 +148,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
                         print("LLM n'a pas retourné de résultat")
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
-                            "error": "LLM n'a pas retourné de résultat""
+                            "error": "LLM n'a pas retourné de résultat"
                         })
                     else:
                         print("tentative de parsing reussie")
