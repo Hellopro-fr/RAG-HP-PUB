@@ -124,7 +124,7 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
         return response_error
 
 @router.post("/qwen/v2", response_model=BatchOptimResponse)
-def optimizeQwen(payload: BatchOptimRequest):
+async def optimizeQwen(payload: BatchOptimRequest):
     try:
         start_time = time.time()
         print(f"Reception de {len(payload.products)} produits")
@@ -140,11 +140,18 @@ def optimizeQwen(payload: BatchOptimRequest):
         
                 chat_request = ChatRequest(prompt=prompt)
 
-                response = llm_client.get_llm_chat_response(chat_request)
+                response = await llm_client.get_llm_chat_response(chat_request)
 
                 try:
                     parsed_response = json.loads(response)
-                    if not parsed_response:
+                    clean_response = (
+                        parsed_response
+                        .replace("{{", "{")
+                        .replace("}}", "}")
+                        .replace('""', '"')
+                        .strip()
+                    )
+                    if not clean_response:
                         print("LLM n'a pas retourné de résultat")
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
@@ -154,15 +161,15 @@ def optimizeQwen(payload: BatchOptimRequest):
                         print("tentative de parsing reussie")
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
-                            "success": parsed_response
+                            "success": clean_response
                         })
 
                 except json.JSONDecodeError:
                     print("tentative de parsing échouée")
-                    print(parsed_response)
+                    print(clean_response)
                     results.append({
                         "id_produit_scrapping": product["id_produit_scrapping"],
-                        "error": f"Tentative de parsing échouée: {response}"
+                        "error": f"Tentative de parsing échouée: {clean_response}"
                     })
 
             except Exception as e:
