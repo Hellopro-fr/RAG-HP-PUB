@@ -144,13 +144,22 @@ async def optimizeQwen(payload: BatchOptimRequest):
 
                 try:
                     parsed_response = json.loads(response)
-                    print("tentative de parsing reussie")
-                    results.append({
-                        "id_produit_scrapping": product["id_produit_scrapping"],
-                        "success": parsed_response
-                    })
+                    if not parsed_response:
+                        print("LLM n'a pas retourné de résultat")
+                        results.append({
+                            "id_produit_scrapping": product["id_produit_scrapping"],
+                            "error": "LLM n'a pas retourné de résultat""
+                        })
+                    else:
+                        print("tentative de parsing reussie")
+                        results.append({
+                            "id_produit_scrapping": product["id_produit_scrapping"],
+                            "success": parsed_response
+                        })
+
                 except json.JSONDecodeError:
                     print("tentative de parsing échouée")
+                    print(parsed_response)
                     results.append({
                         "id_produit_scrapping": product["id_produit_scrapping"],
                         "error": f"Tentative de parsing échouée: {response}"
@@ -167,7 +176,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
         processing_time = end_time - start_time
         
         print(f"Fin traitement en {processing_time:.2f} secondes")
-        return {"data": [results]}
+        return {"data": results}
 
     except Exception as e:
         error_msg = f"Erreur lors du traitement du produit: {type(e).__name__}: {str(e)}"
