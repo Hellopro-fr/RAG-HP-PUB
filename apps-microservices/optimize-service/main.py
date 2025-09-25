@@ -1,5 +1,4 @@
 import logging
-import torch
 from dotenv import load_dotenv
 import os
 from fastapi import APIRouter, FastAPI, Request, status
