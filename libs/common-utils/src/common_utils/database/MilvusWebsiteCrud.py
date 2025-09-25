@@ -35,7 +35,7 @@ class MilvusWebsiteCrud:
         
     def _connect_to_milvus(self):
         if not connections.has_connection("default"):
-            self.logger.info("Connexion sur Zilliz cloud...")
+            print("Connexion sur Zilliz cloud...")
             # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
             connections.connect(
                 alias="default",
@@ -43,18 +43,20 @@ class MilvusWebsiteCrud:
                 port=self.config.ZILLIZ_PORT,
                 timeout=10 # Add a 10-second timeout to prevent indefinite hanging
             )
-            self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+            print("✓ Connexion sur Zilliz cloud avec succès.")
     
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
-        if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
+        print(f"Vérification de l'existence de la collection '{collection_name}'...")
+        if utility.has_collection(collection_name, timeout=10) and self.config.RECREATE_COLLECTIONS:
             logging.warning(f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'")
-            utility.drop_collection(collection_name)
+            utility.drop_collection(collection_name, timeout=10)
 
-        if not utility.has_collection(collection_name):
+        print(f"Nouvelle vérification de l'existence de la collection '{collection_name}'...")
+        if not utility.has_collection(collection_name, timeout=10):
             self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
@@ -109,8 +111,9 @@ class MilvusWebsiteCrud:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
             collection = Collection(collection_name)
         
-        collection.load()
-        self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête.")
+        print(f"Chargement de la collection '{collection_name}' en mémoire...")
+        collection.load(timeout=30)
+        print(f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête.")
         return collection
 
 
