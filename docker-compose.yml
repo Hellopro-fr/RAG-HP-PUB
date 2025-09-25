@@ -16,8 +16,8 @@ services:
       --model Qwen/Qwen3-14B-AWQ
       --quantization awq_marlin
       --trust-remote-code
-      --gpu-memory-utilization 0.95
-      --max-num-seqs 128
+      --gpu-memory-utilization 0.90
+      --max-num-seqs 64
       --max-num-batched-tokens 8192
       --enable-chunked-prefill
       --enable-prefix-caching
