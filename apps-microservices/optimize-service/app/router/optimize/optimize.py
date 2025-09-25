@@ -126,25 +126,48 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
 @router.post("/qwen/v2", response_model=BatchOptimResponse)
 async def optimizeQwen(payload: BatchOptimRequest):
     try:
+        start_time = time.time()
+        print(f"Reception de {len(payload.products)} produits")
+
         instancetraitement = TraitementDonnees()
+        results = []
         
         products_data = [product.dict() for product in payload.products]
-        print(products_data)
+
+        for product in products_data:
+            try:
+                prompt = instancetraitement.generate_prompt(product)
         
-        prompt = instancetraitement.generate_prompt(payload.dict())
- 
-        chat_request = ChatRequest(prompt=prompt)
+                chat_request = ChatRequest(prompt=prompt)
 
-        response = await llm_client.get_llm_chat_response(chat_request)
+                response = await llm_client.get_llm_chat_response(chat_request)
 
-        try:
-            parsed_response = json.loads(response)
-        except json.JSONDecodeError:
-            print("erreur de parsing")
+                try:
+                    parsed_response = json.loads(response)
+                    print("tentative de parsing reussie")
+                    results.append({
+                        "id_produit_scrapping": product["id_produit_scrapping"],
+                        "success": parsed_response
+                    })
+                except json.JSONDecodeError:
+                    print("tentative de parsing échouée")
+                    results.append({
+                        "id_produit_scrapping": product["id_produit_scrapping"],
+                        "error": f"Tentative de parsing échouée: {response}"
+                    })
 
-        print(parsed_response)
+            except Exception as e:
+                print(f"Erreur lors du traitement du produit {product['id_produit_scrapping']}: {str(e)}")
+                results.append({
+                    "id_produit_scrapping": product["id_produit_scrapping"],
+                    "error": f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
+                })
 
-        return {"data": [parsed_response]}
+        end_time = time.time()
+        processing_time = end_time - start_time
+        
+        print(f"Fin traitement en {processing_time:.2f} secondes")
+        return {"data": [results]}
 
     except Exception as e:
         error_msg = f"Erreur lors du traitement du produit: {type(e).__name__}: {str(e)}"
