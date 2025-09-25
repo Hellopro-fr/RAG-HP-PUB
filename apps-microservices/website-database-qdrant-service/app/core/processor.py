@@ -50,6 +50,7 @@ def insertion_data(website_data: dict) -> dict:
 
     # --- Étape 1: Vérifier si l'URL existe déjà ---
     try:
+        logging.info(f"Vérification de l'existence de l'URL '{url}' avec page_type '{page_type}' dans {bdd}...")
         res = base_vectorielle.get_website(url=url, page_type=page_type)
         status = res.get("status")
         data = res.get("data", [])

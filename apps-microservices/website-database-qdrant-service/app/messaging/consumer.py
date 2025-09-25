@@ -100,7 +100,7 @@ class Consumer:
                 print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
                 dlq_props = DLQProperties.create_dlq_properties(e, 'website-database-qdrant-service', MAX_RETRIES, method)
                 ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-        ch.basic_ack(delivery_tag=method.delivery_tag)
+                ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def start_consuming(self):
         for i in range(3):
