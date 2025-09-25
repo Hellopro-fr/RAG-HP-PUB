@@ -120,7 +120,7 @@ class Consumer:
                     raise ValueError("Contenu du message ('text') manquant.")
             except (json.JSONDecodeError, ValueError) as e:
                 print(f"🗑️  Message invalide (tag: {delivery_tag}) envoyé directement à la DLQ finale. Erreur: {e}")
-                dlq_props = DLQProperties.create_dlq_properties(e, 0, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
+                dlq_props = DLQProperties.create_dlq_properties(e, 'template-llm-service', 0, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
                 self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
                 self.channel.basic_ack(delivery_tag=delivery_tag)
 
@@ -158,7 +158,7 @@ class Consumer:
                     self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
                 else:
                     print(f"   -> Échec après {MAX_RETRIES + 1} tentatives (tag: {delivery_tag}). Message envoyé à la DLQ finale.")
-                    dlq_props = DLQProperties.create_dlq_properties(e, MAX_RETRIES, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
+                    dlq_props = DLQProperties.create_dlq_properties(e, 'template-llm-service', MAX_RETRIES, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
                     self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
                     self.channel.basic_ack(delivery_tag=delivery_tag)
         

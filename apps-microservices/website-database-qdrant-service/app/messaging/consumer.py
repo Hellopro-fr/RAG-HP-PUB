@@ -86,7 +86,7 @@ class Consumer:
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message est invalide.
             print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
-            dlq_props = DLQProperties.create_dlq_properties(e, 0, method)
+            dlq_props = DLQProperties.create_dlq_properties(e, 'website-database-qdrant-service', 0, method)
             ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
@@ -98,7 +98,7 @@ class Consumer:
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             else:
                 print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
-                dlq_props = DLQProperties.create_dlq_properties(e, MAX_RETRIES, method)
+                dlq_props = DLQProperties.create_dlq_properties(e, 'website-database-qdrant-service', MAX_RETRIES, method)
                 ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
         ch.basic_ack(delivery_tag=method.delivery_tag)
 
