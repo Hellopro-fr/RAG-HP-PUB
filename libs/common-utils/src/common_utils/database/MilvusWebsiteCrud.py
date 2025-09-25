@@ -51,12 +51,12 @@ class MilvusWebsiteCrud:
         model_key = model_config.model_id
 
         print(f"Vérification de l'existence de la collection '{collection_name}'...")
-        if utility.has_collection(collection_name, timeout=10) and self.config.RECREATE_COLLECTIONS:
-            logging.warning(f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'")
-            utility.drop_collection(collection_name, timeout=10)
+        if utility.has_collection(collection_name, timeout=20) and self.config.RECREATE_COLLECTIONS:
+            print(f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'")
+            utility.drop_collection(collection_name, timeout=20)
 
         print(f"Nouvelle vérification de l'existence de la collection '{collection_name}'...")
-        if not utility.has_collection(collection_name, timeout=10):
+        if not utility.has_collection(collection_name, timeout=20):
             self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
@@ -94,17 +94,17 @@ class MilvusWebsiteCrud:
             # # TODO : Vérifier les paramètres d'indexation
             # # Exemple d'indexation HNSW pour les embeddings
             index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
-            collection.create_index(field_name="embedding", index_params=index_params)
+            collection.create_index(field_name="embedding", index_params=index_params, timeout=60)
 
             # # Optionnel: Créer des index scalaires pour les filtres fréquents
-            collection.create_index(field_name="url", index_name="idx_url")
+            collection.create_index(field_name="url", index_name="idx_url", timeout=60)
             # collection.create_index(field_name="categorie", index_name="idx_categorie")
             # collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
             # collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
             # collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")
             # collection.create_index(field_name="affichage", index_name="idx_affichage")
             # collection.create_index(field_name="etat", index_name="idx_etat")
-            collection.create_index(field_name="page_type", index_name="idx_page_type")
+            collection.create_index(field_name="page_type", index_name="idx_page_type", timeout=60)
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
@@ -112,7 +112,7 @@ class MilvusWebsiteCrud:
             collection = Collection(collection_name)
         
         print(f"Chargement de la collection '{collection_name}' en mémoire...")
-        collection.load(timeout=30)
+        collection.load(timeout=60)
         print(f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête.")
         return collection
 
@@ -279,7 +279,8 @@ class MilvusWebsiteCrud:
 
             result = self.collection.query(
                 expr=f'url == "{url}" && page_type == "{page_type}"',
-                output_fields=["id"]
+                output_fields=["id"],
+                timeout=20
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
