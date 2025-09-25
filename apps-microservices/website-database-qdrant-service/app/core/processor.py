@@ -2,7 +2,6 @@ from common_utils.database.QdrantWebsiteCrud import QdrantWebsiteCrud
 from common_utils.database.MilvusWebsiteCrud import MilvusWebsiteCrud
 
 from common_utils.autres.CollectionName import CollectionName
-import logging
 
 def insertion_data(website_data: dict) -> dict:
     """
@@ -34,12 +33,12 @@ def insertion_data(website_data: dict) -> dict:
     if not page_type:
         raise ValueError("Le type de page est manquant dans les données du site web.")
 
-    logging.info(f"Début du traitement pour l'URL: {url}")
+    print(f"Début du traitement pour l'URL: {url}")
 
     try:
         collection_enum = CollectionName(collection)
     except ValueError:
-        logging.error("'%s' n'est pas un nom de collection valide.", collection)
+        print("'%s' n'est pas un nom de collection valide.", collection)
         raise ValueError(f"Nom de collection invalide: {collection}")
 
     # Initialisation du client de base de données
@@ -50,7 +49,7 @@ def insertion_data(website_data: dict) -> dict:
 
     # --- Étape 1: Vérifier si l'URL existe déjà ---
     try:
-        logging.info(f"Vérification de l'existence de l'URL '{url}' avec page_type '{page_type}' dans {bdd}...")
+        print(f"Vérification de l'existence de l'URL '{url}' avec page_type '{page_type}' dans {bdd}...")
         res = base_vectorielle.get_website(url=url, page_type=page_type)
         status = res.get("status")
         data = res.get("data", [])
@@ -59,7 +58,7 @@ def insertion_data(website_data: dict) -> dict:
             raise Exception(f"Erreur lors de la vérification de l'existence de l'URL: {res.get('message')}")
         
         if data:
-            logging.info(f"L'URL {url} existe déjà dans la base de données. Insertion ignorée.")
+            print(f"L'URL {url} existe déjà dans la base de données. Insertion ignorée.")
             return {
                 "status": "skipped",
                 "message": f"L'URL {url} existe déjà.",
@@ -67,19 +66,19 @@ def insertion_data(website_data: dict) -> dict:
                 "already_in_bdd": True
                 }
     except Exception as e:
-        logging.error(f"Échec de la vérification de l'URL {url}: {e}")
+        print(f"Échec de la vérification de l'URL {url}: {e}")
         raise # Propage l'exception pour que le consumer la gère (retry/DLQ)
 
     # --- Étape 2: Insérer les données si elles n'existent pas ---
     try:
-        logging.info(f"Insertion de {len(websites)} chunk(s) pour l'URL {url} dans {bdd}...")
+        print(f"Insertion de {len(websites)} chunk(s) pour l'URL {url} dans {bdd}...")
         func = base_vectorielle.insert_website
         result = func(websites)
 
         if not result or result.get("status") != "success":
             raise Exception(f"L'insertion a échoué pour l'URL {url}. Réponse de la BDD: {result}")
 
-        logging.info(f"✓ Insertion réussie pour l'URL {url}.")
+        print(f"✓ Insertion réussie pour l'URL {url}.")
         
         return {
             "status": "success",
@@ -90,5 +89,5 @@ def insertion_data(website_data: dict) -> dict:
             "already_in_bdd": False
         }
     except Exception as e:
-        logging.error(f"Échec de l'insertion pour l'URL {url}: {e}")
+        print(f"Échec de l'insertion pour l'URL {url}: {e}")
         raise # Propage l'exception pour que le consumer la gère (retry/DLQ)
