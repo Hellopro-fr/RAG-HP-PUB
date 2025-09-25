@@ -144,14 +144,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
 
                 try:
                     parsed_response = json.loads(response)
-                    clean_response = (
-                        parsed_response
-                        .replace("{{", "{")
-                        .replace("}}", "}")
-                        .replace('""', '"')
-                        .strip()
-                    )
-                    if not clean_response:
+                    if not parsed_response:
                         print("LLM n'a pas retourné de résultat")
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
@@ -161,15 +154,15 @@ async def optimizeQwen(payload: BatchOptimRequest):
                         print("tentative de parsing reussie")
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
-                            "success": clean_response
+                            "success": parsed_response
                         })
 
                 except json.JSONDecodeError:
                     print("tentative de parsing échouée")
-                    print(clean_response)
+                    print(parsed_response)
                     results.append({
                         "id_produit_scrapping": product["id_produit_scrapping"],
-                        "error": f"Tentative de parsing échouée: {clean_response}"
+                        "error": f"Tentative de parsing échouée: {parsed_response}"
                     })
 
             except Exception as e:
