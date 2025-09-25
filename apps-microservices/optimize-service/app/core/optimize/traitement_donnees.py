@@ -53,14 +53,18 @@ class TraitementDonnees:
         return prompt
 
     def clean_json_response(self, resp: str) -> str:
-        # Retirer espaces/retours invisibles
         resp = resp.strip()
-        # Extraire uniquement le bloc JSON (si le LLM parle autour)
-        match = re.search(r'\{.*\}', resp, re.DOTALL)
-        if match:
-            return match.group(0)
+
+        # Corrige d'abord le cas {{ ... }}
         if resp.startswith("{{") and resp.endswith("}}"):
             resp = resp[1:-1].strip()
+
+        # Ensuite, si jamais le LLM a mis du texte autour, on récupère seulement le bloc JSON
+        match = re.search(r'\{.*\}', resp, re.DOTALL)
+        if match:
+            resp = match.group(0)
+
         return resp
+
 
     
