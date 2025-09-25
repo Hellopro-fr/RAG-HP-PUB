@@ -17,7 +17,7 @@ services:
       --quantization awq_marlin
       --trust-remote-code
       --gpu-memory-utilization 0.95
-      --max-num-seqs 16
+      --max-num-seqs 32
       --max-num-batched-tokens 8192
       --enable-chunked-prefill
       --enable-prefix-caching
