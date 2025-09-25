@@ -34,10 +34,16 @@ class MilvusWebsiteCrud:
         self.logger = kwargs.get('logger', logging)
         
     def _connect_to_milvus(self):
-        self.logger.info("Connexion sur Zilliz cloud...")
-        # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
-        connections.connect("default", host=self.config.ZILLIZ_URI, port=self.config.ZILLIZ_PORT)
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        if not connections.has_connection("default"):
+            self.logger.info("Connexion sur Zilliz cloud...")
+            # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
+            connections.connect(
+                alias="default",
+                host=self.config.ZILLIZ_URI, 
+                port=self.config.ZILLIZ_PORT,
+                timeout=10 # Add a 10-second timeout to prevent indefinite hanging
+            )
+            self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
     
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
