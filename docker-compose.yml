@@ -346,6 +346,8 @@ services:
       - ./apps-microservices/template-llm-service/app:/app/template_llm_service:rw
     env_file:
       - .env
+    deploy:
+      replicas: 4
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
