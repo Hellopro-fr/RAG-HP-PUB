@@ -56,7 +56,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
 
                 response = await llm_client.get_llm_chat_response(chat_request)
 
-                response = clean_json_response(response)
+                response = instancetraitement.clean_json_response(response)
 
                 try:
                     parsed_response = json.loads(response)
