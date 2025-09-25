@@ -59,6 +59,8 @@ class TraitementDonnees:
         match = re.search(r'\{.*\}', resp, re.DOTALL)
         if match:
             return match.group(0)
+        if resp.startswith("{{") and resp.endswith("}}"):
+            resp = resp[1:-1].strip()
         return resp
 
     
