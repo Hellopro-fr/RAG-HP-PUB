@@ -142,6 +142,15 @@ async def optimizeQwen(payload: BatchOptimRequest):
 
                 response = await llm_client.get_llm_chat_response(chat_request)
 
+                # Vérifier et nettoyer l'encodage de la réponse
+                if isinstance(response, str):
+                    try:
+                        # Si c'est déjà de l'UTF-8 mal interprété, on le recore
+                        response = response.encode('latin1').decode('utf-8')
+                    except (UnicodeDecodeError, UnicodeEncodeError):
+                        # Si ça échoue, on garde la réponse originale
+                        pass
+
                 try:
                     parsed_response = json.loads(response)
                     if not parsed_response:
