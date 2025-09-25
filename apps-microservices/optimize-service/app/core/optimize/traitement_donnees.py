@@ -43,7 +43,7 @@ class TraitementDonnees:
 
             # FORMAT DE SORTIE TRES IMPORTANT ET OBLIGATOIRE : 
             Ta réponse doit être un JSON strictement valide, sans aucun texte avant ou après, sans balises Markdown, sans ```json, sans commentaire, sans indentation inutile. Exemple :
-            {{{{"Titre": "Titre généré ici"}}}}
+            {"Titre": "Titre généré ici"}
 
             # INPUTS :
             CATEGORIE PRODUIT = {data.get('categorie_produit', '')}
@@ -51,5 +51,14 @@ class TraitementDonnees:
             DESCRIPTION PRODUIT = {data.get('description_produit', '')}
             """
         return prompt
-        
+
+    def clean_json_response(resp: str) -> str:
+        # Retirer espaces/retours invisibles
+        resp = resp.strip()
+        # Extraire uniquement le bloc JSON (si le LLM parle autour)
+        match = re.search(r'\{.*\}', resp, re.DOTALL)
+        if match:
+            return match.group(0)
+        return resp
+
     

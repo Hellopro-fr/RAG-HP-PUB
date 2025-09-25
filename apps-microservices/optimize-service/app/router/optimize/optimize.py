@@ -9,6 +9,7 @@ import traceback
 import asyncio
 import json
 import logging
+import ast
 
 router = APIRouter()
 
@@ -55,14 +56,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
 
                 response = await llm_client.get_llm_chat_response(chat_request)
 
-                # Vérifier et nettoyer l'encodage de la réponse
-                if isinstance(response, str):
-                    try:
-                        # Si c'est déjà de l'UTF-8 mal interprété, on le recore
-                        response = response.encode('latin1').decode('utf-8')
-                    except (UnicodeDecodeError, UnicodeEncodeError):
-                        # Si ça échoue, on garde la réponse originale
-                        pass
+                response = clean_json_response(response)
 
                 try:
                     parsed_response = json.loads(response)
@@ -80,12 +74,15 @@ async def optimizeQwen(payload: BatchOptimRequest):
                         })
 
                 except json.JSONDecodeError:
-                    print("tentative de parsing échouée")
-                    print(parsed_response)
-                    results.append({
-                        "id_produit_scrapping": product["id_produit_scrapping"],
-                        "error": f"Tentative de parsing échouée: {parsed_response}"
-                    })
+                    try:
+                        parsed_response = ast.literal_eval(response)
+                    except Exception:
+                        print("tentative de parsing échouée")
+                        print(response)
+                        results.append({
+                            "id_produit_scrapping": product["id_produit_scrapping"],
+                            "error": f"Tentative de parsing échouée: {response}"
+                        })
 
             except Exception as e:
                 print(f"Erreur lors du traitement du produit {product['id_produit_scrapping']}: {str(e)}")
