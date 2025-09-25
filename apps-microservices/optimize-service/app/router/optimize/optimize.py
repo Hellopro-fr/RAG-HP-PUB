@@ -124,7 +124,7 @@ def optimize_qwen_batch(request: Request, payload: BatchOptimRequest):
         return response_error
 
 @router.post("/qwen/v2", response_model=BatchOptimResponse)
-async def optimizeQwen(payload: BatchOptimRequest):
+def optimizeQwen(payload: BatchOptimRequest):
     try:
         start_time = time.time()
         print(f"Reception de {len(payload.products)} produits")
@@ -140,7 +140,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
         
                 chat_request = ChatRequest(prompt=prompt)
 
-                response = await llm_client.get_llm_chat_response(chat_request)
+                response = llm_client.get_llm_chat_response(chat_request)
 
                 try:
                     parsed_response = json.loads(response)
