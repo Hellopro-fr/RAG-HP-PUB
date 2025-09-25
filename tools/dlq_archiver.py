@@ -104,20 +104,33 @@ def main():
         es_client.indices.create(index=ELASTIC_INDEX_NAME)
 
     documents_buffer = []
-    
+    last_archive_time = time.time()
+
+    def callback(ch, method, properties, body):
+        """Callback simple qui ajoute les messages reçus à un buffer."""
+        print(f"📥 DLQ Archiver: Message reçu de la queue '{method.routing_key}' (tag: {method.delivery_tag})")
+        doc = process_message(body, properties)
+        documents_buffer.append((method.delivery_tag, doc))
+
     try:
         for queue_name in dlq_queues:
-            print(f"👂 DLQ Archiver: Écoute de la queue '{queue_name}'...")
+            print(f"👂 DLQ Archiver: Enregistrement du consumer pour la queue '{queue_name}'...")
+            channel.queue_declare(queue=queue_name, durable=True)
+            channel.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
+        
+        print("👂 DLQ Archiver: Démarrage de la boucle de traitement...")
+        while True:
+            # Traite les événements (messages entrants) pendant 1 seconde
+            channel.connection.process_data_events(time_limit=1)
 
-        # Consommer de toutes les queues en même temps
-        for method_frame, properties, body in channel.consume(dlq_queues):
-            if method_frame:
-                doc = process_message(body, properties)
-                documents_buffer.append((method_frame.delivery_tag, doc))
+            batch_is_full = len(documents_buffer) >= BATCH_SIZE
+            timeout_reached = (time.time() - last_archive_time) > BATCH_TIMEOUT_SECONDS
 
-                # Envoyer le buffer à Elasticsearch s'il est plein
-                if len(documents_buffer) >= BATCH_SIZE:
-                    archive_and_ack_batch(channel, es_client, documents_buffer)
+            if documents_buffer and (batch_is_full or timeout_reached):
+                if timeout_reached:
+                    print(f"   -> Timeout ({BATCH_TIMEOUT_SECONDS}s) atteint, archivage du batch en cours...")
+                archive_and_ack_batch(channel, es_client, documents_buffer)
+                last_archive_time = time.time()
 
     except KeyboardInterrupt:
         print("\n🛑 DLQ Archiver: Arrêt demandé. Archivage des messages restants...")
