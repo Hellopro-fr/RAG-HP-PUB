@@ -16,12 +16,12 @@ services:
       --model Qwen/Qwen3-14B-AWQ
       --quantization awq_marlin
       --trust-remote-code
-      --gpu-memory-utilization 0.95
+      --gpu-memory-utilization 0.90
       --max-num-seqs 256
       --max-num-batched-tokens 8192
       --enable-chunked-prefill
       --enable-prefix-caching
-      --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
+      --rope-scaling '{"rope_type":"yarn","factor":4.0,"original_max_position_embeddings":32768}'
     ports:
       - "8000:8000"
     deploy:
