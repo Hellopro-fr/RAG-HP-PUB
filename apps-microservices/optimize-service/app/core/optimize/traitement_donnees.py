@@ -52,7 +52,7 @@ class TraitementDonnees:
             """
         return prompt
 
-    def clean_json_response(resp: str) -> str:
+    def clean_json_response(self, resp: str) -> str:
         # Retirer espaces/retours invisibles
         resp = resp.strip()
         # Extraire uniquement le bloc JSON (si le LLM parle autour)
