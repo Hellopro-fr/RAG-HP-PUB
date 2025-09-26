@@ -34,6 +34,7 @@ class MilvusWebsiteCrud:
         self.logger = kwargs.get('logger', logging)
         
     def _connect_to_milvus(self):
+        # Check if a connection with the alias 'default' already exists.
         if not connections.has_connection("default"):
             print("Connexion sur Zilliz cloud...")
             # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
@@ -45,22 +46,23 @@ class MilvusWebsiteCrud:
             )
             print("✓ Connexion sur Zilliz cloud avec succès.")
     
-    # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
+        # Simplified and more robust logic
         print(f"Vérification de l'existence de la collection '{collection_name}'...")
-        if utility.has_collection(collection_name, timeout=20) and self.config.RECREATE_COLLECTIONS:
-            print(f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'")
-            utility.drop_collection(collection_name, timeout=20)
+        collection_exists = utility.has_collection(collection_name, using="default", timeout=20)
 
-        print(f"Nouvelle vérification de l'existence de la collection '{collection_name}'...")
-        if not utility.has_collection(collection_name, timeout=20):
+        if collection_exists and self.config.RECREATE_COLLECTIONS:
+            print(f"[{model_key}] Collection '{collection_name}' existante → suppression en cours...")
+            utility.drop_collection(collection_name, using="default", timeout=20)
+            collection_exists = False
+
+        if not collection_exists:
             self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
-                # Todo : ce clé doit être unique
                 FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True),
                 FieldSchema(name="url", dtype=DataType.VARCHAR , max_length=65535),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
@@ -84,15 +86,12 @@ class MilvusWebsiteCrud:
             schema = CollectionSchema(fields, description=f"Collection de chunks de siteweb pour {model_key}")
             
             collection = Collection(
-                collection_name, 
-                schema,
+                name=collection_name, 
+                schema=schema,
+                using="default",
                 consistency_level="Strong"
             )
             
-            # self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
-
-            # # TODO : Vérifier les paramètres d'indexation
-            # # Exemple d'indexation HNSW pour les embeddings
             index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
             collection.create_index(field_name="embedding", index_params=index_params, timeout=60)
 
@@ -109,7 +108,7 @@ class MilvusWebsiteCrud:
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
             self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
-            collection = Collection(collection_name)
+            collection = Collection(name=collection_name, using="default")
         
         print(f"Chargement de la collection '{collection_name}' en mémoire...")
         collection.load(timeout=60)
@@ -144,8 +143,7 @@ class MilvusWebsiteCrud:
                 data = Utils.sanitize_record(data)
                 sanitized_batch.append(data)  
             
-            result = self.collection.insert(sanitized_batch)
-            # self.collection.flush()
+            result = self.collection.insert(sanitized_batch, timeout=30)
 
             self.logger.info(f"Résultat insertion : {result}") 
             self.logger.info(f"Clé primaire : {result.primary_keys}") 
@@ -159,10 +157,10 @@ class MilvusWebsiteCrud:
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de l'insertion : {e}")
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] insertion de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
     
     def update_website(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -195,8 +193,8 @@ class MilvusWebsiteCrud:
             # This is important for Milvus compatibility
             data = Utils.sanitize_record(data)  
 
-            result = self.collection.upsert(data)
-            self.collection.flush()
+            result = self.collection.upsert(data, timeout=30)
+            self.collection.flush(timeout=30)
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             
             return {
@@ -234,8 +232,8 @@ class MilvusWebsiteCrud:
                 }
 
             self.logger.info(f"[{model_key}][siteweb] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
-            result = self.collection.delete(f"id == {id_entity_milvus}")
-            self.collection.flush()
+            result = self.collection.delete(f"id == {id_entity_milvus}", timeout=30)
+            self.collection.flush(timeout=30)
             self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
 
             return {
@@ -282,7 +280,7 @@ class MilvusWebsiteCrud:
                 output_fields=["id"],
                 timeout=20
             )
-            # self.collection.flush()
+
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
             return {
@@ -292,5 +290,7 @@ class MilvusWebsiteCrud:
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][Website] Erreur Milvus lors de la récupération : {e}")
+            return {"status": "error", "message": str(e)}
         except Exception as e:
             self.logger.error(f"[{model_key}][Website] Erreur de Récupèration de siteweb : {e}", exc_info=True)
+            return {"status": "error", "message": str(e)}
