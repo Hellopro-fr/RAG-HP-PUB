@@ -64,7 +64,7 @@ class MilvusWebsiteCrud:
             collection_exists = False
 
         if not collection_exists:
-            self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
+            print(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
                 FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True),
@@ -109,9 +109,9 @@ class MilvusWebsiteCrud:
             # collection.create_index(field_name="etat", index_name="idx_etat")
             collection.create_index(field_name="page_type", index_name="idx_page_type", timeout=60)
 
-            self.logger.info(f"[{model_key}] ✓ Index créés.")
+            print(f"[{model_key}] ✓ Index créés.")
         else:
-            self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
+            print(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
             collection = Collection(name=collection_name, using="default")
         
         print(f"Chargement de la collection '{collection_name}' en mémoire...")
@@ -135,7 +135,7 @@ class MilvusWebsiteCrud:
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
-            self.logger.info(f"[{model_key}][siteweb] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
+            print(f"[{model_key}][siteweb] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
            
             sanitized_batch = []
             for data in datas:
@@ -149,10 +149,10 @@ class MilvusWebsiteCrud:
             
             result = self.collection.insert(sanitized_batch, timeout=30)
 
-            self.logger.info(f"Résultat insertion : {result}") 
-            self.logger.info(f"Clé primaire : {result.primary_keys}") 
+            print(f"Résultat insertion : {result}") 
+            print(f"Clé primaire : {result.primary_keys}") 
             
-            self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
+            print(f"[{model_key}] ✓ Insertion terminée avec succès.")
             
             return {
                 "ids": str(result.primary_keys[0]) if result.primary_keys else "",
@@ -188,7 +188,7 @@ class MilvusWebsiteCrud:
                     "message": "Clé primaire (ID) requise pour la mise à jour."
                 }
 
-            self.logger.info(f"[{model_key}][siteweb] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
+            print(f"[{model_key}][siteweb] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
             
             
             data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
@@ -199,7 +199,7 @@ class MilvusWebsiteCrud:
 
             result = self.collection.upsert(data, timeout=30)
             self.collection.flush(timeout=30)
-            self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
+            print(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             
             return {
                 "ids": str(result.primary_keys[0]) if result.primary_keys else "",
@@ -235,10 +235,10 @@ class MilvusWebsiteCrud:
                     "message": "Clé primaire (ID) requise pour la suppression."
                 }
 
-            self.logger.info(f"[{model_key}][siteweb] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
+            print(f"[{model_key}][siteweb] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
             result = self.collection.delete(f"id == {id_entity_milvus}", timeout=30)
             self.collection.flush(timeout=30)
-            self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
+            print(f"[{model_key}] ✓ Suppression terminée avec succès.")
 
             return {
                 "status": "success",
@@ -285,7 +285,7 @@ class MilvusWebsiteCrud:
                 timeout=20
             )
 
-            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+            print(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
             return {
                 "status": "success",
