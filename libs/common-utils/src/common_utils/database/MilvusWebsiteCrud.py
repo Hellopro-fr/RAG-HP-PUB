@@ -33,7 +33,7 @@ class MilvusWebsiteCrud:
         if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_PORT:
             raise ValueError("Zilliz Cloud URI and API Key/Port must be set in the environment.")
         self.logger = kwargs.get('logger', logging)
-        self.client = MilvusClient(uri=f'{self.config.ZILLIZ_URI}:{self.config.ZILLIZ_PORT}')
+        self.client = MilvusClient(uri=f'http://{self.config.ZILLIZ_URI}:{self.config.ZILLIZ_PORT}')
         
     def _connect_to_milvus(self):
         # Check if a connection with the alias 'default' already exists.
