@@ -50,9 +50,13 @@ class MilvusWebsiteCrud:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
-        # Simplified and more robust logic
-        print(f"Vérification de l'existence de la collection '{collection_name}'...")
-        collection_exists = utility.has_collection(collection_name, using="default", timeout=20)
+        try:
+            print(f"Vérification de l'existence de la collection '{collection_name}'...")
+            collection_exists = utility.has_collection(collection_name, using="default", timeout=20)
+            print(f" -> La collection '{collection_name}' existe: {collection_exists}")
+        except Exception as e:
+            print(f"!!! ERREUR LORS DE LA VÉRIFICATION DE LA COLLECTION: {e}")
+            raise
 
         if collection_exists and self.config.RECREATE_COLLECTIONS:
             print(f"[{model_key}] Collection '{collection_name}' existante → suppression en cours...")
