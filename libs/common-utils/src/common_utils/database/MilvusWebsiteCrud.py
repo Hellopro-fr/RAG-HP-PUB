@@ -90,19 +90,25 @@ class MilvusWebsiteCrud:
             schema = CollectionSchema(fields, description=f"Collection de chunks de siteweb pour {model_key}")
             
             try:
-                print(f"[{model_key}] Création de la collection '{collection_name}' avec le schéma défini...")
-                collection = Collection(
-                    name=collection_name, 
+                print(f"[{model_key}] Tentative de création de la collection '{collection_name}'...")
+                utility.create_collection(
+                    collection_name=collection_name,
                     schema=schema,
                     using="default",
-                    consistency_level="Strong"
+                    consistency_level="Strong",
+                    timeout=60  # Timeout explicite pour la création
                 )
                 print(f"[{model_key}] ✓ Collection '{collection_name}' créée avec succès.")
-            
-                index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
-                collection.create_index(field_name="embedding", index_params=index_params, timeout=60)
 
-                # # Optionnel: Créer des index scalaires pour les filtres fréquents
+                # On récupère l'objet Collection après création
+                collection = Collection(name=collection_name, using="default")
+            
+                print(f"[{model_key}] Création de l'index vectoriel HNSW...")
+                index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
+                collection.create_index(field_name="embedding", index_params=index_params, timeout=120) # Timeout plus long pour l'index
+                print(f"[{model_key}] ✓ Index vectoriel créé.")
+
+                print(f"[{model_key}] Création des index scalaires...")
                 collection.create_index(field_name="url", index_name="idx_url", timeout=60)
                 # collection.create_index(field_name="categorie", index_name="idx_categorie")
                 # collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
@@ -111,10 +117,10 @@ class MilvusWebsiteCrud:
                 # collection.create_index(field_name="affichage", index_name="idx_affichage")
                 # collection.create_index(field_name="etat", index_name="idx_etat")
                 collection.create_index(field_name="page_type", index_name="idx_page_type", timeout=60)
+                print(f"[{model_key}] ✓ Index scalaires créés.")
 
-                print(f"[{model_key}] ✓ Index créés.")
             except Exception as e:
-                print(f"!!! ERREUR LORS DE LA CRÉATION DE LA COLLECTION: {e}")
+                print(f"!!! ERREUR LORS DE LA CRÉATION DE LA COLLECTION OU DES INDEX: {e}")
                 raise
         else:
             print(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
