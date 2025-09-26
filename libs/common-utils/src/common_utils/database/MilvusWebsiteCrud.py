@@ -14,7 +14,8 @@ from pymilvus import (
     CollectionSchema,
     DataType,
     Collection,
-    MilvusException
+    MilvusException,
+    MilvusClient
 )
 
 
@@ -32,6 +33,7 @@ class MilvusWebsiteCrud:
         if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_PORT:
             raise ValueError("Zilliz Cloud URI and API Key/Port must be set in the environment.")
         self.logger = kwargs.get('logger', logging)
+        self.client = MilvusClient(uri=f'{self.config.ZILLIZ_URI}:{self.config.ZILLIZ_PORT}')
         
     def _connect_to_milvus(self):
         # Check if a connection with the alias 'default' already exists.
@@ -91,10 +93,9 @@ class MilvusWebsiteCrud:
             
             try:
                 print(f"[{model_key}] Tentative de création de la collection '{collection_name}'...")
-                utility.create_collection(
+                self.client.create_collection(
                     collection_name=collection_name,
                     schema=schema,
-                    using="default",
                     consistency_level="Strong",
                     timeout=60  # Timeout explicite pour la création
                 )
@@ -172,11 +173,13 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de l'insertion : {e}")
-            self.logger.error(f"Data : {datas}")
+            print(f"[{model_key}][siteweb] Erreur Milvus lors de l'insertion : {e}")
+            print(f"Data : {datas}")
+            raise
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] insertion de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {datas}")
+            print(f"Data : {datas}")
+            raise
     
     def update_website(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -194,7 +197,7 @@ class MilvusWebsiteCrud:
                 }
             
             if not data.get("id"):
-                self.logger.error(f"[{model_key}][siteweb] Mise à jour sans ID.")
+                print(f"[{model_key}][siteweb] Mise à jour sans ID.")
                 return {
                     "status": "error",
                     "message": "Clé primaire (ID) requise pour la mise à jour."
@@ -219,11 +222,13 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de mise à jour : {e}")
-            self.logger.error(f"Data : {data}")
+            print(f"[{model_key}][siteweb] Erreur Milvus lors de mise à jour : {e}")
+            print(f"Data : {data}")
+            raise
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] Mise à jour de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            print(f"Data : {data}")
+            raise
 
     def delete_website(self,data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -241,7 +246,7 @@ class MilvusWebsiteCrud:
                 }
 
             if not id_entity_milvus:
-                self.logger.error(f"[{model_key}][siteweb] Suppression sans ID.")
+                print(f"[{model_key}][siteweb] Suppression sans ID.")
                 return {
                     "status": "error",
                     "message": "Clé primaire (ID) requise pour la suppression."
@@ -258,9 +263,11 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de la suppression : {e}")
+            print(f"[{model_key}][siteweb] Erreur Milvus lors de la suppression : {e}")
+            raise
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] Suppression : {e}", exc_info=True)
+            raise
 
     def get_website(self, url: str, page_type: str) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -305,7 +312,7 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Website] Erreur Milvus lors de la récupération : {e}")
+            print(f"[{model_key}][Website] Erreur Milvus lors de la récupération : {e}")
             return {"status": "error", "message": str(e)}
         except Exception as e:
             self.logger.error(f"[{model_key}][Website] Erreur de Récupèration de siteweb : {e}", exc_info=True)
