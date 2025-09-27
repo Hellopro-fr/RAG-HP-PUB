@@ -83,6 +83,10 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
             conversation, tokenize=False, add_generation_prompt=True, enable_thinking=False
         )
         
+        # Ajout des métriques de diagnostic au message
+        message["_diag_content_length"] = len(content) if content else 0
+        message["_diag_token_count"] = len(TOKENIZER.encode(formatted_prompt))
+        
         # Validation de la longueur du prompt avant de l'envoyer
         # if len(TOKENIZER.encode(formatted_prompt)) >= MAX_MODEL_LEN:
         #     print(f"   -> ⚠️  Prompt trop long pour l'URL {url}. Marqué comme erreur.")
@@ -136,6 +140,10 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
     print(f"   -> Classification en batch terminée pour {len(processed_messages)} messages.")
     # Afficher les types de pages détectés pour chaque message
     for msg in processed_messages:
-        print(f"      • URL: {msg['data'].get('url', 'N/A')} => Type de page: {msg['data'].get('page_type', 'N/A')}")
+        url = msg['data'].get('url', 'N/A')
+        page_type = msg['data'].get('page_type', 'N/A')
+        content_len = msg.get('_diag_content_length', 'N/A')
+        token_count = msg.get('_diag_token_count', 'N/A')
+        print(f"      • URL: {url} => Type de page: {page_type} [Content Length: {content_len}, Token: {token_count}]")
         
     return processed_messages
