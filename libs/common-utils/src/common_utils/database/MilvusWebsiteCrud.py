@@ -14,8 +14,7 @@ from pymilvus import (
     CollectionSchema,
     DataType,
     Collection,
-    MilvusException,
-    MilvusClient
+    MilvusException
 )
 
 
@@ -33,7 +32,6 @@ class MilvusWebsiteCrud:
         if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_PORT:
             raise ValueError("Zilliz Cloud URI and API Key/Port must be set in the environment.")
         self.logger = kwargs.get('logger', logging)
-        self.client = MilvusClient(uri=f'http://{self.config.ZILLIZ_URI}:{self.config.ZILLIZ_PORT}')
         
     def _connect_to_milvus(self):
         # Check if a connection with the alias 'default' already exists.
@@ -93,16 +91,12 @@ class MilvusWebsiteCrud:
             
             try:
                 print(f"[{model_key}] Tentative de création de la collection '{collection_name}'...")
-                self.client.create_collection(
-                    collection_name=collection_name,
+                collection = Collection(
+                    name=collection_name,
                     schema=schema,
                     consistency_level="Strong",
-                    timeout=60  # Timeout explicite pour la création
                 )
                 print(f"[{model_key}] ✓ Collection '{collection_name}' créée avec succès.")
-
-                # On récupère l'objet Collection après création
-                collection = Collection(name=collection_name, using="default")
             
                 print(f"[{model_key}] Création de l'index vectoriel HNSW...")
                 index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
