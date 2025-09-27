@@ -30,6 +30,7 @@ class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
         self.connection = connection
         self.publisher = publisher
+        self.channel = self.connection.channel()
         
         # Noms des composants RabbitMQ
         self.exchange_name = 'processed_data_exchange'
@@ -49,7 +50,6 @@ class Consumer:
         # Garde en mémoire le moment où le dernier batch a été traité.
         self.last_batch_time = time.time()
         
-        self._process_recovery_files()
         self.connect()
         print(f"✅ Consumer initialisé en mode BATCH (Taille: {BATCH_SIZE}, Timeout: {BATCH_TIMEOUT_SECONDS}s).")
 
@@ -90,6 +90,9 @@ class Consumer:
         # messages à la fois. Cela évite de surcharger la mémoire du client et
         # distribue mieux la charge entre plusieurs replicas du service.
         self.channel.basic_qos(prefetch_count=BATCH_SIZE)
+        
+        # Traiter les fichiers de récupération immédiatement après une connexion réussie
+        self._process_recovery_files()
 
     def _get_retry_count(self, properties: pika.BasicProperties) -> int:
         """Inspecte les headers pour compter le nombre de tentatives."""
@@ -114,53 +117,63 @@ class Consumer:
             for msg in successful_messages:
                 self.publisher.publish_message(msg)
             
-            # 2. Acquitter les messages réussis
+            # 2. Acquitter les messages réussis (de manière idempotente)
             for delivery_tag in successful_acks:
-                self.channel.basic_ack(delivery_tag=delivery_tag)
+                try:
+                    self.channel.basic_ack(delivery_tag=delivery_tag)
+                except pika.exceptions.AMQPChannelError as e:
+                    # Cette erreur est attendue si un autre worker a déjà acquitté le message.
+                    print(f"   -> AVERTISSEMENT: Impossible d'acquitter le message (tag: {delivery_tag}). Il a probablement déjà été traité par une autre réplique. Erreur: {e}")
+                    pass # On continue, c'est le comportement attendu.
 
-            # 3. Gérer les messages échoués
+            # 3. Gérer les messages échoués (de manière idempotente)
             for failed_item in failed_messages:
                 delivery_tag = failed_item['delivery_tag']
                 properties = pika.BasicProperties(**failed_item.get('properties', {}))
                 body = json.dumps(failed_item['body']).encode('utf-8')
                 error_message = failed_item['error_message']
 
-                retry_count = self._get_retry_count(properties)
-                if retry_count < MAX_RETRIES:
-                    print(f"   -> NACK du message échoué (tag: {delivery_tag}) pour nouvelle tentative.")
-                    self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
-                else:
-                    print(f"   -> Échec final pour le message (tag: {delivery_tag}). Envoi à la DLQ finale.")
-                    dlq_props = DLQProperties.create_dlq_properties(Exception(error_message), 'template-llm-service', MAX_RETRIES, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
-                    self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-                    self.channel.basic_ack(delivery_tag=delivery_tag)
+                try:
+                    retry_count = self._get_retry_count(properties)
+                    if retry_count < MAX_RETRIES:
+                        print(f"   -> NACK du message échoué (tag: {delivery_tag}) pour nouvelle tentative.")
+                        self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
+                    else:
+                        print(f"   -> Échec final pour le message (tag: {delivery_tag}). Envoi à la DLQ finale.")
+                        dlq_props = DLQProperties.create_dlq_properties(Exception(error_message), 'template-llm-service', MAX_RETRIES, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
+                        self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
+                        self.channel.basic_ack(delivery_tag=delivery_tag)
+                except pika.exceptions.AMQPChannelError as e:
+                    print(f"   -> AVERTISSEMENT: Impossible de traiter l'échec pour le message (tag: {delivery_tag}). Il a probablement déjà été traité. Erreur: {e}")
+                    pass
 
             # 4. Supprimer le fichier de récupération
             os.remove(recovery_filepath)
             print(f"✓ Fichier de récupération {recovery_filepath} traité et supprimé.")
 
         except pika.exceptions.StreamLostError as e:
-            print(f"❌ ERREUR DE CONNEXION pendant la finalisation du batch. La récupération sera retentée au prochain redémarrage. Erreur: {e}")
+            print(f"❌ ERREUR DE CONNEXION pendant la finalisation du batch. La récupération sera retentée à la prochaine reconnexion. Erreur: {e}")
             raise e # Propage pour que la boucle principale tente de se reconnecter
         except Exception as e:
             print(f"❌ Erreur critique lors de la finalisation du batch depuis {recovery_filepath}: {e}")
             # Ne pas supprimer le fichier pour une inspection manuelle
 
     def _process_recovery_files(self):
-        print("🔎 Recherche de fichiers de récupération au démarrage...")
-        recovery_files = [f for f in os.listdir(RECOVERY_DIR) if f.startswith('recovery_') and f.endswith('.json')]
-        if not recovery_files:
-            print("   -> Aucun fichier de récupération trouvé.")
-            return
+        print("🔎 Recherche de fichiers de récupération...")
+        try:
+            recovery_files = [f for f in os.listdir(RECOVERY_DIR) if f.startswith('recovery_') and f.endswith('.json')]
+            if not recovery_files:
+                print("   -> Aucun fichier de récupération trouvé.")
+                return
 
-        print(f"   -> {len(recovery_files)} fichier(s) de récupération trouvé(s). Traitement...")
-        for filename in recovery_files:
-            filepath = os.path.join(RECOVERY_DIR, filename)
-            try:
+            print(f"   -> {len(recovery_files)} fichier(s) de récupération trouvé(s). Traitement...")
+            for filename in recovery_files:
+                filepath = os.path.join(RECOVERY_DIR, filename)
                 self._finalize_batch_from_recovery_file(filepath)
-            except Exception as e:
-                print(f"   -> ⚠️ Échec du traitement du fichier de récupération {filepath}: {e}. Le fichier est conservé pour la prochaine tentative.")
-                # La boucle de reconnexion dans start_consuming() sera déclenchée
+        except pika.exceptions.StreamLostError as e:
+            raise e # Propage l'erreur pour que la boucle principale tente de se reconnecter
+        except Exception as e:
+            print(f"   -> ⚠️ Échec du traitement des fichiers de récupération: {e}. Ils seront ré-essayés après la prochaine reconnexion.")
 
     def _process_batch(self):
         """Orchestre le traitement du batch avec une logique de retry/DLQ."""
@@ -244,7 +257,12 @@ class Consumer:
         except Exception as e:
             print(f"❌ ERREUR CATASTROPHIQUE sur le batch (ex: LLM indisponible): {e}. NACK de tous les messages du batch.")
             for delivery_tag, _, _ in valid_batch_items:
-                self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False) # Laisse DLX gérer le retry
+                try:
+                    self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
+                except pika.exceptions.StreamLostError:
+                    raise # Propage l'erreur de connexion pour la gérer dans la boucle principale
+                except Exception as nack_e:
+                    print(f"   -> Erreur lors du NACK du message {delivery_tag}: {nack_e}")
         
         finally:
             end_time = time.monotonic()
