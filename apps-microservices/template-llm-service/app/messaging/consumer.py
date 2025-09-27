@@ -2,6 +2,8 @@ import pika
 import json
 import time
 import asyncio
+import os
+import uuid
 
 from unittest.mock import MagicMock
 from template_llm_service.messaging.publisher import Publisher
@@ -22,11 +24,11 @@ BATCH_SIZE = 32
 BATCH_TIMEOUT_SECONDS = 2.0
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
+RECOVERY_DIR = 'recovery_data'
 
 class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
         self.connection = connection
-        self.channel = connection.channel()
         self.publisher = publisher
         
         # Noms des composants RabbitMQ
@@ -38,7 +40,6 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
 
-
         self.rabbitmq_connection = RabbitMQConnection()
 
         # --- État interne pour la gestion du batch ---
@@ -47,7 +48,8 @@ class Consumer:
         self.message_buffer = []
         # Garde en mémoire le moment où le dernier batch a été traité.
         self.last_batch_time = time.time()
-
+        
+        self._process_recovery_files()
         self.connect()
         print(f"✅ Consumer initialisé en mode BATCH (Taille: {BATCH_SIZE}, Timeout: {BATCH_TIMEOUT_SECONDS}s).")
 
@@ -55,7 +57,8 @@ class Consumer:
         """
         Établit la connexion et configure le consumer, y compris les queues de retry et de dead-letter.
         """
-        self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
+        if not self.connection or self.connection.is_closed:
+            self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
         self.channel = self.connection.channel()
 
         # --- 1. Infrastructure pour les échecs FINALS (Dead-Letter Queue) ---
@@ -90,12 +93,74 @@ class Consumer:
 
     def _get_retry_count(self, properties: pika.BasicProperties) -> int:
         """Inspecte les headers pour compter le nombre de tentatives."""
-        if properties.headers and 'x-death' in properties.headers:
+        if properties and properties.headers and 'x-death' in properties.headers:
             # `x-death` est une liste, on prend la première entrée qui correspond à notre retry queue
             for death in properties.headers['x-death']:
                 if death.get('queue') == self.retry_queue_name:
                     return death.get('count', 0)
         return 0
+
+    def _finalize_batch_from_recovery_file(self, recovery_filepath: str):
+        print(f"📄 Tentative de finalisation du batch depuis le fichier de récupération: {recovery_filepath}")
+        try:
+            with open(recovery_filepath, 'r') as f:
+                recovery_data = json.load(f)
+            
+            successful_messages = recovery_data.get('successful_messages', [])
+            successful_acks = recovery_data.get('successful_acks', [])
+            failed_messages = recovery_data.get('failed_messages', [])
+
+            # 1. Publier les messages réussis
+            for msg in successful_messages:
+                self.publisher.publish_message(msg)
+            
+            # 2. Acquitter les messages réussis
+            for delivery_tag in successful_acks:
+                self.channel.basic_ack(delivery_tag=delivery_tag)
+
+            # 3. Gérer les messages échoués
+            for failed_item in failed_messages:
+                delivery_tag = failed_item['delivery_tag']
+                properties = pika.BasicProperties(**failed_item.get('properties', {}))
+                body = json.dumps(failed_item['body']).encode('utf-8')
+                error_message = failed_item['error_message']
+
+                retry_count = self._get_retry_count(properties)
+                if retry_count < MAX_RETRIES:
+                    print(f"   -> NACK du message échoué (tag: {delivery_tag}) pour nouvelle tentative.")
+                    self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
+                else:
+                    print(f"   -> Échec final pour le message (tag: {delivery_tag}). Envoi à la DLQ finale.")
+                    dlq_props = DLQProperties.create_dlq_properties(Exception(error_message), 'template-llm-service', MAX_RETRIES, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
+                    self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
+                    self.channel.basic_ack(delivery_tag=delivery_tag)
+
+            # 4. Supprimer le fichier de récupération
+            os.remove(recovery_filepath)
+            print(f"✓ Fichier de récupération {recovery_filepath} traité et supprimé.")
+
+        except pika.exceptions.StreamLostError as e:
+            print(f"❌ ERREUR DE CONNEXION pendant la finalisation du batch. La récupération sera retentée au prochain redémarrage. Erreur: {e}")
+            raise e # Propage pour que la boucle principale tente de se reconnecter
+        except Exception as e:
+            print(f"❌ Erreur critique lors de la finalisation du batch depuis {recovery_filepath}: {e}")
+            # Ne pas supprimer le fichier pour une inspection manuelle
+
+    def _process_recovery_files(self):
+        print("🔎 Recherche de fichiers de récupération au démarrage...")
+        recovery_files = [f for f in os.listdir(RECOVERY_DIR) if f.startswith('recovery_') and f.endswith('.json')]
+        if not recovery_files:
+            print("   -> Aucun fichier de récupération trouvé.")
+            return
+
+        print(f"   -> {len(recovery_files)} fichier(s) de récupération trouvé(s). Traitement...")
+        for filename in recovery_files:
+            filepath = os.path.join(RECOVERY_DIR, filename)
+            try:
+                self._finalize_batch_from_recovery_file(filepath)
+            except Exception as e:
+                print(f"   -> ⚠️ Échec du traitement du fichier de récupération {filepath}: {e}. Le fichier est conservé pour la prochaine tentative.")
+                # La boucle de reconnexion dans start_consuming() sera déclenchée
 
     def _process_batch(self):
         """Orchestre le traitement du batch avec une logique de retry/DLQ."""
@@ -132,20 +197,43 @@ class Consumer:
             return
 
         print(f"⚙️  Traitement d'un batch de {len(valid_batch_items)} message(s) valide(s)...")
-        messages = [json.loads(item[2]) for item in valid_batch_items]
+
+        messages_to_process = [json.loads(item[2]) for item in valid_batch_items]
+        
+        recovery_package = {
+            "successful_messages": [],
+            "successful_acks": [],
+            "failed_messages": []
+        }
 
         try:
-            processed_messages = asyncio.run(classify_page_template_batch(messages))
+            processed_results = asyncio.run(classify_page_template_batch(messages_to_process))
             
-            # --- Gestion granulaire des ACKs/NACKs pour la résilience ---
-            # On parcourt chaque résultat pour l'acquitter individuellement.
-            # Si un seul message échoue, les autres ne sont pas impactés.
-            for i, output_message in enumerate(processed_messages):
-                original_delivery_tag = valid_batch_items[i][0]
-                self.publisher.publish_message(output_message)
-                self.channel.basic_ack(delivery_tag=original_delivery_tag)
+            for i, result in enumerate(processed_results):
+                delivery_tag, properties, body = valid_batch_items[i]
+                
+                if result['status'] == 'success':
+                    recovery_package['successful_messages'].append(result['processed_message'])
+                    recovery_package['successful_acks'].append(delivery_tag)
+                else:
+                    # Pour pika.BasicProperties, les headers doivent être un dictionnaire
+                    props_dict = {'headers': properties.headers} if properties and properties.headers else {}
+                    
+                    recovery_package['failed_messages'].append({
+                        "delivery_tag": delivery_tag,
+                        "properties": props_dict,
+                        "body": json.loads(body),
+                        "error_message": result['error_message']
+                    })
 
-            print("   -> Batch valide traité avec succès.")
+            batch_id = str(uuid.uuid4())
+            recovery_filepath = os.path.join(RECOVERY_DIR, f"recovery_{batch_id}.json")
+
+            with open(recovery_filepath, 'w') as f:
+                json.dump(recovery_package, f)
+            
+            print(f"   -> Fichier de récupération {recovery_filepath} créé.")
+            self._finalize_batch_from_recovery_file(recovery_filepath)
 
         except pika.exceptions.StreamLostError as e:
             print(f"❌ ERREUR DE CONNEXION PENDANT LE TRAITEMENT: {e}. Le batch sera retraité par RabbitMQ après reconnexion.")
@@ -154,20 +242,9 @@ class Consumer:
             raise e
 
         except Exception as e:
-            # Ceci est une erreur applicative (ex: le modèle vLLM a crashé).
-            # Dans ce cas, on ne peut pas savoir quels messages ont réussi.
-            # La stratégie la plus sûre est de NACK tout le batch pour un retraitement ultérieur.
-            print(f"❌ ERREUR APPLICATIVE sur le batch valide : {e}. Gestion individuelle des messages...")
-            for delivery_tag, properties, body in valid_batch_items:
-                retry_count = self._get_retry_count(properties)
-                if retry_count < MAX_RETRIES:
-                    print(f"   -> NACK du message (tag: {delivery_tag}) pour une nouvelle tentative (essai {retry_count + 1}).")
-                    self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
-                else:
-                    print(f"   -> Échec après {MAX_RETRIES + 1} tentatives (tag: {delivery_tag}). Message envoyé à la DLQ finale.")
-                    dlq_props = DLQProperties.create_dlq_properties(e, 'template-llm-service', MAX_RETRIES, MagicMock(exchange=self.exchange_name, routing_key=self.routing_key))
-                    self.channel.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-                    self.channel.basic_ack(delivery_tag=delivery_tag)
+            print(f"❌ ERREUR CATASTROPHIQUE sur le batch (ex: LLM indisponible): {e}. NACK de tous les messages du batch.")
+            for delivery_tag, _, _ in valid_batch_items:
+                self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False) # Laisse DLX gérer le retry
         
         finally:
             end_time = time.monotonic()

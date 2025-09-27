@@ -17,6 +17,9 @@ def main():
         exit(1)
 
     print("🚀 template-llm-service: Démarrage...")
+    
+    # Créer le répertoire de récupération s'il n'existe pas
+    os.makedirs('recovery_data', exist_ok=True)
 
     connection = None
     for i in range(10):

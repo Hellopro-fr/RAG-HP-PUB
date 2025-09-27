@@ -57,13 +57,10 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
     pour une efficacité maximale, et retourne une liste de messages enrichis.
 
     Args:
-        llm_instance (LLM): L'instance du modèle vLLM chargé.
-        tokenizer: Le tokenizer associé au modèle.
-        llm_config (dict): La configuration du LLM (ex: max_model_len).
         messages (list[dict]): La liste des messages originaux à traiter.
 
     Returns:
-        list[dict]: La liste des messages, chacun enrichi avec le "page_type".
+        list[dict]: Une liste de résultats, chaque élément contenant le statut ('success' ou 'error').
     """
     prompts = []
     
@@ -83,67 +80,68 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
             conversation, tokenize=False, add_generation_prompt=True, enable_thinking=False
         )
         
-        # Ajout des métriques de diagnostic au message
+        # Ajout des métriques de diagnostic
         message["_diag_content_length"] = len(content) if content else 0
         message["_diag_token_count"] = len(TOKENIZER.encode(formatted_prompt))
         
-        # Validation de la longueur du prompt avant de l'envoyer
-        # if len(TOKENIZER.encode(formatted_prompt)) >= MAX_MODEL_LEN:
-        #     print(f"   -> ⚠️  Prompt trop long pour l'URL {url}. Marqué comme erreur.")
-        #     # On met un marqueur pour savoir que ce prompt ne doit pas être envoyé.
-        #     prompts.append("PROMPT_TOO_LONG")
-        # else:
         prompts.append(formatted_prompt)
 
     # --- Étape 2: Appel gRPC par lots au service LLM ---
-    # On filtre les prompts qui sont trop longs pour ne pas les envoyer.
-    valid_prompts = [p for p in prompts if p != "PROMPT_TOO_LONG"]
     batch_outputs = []
-    if valid_prompts:
+    if prompts:
         batch_outputs = await llm_client.get_llm_chat_batch_response(
-            messages=valid_prompts,
+            messages=prompts,
             temperature=0.7,
-            max_tokens=256, # Assez pour une réponse JSON de classification
+            max_tokens=256,
             enable_thinking=False
         )
         
     # --- Étape 3: Traitement des résultats ---
-    processed_messages = []
-    output_index = 0
-    for i, original_prompt in enumerate(prompts):
-        original_message = messages[i]
+    processed_results = []
+    for i, original_message in enumerate(messages):
+        result = {
+            "status": "error",
+            "original_message": original_message,
+            "error_message": "Aucune réponse du LLM pour ce message."
+        }
+        
+        if i < len(batch_outputs):
+            raw_text = batch_outputs[i]
+            try:
+                match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                if match:
+                    json_string = match.group(0)
+                    parsed_json = json.loads(json_string)
+                    page_type = parsed_json.get("page_type")
+                    if not page_type:
+                        raise ValueError("Le champ 'page_type' est manquant ou vide dans la réponse JSON.")
+                    
+                    # Enrichissement du message original
+                    original_message["data"]["page_type"] = page_type
+                    result = {
+                        "status": "success",
+                        "processed_message": original_message
+                    }
+                else:
+                    raise ValueError("Aucun bloc JSON trouvé dans la sortie du LLM.")
+            except Exception as e:
+                error_str = f"Erreur de parsing JSON. Sortie brute: '{raw_text}'. Erreur: {e}"
+                result["error_message"] = error_str
+                print(f"   -> ⚠️ {error_str}")
 
-        if original_prompt == "PROMPT_TOO_LONG":
-            raise ValueError(f"   -> ⚠️  Le prompt pour le message {i} est trop long et n'a pas été envoyé.")
-        else:
-            if output_index < len(batch_outputs):
-                raw_text = batch_outputs[output_index]
-                output_index += 1
-                try:
-                    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                    if match:
-                        json_string = match.group(0)
-                        result = json.loads(json_string)
-                        page_type = result.get("page_type")
-                        if not page_type:
-                            raise ValueError("Le champ 'page_type' est manquant ou vide.")
-                    else:
-                        raise ValueError("Aucun bloc JSON trouvé dans la sortie du LLM.")
-                except Exception as e:
-                    raise ValueError(f"   -> ⚠️  Erreur de parsing JSON pour un message. Sortie brute: '{raw_text}'. Erreur: {e}")
-            else:
-                raise ValueError(f"   -> ⚠️  Aucune réponse du service LLM pour le prompt {i}.")
-        
-        original_message["data"]["page_type"] = page_type
-        processed_messages.append(original_message)
-    
-    print(f"   -> Classification en batch terminée pour {len(processed_messages)} messages.")
-    # Afficher les types de pages détectés pour chaque message
-    for msg in processed_messages:
+        processed_results.append(result)
+
+    print(f"   -> Classification en batch terminée pour {len(processed_results)} messages.")
+    for res in processed_results:
+        msg = res.get('processed_message') or res.get('original_message')
         url = msg['data'].get('url', 'N/A')
-        page_type = msg['data'].get('page_type', 'N/A')
-        content_len = msg.get('_diag_content_length', 'N/A')
-        token_count = msg.get('_diag_token_count', 'N/A')
-        print(f"      • URL: {url} => Type de page: {page_type} [Content Length: {content_len}, Token: {token_count}]")
         
-    return processed_messages
+        if res['status'] == 'success':
+            page_type = msg['data'].get('page_type', 'N/A')
+            content_len = msg.get('_diag_content_length', 'N/A')
+            token_count = msg.get('_diag_token_count', 'N/A')
+            print(f"      • [SUCCESS] URL: {url} => Type: {page_type} [Len: {content_len}, Tokens: {token_count}]")
+        else:
+            print(f"      • [FAILURE] URL: {url} => Erreur: {res.get('error_message', 'Inconnue')}")
+            
+    return processed_results
