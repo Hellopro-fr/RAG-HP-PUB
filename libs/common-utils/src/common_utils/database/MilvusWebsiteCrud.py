@@ -21,7 +21,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "siteweb_bo"
+    collection_name: str = "siteweb_2"
     dimension: int = 1024
 
 class MilvusWebsiteCrud:
