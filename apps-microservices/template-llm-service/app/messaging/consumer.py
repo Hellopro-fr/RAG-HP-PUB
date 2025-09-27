@@ -25,6 +25,7 @@ RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
 
 class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
+        self.connection = connection
         self.channel = connection.channel()
         self.publisher = publisher
         
@@ -146,11 +147,17 @@ class Consumer:
 
             print("   -> Batch valide traité avec succès.")
 
+        except pika.exceptions.StreamLostError as e:
+            print(f"❌ ERREUR DE CONNEXION PENDANT LE TRAITEMENT: {e}. Le batch sera retraité par RabbitMQ après reconnexion.")
+            # En ne les acquittant pas, RabbitMQ les remettra dans la file d'attente.
+            # On propage l'erreur pour déclencher la reconnexion.
+            raise e
+
         except Exception as e:
-            # Ceci est une erreur catastrophique (ex: le modèle vLLM a crashé).
+            # Ceci est une erreur applicative (ex: le modèle vLLM a crashé).
             # Dans ce cas, on ne peut pas savoir quels messages ont réussi.
             # La stratégie la plus sûre est de NACK tout le batch pour un retraitement ultérieur.
-            print(f"❌ ERREUR CATASTROPHIQUE sur le batch valide : {e}. Gestion individuelle des messages...")
+            print(f"❌ ERREUR APPLICATIVE sur le batch valide : {e}. Gestion individuelle des messages...")
             for delivery_tag, properties, body in valid_batch_items:
                 retry_count = self._get_retry_count(properties)
                 if retry_count < MAX_RETRIES:
@@ -171,30 +178,41 @@ class Consumer:
 
     def start_consuming(self):
         """
-        Remplace la boucle de consommation basique par une boucle contrôlée
-        qui gère la logique de création de batches.
+        Démarre une boucle de consommation résiliente qui gère la logique de batching
+        et les reconnexions automatiques.
         """
-        print("👂 template-llm-service: En attente de messages pour le batching...")
-        
-        # channel.consume() est un générateur qui nous donne plus de contrôle.
-        # 'inactivity_timeout' est crucial : il permet à la boucle de continuer
-        # même si aucun message n'arrive, afin de traiter les batches incomplets.
-        for method_frame, properties, body in self.channel.consume(self.queue_name, inactivity_timeout=BATCH_TIMEOUT_SECONDS):
-            
-            # Si method_frame est None, cela signifie que le timeout a été atteint.
-            if method_frame is None:
-                # S'il y a des messages en attente dans le buffer, il est temps de les traiter.
-                if self.message_buffer:
-                    print("   -> Timeout atteint, traitement du batch en cours...")
-                    self._process_batch()
-                # On continue la boucle pour attendre de nouveaux messages.
-                continue
+        while True:
+            try:
+                print("👂 template-llm-service: En attente de messages pour le batching...")
+                # channel.consume() est un générateur qui nous donne plus de contrôle.
+                # 'inactivity_timeout' est crucial : il permet à la boucle de continuer
+                # même si aucun message n'arrive, afin de traiter les batches incomplets.
+                for method_frame, properties, body in self.channel.consume(self.queue_name, inactivity_timeout=BATCH_TIMEOUT_SECONDS):
+                    
+                    # Si method_frame est None, cela signifie que le timeout a été atteint.
+                    if method_frame is None:
+                        # S'il y a des messages en attente dans le buffer, il est temps de les traiter.
+                        if self.message_buffer:
+                            print("   -> Timeout atteint, traitement du batch en cours...")
+                            self._process_batch()
+                        # On continue la boucle pour attendre de nouveaux messages.
+                        continue
 
-            # Un message est arrivé. On l'ajoute à notre buffer.
-            self.message_buffer.append((method_frame.delivery_tag, properties, body))
-            
-            # Si le buffer a atteint sa taille maximale, on traite le batch immédiatement
-            # sans attendre le timeout.
-            if len(self.message_buffer) >= BATCH_SIZE:
-                print(f"   -> Taille maximale du batch ({BATCH_SIZE}) atteinte, traitement...")
-                self._process_batch()
+                    # Un message est arrivé. On l'ajoute à notre buffer.
+                    self.message_buffer.append((method_frame.delivery_tag, properties, body))
+                    
+                    # Si le buffer a atteint sa taille maximale, on traite le batch immédiatement
+                    # sans attendre le timeout.
+                    if len(self.message_buffer) >= BATCH_SIZE:
+                        print(f"   -> Taille maximale du batch ({BATCH_SIZE}) atteinte, traitement...")
+                        self._process_batch()
+
+            except pika.exceptions.StreamLostError as e:
+                print(f"⚠️ Connexion perdue dans la boucle principale: {e}. Tentative de reconnexion...")
+                self.connect() # Tente de se reconnecter
+            except KeyboardInterrupt:
+                print("\n🛑 Interruption manuelle. Arrêt du consumer.")
+                break
+            except Exception as e:
+                print(f"❌ Erreur inattendue dans la boucle de consommation: {e}. Tentative de reconnexion...")
+                self.connect() # Tente de se reconnecter
