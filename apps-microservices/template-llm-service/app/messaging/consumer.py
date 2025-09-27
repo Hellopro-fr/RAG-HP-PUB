@@ -91,6 +91,9 @@ class Consumer:
         # distribue mieux la charge entre plusieurs replicas du service.
         self.channel.basic_qos(prefetch_count=BATCH_SIZE)
         
+        # Synchroniser le publisher avec le nouveau canal valide
+        self.publisher.update_channel(self.channel)
+        
         # Traiter les fichiers de récupération immédiatement après une connexion réussie
         self._process_recovery_files()
 
