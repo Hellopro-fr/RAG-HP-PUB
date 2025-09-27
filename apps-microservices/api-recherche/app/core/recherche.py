@@ -445,6 +445,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
                 reranked_results_by_source[source] = [
                     result_map[text] for text in ranked_texts if text in result_map
                 ]
+                reranked_results_by_source[source] = reranked_results_by_source[source][:top_k_final]
                 logging.info(
                     f"Temps de reconstruction : {round((time.perf_counter() - start_reconstruction), 2)}"
                 )

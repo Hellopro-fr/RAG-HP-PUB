@@ -51,5 +51,20 @@ class TraitementDonnees:
             DESCRIPTION PRODUIT = {data.get('description_produit', '')}
             """
         return prompt
-        
+
+    def clean_json_response(self, resp: str) -> str:
+        resp = resp.strip()
+
+        # Corrige d'abord le cas {{ ... }}
+        if resp.startswith("{{") and resp.endswith("}}"):
+            resp = resp[1:-1].strip()
+
+        # Ensuite, si jamais le LLM a mis du texte autour, on récupère seulement le bloc JSON
+        match = re.search(r'\{.*\}', resp, re.DOTALL)
+        if match:
+            resp = match.group(0)
+
+        return resp
+
+
     
