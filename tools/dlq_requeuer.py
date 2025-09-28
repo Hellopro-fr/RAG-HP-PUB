@@ -72,7 +72,8 @@ def requeue_messages(es_client, rabbit_channel, args):
     
     # Utilisation de helpers.scan pour récupérer efficacement tous les résultats
     try:
-        for doc in helpers.scan(es_client, index=ELASTIC_INDEX_NAME, query={"query": query}):
+        # Ajout du paramètre `scroll` pour augmenter le timeout du contexte de recherche
+        for doc in helpers.scan(es_client, index=ELASTIC_INDEX_NAME, query={"query": query}, scroll='5m'):
             source = doc["_source"]
             original_payload = source.get("original_payload", {})
             original_exchange = source.get("original_exchange")
