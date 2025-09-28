@@ -101,7 +101,7 @@ async def _process_single_message(message: dict) -> dict:
             parsed_json = json.loads(json_string)
             page_type = parsed_json.get("page_type")
             if not page_type:
-                raise ValueError("Le champ 'page_type' est manquant ou vide dans la réponse JSON.")
+                raise ValueError(f"Le champ 'page_type' est manquant ou vide dans la réponse JSON: {raw_text}")
             
             original_message["data"]["page_type"] = page_type
             return {
@@ -109,7 +109,7 @@ async def _process_single_message(message: dict) -> dict:
                 "processed_message": original_message
             }
         else:
-            raise ValueError("Aucun bloc JSON trouvé dans la sortie du LLM.")
+            raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
     except Exception as e:
         error_str = f"Erreur de traitement individuel. Erreur: {e}"
