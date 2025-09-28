@@ -554,8 +554,10 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - grafana-storage:/var/lib/grafana  # Persist Grafana data
+      - ./grafana/dashboards:/var/lib/grafana/dashboards  # Mount custom dashboards
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards  # Auto-provision dashboards
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources  # Auto-provision data sources
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
