@@ -97,7 +97,9 @@ class Consumer:
                 pass
 
             if len(batch) >= BATCH_SIZE or (batch and timeout is not None):
-                print(f"⚙️  Traitement d'un batch de {len(batch)} messages...")
+                start_time = time.monotonic()
+                batch_size = len(batch)
+                print(f"⚙️  Traitement d'un batch de {batch_size} messages...")
                 messages_to_process = [json.loads(msg.body) for msg in batch]
                 
                 try:
@@ -140,6 +142,9 @@ class Consumer:
                     for msg in batch:
                         await msg.nack(requeue=False)
                 finally:
+                    end_time = time.monotonic()
+                    duration = end_time - start_time
+                    print(f"🏁 Traitement du batch de {batch_size} message(s) terminé en {duration:.4f} secondes.")
                     batch = []
 
     async def start_consuming(self):
