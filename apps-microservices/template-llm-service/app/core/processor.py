@@ -3,6 +3,7 @@ import re
 import asyncio
 from transformers import AutoTokenizer
 from common_utils.grpc_clients import llm_client
+from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 # Le prompt est défini ici, avec la logique métier
 PROMPT_TEMPLATE_FR = """
@@ -51,29 +52,19 @@ Contenu en entrée (Markdown) :
 TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
 MAX_MODEL_LEN = 4096 # Correspond à la configuration du modèle servi par vLLM
 
-async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
+async def _process_single_message(message: dict) -> dict:
     """
-    Prend un BATCH (une liste) de messages, les classifie tous avec un seul appel au LLM
-    pour une efficacité maximale, et retourne une liste de messages enrichis.
-
-    Args:
-        messages (list[dict]): La liste des messages originaux à traiter.
-
-    Returns:
-        list[dict]: Une liste de résultats, chaque élément contenant le statut ('success' ou 'error').
+    Traite un seul message en appelant le LLM. Conçu pour être exécuté en parallèle.
     """
-    prompts = []
-    
-    # --- Étape 1: Préparation des prompts pour le batch ---
-    for message in messages:
+    original_message = message
+    try:
         data_payload = message.get("data", {})
         url = data_payload.get("url", "URL non fournie")
         content = data_payload.get("text")
         
-        # Formatage du prompt final avec l'URL et le contenu tronqué.
         user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=content)
         conversation = [{"role": "user", "content": user_prompt}]
-        
+
         # apply_chat_template est la méthode recommandée pour formater le prompt
         # pour les modèles de type "chat".
         formatted_prompt = TOKENIZER.apply_chat_template(
@@ -81,56 +72,58 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
         )
         
         # Ajout des métriques de diagnostic
-        message["_diag_content_length"] = len(content) if content else 0
-        message["_diag_token_count"] = len(TOKENIZER.encode(formatted_prompt))
-        
-        prompts.append(formatted_prompt)
+        original_message["_diag_content_length"] = len(content) if content else 0
+        original_message["_diag_token_count"] = len(TOKENIZER.encode(formatted_prompt))
 
-    # --- Étape 2: Appel gRPC par lots au service LLM ---
-    batch_outputs = []
-    if prompts:
-        batch_outputs = await llm_client.get_llm_chat_batch_response(
-            messages=prompts,
+        # Appel gRPC pour un seul prompt
+        chat_request = ChatRequest(
+            prompt=formatted_prompt,
             temperature=0.7,
             max_tokens=256,
             enable_thinking=False
         )
+        raw_text = await llm_client.get_llm_chat_response(chat_request)
         
-    # --- Étape 3: Traitement des résultats ---
-    processed_results = []
-    for i, original_message in enumerate(messages):
-        result = {
+        # Parsing de la réponse
+        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if match:
+            json_string = match.group(0)
+            parsed_json = json.loads(json_string)
+            page_type = parsed_json.get("page_type")
+            if not page_type:
+                raise ValueError("Le champ 'page_type' est manquant ou vide dans la réponse JSON.")
+            
+            original_message["data"]["page_type"] = page_type
+            return {
+                "status": "success",
+                "processed_message": original_message
+            }
+        else:
+            raise ValueError("Aucun bloc JSON trouvé dans la sortie du LLM.")
+
+    except Exception as e:
+        error_str = f"Erreur de traitement individuel. Erreur: {e}"
+        return {
             "status": "error",
             "original_message": original_message,
-            "error_message": "Aucune réponse du LLM pour ce message."
+            "error_message": error_str
         }
+
+async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
+    """
+    Traite un BATCH de messages en créant des tâches concurrentes pour chaque message,
+    permettant au serveur vLLM de faire du 'continuous batching'.
+    """
+    if not messages:
+        return []
+
+    # --- Étape 1: Créer une tâche asyncio pour chaque message ---
+    tasks = [_process_single_message(msg) for msg in messages]
+    
+    # --- Étape 2: Exécuter toutes les tâches en parallèle ---
+    processed_results = await asyncio.gather(*tasks)
         
-        if i < len(batch_outputs):
-            raw_text = batch_outputs[i]
-            try:
-                match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                if match:
-                    json_string = match.group(0)
-                    parsed_json = json.loads(json_string)
-                    page_type = parsed_json.get("page_type")
-                    if not page_type:
-                        raise ValueError("Le champ 'page_type' est manquant ou vide dans la réponse JSON.")
-                    
-                    # Enrichissement du message original
-                    original_message["data"]["page_type"] = page_type
-                    result = {
-                        "status": "success",
-                        "processed_message": original_message
-                    }
-                else:
-                    raise ValueError("Aucun bloc JSON trouvé dans la sortie du LLM.")
-            except Exception as e:
-                error_str = f"Erreur de parsing JSON. Sortie brute: '{raw_text}'. Erreur: {e}"
-                result["error_message"] = error_str
-                print(f"   -> ⚠️ {error_str}")
-
-        processed_results.append(result)
-
+    # --- Étape 3: Journalisation des résultats ---
     print(f"   -> Classification en batch terminée pour {len(processed_results)} messages.")
     for res in processed_results:
         msg = res.get('processed_message') or res.get('original_message')

@@ -4,6 +4,7 @@ import time
 import asyncio
 import os
 import uuid
+import hashlib
 
 from unittest.mock import MagicMock
 from template_llm_service.messaging.publisher import Publisher
@@ -25,6 +26,10 @@ BATCH_TIMEOUT_SECONDS = 2.0
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
 RECOVERY_DIR = 'recovery_data'
+
+# --- Configuration for the deduplication cache ---
+CACHE_TIMEOUT_SECONDS = 600  # 10 minutes: A message is unlikely to be redelivered after this time
+CACHE_CLEANUP_INTERVAL_SECONDS = 120 # 2 minutes: How often to prune the cache
 
 class Consumer:
     def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
@@ -49,13 +54,18 @@ class Consumer:
         self.message_buffer = []
         # Garde en mémoire le moment où le dernier batch a été traité.
         self.last_batch_time = time.time()
+
+        # --- Deduplication Cache ---
+        self.processing_cache = {}
+        self.last_cache_cleanup = time.time()
         
         self.connect()
         print(f"✅ Consumer initialisé en mode BATCH (Taille: {BATCH_SIZE}, Timeout: {BATCH_TIMEOUT_SECONDS}s).")
 
     def connect(self):
         """
-        Établit la connexion et configure le consumer, y compris les queues de retry et de dead-letter.
+        Établit la connexion, configure le consumer, synchronise le publisher,
+        et traite immédiatement les fichiers de récupération existants.
         """
         if not self.connection or self.connection.is_closed:
             self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
@@ -178,6 +188,23 @@ class Consumer:
         except Exception as e:
             print(f"   -> ⚠️ Échec du traitement des fichiers de récupération: {e}. Ils seront ré-essayés après la prochaine reconnexion.")
 
+    def _prune_cache(self):
+        """
+        Removes old entries from the processing cache to prevent it from growing indefinitely.
+        """
+        current_time = time.time()
+        if current_time - self.last_cache_cleanup > CACHE_CLEANUP_INTERVAL_SECONDS:
+            print("🧹 Exécution du nettoyage du cache de déduplication...")
+            keys_to_delete = [
+                key for key, timestamp in self.processing_cache.items()
+                if current_time - timestamp > CACHE_TIMEOUT_SECONDS
+            ]
+            for key in keys_to_delete:
+                del self.processing_cache[key]
+            
+            self.last_cache_cleanup = current_time
+            print(f"   -> Cache nettoyé. {len(keys_to_delete)} entrée(s) expirée(s) supprimée(s). Taille actuelle: {len(self.processing_cache)}.")
+
     def _process_batch(self):
         """Orchestre le traitement du batch avec une logique de retry/DLQ."""
         if not self.message_buffer:
@@ -273,6 +300,7 @@ class Consumer:
             print(f"🏁 Traitement du batch de {batch_size} message(s) terminé en {duration:.4f} secondes.")
             # On réinitialise le timer du batch.
             self.last_batch_time = time.time()
+            self._prune_cache()
 
     def start_consuming(self):
         """
@@ -295,8 +323,16 @@ class Consumer:
                             self._process_batch()
                         # On continue la boucle pour attendre de nouveaux messages.
                         continue
+                    
+                    # --- Deduplication Check ---
+                    message_hash = hashlib.sha256(body).hexdigest()
 
-                    # Un message est arrivé. On l'ajoute à notre buffer.
+                    if message_hash in self.processing_cache:
+                        print(f"🟡 Doublon détecté (hash: {message_hash[:8]}...). Message (tag: {method_frame.delivery_tag}) acquitté et ignoré.")
+                        self.channel.basic_ack(delivery_tag=method_frame.delivery_tag)
+                        continue
+
+                    self.processing_cache[message_hash] = time.time()
                     self.message_buffer.append((method_frame.delivery_tag, properties, body))
                     
                     # Si le buffer a atteint sa taille maximale, on traite le batch immédiatement
@@ -311,6 +347,18 @@ class Consumer:
             except KeyboardInterrupt:
                 print("\n🛑 Interruption manuelle. Arrêt du consumer.")
                 break
+            except pika.exceptions.AMQPChannelError as e:
+                # This specific error occurs when an ack/nack is sent for a delivery tag
+                # that RabbitMQ no longer recognizes, usually because another consumer
+                # already handled it due to a long processing time and ack timeout.
+                if 'unknown delivery tag' in str(e):
+                    print(f"🟡 AVERTISSEMENT de condition de course: {e}. Un message a probablement été traité par une autre réplique. On continue.")
+                    # We just continue the loop without reconnecting, the channel is fine.
+                    continue
+                else:
+                    # For other channel errors, it's safer to reconnect.
+                    print(f"❌ Erreur de canal inattendue: {e}. Tentative de reconnexion...")
+                    self.connect()
             except Exception as e:
                 print(f"❌ Erreur inattendue dans la boucle de consommation: {e}. Tentative de reconnexion...")
                 self.connect() # Tente de se reconnecter
