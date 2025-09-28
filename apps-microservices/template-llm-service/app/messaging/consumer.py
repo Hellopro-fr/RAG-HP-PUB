@@ -341,21 +341,17 @@ class Consumer:
                         print(f"   -> Taille maximale du batch ({BATCH_SIZE}) atteinte, traitement...")
                         self._process_batch()
 
-            except pika.exceptions.StreamLostError as e:
-                print(f"⚠️ Connexion perdue dans la boucle principale: {e}. Tentative de reconnexion...")
-                self.connect() # Tente de se reconnecter
+            except (pika.exceptions.StreamLostError, pika.exceptions.ChannelWrongStateError) as e:
+                print(f"⚠️ Connexion ou canal perdu dans la boucle principale: {e}. Tentative de reconnexion...")
+                self.connect()
             except KeyboardInterrupt:
                 print("\n🛑 Interruption manuelle. Arrêt du consumer.")
                 break
             except pika.exceptions.AMQPChannelError as e:
-                # This specific error occurs when an ack/nack is sent for a delivery tag
-                # that RabbitMQ no longer recognizes (reply-code 406).
-                if e.reply_code == 406:
+                if hasattr(e, 'reply_code') and e.reply_code == 406:
                     print(f"🟡 AVERTISSEMENT de condition de course: {e}. Un message a probablement été traité par une autre réplique. On continue.")
-                    # We just continue the loop without reconnecting, the channel is fine.
                     continue
                 else:
-                    # For other channel errors, it's safer to reconnect.
                     print(f"❌ Erreur de canal inattendue: {e}. Tentative de reconnexion...")
                     self.connect()
             except Exception as e:
