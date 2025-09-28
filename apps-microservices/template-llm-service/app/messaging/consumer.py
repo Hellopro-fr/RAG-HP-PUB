@@ -17,7 +17,7 @@ from common_utils.autres.DLQProperties import DLQProperties
 # Détermine le nombre maximum de messages à traiter en un seul batch.
 # Une valeur plus élevée augmente le débit (throughput) mais aussi la latence potentielle.
 # À ajuster en fonction de la charge et de la VRAM du GPU.
-BATCH_SIZE = 32
+BATCH_SIZE = 8
 
 # Détermine le temps d'attente maximum (en secondes) avant de traiter un batch,
 # même s'il n'est pas plein. C'est une sécurité pour éviter que des messages
@@ -127,20 +127,26 @@ class Consumer:
             failed_messages = recovery_data.get('failed_messages', [])
 
             # 1. Publier les messages réussis
-            for msg in successful_messages:
+            for i, msg in enumerate(successful_messages):
                 self.publisher.publish_message(msg)
+                # Allow Pika to process heartbeats during long loops
+                if (i + 1) % 5 == 0:
+                    self.connection.process_data_events()
             
             # 2. Acquitter les messages réussis (de manière idempotente)
-            for delivery_tag in successful_acks:
+            for i, delivery_tag in enumerate(successful_acks):
                 try:
                     self.channel.basic_ack(delivery_tag=delivery_tag)
                 except pika.exceptions.AMQPChannelError as e:
                     # Cette erreur est attendue si un autre worker a déjà acquitté le message.
                     print(f"   -> AVERTISSEMENT: Impossible d'acquitter le message (tag: {delivery_tag}). Il a probablement déjà été traité par une autre réplique. Erreur: {e}")
                     pass # On continue, c'est le comportement attendu.
+                # Allow Pika to process heartbeats during long loops
+                if (i + 1) % 5 == 0:
+                    self.connection.process_data_events()
 
             # 3. Gérer les messages échoués (de manière idempotente)
-            for failed_item in failed_messages:
+            for i, failed_item in enumerate(failed_messages):
                 delivery_tag = failed_item['delivery_tag']
                 properties = pika.BasicProperties(**failed_item.get('properties', {}))
                 body = json.dumps(failed_item['body']).encode('utf-8')
@@ -159,6 +165,9 @@ class Consumer:
                 except pika.exceptions.AMQPChannelError as e:
                     print(f"   -> AVERTISSEMENT: Impossible de traiter l'échec pour le message (tag: {delivery_tag}). Il a probablement déjà été traité. Erreur: {e}")
                     pass
+                # Allow Pika to process heartbeats during long loops
+                if (i + 1) % 5 == 0:
+                    self.connection.process_data_events()
 
             # 4. Supprimer le fichier de récupération
             os.remove(recovery_filepath)
