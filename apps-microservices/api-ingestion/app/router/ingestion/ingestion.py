@@ -67,11 +67,8 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
         if connection:
             channel = connection.channel()
         else:
-            return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
+            return [BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")]
 
-        return BaseIngestionReponse(code=status.HTTP_503_SERVICE_UNAVAILABLE, message="La connexion à RabbitMQ n'est pas disponible.")
-
-    
     response: list[BaseIngestionReponseSucces | BaseIngestionReponse] = []
 
     for payload in payloads:
