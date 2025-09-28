@@ -82,7 +82,7 @@ def requeue_messages(es_client, rabbit_channel, args):
                 "query": query,
                 "sort": [
                     {"@timestamp": "asc"}, # Primary sort key
-                    {"_id": "asc"}       # Tie-breaker for documents with the same timestamp
+                    {"_doc": "asc"}       # Efficient tie-breaker for documents with the same timestamp
                 ]
             }
             if search_after_value:
