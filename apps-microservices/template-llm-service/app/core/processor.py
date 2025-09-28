@@ -50,7 +50,9 @@ Contenu en entrée (Markdown) :
 # Le tokenizer est chargé une seule fois pour la validation de la longueur du prompt.
 # C'est une opération légère qui ne nécessite pas de GPU.
 TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
-MAX_MODEL_LEN = 4096 # Correspond à la configuration du modèle servi par vLLM
+MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
+# On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
+SAFE_MAX_LEN = MAX_MODEL_LEN - 512
 
 async def _process_single_message(message: dict) -> dict:
     """
@@ -63,21 +65,28 @@ async def _process_single_message(message: dict) -> dict:
         content = data_payload.get("text")
         
         user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=content)
-        conversation = [{"role": "user", "content": user_prompt}]
-
-        # apply_chat_template est la méthode recommandée pour formater le prompt
-        # pour les modèles de type "chat".
-        formatted_prompt = TOKENIZER.apply_chat_template(
-            conversation, tokenize=False, add_generation_prompt=True, enable_thinking=False
-        )
         
-        # Ajout des métriques de diagnostic
+        # Encodage pour vérifier la longueur
+        prompt_tokens = TOKENIZER.encode(user_prompt)
+        token_count = len(prompt_tokens)
+
+        # --- NOUVEAU: Logique de troncature ---
+        if token_count >= SAFE_MAX_LEN:
+            print(f"   -> ⚠️  AVERTISSEMENT: Le prompt pour l'URL {url} ({token_count} tokens) dépasse la limite de sécurité. Troncature en cours...")
+            # On tronque la liste de tokens et on la décode à nouveau
+            truncated_tokens = prompt_tokens[:SAFE_MAX_LEN]
+            user_prompt = TOKENIZER.decode(truncated_tokens, skip_special_tokens=True)
+            # On met à jour le compte de tokens pour le log
+            token_count = len(truncated_tokens)
+            print(f"   -> Prompt tronqué à {token_count} tokens.")
+
+        # Ajout des métriques de diagnostic au message
         original_message["_diag_content_length"] = len(content) if content else 0
-        original_message["_diag_token_count"] = len(TOKENIZER.encode(formatted_prompt))
+        original_message["_diag_token_count"] = token_count
 
         # Appel gRPC pour un seul prompt
         chat_request = ChatRequest(
-            prompt=formatted_prompt,
+            prompt=user_prompt,
             temperature=0.7,
             max_tokens=256,
             enable_thinking=False
