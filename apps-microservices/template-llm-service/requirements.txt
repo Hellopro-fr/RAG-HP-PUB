@@ -11,3 +11,4 @@ protobuf
 googleapis-common-protos
 pydantic
 jinja2
+aio_pika
