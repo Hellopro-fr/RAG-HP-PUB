@@ -537,6 +537,22 @@ services:
     networks:
       - services-net
   
+  dlq-requeuer-tool:
+    build:
+      context: .
+      dockerfile: tools/Dockerfile
+    container_name: dlq-requeuer-tool
+    env_file:
+      - .env
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - services-net
+    command: tail -f /dev/null
+
   prometheus:
     image: prom/prometheus
     container_name: prometheus

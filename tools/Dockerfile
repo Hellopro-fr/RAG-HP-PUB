@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the archiver script into the container
 COPY tools/dlq_archiver.py .
+COPY tools/dlq_requeuer.py .
 
 # Define the command that will be run when the container starts
 CMD ["python", "-u", "dlq_archiver.py"]
