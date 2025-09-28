@@ -349,9 +349,8 @@ class Consumer:
                 break
             except pika.exceptions.AMQPChannelError as e:
                 # This specific error occurs when an ack/nack is sent for a delivery tag
-                # that RabbitMQ no longer recognizes, usually because another consumer
-                # already handled it due to a long processing time and ack timeout.
-                if 'unknown delivery tag' in str(e):
+                # that RabbitMQ no longer recognizes (reply-code 406).
+                if e.reply_code == 406:
                     print(f"🟡 AVERTISSEMENT de condition de course: {e}. Un message a probablement été traité par une autre réplique. On continue.")
                     # We just continue the loop without reconnecting, the channel is fine.
                     continue
