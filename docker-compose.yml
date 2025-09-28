@@ -574,3 +574,4 @@ networks:
 volumes:
   elasticsearch-data:
     driver: local
+  grafana-storage:
