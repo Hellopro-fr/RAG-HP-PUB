@@ -44,7 +44,10 @@ def requeue_messages(es_client, rabbit_channel, args):
     """
     query = {
         "bool": {
-            "must": []
+            "must": [],
+            "must_not": [
+                {"exists": {"field": "requeued_at"}}
+            ]
         }
     }
 
@@ -75,19 +78,21 @@ def requeue_messages(es_client, rabbit_channel, args):
         # Ajout du paramètre `scroll` pour augmenter le timeout du contexte de recherche
         for doc in helpers.scan(es_client, index=ELASTIC_INDEX_NAME, query={"query": query}, scroll='5m'):
             source = doc["_source"]
+            doc_id = doc["_id"]
             original_payload = source.get("original_payload", {})
             original_exchange = source.get("original_exchange")
             original_routing_key = source.get("original_routing_key")
 
             if not original_exchange or not original_routing_key:
                 if args.verbose:
-                    print(f"⚠️ Message ignoré (ID: {doc['_id']}) car il manque l'exchange ou la routing key d'origine.")
+                    print(f"⚠️ Message ignoré (ID: {doc_id}) car il manque l'exchange ou la routing key d'origine.")
                 continue
 
             if args.verbose:
                 print(f" reprocessing message from service '{source.get('service_name')}' with original key '{original_routing_key}'...")
 
             if not args.dry_run:
+                # 1. Publier le message
                 rabbit_channel.basic_publish(
                     exchange=original_exchange,
                     routing_key=original_routing_key,
@@ -97,6 +102,21 @@ def requeue_messages(es_client, rabbit_channel, args):
                         # Les headers sont intentionnellement omis pour réinitialiser le statut
                     )
                 )
+                
+                # 2. Mettre à jour le document dans Elasticsearch pour le marquer comme traité
+                update_body = {
+                    "doc": {
+                        "requeued_at": datetime.utcnow().isoformat()
+                    }
+                }
+                es_client.update(
+                    index=ELASTIC_INDEX_NAME,
+                    id=doc_id,
+                    body=update_body
+                )
+                if args.verbose:
+                    print(f"   -> Marqué comme re-publié dans Elasticsearch (ID: {doc_id})")
+
             total_requeued += 1
 
     except Exception as e:
@@ -107,7 +127,7 @@ def requeue_messages(es_client, rabbit_channel, args):
     if args.dry_run:
         print(f"DRY RUN: {total_requeued} message(s) correspondent aux critères et seraient re-publiés.")
     else:
-        print(f"SUCCÈS: {total_requeued} message(s) ont été re-publiés avec succès.")
+        print(f"SUCCÈS: {total_requeued} message(s) ont été re-publiés et marqués dans l'archive.")
     print("-----------------------------\n")
 
 def main():
