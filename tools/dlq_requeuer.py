@@ -4,12 +4,13 @@ import json
 import time
 import argparse
 from datetime import datetime, timezone
-from elasticsearch import Elasticsearch, helpers
+from elasticsearch import Elasticsearch
 
 # --- Configuration ---
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
 ELASTIC_INDEX_NAME = "failed_messages_archive"
+PAGE_SIZE = 100  # Number of documents to process per Elasticsearch query
 
 def get_rabbitmq_connection():
     """Tente de se connecter à RabbitMQ avec des retries."""
@@ -27,7 +28,7 @@ def get_elasticsearch_client():
     """Tente de se connecter à Elasticsearch avec des retries."""
     for i in range(5):
         try:
-            es_client = Elasticsearch(ELASTICSEARCH_URL)
+            es_client = Elasticsearch(ELASTICSEARCH_URL, request_timeout=30)
             if es_client.ping():
                 print("✅ Re-queuer: Connecté à Elasticsearch.")
                 return es_client
@@ -40,7 +41,7 @@ def get_elasticsearch_client():
 
 def requeue_messages(es_client, rabbit_channel, args):
     """
-    Interroge Elasticsearch et republie les messages correspondants dans RabbitMQ.
+    Interroge Elasticsearch en utilisant la pagination `search_after` et republie les messages.
     """
     query = {
         "bool": {
@@ -72,56 +73,66 @@ def requeue_messages(es_client, rabbit_channel, args):
     print("-----------------------------\n")
 
     total_requeued = 0
+    search_after_value = None
     
-    # Utilisation de helpers.scan pour récupérer efficacement tous les résultats
-    try:
-        # Ajout du paramètre `scroll` pour augmenter le timeout du contexte de recherche
-        for doc in helpers.scan(es_client, index=ELASTIC_INDEX_NAME, query={"query": query}, scroll='5m'):
-            source = doc["_source"]
-            doc_id = doc["_id"]
-            original_payload = source.get("original_payload", {})
-            original_exchange = source.get("original_exchange")
-            original_routing_key = source.get("original_routing_key")
+    while True:
+        try:
+            body = {
+                "size": PAGE_SIZE,
+                "query": query,
+                "sort": [
+                    {"@timestamp": "asc"}, # Primary sort key
+                    {"_id": "asc"}       # Tie-breaker for documents with the same timestamp
+                ]
+            }
+            if search_after_value:
+                body["search_after"] = search_after_value
 
-            if not original_exchange or not original_routing_key:
+            response = es_client.search(
+                index=ELASTIC_INDEX_NAME,
+                body=body
+            )
+
+            hits = response['hits']['hits']
+            if not hits:
+                break # Fin de la pagination
+
+            for doc in hits:
+                source = doc["_source"]
+                doc_id = doc["_id"]
+                original_payload = source.get("original_payload", {})
+                original_exchange = source.get("original_exchange")
+                original_routing_key = source.get("original_routing_key")
+
+                if not original_exchange or not original_routing_key:
+                    if args.verbose:
+                        print(f"⚠️ Message ignoré (ID: {doc_id}) car il manque l'exchange ou la routing key d'origine.")
+                    continue
+
                 if args.verbose:
-                    print(f"⚠️ Message ignoré (ID: {doc_id}) car il manque l'exchange ou la routing key d'origine.")
-                continue
+                    print(f" Reprocessing message from service '{source.get('service_name')}' with original key '{original_routing_key}'...")
 
-            if args.verbose:
-                print(f" reprocessing message from service '{source.get('service_name')}' with original key '{original_routing_key}'...")
-
-            if not args.dry_run:
-                # 1. Publier le message
-                rabbit_channel.basic_publish(
-                    exchange=original_exchange,
-                    routing_key=original_routing_key,
-                    body=json.dumps(original_payload).encode('utf-8'),
-                    properties=pika.BasicProperties(
-                        delivery_mode=pika.DeliveryMode.Persistent,
-                        # Les headers sont intentionnellement omis pour réinitialiser le statut
+                if not args.dry_run:
+                    rabbit_channel.basic_publish(
+                        exchange=original_exchange,
+                        routing_key=original_routing_key,
+                        body=json.dumps(original_payload).encode('utf-8'),
+                        properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent)
                     )
-                )
-                
-                # 2. Mettre à jour le document dans Elasticsearch pour le marquer comme traité
-                update_body = {
-                    "doc": {
-                        "requeued_at": datetime.utcnow().isoformat()
-                    }
-                }
-                es_client.update(
-                    index=ELASTIC_INDEX_NAME,
-                    id=doc_id,
-                    body=update_body
-                )
-                if args.verbose:
-                    print(f"   -> Marqué comme re-publié dans Elasticsearch (ID: {doc_id})")
+                    
+                    update_body = {"doc": {"requeued_at": datetime.utcnow().isoformat()}}
+                    es_client.update(index=ELASTIC_INDEX_NAME, id=doc_id, body=update_body)
+                    
+                    if args.verbose:
+                        print(f"   -> Marqué comme re-publié dans Elasticsearch (ID: {doc_id})")
 
-            total_requeued += 1
+                total_requeued += 1
+            
+            search_after_value = hits[-1]['sort']
 
-    except Exception as e:
-        print(f"❌ Erreur lors de la récupération ou de la republication des messages : {e}")
-        return
+        except Exception as e:
+            print(f"❌ Erreur lors de la récupération ou de la republication des messages : {e}")
+            break
 
     print("\n--- Résumé de l'Opération ---")
     if args.dry_run:
