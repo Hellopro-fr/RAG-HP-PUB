@@ -48,7 +48,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-vllm-datasource"
           },
           "editorMode": "builder",
           "expr": "vllm:gpu_cache_usage_perc",
@@ -87,7 +87,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-vllm-datasource"
           },
           "editorMode": "builder",
           "expr": "vllm:num_requests_running",
@@ -126,7 +126,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-vllm-datasource"
           },
           "editorMode": "builder",
           "expr": "vllm:num_requests_waiting",
@@ -165,7 +165,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-vllm-datasource"
           },
           "editorMode": "builder",
           "expr": "vllm:num_requests_swapped",
@@ -201,7 +201,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-vllm-datasource"
           },
           "editorMode": "builder",
           "expr": "rate(vllm:request_prompt_tokens_sum[1m])",
@@ -212,7 +212,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-vllm-datasource"
           },
           "editorMode": "builder",
           "expr": "rate(vllm:request_generation_tokens_sum[1m])",
@@ -248,7 +248,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "prometheus-vllm-datasource"
           },
           "editorMode": "builder",
           "expr": "vllm:request_latency_seconds_bucket",
