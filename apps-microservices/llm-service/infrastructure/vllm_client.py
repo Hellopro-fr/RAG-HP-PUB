@@ -43,7 +43,7 @@ class VLLMClient:
     async def get_chat_completion(self, message_history, temperature: float, max_tokens: int, enable_thinking: bool) -> str:
         try:
             # timeout_config = httpx.Timeout(300.0, connect=10.0)
-            timeout_config = httpx.Timeout(None, connect=10.0)
+            timeout_config = httpx.Timeout(None)
             async with httpx.AsyncClient(timeout=timeout_config) as client:
                 request_payload = {
                     "model": MODEL_NAME,
