@@ -50,6 +50,7 @@ Contenu en entrée (Markdown) :
 # Le tokenizer est chargé une seule fois pour la validation de la longueur du prompt.
 # C'est une opération légère qui ne nécessite pas de GPU.
 TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
+TOKENIZER.pad_token = TOKENIZER.eos_token
 MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
 # On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
 SAFE_MAX_LEN = MAX_MODEL_LEN - 512
