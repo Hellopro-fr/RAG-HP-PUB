@@ -49,7 +49,8 @@ def requeue_messages(es_client, rabbit_channel, args):
     }
 
     if args.service_name:
-        query["bool"]["must"].append({"match": {"service_name": args.service_name}})
+        # Utiliser une requête 'term' sur le champ '.keyword' pour une correspondance exacte.
+        query["bool"]["must"].append({"term": {"service_name.keyword": args.service_name}})
     
     if args.error_reason:
         query["bool"]["must"].append({"wildcard": {"error_reason": f"*{args.error_reason}*"}})
@@ -78,10 +79,12 @@ def requeue_messages(es_client, rabbit_channel, args):
             original_routing_key = source.get("original_routing_key")
 
             if not original_exchange or not original_routing_key:
-                print(f"⚠️ Message ignoré (ID: {doc['_id']}) car il manque l'exchange ou la routing key d'origine.")
+                if args.verbose:
+                    print(f"⚠️ Message ignoré (ID: {doc['_id']}) car il manque l'exchange ou la routing key d'origine.")
                 continue
 
-            print(f" reprocessing message from service '{source.get('service_name')}' with original key '{original_routing_key}'...")
+            if args.verbose:
+                print(f" reprocessing message from service '{source.get('service_name')}' with original key '{original_routing_key}'...")
 
             if not args.dry_run:
                 rabbit_channel.basic_publish(
@@ -101,18 +104,19 @@ def requeue_messages(es_client, rabbit_channel, args):
 
     print("\n--- Résumé de l'Opération ---")
     if args.dry_run:
-        print(f"DRY RUN: {total_requeued} message(s) seraient re-publiés.")
+        print(f"DRY RUN: {total_requeued} message(s) correspondent aux critères et seraient re-publiés.")
     else:
         print(f"SUCCÈS: {total_requeued} message(s) ont été re-publiés avec succès.")
     print("-----------------------------\n")
 
 def main():
     parser = argparse.ArgumentParser(description="Outil pour re-publier des messages depuis la DLQ archivée dans Elasticsearch.")
-    parser.add_argument("--service-name", type=str, help="Filtrer par nom de service (ex: template-llm-service).")
+    parser.add_argument("--service-name", type=str, help="Filtrer par nom de service exact (ex: template-llm-service).")
     parser.add_argument("--error-reason", type=str, help="Filtrer par raison de l'erreur (supporte les wildcards, ex: *timeout*).")
     parser.add_argument("--start-date", type=str, help="Date de début (format ISO: YYYY-MM-DDTHH:MM:SS).")
     parser.add_argument("--end-date", type=str, help="Date de fin (format ISO: YYYY-MM-DDTHH:MM:SS).")
-    parser.add_argument("--dry-run", action="store_true", help="Simule l'opération sans publier réellement de messages.")
+    parser.add_argument("--dry-run", action="store_true", help="Simule l'opération et affiche le nombre de messages correspondants sans les publier.")
+    parser.add_argument("--verbose", action="store_true", help="Affiche les détails de chaque message traité.")
     
     args = parser.parse_args()
 
