@@ -8,6 +8,7 @@ VLLM_API_URL = os.getenv("VLLM_API_URL", "http://vllm-server:8000/v1/chat/comple
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen3-14B-AWQ")
 MAX_RETRIES = 3
 INITIAL_BACKOFF_DELAY = 15  # seconds
+ADDING_TIME = 30 # seconds
 
 class VLLMClient:
     async def stream_chat(self, message_history, temperature: float, max_tokens: int, enable_thinking: bool):
@@ -49,7 +50,7 @@ class VLLMClient:
                     yield "[ERREUR: Le service LLM est indisponible après plusieurs tentatives]"
                     return
                 await asyncio.sleep(delay)
-                delay *= 2
+                delay += ADDING_TIME
         yield "[ERREUR: Le service LLM est indisponible après plusieurs tentatives]"
 
 
@@ -84,5 +85,5 @@ class VLLMClient:
                     logging.error(f"Échec final pour contacter vLLM après {MAX_RETRIES} tentatives.")
                     return "[ERREUR: Le service LLM est indisponible après plusieurs tentatives]"
                 await asyncio.sleep(delay)
-                delay *= 2
+                delay += ADDING_TIME
         return "[ERREUR: Le service LLM est indisponible après plusieurs tentatives]"
