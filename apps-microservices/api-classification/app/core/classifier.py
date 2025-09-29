@@ -263,7 +263,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     temperature=0,
                     response_format={"type": "json_object"}
                 )
-                return {"success": True, "response": response, "raw_response": response}
+                # Convertir en dictionnaire pour la sérialisation JSON
+                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                return {"success": True, "response": response, "raw_response": raw_response_dict}
 
             elif self.llm_choice == 'DeepSeek' and self.deepseek_client:
                 response = self.deepseek_client.chat.completions.create(
@@ -272,7 +274,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     temperature=0,
                     response_format={"type": "json_object"}
                 )
-                return {"success": True, "response": response, "raw_response": response}
+                # Convertir en dictionnaire pour la sérialisation JSON
+                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                return {"success": True, "response": response, "raw_response": raw_response_dict}
             else:
                 raise ValueError(f"LLM {self.llm_choice} non configuré")
 
