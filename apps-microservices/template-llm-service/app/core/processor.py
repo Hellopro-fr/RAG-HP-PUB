@@ -45,6 +45,33 @@ Contenu en entrée (Markdown) :
 {content}
 """
 
+PROMPT_OCR_FR = """
+Tu es un classifieur de type de document.
+En entrée, tu reçois le contenu texte présent dans le document. Attention, il faut donc identifier le contenu principal du document et en identifier le sens. Ne pas se laisser influencer par le contenu présent dans le header ou le footer par exemple.
+Ta tâche est de déterminer quelle est la fonction principale de ce document pour l’utilisateur final, pas simplement sa structure.
+En sortie, tu dois produire un objet JSON :
+Si la page correspond à un des types listés → retourne uniquement :
+json
+{{ "page_type": "valeur" }}
+Si la page ne correspond à aucun type → retourne :
+json
+{{ "page_type": "autre", "commentaire_si_autre": "explication en 15 mots max" }}
+Critère clé : ne te base pas uniquement sur les balises Markdown.
+Analyse le but du document pour l’utilisateur final : décider d’un achat (devis), s’informer en détail (fiche technique), découvrir et comparer l’offre (catalogue), évaluer rapidement les tarifs (plaquette prix),etc.
+Voici les types de pages possibles :
+"devis" : document commercial qui détaille une offre (produit ou service), ses conditions, son prix et qui engage le fournisseur si accepté.
+"fiche_technique" : document décrivant les caractéristiques, fonctionnalités et spécifications d’un produit ou service.
+"catelogue" : recueil structuré présentant l’ensemble ou une partie des produits/services proposés par une entreprise.
+"plaquette_prix" : support listant les tarifs des produits ou services, généralement sous forme simplifiée et claire pour les clients.
+"autre" : si aucun de ces types ne correspond.
+Rappels :
+Si "page_type" ≠ "autre", ne génère pas de champ "commentaire_si_autre".
+Génère seulement le JSON, sans autre texte.
+Analyse le but marketing ou fonctionnel du document.
+Contenu en entrée (Markdown) :
+{content}
+"""
+
 def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict, messages: list[dict]) -> list[dict]:
     """
     Prend un BATCH (une liste) de messages, les classifie tous avec un seul appel au LLM
@@ -66,6 +93,7 @@ def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict,
     # le prompt formaté qui sera envoyé au modèle.
     for message in messages:
         data_payload = message.get("data", {})
+        collection = message.get("collection", {})
         url = data_payload.get("url", "URL non fournie")
         content = data_payload.get("text")
 
@@ -81,7 +109,11 @@ def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict,
             truncated_content = content
         
         # Formatage du prompt final avec l'URL et le contenu tronqué.
-        user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=truncated_content)
+        if collection == "document":
+            user_prompt = PROMPT_OCR_FR.format(content=truncated_content)
+        else:
+            user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=truncated_content)
+        
         conversation = [{"role": "user", "content": user_prompt}]
         
         # apply_chat_template est la méthode recommandée pour formater le prompt
