@@ -342,7 +342,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'score_llm': None,
                     'error': llm_result_wrapper.get('error', 'Erreur LLM inconnue'),
                     'llm_type': self.llm_choice,
-                    'llm_response': llm_result_wrapper.get('raw_response'),
+                    'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
                     'processing_time': time.time() - start_time
                 }
 
@@ -359,7 +359,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'score_llm': None,
                     'error': f'Erreur parsing réponse LLM: {str(e)}',
                     'llm_type': self.llm_choice,
-                    'llm_response': llm_result_wrapper.get('raw_response'),
+                    'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
                     'processing_time': time.time() - start_time
                 }
 
@@ -375,7 +375,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'score_llm': None,
                     'error': 'Réponse LLM invalide',
                     'llm_type': self.llm_choice,
-                    'llm_response': llm_result_wrapper.get('raw_response'),
+                    'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
                     'processing_time': time.time() - start_time
                 }
 
@@ -390,7 +390,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'score_llm': None,
                     'error': f'Catégorie {chosen_id} introuvable',
                     'llm_type': self.llm_choice,
-                    'llm_response': llm_result_wrapper.get('raw_response'),
+                    'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
                     'processing_time': time.time() - start_time
                 }
             
@@ -403,7 +403,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'score_llm': score,
                 'llm_type': self.llm_choice,
                 'processing_time': time.time() - start_time,
-                'llm_response': llm_result_wrapper.get('raw_response')
+                'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None
             }
             
         except Exception as e:
@@ -416,7 +416,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'score_llm': None,
                 'error': str(e),
                 'llm_type': self.llm_choice,
-                'llm_response': f'Exception générale: {str(e)}',
+                'llm_response': [f'Exception générale: {str(e)}'],
                 'processing_time': time.time() - start_time
             }
 
