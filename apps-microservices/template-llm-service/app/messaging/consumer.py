@@ -16,7 +16,7 @@ BATCH_SIZE = 8
 # Détermine le temps d'attente maximum (en secondes) avant de traiter un batch,
 # même s'il n'est pas plein. C'est une sécurité pour éviter que des messages
 # ne restent bloqués indéfiniment en période de faible trafic.
-BATCH_TIMEOUT_SECONDS = 2.0
+BATCH_TIMEOUT_SECONDS = 5.0
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
 
