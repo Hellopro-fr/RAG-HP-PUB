@@ -12,21 +12,40 @@ services:
     command: /bin/bash -c "python export_embedding_to_onnx.py && python export_reranker_to_onnx.py"
   vllm-server:
     image: vllm/vllm-openai:latest
+    # Si vous ajoutez/modifiez une commande ici, merci d'en ajouter également
+    # * Dans les fichiers suivantes :
+      # apps-microservices/template-llm-service/app/core/processor.py
+    # * Dans la partie environment
     command: >
       --model Qwen/Qwen3-14B-AWQ
-      --quantization awq
       --trust-remote-code
       --gpu-memory-utilization 0.95
-      --max-num-seqs 32
+      --max-num-seqs 64
       --max-num-batched-tokens 8192
       --enable-chunked-prefill
       --enable-prefix-caching
+      --disable-log-stats
       --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
-      --swap-space 16
+      --swap-space 4
       --max-model-len 32768
       --enforce-eager
+      --dtype auto
     ports:
       - "8000:8000"
+    environment:
+      - MODEL=Qwen/Qwen3-14B-AWQ
+      - TRUST_REMOTE_CODE=true
+      - GPU_MEMORY_UTILIZATION=0.95
+      - MAX_NUM_SEQS=64
+      - MAX_NUM_BATCHED_TOKENS=8192
+      - ENABLE_CHUNKED_PREFILL=true
+      - ENABLE_PREFIX_CACHING=true
+      - DISABLE_LOG_STATS=true
+      - ROPE_SCALING={"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}
+      - SWAP_SPACE=4
+      - MAX_MODEL_LEN=32768
+      - ENFORCE_EAGER=true
+      - DTYPE=auto
     deploy:
       resources:
         reservations:

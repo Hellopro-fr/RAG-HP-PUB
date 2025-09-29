@@ -1,7 +1,8 @@
+import os
 import json
 import re
 import asyncio
-from vllm.transformers_utils.tokenizer import get_tokenizer
+from vllm import LLM
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
@@ -48,7 +49,23 @@ Contenu en entrée (Markdown) :
 """
 
 # Utilisation du tokenizer de vLLM pour garantir une compatibilité parfaite
-TOKENIZER = get_tokenizer("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
+LLM_CONFIG = {
+    "model": os.environ.get("MODEL", "Qwen/Qwen3-14B-AWQ"),
+    "gpu_memory_utilization": os.environ.get("GPU_MEMORY_UTILIZATION", 0.95),
+    "trust_remote_code": os.environ.get("TRUST_REMOTE_CODE", "true").lower() == "true",
+    "dtype": os.environ.get("DTYPE", "auto"),
+    "max_model_len": os.environ.get("MAX_MODEL_LEN", 32768),
+    "swap_space": os.environ.get("SWAP_SPACE", 4),  # GB de swap pour gérer les pics
+    "max_num_seqs": os.environ.get("MAX_NUM_SEQS", 64),  # Réduit pour éviter les timeouts
+    "max_num_batched_tokens": os.environ.get("MAX_NUM_BATCHED_TOKENS", 8192),  # Plus conservateur
+    "enable_prefix_caching": os.environ.get("ENABLE_PREFIX_CACHING", "true").lower() == "true",  # Cache les préfixes communs
+    "disable_log_stats": os.environ.get("DISABLE_LOG_STATS", "true").lower() == "true",  # Réduit l'overhead
+    "rope_scaling": json.loads(os.environ.get("ROPE_SCALING", '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}')),
+    "enforce_eager": os.environ.get("ENFORCE_EAGER", "true").lower() == "true",  # Pour éviter les erreurs de mémoire
+    "enable_chunked_prefill": os.environ.get("ENABLE_CHUNKED_PREFILL", "true").lower() == "true"  # Pour les très longs prompts
+}
+llm = LLM(**LLM_CONFIG)  # Initialisation du modèle vLLM avec la configuration
+TOKENIZER = llm.get_tokenizer()
 MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
 # On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
 SAFE_MAX_LEN = MAX_MODEL_LEN - 512
@@ -78,6 +95,9 @@ async def _process_single_message(message: dict) -> dict:
             # On met à jour le compte de tokens pour le log
             token_count = len(truncated_tokens)
             print(f"   -> Prompt tronqué à {token_count} tokens.")
+
+        conversation = [{"role": "user", "content": user_prompt}]
+        user_prompt = TOKENIZER.apply_chat_template(conversation)
 
         # Ajout des métriques de diagnostic au message
         original_message["_diag_content_length"] = len(content) if content else 0
