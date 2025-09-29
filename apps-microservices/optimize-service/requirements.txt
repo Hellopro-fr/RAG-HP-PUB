@@ -3,10 +3,8 @@ uvicorn
 python-dotenv
 pydantic-settings
 openai
-torch
 requests
 grpcio
 grpcio-tools
 protobuf
 googleapis-common-protos
-vllm
