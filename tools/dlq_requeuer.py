@@ -52,12 +52,20 @@ def requeue_messages(es_client, rabbit_channel, args):
         }
     }
 
-    if args.service_name:
-        # Utiliser une requête 'term' sur le champ '.keyword' pour une correspondance exacte.
-        query["bool"]["must"].append({"term": {"service_name.keyword": args.service_name}})
-    
-    if args.error_reason:
-        query["bool"]["must"].append({"wildcard": {"error_reason": f"*{args.error_reason}*"}})
+    # Dynamically build the query from --filter arguments
+    if args.filter:
+        for f in args.filter:
+            if ':' not in f:
+                print(f"⚠️ Filtre invalide ignoré: '{f}'. Le format doit être 'champ:valeur'.")
+                continue
+            
+            key, value = f.split(':', 1)
+            if '*' in value:
+                # Use wildcard query for partial matches
+                query["bool"]["must"].append({"wildcard": {key: {"value": value}}})
+            else:
+                # Use term query for exact matches
+                query["bool"]["must"].append({"term": {key: value}})
 
     time_range = {}
     if args.start_date:
@@ -142,9 +150,20 @@ def requeue_messages(es_client, rabbit_channel, args):
     print("-----------------------------\n")
 
 def main():
-    parser = argparse.ArgumentParser(description="Outil pour re-publier des messages depuis la DLQ archivée dans Elasticsearch.")
-    parser.add_argument("--service-name", type=str, help="Filtrer par nom de service exact (ex: template-llm-service).")
-    parser.add_argument("--error-reason", type=str, help="Filtrer par raison de l'erreur (supporte les wildcards, ex: *timeout*).")
+    parser = argparse.ArgumentParser(
+        description="Outil pour re-publier des messages depuis la DLQ archivée dans Elasticsearch.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    
+    filter_help = """
+Filtrer les messages à re-publier. Peut être utilisé plusieurs fois.
+Format: 'champ:valeur'. Supporte les wildcards (*).
+Exemples:
+  --filter "service_name.keyword:template-llm-service"
+  --filter "error_reason:*timeout*"
+  --filter "original_payload.data.url:*example.com/product/123*"
+"""
+    parser.add_argument("--filter", type=str, action='append', help=filter_help)
     parser.add_argument("--start-date", type=str, help="Date de début (format ISO: YYYY-MM-DDTHH:MM:SS).")
     parser.add_argument("--end-date", type=str, help="Date de fin (format ISO: YYYY-MM-DDTHH:MM:SS).")
     parser.add_argument("--dry-run", action="store_true", help="Simule l'opération et affiche le nombre de messages correspondants sans les publier.")
