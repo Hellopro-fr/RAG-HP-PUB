@@ -1,7 +1,7 @@
 import json
 import re
 import asyncio
-from vllm.model_executor.tokenizer_utils import get_tokenizer
+from vllm.transformers_utils.tokenizer import get_tokenizer
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
