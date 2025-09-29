@@ -35,6 +35,7 @@ services:
               device_ids: ['0']
               # count: all
               capabilities: [gpu]
+    restart: on-failure
     volumes:
       - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
     networks:
