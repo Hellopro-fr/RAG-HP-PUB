@@ -96,6 +96,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
         processing_time = end_time - start_time
         
         print(f"Fin traitement en {processing_time:.2f} secondes")
+        print (f"Résultats: {results}")
         return {"data": results}
 
     except Exception as e:
