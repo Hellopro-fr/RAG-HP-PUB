@@ -68,6 +68,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
                         })
                     else:
                         print("tentative de parsing reussie")
+                        print(parsed_response)
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
                             "success": parsed_response
