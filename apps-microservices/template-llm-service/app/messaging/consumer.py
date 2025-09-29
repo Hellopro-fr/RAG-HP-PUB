@@ -11,7 +11,7 @@ from common_utils.autres.DLQProperties import DLQProperties
 # Détermine le nombre maximum de messages à traiter en un seul batch.
 # Une valeur plus élevée augmente le débit (throughput) mais aussi la latence potentielle.
 # À ajuster en fonction de la charge et de la VRAM du GPU.
-BATCH_SIZE = 8
+BATCH_SIZE = 2
 
 # Détermine le temps d'attente maximum (en secondes) avant de traiter un batch,
 # même s'il n'est pas plein. C'est une sécurité pour éviter que des messages
