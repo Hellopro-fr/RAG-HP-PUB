@@ -14,7 +14,7 @@ services:
     image: vllm/vllm-openai:latest
     command: >
       --model Qwen/Qwen3-14B-AWQ
-      --quantization awq_marlin
+      --quantization awq
       --trust-remote-code
       --gpu-memory-utilization 0.95
       --max-num-seqs 32
@@ -24,7 +24,7 @@ services:
       --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
       --swap-space 16
       --max-model-len 32768
-      --compilation-config '{"level":0}'
+      --enforce-eager
     ports:
       - "8000:8000"
     deploy:
