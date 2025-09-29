@@ -321,10 +321,12 @@ async def search_in_milvus_stream(request: SearchRequest):
             start_llm_time = time.perf_counter()
             
             # Appel au microservice LLM en streaming
-            token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            # token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            token_generator = llm_prompt(request, context_texts)
+            yield {"type": "llm_chunk", "payload": token_generator.llm_response}
             
-            for token in token_generator:
-                yield {"type": "llm_chunk", "payload": token}
+            # for token in token_generator:
+            #     yield {"type": "llm_chunk", "payload": token}
             
             llm_duration = time.perf_counter() - start_llm_time
         
@@ -591,10 +593,12 @@ async def search_in_milvus_classique_stream(request: SearchRequest):
             yield {"type": "llm_start"}
             start_llm_time = time.perf_counter()
             
-            token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            # token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            token_generator = llm_prompt(request, context_texts)
+            yield {"type": "llm_chunk", "payload": token_generator.llm_response}
             
-            for token in token_generator:
-                yield {"type": "llm_chunk", "payload": token}
+            # for token in token_generator:
+            #     yield {"type": "llm_chunk", "payload": token}
             
             llm_duration = time.perf_counter() - start_llm_time
         
