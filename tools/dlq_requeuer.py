@@ -61,10 +61,11 @@ def requeue_messages(es_client, rabbit_channel, args):
             
             key, value = f.split(':', 1)
             if '*' in value:
-                # Use wildcard query for partial matches
-                query["bool"]["must"].append({"wildcard": {key: {"value": value}}})
+                # For wildcard, always append .keyword if not already present.
+                field_name = key if key.endswith('.keyword') else f"{key}.keyword"
+                query["bool"]["must"].append({"wildcard": {field_name: {"value": value}}})
             else:
-                # Use term query for exact matches
+                # Use term query for exact matches (user should provide .keyword if needed)
                 query["bool"]["must"].append({"term": {key: value}})
 
     time_range = {}
@@ -158,10 +159,12 @@ def main():
     filter_help = """
 Filtrer les messages à re-publier. Peut être utilisé plusieurs fois.
 Format: 'champ:valeur'. Supporte les wildcards (*).
+Pour les recherches exactes sur du texte, utilisez le suffixe '.keyword'.
+
 Exemples:
   --filter "service_name.keyword:template-llm-service"
   --filter "error_reason:*timeout*"
-  --filter "original_payload.data.url:*example.com/product/123*"
+  --filter "original_payload.data.url.keyword:*example.com/product/123*"
 """
     parser.add_argument("--filter", type=str, action='append', help=filter_help)
     parser.add_argument("--start-date", type=str, help="Date de début (format ISO: YYYY-MM-DDTHH:MM:SS).")
