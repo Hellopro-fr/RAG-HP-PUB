@@ -152,7 +152,10 @@ async def filtre_source (filtre: dict, source: str = "") -> list:
     if not field_types:
         logger.warning(f"Impossible de récupérer le schéma pour la collection '{source}'. Le filtrage sera ignoré pour cette source.")
         return []
-    NUMERIC_DTYPES = {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64, DataType.FLOAT, DataType.DOUBLE}
+    NUMERIC_DTYPES = {
+        DataType.INT8.value, DataType.INT16.value, DataType.INT32.value, 
+        DataType.INT64.value, DataType.FLOAT.value, DataType.DOUBLE.value
+    }
     logger.info(f"numeric_dtypes : {NUMERIC_DTYPES}")
     for key, val in filtre.items():
         dtype = field_types.get(key)
