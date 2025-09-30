@@ -518,6 +518,8 @@ services:
       - "8511:8511"
     env_file:
       - .env
+    networks:
+      - services-net
     
 networks:
   services-net:
