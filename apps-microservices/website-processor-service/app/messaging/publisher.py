@@ -1,40 +1,27 @@
-import pika
+import aio_pika
 import json
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 class Publisher:
-    def __init__(self, connection: pika.BlockingConnection):
+    def __init__(self, connection: aio_pika.RobustConnection):
         """
-        Initialise le publisher avec une connexion RabbitMQ existante.
+        Initialise le publisher asynchrone.
         """
-        self.rabbitmq_connection = RabbitMQConnection()
         self.connection = connection
-        self.channel = self.connection.channel()
         self.exchange_name = 'processed_data_exchange'
-        self.routing_key = 'data.ready_for_embedding'
+        print(f"✅ Publisher initialisé (vers exchange '{self.exchange_name}').")
 
-        # Déclare l'exchange où il va publier
-        self.channel.exchange_declare(
-            exchange=self.exchange_name, 
-            exchange_type='topic', 
-            durable=True
-        )
-        print("✅ Publisher initialisé.")
-
-    def update_channel(self, new_channel):
-        """Met à jour le canal interne, utilisé par le Consumer après une reconnexion."""
-        self.channel = new_channel
-        print("   -> Canal du Publisher synchronisé avec le Consumer.")
-
-    def publish_message(self, message_dict: dict):
+    async def publish_message(self, message_dict: dict, channel: aio_pika.abc.AbstractChannel):
         """
-        Publie un message (dictionnaire) sur le topic configuré.
-        Propage les exceptions pour que le Consumer les gère.
+        Publie un message de manière asynchrone sur le canal fourni.
         """
-        self.channel.basic_publish(
-            exchange=self.exchange_name,
-            routing_key=self.routing_key,
-            body=json.dumps(message_dict).encode('utf-8'),
-            properties=pika.BasicProperties(delivery_mode=2)
+        routing_key = message_dict.get('routing_key', 'data.ready_for_embedding')
+        exchange = await channel.get_exchange(self.exchange_name, ensure=True)
+        
+        await exchange.publish(
+            aio_pika.Message(
+                body=json.dumps(message_dict).encode('utf-8'),
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+            ),
+            routing_key=routing_key
         )
-        print(f"   📤 Message traité et publié pour la prochaine étape.")
+        print(f"   📤 Message traité et publié avec la clé '{routing_key}'.")
