@@ -2,6 +2,7 @@ import aio_pika
 import json
 import asyncio
 import time
+import aiormq
 
 from template_llm_service.messaging.publisher import Publisher
 from template_llm_service.core.processor import classify_page_template_batch
@@ -140,7 +141,12 @@ class Consumer:
                 except Exception as e:
                     print(f"❌ ERREUR CATASTROPHIQUE sur le batch (ex: LLM indisponible): {e}. NACK de tous les messages du batch.")
                     for msg in batch:
-                        await msg.nack(requeue=False)
+                        try:
+                            await msg.nack(requeue=False)
+                        except aiormq.exceptions.ChannelInvalidStateError:
+                            # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
+                            print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
+                            break # Sortir de la boucle de nack
                 finally:
                     end_time = time.monotonic()
                     duration = end_time - start_time
