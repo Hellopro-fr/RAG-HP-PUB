@@ -21,21 +21,20 @@ class Publisher:
         )
         print("✅ Publisher initialisé.")
 
+    def update_channel(self, new_channel):
+        """Met à jour le canal interne, utilisé par le Consumer après une reconnexion."""
+        self.channel = new_channel
+        print("   -> Canal du Publisher synchronisé avec le Consumer.")
+
     def publish_message(self, message_dict: dict):
-        for i in range(3):  # Essaye de se reconnecter 3 fois
-            try:
-                """
-                Publie un message (dictionnaire) sur le topic configuré.
-                """
-                self.channel.basic_publish(
-                    exchange=self.exchange_name,
-                    routing_key=self.routing_key,
-                    body=json.dumps(message_dict).encode('utf-8'),
-                    properties=pika.BasicProperties(delivery_mode=2)
-                )
-                print(f"   📤 Message traité et publié pour la prochaine étape.")
-                break  # Si la publication réussit, on sort de la boucle
-            except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
-                self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-                self.channel = self.connection.channel()
+        """
+        Publie un message (dictionnaire) sur le topic configuré.
+        Propage les exceptions pour que le Consumer les gère.
+        """
+        self.channel.basic_publish(
+            exchange=self.exchange_name,
+            routing_key=self.routing_key,
+            body=json.dumps(message_dict).encode('utf-8'),
+            properties=pika.BasicProperties(delivery_mode=2)
+        )
+        print(f"   📤 Message traité et publié pour la prochaine étape.")

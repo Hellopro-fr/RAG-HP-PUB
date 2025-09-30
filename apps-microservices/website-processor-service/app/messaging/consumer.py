@@ -14,7 +14,7 @@ class Consumer:
         Initialise le consumer.
         Il a besoin d'une connexion ET d'une instance du publisher.
         """
-        self.channel = connection.channel()
+        self.connection = connection
         self.publisher = publisher
         # Noms des composants RabbitMQ
         self.exchange_name = 'data_exchange_siteweb'
@@ -33,7 +33,8 @@ class Consumer:
         """
         Établit la connexion et configure le consumer, y compris les queues de retry et de dead-letter.
         """
-        self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
+        if not self.connection or self.connection.is_closed:
+            self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
         self.channel = self.connection.channel()
         
         # --- 1. Infrastructure pour les échecs FINALS (Dead-Letter Queue) ---
@@ -59,6 +60,9 @@ class Consumer:
         }
         self.channel.queue_declare(queue=self.queue_name, durable=True, arguments=main_queue_args)
         self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
+        
+        # Synchronise le publisher avec le nouveau canal
+        self.publisher.update_channel(self.channel)
 
     def _get_retry_count(self, properties: pika.BasicProperties) -> int:
         """Inspecte les headers pour compter le nombre de tentatives."""
@@ -119,15 +123,21 @@ class Consumer:
                 ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def start_consuming(self):
-        for i in range(3):
+        """
+        Démarre la boucle de consommation résiliente.
+        """
+        while True:
             try: 
-                """
-                Démarre la boucle d'écoute des messages.
-                """
                 self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
                 print("👂 Website-Processor: En attente de messages...")
                 self.channel.start_consuming()
-                break  # Si start_consuming se termine normalement, on sort de la boucle
-            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+            except (pika.exceptions.StreamLostError, pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelWrongStateError) as e:
+                print(f"⚠️ Connexion perdue ou canal fermé: {e}. Tentative de reconnexion...")
+                self.connect()
+            except KeyboardInterrupt:
+                print("\n🛑 Website-Processor: Arrêt demandé.")
+                self.channel.stop_consuming()
+                break
+            except Exception as e:
+                print(f"❌ Erreur inattendue dans la boucle de consommation: {e}. Tentative de reconnexion...")
                 self.connect()
