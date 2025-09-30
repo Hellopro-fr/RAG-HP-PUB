@@ -83,17 +83,25 @@ def process_message(body, properties):
         retry_count = _get_retry_count_from_headers(headers)
         service_name = original_queue.replace('_queue', '').replace('_retry', '')
 
+    # --- Sanitization and Type Coercion ---
+    try:
+        safe_retry_count = int(retry_count) if retry_count is not None else 0
+    except (ValueError, TypeError):
+        safe_retry_count = 0
+        
+    source_doc = {
+        "@timestamp": datetime.utcnow().isoformat(),
+        "service_name": str(service_name or "N/A"),
+        "error_reason": str(error_reason or "Raison inconnue"),
+        "retry_count": safe_retry_count,
+        "original_exchange": str(original_exchange or "N/A"),
+        "original_routing_key": str(original_routing_key or "N/A"),
+        "original_payload": original_payload,
+    }
+
     document = {
         "_index": ELASTIC_INDEX_NAME,
-        "_source": {
-            "@timestamp": datetime.utcnow().isoformat(),
-            "service_name": service_name,
-            "error_reason": str(error_reason),
-            "retry_count": retry_count,
-            "original_exchange": original_exchange,
-            "original_routing_key": original_routing_key,
-            "original_payload": original_payload,
-        }
+        "_source": source_doc
     }
     return document
 
