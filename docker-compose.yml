@@ -136,7 +136,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-recherche/Dockerfile
-    container_name: api-recherche-service
+    # container_name: api-recherche-service
     restart: unless-stopped
     # TODO: à supprimer en PROD
     # volumes:
@@ -155,7 +155,8 @@ services:
       - database-recherche-service
     env_file:
       - .env
-    # deploy:
+    deploy:
+      replicas: 4
     #   resources:
     #     reservations:
     #       devices:
