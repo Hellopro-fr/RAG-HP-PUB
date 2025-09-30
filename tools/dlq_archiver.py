@@ -4,13 +4,14 @@ import json
 import time
 from datetime import datetime
 from elasticsearch import Elasticsearch, helpers
+from es_mapping import INDEX_MAPPING # Import the new mapping
 
 # --- Configuration ---
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
 # Les queues DLQ à écouter, séparées par des virgules
 DLQ_QUEUES_STR = os.environ.get("DLQ_QUEUES", "embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq")
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
-ELASTIC_INDEX_NAME = "failed_messages_archive"
+ELASTIC_INDEX_NAME = "failed_messages_archive_v2" # Point to the new index
 BATCH_SIZE = 10 # Nombre de messages à archiver en une seule fois
 BATCH_TIMEOUT_SECONDS = 5.0 # Temps d'attente max avant d'archiver un batch non plein
 
@@ -106,10 +107,10 @@ def main():
 
     dlq_queues = [q.strip() for q in DLQ_QUEUES_STR.split(',')]
     
-    # Assurer que l'index existe dans Elasticsearch
+    # Assurer que l'index existe dans Elasticsearch avec le bon mapping
     if not es_client.indices.exists(index=ELASTIC_INDEX_NAME):
-        print(f"Index '{ELASTIC_INDEX_NAME}' non trouvé. Création...")
-        es_client.indices.create(index=ELASTIC_INDEX_NAME)
+        print(f"Index '{ELASTIC_INDEX_NAME}' non trouvé. Création avec le mapping correct...")
+        es_client.indices.create(index=ELASTIC_INDEX_NAME, body=INDEX_MAPPING)
 
     documents_buffer = []
     last_archive_time = time.time()
