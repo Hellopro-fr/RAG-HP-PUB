@@ -504,11 +504,10 @@ services:
     env_file:
       - .env
 
-  g-api-recherche-service
+  api-recherche-service-worker:
     build:
       context: .
       dockerfile: ./apps-microservices/api-recherche-service/Dockerfile
-    container_name: g-api-recherche-service
     restart: unless-stopped
     environment:
       - LLM_SERVICE_URL=llm-service:50051
