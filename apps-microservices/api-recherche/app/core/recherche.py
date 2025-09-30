@@ -159,6 +159,12 @@ async def filtre_source (filtre: dict, source: str = "") -> list:
     logger.info(f"numeric_dtypes : {NUMERIC_DTYPES}")
     for key, val in filtre.items():
         dtype = field_types.get(key)
+        if isinstance(dtype, DataType):
+            # Si oui, on extrait sa valeur entière (ex: 5)
+            dtype = dtype.value
+        else:
+            # Sinon (c'est un string comme 'VARCHAR' ou None), on l'utilise directement
+            dtype = dtype
         if key == 'id_categorie' and source == 'produits':
             key = 'categorie'
         elif key == 'id_categorie' and source == 'siteweb':
