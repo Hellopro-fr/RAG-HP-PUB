@@ -7,7 +7,7 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 COPY libs/common-utils /app/libs/common-utils
-COPY apps-microservices/api-recherche/requirements.txt .
+COPY apps-microservices/api-recherche-service/requirements.txt .
 COPY libs/grpc-stubs/setup.py /app/libs/grpc-stubs/setup.py
 COPY protos /app/protos
 
