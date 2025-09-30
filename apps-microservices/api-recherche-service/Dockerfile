@@ -8,7 +8,7 @@ ENV PYTHONPATH=/app
 
 COPY libs/common-utils /app/libs/common-utils
 COPY apps-microservices/api-recherche-service/requirements.txt .
-COPY libs/grpc-stubs/setup.py /app/libs/grpc-stubs/setup.py
+COPY libs/grpc-stubs/ /app/libs/grpc-stubs/
 COPY protos /app/protos
 
 RUN pip install --no-cache-dir -r requirements.txt
