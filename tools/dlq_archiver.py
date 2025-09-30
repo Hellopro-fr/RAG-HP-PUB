@@ -85,6 +85,13 @@ class DLQArchiver:
         except json.JSONDecodeError:
             original_payload = {"raw_body": body.decode('utf-8', errors='ignore')}
 
+        # --- Flattening Logic ---
+        if isinstance(original_payload, dict) and 'data' in original_payload and isinstance(original_payload['data'], dict):
+            nested_data = original_payload.pop('data')
+            # Merge the nested 'data' dictionary into the main payload
+            # This handles potential key conflicts by overwriting with the nested value
+            original_payload.update(nested_data)
+
         headers = properties.headers or {}
         
         if 'x-service-name' in headers:
