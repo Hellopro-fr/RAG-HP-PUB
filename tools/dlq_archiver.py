@@ -2,6 +2,7 @@ import pika
 import os
 import json
 import time
+import hashlib
 from datetime import datetime
 from elasticsearch import Elasticsearch, helpers
 from es_mapping import INDEX_MAPPING
@@ -76,7 +77,9 @@ class DLQArchiver:
         self.documents_buffer.append((method.delivery_tag, doc))
 
     def _process_message_to_doc(self, body, properties):
-        """Transforms a RabbitMQ message into an Elasticsearch document."""
+        """Transforms a RabbitMQ message into an Elasticsearch document with a deterministic ID."""
+        message_hash = hashlib.sha256(body).hexdigest()
+
         try:
             original_payload = json.loads(body)
         except json.JSONDecodeError:
@@ -112,7 +115,11 @@ class DLQArchiver:
             "retry_count": safe_retry_count, "original_exchange": str(original_exchange or "N/A"),
             "original_routing_key": str(original_routing_key or "N/A"), "original_payload": original_payload,
         }
-        return {"_index": ELASTIC_INDEX_NAME, "_source": source_doc}
+        return {
+            "_index": ELASTIC_INDEX_NAME,
+            "_id": message_hash,
+            "_source": source_doc
+        }
 
     def _get_retry_count(self, headers):
         if headers and 'x-death' in headers:
@@ -135,22 +142,33 @@ class DLQArchiver:
         try:
             success_count, errors = helpers.bulk(self.es_client, docs_to_es, raise_on_error=False)
             
-            if errors:
-                print(f"   -> ❌ {len(errors)} document(s) ont échoué à l'indexation.")
-                # This is complex to solve perfectly without more state.
-                # A safe default is to NACK everything to retry.
-                last_delivery_tag = buffer_copy[-1][0]
-                self.channel.basic_nack(delivery_tag=last_delivery_tag, multiple=True, requeue=True)
-                return
+            print(f"   -> Résultat du bulk: {success_count} succès, {len(errors)} échecs.")
 
-            print(f"   -> Batch entièrement archivé avec succès.")
-            last_delivery_tag = buffer_copy[-1][0]
-            self.channel.basic_ack(delivery_tag=last_delivery_tag, multiple=True)
-            
+            if errors:
+                print(f"   -> ❌ Erreurs d'indexation détectées. Traitement individuel des acquittements.")
+                # Create a set of failed document IDs for quick lookup
+                failed_doc_ids = {err['index']['_id'] for err in errors}
+                for delivery_tag, doc in buffer_copy:
+                    if doc['_id'] in failed_doc_ids:
+                        print(f"     -> NACK du message (tag: {delivery_tag}) car l'archivage a échoué.")
+                        self.channel.basic_nack(delivery_tag=delivery_tag, requeue=True)
+                    else:
+                        self.channel.basic_ack(delivery_tag=delivery_tag)
+            else:
+                # If everything succeeded, we can ack the whole batch at once.
+                last_delivery_tag = buffer_copy[-1][0]
+                self.channel.basic_ack(delivery_tag=last_delivery_tag, multiple=True)
+                print(f"   -> Batch entièrement archivé et acquitté avec succès (jusqu'au tag {last_delivery_tag}).")
+
         except Exception as e:
-            print(f"❌ ERREUR CRITIQUE lors de la communication avec Elasticsearch: {e}. NACK de tout le batch.")
+            print(f"❌ ERREUR CRITIQUE lors de la communication avec Elasticsearch: {e}. NACK de tout le batch (requeue=True).")
             last_delivery_tag = buffer_copy[-1][0]
             self.channel.basic_nack(delivery_tag=last_delivery_tag, multiple=True, requeue=True)
+        finally:
+            # Clear the buffer regardless of outcome to prevent reprocessing the same batch in memory.
+            # RabbitMQ will handle redelivery based on ack/nack.
+            self.documents_buffer.clear()
+
 
     def start_consuming(self):
         """Main resilient loop to consume messages."""
