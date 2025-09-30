@@ -15,10 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV PIP_TARGET=/app/wheelhouse
 RUN pip install --no-cache-dir -r requirements.txt --target=${PIP_TARGET}
-RUN pip install --no-cache-dir -e /app/libs/common-utils --target=${PIP_TARGET}
+RUN pip install --no-cache-dir /app/libs/common-utils --target=${PIP_TARGET}
 
 RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
-RUN pip install --no-cache-dir -e /app/libs/grpc-stubs --target=${PIP_TARGET}
+RUN pip install --no-cache-dir /app/libs/grpc-stubs --target=${PIP_TARGET}
 
 FROM python:3.10-slim
 
