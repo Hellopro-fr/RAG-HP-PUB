@@ -34,7 +34,7 @@ EXPOSE 8511
 
 # --- Commande de Lancement ---
 # Utilisation de Gunicorn pour gérer les workers
-CMD ["gunicorn", \
+CMD ["python","-m","gunicorn", \
      "-w", "4", \
      "-k", "uvicorn.workers.UvicornWorker", \
      "--bind", "0.0.0.0:8511", \
