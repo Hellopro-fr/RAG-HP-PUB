@@ -159,6 +159,11 @@ async def filtre_source (filtre: dict, source: str = "") -> list:
             key = 'categorie'
         elif key == 'id_categorie' and source == 'siteweb':
             continue
+        elif key == 'id_categorie' and source == 'devis':
+            if isinstance(val, list) and all(isinstance(x, (int, float)) for x in val):
+                numeric_vals = [int(v) if dtype in {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64} else float(v) for v in val]
+                clauses.append(f"{key} in {numeric_vals}")
+                continue
         
         if not dtype:
             logger.info(f"dtype none {key}")
