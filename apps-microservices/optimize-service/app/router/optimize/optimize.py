@@ -97,6 +97,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
         
         print(f"Fin traitement en {processing_time:.2f} secondes")
         print (f"Résultats: {results}")
+        print(f"lots traité, taille results: {len(results)}")
         return {"data": results}
 
     except Exception as e:
