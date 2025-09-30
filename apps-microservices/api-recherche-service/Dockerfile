@@ -11,14 +11,10 @@ COPY apps-microservices/api-recherche-service/requirements.txt .
 COPY libs/grpc-stubs/ /app/libs/grpc-stubs/
 COPY protos /app/protos
 
-RUN pip install --no-cache-dir -r requirements.txt
 
 ENV PIP_TARGET=/app/wheelhouse
-RUN pip install --no-cache-dir -r requirements.txt --target=${PIP_TARGET}
-RUN pip install --no-cache-dir -e /app/libs/common-utils
 
-RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
-RUN pip install --no-cache-dir -e /app/libs/grpc-stubs
+RUN pip install --no-cache-dir -r requirements.txt --target=${PIP_TARGET}
 
 FROM python:3.10-slim
 
@@ -26,6 +22,11 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 COPY --from=builder /app/wheelhouse /usr/local/lib/python3.10/site-packages
+
+RUN pip install --no-cache-dir -e /app/libs/common-utils
+
+RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
+RUN pip install --no-cache-dir -e /app/libs/grpc-stubs
 
 COPY apps-microservices/api-recherche/app ./app
 COPY apps-microservices/api-recherche/main.py .
