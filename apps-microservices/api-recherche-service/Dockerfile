@@ -11,6 +11,8 @@ COPY apps-microservices/api-recherche-service/requirements.txt .
 COPY libs/grpc-stubs/setup.py /app/libs/grpc-stubs/setup.py
 COPY protos /app/protos
 
+RUN pip install --no-cache-dir -r requirements.txt
+
 ENV PIP_TARGET=/app/wheelhouse
 RUN pip install --no-cache-dir -r requirements.txt --target=${PIP_TARGET}
 RUN pip install --no-cache-dir -e /app/libs/common-utils --target=${PIP_TARGET}
