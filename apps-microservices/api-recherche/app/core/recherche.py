@@ -168,7 +168,7 @@ async def filtre_source (filtre: dict, source: str = "") -> list:
             logger.info(f"dtype none {key}")
             continue
         
-        logger.info(f'dtype {key} : {dtype}, val : {val} + {dtype.value}')
+        logger.info(f'dtype {key} : {dtype}, val : {val}')
         
         if dtype == DataType.ARRAY:
             if isinstance(val, list):
