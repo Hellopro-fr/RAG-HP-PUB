@@ -155,8 +155,7 @@ services:
       - database-recherche-service
     env_file:
       - .env
-    deploy:
-      replicas: 4
+    # deploy:
     #   resources:
     #     reservations:
     #       devices:
