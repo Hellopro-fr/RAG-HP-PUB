@@ -12,7 +12,7 @@ RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:56
 DLQ_QUEUES_STR = os.environ.get("DLQ_QUEUES", "embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq")
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
 ELASTIC_INDEX_NAME = "failed_messages_archive" # Point to the new index
-BATCH_SIZE = 10 # Nombre de messages à archiver en une seule fois
+BATCH_SIZE = 50 # Nombre de messages à archiver en une seule fois
 BATCH_TIMEOUT_SECONDS = 5.0 # Temps d'attente max avant d'archiver un batch non plein
 
 def get_rabbitmq_connection():
