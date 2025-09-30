@@ -1489,6 +1489,22 @@ $(function () {
           break;
         case 'error':
           console.error(`[WS Error] ${data.payload}`);
+          if (!state.isSidebarOpen) {
+            state.isSidebarOpen = true;
+            updateUI();
+          }
+          // Cacher l'indicateur de chargement
+          elements.llmAnalyzeState.hide();
+          // Afficher le conteneur de réponse
+          elements.llmResponseContainer.show();
+          // Créer un élément HTML pour l'erreur et l'afficher
+          const errorHtml = `<div class="llm-error">${data.payload}</div>`;
+          elements.llmResponseText.html(errorHtml);
+          
+          // La recherche est terminée à cause de l'erreur
+          state.isSearching = false;
+          updateUI(); // Mettre à jour les boutons, etc.
+          socket.close();
           break;
         case 'initial_results':
           console.log("Réception des résultats initiaux (pré-reranking).");

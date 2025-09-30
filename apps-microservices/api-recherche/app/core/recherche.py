@@ -64,8 +64,11 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
     try:
         full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
     except Exception as e:
-        logger.error(f"Erreur lors du formatage du template de prompt: {e}")
-        yield f"\n\n--- ERREUR --- \n{e}"
+        error_message = f"Erreur de formatage du prompt : la clé '{e}' est manquante ou le format est invalide.\nMerci de doubler les accolades dans le prompt à part {{chunks}} et {{recherche}} : {{{{'key_1': 'value_1', 'key_2': 'value_2'}}}}"
+        logger.error(error_message)
+        # On envoie un message d'erreur clair via le WebSocket
+        yield {"type": "error", "payload": error_message}
+        return
     
     type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
 
@@ -99,11 +102,8 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
                 yield chunk.choices[0].delta.content
 
     except Exception as e:
-        error_message = f"Erreur de formatage du prompt : la clé '{e}' est manquante ou le format est invalide.\nMerci de doubler les accolades dans le prompt à part celui du chunks et recherche."
-        logger.error(error_message)
-        # On envoie un message d'erreur clair via le WebSocket
-        yield {"type": "error", "payload": error_message}
-        return
+        logger.error(f"Erreur durant le streaming LLM: {e}")
+        yield f"\n\n--- ERREUR --- \n{e}"
         
 def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
     llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
@@ -113,7 +113,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         try:
             full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
         except (KeyError, ValueError) as e:
-            error_message = f"Erreur de formatage du prompt : la clé '{e}' est manquante ou le format est invalide.\nMerci de doubler les accolades dans le prompt à part celui du chunks et recherche."
+            error_message = f"Erreur de formatage du prompt : la clé '{e}' est manquante ou le format est invalide.\nMerci de doubler les accolades dans le prompt à part {{chunks}} et {{recherche}} : {{{{'key_1': 'value_1', 'key_2': 'value_2'}}}}"
             logger.error(error_message)
             # On retourne un objet LLMPipeline avec le message d'erreur
             return LLMPipeline(llm_response=error_message, context=context)
