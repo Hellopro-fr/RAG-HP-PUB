@@ -6,11 +6,7 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 WORKDIR /app
 ENV PYTHONPATH=/app
 
-COPY libs/common-utils /app/libs/common-utils
 COPY apps-microservices/api-recherche-service/requirements.txt .
-COPY libs/grpc-stubs/ /app/libs/grpc-stubs/
-COPY protos /app/protos
-
 
 ENV PIP_TARGET=/app/wheelhouse
 
@@ -23,10 +19,12 @@ ENV PYTHONPATH=/app
 
 COPY --from=builder /app/wheelhouse /usr/local/lib/python3.10/site-packages
 
-RUN pip install --no-cache-dir -e /app/libs/common-utils
+COPY protos /app/protos
+COPY libs/ /app/libs/
+RUN pip install --no-cache-dir -e ./libs/common-utils
 
 RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
-RUN pip install --no-cache-dir -e /app/libs/grpc-stubs
+RUN pip install --no-cache-dir -e ./libs/grpc-stubs
 
 COPY apps-microservices/api-recherche/app ./app
 COPY apps-microservices/api-recherche/main.py .
