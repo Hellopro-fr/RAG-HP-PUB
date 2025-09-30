@@ -168,40 +168,38 @@ def archive_and_ack_batch(channel, es_client, buffer):
     print(f"📦 DLQ Archiver: Tentative d'archivage d'un batch de {len(buffer)} documents...")
     docs_to_es = [doc for _, doc in buffer]
     
-    successes = 0
-    failures = 0
-    
+    success_tags = []
+    failure_tags = []
+
     try:
-        # Utiliser `raise_on_error=False` pour obtenir un rapport détaillé des erreurs
-        for ok, action in helpers.streaming_bulk(es_client, docs_to_es, raise_on_error=False):
-            if not ok:
-                failures += 1
-                # L'objet 'action' contient l'erreur détaillée d'Elasticsearch
-                print(f"   -> ❌ Échec de l'indexation: {action}")
-                # Nous ne connaissons pas le delivery_tag ici, nous le gérerons plus tard
+        # Utiliser `streaming_bulk` pour traiter les réponses une par une
+        for i, (ok, action) in enumerate(helpers.streaming_bulk(es_client, docs_to_es, raise_on_error=False)):
+            delivery_tag = buffer[i][0]
+            if ok:
+                success_tags.append(delivery_tag)
             else:
-                successes += 1
+                failure_tags.append(delivery_tag)
+                print(f"   -> ❌ Échec de l'indexation pour le message (tag: {delivery_tag}): {action}")
         
-        print(f"   -> Résultat du bulk: {successes} succès, {failures} échecs.")
+        # Gérer les acquittements et rejets
+        for tag in success_tags:
+            channel.basic_ack(delivery_tag=tag)
+        
+        for tag in failure_tags:
+            # Rejeter sans remettre en file d'attente. Si une DLQ est configurée sur la queue principale,
+            # le message y sera routé. C'est la bonne pratique pour les "poison pills".
+            channel.basic_nack(delivery_tag=tag, requeue=False)
 
-        # Maintenant, nous acquittons ou rejetons en nous basant sur le succès
-        # NOTE: Cette approche simple suppose que l'ordre est conservé, ce qui est le cas pour streaming_bulk.
-        # Dans un scénario plus complexe, on pourrait mapper les erreurs à l'ID du document.
-        if failures > 0:
-            # Pour la simplicité de cette correction, nous rejetons l'ensemble du lot si une partie échoue.
-            # Cela empêche la perte de messages mais peut entraîner le retraitement des messages réussis.
-            # C'est un compromis sûr.
-            last_delivery_tag = buffer[-1][0]
-            print(f"   -> Au moins un document a échoué. NACK de tout le batch (jusqu'au tag {last_delivery_tag}) pour un retraitement sûr.")
-            channel.basic_nack(delivery_tag=last_delivery_tag, multiple=True, requeue=True) # Requeue pour nouvelle tentative
-        else:
-            # Si tout a réussi, on acquitte tout le batch.
-            last_delivery_tag = buffer[-1][0]
-            channel.basic_ack(delivery_tag=last_delivery_tag, multiple=True)
-            print(f"   -> Batch entièrement archivé et acquitté avec succès (jusqu'au tag {last_delivery_tag}).")
-
-        buffer.clear()
+        print(f"   -> Résultat du batch: {len(success_tags)} succès, {len(failure_tags)} échecs.")
+        if len(failure_tags) > 0:
+            print("   -> Les messages échoués ont été rejetés et devraient être routés vers une DLQ si configurée.")
 
     except Exception as e:
-        print(f"❌ ERREUR CRITIQUE lors de la communication avec Elasticsearch: {e}. Les messages ne seront pas acquittés et seront retraités.")
-        # Ne pas acquitter permet de retenter au prochain redémarrage du service.
+        print(f"❌ ERREUR CRITIQUE lors de la communication avec Elasticsearch: {e}. NACK de tout le batch (requeue=True).")
+        # En cas d'erreur de connexion ES, on ne peut pas savoir ce qui a réussi.
+        # La stratégie la plus sûre est de renvoyer tout le lot dans la file d'attente pour une nouvelle tentative.
+        last_delivery_tag = buffer[-1][0]
+        channel.basic_nack(delivery_tag=last_delivery_tag, multiple=True, requeue=True)
+    finally:
+        # Vider le buffer après le traitement
+        buffer.clear()
