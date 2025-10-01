@@ -102,6 +102,11 @@ class DLQArchiver:
 
         # Sanitize the payload by removing any embedding vectors before they cause issues
         sanitized_payload = self._remove_embedding_recursively(original_payload)
+        
+        # Flatten the payload if it contains a nested 'data' object
+        if isinstance(sanitized_payload, dict) and 'data' in sanitized_payload and isinstance(sanitized_payload['data'], dict):
+            nested_data = sanitized_payload.pop('data')
+            sanitized_payload.update(nested_data)
 
         headers = properties.headers or {}
         
@@ -171,15 +176,18 @@ class DLQArchiver:
             else:
                 print(f"   -> ❌ Erreurs d'indexation détectées. Traitement individuel des acquittements.")
                 # Create a set of failed document IDs for quick lookup
-                failed_doc_ids = {err['index']['_id'] for err in errors}
+                failed_doc_ids = {err['index']['_id']: err['index']['error'] for err in errors}
                 
                 for delivery_tag, doc in buffer_copy:
-                    if doc['_id'] in failed_doc_ids:
+                    doc_id = doc['_id']
+                    if doc_id in failed_doc_ids:
+                        error_details = failed_doc_ids[doc_id]
                         print(f"     -> NACK du message (tag: {delivery_tag}) car l'archivage a échoué.")
-                        self.channel.basic_nack(delivery_tag=delivery_tag, requeue=True)
+                        print(f"     -> Raison de l'échec pour ID {doc_id}: {error_details.get('type')}: {error_details.get('reason')}")
+                        self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False) # requeue=False to DLX
                     else:
                         self.channel.basic_ack(delivery_tag=delivery_tag)
-                print("   -> Les messages échoués ont été renvoyés dans la file pour un retraitement.")
+                print("   -> Les messages échoués ont été routés vers l'infrastructure de retry/DLQ.")
 
         except Exception as e:
             print(f"❌ ERREUR CRITIQUE lors de la communication avec Elasticsearch: {e}. NACK de tout le batch (requeue=True).")
