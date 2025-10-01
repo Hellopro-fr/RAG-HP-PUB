@@ -106,11 +106,6 @@ class DLQArchiver:
 
         # Sanitize the payload by removing any embedding vectors before they cause issues
         sanitized_payload = self._remove_embedding_recursively(original_payload)
-        
-        # Flatten the payload if it contains a nested 'data' object
-        if isinstance(sanitized_payload, dict) and 'data' in sanitized_payload and isinstance(sanitized_payload['data'], dict):
-            nested_data = sanitized_payload.pop('data')
-            sanitized_payload.update(nested_data)
 
         headers = properties.headers or {}
         
