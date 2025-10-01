@@ -534,7 +534,8 @@ services:
     env_file:
       - .env
     environment:
-      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
+      # - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
+      - DLQ_QUEUES=website_processing_queue_dlq # Staying only on website_processing_queue_dlq for the now. Need to investigate the other queues later when they will have messages again in DLQ
       - ELASTICSEARCH_URL=http://elasticsearch:9200
     depends_on:
       elasticsearch:

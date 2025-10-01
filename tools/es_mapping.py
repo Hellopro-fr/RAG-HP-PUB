@@ -4,17 +4,29 @@
 
 INDEX_MAPPING = {
     "mappings": {
+        "dynamic_templates": [
+            {
+                "long_text_fields": {
+                    "path_match": "original_payload.*.text",
+                    "match_mapping_type": "string",
+                    "mapping": {
+                        "type": "text",
+                        "index": False
+                    }
+                }
+            }
+        ],
         "properties": {
             "@timestamp": {"type": "date"},
             "service_name": {
-                "type": "keyword"  # Use keyword for exact, case-sensitive matching and aggregation.
+                "type": "keyword"
             },
             "error_reason": {
-                "type": "text",  # Use text for full-text search on the error message.
+                "type": "text",
                 "fields": {
                     "keyword": {
-                        "type": "keyword", # Use keyword sub-field for wildcard searches.
-                        "ignore_above": 1024 # Ignore very long error messages for this specific field.
+                        "type": "keyword",
+                        "ignore_above": 1024
                     }
                 }
             },
@@ -22,7 +34,8 @@ INDEX_MAPPING = {
             "original_exchange": {"type": "keyword"},
             "original_routing_key": {"type": "keyword"},
             "original_payload": {
-                "type": "flattened" # The key to the solution: treats the entire payload object as a set of keywords, preventing any mapping conflicts with nested fields of varying types.
+                "type": "object",
+                "dynamic": True
             }
         }
     }

@@ -11,7 +11,7 @@ from es_mapping import INDEX_MAPPING
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
 DLQ_QUEUES_STR = os.environ.get("DLQ_QUEUES", "embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq")
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
-ELASTIC_INDEX_NAME = "failed_messages_archive_v2"
+ELASTIC_INDEX_NAME = "failed_messages_archive_v3"
 BATCH_SIZE = 50
 BATCH_TIMEOUT_SECONDS = 5.0
 
@@ -92,21 +92,21 @@ class DLQArchiver:
         return obj
 
     def _process_message_to_doc(self, body, properties):
-        """Transforms a RabbitMQ message into an Elasticsearch document with a deterministic ID."""
+        """Transforms a RabbitMQ message into an Elasticsearch document with robust parsing."""
         message_hash = hashlib.sha256(body).hexdigest()
 
+        original_payload = None
         try:
-            original_payload = json.loads(body)
+            parsed_body = json.loads(body)
+            if isinstance(parsed_body, dict):
+                original_payload = parsed_body
+            else:
+                original_payload = {"value": parsed_body}
         except json.JSONDecodeError:
             original_payload = {"raw_body": body.decode('utf-8', errors='ignore')}
-
-        # --- Ensure payload is an object for 'flattened' mapping ---
-        if not isinstance(original_payload, dict):
-            original_payload = {"value": original_payload}
-
-        # Sanitize the payload by removing any embedding vectors before they cause issues
+        
         sanitized_payload = self._remove_embedding_recursively(original_payload)
-
+        
         headers = properties.headers or {}
         
         if 'x-service-name' in headers:
