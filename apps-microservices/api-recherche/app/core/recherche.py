@@ -335,7 +335,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                 final_filter_expr = " and ".join(filters) if filters else ""
 
                 # Retourne la coroutine de recherche prête à être exécutée
-                return database_client.search_vector(
+                return await database_client.search_vector(
                     collection=s_name,
                     vector=query_vector,
                     k=top_k_retrieval,
