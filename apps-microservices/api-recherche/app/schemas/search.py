@@ -1,3 +1,4 @@
+from os import error
 from pydantic import BaseModel, Field
 from typing import Annotated, List, Optional, Dict, Any
 
@@ -67,6 +68,7 @@ class LLMPipeline(BaseModel):
     llm_duration: float = ""
     full_user_prompt: str = ""
     context: str = ""
+    error: Optional[bool] = False
     
 class SearchReponse(BaseModel):
     results: Annotated[SearchResponse, Field(title="Contient l'objet du résultat depuis les recherches")]
