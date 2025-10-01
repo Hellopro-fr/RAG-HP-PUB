@@ -37,20 +37,29 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         try:
             start_time = time.monotonic()
             extractor = HeaderFooterExtractor(website_data.get("text",""))
+            
+            duration = time.monotonic() - start_time
+            print(f"    [DIAGNOSTIC] Temps d'instanciation ({page_type}): {duration:.4f} secondes")
             if not isinstance(extractor.soup, BeautifulSoup):
                 raise ValueError("Le contenu HTML est invalide ou vide.")
             
             if page_type == "header":
                 text_to_embed = extractor.extract_header(extractor.soup)
+                
+                duration = time.monotonic() - start_time
+                print(f"    [DIAGNOSTIC] Temps d'extraction ({page_type}): {duration:.4f} secondes")
+                
                 if not text_to_embed:
                     raise ValueError("Aucun header extrait.")
             else:
                 text_to_embed = extractor.extract_footer(extractor.soup)
+                
+                duration = time.monotonic() - start_time
+                print(f"    [DIAGNOSTIC] Temps d'extraction ({page_type}): {duration:.4f} secondes")
+                
                 if not text_to_embed:
                     raise ValueError("Aucun footer extrait.")
             
-            duration = time.monotonic() - start_time
-            print(f"    [DIAGNOSTIC] Temps d'extraction ({page_type}): {duration:.4f} secondes")
             text_to_embed_clean = text_to_embed.strip()
         except Exception as e:
             raise ValueError(f"Erreur lors de l'extraction du {page_type.capitalize()}: {e}")
@@ -70,14 +79,14 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         duration = time.monotonic() - start_time
         print(f"    [DIAGNOSTIC] Temps d'extraction (Trafilatura): {duration:.4f} secondes")
         
+        # --- DIAGNOSTICS: Memory after processing ---
+        mem_after = process.memory_info().rss / (1024 * 1024) # in MB
+        print(f"    [DIAGNOSTIC] Mémoire après traitement: {mem_after:.2f} MB (Delta: {mem_after - mem_before:+.2f} MB)")
+        
         if not data_extracted:
             raise ValueError("Le contenu extrait est vide ou invalide.")
         
         text_to_embed_clean = data_extracted.strip()
-        
-    # --- DIAGNOSTICS: Memory after processing ---
-    mem_after = process.memory_info().rss / (1024 * 1024) # in MB
-    print(f"    [DIAGNOSTIC] Mémoire après traitement: {mem_after:.2f} MB (Delta: {mem_after - mem_before:+.2f} MB)")
     
     # Étape 3: Construire le message de sortie
     output_message = {
