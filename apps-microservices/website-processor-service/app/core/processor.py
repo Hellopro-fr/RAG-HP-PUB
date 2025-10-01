@@ -117,7 +117,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             
             if attempt < max_retries - 1:
                 logging.info(f"    -> Tentative {attempt + 1} échouée (contenu vide), nouvelle tentative dans 1 seconde...")
-                time.sleep(1)
+                time.sleep(5)
 
         if not data_extracted:
             raise ValueError("Le contenu extrait est vide ou invalide.")
