@@ -502,21 +502,6 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             for match in matches:
                 context_texts.append(match['metadata']['entity']['text'])
 
-        # if request.action == 2 and context_texts:
-        #     logger.info("Début de la génération de réponse par le LLM...")
-        #     start_llm_time = time.perf_counter()
-            
-        #     context = "\n-----\n".join(context_texts)
-        #     full_user_prompt = f"Contexte:\n{context}\n\nQuestion:\n{request.prompt}"
-
-        #     # Appel au microservice LLM et agrégation de la réponse
-        #     response_chunks = []
-        #     async for token in llm_client.stream_llm_chat(full_user_prompt):
-        #         response_chunks.append(token)
-        #     llm_response_content = "".join(response_chunks)
-            
-        #     llm_duration = time.perf_counter() - start_llm_time
-        #     logger.info(f"Génération LLM terminée en {llm_duration:.2f}s.")
         llm_req = llm_prompt(request, context_texts)
 
         # --- FIN: Construction du dictionnaire de retour ---
