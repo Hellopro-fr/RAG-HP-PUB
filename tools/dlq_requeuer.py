@@ -150,6 +150,23 @@ def requeue_messages(es_client, rabbit_channel, args):
         print(f"SUCCÈS: {total_requeued} message(s) ont été re-publiés et marqués dans l'archive.")
     print("-----------------------------\n")
 
+def run_requeue_cycle(args):
+    """Encapsulates a single run of connecting, requeueing, and disconnecting."""
+    rabbit_conn = None
+    try:
+        es_client = get_elasticsearch_client()
+        rabbit_conn = get_rabbitmq_connection()
+        rabbit_channel = rabbit_conn.channel()
+
+        requeue_messages(es_client, rabbit_channel, args)
+
+    except ConnectionError as e:
+        print(f"❌ Impossible d'établir les connexions pour ce cycle: {e}")
+    finally:
+        if rabbit_conn and rabbit_conn.is_open:
+            rabbit_conn.close()
+            print("✅ Connexion RabbitMQ fermée pour ce cycle.")
+
 def main():
     parser = argparse.ArgumentParser(
         description="Outil pour re-publier des messages depuis la DLQ archivée dans Elasticsearch.",
@@ -171,25 +188,26 @@ Exemples:
     parser.add_argument("--end-date", type=str, help="Date de fin (format ISO: YYYY-MM-DDTHH:MM:SS).")
     parser.add_argument("--dry-run", action="store_true", help="Simule l'opération et affiche le nombre de messages correspondants sans les publier.")
     parser.add_argument("--verbose", action="store_true", help="Affiche les détails de chaque message traité.")
+    parser.add_argument("--watch", action="store_true", help="Exécute le script en boucle pour republier automatiquement les nouveaux messages.")
+    parser.add_argument("--interval", type=int, default=60, help="Intervalle d'attente en secondes entre les cycles en mode --watch. Défaut: 60.")
     
     args = parser.parse_args()
 
     if args.dry_run:
         print("🟡 MODE DRY RUN ACTIVÉ. Aucun message ne sera réellement publié.")
 
-    try:
-        es_client = get_elasticsearch_client()
-        rabbit_conn = get_rabbitmq_connection()
-        rabbit_channel = rabbit_conn.channel()
-
-        requeue_messages(es_client, rabbit_channel, args)
-
-    except ConnectionError as e:
-        print(f"❌ Impossible d'établir les connexions nécessaires: {e}")
-    finally:
-        if 'rabbit_conn' in locals() and rabbit_conn.is_open:
-            rabbit_conn.close()
-            print("✅ Connexion RabbitMQ fermée.")
+    if args.watch:
+        print(f"👁️  Entrée en mode 'watch'. Vérification toutes les {args.interval} secondes. Appuyez sur Ctrl+C pour arrêter.")
+        try:
+            while True:
+                run_requeue_cycle(args)
+                print(f"--- Cycle terminé. En attente pendant {args.interval} secondes... ---")
+                time.sleep(args.interval)
+        except KeyboardInterrupt:
+            print("\n🛑 Mode 'watch' arrêté par l'utilisateur.")
+    else:
+        # Single run mode
+        run_requeue_cycle(args)
 
 if __name__ == "__main__":
     main()
