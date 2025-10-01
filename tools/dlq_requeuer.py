@@ -9,7 +9,7 @@ from elasticsearch import Elasticsearch
 # --- Configuration ---
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
-ELASTIC_INDEX_NAME = "failed_messages_archive" # Point to the new, correctly mapped index
+ELASTIC_INDEX_NAME = "failed_messages_archive_v2" # Point to the new, correctly mapped index
 PAGE_SIZE = 100  # Number of documents to process per Elasticsearch query
 
 def get_rabbitmq_connection():
