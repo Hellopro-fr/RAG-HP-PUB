@@ -116,7 +116,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
             error_message = f"Erreur de formatage du prompt : la clé '{e}' est manquante ou le format est invalide.\nMerci de doubler les accolades dans le prompt à part {{chunks}} et {{recherche}} : {{{{'key_1': 'value_1', 'key_2': 'value_2'}}}}"
             logger.error(error_message)
             # On retourne un objet LLMPipeline avec le message d'erreur
-            return LLMPipeline(llm_response=error_message, context=context)
+            return LLMPipeline(llm_response=error_message, context=context,error=True)
         
         type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
             
@@ -356,7 +356,7 @@ async def search_in_milvus_stream(request: SearchRequest):
             # token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
             token_generator = await asyncio.to_thread(llm_prompt, request, context_texts)
             # token_generator = llm_prompt(request, context_texts)
-            yield {"type": "llm_chunk", "payload": token_generator.llm_response}
+            yield {"type": "llm_chunk" if not token_generator.error else "error", "payload": token_generator.llm_response}
             
             # for token in token_generator:
             #     yield {"type": "llm_chunk", "payload": token}
