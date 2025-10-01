@@ -335,19 +335,44 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
             start_rerank_time = time.perf_counter()
 
+            # Préparation optimisée pour le reranker
+            docs_to_rerank = []
+            # Créer une map pour reconstruire les résultats après le reranking
+            result_map = {}
+            for res in initial_matches:
+                # On s'assure que le texte existe et n'est pas déjà dans la map (cas de doublons)
+                doc_text = res.get('metadata', {}).get('entity', {}).get('text')
+                if doc_text and doc_text not in result_map:
+                    docs_to_rerank.append(doc_text)
+                    result_map[doc_text] = res
+
+            if not docs_to_rerank:
+                yield {"type": "status", "payload": "Reranking annulé: aucun texte trouvé dans les résultats."}
+            else:
+                yield {"type": "status", "payload": f"Reclassement de {len(docs_to_rerank)} documents..."}
+                start_rerank_time = time.perf_counter()
+
+                # Appel au microservice avec une charge utile minimale
+                ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
+                
+                # Reconstruction de la liste de résultats dans le nouvel ordre
+                final_results = [result_map[text] for text in ranked_texts if text in result_map]
+                
+                rerank_duration = time.perf_counter() - start_rerank_time
+                yield {"type": "rerank_complete", "payload": {"results": final_results[:top_k_final], "duration": round(rerank_duration, 2)}}
             # Préparation des documents pour le reranker
             # HYPOTHÈSE: Le texte est dans metadata.text
-            docs_to_rerank = [res['metadata']['entity']['text'] for res in initial_matches]
+            # docs_to_rerank = [res['metadata']['entity']['text'] for res in initial_matches]
             
-            # Appel au microservice de reranking
-            ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
+            # # Appel au microservice de reranking
+            # ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
             
-            # Reconstruction de la liste de résultats dans le nouvel ordre
-            result_map = {res['metadata']['entity']['text']: res for res in initial_matches}
-            final_results = [result_map[text] for text in ranked_texts if text in result_map]
+            # # Reconstruction de la liste de résultats dans le nouvel ordre
+            # result_map = {res['metadata']['entity']['text']: res for res in initial_matches}
+            # final_results = [result_map[text] for text in ranked_texts if text in result_map]
             
-            rerank_duration = time.perf_counter() - start_rerank_time
-            yield {"type": "rerank_complete", "payload": {"results": final_results[:top_k_final], "duration": round(rerank_duration, 2)}}
+            # rerank_duration = time.perf_counter() - start_rerank_time
+            # yield {"type": "rerank_complete", "payload": {"results": final_results[:top_k_final], "duration": round(rerank_duration, 2)}}
         
         # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
         llm_duration = 0
