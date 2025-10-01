@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 WORKDIR /app
 ENV PYTHONPATH=/app
 
-COPY apps-microservices/api-recherche-service/requirements.txt .
+COPY apps-microservices/api-recherche/requirements.txt .
 
 ENV PIP_TARGET=/app/wheelhouse
 
