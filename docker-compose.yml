@@ -306,7 +306,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 16
 
   product-processor-service:
     build:
