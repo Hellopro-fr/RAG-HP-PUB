@@ -3,6 +3,7 @@ import time
 import os
 import psutil
 import socket
+import logging
 from contextlib import contextmanager
 
 from bs4 import BeautifulSoup
@@ -24,7 +25,7 @@ def SocketSniffer():
         original_connect = sock.connect
         def sniffer_connect(address):
             host, port = address
-            print(f"    [NETWORK SNIFFER] Attempting to connect to: {host}:{port}")
+            logging.info(f"    [NETWORK SNIFFER] Attempting to connect to: {host}:{port}")
             return original_connect(address)
             
         sock.connect = sniffer_connect
@@ -57,7 +58,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     # --- DIAGNOSTICS: Memory and Process Info ---
     process = psutil.Process(os.getpid())
     mem_before = process.memory_info().rss / (1024 * 1024) # in MB
-    print(f"    [DIAGNOSTIC] Mémoire avant traitement: {mem_before:.2f} MB")
+    logging.info(f"    [DIAGNOSTIC] Mémoire avant traitement: {mem_before:.2f} MB")
     
     # Étape 2: Vérifier si la présence du page_type == "header" ou page_type == "footer" sinon on procède normalement
     if website_data.get("page_type","") == "header" or website_data.get("page_type","") == "footer":
@@ -80,7 +81,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
                     raise ValueError("Aucun footer extrait.")
             
             duration = time.monotonic() - start_time
-            print(f"    [DIAGNOSTIC] Temps d'extraction ({page_type}): {duration:.4f} secondes")
+            logging.info(f"    [DIAGNOSTIC] Temps d'extraction ({page_type}): {duration:.4f} secondes")
             text_to_embed_clean = text_to_embed.strip()
         except Exception as e:
             raise ValueError(f"Erreur lors de l'extraction du {page_type.capitalize()}: {e}")
@@ -101,20 +102,21 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             start_time = time.monotonic()
             extracted_content = None
             
+            logging.info("   -> [DIAGNOSTIC] Activating network sniffer...")
             with SocketSniffer():
-                print(f"    -> [DIAGNOSTIC] Démarrage de Trafilatura dans le sniffer réseau (Tentative {attempt + 1}/{max_retries})...")
+                logging.info(f"    -> [DIAGNOSTIC] Démarrage de Trafilatura dans le sniffer réseau (Tentative {attempt + 1}/{max_retries})...")
                 extracted_content = trafilatura.extract(info).content
 
             duration = time.monotonic() - start_time
-            print(f"    [DIAGNOSTIC] Tentative {attempt + 1}/{max_retries} d'extraction (Trafilatura): {duration:.4f} secondes")
+            logging.info(f"    [DIAGNOSTIC] Tentative {attempt + 1}/{max_retries} d'extraction (Trafilatura): {duration:.4f} secondes")
 
             if extracted_content and extracted_content.strip():
                 data_extracted = extracted_content
-                print(f"    -> Extraction réussie à la tentative {attempt + 1}.")
+                logging.info(f"    -> Extraction réussie à la tentative {attempt + 1}.")
                 break
             
             if attempt < max_retries - 1:
-                print(f"    -> Tentative {attempt + 1} échouée (contenu vide), nouvelle tentative dans 1 seconde...")
+                logging.info(f"    -> Tentative {attempt + 1} échouée (contenu vide), nouvelle tentative dans 1 seconde...")
                 time.sleep(1)
 
         if not data_extracted:
@@ -124,7 +126,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         
     # --- DIAGNOSTICS: Memory after processing ---
     mem_after = process.memory_info().rss / (1024 * 1024) # in MB
-    print(f"    [DIAGNOSTIC] Mémoire après traitement: {mem_after:.2f} MB (Delta: {mem_after - mem_before:+.2f} MB)")
+    logging.info(f"    [DIAGNOSTIC] Mémoire après traitement: {mem_after:.2f} MB (Delta: {mem_after - mem_before:+.2f} MB)")
     
     # Étape 3: Construire le message de sortie
     output_message = {
@@ -138,8 +140,8 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     }
 
     # Étape 4: Afficher le message de sortie pour débogage
-    print(f"🔍Website-Processor: Message prêt pour {log}: {json.dumps(output_message, indent=2)}")
+    logging.info(f"🔍Website-Processor: Message prêt pour {log}: {json.dumps(output_message, indent=2)}")
     
     # Étape 5: Retourner le message prêt à être publié
-    print(f"📦 Website-Processor: Website traité pour {log}.")
+    logging.info(f"📦 Website-Processor: Website traité pour {log}.")
     return output_message
