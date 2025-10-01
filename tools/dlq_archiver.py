@@ -100,6 +100,10 @@ class DLQArchiver:
         except json.JSONDecodeError:
             original_payload = {"raw_body": body.decode('utf-8', errors='ignore')}
 
+        # --- Ensure payload is an object for 'flattened' mapping ---
+        if not isinstance(original_payload, dict):
+            original_payload = {"value": original_payload}
+
         # Sanitize the payload by removing any embedding vectors before they cause issues
         sanitized_payload = self._remove_embedding_recursively(original_payload)
         
