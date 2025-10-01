@@ -76,6 +76,21 @@ class DLQArchiver:
         doc = self._process_message_to_doc(body, properties)
         self.documents_buffer.append((method.delivery_tag, doc))
 
+    def _remove_embedding_recursively(self, obj):
+        """Recursively finds and removes/replaces 'embedding' keys from an object."""
+        if isinstance(obj, dict):
+            for key in list(obj.keys()):
+                if key == 'embedding':
+                    # Replace the large vector with a placeholder for context
+                    vector_len = len(obj[key]) if isinstance(obj[key], list) else 'N/A'
+                    obj[key] = f"Vector of size {vector_len} (removed for archiving)"
+                else:
+                    self._remove_embedding_recursively(obj[key])
+        elif isinstance(obj, list):
+            for item in obj:
+                self._remove_embedding_recursively(item)
+        return obj
+
     def _process_message_to_doc(self, body, properties):
         """Transforms a RabbitMQ message into an Elasticsearch document with a deterministic ID."""
         message_hash = hashlib.sha256(body).hexdigest()
@@ -85,12 +100,8 @@ class DLQArchiver:
         except json.JSONDecodeError:
             original_payload = {"raw_body": body.decode('utf-8', errors='ignore')}
 
-        # --- Flattening Logic ---
-        if isinstance(original_payload, dict) and 'data' in original_payload and isinstance(original_payload['data'], dict):
-            nested_data = original_payload.pop('data')
-            # Merge the nested 'data' dictionary into the main payload
-            # This handles potential key conflicts by overwriting with the nested value
-            original_payload.update(nested_data)
+        # Sanitize the payload by removing any embedding vectors before they cause issues
+        sanitized_payload = self._remove_embedding_recursively(original_payload)
 
         headers = properties.headers or {}
         
@@ -120,7 +131,7 @@ class DLQArchiver:
             "@timestamp": datetime.utcnow().isoformat(),
             "service_name": str(service_name or "N/A"), "error_reason": str(error_reason or "Raison inconnue"),
             "retry_count": safe_retry_count, "original_exchange": str(original_exchange or "N/A"),
-            "original_routing_key": str(original_routing_key or "N/A"), "original_payload": original_payload,
+            "original_routing_key": str(original_routing_key or "N/A"), "original_payload": sanitized_payload,
         }
         return {
             "_index": ELASTIC_INDEX_NAME,
@@ -147,33 +158,35 @@ class DLQArchiver:
         docs_to_es = [doc for _, doc in buffer_copy]
         
         try:
+            # Use raise_on_error=False to get a report of failures instead of an exception
             success_count, errors = helpers.bulk(self.es_client, docs_to_es, raise_on_error=False)
             
             print(f"   -> Résultat du bulk: {success_count} succès, {len(errors)} échecs.")
 
-            if errors:
+            if not errors:
+                # If everything succeeded, we can ack the whole batch at once for efficiency.
+                last_delivery_tag = buffer_copy[-1][0]
+                self.channel.basic_ack(delivery_tag=last_delivery_tag, multiple=True)
+                print(f"   -> Batch entièrement archivé et acquitté avec succès (jusqu'au tag {last_delivery_tag}).")
+            else:
                 print(f"   -> ❌ Erreurs d'indexation détectées. Traitement individuel des acquittements.")
                 # Create a set of failed document IDs for quick lookup
                 failed_doc_ids = {err['index']['_id'] for err in errors}
+                
                 for delivery_tag, doc in buffer_copy:
                     if doc['_id'] in failed_doc_ids:
                         print(f"     -> NACK du message (tag: {delivery_tag}) car l'archivage a échoué.")
                         self.channel.basic_nack(delivery_tag=delivery_tag, requeue=True)
                     else:
                         self.channel.basic_ack(delivery_tag=delivery_tag)
-            else:
-                # If everything succeeded, we can ack the whole batch at once.
-                last_delivery_tag = buffer_copy[-1][0]
-                self.channel.basic_ack(delivery_tag=last_delivery_tag, multiple=True)
-                print(f"   -> Batch entièrement archivé et acquitté avec succès (jusqu'au tag {last_delivery_tag}).")
+                print("   -> Les messages échoués ont été renvoyés dans la file pour un retraitement.")
 
         except Exception as e:
             print(f"❌ ERREUR CRITIQUE lors de la communication avec Elasticsearch: {e}. NACK de tout le batch (requeue=True).")
             last_delivery_tag = buffer_copy[-1][0]
             self.channel.basic_nack(delivery_tag=last_delivery_tag, multiple=True, requeue=True)
         finally:
-            # Clear the buffer regardless of outcome to prevent reprocessing the same batch in memory.
-            # RabbitMQ will handle redelivery based on ack/nack.
+            # The buffer is already cleared, but we ensure it's empty to avoid any reprocessing in memory.
             self.documents_buffer.clear()
 
 
