@@ -20,7 +20,7 @@ def insertion_data(document_data: dict) -> dict:
         logging.error("'%s' n'est pas un nom de collection valide.", collection)
         return None
 
-    base_vectorielle = MilvusdocumentCrud()
+    base_vectorielle = MilvusDocumentCrud()
 
     processing_functions = {
         CollectionName.DOCUMENT: base_vectorielle.insert_document
@@ -51,7 +51,7 @@ def insertion_data(document_data: dict) -> dict:
                     "already_in_bdd" : len(data) > 0
                 }
             else:
-                logging.error("Erreur lors de la vérification de l'URL %s : %s", url, message)
+                logging.error("Erreur lors de la vérification du fichie source %s : %s", fichier_source, message)
                 output_message = {
                     "database"       : bdd,
                     "collection"     : collection,
@@ -62,7 +62,7 @@ def insertion_data(document_data: dict) -> dict:
 
         elif status == "success":
             if len(data) > 0:
-                logging.info("Le fichier_source %s existe déjà dans la base de données. Insertion ignorée.", url)
+                logging.info("Le fichier source %s existe déjà dans la base de données. Insertion ignorée.", fichier_source)
                 result = data
             else:
                 result = func(documents)

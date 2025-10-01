@@ -253,7 +253,7 @@ class MilvusDocumentCrud:
             if not fichier_source:
                 return {
                     "status": "error",
-                    "message": "Url requise pour la récupération.",
+                    "message": "Fichier source requis pour la récupération.",
                     "code" : 400
                 }
 
