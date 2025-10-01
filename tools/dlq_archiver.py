@@ -188,7 +188,7 @@ class DLQArchiver:
                         error_details = failed_doc_ids[doc_id]
                         print(f"     -> NACK du message (tag: {delivery_tag}) car l'archivage a échoué.")
                         print(f"     -> Raison de l'échec pour ID {doc_id}: {error_details.get('type')}: {error_details.get('reason')[:500]}...")
-                        self.channel.basic_nack(delivery_tag=delivery_tag, requeue=False) # requeue=False to DLX
+                        self.channel.basic_nack(delivery_tag=delivery_tag, requeue=True)
                     else:
                         self.channel.basic_ack(delivery_tag=delivery_tag)
                 print("   -> Les messages échoués ont été routés vers l'infrastructure de retry/DLQ.")
