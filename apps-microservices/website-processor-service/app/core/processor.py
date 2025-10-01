@@ -2,12 +2,42 @@ import json
 import time
 import os
 import psutil
+import socket
+from contextlib import contextmanager
 
 from bs4 import BeautifulSoup
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
 from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
+
+@contextmanager
+def SocketSniffer():
+    """A context manager to temporarily intercept and log socket connection attempts."""
+    original_socket = socket.socket
+    
+    def sniffer_socket(*args, **kwargs):
+        # Create the real socket object
+        sock = original_socket(*args, **kwargs)
+        
+        # Override its connect method
+        original_connect = sock.connect
+        def sniffer_connect(address):
+            host, port = address
+            print(f"    [NETWORK SNIFFER] Attempting to connect to: {host}:{port}")
+            return original_connect(address)
+            
+        sock.connect = sniffer_connect
+        return sock
+
+    # Monkey-patch the socket class
+    socket.socket = sniffer_socket
+    try:
+        yield
+    finally:
+        # Restore the original socket class
+        socket.socket = original_socket
+
 
 def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") -> dict:
     """
@@ -69,8 +99,12 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         max_retries = 3
         for attempt in range(max_retries):
             start_time = time.monotonic()
-            # On ne prend que le contenu, pas l'objet entier
-            extracted_content = trafilatura.extract(info).content
+            extracted_content = None
+            
+            with SocketSniffer():
+                print(f"    -> [DIAGNOSTIC] Démarrage de Trafilatura dans le sniffer réseau (Tentative {attempt + 1}/{max_retries})...")
+                extracted_content = trafilatura.extract(info).content
+
             duration = time.monotonic() - start_time
             print(f"    [DIAGNOSTIC] Tentative {attempt + 1}/{max_retries} d'extraction (Trafilatura): {duration:.4f} secondes")
 
