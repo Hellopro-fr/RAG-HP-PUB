@@ -58,7 +58,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         trafilatura = TrafilaturaHp(info)
         
         data_extracted = ""
-        max_retries = 10
+        max_retries = 3
         for attempt in range(max_retries):
             extracted_content = trafilatura.extract(info).content
 
