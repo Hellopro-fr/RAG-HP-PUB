@@ -276,41 +276,87 @@ async def search_in_milvus_stream(request: SearchRequest):
         # Pour l'instant, nous supposons un filtre simple.
         # filter_expr = " and ".join(request.filtre) if request.filtre else ""
 
+        # all_source_results = []
+        # search_duration = 0
+        
         all_source_results = []
-        search_duration = 0
+        start_search_time = time.perf_counter()
 
-        # Boucle sur les sources demandées
+        # # Boucle sur les sources demandées
+        # for item in request.source:
+        #     source_name = item.source
+        #     filtre = item.filtre
+        #     yield {"type": "status", "payload": f"Recherche dans la source '{source_name}'..."}
+        #     start_search_source = time.perf_counter()
+
+        #     filters = []
+        #     filter_expr = await filtre_source(request.filtre, source_name)
+        #     if filter_expr:
+        #         filters.append(" and ".join(filter_expr))
+            
+        #     filter_expr_source = await filtre_source(filtre, source_name) if filtre else ""
+        #     if filter_expr_source:
+        #         filters.append(" and ".join(filter_expr_source))
+
+        #     # Appel au microservice de recherche en base de données
+        #     # Le client gRPC gère la conversion en dictionnaire
+        #     source_results = await database_client.search_vector(
+        #         collection=source_name,
+        #         vector=query_vector,
+        #         k=top_k_retrieval,
+        #         filter_expr=" and ".join(filters) if filters else "" # Le filtre est passé directement
+        #     )
+            
+        #     search_duration += time.perf_counter() - start_search_source
+            
+        #     if source_results is None:
+        #         yield {"type": "warning", "payload": f"Erreur lors de la recherche dans la source '{source_name}'."}
+        #         continue
+            
+        #     all_source_results.extend([MessageToDict(res) for res in source_results])
+        
+        search_tasks = []
         for item in request.source:
             source_name = item.source
             filtre = item.filtre
-            yield {"type": "status", "payload": f"Recherche dans la source '{source_name}'..."}
-            start_search_source = time.perf_counter()
+            yield {"type": "status", "payload": f"Préparation de la recherche pour '{source_name}'..."}
 
-            filters = []
-            filter_expr = await filtre_source(request.filtre, source_name)
-            if filter_expr:
-                filters.append(" and ".join(filter_expr))
-            
-            filter_expr_source = await filtre_source(filtre, source_name) if filtre else ""
-            if filter_expr_source:
-                filters.append(" and ".join(filter_expr_source))
+            # Fonction interne pour créer la coroutine de recherche avec le bon contexte
+            async def create_search_task(s_name=source_name, s_filtre=filtre):
+                filters = []
+                filter_expr_global = await filtre_source(request.filtre, s_name)
+                if filter_expr_global:
+                    filters.append(" and ".join(filter_expr_global))
+                
+                filter_expr_source = await filtre_source(s_filtre, s_name) if s_filtre else ""
+                if filter_expr_source:
+                    filters.append(" and ".join(filter_expr_source))
+                
+                final_filter_expr = " and ".join(filters) if filters else ""
 
-            # Appel au microservice de recherche en base de données
-            # Le client gRPC gère la conversion en dictionnaire
-            source_results = await database_client.search_vector(
-                collection=source_name,
-                vector=query_vector,
-                k=top_k_retrieval,
-                filter_expr=" and ".join(filters) if filters else "" # Le filtre est passé directement
-            )
-            
-            search_duration += time.perf_counter() - start_search_source
-            
-            if source_results is None:
-                yield {"type": "warning", "payload": f"Erreur lors de la recherche dans la source '{source_name}'."}
+                # Retourne la coroutine de recherche prête à être exécutée
+                return database_client.search_vector(
+                    collection=s_name,
+                    vector=query_vector,
+                    k=top_k_retrieval,
+                    filter_expr=final_filter_expr
+                )
+
+            search_tasks.append(create_search_task())
+
+        # Exécuter toutes les tâches de recherche en parallèle
+        yield {"type": "status", "payload": f"Lancement de la recherche parallèle sur {len(search_tasks)} source(s)..."}
+        # asyncio.gather exécute toutes les coroutines en même temps et attend leurs résultats
+        list_of_results_groups = await asyncio.gather(*search_tasks, return_exceptions=True)
+        search_duration = time.perf_counter() - start_search_time
+
+        # Aplatir la liste de listes de résultats et gérer les erreurs
+        for source_results in list_of_results_groups:
+            if isinstance(source_results, Exception):
+                logging.error(f"Une tâche de recherche a échoué: {source_results}")
                 continue
-            
-            all_source_results.extend([MessageToDict(res) for res in source_results])
+            if source_results:
+                all_source_results.extend([MessageToDict(res) for res in source_results])
 
         # On trie tous les résultats par score de similarité initial
         initial_matches = sorted(all_source_results, key=lambda x: x['score'], reverse=True)

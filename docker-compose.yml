@@ -503,6 +503,25 @@ services:
       - "8569:8569"
     env_file:
       - .env
+
+  # TODO:
+  # pour vérification api-recherche-service-worker
+  api-recherche-service-worker:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-recherche-service/Dockerfile
+    restart: unless-stopped
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - RERANKING_SERVICE_URL=reranking-model-service:50053
+      - DATABASE_SERVICE_URL=database-recherche-service:50054
+    ports:
+      - "8511:8511"
+    env_file:
+      - .env
+    networks:
+      - services-net
     
 networks:
   services-net:
