@@ -47,7 +47,9 @@ Exemples: <br>
 • {"price": {"$gte": 50}, "category": {"$in": ["electronics"]}} → prix >= 50 ET catégorie electronics"""),
     limit: Optional[int] = Query(1000, description="Limite du nombre de résultats (max 10000)"),
     offset: Optional[int] = Query(0, description="Nombre d'éléments à ignorer (pagination)"),
-    fields: Optional[str] = Query(None, description="Champs à retourner, séparés par des virgules (ex: 'id,name,type')")
+    fields: Optional[str] = Query(None, description="Champs à retourner, séparés par des virgules (ex: 'id,name,type')"),
+    order_by: Optional[str] = Query(None, description="Champ pour le tri (ex: 'id', 'price', 'created_at')"),
+    order_direction: Optional[str] = Query("ASC", description="Direction du tri: 'ASC' (croissant) ou 'DESC' (décroissant)")
 ):
     try:
         parsed_metadata = json.loads(metadata) if metadata else {}
@@ -62,8 +64,21 @@ Exemples: <br>
     if fields:
         parsed_fields = [field.strip() for field in fields.split(',') if field.strip()]
 
+    # Validation de la direction de tri
+    if order_direction and order_direction.upper() not in ["ASC", "DESC"]:
+        raise HTTPException(status_code=400, detail="order_direction doit être 'ASC' ou 'DESC'")
+
     try:
-        result = get_ressource_rest(collection_name = collection_name, id_milvus = id_ressource, metadata = parsed_metadata, limit = limit, offset = offset, fields = parsed_fields)
+        result = get_ressource_rest(
+            collection_name=collection_name,
+            id_milvus=id_ressource,
+            metadata=parsed_metadata,
+            limit=limit,
+            offset=offset,
+            fields=parsed_fields,
+            order_by=order_by,
+            order_direction=order_direction.upper() if order_direction else "ASC"
+        )
 
         if not result:
             raise HTTPException(status_code=404, detail="Ressource non trouvée.")
@@ -150,7 +165,7 @@ def _build_single_condition(field_name: str, operator: str, value: Any) -> Optio
         else:
             return f"{field_name} {milvus_op} {value}"
 
-def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, limit: int = 1000, offset: int = 0, fields: Optional[list] = None) -> Dict[str, Any]:
+def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None, limit: int = 1000, offset: int = 0, fields: Optional[list] = None, order_by: Optional[str] = None, order_direction: str = "ASC") -> Dict[str, Any]:
 
         print(f"get_ressource_rest - collection_name: {collection_name}, id_milvus: {id_milvus}, metadata: {metadata}")
 
@@ -213,7 +228,17 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
 
                 # Récupération de tous les documents avec offset et limit
                 try:
-                    results = collection.query(expr="", output_fields=output_fields, limit=limit, offset=offset)
+                    # Construire le paramètre order_by si fourni
+                    query_params = {
+                        "expr": "",
+                        "output_fields": output_fields,
+                        "limit": limit,
+                        "offset": offset
+                    }
+                    if order_by:
+                        query_params["order_by"] = f"{order_by} {order_direction}"
+
+                    results = collection.query(**query_params)
                 except MilvusException as e:
                     if "invalid max query result window" in str(e):
                         return {
@@ -236,7 +261,9 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                         "get_all": True,
                         "limit": limit,
                         "offset": offset,
-                        "fields": fields or "default"
+                        "fields": fields or "default",
+                        "order_by": order_by,
+                        "order_direction": order_direction
                     },
                     "pagination": {
                         "current_page": (offset // limit) + 1,
@@ -258,7 +285,17 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                 output_fields = MILVUS_COLLECTIONS_DEFAULT_FIELDS.get(collection_name, ["*"])
 
             try:
-                results = collection.query(expr=expr, output_fields=output_fields, limit=limit, offset=offset)
+                # Construire le paramètre order_by si fourni
+                query_params = {
+                    "expr": expr,
+                    "output_fields": output_fields,
+                    "limit": limit,
+                    "offset": offset
+                }
+                if order_by:
+                    query_params["order_by"] = f"{order_by} {order_direction}"
+
+                results = collection.query(**query_params)
             except MilvusException as e:
                 if "invalid max query result window" in str(e):
                     return {
@@ -283,7 +320,9 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                     "expr" : expr,
                     "limit": limit,
                     "offset": offset,
-                    "fields": fields or "default"
+                    "fields": fields or "default",
+                    "order_by": order_by,
+                    "order_direction": order_direction
                 },
                 "pagination": {
                     "current_page": (offset // limit) + 1,

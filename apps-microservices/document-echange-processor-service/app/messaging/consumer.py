@@ -1,7 +1,7 @@
 import pika
 import json
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
-from document_echange_processor_service.core.processor import process_document_data_for_embedding # Importe la logique métier
+from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 class Consumer:
@@ -30,7 +30,7 @@ class Consumer:
         self.channel.queue_declare(queue=self.queue_name, durable=True)
         self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
 
-    def _on_message_callback(self, ch, method, properties, body):
+    async def _on_message_callback(self, ch, method, properties, body):
         """
         Callback privé qui orchestre le traitement d'un message.
         """
@@ -49,11 +49,10 @@ class Consumer:
         
         try:
             # 1. Appelle la logique métier PURE
-            output_message = process_document_data_for_embedding(document_data,bdd)
+            output_message = await process_document_data_for_templating(document_data,bdd)
             
-
-            self.publisher.routing_key = 'data.ready_for_embedding'
-            print("➡️ Document-Echange-Processor: Message prêt pour l'embedding")
+            self.publisher.routing_key = 'data.ready_for_templating'
+            print("➡️ Document-Echange-Processor: Message prêt pour templating")
             
             try:
                 # 2. Utilise le publisher pour envoyer le résultat

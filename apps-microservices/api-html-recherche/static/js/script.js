@@ -1340,7 +1340,9 @@ $(function () {
 
     socket.onopen = () => {
       console.log('WebSocket connecté.');
-
+      if (elements.llmResponseText.hasClass('text-custom-rouge')) {
+        elements.llmResponseText.removeClass('text-custom-rouge');
+      }
       // --- DÉBUT DE LA MODIFICATION : Construction de la requête conforme au schéma ---
 
       // 1. Construire la liste `source` au format `List[SourcesFiltre]`
@@ -1489,6 +1491,30 @@ $(function () {
           break;
         case 'error':
           console.error(`[WS Error] ${data.payload}`);
+          if (!state.isSidebarOpen) {
+            state.isSidebarOpen = true;
+            updateUI();
+          }
+          // Cacher l'indicateur de chargement
+          elements.llmAnalyzeState.hide();
+          // Afficher le conteneur de réponse
+          elements.llmResponseContainer.show();
+          // Créer un élément HTML pour l'erreur et l'afficher
+          const errorHtml = `<div class="llm-error">${data.payload}</div>`;
+          elements.llmResponseText.html(errorHtml);
+          state.llmResponse = data.payload;
+          updateResultsSidebar();
+          if (!elements.llmResponseText.hasClass('text-custom-rouge')) {
+            elements.llmResponseText.addClass('text-custom-rouge');
+          }
+          show_toast(generate_error_message("Une erreur s'est produite"), "error");
+          $('html, body').animate({
+            scrollTop: $('body').offset().top
+          }, 800);
+          // La recherche est terminée à cause de l'erreur
+          state.isSearching = false;
+          updateUI(); // Mettre à jour les boutons, etc.
+          socket.close();
           break;
         case 'initial_results':
           console.log("Réception des résultats initiaux (pré-reranking).");

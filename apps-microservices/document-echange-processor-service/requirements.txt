@@ -28,3 +28,7 @@ openpyxl
 python-pptx 
 mammoth 
 odfpy 
+grpcio
+grpcio-tools
+protobuf
+googleapis-common-protos

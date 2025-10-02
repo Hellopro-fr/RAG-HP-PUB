@@ -1,4 +1,5 @@
 import time
+import os
 from typing import List
 from gradio_client import Client, handle_file
 
@@ -7,12 +8,12 @@ USERNAME = os.getenv("USERNAME_OCR", "admin")
 PASSWORD = os.getenv("PASSWORD_OCR", "admin")
 
 class OCRDocExtractor:
-    def __init__(client_url: str = CLIENT_URL, username: str = USERNAME, password: str = PASSWORD):
+    def __init__(self,client_url: str = CLIENT_URL, username: str = USERNAME, password: str = PASSWORD):
         self.client_url = client_url
         self.username = username
         self.password = password
 
-    def convert_doc_to_markdown(file_paths: list):
+    def convert_doc_to_markdown(self,file_paths: List):
         """
         Convert PDF/images to markdown using the API
 
