@@ -47,6 +47,32 @@ Voici l'url de la page : {url}
 Contenu en entrée (Markdown) :
 {content}
 """
+PROMPT_OCR_FR = """
+Tu es un classifieur de type de document.
+En entrée, tu reçois le contenu texte présent dans le document. Attention, il faut donc identifier le contenu principal du document et en identifier le sens. Ne pas se laisser influencer par le contenu présent dans le header ou le footer par exemple.
+Ta tâche est de déterminer quelle est la fonction principale de ce document pour l’utilisateur final, pas simplement sa structure.
+En sortie, tu dois produire un objet JSON :
+Si la page correspond à un des types listés → retourne uniquement :
+json
+{{ "page_type": "valeur" }}
+Si la page ne correspond à aucun type → retourne :
+json
+{{ "page_type": "autre", "commentaire_si_autre": "explication en 15 mots max" }}
+Critère clé : ne te base pas uniquement sur les balises Markdown.
+Analyse le but du document pour l’utilisateur final : décider d’un achat (devis), s’informer en détail (fiche technique), découvrir et comparer l’offre (catalogue), évaluer rapidement les tarifs (plaquette prix),etc.
+Voici les types de pages possibles :
+"devis" : document commercial qui détaille une offre (produit ou service), ses conditions, son prix et qui engage le fournisseur si accepté.
+"fiche_technique" : document décrivant les caractéristiques, fonctionnalités et spécifications d’un produit ou service.
+"catelogue" : recueil structuré présentant l’ensemble ou une partie des produits/services proposés par une entreprise.
+"plaquette_prix" : support listant les tarifs des produits ou services, généralement sous forme simplifiée et claire pour les clients.
+"autre" : si aucun de ces types ne correspond.
+Rappels :
+Si "page_type" ≠ "autre", ne génère pas de champ "commentaire_si_autre".
+Génère seulement le JSON, sans autre texte.
+Analyse le but marketing ou fonctionnel du document.
+Contenu en entrée (Markdown) :
+{content}
+"""
 
 TOKENIZER = get_tokenizer("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
 MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
@@ -60,10 +86,14 @@ async def _process_single_message(message: dict) -> dict:
     original_message = message
     try:
         data_payload = message.get("data", {})
+        collection = message.get("collection", {})
         url = data_payload.get("url", "URL non fournie")
         content = data_payload.get("text")
         
-        user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=content)
+        if collection == "document":
+            user_prompt = PROMPT_OCR_FR.format(content=content)
+        else:
+            user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=content)
         
         # Encodage pour vérifier la longueur
         prompt_tokens = TOKENIZER.encode(user_prompt)
