@@ -88,7 +88,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
     # Suppression des info inutiles via llm
     payload = {
         "prompt" : json.dumps(PROMPT_NETTOYAGE.format(content=text_to_embed_clean)),
-        "max_tokens" : 128000,
+        "max_tokens" : 32700,
         "temperature": 0.7
     }
 
