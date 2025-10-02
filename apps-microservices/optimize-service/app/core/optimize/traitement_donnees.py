@@ -73,7 +73,7 @@ class TraitementDonnees:
             resp = match.group(0)
 
         # tentative de réparation
-        resp = fix_json_quotes(resp)
+        resp = self.fix_json_quotes(resp)
 
         return resp
 
