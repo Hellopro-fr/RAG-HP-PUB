@@ -1,20 +1,19 @@
-import pika
+import aio_pika
 import json
 import asyncio
 from embedding_service.messaging.publisher import Publisher
 from embedding_service.core.processor import embed_input_data
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher, **kwargs):
+    def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher, **kwargs):
         """
         Initialise le consumer avec une logique de retry et DLQ.
         """
-        self.channel = connection.channel()
+        self.connection = connection
         self.publisher = publisher
         
         # Noms des composants RabbitMQ
@@ -26,94 +25,101 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
-        self.rabbitmq_connection = RabbitMQConnection()
-        self.connect()
         print("✅ Consumer initialisé.")
 
-    def connect(self):
-        """
-        Établit la connexion et configure le consumer, y compris les queues de retry et de dead-letter.
-        """
-        self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-        self.channel = self.connection.channel()
-
+    async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
+        """Déclare toutes les files d'attente et les échanges nécessaires."""
+        
         # --- 1. Infrastructure pour les échecs FINALS (Dead-Letter Queue) ---
-        self.channel.exchange_declare(exchange=self.dead_letter_exchange, exchange_type='topic', durable=True)
-        self.channel.queue_declare(queue=self.dead_letter_queue_name, durable=True)
-        self.channel.queue_bind(exchange=self.dead_letter_exchange, queue=self.dead_letter_queue_name, routing_key=self.routing_key)
+        dlx = await channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
+        dlq = await channel.declare_queue(self.dead_letter_queue_name, durable=True)
+        await dlq.bind(dlx, self.routing_key)
 
         # --- 2. Infrastructure pour les tentatives (Retry Queue) ---
-        self.channel.exchange_declare(exchange=self.retry_exchange, exchange_type='topic', durable=True)
-        retry_queue_args = {
-            'x-message-ttl': RETRY_TTL_MS,
-            'x-dead-letter-exchange': self.exchange_name,
-            'x-dead-letter-routing-key': self.routing_key
-        }
-        self.channel.queue_declare(queue=self.retry_queue_name, durable=True, arguments=retry_queue_args)
-        self.channel.queue_bind(exchange=self.retry_exchange, queue=self.retry_queue_name, routing_key=self.routing_key)
+        retry_exchange = await channel.declare_exchange(self.retry_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
+        retry_queue = await channel.declare_queue(
+            self.retry_queue_name,
+            durable=True,
+            arguments={
+                'x-message-ttl': RETRY_TTL_MS,
+                'x-dead-letter-exchange': self.exchange_name,
+                'x-dead-letter-routing-key': self.routing_key
+            }
+        )
+        await retry_queue.bind(retry_exchange, self.routing_key)
 
         # --- 3. Configuration de la Queue Principale ---
-        self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-        main_queue_args = {
-            'x-dead-letter-exchange': self.retry_exchange,
-            'x-dead-letter-routing-key': self.routing_key
-        }
-        self.channel.queue_declare(queue=self.queue_name, durable=True, arguments=main_queue_args)
-        self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
+        exchange = await channel.declare_exchange(self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True)
+        main_queue = await channel.declare_queue(
+            self.queue_name,
+            durable=True,
+            arguments={
+                'x-dead-letter-exchange': self.retry_exchange,
+                'x-dead-letter-routing-key': self.routing_key
+            }
+        )
+        await main_queue.bind(exchange, self.routing_key)
+        return main_queue
 
-    def _get_retry_count(self, properties: pika.BasicProperties) -> int:
-        if properties.headers and 'x-death' in properties.headers:
-            for death in properties.headers['x-death']:
+    def _get_retry_count(self, message: aio_pika.abc.AbstractIncomingMessage) -> int:
+        if message.headers and 'x-death' in message.headers:
+            for death in message.headers['x-death']:
                 if death.get('queue') == self.retry_queue_name:
                     return death.get('count', 0)
         return 0
 
-    def _on_message_callback(self, ch, method, properties, body):
+    async def _on_message_callback(self, message: aio_pika.abc.AbstractIncomingMessage):
         """
-        Callback qui orchestre le traitement d'un message avec logique de retry/DLQ.
+        Callback asynchrone qui orchestre le traitement d'un message avec logique de retry/DLQ.
         """
-        try:
-            input_data = json.loads(body)
-            print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
+        async with message.process():
+            try:
+                input_data = json.loads(message.body)
+                print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
 
-            # 1. Appelle la logique métier PURE
-            output_message = asyncio.run(embed_input_data(input_data))
-            
-            # 2. Utilise le publisher pour envoyer le résultat
-            self.publisher.publish_message(output_message)
+                # 1. Appelle la logique métier PURE
+                output_message = await embed_input_data(input_data)
+                
+                # 2. Utilise le publisher pour envoyer le résultat
+                async with self.connection.channel() as channel:
+                    await self.publisher.publish_message(output_message, channel)
 
-            # 3. Acquitte le message original
-            ch.basic_ack(delivery_tag=method.delivery_tag)
+            except (json.JSONDecodeError, ValueError) as e:
+                # Erreur permanente: le message est invalide.
+                print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
+                await self._send_to_dlq(message, e, 0)
 
-        except (json.JSONDecodeError, ValueError) as e:
-            # Erreur permanente: le message est invalide.
-            print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
-            dlq_props = DLQProperties.create_dlq_properties(e, 'embedding-service', 0, method)
-            ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-            ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception as e:
+                # Erreur potentiellement transitoire.
+                retry_count = self._get_retry_count(message)
+                if retry_count < MAX_RETRIES:
+                    print(f"❌ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                    await message.nack(requeue=False) # NACK pour retry via DLX
+                else:
+                    print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                    await self._send_to_dlq(message, e, MAX_RETRIES)
+    
+    async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
+        async with self.connection.channel() as channel:
+            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+            dlq_headers = DLQProperties.create_dlq_headers(error, 'embedding-service', retry_count, message)
+            await dlx.publish(
+                aio_pika.Message(
+                    body=message.body,
+                    headers=dlq_headers,
+                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                ),
+                routing_key=self.routing_key
+            )
 
-        except Exception as e:
-            # Erreur potentiellement transitoire (ex: service d'embedding indisponible).
-            retry_count = self._get_retry_count(properties)
-            if retry_count < MAX_RETRIES:
-                print(f"❌ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False) # NACK pour retry via DLX
-            else:
-                print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
-                dlq_props = DLQProperties.create_dlq_properties(e, 'embedding-service', MAX_RETRIES, method)
-                ch.basic_publish(exchange=self.dead_letter_exchange, routing_key=self.routing_key, body=body, properties=dlq_props)
-                ch.basic_ack(delivery_tag=method.delivery_tag) # ACK pour confirmer le déplacement
-
-    def start_consuming(self):
+    async def start_consuming(self):
         """
         Démarre la boucle d'écoute des messages.
         """
-        for i in range(3):
-            try:
-                self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-                print("👂 Embedding-Service: En attente de messages...")
-                self.channel.start_consuming()
-                break  # Si start_consuming se termine normalement, on sort de la boucle
-            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
-                self.connect()
+        channel = await self.connection.channel()
+        await channel.set_qos(prefetch_count=10) # Traiter jusqu'à 10 messages en parallèle
+        
+        queue = await self._setup_queues(channel)
+        
+        print("👂 Embedding-Service: En attente de messages...")
+        await queue.consume(self._on_message_callback)
