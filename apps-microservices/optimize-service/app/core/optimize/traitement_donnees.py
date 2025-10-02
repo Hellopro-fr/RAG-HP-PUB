@@ -52,17 +52,28 @@ class TraitementDonnees:
             """
         return prompt
 
+    def fix_json_quotes(resp: str) -> str:
+        # Corrige les "" en "
+        resp = resp.replace('""', '"')
+        
+        # Optionnel : si jamais le texte contient des guillemets dans la valeur, les échapper
+        # Exemple: 1"1/2 doit devenir 1\"1/2
+        resp = re.sub(r'(\d)"(\d)', r'\1\"\2', resp)
+
+        return resp
+
     def clean_json_response(self, resp: str) -> str:
         resp = resp.strip()
 
-        # Corrige d'abord le cas {{ ... }}
         if resp.startswith("{{") and resp.endswith("}}"):
             resp = resp[1:-1].strip()
 
-        # Ensuite, si jamais le LLM a mis du texte autour, on récupère seulement le bloc JSON
         match = re.search(r'\{.*\}', resp, re.DOTALL)
         if match:
             resp = match.group(0)
+
+        # tentative de réparation
+        resp = fix_json_quotes(resp)
 
         return resp
 
