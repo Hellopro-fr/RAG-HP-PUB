@@ -19,7 +19,8 @@ $(function () {
     templatePrompt: $("#llmPrompt").val(),
     useReranker: true,
     rerankerModel: "BAAI/bge-reranker-v2-m3",
-    selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
+    // selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
+    selectedModel: "qwen/qwen3-coder", // Mis à jour avec la nouvelle valeur par défaut
     isFilterOpen: true,
     isLlmEnabled: false,
     isSidebarOpen: false,
