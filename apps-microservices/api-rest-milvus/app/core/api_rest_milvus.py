@@ -16,14 +16,11 @@ logger = logging.getLogger(__name__)
 def get_milvus_connection():
     alias = "default"
     try:
-        if connections.has_connection(alias):
-            connections.disconnect(alias)
-            logger.info("Connexion existante déconnectée.")
-
-        logger.info("Connexion à Milvus...")
-        # connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
-        connections.connect(alias, host=settings.ZILLIZ_URI_DEV, port=settings.ZILLIZ_PORT)
-        logger.info(f"Connecté à Milvus.")
+        if not connections.has_connection(alias):
+            logger.info("Connexion à Milvus...")
+            # connections.connect(alias, uri=settings.MILVUS_URI, token=settings.MILVUS_TOKEN)
+            connections.connect(alias, host=settings.ZILLIZ_URI, port=settings.ZILLIZ_PORT)
+            logger.info(f"Connecté à Milvus.")
     except Exception as e:
         logger.error(f"❌ Erreur de connexion à Milvus: {e}")
         raise e
