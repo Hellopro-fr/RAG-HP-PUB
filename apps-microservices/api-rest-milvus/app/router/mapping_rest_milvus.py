@@ -59,3 +59,14 @@ MILVUS_COLLECTIONS_UNIQUE_FIELD  = {
     "categories": "id_categorie",
     "echanges": "conversation_id"
 }
+
+# Mapping des collections principales vers leurs collections de correspondance
+# Utilisé pour la suppression en cascade
+MILVUS_COLLECTIONS_CASCADE_MAPPING = {
+    "produits": "correspondance_produits_bo_milvus",
+    "produits_2": "correspondance_produits_bo_milvus_2",
+    "produits_3": "correspondance_produits_bo_milvus_3",
+    "devis": "correspondance_devis_bo_milvus",
+    "categories": "correspondance_categories_bo_milvus",
+    "echanges": "correspondance_echanges_bo_milvus"
+}
