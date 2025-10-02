@@ -52,7 +52,7 @@ class TraitementDonnees:
             """
         return prompt
 
-    def fix_json_quotes(resp: str) -> str:
+    def fix_json_quotes(self, resp: str) -> str:
         # Corrige les "" en "
         resp = resp.replace('""', '"')
         
