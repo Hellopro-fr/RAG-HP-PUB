@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     QDRANT_HOST_URL: str
     QDRANT_PORT: str
     QDRANT_API_KEY: str
+    ZILLIZ_URI_DEV: str
     ZILLIZ_URI: str
     ZILLIZ_PORT: str
     ZILLIZ_API_KEY: str
