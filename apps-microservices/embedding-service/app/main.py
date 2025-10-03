@@ -1,53 +1,50 @@
 import pika
 import time
 import os
-
-# Importer les modules nécessaires
-# from sentence_transformers import SentenceTransformer
+import asyncio
+import aio_pika
 
 # Importer les modules locaux
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
 
-# from transformers import AutoTokenizer # pour encoder du modèle d'embedding
-
-def main():
+async def main():
     """
-    Point d'entrée principal du service.
+    Point d'entrée principal asynchrone du service.
     Met en place la connexion et lance les composants.
     """
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
-    connection = None
-
-    # Boucle de connexion robuste
-    for i in range(10):
+    
+    print("🚀 Embedding-Service: Démarrage...")
+    
+    loop = asyncio.get_event_loop()
+    
+    while True:
         try:
-            connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ Embedding-Product-Processor: Connecté à RabbitMQ.")
+            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
+            print("✅ Embedding-Service: Connecté à RabbitMQ.")
+            
+            async with connection:
+                publisher = Publisher(connection)
+                consumer = Consumer(connection, publisher)
+                
+                # Lancer le consumer, qui va démarrer ses propres tâches de fond
+                await consumer.start_consuming()
+                
+                # Garder le service en vie pour que les tâches de fond continuent de tourner
+                await asyncio.Future()
+
+        except aio_pika.exceptions.AMQPConnectionError as e:
+            print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
+            await asyncio.sleep(10)
+        except KeyboardInterrupt:
+            print("\n🛑 Embedding-Service: Arrêt demandé.")
             break
-        except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ Embedding-Product-Processor: En attente de RabbitMQ... {i+1}s")
-            time.sleep(1)
-
-    if not connection:
-        print("❌ Embedding-Product-Processor: Impossible de se connecter, arrêt du service.")
-        exit(1)
-
-    try:
-        # 1. Créer une instance du publisher
-        publisher = Publisher(connection)
-        
-        consumer = Consumer(connection, publisher)
-        
-        # 4. Lancer l'écoute
-        consumer.start_consuming()
-
-    except KeyboardInterrupt:
-        print("\n🛑 Embedding-Product-Processor: Arrêt demandé.")
-    finally:
-        if connection and not connection.is_closed:
-            connection.close()
-            print("✅ Embedding-Product-Processor: Connexion RabbitMQ fermée.")
+        except Exception as e:
+            print(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
+            await asyncio.sleep(10)
+    
+    print("✅ Embedding-Service: Service arrêté.")
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())

@@ -6,7 +6,12 @@ service LLMService {
   // RPC de streaming bi-directionnel pour une conversation interactive.
   // TODO: Sécuriser ce flux (authentification, validation des entrées pour éviter les injections)
   rpc ChatStream(stream ChatRequest) returns (stream ChatResponse);
+
+  // RPC unaire pour une seule requête-réponse.
   rpc Chat(ChatRequest) returns (FullChatResponse);
+
+  // RPC pour traitement par lots
+  rpc ChatBatch(ChatBatchRequest) returns (ChatBatchResponse);
 }
 
 message ChatRequest {
@@ -22,4 +27,15 @@ message ChatResponse {
 
 message FullChatResponse {
   string full_message = 1;
+}
+
+message ChatBatchRequest {
+  repeated string messages = 1;
+  optional float temperature = 2;
+  optional int32 max_tokens = 3;
+  optional bool enable_thinking = 4;
+}
+
+message ChatBatchResponse {
+  repeated string full_messages = 1;
 }

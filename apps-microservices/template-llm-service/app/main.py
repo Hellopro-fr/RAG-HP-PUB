@@ -1,16 +1,18 @@
 import pika
 import time
 import os
-from vllm import LLM
+import asyncio
 
 # On utilise des imports absolus basés sur le nom du module qui sera dans le PYTHONPATH
 from template_llm_service.messaging.consumer import Consumer
 from template_llm_service.messaging.publisher import Publisher
+import aio_pika
+import aiormq
 
-def main():
+async def main():
     """
-    Point d'entrée principal du service.
-    Charge le modèle LLM et lance les composants RabbitMQ.
+    Point d'entrée principal asynchrone du service.
+    Met en place la connexion et lance les composants.
     """
     rabbitmq_url = os.environ.get("RABBITMQ_URL")
     if not rabbitmq_url:
@@ -19,79 +21,38 @@ def main():
 
     print("🚀 template-llm-service: Démarrage...")
     
-    # On lit la configuration du parallélisme tensoriel depuis la variable d'environnement
-    # définie par le script start.sh. On met '1' comme valeur par défaut par sécurité.
-    tensor_parallel_size = int(os.environ.get("TENSOR_PARALLEL_SIZE", "1"))
-    
-    if tensor_parallel_size > 1:
-        print(f"🧠 Configuration détectée : Mode Multi-GPU (Tensor Parallel Size = {tensor_parallel_size}).")
-    else:
-        print("🧠 Configuration détectée : Mode Mono-GPU.")
-    
-    print("🧠 Chargement du modèle LLM (cela peut prendre plusieurs minutes)...")
-    
-    # Configuration optimisée mais compatible avec LLM synchrone
-    llm_config = {
-        "model": "Qwen/Qwen3-14B-AWQ",
-        "quantization": "awq",
-        "tensor_parallel_size": tensor_parallel_size,
-        "gpu_memory_utilization": 0.90,  # Plus agressif avec AWQ
-        "trust_remote_code": True,
-        "dtype": "auto",
-        "max_model_len": 4096,
-        "swap_space": 4,  # GB de swap pour gérer les pics
-        "max_num_seqs": 64,  # Réduit pour éviter les timeouts
-        "max_num_batched_tokens": 4096,  # Plus conservateur
-        "enable_prefix_caching": True,  # Cache les préfixes communs
-        "disable_log_stats": True,  # Réduit l'overhead
-    }
-    
-    try:
-        # Utilise le LLM synchrone standard (plus simple)
-        llm = LLM(**llm_config)
-        tokenizer = llm.get_tokenizer()  # ✅ Maintenant défini
-        print("✅ Modèle LLM chargé avec succès sur 2 GPUs.")
-        
-        # Warmup simple
-        print("🔥 Préchauffage du modèle...")
-        from vllm import SamplingParams
-        warmup_params = SamplingParams(temperature=0.7, max_tokens=10)
-        llm.generate("Hello", warmup_params)
-        print("✅ Modèle préchauffé.")
-        
-    except Exception as e:
-        print(f"❌ ERREUR CRITIQUE: Impossible de charger le modèle LLM. Arrêt du service. Erreur: {e}")
-        exit(1)
+    # Créer le répertoire de récupération s'il n'existe pas
+    os.makedirs('recovery_data', exist_ok=True)
 
-    connection = None
-    for i in range(10):
+    loop = asyncio.get_event_loop()
+    
+    while True:
         try:
-            connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
+            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
             print("✅ template-llm-service: Connecté à RabbitMQ.")
+            
+            async with connection:
+                publisher = Publisher(connection)
+                consumer = Consumer(connection, publisher)
+                
+                # Lancer le consumer, qui va démarrer ses propres tâches de fond
+                await consumer.start_consuming()
+                
+                # Garder le service en vie pour que les tâches de fond continuent de tourner
+                await asyncio.Future()
+
+        except (aiormq.exceptions.AMQPConnectionError, aiormq.exceptions.ChannelInvalidStateError) as e:
+            print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
+            await asyncio.sleep(10)
+        except KeyboardInterrupt:
+            print("\n🛑 template-llm-service: Arrêt demandé.")
             break
-        except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ template-llm-service: En attente de RabbitMQ... {i+1}s")
-            time.sleep(1)
+        except Exception as e:
+            print(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
+            await asyncio.sleep(10)
+    
+    print("✅ template-llm-service: Service arrêté.")
 
-    if not connection:
-        print("❌ template-llm-service: Impossible de se connecter, arrêt du service.")
-        exit(1)
-
-    try:
-        publisher = Publisher(connection)
-        consumer = Consumer(connection, publisher, llm, tokenizer, llm_config)
-        consumer.start_consuming()
-    except KeyboardInterrupt:
-        print("\n🛑 template-llm-service: Arrêt demandé.")
-    finally:
-        if connection and not connection.is_closed:
-            connection.close()
-            print("✅ template-llm-service: Connexion RabbitMQ fermée.")
 
 if __name__ == '__main__':
-    # Optimisations PyTorch
-    import torch
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-    
-    main()
+    asyncio.run(main())

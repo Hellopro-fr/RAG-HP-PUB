@@ -1,48 +1,35 @@
-import pika
+import aio_pika
 import json
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
 class Publisher:
-    def __init__(self, connection: pika.BlockingConnection):
+    def __init__(self, connection: aio_pika.RobustConnection):
         """
-        Initialise le publisher avec une connexion RabbitMQ existante.
+        Initialise le publisher asynchrone.
         """
         self.connection = connection
-        self.channel = self.connection.channel()
-        self.rabbitmq_connection = RabbitMQConnection()
         print("✅ Publisher initialisé.")
 
-    def publish_message(self, message_dict: dict):
+    async def publish_message(self, message_dict: dict, channel: aio_pika.abc.AbstractChannel):
+        """
+        Publie un message (dictionnaire) sur le topic configuré de manière asynchrone.
+        """
+        collection = message_dict.get("collection", "inconnu").lower()
+        exchange_name = f"{collection}_embedded_data_exchange"
+        routing_key = f"data.{collection}.ready_for_insertion"
 
-        for i in range(3):  # Essaye de se reconnecter 3 fois
-            try:
-                """
-                Publie un message (dictionnaire) sur le topic configuré.
-                """
-                collection = message_dict.get("collection", "inconnu")
-                collection = collection.lower()
-                self.exchange_name = f"{collection}_embedded_data_exchange"
-                self.routing_key = f"data.{collection}.ready_for_insertion"
+        # Déclare l'exchange (idempotent)
+        exchange = await channel.declare_exchange(
+            exchange_name, 
+            aio_pika.ExchangeType.TOPIC, 
+            durable=True
+        )
 
-                # Déclare l'exchange où il va publier
-                self.channel.exchange_declare(
-                    exchange=self.exchange_name, 
-                    exchange_type='topic', 
-                    durable=True
-                )
-
-                self.channel.basic_publish(
-                    exchange=self.exchange_name,
-                    routing_key=self.routing_key,
-                    body=json.dumps(message_dict).encode('utf-8'),
-                    properties=pika.BasicProperties(delivery_mode=2)
-                )
-                
-                print(f"   📤 routing_key : '{self.routing_key}'")
-                print(f"   📤 Message traité et publié post embedding.")
-
-                break  # Si la publication réussit, on sort de la boucle
-            except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
-                self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-                self.channel = self.connection.channel()
+        await exchange.publish(
+            aio_pika.Message(
+                body=json.dumps(message_dict).encode('utf-8'),
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+            ),
+            routing_key=routing_key
+        )
+        
+        print(f"   📤 Message avec embedding pour la collection '{collection}' publié avec la clé '{routing_key}'.")

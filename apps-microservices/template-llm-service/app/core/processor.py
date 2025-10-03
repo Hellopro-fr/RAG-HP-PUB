@@ -1,6 +1,10 @@
+import os
 import json
 import re
-from vllm import LLM, SamplingParams
+import asyncio
+from vllm.transformers_utils.tokenizer import get_tokenizer
+from common_utils.grpc_clients import llm_client
+from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 # Le prompt est défini ici, avec la logique métier
 PROMPT_TEMPLATE_FR = """
@@ -13,7 +17,7 @@ json
 {{ "page_type": "valeur" }}
 Si la page ne correspond à aucun type → retourne :
 json
-{{ "page_type": "autre", "commentaire_si_autre": "explication en 15 mots max" }}
+{{ "page_type": "autre" }}
 Critère clé : ne te base pas uniquement sur les balises Markdown.
 Analyse le but de la page pour l’utilisateur final : s’informer, comparer, acheter, demander un devis, découvrir une offre locale, etc.
 Voici les types de pages possibles :
@@ -36,7 +40,6 @@ Voici les types de pages possibles :
 "politique_confidentialite" : politique de confidentialité ou cookies, RGPD, gestion des données personnelles.
 "autre" : si aucun de ces types ne correspond.
 Rappels :
-Si "page_type" ≠ "autre", ne génère pas de champ "commentaire_si_autre".
 Génère seulement le JSON, sans autre texte.
 Ne pas se laisser influencer par les premières balises Markdown (ex : une page “containers à Lyon” n’est ni une fiche produit ni un article, mais une offre localisée = "offre_segment").
 Analyse le but marketing ou fonctionnel de la page.
@@ -44,7 +47,6 @@ Voici l'url de la page : {url}
 Contenu en entrée (Markdown) :
 {content}
 """
-
 PROMPT_OCR_FR = """
 Tu es un classifieur de type de document.
 En entrée, tu reçois le contenu texte présent dans le document. Attention, il faut donc identifier le contenu principal du document et en identifier le sens. Ne pas se laisser influencer par le contenu présent dans le header ou le footer par exemple.
@@ -72,96 +74,106 @@ Contenu en entrée (Markdown) :
 {content}
 """
 
-def classify_page_template_batch(llm_instance: LLM, tokenizer, llm_config: dict, messages: list[dict]) -> list[dict]:
-    """
-    Prend un BATCH (une liste) de messages, les classifie tous avec un seul appel au LLM
-    pour une efficacité maximale, et retourne une liste de messages enrichis.
+TOKENIZER = get_tokenizer("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
+MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
+# On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
+SAFE_MAX_LEN = MAX_MODEL_LEN - 512
 
-    Args:
-        llm_instance (LLM): L'instance du modèle vLLM chargé.
-        tokenizer: Le tokenizer associé au modèle.
-        llm_config (dict): La configuration du LLM (ex: max_model_len).
-        messages (list[dict]): La liste des messages originaux à traiter.
-
-    Returns:
-        list[dict]: La liste des messages, chacun enrichi avec le "page_type".
+async def _process_single_message(message: dict) -> dict:
     """
-    prompts = []
-    
-    # --- Étape 1: Préparation de tous les prompts pour le batch ---
-    # Nous parcourons chaque message pour en extraire le contenu et construire
-    # le prompt formaté qui sera envoyé au modèle.
-    for message in messages:
+    Traite un seul message en appelant le LLM. Conçu pour être exécuté en parallèle.
+    """
+    original_message = message
+    try:
         data_payload = message.get("data", {})
+        collection = message.get("collection", {})
         collection = message.get("collection", {})
         url = data_payload.get("url", "URL non fournie")
         content = data_payload.get("text")
-
-        # Sécurité : Tronquer le contenu si trop long pour éviter les erreurs du modèle.
-        # On garde une marge de sécurité (1024 tokens) pour le template du prompt lui-même.
-        max_model_len = llm_config.get("max_model_len", 4096)
-        max_content_tokens = max_model_len - 1024
-        content_tokens = tokenizer.encode(content)
-        if len(content_tokens) > max_content_tokens:
-            truncated_tokens = content_tokens[:max_content_tokens]
-            truncated_content = tokenizer.decode(truncated_tokens)
-        else:
-            truncated_content = content
         
-        # Formatage du prompt final avec l'URL et le contenu tronqué.
         if collection == "document":
-            user_prompt = PROMPT_OCR_FR.format(content=truncated_content)
+            user_prompt = PROMPT_OCR_FR.format(content=content)
         else:
-            user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=truncated_content)
+            user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=content)
         
-        conversation = [{"role": "user", "content": user_prompt}]
-        
-        # apply_chat_template est la méthode recommandée pour formater le prompt
-        # pour les modèles de type "chat".
-        formatted_prompt = tokenizer.apply_chat_template(
-            conversation, tokenize=False, add_generation_prompt=True, enable_thinking=False
+        # Encodage pour vérifier la longueur
+        prompt_tokens = TOKENIZER.encode(user_prompt)
+        token_count = len(prompt_tokens)
+
+        # --- NOUVEAU: Logique de troncature ---
+        if token_count >= SAFE_MAX_LEN:
+            print(f"   -> ⚠️  AVERTISSEMENT: Le prompt pour l'URL {url} ({token_count} tokens) dépasse la limite de sécurité. Troncature en cours...")
+            # On tronque la liste de tokens et on la décode à nouveau
+            truncated_tokens = prompt_tokens[:SAFE_MAX_LEN]
+            user_prompt = TOKENIZER.decode(truncated_tokens, skip_special_tokens=True)
+            # On met à jour le compte de tokens pour le log
+            token_count = len(truncated_tokens)
+            print(f"   -> Prompt tronqué à {token_count} tokens.")
+
+        # Ajout des métriques de diagnostic au message
+        original_message["_diag_content_length"] = len(content) if content else 0
+        original_message["_diag_token_count"] = token_count
+
+        # Appel gRPC pour un seul prompt
+        chat_request = ChatRequest(
+            prompt=user_prompt,
+            temperature=0.7,
+            max_tokens=256,
+            enable_thinking=False
         )
-        prompts.append(formatted_prompt)
-
-    # --- Étape 2: Appel unique et puissant au LLM avec tout le batch de prompts ---
-    # C'est ici que réside le gain de performance. vLLM va traiter tous ces prompts
-    # en parallèle sur le GPU.
-    sampling_params = SamplingParams(max_tokens=250, temperature=0.1)
-    batch_outputs = llm_instance.generate(prompts, sampling_params)
-
-    # --- Étape 3: Traitement des résultats pour chaque message ---
-    processed_messages = []
-    for i, output in enumerate(batch_outputs):
-        # On récupère le message original correspondant à ce résultat
-        original_message = messages[i]
-        raw_text = output.outputs[0].text.strip()
+        raw_text = await llm_client.get_llm_chat_response(chat_request)
         
-        # Le parsing du JSON doit être robuste car le LLM peut parfois échouer.
-        # On utilise une expression régulière pour extraire le bloc JSON, même s'il est
-        # entouré d'autre texte.
-        try:
-            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-            if match:
-                json_string = match.group(0)
-                result = json.loads(json_string)
-                page_type = result.get("page_type")
-                # Vérification de sécurité : si le champ est vide ou manquant.
-                if not page_type:
-                    raise ValueError("Le champ 'page_type' est manquant ou vide dans le JSON.")
-            else:
-                 raise ValueError("Aucun bloc JSON trouvé dans la sortie du LLM.")
-        except Exception as e:
-            # Si le parsing échoue, on assigne un type d'erreur pour ne pas bloquer le flux.
-            raise ValueError(f"   -> ⚠️  Erreur de parsing JSON pour un message. Sortie brute: '{raw_text}'. Erreur: {e}")
+        # Parsing de la réponse
+        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if match:
+            json_string = match.group(0)
+            parsed_json = json.loads(json_string)
+            page_type = parsed_json.get("page_type")
+            if not page_type:
+                raise ValueError(f"Le champ 'page_type' est manquant ou vide dans la réponse JSON: {raw_text}")
+            
+            original_message["data"]["page_type"] = page_type
+            return {
+                "status": "success",
+                "processed_message": original_message
+            }
+        else:
+            raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
-        # On enrichit le message original avec le résultat de la classification
-        # et on l'ajoute à notre liste de résultats.
-        original_message["data"]["page_type"] = page_type
-        processed_messages.append(original_message)
+    except Exception as e:
+        error_str = f"Erreur de traitement individuel. Erreur: {e}"
+        return {
+            "status": "error",
+            "original_message": original_message,
+            "error_message": error_str
+        }
+
+async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
+    """
+    Traite un BATCH de messages en créant des tâches concurrentes pour chaque message,
+    permettant au serveur vLLM de faire du 'continuous batching'.
+    """
+    if not messages:
+        return []
+
+    # --- Étape 1: Créer une tâche asyncio pour chaque message ---
+    tasks = [_process_single_message(msg) for msg in messages]
     
-    print(f"   -> Classification en batch terminée pour {len(processed_messages)} messages.")
-    # Afficher les types de pages détectés pour chaque message
-    for msg in processed_messages:
-        print(f"      • URL: {msg['data'].get('url', 'N/A')} => Type de page: {msg['data'].get('page_type', 'N/A')}")
+    # --- Étape 2: Exécuter toutes les tâches en parallèle ---
+    processed_results = await asyncio.gather(*tasks)
         
-    return processed_messages
+    # --- Étape 3: Journalisation des résultats ---
+    print(f"   -> Classification en batch terminée pour {len(processed_results)} messages.")
+    for res in processed_results:
+        msg = res.get('processed_message') or res.get('original_message')
+        url = msg['data'].get('url', 'N/A')
+        
+        if res['status'] == 'success':
+            page_type = msg['data'].get('page_type', 'N/A')
+            content_len = msg.get('_diag_content_length', 'N/A')
+            token_count = msg.get('_diag_token_count', 'N/A')
+            print(f"      • [SUCCESS] URL: {url} => Type: {page_type} [Len: {content_len}, Tokens: {token_count}]")
+        else:
+            print(f"      • [FAILURE] URL: {url} => Erreur: {res.get('error_message', 'Inconnue')}")
+            
+    return processed_results

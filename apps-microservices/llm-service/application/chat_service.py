@@ -1,3 +1,4 @@
+import asyncio
 from infrastructure.vllm_client import VLLMClient
 
 class ChatApplicationService:
@@ -43,3 +44,18 @@ class ChatApplicationService:
         return await self.vllm_client.get_chat_completion(
             message_history, temperature, max_tokens, enable_thinking
         )
+
+    async def handle_chat_batch_completion(self, messages: list[str], temperature: float, max_tokens: int, enable_thinking: bool) -> list[str]:
+        """
+        Gère une liste de requêtes de chat en parallèle et retourne les réponses complètes.
+        """
+        if not messages:
+            return []
+        
+        # Crée une tâche asynchrone pour chaque message
+        tasks = [self.handle_chat_completion(msg, temperature, max_tokens, enable_thinking) for msg in messages]
+        
+        # Exécute toutes les tâches en parallèle et attend leurs résultats
+        # vLLM va automatiquement batcher ces requêtes concurrentes en interne.
+        responses = await asyncio.gather(*tasks)
+        return responses

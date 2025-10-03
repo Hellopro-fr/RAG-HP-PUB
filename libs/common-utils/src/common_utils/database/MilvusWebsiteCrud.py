@@ -21,7 +21,7 @@ from pymilvus import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "siteweb"
+    collection_name: str = "siteweb_2"
     dimension: int = 1024
 
 class MilvusWebsiteCrud:
@@ -34,25 +34,39 @@ class MilvusWebsiteCrud:
         self.logger = kwargs.get('logger', logging)
         
     def _connect_to_milvus(self):
-        self.logger.info("Connexion sur Zilliz cloud...")
-        # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
-        connections.connect("default", host=self.config.ZILLIZ_URI, port=self.config.ZILLIZ_PORT)
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        # Check if a connection with the alias 'default' already exists.
+        if not connections.has_connection("default"):
+            print("Connexion sur Zilliz cloud...")
+            # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
+            connections.connect(
+                alias="default",
+                host=self.config.ZILLIZ_URI, 
+                port=self.config.ZILLIZ_PORT,
+                timeout=10 # Add a 10-second timeout to prevent indefinite hanging
+            )
+            print("✓ Connexion sur Zilliz cloud avec succès.")
     
-    # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
-        if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
-            logging.warning(f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'")
-            utility.drop_collection(collection_name)
+        try:
+            print(f"Vérification de l'existence de la collection '{collection_name}'...")
+            collection_exists = utility.has_collection(collection_name, using="default", timeout=20)
+            print(f" -> La collection '{collection_name}' existe: {collection_exists}")
+        except Exception as e:
+            print(f"!!! ERREUR LORS DE LA VÉRIFICATION DE LA COLLECTION: {e}")
+            raise
 
-        if not utility.has_collection(collection_name):
-            self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
+        if collection_exists and self.config.RECREATE_COLLECTIONS:
+            print(f"[{model_key}] Collection '{collection_name}' existante → suppression en cours...")
+            utility.drop_collection(collection_name, using="default", timeout=20)
+            collection_exists = False
+
+        if not collection_exists:
+            print(f"Collection '{collection_name}' non trouvée. Création...")
             # Définition du schéma détaillé
             fields = [
-                # Todo : ce clé doit être unique
                 FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True),
                 FieldSchema(name="url", dtype=DataType.VARCHAR , max_length=65535),
                 FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
@@ -75,36 +89,41 @@ class MilvusWebsiteCrud:
             ]
             schema = CollectionSchema(fields, description=f"Collection de chunks de siteweb pour {model_key}")
             
-            collection = Collection(
-                collection_name, 
-                schema,
-                consistency_level="Strong"
-            )
+            try:
+                print(f"[{model_key}] Tentative de création de la collection '{collection_name}'...")
+                collection = Collection(
+                    name=collection_name,
+                    schema=schema,
+                    consistency_level="Strong",
+                )
+                print(f"[{model_key}] ✓ Collection '{collection_name}' créée avec succès.")
             
-            # self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
+                print(f"[{model_key}] Création de l'index vectoriel HNSW...")
+                index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
+                collection.create_index(field_name="embedding", index_params=index_params, timeout=120) # Timeout plus long pour l'index
+                print(f"[{model_key}] ✓ Index vectoriel créé.")
 
-            # # TODO : Vérifier les paramètres d'indexation
-            # # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
-            collection.create_index(field_name="embedding", index_params=index_params)
+                print(f"[{model_key}] Création des index scalaires...")
+                collection.create_index(field_name="url", index_name="idx_url", timeout=60)
+                # collection.create_index(field_name="categorie", index_name="idx_categorie")
+                # collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
+                # collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
+                # collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")
+                # collection.create_index(field_name="affichage", index_name="idx_affichage")
+                # collection.create_index(field_name="etat", index_name="idx_etat")
+                collection.create_index(field_name="page_type", index_name="idx_page_type", timeout=60)
+                print(f"[{model_key}] ✓ Index scalaires créés.")
 
-            # # Optionnel: Créer des index scalaires pour les filtres fréquents
-            collection.create_index(field_name="url", index_name="idx_url")
-            # collection.create_index(field_name="categorie", index_name="idx_categorie")
-            # collection.create_index(field_name="id_categorie", index_name="idx_id_categorie")
-            # collection.create_index(field_name="fournisseur", index_name="idx_fournisseur")
-            # collection.create_index(field_name="id_fournisseur", index_name="idx_id_fournisseur")
-            # collection.create_index(field_name="affichage", index_name="idx_affichage")
-            # collection.create_index(field_name="etat", index_name="idx_etat")
-            # collection.create_index(field_name="page_type", index_name="idx_page_type")
-
-            self.logger.info(f"[{model_key}] ✓ Index créés.")
+            except Exception as e:
+                print(f"!!! ERREUR LORS DE LA CRÉATION DE LA COLLECTION OU DES INDEX: {e}")
+                raise
         else:
-            self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
-            collection = Collection(collection_name)
+            print(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
+            collection = Collection(name=collection_name, using="default")
         
-        collection.load()
-        self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête.")
+        print(f"Chargement de la collection '{collection_name}' en mémoire...")
+        collection.load(timeout=60)
+        print(f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête.")
         return collection
 
 
@@ -123,7 +142,7 @@ class MilvusWebsiteCrud:
                     "message": "Aucune donnée à insérer ou collection non initialisée."
                 }
             
-            self.logger.info(f"[{model_key}][siteweb] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
+            print(f"[{model_key}][siteweb] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
            
             sanitized_batch = []
             for data in datas:
@@ -135,13 +154,12 @@ class MilvusWebsiteCrud:
                 data = Utils.sanitize_record(data)
                 sanitized_batch.append(data)  
             
-            result = self.collection.insert(sanitized_batch)
-            # self.collection.flush()
+            result = self.collection.insert(sanitized_batch, timeout=30)
 
-            self.logger.info(f"Résultat insertion : {result}") 
-            self.logger.info(f"Clé primaire : {result.primary_keys}") 
+            print(f"Résultat insertion : {result}") 
+            print(f"Clé primaire : {result.primary_keys}") 
             
-            self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
+            print(f"[{model_key}] ✓ Insertion terminée avec succès.")
             
             return {
                 "ids": str(result.primary_keys[0]) if result.primary_keys else "",
@@ -149,11 +167,13 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de l'insertion : {e}")
-            self.logger.error(f"Data : {data}")
+            print(f"[{model_key}][siteweb] Erreur Milvus lors de l'insertion : {e}")
+            print(f"Data : {datas}")
+            raise
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] insertion de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            print(f"Data : {datas}")
+            raise
     
     def update_website(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -171,13 +191,13 @@ class MilvusWebsiteCrud:
                 }
             
             if not data.get("id"):
-                self.logger.error(f"[{model_key}][siteweb] Mise à jour sans ID.")
+                print(f"[{model_key}][siteweb] Mise à jour sans ID.")
                 return {
                     "status": "error",
                     "message": "Clé primaire (ID) requise pour la mise à jour."
                 }
 
-            self.logger.info(f"[{model_key}][siteweb] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
+            print(f"[{model_key}][siteweb] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
             
             
             data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
@@ -186,9 +206,9 @@ class MilvusWebsiteCrud:
             # This is important for Milvus compatibility
             data = Utils.sanitize_record(data)  
 
-            result = self.collection.upsert(data)
-            self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
+            result = self.collection.upsert(data, timeout=30)
+            self.collection.flush(timeout=30)
+            print(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             
             return {
                 "ids": str(result.primary_keys[0]) if result.primary_keys else "",
@@ -196,11 +216,13 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de mise à jour : {e}")
-            self.logger.error(f"Data : {data}")
+            print(f"[{model_key}][siteweb] Erreur Milvus lors de mise à jour : {e}")
+            print(f"Data : {data}")
+            raise
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] Mise à jour de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            print(f"Data : {data}")
+            raise
 
     def delete_website(self,data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -218,16 +240,16 @@ class MilvusWebsiteCrud:
                 }
 
             if not id_entity_milvus:
-                self.logger.error(f"[{model_key}][siteweb] Suppression sans ID.")
+                print(f"[{model_key}][siteweb] Suppression sans ID.")
                 return {
                     "status": "error",
                     "message": "Clé primaire (ID) requise pour la suppression."
                 }
 
-            self.logger.info(f"[{model_key}][siteweb] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
-            result = self.collection.delete(f"id == {id_entity_milvus}")
-            self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
+            print(f"[{model_key}][siteweb] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
+            result = self.collection.delete(f"id == {id_entity_milvus}", timeout=30)
+            self.collection.flush(timeout=30)
+            print(f"[{model_key}] ✓ Suppression terminée avec succès.")
 
             return {
                 "status": "success",
@@ -235,12 +257,13 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de la suppression : {e}")
+            print(f"[{model_key}][siteweb] Erreur Milvus lors de la suppression : {e}")
+            raise
         except Exception as e:
             self.logger.error(f"[{model_key}][siteweb] Suppression : {e}", exc_info=True)
+            raise
 
-    def get_website(self,url: str) -> Dict[str, Any]:
-        list_url = [url]
+    def get_website(self, url: str, page_type: str, domaine: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
         
@@ -261,13 +284,38 @@ class MilvusWebsiteCrud:
                     "message": "Url requise pour la récupération.",
                     "code" : 400
                 }
+                
+            if not page_type:
+                return {
+                    "status": "error",
+                    "message": "Page type requise pour la récupération.",
+                    "code" : 400
+                }
+                
+            if not domaine:
+                return {
+                    "status": "error",
+                    "message": "Domaine requis pour la récupération.",
+                    "code" : 400
+                }
 
-            result = self.collection.query(
-                expr=f"url in {list_url}",
-                output_fields=["id"]
-            )
-            # self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
+            if page_type != 'header' and page_type != 'footer':
+                # Si page_type != header ou page_type != footer, on check uniquement sur l'URL
+                print(f"[{model_key}] AVERTISSEMENT: Le type de page fourni '{page_type}' n'est pas standard (header/footer).")
+                result = self.collection.query(
+                    expr=f'url == "{url}"',
+                    output_fields=["id"],
+                    timeout=20
+                )
+            else:
+                # Sinon, on check si le type de page existe déjà pour le domaine
+                result = self.collection.query(
+                    expr=f'domaine == "{domaine}" && page_type == "{page_type}"',
+                    output_fields=["id"],
+                    timeout=20
+                )
+
+            print(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
             return {
                 "status": "success",
@@ -275,6 +323,8 @@ class MilvusWebsiteCrud:
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Website] Erreur Milvus lors de la récupération : {e}")
+            print(f"[{model_key}][Website] Erreur Milvus lors de la récupération : {e}")
+            return {"status": "error", "message": str(e)}
         except Exception as e:
             self.logger.error(f"[{model_key}][Website] Erreur de Récupèration de siteweb : {e}", exc_info=True)
+            return {"status": "error", "message": str(e)}
