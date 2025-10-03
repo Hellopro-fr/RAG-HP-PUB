@@ -5,13 +5,15 @@ WORKDIR /app
 # --- Étape 1: Définir le PYTHONPATH ---
 ENV PYTHONPATH=/app
 
-RUN apt-get update && apt-get install -y curl git \
+RUN apt-get update && apt-get install -y git protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Étape 2: Installer uv ---
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# Copier les requirements du service
+COPY apps-microservices/document-echange-processor-service/requirements.txt .
+RUN pip install -r requirements.txt
 
-# --- Étape 3: Installer les dépendances du projet ---
+COPY libs/grpc-stubs /app/libs/grpc-stubs
+RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
 
 # Copier la lib partagée
 COPY protos /app/protos
@@ -20,10 +22,6 @@ RUN pip install --no-cache-dir -e ./libs/common-utils
 
 RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
 RUN pip install --no-cache-dir -e ./libs/grpc-stubs
-
-# Copier les requirements du service
-COPY apps-microservices/document-echange-processor-service/requirements.txt .
-RUN pip install -r requirements.txt
 
 # Copier le code source principal
 COPY apps-microservices/document-echange-processor-service/app/ \
