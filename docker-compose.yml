@@ -302,6 +302,24 @@ services:
     deploy:
       replicas: 4
 
+  document-echange-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/document-echange-processor-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8559:8559"
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    depends_on:
+      - llm-service
+    env_file:
+      - .env
+    networks:
+      - services-net
+    # deploy:
+    #   replicas: 4
+
   template-llm-service:
     build:
       context: .
@@ -428,6 +446,17 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/fournisseurs-database-qdrant-service/Dockerfile
+    # container_name: fournisseurs-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+  
+  document-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/document-database-qdrant-service/Dockerfile
     # container_name: fournisseurs-database-qdrant-service
     restart: unless-stopped
     env_file:

@@ -39,7 +39,7 @@ COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # --- Étape 5: Exposer le port du serveur docext ---
-EXPOSE 9998
+EXPOSE 8559
 
 # --- Étape 6: Définir le point d'entrée ---
 CMD ["/app/entrypoint.sh"]
