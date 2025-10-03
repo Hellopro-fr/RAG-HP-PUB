@@ -30,7 +30,7 @@ class Consumer:
         self.channel.queue_declare(queue=self.queue_name, durable=True)
         self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
 
-    async def _on_message_callback(self, ch, method, properties, body):
+    def _on_message_callback(self, ch, method, properties, body):
         """
         Callback privé qui orchestre le traitement d'un message.
         """
