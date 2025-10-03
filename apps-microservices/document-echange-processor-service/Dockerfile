@@ -32,7 +32,7 @@ COPY apps-microservices/document-echange-processor-service/app/ \
 RUN git clone https://github.com/nanonets/docext.git
 WORKDIR /app/docext
 RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
-RUN uv pip install -e .
+RUN pip install -e .
 
 WORKDIR /app
 # --- Étape 4: Copier le script entrypoint ---
