@@ -5,10 +5,6 @@ WORKDIR /app
 # --- Étape 1: Définir le PYTHONPATH ---
 ENV PYTHONPATH=/app
 
-# --- Étape 4: Copier le script entrypoint ---
-COPY apps-microservices/document-echange-processor-service/entrypoint.sh .
-RUN chmod +x entrypoint.sh
-
 # --- Étape 2: Installer uv ---
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -34,6 +30,11 @@ RUN git clone https://github.com/nanonets/docext.git
 WORKDIR /app/docext
 RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
 RUN uv pip install -e .
+
+WORKDIR /app
+# --- Étape 4: Copier le script entrypoint ---
+COPY apps-microservices/document-echange-processor-service/entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
 # --- Étape 5: Exposer le port du serveur docext ---
 EXPOSE 8559
