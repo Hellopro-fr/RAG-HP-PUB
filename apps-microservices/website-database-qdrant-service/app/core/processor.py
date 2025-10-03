@@ -32,6 +32,10 @@ def insertion_data(website_data: dict) -> dict:
     page_type = websites[0].get("page_type")
     if not page_type:
         raise ValueError("Le type de page est manquant dans les données du site web.")
+    
+    domaine = websites[0].get("domaine")
+    if not domaine:
+        raise ValueError("Le domaine est manquant dans les données du site web.")
 
     print(f"Début du traitement pour l'URL: {url}")
 
@@ -50,7 +54,7 @@ def insertion_data(website_data: dict) -> dict:
     # --- Étape 1: Vérifier si l'URL existe déjà ---
     try:
         print(f"Vérification de l'existence de l'URL '{url}' avec page_type '{page_type}' dans {bdd}...")
-        res = base_vectorielle.get_website(url=url, page_type=page_type)
+        res = base_vectorielle.get_website(url=url, page_type=page_type, domaine=domaine)
         status = res.get("status")
         data = res.get("data", [])
 

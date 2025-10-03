@@ -263,7 +263,7 @@ class MilvusWebsiteCrud:
             self.logger.error(f"[{model_key}][siteweb] Suppression : {e}", exc_info=True)
             raise
 
-    def get_website(self, url: str, page_type: str) -> Dict[str, Any]:
+    def get_website(self, url: str, page_type: str, domaine: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
         
@@ -296,7 +296,7 @@ class MilvusWebsiteCrud:
                 # Si page_type != header ou page_type != footer, on check uniquement sur l'URL
                 print(f"[{model_key}] AVERTISSEMENT: Le type de page fourni '{page_type}' n'est pas standard (header/footer).")
                 result = self.collection.query(
-                    expr=f'url == "{url}"',
+                    expr=f'domaine == "{domaine}" && page_type == "{page_type}"',
                     output_fields=["id"],
                     timeout=20
                 )
