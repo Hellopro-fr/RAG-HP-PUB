@@ -16,18 +16,18 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Copier la lib partagée
 COPY libs/common-utils /app/libs/common-utils
-RUN uv pip install -e /app/libs/common-utils
+RUN pip install -e /app/libs/common-utils
 
 # Copier les requirements du service
 COPY apps-microservices/document-echange-processor-service/requirements.txt .
-RUN uv pip install -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Copier le code source principal
 COPY apps-microservices/document-echange-processor-service/app/ \
      /app/document_echange_processor_service
 
-# Installer docext depuis PyPI (optionnel)
-RUN uv pip install docext
+# # Installer docext depuis PyPI (optionnel)
+# RUN uv pip install docext
 
 # Installer docext depuis la source
 RUN git clone https://github.com/nanonets/docext.git
