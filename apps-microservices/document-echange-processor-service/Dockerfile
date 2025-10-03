@@ -14,8 +14,12 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # --- Étape 3: Installer les dépendances du projet ---
 
 # Copier la lib partagée
-COPY libs/common-utils /app/libs/common-utils
-RUN pip install -e /app/libs/common-utils
+COPY protos /app/protos
+COPY libs/ /app/libs/
+RUN pip install --no-cache-dir -e ./libs/common-utils
+
+RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
+RUN pip install --no-cache-dir -e ./libs/grpc-stubs
 
 # Copier les requirements du service
 COPY apps-microservices/document-echange-processor-service/requirements.txt .
