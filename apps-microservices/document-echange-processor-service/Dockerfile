@@ -5,6 +5,9 @@ WORKDIR /app
 # --- Étape 1: Définir le PYTHONPATH ---
 ENV PYTHONPATH=/app
 
+RUN apt-get update && apt-get install -y curl \
+    && rm -rf /var/lib/apt/lists/*
+    
 # --- Étape 2: Installer uv ---
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
