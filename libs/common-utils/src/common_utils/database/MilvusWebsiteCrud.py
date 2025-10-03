@@ -291,19 +291,26 @@ class MilvusWebsiteCrud:
                     "message": "Page type requise pour la récupération.",
                     "code" : 400
                 }
+                
+            if not domaine:
+                return {
+                    "status": "error",
+                    "message": "Domaine requis pour la récupération.",
+                    "code" : 400
+                }
 
             if page_type != 'header' or page_type != 'footer':
                 # Si page_type != header ou page_type != footer, on check uniquement sur l'URL
                 print(f"[{model_key}] AVERTISSEMENT: Le type de page fourni '{page_type}' n'est pas standard (header/footer).")
                 result = self.collection.query(
-                    expr=f'domaine == "{domaine}" && page_type == "{page_type}"',
+                    expr=f'url == "{url}"',
                     output_fields=["id"],
                     timeout=20
                 )
             else:
-                # Sinon, on check sur l'URL + le type de page
+                # Sinon, on check si le type de page existe déjà pour le domaine
                 result = self.collection.query(
-                    expr=f'url == "{url}" && page_type == "{page_type}"',
+                    expr=f'domaine == "{domaine}" && page_type == "{page_type}"',
                     output_fields=["id"],
                     timeout=20
                 )
