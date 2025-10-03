@@ -299,7 +299,7 @@ class MilvusWebsiteCrud:
                     "code" : 400
                 }
 
-            if page_type != 'header' or page_type != 'footer':
+            if page_type != 'header' and page_type != 'footer':
                 # Si page_type != header ou page_type != footer, on check uniquement sur l'URL
                 print(f"[{model_key}] AVERTISSEMENT: Le type de page fourni '{page_type}' n'est pas standard (header/footer).")
                 result = self.collection.query(
