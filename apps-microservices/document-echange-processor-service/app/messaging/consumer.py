@@ -48,11 +48,12 @@ class Consumer:
         print(f"\n📥 Document-Echange-Processor: Message reçu")
         
         try:
-            # 1. Appelle la logique métier PURE
-            output_message = await process_document_data_for_templating(document_data,bdd)
+
+            import asyncio
+            output_message = asyncio.run(process_document_data_for_templating(document_data, bdd))
             
             self.publisher.routing_key = 'data.ready_for_templating'
-            print("➡️ Document-Echange-Processor: Message prêt pour templating")
+            print(f"➡️ Document-Echange-Processor: Message prêt pour templating : {output_message.get('data',{}).get('text','texte ocr nok')}")
             
             try:
                 # 2. Utilise le publisher pour envoyer le résultat

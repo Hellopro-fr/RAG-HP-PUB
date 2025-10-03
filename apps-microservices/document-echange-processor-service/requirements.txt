@@ -1,4 +1,5 @@
 pika
+asyncio
 beautifulsoup4
 bs4
 markdownify
