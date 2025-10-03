@@ -19,6 +19,6 @@ RoutingKeys = {
     CollectionName.CATEGORIE: "new_data.category",
     CollectionName.ECHANGE: "new_data.echange",
     CollectionName.FOURNISSEUR: "new_data.fournisseurs",
-    CollectionName.SITEWEB: "new_data.website"
+    CollectionName.SITEWEB: "new_data.website",
     CollectionName.DOCUMENT: "new_data.document"
 }
