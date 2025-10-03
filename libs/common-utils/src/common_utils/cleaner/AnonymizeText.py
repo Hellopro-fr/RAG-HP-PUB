@@ -1,7 +1,7 @@
 import re
 
 class AnonymizeText:
-    def anonymize_text(text: str) -> str:
+    def anonymize_text(self,text: str) -> str:
         processed_text = text
 
         phone_pattern = r'(?<![\d/])(?: (?:(?:\+|00)\d{1,3}[-.\s]?)?(?:\(\d{1,5}\)[-.\s]?)?\d(?:[\d\s.-]{5,13}\d) )(?!:)'
@@ -13,7 +13,7 @@ class AnonymizeText:
         return processed_text
 
 
-    def normalize_text(text: str) -> str:
+    def normalize_text(self,text: str) -> str:
         processed_text = text
 
         processed_text = re.sub(r'<[^>]+>', '', processed_text)
