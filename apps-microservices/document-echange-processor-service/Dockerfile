@@ -6,7 +6,7 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 # --- Étape 4: Copier le script entrypoint ---
-COPY entrypoint.sh .
+COPY apps-microservices/document-echange-processor-service/entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
 # --- Étape 2: Installer uv ---
