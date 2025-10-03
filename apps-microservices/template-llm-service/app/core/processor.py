@@ -87,6 +87,7 @@ async def _process_single_message(message: dict) -> dict:
     try:
         data_payload = message.get("data", {})
         collection = message.get("collection", {})
+        collection = message.get("collection", {})
         url = data_payload.get("url", "URL non fournie")
         content = data_payload.get("text")
         

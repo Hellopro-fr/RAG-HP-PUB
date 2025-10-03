@@ -1,5 +1,5 @@
 import time
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from app.router import search as search_router
 from app.router import searchws as search_ws_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,8 +8,10 @@ from app.core.credentials import settings
 import logging
 import asyncio
 from contextlib import asynccontextmanager
+import os
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log_format = "%(asctime)s - %(levelname)s - [WORKER_PID:%(process)d] - %(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -31,6 +33,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"Requête reçue: {request.method} {request.url.path}")
+    response = await call_next(request)
+    logger.info(f"Réponse envoyée avec le statut: {response.status_code}")
+    return response
 
 @app.on_event("startup")
 def startup():

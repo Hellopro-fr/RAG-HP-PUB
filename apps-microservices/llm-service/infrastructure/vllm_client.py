@@ -11,6 +11,13 @@ INITIAL_BACKOFF_DELAY = 15  # seconds
 ADDING_TIME = 30 # seconds
 
 class VLLMClient:
+    def __init__(self):
+        # Créer une seule instance client avec un timeout généreux
+        # et des limites de connexion pour la robustesse.
+        timeout_config = httpx.Timeout(None, connect=10.0)
+        limits_config = httpx.Limits(max_connections=100, max_keepalive_connections=20)
+        self.http_client = httpx.AsyncClient(timeout=timeout_config, limits=limits_config)
+
     async def stream_chat(self, message_history, temperature: float, max_tokens: int, enable_thinking: bool):
         delay = INITIAL_BACKOFF_DELAY
         for attempt in range(MAX_RETRIES):

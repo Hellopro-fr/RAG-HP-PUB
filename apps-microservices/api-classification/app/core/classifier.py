@@ -254,7 +254,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
     def query_llm(self, prompt: str) -> Dict:
         """Appel au LLM selon le choix"""
         messages = [{"role": "user", "content": prompt}]
-        
+
         try:
             if self.llm_choice == 'OpenAI' and self.openai_client:
                 response = self.openai_client.chat.completions.create(
@@ -263,9 +263,10 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     temperature=0,
                     response_format={"type": "json_object"}
                 )
-                #return json.loads(response.choices[0].message.content)
-                return response
-                
+                # Convertir en dictionnaire pour la sérialisation JSON
+                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                return {"success": True, "response": response, "raw_response": raw_response_dict}
+
             elif self.llm_choice == 'DeepSeek' and self.deepseek_client:
                 response = self.deepseek_client.chat.completions.create(
                     model="deepseek-chat",
@@ -273,14 +274,25 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     temperature=0,
                     response_format={"type": "json_object"}
                 )
-                #return json.loads(response.choices[0].message.content)
-                return response
+                # Convertir en dictionnaire pour la sérialisation JSON
+                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                return {"success": True, "response": response, "raw_response": raw_response_dict}
             else:
                 raise ValueError(f"LLM {self.llm_choice} non configuré")
-                
+
         except Exception as e:
             logger.error(f"Erreur LLM: {e}")
-            return {"id_categorie": None, "score": -1}
+            # Capturer l'exception complète avec ses détails
+            return {
+                "success": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "raw_response": {
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "exception_details": str(e)
+                }
+            }
 
     def classify_single(self, product: Dict) -> Dict:
         """Classifie un seul produit"""
@@ -293,7 +305,12 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 return {
                     'id_produit': product['id_produit'],
                     'status': 'ERROR',
+                    'id_categorie': None,
+                    'nom_categorie': None,
+                    'score_llm': None,
                     'error': 'Aucun produit similaire trouvé',
+                    'llm_type': self.llm_choice,
+                    'llm_response': None,
                     'processing_time': time.time() - start_time
                 }
             
@@ -303,7 +320,12 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 return {
                     'id_produit': product['id_produit'],
                     'status': 'ERROR',
+                    'id_categorie': None,
+                    'nom_categorie': None,
+                    'score_llm': None,
                     'error': 'Aucune catégorie trouvée',
+                    'llm_type': self.llm_choice,
+                    'llm_response': None,
                     'processing_time': time.time() - start_time
                 }
             
@@ -312,32 +334,68 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             
             # Construction du prompt et appel LLM
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
-            raw_llm = self.query_llm(prompt)
-            llm_result = json.loads(raw_llm.choices[0].message.content)
-            
+            llm_result_wrapper = self.query_llm(prompt)
+
+            # Vérifier si l'appel LLM a échoué
+            if not llm_result_wrapper.get('success', False):
+                return {
+                    'id_produit': product['id_produit'],
+                    'status': 'ERROR',
+                    'id_categorie': None,
+                    'nom_categorie': None,
+                    'score_llm': None,
+                    'error': llm_result_wrapper.get('error', 'Erreur LLM inconnue'),
+                    'llm_type': self.llm_choice,
+                    'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                    'processing_time': time.time() - start_time
+                }
+
+            raw_llm = llm_result_wrapper['response']
+
+            try:
+                llm_result = json.loads(raw_llm.choices[0].message.content)
+            except (AttributeError, KeyError, json.JSONDecodeError) as e:
+                return {
+                    'id_produit': product['id_produit'],
+                    'status': 'ERROR',
+                    'id_categorie': None,
+                    'nom_categorie': None,
+                    'score_llm': None,
+                    'error': f'Erreur parsing réponse LLM: {str(e)}',
+                    'llm_type': self.llm_choice,
+                    'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                    'processing_time': time.time() - start_time
+                }
+
             chosen_id = llm_result.get('id_categorie')
             score = llm_result.get('score', -1)
-            
+
             if not chosen_id or score not in [0, 1]:
                 return {
                     'id_produit': product['id_produit'],
                     'status': 'ERROR',
+                    'id_categorie': None,
+                    'nom_categorie': None,
+                    'score_llm': None,
                     'error': 'Réponse LLM invalide',
                     'llm_type': self.llm_choice,
-                    'llm_response': [raw_llm.model_dump()],
+                    'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
                     'processing_time': time.time() - start_time
                 }
-            
+
             # Trouver la catégorie choisie
             chosen_category = next((c for c in categories if str(c['id']) == str(chosen_id)), None)
             if not chosen_category:
                 return {
                     'id_produit': product['id_produit'],
                     'status': 'ERROR',
+                    'id_categorie': None,
+                    'nom_categorie': None,
+                    'score_llm': None,
                     'error': f'Catégorie {chosen_id} introuvable',
                     'llm_type': self.llm_choice,
-                    'processing_time': time.time() - start_time,
-                    'llm_response': [raw_llm.model_dump()]
+                    'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                    'processing_time': time.time() - start_time
                 }
             
             # Résultat final
@@ -349,7 +407,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'score_llm': score,
                 'llm_type': self.llm_choice,
                 'processing_time': time.time() - start_time,
-                'llm_response': [raw_llm.model_dump()]
+                'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None
             }
             
         except Exception as e:
@@ -357,7 +415,12 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             return {
                 'id_produit': product['id_produit'],
                 'status': 'ERROR',
+                'id_categorie': None,
+                'nom_categorie': None,
+                'score_llm': None,
                 'error': str(e),
+                'llm_type': self.llm_choice,
+                'llm_response': [f'Exception générale: {str(e)}'],
                 'processing_time': time.time() - start_time
             }
 

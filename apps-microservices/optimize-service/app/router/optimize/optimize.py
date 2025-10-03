@@ -68,6 +68,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
                         })
                     else:
                         print("tentative de parsing reussie")
+                        print(parsed_response)
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
                             "success": parsed_response
@@ -95,6 +96,8 @@ async def optimizeQwen(payload: BatchOptimRequest):
         processing_time = end_time - start_time
         
         print(f"Fin traitement en {processing_time:.2f} secondes")
+        print (f"Résultats: {results}")
+        print(f"lots traité, taille results: {len(results)}")
         return {"data": results}
 
     except Exception as e:

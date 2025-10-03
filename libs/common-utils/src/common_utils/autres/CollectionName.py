@@ -11,6 +11,7 @@ class CollectionName(str, Enum):
     ECHANGE = "echanges"
     FOURNISSEUR = "fournisseurs"
     SITEWEB = "siteweb"
+    DOCUMENT = "document"
     
 RoutingKeys = {
     CollectionName.PRODUIT: "new_data.product",
@@ -19,4 +20,5 @@ RoutingKeys = {
     CollectionName.ECHANGE: "new_data.echange",
     CollectionName.FOURNISSEUR: "new_data.fournisseurs",
     CollectionName.SITEWEB: "new_data.website"
+    CollectionName.DOCUMENT: "new_data.document"
 }

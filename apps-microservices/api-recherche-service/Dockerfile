@@ -29,15 +29,24 @@ RUN pip install --no-cache-dir -e ./libs/grpc-stubs
 COPY apps-microservices/api-recherche/app ./app
 COPY apps-microservices/api-recherche/main.py .
 
-EXPOSE 8510
+EXPOSE 8511
 
 # --- Commande de Lancement ---
 # Utilisation de Gunicorn pour gérer les workers
-CMD ["python","-m","gunicorn", \
-     "-w", "8", \
-     "-k", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8510", \
-     "--timeout", "120", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "main:app"]
+# CMD ["python","-m","gunicorn", \
+#      "-w", "8", \
+#      "-k", "uvicorn.workers.UvicornWorker", \
+#      "--bind", "0.0.0.0:8511", \
+#      "--timeout", "120", \
+#      "--access-logfile", "-", \
+#      "--error-logfile", "-", \
+#      "main:app"]
+
+CMD ["/bin/bash", "-c", "exec python -m gunicorn \
+     -w $((2 * $(nproc) + 1)) \
+     -k uvicorn.workers.UvicornWorker \
+     --bind 0.0.0.0:8511 \
+     --timeout 120 \
+     --access-logfile - \
+     --error-logfile - \
+     main:app"]

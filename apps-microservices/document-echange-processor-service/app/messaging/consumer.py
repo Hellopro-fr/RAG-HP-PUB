@@ -1,0 +1,85 @@
+import pika
+import json
+from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
+from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
+from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
+
+class Consumer:
+    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
+        """
+        Initialise le consumer.
+        Il a besoin d'une connexion ET d'une instance du publisher.
+        """
+        self.channel = connection.channel()
+        self.publisher = publisher
+        self.exchange_name = 'data_exchange_document'
+        self.routing_key = 'new_data.document'
+        self.queue_name = 'document_processing_queue'
+        self.rabbitmq_connection = RabbitMQConnection()
+        self.connect()
+        print("✅ Consumer initialisé.")
+
+    def connect(self):
+        """
+        Établit une connexion RabbitMQ via la fonction utilitaire.
+        """
+        self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
+        self.channel = self.connection.channel()
+        # Déclare l'exchange où il consomme
+        self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
+        self.channel.queue_declare(queue=self.queue_name, durable=True)
+        self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
+
+    async def _on_message_callback(self, ch, method, properties, body):
+        """
+        Callback privé qui orchestre le traitement d'un message.
+        """
+        print("📥 Document-Echange-Processor: Message reçu.")
+        data = json.loads(body)
+        document_data = data.get('data', {})
+        bdd = data.get('database', "qdrant")
+
+        
+        if not document_data:
+            print("❌ Document-Echange-Processor: Aucune donnée trouvée dans le message.")
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            return
+
+        print(f"\n📥 Document-Echange-Processor: Message reçu")
+        
+        try:
+            # 1. Appelle la logique métier PURE
+            output_message = await process_document_data_for_templating(document_data,bdd)
+            
+            self.publisher.routing_key = 'data.ready_for_templating'
+            print("➡️ Document-Echange-Processor: Message prêt pour templating")
+            
+            try:
+                # 2. Utilise le publisher pour envoyer le résultat
+                self.publisher.publish_message(output_message)
+
+                # 3. Acquitte le message original
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception as e:
+                print(f"   -> ❌ Erreur de publication pour message {method.delivery_tag}. NACK. Erreur: {e}")
+                # Si la publication échoue, on NACK le message pour qu'il soit retraité.
+                self.channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            
+        except Exception as e:
+            print(f"❌ Document-Echange-Processor: Erreur lors du traitement des données: {e}")
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)  # Ne pas remettre en queue pour éviter les boucles infinies
+            return
+
+    def start_consuming(self):
+        for i in range(3):
+            try: 
+                """
+                Démarre la boucle d'écoute des messages.
+                """
+                self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
+                print("👂 Document-Echange-Processor: En attente de messages...")
+                self.channel.start_consuming()
+                break  # Si start_consuming se termine normalement, on sort de la boucle
+            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
+                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
+                self.connect()
