@@ -28,6 +28,12 @@ services:
       --dtype auto
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 24 # Wait up to 4 minutes for the model to load
+      start_period: 30s
     deploy:
       resources:
         reservations:
@@ -48,6 +54,12 @@ services:
     ports:
       - "8001:8001" # Port gRPC de Triton
       - "8002:8002" # Port de métriques
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v2/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 24 # Wait up to 4 minutes for models to load
+      start_period: 30s
     deploy:
       resources:
         reservations:
@@ -104,7 +116,8 @@ services:
     environment:
       - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
     depends_on:
-      - vllm-server
+      vllm-server:
+        condition: service_healthy
     networks:
       - services-net
 
@@ -116,7 +129,8 @@ services:
     environment:
       - TRITON_URL=triton-server:8001
     depends_on:
-      - triton-server
+      triton-server:
+        condition: service_healthy
     networks:
       - services-net
 
@@ -128,7 +142,8 @@ services:
     environment:
       - TRITON_URL=triton-server:8001
     depends_on:
-      - triton-server
+      triton-server:
+        condition: service_healthy
     networks:
       - services-net
 
@@ -391,7 +406,8 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
     depends_on:
-      - embedding-model-service
+      embedding-model-service:
+        condition: service_healthy
     env_file:
       - .env
     volumes:
@@ -531,7 +547,8 @@ services:
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
-      - llm-service
+      llm-service:
+        condition: service_healthy
     # deploy:
     #   resources:
     #     reservations:
