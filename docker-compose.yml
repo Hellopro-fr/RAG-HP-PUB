@@ -194,11 +194,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-recherche/Dockerfile
-    # container_name: api-recherche-service
     restart: unless-stopped
-    # TODO: à supprimer en PROD
-    # volumes:
-    #   - ./apps-microservices/api-recherche:/app:rw
     ports:
       - "8510:8510"
     environment:
@@ -213,13 +209,22 @@ services:
       - database-recherche-service
     env_file:
       - .env
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    networks:
+      - services-net
+
+  api-embedding-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-embedding-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8555:8555"
+    environment:
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+    # depends_on:
+    #   - embedding-model-service
+    env_file:
+      - .env
     networks:
       - services-net
 
@@ -367,6 +372,8 @@ services:
     restart: unless-stopped
     ports:
       - "8559:8559"
+    volumes:
+      - ./apps-microservices/document-echange-processor-service/app:/app/document_echange_processor_service:rw
     environment:
       - LLM_SERVICE_URL=llm-service:50051
       - VLLM_DEVICE=cuda
@@ -395,7 +402,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 64
+      replicas: 4
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
@@ -558,14 +565,8 @@ services:
     depends_on:
       llm-service:
         condition: service_healthy
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           device_ids: ['1']
-    #           # count: all
-    #           capabilities: [gpu]
+    deploy:
+      replicas: 4  
     networks:
       - services-net
 
