@@ -365,14 +365,20 @@ services:
       - "8559:8559"
     environment:
       - LLM_SERVICE_URL=llm-service:50051
+      - VLLM_DEVICE=cuda
     depends_on:
       - llm-service
     env_file:
       - .env
     networks:
       - services-net
-    # deploy:
-    #   replicas: 4
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['1']
+              capabilities: [gpu]
 
   template-llm-service:
     build:

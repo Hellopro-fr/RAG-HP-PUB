@@ -1,7 +1,9 @@
 pika
+asyncio
 beautifulsoup4
 bs4
 markdownify
+html5lib
 accelerate
 gradio==5.23.2
 json-repair

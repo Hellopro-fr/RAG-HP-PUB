@@ -30,7 +30,7 @@ class Consumer:
         self.channel.queue_declare(queue=self.queue_name, durable=True)
         self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
 
-    async def _on_message_callback(self, ch, method, properties, body):
+    def _on_message_callback(self, ch, method, properties, body):
         """
         Callback privé qui orchestre le traitement d'un message.
         """
@@ -48,11 +48,12 @@ class Consumer:
         print(f"\n📥 Document-Echange-Processor: Message reçu")
         
         try:
-            # 1. Appelle la logique métier PURE
-            output_message = await process_document_data_for_templating(document_data,bdd)
+
+            import asyncio
+            output_message = asyncio.run(process_document_data_for_templating(document_data, bdd))
             
             self.publisher.routing_key = 'data.ready_for_templating'
-            print("➡️ Document-Echange-Processor: Message prêt pour templating")
+            print(f"➡️ Document-Echange-Processor: Message prêt pour templating : {output_message.get('data',{}).get('text','texte ocr nok')}")
             
             try:
                 # 2. Utilise le publisher pour envoyer le résultat
