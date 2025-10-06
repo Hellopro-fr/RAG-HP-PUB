@@ -190,11 +190,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-recherche/Dockerfile
-    # container_name: api-recherche-service
     restart: unless-stopped
-    # TODO: à supprimer en PROD
-    # volumes:
-    #   - ./apps-microservices/api-recherche:/app:rw
     ports:
       - "8510:8510"
     environment:
@@ -209,13 +205,22 @@ services:
       - database-recherche-service
     env_file:
       - .env
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    networks:
+      - services-net
+
+  api-embedding-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-embedding/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8555:8555"
+    environment:
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+    depends_on:
+      - embedding-model-service
+    env_file:
+      - .env
     networks:
       - services-net
 
