@@ -3,6 +3,7 @@ import json
 import asyncio
 import time
 import aiormq
+import logging
 
 from template_llm_service.messaging.publisher import Publisher
 from template_llm_service.core.processor import classify_page_template_batch
@@ -110,6 +111,7 @@ class Consumer:
                         for i, result in enumerate(processed_results):
                             original_message = batch[i]
                             if result['status'] == 'success':
+                                logging.info(f"\n\nTexte juste après identification template :\n{result['processed_message']}")
                                 await self.publisher.publish_message(result['processed_message'], channel)
                                 await original_message.ack()
                             else: # status == 'error'
