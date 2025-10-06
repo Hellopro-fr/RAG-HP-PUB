@@ -24,7 +24,7 @@ async def embedded(request: EmbeddingRequest) -> List[float]:
         if not request.text.strip():
             raise ValueError("Le prompt ne peut pas être vide.")
         embedding_service = Embedding()
-        results = await embedding_service.embed_data_clean(request.to_dict())
+        results = await embedding_service.embed_data_clean(dict(request))
         
         if not results:
             raise ValueError("Aucun contenu textuel valide trouvé pour l'embedding après nettoyage.")
