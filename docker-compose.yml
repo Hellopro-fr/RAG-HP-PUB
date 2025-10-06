@@ -76,12 +76,15 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
     container_name: elasticsearch
+    profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
       - http.host=0.0.0.0
     ports:
+      # Mappe le port sur toutes les interfaces réseau de l'hôte
+      # Assurez-vous que le pare-feu de votre Host VM autorise les connexions sur le port 9200
       - "9200:9200"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
@@ -97,6 +100,7 @@ services:
   kibana:
     image: docker.elastic.co/kibana/kibana:9.1.1
     container_name: kibana
+    profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
     ports:
       - "5601:5601"
     environment:
@@ -564,17 +568,45 @@ services:
     networks:
       - services-net
 
-  dlq-archiver-service:
+  api-pdf-to-text:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-pdf-to-text/Dockerfile
+    container_name: api-pdf-to-text
+    restart: unless-stopped
+    ports:
+      - "8569:8569"
+    env_file:
+      - .env
+
+  dlq-archiver-host:
     build:
       context: .
       dockerfile: tools/Dockerfile
-    container_name: dlq-archiver-service
+    profiles: ["disabled"]
     restart: unless-stopped
     env_file:
       - .env
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - services-net
+
+    dlq-archiver-client:
+    build:
+      context: .
+      dockerfile: tools/Dockerfile
+    profiles: ["disabled"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -589,7 +621,7 @@ services:
     env_file:
       - .env
     environment:
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
     depends_on:
       elasticsearch:
         condition: service_healthy
