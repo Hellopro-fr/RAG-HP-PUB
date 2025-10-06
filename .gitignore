@@ -114,3 +114,6 @@ local/*
 .venv
 
 triton-model-repo
+
+# Docker compose override file
+docker-compose.override.yml
