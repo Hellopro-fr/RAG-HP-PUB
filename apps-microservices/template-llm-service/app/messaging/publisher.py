@@ -1,7 +1,7 @@
 import aio_pika
 import json
 import logging 
-# import os
+import os
 class Publisher:
     def __init__(self, connection: aio_pika.RobustConnection):
         """
@@ -21,38 +21,17 @@ class Publisher:
         collection = message_dict.get("collection")
         
         if log_file and collection == "document":
-            base_name = message_dict.get("base_name")
-
-            log_file = f"{base_name}.txt"
-
-            # Créer un logger spécifique pour ce document (pas le logger root)
-            logger = logging.getLogger(f"doc_processor_{base_name}")
-            logger.setLevel(logging.INFO)
-            
-            # Supprimer les handlers existants pour ce logger
-            logger.handlers.clear()
-            
-            # Ajouter les nouveaux handlers
-            file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
-            file_handler.setLevel(logging.INFO)
-            file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-            
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.INFO)
-            console_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-            
-            logger.addHandler(file_handler)
-            logger.addHandler(console_handler)
-            
-            # Empêcher la propagation au logger root
-            logger.propagate = False
-            
+            # os.makedirs(os.path.dirname(log_file), exist_ok=True)
             page_type = message_dict.get("data", {}).get("page_type", "Inconnu")
-            logger.info(f"page_type : {page_type}")
+
+            log_path = os.path.join("/app", log_file)  # chemin absolu vers /app
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+            with open(log_path, "a+", encoding="utf-8") as f:
+                f.write(f"page_type : {page_type}")  # écriture simple
             
             if not log_file:
                 print(f"⚠️ Collection {collection}: Aucun 'log_file' défini dans message_dict. Le logging fichier sera ignoré.")
-
 
 
         # La déclaration de l'exchange est idempotente et rapide, on s'assure qu'elle existe.
