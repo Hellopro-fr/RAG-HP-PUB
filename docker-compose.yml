@@ -575,7 +575,24 @@ services:
       - .env
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - services-net
+
+  dlq-archiver-client:
+    build:
+      context: .
+      dockerfile: tools/Dockerfile
+    profiles: ["disabled"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -586,7 +603,7 @@ services:
     build:
       context: .
       dockerfile: tools/Dockerfile
-    container_name: dlq-requeuer-tool
+    profiles: ["disabled"]
     env_file:
       - .env
     environment:
