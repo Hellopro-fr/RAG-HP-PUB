@@ -63,7 +63,7 @@ Analyse le but du document pour l’utilisateur final : décider d’un achat (d
 Voici les types de pages possibles :
 "devis" : document commercial qui détaille une offre (produit ou service), ses conditions, son prix et qui engage le fournisseur si accepté.
 "fiche_technique" : document décrivant les caractéristiques, fonctionnalités et spécifications d’un produit ou service.
-"catelogue" : recueil structuré présentant l’ensemble ou une partie des produits/services proposés par une entreprise.
+"catalogue" : recueil structuré présentant l’ensemble ou une partie des produits/services proposés par une entreprise.
 "plaquette_prix" : support listant les tarifs des produits ou services, généralement sous forme simplifiée et claire pour les clients.
 "autre" : si aucun de ces types ne correspond.
 Rappels :
