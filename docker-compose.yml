@@ -445,7 +445,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 12
+      replicas: 4
 
   echange-database-qdrant-service:
     build:
@@ -478,7 +478,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 20
+      replicas: 4
 
   categories-database-qdrant-service:
     build:
