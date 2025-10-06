@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/embedding", tags=["Embedding"])
-async def embedded(request: dict) -> List[float]:
+async def embedded(request: EmbeddingRequest) -> List[float]:
     try:
         logger.info(f"Requête reçue pour embedding: {request.text}")
         if not request.text.strip():
             raise ValueError("Le prompt ne peut pas être vide.")
         embedding_service = Embedding()
-        results = await embedding_service.embed_data_clean(request)
+        results = await embedding_service.embed_data_clean(request.model_dump())
         
         if not results:
             raise ValueError("Aucun contenu textuel valide trouvé pour l'embedding après nettoyage.")
