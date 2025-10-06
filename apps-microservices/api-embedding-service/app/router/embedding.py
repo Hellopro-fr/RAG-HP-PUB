@@ -23,7 +23,7 @@ async def embedded(request: EmbeddingRequest) -> List[float]:
         if not request.prompt.strip():
             raise ValueError("Le prompt ne peut pas être vide.")
         
-        results = await embedding_client.get_embedding(request)
+        results = await embedding_client.get_embedding(request.prompt)
         return results
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
