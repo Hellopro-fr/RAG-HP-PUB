@@ -21,7 +21,7 @@ from qdrant_client.http.models import (
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "produits"
+    collection_name: str = "produits_3"
     dimension: int = 1024
 
 
