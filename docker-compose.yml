@@ -551,9 +551,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/optimize-service/Dockerfile
-    container_name: optimize-service
     restart: unless-stopped
-    # TODO: à supprimer en PROD
     # volumes:
     #   - ./apps-microservices/optimize-service:/app:rw
     ports:
