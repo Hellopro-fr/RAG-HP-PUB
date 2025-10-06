@@ -27,6 +27,11 @@ RETRY_DELAY_SECONDS = 2.0  # Délai entre chaque retry
 
 logger = logging.getLogger(__name__)
 
+logging.basicConfig(
+    level=logging.INFO,  # Affiche INFO et plus (WARNING, ERROR, etc.)
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
 async def _process_single_product(product: Dict[str, Any], retry_count: int = 0) -> Dict[str, Any]:
     """
     Traite un seul produit en appelant le LLM.
