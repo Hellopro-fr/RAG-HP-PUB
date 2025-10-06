@@ -26,3 +26,4 @@ class Publisher:
             routing_key=self.routing_key
         )
         print(f"   📤 Message classifié publié avec la clé '{self.routing_key}'.")
+        print(f"   📤 Message classifié publié '{message_dict}'.")
