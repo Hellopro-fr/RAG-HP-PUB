@@ -87,7 +87,7 @@ async def _process_single_product(product: Dict[str, Any], retry_count: int = 0)
         # Gestion du retry
         if retry_count < MAX_RETRIES:
             logger.warning(f"[RETRY {retry_count + 1}/{MAX_RETRIES}] Produit {product_id} - Erreur: {error_msg}")
-            await asyncio.sleep(RETRY_DELAY_SECONDS)  # Attente avant retry
+            # await asyncio.sleep(RETRY_DELAY_SECONDS)  # Attente avant retry
             return await _process_single_product(product, retry_count + 1)
         else:
             logger.error(f"[FAILURE] Produit {product_id} - Échec définitif après {MAX_RETRIES} tentatives: {error_msg}")
