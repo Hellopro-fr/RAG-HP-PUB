@@ -554,14 +554,8 @@ services:
     depends_on:
       llm-service:
         condition: service_healthy
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           device_ids: ['1']
-    #           # count: all
-    #           capabilities: [gpu]
+    deploy:
+      replicas: 4  
     networks:
       - services-net
 
