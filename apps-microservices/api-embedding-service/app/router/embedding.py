@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/embedding", tags=["Embedding"])
-async def embedded(request: EmbeddingRequest) -> List[float]:
+async def embedded(request: EmbeddingRequest):
     try:
         logger.info(f"Requête reçue pour embedding: {request.text}")
         if not request.text.strip():
