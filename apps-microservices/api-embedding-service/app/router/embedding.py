@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/embedding", tags=["Embedding"])
-async def embedded(request: EmbeddingRequest = Body(...)) -> List[float]:
+async def embedded(request: EmbeddingRequest) -> List[float]:
     try:
         logger.info(f"Requête reçue pour embedding: {request.prompt}")
         if not request.prompt.strip():
             raise ValueError("Le prompt ne peut pas être vide.")
         
-        results = await asyncio.to_thread(embedding_client.get_embedding, request)
+        results = await embedding_client.get_embedding(request)
         return results
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
