@@ -1,6 +1,7 @@
 import json
 import re
 import logging
+import os
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
@@ -68,6 +69,28 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
     # Étape 0: Initialisation du message de sortie
     output_message = {}
     
+    # --- CONFIGURATION DU LOGGING PAR DOCUMENT ---
+    document_path = document_data.get("document")
+    if not document_path:
+        raise ValueError("Le champ 'document' est manquant dans document_data")
+
+    # Extraire le nom du fichier sans extension
+    base_name = os.path.splitext(os.path.basename(document_path))[0]
+    log_file = f"{base_name}.txt"
+
+    # Configurer le logger
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(log_file, mode="w", encoding="utf-8"),
+            logging.StreamHandler()  # affiche aussi dans la console
+        ]
+    )
+
+    logging.info(f"--- Début du traitement pour le document : {document_path} ---")
+
+
     # Étape 1: Vérifier les données d'entrée
     if not isinstance(document_data, dict):
         raise ValueError("Les données doivent être un dictionnaire.")
@@ -115,9 +138,11 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
             **{k.replace("-", "_"): v for k, v in document_data.items() if k not in ['document']}
         },
         "collection": CollectionName.DOCUMENT,
-        "database": bdd  
+        "database": bdd,
+        "log_file": log_file  
     }
 
+    logging.info(f"\n\nTexte juste après nettoyage bruit via LLM : {text_to_embed_clean}")
     # Étape 4: Afficher le message de sortie pour débogage
     print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
     
