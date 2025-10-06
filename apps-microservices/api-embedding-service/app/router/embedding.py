@@ -2,7 +2,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Body
 from app.schemas.embedding import EmbeddingRequest
 # from app.core.search import search_in_milvus
-from app.core.recherche import search_in_milvus as search
+
 import logging
 import os
 import asyncio
