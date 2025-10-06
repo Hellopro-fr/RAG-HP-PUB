@@ -84,19 +84,19 @@ async def _process_single_product(product: Dict[str, Any], retry_count: int = 0)
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         
-        # Gestion du retry
-        if retry_count < MAX_RETRIES:
-            logger.warning(f"[RETRY {retry_count + 1}/{MAX_RETRIES}] Produit {product_id} - Erreur: {error_msg}")
-            # await asyncio.sleep(RETRY_DELAY_SECONDS)  # Attente avant retry
-            return await _process_single_product(product, retry_count + 1)
-        else:
-            logger.error(f"[FAILURE] Produit {product_id} - Échec définitif après {MAX_RETRIES} tentatives: {error_msg}")
-            return {
-                "status": "error",
-                "id_produit_scrapping": product_id,
-                "error": error_msg,
-                "retry_count": retry_count
-            }
+        # # Gestion du retry
+        # if retry_count < MAX_RETRIES:
+        #     logger.warning(f"[RETRY {retry_count + 1}/{MAX_RETRIES}] Produit {product_id} - Erreur: {error_msg}")
+        #     # await asyncio.sleep(RETRY_DELAY_SECONDS)  # Attente avant retry
+        #     return await _process_single_product(product, retry_count + 1)
+        # else:
+        #     logger.error(f"[FAILURE] Produit {product_id} - Échec définitif après {MAX_RETRIES} tentatives: {error_msg}")
+        #     return {
+        #         "status": "error",
+        #         "id_produit_scrapping": product_id,
+        #         "error": error_msg,
+        #         "retry_count": retry_count
+        #     }
 
 
 async def _process_batch(products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
