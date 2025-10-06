@@ -617,7 +617,7 @@ services:
     build:
       context: .
       dockerfile: tools/Dockerfile
-    container_name: dlq-requeuer-tool
+    profiles: ["disabled"]
     env_file:
       - .env
     environment:
