@@ -9,6 +9,7 @@ import asyncio
 from common_utils.grpc_clients import (
     embedding_client
 )
+from common_utils.embedding.Embedding import Embedding
 
 log_format = "%(asctime)s - %(levelname)s - [WORKER_PID:%(process)d] - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
@@ -19,11 +20,15 @@ router = APIRouter()
 @router.post("/embedding", tags=["Embedding"])
 async def embedded(request: EmbeddingRequest) -> List[float]:
     try:
-        logger.info(f"Requête reçue pour embedding: {request.prompt}")
-        if not request.prompt.strip():
+        logger.info(f"Requête reçue pour embedding: {request.text}")
+        if not request.text.strip():
             raise ValueError("Le prompt ne peut pas être vide.")
+        embedding_service = Embedding()
+        results = await embedding_service.embed_data_clean(request)
         
-        results = await embedding_client.get_embedding(request.prompt)
+        if not results:
+            raise ValueError("Aucun contenu textuel valide trouvé pour l'embedding après nettoyage.")
+        
         return results
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
