@@ -211,7 +211,7 @@ services:
   api-embedding-service:
     build:
       context: .
-      dockerfile: ./apps-microservices/api-embedding/Dockerfile
+      dockerfile: ./apps-microservices/api-embedding-service/Dockerfile
     restart: unless-stopped
     ports:
       - "8555:8555"
