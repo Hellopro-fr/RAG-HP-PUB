@@ -78,72 +78,91 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
     base_name = os.path.splitext(os.path.basename(document_path))[0]
     log_file = f"{base_name}.txt"
 
-    # Configurer le logger
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file, mode="w", encoding="utf-8"),
-            logging.StreamHandler()  # affiche aussi dans la console
-        ]
-    )
-
-    logging.info(f"--- Début du traitement pour le document : {document_path} ---")
-
-
-    # Étape 1: Vérifier les données d'entrée
-    if not isinstance(document_data, dict):
-        raise ValueError("Les données doivent être un dictionnaire.")
-
-    # Étape 2.2: Extraire les textes dans le document 
-    extractor = DocumentTextExtractor() 
-    results   = extractor.process_single_file(document_data.get("document"))
-    texts     = results['text']
-    method    = results['method']
-
-    logging.info(f"\n\nMéthode utilisée : {method}")
-    logging.info(f"\n\nTexte juste après extraction : {texts}")
-
-    # Néttoyage
-    cleaner      = CleanHTML(texts)
-    cleaned_text = cleaner.clean()
-
-    logging.info(f"\n\nTexte juste après nettoyage : {cleaned_text}")
-
-    # Anonymisation
-    anonymize = AnonymizeText()
-    anonymized_text     = anonymize.anonymize_text(cleaned_text)
-    text_to_embed_clean = anonymize.normalize_text(anonymized_text)
-
-    logging.info(f"\n\nTexte juste après Anonymisation : {text_to_embed_clean}")
-
-
-    # Suppression des info inutiles via llm
-    payload = {
-        "prompt" : json.dumps(PROMPT_NETTOYAGE.format(content=text_to_embed_clean)),
-        "max_tokens" : 32700,
-        "temperature": 0.7
-    }
-
-    try: 
-        response = await llm_client.get_llm_chat_response(payload)
-        text_to_embed_clean = extract_contenu(response.json())
-    except:
-        pass
-
-    # Étape 3: Construire le message de sortie
-    output_message = {
-        "data": {
-            "text": text_to_embed_clean,
-            **{k.replace("-", "_"): v for k, v in document_data.items() if k not in ['document']}
-        },
-        "collection": CollectionName.DOCUMENT,
-        "database": bdd,
-        "log_file": log_file  
-    }
-
-    logging.info(f"\n\nTexte juste après nettoyage bruit via LLM : {text_to_embed_clean}")
-    # Étape 4: Afficher le message de sortie pour débogage
-    print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
+    # Créer un logger spécifique pour ce document (pas le logger root)
+    logger = logging.getLogger(f"doc_processor_{base_name}")
+    logger.setLevel(logging.INFO)
     
-    return output_message
+    # Supprimer les handlers existants pour ce logger
+    logger.handlers.clear()
+    
+    # Ajouter les nouveaux handlers
+    file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    # Empêcher la propagation au logger root
+    logger.propagate = False
+
+    logger.info(f"--- Début du traitement pour le document : {document_path} ---")
+
+    try:
+        # Étape 1: Vérifier les données d'entrée
+        if not isinstance(document_data, dict):
+            raise ValueError("Les données doivent être un dictionnaire.")
+
+        # Étape 2.2: Extraire les textes dans le document 
+        extractor = DocumentTextExtractor() 
+        results   = extractor.process_single_file(document_data.get("document"))
+        texts     = results['text']
+        method    = results['method']
+
+        logger.info(f"\n\nMéthode utilisée : {method}")
+        logger.info(f"\n\nTexte juste après extraction : {texts}")
+
+        # Néttoyage
+        cleaner      = CleanHTML(texts)
+        cleaned_text = cleaner.clean()
+
+        logger.info(f"\n\nTexte juste après nettoyage : {cleaned_text}")
+
+        # Anonymisation
+        anonymize = AnonymizeText()
+        anonymized_text     = anonymize.anonymize_text(cleaned_text)
+        text_to_embed_clean = anonymize.normalize_text(anonymized_text)
+
+        logger.info(f"\n\nTexte juste après Anonymisation : {text_to_embed_clean}")
+
+        # Suppression des info inutiles via llm
+        payload = {
+            "prompt" : json.dumps(PROMPT_NETTOYAGE.format(content=text_to_embed_clean)),
+            "max_tokens" : 32700,
+            "temperature": 0.7
+        }
+
+        try: 
+            response = await llm_client.get_llm_chat_response(payload)
+            text_to_embed_clean = extract_contenu(response.json())
+        except Exception as e:
+            logger.warning(f"Erreur lors du nettoyage LLM : {e}")
+
+        # Étape 3: Construire le message de sortie
+        output_message = {
+            "data": {
+                "text": text_to_embed_clean,
+                **{k.replace("-", "_"): v for k, v in document_data.items() if k not in ['document']}
+            },
+            "collection": CollectionName.DOCUMENT,
+            "database": bdd,
+            "log_file": log_file,
+            "base_name": base_name
+        }
+
+        logger.info(f"\n\nTexte juste après nettoyage bruit via LLM : {text_to_embed_clean}")
+        
+        # Étape 4: Afficher le message de sortie pour débogage
+        print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
+        
+        return output_message
+    
+    finally:
+        # Nettoyer les handlers pour libérer le fichier
+        for handler in logger.handlers[:]:
+            handler.close()
+            logger.removeHandler(handler)
