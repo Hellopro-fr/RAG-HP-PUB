@@ -1,5 +1,6 @@
 import json
 import re
+import logging
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
@@ -75,15 +76,25 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
     extractor = DocumentTextExtractor() 
     results   = extractor.process_single_file(document_data.get("document"))
     texts     = results['text']
+    method    = results['method']
+
+    logging.info(f"Méthode utilisée : {method}")
+    logging.info(f"Texte juste après extraction : {texts}")
 
     # Néttoyage
     cleaner      = CleanHTML(texts)
     cleaned_text = cleaner.clean()
 
+    logging.info(f"Texte juste après nettoyage : {cleaned_text}")
+
+
     # Anonymisation
     anonymize = AnonymizeText()
     anonymized_text     = anonymize.anonymize_text(cleaned_text)
     text_to_embed_clean = anonymize.normalize_text(anonymized_text)
+
+    logging.info(f"Texte juste après Anonymisation : {text_to_embed_clean}")
+
 
     # Suppression des info inutiles via llm
     payload = {
