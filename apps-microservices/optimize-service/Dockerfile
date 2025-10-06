@@ -1,43 +1,42 @@
-FROM python:3.10-slim as builder
-
-# Installer les dépendances système (compilateur protobuf)
-RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-ENV PYTHONPATH=/app
-
-COPY apps-microservices/optimize-service/requirements.txt .
-
-ENV PIP_TARGET=/app/wheelhouse
-
-RUN pip install --no-cache-dir -r requirements.txt --target=${PIP_TARGET}
+# apps-microservices/optimize-service/Dockerfile
 
 FROM python:3.10-slim
 
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+
+# Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
 ENV PYTHONPATH=/app
 
-COPY --from=builder /app/wheelhouse /usr/local/lib/python3.10/site-packages
+# Étape 2: Installer TOUTES les dépendances dans l'environnement global du conteneur
+# D'abord, on copie et installe notre librairie partagée
+COPY libs/common-utils /app/libs/common-utils
+RUN pip install -e /app/libs/common-utils
+
+# Ensuite, on copie et installe les requirements spécifiques à ce service
+COPY apps-microservices/optimize-service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY libs/grpc-stubs /app/libs/grpc-stubs
+RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
 
 COPY protos /app/protos
-COPY libs/ /app/libs/
-RUN pip install --no-cache-dir -e ./libs/common-utils
-
 RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
-RUN pip install --no-cache-dir -e ./libs/grpc-stubs
+# RUN touch ./protos/__init__.py
+RUN pip install -e /app/libs/grpc-stubs
 
+# Étape 3: Copier le code source de manière propre
+# On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
 COPY apps-microservices/optimize-service/app ./app
 COPY apps-microservices/optimize-service/main.py .
 
+
+# # Étape 4: Exposer le port
 EXPOSE 8563
 
-# --- Commande de Lancement ---
-# Utilisation de Gunicorn pour gérer les workers
-CMD ["python","-m","gunicorn", \
-     "-w", "8", \
-     "-k", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8563", \
-     "--timeout", "120", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "main:app"]
+
+# Étape 5: Définir la commande de lancement directement
+# On lance Uvicorn en lui disant de trouver le module 'main' dans le paquet 'api_ingestion_service'
+# Le port est défini dynamiquement par la variable $PORT de Render, avec une valeur par défaut de 8509.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8563"]
