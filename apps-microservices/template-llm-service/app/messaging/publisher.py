@@ -1,7 +1,7 @@
 import aio_pika
 import json
 import logging 
-import os
+# import os
 class Publisher:
     def __init__(self, connection: aio_pika.RobustConnection):
         """
@@ -19,8 +19,9 @@ class Publisher:
 
         log_file = message_dict.get("log_file")
         collection = message_dict.get("collection")
+        
         if log_file and collection == "document":
-            os.makedirs(os.path.dirname(log_file), exist_ok=True)  # crée le dossier si besoin
+            # os.makedirs(os.path.dirname(log_file), exist_ok=True)  # crée le dossier si besoin
 
             # Configuration du logger
             logging.basicConfig(
@@ -29,7 +30,8 @@ class Publisher:
                 handlers=[
                     logging.FileHandler(log_file, mode="a", encoding="utf-8"),
                     logging.StreamHandler()
-                ]
+                ],
+                force=True
             )
             # --- Log du type de page ---
             page_type = message_dict.get("data", {}).get("page_type", "Inconnu")
