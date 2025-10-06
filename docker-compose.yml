@@ -558,8 +558,7 @@ services:
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
-      llm-service:
-        condition: service_healthy
+      - llm-service
     # deploy:
     #   replicas: 4  
     networks:
