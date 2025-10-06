@@ -29,14 +29,14 @@ RUN pip install --no-cache-dir -e ./libs/grpc-stubs
 COPY apps-microservices/optimize-service/app ./app
 COPY apps-microservices/optimize-service/main.py .
 
-EXPOSE 8565
+EXPOSE 8563
 
 # --- Commande de Lancement ---
 # Utilisation de Gunicorn pour gérer les workers
 CMD ["python","-m","gunicorn", \
      "-w", "8", \
      "-k", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8565", \
+     "--bind", "0.0.0.0:8563", \
      "--timeout", "120", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
