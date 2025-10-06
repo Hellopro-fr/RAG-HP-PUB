@@ -55,7 +55,7 @@ class DocumentTextExtractor:
         
         # Formats supportés
         self.image_formats = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
-        self.ocr_supported = {'.png', '.jpg', '.jpeg', '.bmp', '.pdf'}
+        self.ocr_supported = {'.png', '.jpg', '.jpeg', '.bmp', '.pdf', '.gif', '.webp'}
         self.document_formats = {'.doc', '.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.odt'}
         
         # Configuration du logging
