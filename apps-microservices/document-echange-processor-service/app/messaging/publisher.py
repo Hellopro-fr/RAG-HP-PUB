@@ -11,7 +11,7 @@ class Publisher:
         self.connection = connection
         self.channel = self.connection.channel()
         self.exchange_name = 'processed_data_exchange'
-        self.routing_key = 'data.ready_for_embedding'
+        self.routing_key = 'data.ready_for_templating'
 
         # Déclare l'exchange où il va publier
         self.channel.exchange_declare(
@@ -33,7 +33,7 @@ class Publisher:
                     body=json.dumps(message_dict).encode('utf-8'),
                     properties=pika.BasicProperties(delivery_mode=2)
                 )
-                print(f"   📤 Message traité et publié pour embedding.")
+                print(f"   📤 Message traité et publié pour templating.")
                 break  # Si la publication réussit, on sort de la boucle
             except (pika.exceptions.AMQPConnectionError,pika.exceptions.ChannelClosedByBroker) as e:
                 print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
