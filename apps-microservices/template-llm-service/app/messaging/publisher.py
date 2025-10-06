@@ -28,7 +28,7 @@ class Publisher:
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
             with open(log_path, "a+", encoding="utf-8") as f:
-                f.write(f"page_type : {page_type}")  # écriture simple
+                f.write(f"\npage_type : {page_type}\n")  # écriture simple
             
             if not log_file:
                 print(f"⚠️ Collection {collection}: Aucun 'log_file' défini dans message_dict. Le logging fichier sera ignoré.")
