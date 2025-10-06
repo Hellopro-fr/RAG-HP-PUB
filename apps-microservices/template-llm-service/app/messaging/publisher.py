@@ -17,28 +17,28 @@ class Publisher:
         Publie un message de manière asynchrone sur le canal fourni.
         """
 
-        log_file = message_dict.get("log_file")
-        collection = message_dict.get("collection")
+        # log_file = message_dict.get("log_file")
+        # collection = message_dict.get("collection")
         
-        if log_file and collection == "document":
-            # os.makedirs(os.path.dirname(log_file), exist_ok=True)  # crée le dossier si besoin
+        # if log_file and collection == "document":
+        #     # os.makedirs(os.path.dirname(log_file), exist_ok=True)  # crée le dossier si besoin
 
-            # Configuration du logger
-            logging.basicConfig(
-                level=logging.INFO,
-                format="%(asctime)s - %(levelname)s - %(message)s",
-                handlers=[
-                    logging.FileHandler(log_file, mode="a", encoding="utf-8"),
-                    logging.StreamHandler()
-                ],
-                force=True
-            )
-            # --- Log du type de page ---
-            page_type = message_dict.get("data", {}).get("page_type", "Inconnu")
-            logging.info(f"page_type : {page_type}")
+        #     # Configuration du logger
+        #     logging.basicConfig(
+        #         level=logging.INFO,
+        #         format="%(asctime)s - %(levelname)s - %(message)s",
+        #         handlers=[
+        #             logging.FileHandler(log_file, mode="a", encoding="utf-8"),
+        #             logging.StreamHandler()
+        #         ],
+        #         force=True
+        #     )
+        #     # --- Log du type de page ---
+        #     page_type = message_dict.get("data", {}).get("page_type", "Inconnu")
+        #     logging.info(f"page_type : {page_type}")
             
-            if not log_file:
-                print(f"⚠️ Collection {collection}: Aucun 'log_file' défini dans message_dict. Le logging fichier sera ignoré.")
+        #     if not log_file:
+        #         print(f"⚠️ Collection {collection}: Aucun 'log_file' défini dans message_dict. Le logging fichier sera ignoré.")
 
 
 
