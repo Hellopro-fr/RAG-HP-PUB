@@ -21,7 +21,7 @@ from common_utils.grpc_clients import (
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 # --- Configuration du Batching et Retry ---
-BATCH_SIZE = 5  # Nombre de produits à traiter en parallèle
+BATCH_SIZE = 2  # Nombre de produits à traiter en parallèle
 MAX_RETRIES = 3  # Nombre de tentatives avant échec définitif
 RETRY_DELAY_SECONDS = 2.0  # Délai entre chaque retry
 
