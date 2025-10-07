@@ -46,6 +46,8 @@ class BatchProductsInput(BaseModel):
 class ClassificationResult(BaseModel):
     """Résultat de classification pour un produit"""
     id_produit: str = Field(..., description="ID du produit")
+    titre_produit: str = Field(..., description="Titre/nom du produit")
+    description_produit: str = Field(..., description="Description du produit")
     status: Literal["SUCCESS", "ERROR"] = Field(..., description="Statut de la classification")
     id_categorie: Optional[str] = Field(None, description="ID de la catégorie assignée")
     nom_categorie: Optional[str] = Field(None, description="Nom de la catégorie assignée")

@@ -1240,8 +1240,8 @@ $(function () {
         title = meta.lead_id || title;
       case "echanges":
         title = meta.conversation_id || title;
-      // case "siteweb_2":
-      case "siteweb":
+      case "siteweb_2":
+      // case "siteweb":
         title = meta.url || title;
         result.source = "siteweb"
       default:
@@ -1415,7 +1415,7 @@ $(function () {
               if (fournisseurSiteweb.length > 0) {
                 filtreSpecifique.id_fournisseur = fournisseurSiteweb;
               }
-              // sourceName = 'siteweb_2';
+              sourceName = 'siteweb_2';
               break;
             case 'echanges':
               const fournisseurMcf = $("#fournisseurMcf").val() || [];

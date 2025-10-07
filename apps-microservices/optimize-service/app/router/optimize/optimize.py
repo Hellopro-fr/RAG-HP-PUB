@@ -64,7 +64,7 @@ async def _process_single_product(product: Dict[str, Any], retry_count: int = 0)
                 "status": "success",
                 "id_produit_scrapping": product_id,
                 "data": parsed_response,
-                "retry_count": retry_count
+                # "retry_count": retry_count
             }
             
         except json.JSONDecodeError:
