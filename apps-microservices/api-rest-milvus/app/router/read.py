@@ -161,6 +161,12 @@ def _build_single_condition(field_name: str, operator: str, value: Any) -> Optio
     else:
         # Pour les autres opérateurs (>, >=, ==, !=, <, <=)
         if isinstance(value, str):
+            # Cas spécial : chaîne vide "" → chercher les champs vides OU inexistants
+            if value == "" and operator == "$eq":
+                # Milvus : (field == "" or field == null) n'est pas supporté directement
+                # On utilise seulement field == "" qui matche les chaînes vides
+                # Note : Si le champ n'existe pas, il ne sera pas matché
+                return f'{field_name} == ""'
             return f'{field_name} {milvus_op} "{value}"'
         else:
             return f"{field_name} {milvus_op} {value}"
