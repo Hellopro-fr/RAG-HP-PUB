@@ -304,6 +304,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             if not similar_products:
                 return {
                     'id_produit': product['id_produit'],
+                    'titre_produit': product['nom_produit'],
+                    'description_produit': product['description'],
                     'status': 'ERROR',
                     'id_categorie': None,
                     'nom_categorie': None,
@@ -319,6 +321,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             if not categories:
                 return {
                     'id_produit': product['id_produit'],
+                    'titre_produit': product['nom_produit'],
+                    'description_produit': product['description'],
                     'status': 'ERROR',
                     'id_categorie': None,
                     'nom_categorie': None,
@@ -340,6 +344,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             if not llm_result_wrapper.get('success', False):
                 return {
                     'id_produit': product['id_produit'],
+                    'titre_produit': product['nom_produit'],
+                    'description_produit': product['description'],
                     'status': 'ERROR',
                     'id_categorie': None,
                     'nom_categorie': None,
@@ -357,6 +363,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             except (AttributeError, KeyError, json.JSONDecodeError) as e:
                 return {
                     'id_produit': product['id_produit'],
+                    'titre_produit': product['nom_produit'],
+                    'description_produit': product['description'],
                     'status': 'ERROR',
                     'id_categorie': None,
                     'nom_categorie': None,
@@ -373,6 +381,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             if not chosen_id or score not in [0, 1]:
                 return {
                     'id_produit': product['id_produit'],
+                    'titre_produit': product['nom_produit'],
+                    'description_produit': product['description'],
                     'status': 'ERROR',
                     'id_categorie': None,
                     'nom_categorie': None,
@@ -388,6 +398,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             if not chosen_category:
                 return {
                     'id_produit': product['id_produit'],
+                    'titre_produit': product['nom_produit'],
+                    'description_produit': product['description'],
                     'status': 'ERROR',
                     'id_categorie': None,
                     'nom_categorie': None,
@@ -401,6 +413,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             # Résultat final
             return {
                 'id_produit': product['id_produit'],
+                'titre_produit': product['nom_produit'],
+                'description_produit': product['description'],
                 'status': 'SUCCESS',
                 'id_categorie': chosen_category['id'],
                 'nom_categorie': chosen_category['name'],
@@ -414,6 +428,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             logger.error(f"Erreur classification produit {product['id_produit']}: {e}")
             return {
                 'id_produit': product['id_produit'],
+                'titre_produit': product.get('nom_produit', ''),
+                'description_produit': product.get('description', ''),
                 'status': 'ERROR',
                 'id_categorie': None,
                 'nom_categorie': None,
