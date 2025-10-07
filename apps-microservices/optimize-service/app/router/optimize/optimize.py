@@ -4,11 +4,10 @@ from app.core.optimize.traitement_donnees import TraitementDonnees
 from typing import List, Dict, Any
 import time
 import os
-import threading
 import traceback
 import asyncio
 import json
-import logging
+# import logging
 import ast
 
 router = APIRouter()
@@ -23,14 +22,16 @@ from common_utils.grpc_clients.schemas.chat import ChatRequest
 # --- Configuration du Batching et Retry ---
 BATCH_SIZE = 2  # Nombre de produits à traiter en parallèle
 MAX_RETRIES = 3  # Nombre de tentatives avant échec définitif
-RETRY_DELAY_SECONDS = 2.0  # Délai entre chaque retry
+RETRY_DELAY_SECONDS = 0.1  # Délai entre chaque retry
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
-logging.basicConfig(
-    level=logging.INFO,  # Affiche INFO et plus (WARNING, ERROR, etc.)
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+# logging.basicConfig(
+#     level=logging.INFO,  # Affiche INFO et plus (WARNING, ERROR, etc.)
+#     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+# )
+
+global_traitement_donnees_instance = TraitementDonnees()
 
 async def _process_single_product(product: Dict[str, Any], retry_count: int = 0) -> Dict[str, Any]:
     """
@@ -40,17 +41,16 @@ async def _process_single_product(product: Dict[str, Any], retry_count: int = 0)
     product_id = product.get("id_produit_scrapping", "unknown")
     
     try:
-        instancetraitement = TraitementDonnees()
         
         # Génération du prompt
-        prompt = instancetraitement.generate_prompt(product)
+        prompt = global_traitement_donnees_instance.generate_prompt(product)
         
         # Appel gRPC au LLM
         chat_request = ChatRequest(prompt=prompt)
         response = await llm_client.get_llm_chat_response(chat_request)
         
         # Nettoyage de la réponse
-        cleaned_response = instancetraitement.clean_json_response(response)
+        cleaned_response = global_traitement_donnees_instance.clean_json_response(response)
         
         # Parsing JSON
         try:
@@ -59,7 +59,7 @@ async def _process_single_product(product: Dict[str, Any], retry_count: int = 0)
             if not parsed_response:
                 raise ValueError("LLM n'a pas retourné de résultat")
             
-            logger.info(f"[SUCCESS] Produit {product_id} traité avec succès (tentative {retry_count + 1})")
+            print(f"[SUCCESS] Produit {product_id} traité avec succès (tentative {retry_count + 1})")
             return {
                 "status": "success",
                 "id_produit_scrapping": product_id,
@@ -68,35 +68,24 @@ async def _process_single_product(product: Dict[str, Any], retry_count: int = 0)
             }
             
         except json.JSONDecodeError:
-            # Tentative avec ast.literal_eval
-            try:
-                parsed_response = ast.literal_eval(cleaned_response)
-                logger.info(f"[SUCCESS] Produit {product_id} traité via ast.literal_eval")
-                return {
-                    "status": "success",
-                    "id_produit_scrapping": product_id,
-                    "data": parsed_response,
-                    "retry_count": retry_count
-                }
-            except Exception as parse_error:
-                raise ValueError(f"Parsing échoué: {cleaned_response[:200]}")
+            raise ValueError(f"Parsing échoué: {cleaned_response[:200]}")
     
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
         
-        # # Gestion du retry
+        # Gestion du retry
         # if retry_count < MAX_RETRIES:
         #     logger.warning(f"[RETRY {retry_count + 1}/{MAX_RETRIES}] Produit {product_id} - Erreur: {error_msg}")
         #     # await asyncio.sleep(RETRY_DELAY_SECONDS)  # Attente avant retry
         #     return await _process_single_product(product, retry_count + 1)
         # else:
         #     logger.error(f"[FAILURE] Produit {product_id} - Échec définitif après {MAX_RETRIES} tentatives: {error_msg}")
-        #     return {
-        #         "status": "error",
-        #         "id_produit_scrapping": product_id,
-        #         "error": error_msg,
-        #         "retry_count": retry_count
-        #     }
+        return {
+            "status": "error",
+            "id_produit_scrapping": product_id,
+            "error": error_msg,
+            # "retry_count": retry_count
+        }
 
 
 async def _process_batch(products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -108,7 +97,7 @@ async def _process_batch(products: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         return []
     
     batch_size = len(products)
-    logger.info(f"⚙️  Traitement d'un batch de {batch_size} produit(s)...")
+    print(f"⚙️  Traitement d'un batch de {batch_size} produit(s)...")
     
     start_time = time.monotonic()
     
@@ -125,7 +114,7 @@ async def _process_batch(products: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     success_count = sum(1 for r in results if r["status"] == "success")
     error_count = sum(1 for r in results if r["status"] == "error")
     
-    logger.info(f"🏁 Batch terminé en {duration:.2f}s - Succès: {success_count}, Échecs: {error_count}")
+    print(f"🏁 Batch terminé en {duration:.2f}s - Succès: {success_count}, Échecs: {error_count}")
     
     return results
 
@@ -138,7 +127,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
         overall_start_time = time.time()
         total_products = len(payload.products)
         
-        logger.info(f"📦 Réception de {total_products} produit(s)")
+        print(f"📦 Réception de {total_products} produit(s)")
         
         # Conversion des produits en dict
         products_data = [product.dict() for product in payload.products]
@@ -170,14 +159,16 @@ async def optimizeQwen(payload: BatchOptimRequest):
         success_total = sum(1 for r in all_results if r["status"] == "success")
         error_total = sum(1 for r in all_results if r["status"] == "error")
         
-        logger.info(f"✅ Traitement complet terminé en {total_duration:.2f}s")
-        logger.info(f"📊 Résultats: {success_total} succès, {error_total} échecs sur {total_products} produits")
+        print(f"✅ Traitement complet terminé en {total_duration:.2f}s")
+        print(f"📊 Résultats: {success_total} succès, {error_total} échecs sur {total_products} produits")
         
         return {"data": formatted_results}
     
     except Exception as e:
-        logger.error(f"❌ Erreur critique: {type(e).__name__}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
-        )
+        error_msg = f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
+        debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
+        response_error = {
+            "ERROR": error_msg
+        }
+        print(debug_msg)
+        return response_error
