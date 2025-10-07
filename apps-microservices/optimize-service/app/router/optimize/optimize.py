@@ -57,10 +57,10 @@ async def _process_single_product(product: Dict[str, Any], retry_count: int = 0)
             error_msg = f"{type(e).__name__}: {str(e)}"
         
         # Gestion des retries
-        # if retry_count < MAX_RETRIES:
-        #     await asyncio.sleep(RETRY_DELAY_SECONDS)
-        #     return await _process_single_product(product, retry_count + 1)
-        # else:
+        if retry_count < MAX_RETRIES:
+            await asyncio.sleep(RETRY_DELAY_SECONDS)
+            return await _process_single_product(product, retry_count + 1)
+        else:
             print(f"[FAILURE] Produit {product_id} - Échec après {MAX_RETRIES} tentatives")
             return {
                 "status": "error",
@@ -115,24 +115,29 @@ async def optimizeQwen(payload: BatchOptimRequest):
         # Le sémaphore contrôle la concurrence
         all_results = await asyncio.gather(
             *[_process_single_product(product) for product in products_data],
-            return_exceptions=False
+            return_exceptions=True
         )
         
-        # Formatage de la réponse finale (optimisé avec compréhension de liste)
-        formatted_results = [
-            {
-                "id_produit_scrapping": result["id_produit_scrapping"],
-                "success": result.get("data") if result["status"] == "success" else None,
-                "error": result.get("error") if result["status"] == "error" else None,
-            }
-            for result in all_results
-        ]
-        
-        # Filtrer les None pour un résultat plus propre
-        formatted_results = [
-            {k: v for k, v in r.items() if v is not None}
-            for r in formatted_results
-        ]
+        # Formatage de la réponse finale avec gestion des exceptions
+        formatted_results = []
+        for result in all_results:
+            # Gérer les exceptions retournées par gather
+            if isinstance(result, Exception):
+                formatted_results.append({
+                    "id_produit_scrapping": "unknown",
+                    "error": f"{type(result).__name__}: {str(result)}"
+                })
+            elif result and isinstance(result, dict):
+                if result.get("status") == "success":
+                    formatted_results.append({
+                        "id_produit_scrapping": result["id_produit_scrapping"],
+                        "success": result.get("data")
+                    })
+                else:
+                    formatted_results.append({
+                        "id_produit_scrapping": result["id_produit_scrapping"],
+                        "error": result.get("error")
+                    })
         
         overall_end_time = time.time()
         total_duration = overall_end_time - overall_start_time
