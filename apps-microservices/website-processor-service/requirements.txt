@@ -11,3 +11,5 @@ html5lib
 lxml
 lxml_html_clean
 pydantic
+aio-pika
+psutil

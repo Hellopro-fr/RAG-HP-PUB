@@ -19,7 +19,8 @@ $(function () {
     templatePrompt: $("#llmPrompt").val(),
     useReranker: true,
     rerankerModel: "BAAI/bge-reranker-v2-m3",
-    selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
+    // selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
+    selectedModel: "qwen/qwen3-coder", // Mis à jour avec la nouvelle valeur par défaut
     isFilterOpen: true,
     isLlmEnabled: false,
     isSidebarOpen: false,
@@ -1239,8 +1240,10 @@ $(function () {
         title = meta.lead_id || title;
       case "echanges":
         title = meta.conversation_id || title;
+      // case "siteweb_2":
       case "siteweb":
         title = meta.url || title;
+        result.source = "siteweb"
       default:
         break;
     }
@@ -1412,6 +1415,7 @@ $(function () {
               if (fournisseurSiteweb.length > 0) {
                 filtreSpecifique.id_fournisseur = fournisseurSiteweb;
               }
+              // sourceName = 'siteweb_2';
               break;
             case 'echanges':
               const fournisseurMcf = $("#fournisseurMcf").val() || [];

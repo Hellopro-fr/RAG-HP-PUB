@@ -5,8 +5,8 @@ from app.router.ingestion.ingestion import router as IngestionRouter
 params = [
     [
         IngestionRouter,
-        f"/check-doublon",
-        Tags.check_doublon,
+        f"/",
+        Tags.search,
         True
     ]
 ]

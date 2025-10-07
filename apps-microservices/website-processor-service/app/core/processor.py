@@ -1,10 +1,13 @@
 import json
+import time
+import logging
 
 from bs4 import BeautifulSoup
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
 from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
+
 
 def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") -> dict:
     """
@@ -44,18 +47,33 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         except Exception as e:
             raise ValueError(f"Erreur lors de l'extraction du {page_type.capitalize()}: {e}")
     else:  
-        # Étape 2.1: Préparer le texte à embedder (À voir avec l'équipe en charge)
+        # Étape 2.1: Construction du dictionnaire d'entrée pour le nettoyage
         info = {
             "url": website_data.get("url",""),
             "content": website_data.get("text",""),
             "fetch": False
         }
 
-        # Étape 2.2: Nettoyer les données  
-        trafila = TrafilaturaHp(info)
-        res_clean = trafila.extract(info)
-        text_to_embed_clean = res_clean.content
+        # Étape 2.2: Extraire le contenu nettoyé avec Trafilatura, avec une logique de retry
+        trafilatura = TrafilaturaHp(info)
         
+        data_extracted = ""
+        max_retries = 3
+        for attempt in range(max_retries):
+            extracted_content = trafilatura.extract(info).content
+
+            if extracted_content and extracted_content.strip():
+                data_extracted = extracted_content
+                break
+            
+            if attempt < max_retries - 1:
+                time.sleep(1)
+
+        if not data_extracted:
+            raise ValueError("Le contenu extrait est vide ou invalide.")
+        
+        text_to_embed_clean = data_extracted.strip()
+    
     # Étape 3: Construire le message de sortie
     output_message = {
         "data": {
@@ -68,8 +86,8 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     }
 
     # Étape 4: Afficher le message de sortie pour débogage
-    print(f"🔍Website-Processor: Message prêt pour {log}: {json.dumps(output_message, indent=2)}")
+    logging.info(f"🔍Website-Processor: Message prêt pour {log}: {json.dumps(output_message, indent=2)}")
     
     # Étape 5: Retourner le message prêt à être publié
-    print(f"📦 Website-Processor: Website traité pour embedding.")
+    logging.info(f"📦 Website-Processor: Website traité pour {log}.")
     return output_message

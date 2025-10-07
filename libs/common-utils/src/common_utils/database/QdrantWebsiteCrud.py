@@ -178,7 +178,7 @@ class QdrantWebsiteCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def get_website(self, url: str) -> Dict[str, Any]:
+    def get_website(self, url: str, page_type: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -189,11 +189,14 @@ class QdrantWebsiteCrud:
             if self.collection is None:
                 return {"status": "error", "message": "Collection non initialisée.","code":404}
 
-            if not url:
-                return {"status": "error", "message": "Url website requis.","code":400}
+            if not url or not page_type:
+                return {"status": "error", "message": "Url website ou Page type requis.","code":400}
 
             filter_query = Filter(
-                must=[FieldCondition(key="url", match=MatchValue(value=url))]
+                must=[
+                    FieldCondition(key="url", match=MatchValue(value=url)),
+                    FieldCondition(key="page_type", match=MatchValue(value=page_type))
+                ]
             )
 
             scroll_result, _ = self.client.scroll(
