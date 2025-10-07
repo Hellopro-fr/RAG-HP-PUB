@@ -9,7 +9,11 @@ class AnonymizeText:
 
         email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
         processed_text = re.sub(email_pattern, "n.cruchon@gmail.com", processed_text)
+        
+        page_number_pattern = r'Page\s*\d+of\s*\d+'
+        processed_text = re.sub(page_number_pattern,"", processed_text)
 
+        
         return processed_text
 
 
