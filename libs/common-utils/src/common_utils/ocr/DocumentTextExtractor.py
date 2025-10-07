@@ -483,7 +483,7 @@ class DocumentTextExtractor:
             # Traitement des PDFs
             elif file_ext == '.pdf':
                 result['text'] = self.extract_text_from_pdf(file_path)
-                result['method'] += 'PDF extraction + OCRExtractor si nécessaire'
+                result['method'] += 'PDF extraction'
             
             # Traitement des documents avec vérification d'images
             elif file_ext in self.document_formats:
@@ -492,7 +492,7 @@ class DocumentTextExtractor:
                     pdf_path = self.convert_to_pdf(file_path)
                     self.add_file_for_cleanup(pdf_path)
                     result['text'] = self.extract_text_from_pdf(pdf_path)
-                    result['method'] += 'Conversion PDF + OCRExtractor'
+                    result['method'] += 'Conversion PDF + PDF extraction'
                     # Optionnel: supprimer le PDF temporaire
                     pdf_path.unlink(missing_ok=True)
                 else:
