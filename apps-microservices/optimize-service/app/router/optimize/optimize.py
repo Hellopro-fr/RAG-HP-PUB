@@ -4,180 +4,153 @@ from app.core.optimize.traitement_donnees import TraitementDonnees
 from typing import List, Dict, Any
 import time
 import os
-import threading
 import traceback
 import asyncio
 import json
-import logging
 import ast
 
 router = APIRouter()
 
-# Import des clients gRPC de notre architecture
-from common_utils.grpc_clients import (
-    llm_client,
-)
-
+from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 # --- Configuration du Batching et Retry ---
-BATCH_SIZE = 5  # Nombre de produits à traiter en parallèle
-MAX_RETRIES = 3  # Nombre de tentatives avant échec définitif
-RETRY_DELAY_SECONDS = 2.0  # Délai entre chaque retry
+BATCH_SIZE = 10  # Augmenté de 2 à 10 pour meilleur parallélisme
+MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 0.1
+MAX_CONCURRENT_TASKS = 50  # Limite de tâches concurrentes
+SEMAPHORE = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
 
-logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    level=logging.INFO,  # Affiche INFO et plus (WARNING, ERROR, etc.)
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+global_traitement_donnees_instance = TraitementDonnees()
 
 async def _process_single_product(product: Dict[str, Any], retry_count: int = 0) -> Dict[str, Any]:
     """
-    Traite un seul produit en appelant le LLM.
-    Gère automatiquement les retries en cas d'erreur.
+    Traite un seul produit en appelant le LLM avec gestion des retries.
+    Utilise un sémaphore pour limiter la concurrence.
     """
     product_id = product.get("id_produit_scrapping", "unknown")
     
-    try:
-        instancetraitement = TraitementDonnees()
-        
-        # Génération du prompt
-        prompt = instancetraitement.generate_prompt(product)
-        
-        # Appel gRPC au LLM
-        chat_request = ChatRequest(prompt=prompt)
-        response = await llm_client.get_llm_chat_response(chat_request)
-        
-        # Nettoyage de la réponse
-        cleaned_response = instancetraitement.clean_json_response(response)
-        
-        # Parsing JSON
+    async with SEMAPHORE:  # Limite la concurrence globale
         try:
+            # Génération du prompt et appel LLM en séquence (optimisé)
+            prompt = global_traitement_donnees_instance.generate_prompt(product)
+            chat_request = ChatRequest(prompt=prompt)
+            response = await llm_client.get_llm_chat_response(chat_request)
+            
+            # Nettoyage et parsing dans une seule étape
+            cleaned_response = global_traitement_donnees_instance.clean_json_response(response)
             parsed_response = json.loads(cleaned_response)
             
             if not parsed_response:
                 raise ValueError("LLM n'a pas retourné de résultat")
             
-            logger.info(f"[SUCCESS] Produit {product_id} traité avec succès (tentative {retry_count + 1})")
+            print(f"[SUCCESS] Produit {product_id} traité")
             return {
                 "status": "success",
                 "id_produit_scrapping": product_id,
                 "data": parsed_response,
-                "retry_count": retry_count
             }
             
-        except json.JSONDecodeError:
-            # Tentative avec ast.literal_eval
-            try:
-                parsed_response = ast.literal_eval(cleaned_response)
-                logger.info(f"[SUCCESS] Produit {product_id} traité via ast.literal_eval")
-                return {
-                    "status": "success",
-                    "id_produit_scrapping": product_id,
-                    "data": parsed_response,
-                    "retry_count": retry_count
-                }
-            except Exception as parse_error:
-                raise ValueError(f"Parsing échoué: {cleaned_response[:200]}")
-    
-    except Exception as e:
-        error_msg = f"{type(e).__name__}: {str(e)}"
+        except json.JSONDecodeError as e:
+            error_msg = f"JSONDecodeError: {str(e)}"
+        except Exception as e:
+            error_msg = f"{type(e).__name__}: {str(e)}"
         
-        # # Gestion du retry
-        # if retry_count < MAX_RETRIES:
-        #     logger.warning(f"[RETRY {retry_count + 1}/{MAX_RETRIES}] Produit {product_id} - Erreur: {error_msg}")
-        #     # await asyncio.sleep(RETRY_DELAY_SECONDS)  # Attente avant retry
-        #     return await _process_single_product(product, retry_count + 1)
-        # else:
-        #     logger.error(f"[FAILURE] Produit {product_id} - Échec définitif après {MAX_RETRIES} tentatives: {error_msg}")
-        #     return {
-        #         "status": "error",
-        #         "id_produit_scrapping": product_id,
-        #         "error": error_msg,
-        #         "retry_count": retry_count
-        #     }
+        # Gestion des retries
+        if retry_count < MAX_RETRIES:
+            await asyncio.sleep(RETRY_DELAY_SECONDS)
+            return await _process_single_product(product, retry_count + 1)
+        else:
+            print(f"[FAILURE] Produit {product_id} - Échec après {MAX_RETRIES} tentatives")
+            return {
+                "status": "error",
+                "id_produit_scrapping": product_id,
+                "error": error_msg,
+            }
 
 
 async def _process_batch(products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Traite un batch de produits en parallèle.
-    Utilise asyncio.gather pour exécuter toutes les tâches simultanément.
+    Traite un batch de produits en parallèle avec asyncio.gather.
     """
     if not products:
         return []
     
     batch_size = len(products)
-    logger.info(f"⚙️  Traitement d'un batch de {batch_size} produit(s)...")
+    print(f"⚙️  Traitement d'un batch de {batch_size} produit(s)...")
     
     start_time = time.monotonic()
     
-    # Créer une tâche asyncio pour chaque produit
+    # Créer et exécuter toutes les tâches en parallèle
     tasks = [_process_single_product(product) for product in products]
-    
-    # Exécuter toutes les tâches en parallèle
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=False)
     
     end_time = time.monotonic()
     duration = end_time - start_time
     
     # Statistiques
-    success_count = sum(1 for r in results if r["status"] == "success")
-    error_count = sum(1 for r in results if r["status"] == "error")
+    success_count = sum(1 for r in results if r.get("status") == "success")
+    error_count = sum(1 for r in results if r.get("status") == "error")
     
-    logger.info(f"🏁 Batch terminé en {duration:.2f}s - Succès: {success_count}, Échecs: {error_count}")
+    print(f"🏁 Batch terminé en {duration:.2f}s - Succès: {success_count}, Échecs: {error_count}")
     
     return results
+
 
 @router.post("/qwen/v2", response_model=BatchOptimResponse)
 async def optimizeQwen(payload: BatchOptimRequest):
     """
-    Endpoint principal qui reçoit un batch de produits et les traite par lots.
+    Endpoint principal avec traitement par batch optimisé.
     """
     try:
         overall_start_time = time.time()
         total_products = len(payload.products)
         
-        logger.info(f"📦 Réception de {total_products} produit(s)")
+        print(f"📦 Réception de {total_products} produit(s)")
         
-        # Conversion des produits en dict
+        # Conversion des produits en dict (une seule fois)
         products_data = [product.dict() for product in payload.products]
         
-        # Division en batches de BATCH_SIZE
-        all_results = []
-        for i in range(0, total_products, BATCH_SIZE):
-            batch = products_data[i:i + BATCH_SIZE]
-            batch_results = await _process_batch(batch)
-            all_results.extend(batch_results)
+        # Traiter TOUS les produits en parallèle (pas de batchs séquentiels)
+        # Le sémaphore contrôle la concurrence
+        all_results = await asyncio.gather(
+            *[_process_single_product(product) for product in products_data],
+            return_exceptions=True
+        )
         
-        # Formatage de la réponse finale
+        # Formatage de la réponse finale avec gestion des exceptions
         formatted_results = []
         for result in all_results:
-            if result["status"] == "success":
+            # Gérer les exceptions retournées par gather
+            if isinstance(result, Exception):
                 formatted_results.append({
-                    "id_produit_scrapping": result["id_produit_scrapping"],
-                    "success": result["data"]
+                    "id_produit_scrapping": "unknown",
+                    "error": f"{type(result).__name__}: {str(result)}"
                 })
-            else:
-                formatted_results.append({
-                    "id_produit_scrapping": result["id_produit_scrapping"],
-                    "error": result["error"]
-                })
+            elif result and isinstance(result, dict):
+                if result.get("status") == "success":
+                    formatted_results.append({
+                        "id_produit_scrapping": result["id_produit_scrapping"],
+                        "success": result.get("data")
+                    })
+                else:
+                    formatted_results.append({
+                        "id_produit_scrapping": result["id_produit_scrapping"],
+                        "error": result.get("error")
+                    })
         
         overall_end_time = time.time()
         total_duration = overall_end_time - overall_start_time
         
-        success_total = sum(1 for r in all_results if r["status"] == "success")
-        error_total = sum(1 for r in all_results if r["status"] == "error")
+        success_total = sum(1 for r in all_results if r.get("status") == "success")
+        error_total = sum(1 for r in all_results if r.get("status") == "error")
         
-        logger.info(f"✅ Traitement complet terminé en {total_duration:.2f}s")
-        logger.info(f"📊 Résultats: {success_total} succès, {error_total} échecs sur {total_products} produits")
+        print(f"✅ Traitement complet terminé en {total_duration:.2f}s")
+        print(f"📊 Résultats: {success_total} succès, {error_total} échecs")
         
         return {"data": formatted_results}
     
     except Exception as e:
-        logger.error(f"❌ Erreur critique: {type(e).__name__}: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
-        )
+        error_msg = f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
+        print(f"{error_msg}\nTraceback:\n{traceback.format_exc()}")
+        return {"ERROR": error_msg}

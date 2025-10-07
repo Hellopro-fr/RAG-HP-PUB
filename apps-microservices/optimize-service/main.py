@@ -12,7 +12,7 @@ from app.utils.response import error_response
 load_dotenv(dotenv_path=".env")
 
 description = """
-API d'embedding [RAG Hellopro] 🚀
+API d'optimisation [RAG Hellopro] 🚀
 """
 
 os.makedirs(f'{settings.DOCUMENT_ROOT}/logs', exist_ok=True)
