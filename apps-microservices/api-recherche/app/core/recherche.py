@@ -94,6 +94,7 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
             stream = client_or.chat.completions.create(
                 model=request.llm.chat_model,
                 messages=[{"role": "user", "content": full_user_prompt}],
+                temperature=float(request.llm.temperature),
                 stream=True
             )
 
@@ -142,6 +143,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
             completion = client_or.chat.completions.create(
                 extra_body={},
                 model=request.llm.chat_model,
+                temperature=float(request.llm.temperature),
                 messages=[
                     {
                         "role": "user",
