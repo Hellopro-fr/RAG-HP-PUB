@@ -55,7 +55,7 @@ class DocumentTextExtractor:
         
         # Formats supportés
         self.image_formats = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
-        self.ocr_supported = {'.png', '.jpg', '.jpeg', '.bmp', '.pdf', '.gif', '.webp'}
+        self.ocr_supported = {'.png', '.bmp', '.pdf', '.gif'}
         self.document_formats = {'.doc', '.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.odt'}
         
         # Configuration du logging
@@ -262,10 +262,10 @@ class DocumentTextExtractor:
             if file_path.suffix.lower() in {'.ppt', '.pptx'}:
                 # PowerPoint contient souvent des images intégrées
                 return True
-            elif file_path.suffix.lower() in {'.doc'}:
+            elif file_path.suffix.lower() in {'.doc','.docx'}:
                 # Les anciens formats Word peuvent avoir des images intégrées
                 return True
-            elif file_path.suffix.lower() in {'.xls'}:
+            elif file_path.suffix.lower() in {'.xls','.xlsx'}:
                 # Excel ancien format peut avoir des images
                 return True
             
