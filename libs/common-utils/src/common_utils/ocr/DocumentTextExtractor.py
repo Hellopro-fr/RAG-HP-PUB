@@ -483,8 +483,8 @@ class DocumentTextExtractor:
             
             # Traitement des PDFs
             elif file_ext == '.pdf':
-                result['text'] = self.extract_text_from_pdf(file_path)
-                result['method'] += 'PDF extraction'
+                result['text'] = self.extract_text_from_pdf(file_path,use_ocr=True)
+                result['method'] += 'PDF extraction + OCR'
             
             # Traitement des documents avec vérification d'images
             elif file_ext in self.document_formats:
@@ -513,7 +513,7 @@ class DocumentTextExtractor:
                             pdf_path = self.convert_to_pdf(file_path)
                             self.add_file_for_cleanup(pdf_path)
                             result['text'] = self.extract_text_from_pdf(pdf_path)
-                            result['method'] += 'XLS -> PDF + OCRExtractor'
+                            result['method'] += 'XLS -> PDF'
                     elif file_ext in {'.pptx', '.ppt'}:
                         if file_ext == '.pptx':
                             result['text'] = self.extract_text_from_pptx(file_path)
@@ -523,7 +523,7 @@ class DocumentTextExtractor:
                             pdf_path = self.convert_to_pdf(file_path)
                             self.add_file_for_cleanup(pdf_path)
                             result['text'] = self.extract_text_from_pdf(pdf_path)
-                            result['method'] += 'PPT -> PDF + OCRExtractor'
+                            result['method'] += 'PPT -> PDF'
                     elif file_ext == '.odt':
                         result['text'] = self.extract_text_from_odt(file_path)
                         result['method'] += 'ODT direct'
