@@ -70,7 +70,7 @@ async def get_chat_completion_response(request: ChatRequest):
     # appel chat en asyncio
     response = await asyncio.to_thread(llm_prompt_qwen, request)
 
-    logger.info("LLM response received. \nResponse: %s", response)
+    # logger.info("LLM response received. \nResponse: %s", response)
 
     time_elapsed = time.perf_counter() - start_time
     logger.info(f"Temps écoulé pour get_next_questinon: {time_elapsed:.2f} secondes")
@@ -99,7 +99,7 @@ async def get_chatgpt_chat_completion_response(request: ChatRequest):
     # appel chat en asyncio
     response = await asyncio.to_thread(llm_prompt_chatgpt, request)
 
-    logger.info("ChatGPT response received. \nResponse: %s", response)
+    # logger.info("ChatGPT response received. \nResponse: %s", response)
 
     time_elapsed = time.perf_counter() - start_time
     logger.info(f"Temps écoulé pour get_next_questinon: {time_elapsed:.2f} secondes")
@@ -123,7 +123,7 @@ async def get_deepseek_chat_completion_response(request: ChatRequest):
     # appel chat en asyncio
     response = await asyncio.to_thread(llm_prompt_deepseek, request)
 
-    logger.info("Deepseek response received. \nResponse: %s", response)
+    # logger.info("Deepseek response received. \nResponse: %s", response)
 
     time_elapsed = time.perf_counter() - start_time
     logger.info(f"Temps écoulé pour get_next_questinon: {time_elapsed:.2f} secondes")
@@ -163,7 +163,7 @@ async def get_gemini_chat_completion_response(request: ChatRequest):
     # appel chat en asyncio
     response = await asyncio.to_thread(llm_prompt_gemini, request)
 
-    logger.info("Deepseek response received. \nResponse: %s", response)
+    # logger.info("Deepseek response received. \nResponse: %s", response)
 
     time_elapsed = time.perf_counter() - start_time
     logger.info(f"Temps écoulé pour get_next_questinon: {time_elapsed:.2f} secondes")
