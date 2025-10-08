@@ -15,7 +15,7 @@ from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 # --- Configuration ---
-BATCH_SIZE = 5
+BATCH_SIZE = 4
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 0.1
 
