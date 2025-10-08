@@ -120,14 +120,10 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         cleaner      = CleanHTML(texts)
         cleaned_text = cleaner.clean()
 
-        logger.info(f"\n\nTexte juste après nettoyage : {cleaned_text}")
-
         # Anonymisation
         anonymize = AnonymizeText()
         anonymized_text     = anonymize.anonymize_text(cleaned_text)
         text_to_embed_clean = anonymize.normalize_text(anonymized_text)
-
-        logger.info(f"\n\nTexte juste après Anonymisation : {text_to_embed_clean}")
 
         # Suppression des info inutiles via llm
         payload = {
