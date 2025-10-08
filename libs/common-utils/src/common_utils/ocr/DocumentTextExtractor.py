@@ -55,7 +55,7 @@ class DocumentTextExtractor:
         
         # Formats supportés
         self.image_formats = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
-        self.ocr_supported = {'.png', '.jpg', '.jpeg', '.bmp', '.pdf', '.gif', '.webp'}
+        self.ocr_supported = {'.png', '.bmp', '.pdf', '.gif'}
         self.document_formats = {'.doc', '.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.odt'}
         
         # Configuration du logging
@@ -262,10 +262,10 @@ class DocumentTextExtractor:
             if file_path.suffix.lower() in {'.ppt', '.pptx'}:
                 # PowerPoint contient souvent des images intégrées
                 return True
-            elif file_path.suffix.lower() in {'.doc'}:
+            elif file_path.suffix.lower() in {'.doc','.docx'}:
                 # Les anciens formats Word peuvent avoir des images intégrées
                 return True
-            elif file_path.suffix.lower() in {'.xls'}:
+            elif file_path.suffix.lower() in {'.xls','.xlsx'}:
                 # Excel ancien format peut avoir des images
                 return True
             
@@ -483,7 +483,7 @@ class DocumentTextExtractor:
             # Traitement des PDFs
             elif file_ext == '.pdf':
                 result['text'] = self.extract_text_from_pdf(file_path)
-                result['method'] += 'PDF extraction + OCRExtractor si nécessaire'
+                result['method'] += 'PDF extraction'
             
             # Traitement des documents avec vérification d'images
             elif file_ext in self.document_formats:
@@ -492,7 +492,7 @@ class DocumentTextExtractor:
                     pdf_path = self.convert_to_pdf(file_path)
                     self.add_file_for_cleanup(pdf_path)
                     result['text'] = self.extract_text_from_pdf(pdf_path)
-                    result['method'] += 'Conversion PDF + OCRExtractor'
+                    result['method'] += 'Conversion PDF + PDF extraction'
                     # Optionnel: supprimer le PDF temporaire
                     pdf_path.unlink(missing_ok=True)
                 else:
