@@ -247,7 +247,7 @@ class DocumentTextExtractor:
                 raise ValueError(f"Format de fichier non supporté : {ext}")
         except Exception as e:
             self.logger.error(f"Erreur OCR: {e}")
-            return "error ocr"
+            return f"error ocr {e}"
         
     def has_extractable_images(self, file_path: Path) -> bool:
         """
