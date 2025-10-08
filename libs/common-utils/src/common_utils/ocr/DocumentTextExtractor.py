@@ -239,15 +239,15 @@ class DocumentTextExtractor:
             raise ValueError(f"Le chemin fourni n'est pas un fichier valide : {file_path}")
 
         ext = file_path.suffix.lower()
-        try:
+        # try:
             # Vérifier l'extension
-            if ext in self.ocr_supported:
-                return self.ocr_processor.convert_doc_to_markdown([file_path])
-            else:
-                raise ValueError(f"Format de fichier non supporté : {ext}")
-        except Exception as e:
-            self.logger.error(f"Erreur OCR: {e}")
-            return f"error ocr {e}"
+        if ext in self.ocr_supported:
+            return self.ocr_processor.convert_doc_to_markdown([file_path])
+        else:
+            raise ValueError(f"Format de fichier non supporté : {ext}")
+        # except Exception as e:
+        #     self.logger.error(f"Erreur OCR: {e}")
+        #     return f"error ocr {e}"
         
     def has_extractable_images(self, file_path: Path) -> bool:
         """
