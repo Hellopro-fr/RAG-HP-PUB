@@ -55,7 +55,7 @@ class DocumentTextExtractor:
         
         # Formats supportés
         self.image_formats = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
-        self.ocr_supported = {'.png', '.bmp', '.pdf', '.gif'}
+        self.ocr_supported = {'.png', '.bmp', '.pdf', '.gif', '.jpg', '.jpeg'}
         self.document_formats = {'.doc', '.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.odt'}
         
         # Configuration du logging
@@ -245,7 +245,8 @@ class DocumentTextExtractor:
                 return self.ocr_processor.convert_doc_to_markdown([file_path])
             else:
                 raise ValueError(f"Format de fichier non supporté : {ext}")
-        except:
+        except Exception as e:
+            self.logger.error(f"Erreur OCR: {e}")
             return "error ocr"
         
     def has_extractable_images(self, file_path: Path) -> bool:
