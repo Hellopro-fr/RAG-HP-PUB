@@ -61,8 +61,8 @@ class Consumer:
             document_data = data.get('data', {})
             bdd = data.get('database', "milvus")
 
-            if not document_data or not document_data.get('text'):
-                raise ValueError("Données invalides (contenu vide ou 'text' manquant).")
+            if not document_data or not document_data.get('document'):
+                raise ValueError("Données invalides (contenu vide ou 'document' manquant).")
 
             print(f"\n📥 Document-Processor: Message reçu pour URL: {document_data.get('fichier_source', 'Source inconnue')}")
             
