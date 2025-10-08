@@ -66,10 +66,11 @@ class Consumer:
 
             print(f"\n📥 Document-Processor: Message reçu pour URL: {document_data.get('fichier_source', 'Source inconnue')}")
             
-            loop = asyncio.get_running_loop()
-            output_message = await loop.run_in_executor(
-                self.executor, process_document_data_for_templating, document_data, bdd
-            )
+            # loop = asyncio.get_running_loop()
+            # output_message = await loop.run_in_executor(
+            #     self.executor, process_document_data_for_templating, document_data, bdd
+            # )
+            output_message = await process_document_data_for_templating(document_data, bdd)
             
             routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
             output_message['routing_key'] = routing_key
