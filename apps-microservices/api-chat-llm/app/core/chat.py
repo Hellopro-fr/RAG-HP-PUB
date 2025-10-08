@@ -68,7 +68,8 @@ async def get_chat_completion_response(request: ChatRequest):
     start_time = time.perf_counter()    
 
     # appel chat en asyncio
-    response = await asyncio.to_thread(llm_prompt_qwen, request)
+    # response = await llm_client.get_llm_chat_response(request)
+    response = await asyncio.to_thread(llm_client.get_llm_chat_response, request)
 
     # logger.info("LLM response received. \nResponse: %s", response)
 
