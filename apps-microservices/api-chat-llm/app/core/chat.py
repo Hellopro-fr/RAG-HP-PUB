@@ -79,7 +79,7 @@ async def get_chat_completion_response(request: ChatRequest):
     return {"response": response , "time_elapsed": time_elapsed}
 
 # Chat completion via chatGpt 40
-async def llm_prompt_chatgpt(request: ChatRequest) -> str:
+def llm_prompt_chatgpt(request: ChatRequest) -> str:
     # Appel chat completion avec Chatgpt , model fixe pour l'instant
     openai_client = get_openai_client()
     tab_response = openai_client.chat.completions.create(
@@ -108,7 +108,7 @@ async def get_chatgpt_chat_completion_response(request: ChatRequest):
     return {"response": response , "time_elapsed": time_elapsed}
 
 # Chat completion via Deepseek
-async def llm_prompt_deepseek(request: ChatRequest) -> str:
+def llm_prompt_deepseek(request: ChatRequest) -> str:
     # Appel chat completion avec Deepseek
     deepseek = DeepSeek()
     deepseek.set_temperature(request.temperature)
@@ -132,7 +132,7 @@ async def get_deepseek_chat_completion_response(request: ChatRequest):
     return {"response": response , "time_elapsed": time_elapsed}
 
 # Chat completion via Gemini by openrouter
-async def llm_prompt_gemini(request: ChatRequest) -> str:
+def llm_prompt_gemini(request: ChatRequest) -> str:
     # Appel chat completion avec openrouter de model genini flash 1.5
     client_or = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
