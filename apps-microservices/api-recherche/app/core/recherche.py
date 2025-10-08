@@ -731,7 +731,8 @@ async def search_in_milvus_classique(request: SearchRequest) -> dict:
         # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
         context_texts = [match['metadata']['entity']['text'] for matches in all_results.values() for match in matches]
         
-        llm_req = llm_prompt(request, context_texts)
+        # llm_req = llm_prompt(request, context_texts)
+        llm_req = await asyncio.to_thread(llm_prompt, request, context_texts)
 
         # --- FIN: Construction du dictionnaire de retour ---
         total_duration = time.perf_counter() - start_total_time
