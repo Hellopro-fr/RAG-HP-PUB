@@ -246,7 +246,7 @@ class DocumentTextExtractor:
             else:
                 raise ValueError(f"Format de fichier non supporté : {ext}")
         except:
-            return self.extract_text_from_pdf(file_path) if ext == ".pdf" else ""
+            return "error ocr"
         
     def has_extractable_images(self, file_path: Path) -> bool:
         """
