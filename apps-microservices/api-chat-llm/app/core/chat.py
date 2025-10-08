@@ -58,12 +58,17 @@ def get_openai_client():
     return client
 
 # Chat completion via llm Qwen3 14B
-async def get_chat_completion_response(request: ChatRequest):
-
-    start_time = time.perf_counter()
-
+async def llm_prompt_qwen(request: ChatRequest) -> str:
     # Appeler le service LLM via gRPC pour obtenir la réponse
     response = await llm_client.get_llm_chat_response(request)
+    return response
+
+async def get_chat_completion_response(request: ChatRequest):
+
+    start_time = time.perf_counter()    
+
+    # appel chat en asyncio
+    response = await asyncio.to_thread(llm_prompt_qwen, request)
 
     logger.info("LLM response received. \nResponse: %s", response)
 
@@ -73,10 +78,7 @@ async def get_chat_completion_response(request: ChatRequest):
     return {"response": response , "time_elapsed": time_elapsed}
 
 # Chat completion via chatGpt 40
-async def get_chatgpt_chat_completion_response(request: ChatRequest):
-
-    start_time = time.perf_counter()
-
+async def llm_prompt_chatgpt(request: ChatRequest) -> str:
     # Appel chat completion avec Chatgpt , model fixe pour l'instant
     openai_client = get_openai_client()
     tab_response = openai_client.chat.completions.create(
@@ -88,6 +90,15 @@ async def get_chatgpt_chat_completion_response(request: ChatRequest):
 
     response = tab_response.choices[0].message.content
 
+    return response
+
+async def get_chatgpt_chat_completion_response(request: ChatRequest):
+
+    start_time = time.perf_counter()
+
+    # appel chat en asyncio
+    response = await asyncio.to_thread(llm_prompt_chatgpt, request)
+
     logger.info("ChatGPT response received. \nResponse: %s", response)
 
     time_elapsed = time.perf_counter() - start_time
@@ -96,15 +107,21 @@ async def get_chatgpt_chat_completion_response(request: ChatRequest):
     return {"response": response , "time_elapsed": time_elapsed}
 
 # Chat completion via Deepseek
-async def get_deepseek_chat_completion_response(request: ChatRequest):
-
-    start_time = time.perf_counter()
-
+async def llm_prompt_deepseek(request: ChatRequest) -> str:
     # Appel chat completion avec Deepseek
     deepseek = DeepSeek()
     deepseek.set_temperature(request.temperature)
     tab_response = deepseek.chat(request.prompt , stream=False)
     response = tab_response['content']
+
+    return response
+
+async def get_deepseek_chat_completion_response(request: ChatRequest):
+
+    start_time = time.perf_counter()
+
+    # appel chat en asyncio
+    response = await asyncio.to_thread(llm_prompt_deepseek, request)
 
     logger.info("Deepseek response received. \nResponse: %s", response)
 
@@ -114,10 +131,7 @@ async def get_deepseek_chat_completion_response(request: ChatRequest):
     return {"response": response , "time_elapsed": time_elapsed}
 
 # Chat completion via Gemini by openrouter
-async def get_gemini_chat_completion_response(request: ChatRequest):
-
-    start_time = time.perf_counter()
-
+async def llm_prompt_gemini(request: ChatRequest) -> str:
     # Appel chat completion avec openrouter de model genini flash 1.5
     client_or = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
@@ -139,6 +153,15 @@ async def get_gemini_chat_completion_response(request: ChatRequest):
         ]
     )
     response = completion.choices[0].message.content
+
+    return response
+
+async def get_gemini_chat_completion_response(request: ChatRequest):
+
+    start_time = time.perf_counter()
+
+    # appel chat en asyncio
+    response = await asyncio.to_thread(llm_prompt_gemini, request)
 
     logger.info("Deepseek response received. \nResponse: %s", response)
 
