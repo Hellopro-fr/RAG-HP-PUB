@@ -108,6 +108,7 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
         
 def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
     llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
+    completion = {}
     if request.action == 2 and context_texts:
         context = "\n-----\n\n\n".join(context_texts)
         # full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
@@ -122,7 +123,6 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
             
         start_llm_time = time.perf_counter()
-        completion = {}
         if type_prompt == "openai":
             if request.llm.chat_model == "deepseek":
                 deepseek = DeepSeek()
