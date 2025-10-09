@@ -3,7 +3,7 @@ import asyncio
 import aio_pika
 import aiormq
 from document_echange_processor_service.messaging.publisher import Publisher
-from document_echange_processor_service.messaging.consumer import AsyncConsumer  # consumer adapté à aio-pika
+from document_echange_processor_service.messaging.consumer import Consumer  # consumer adapté à aio-pika
 
 
 async def main():
@@ -35,7 +35,7 @@ async def main():
             async with connection:
                 # 2️⃣ Instanciation du publisher et du consumer asynchrone
                 publisher = Publisher(connection)
-                consumer = AsyncConsumer(publisher)
+                consumer = Consumer(connection, publisher)
 
                 # 3️⃣ Lancement du consumer
                 await consumer.start_consuming()
