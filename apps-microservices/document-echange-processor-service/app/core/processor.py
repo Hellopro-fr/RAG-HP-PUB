@@ -8,6 +8,8 @@ from common_utils.cleaner.CleanHTML import CleanHTML
 from common_utils.cleaner.AnonymizeText import AnonymizeText
 from common_utils.ocr.DocumentTextExtractor import DocumentTextExtractor
 from common_utils.grpc_clients import llm_client
+from common_utils.grpc_clients.schemas.chat import ChatRequest
+
 
 PROMPT_NETTOYAGE = """
 **Rôles** :
@@ -91,15 +93,15 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         anonymized_text     = anonymize.anonymize_text(cleaned_text)
         text_to_embed_clean = anonymize.normalize_text(anonymized_text)
 
-        # Suppression des info inutiles via llm
-        payload = {
-            "prompt" : json.dumps(PROMPT_NETTOYAGE.format(content=text_to_embed_clean)),
-            "max_tokens" : 32700,
-            "temperature": 0.7
-        }
 
         try:
-            raw_text = await llm_client.get_llm_chat_response(payload)
+            chat_request = ChatRequest(
+                prompt=PROMPT_NETTOYAGE.format(content=text_to_embed_clean),
+                max_tokens=32700,
+                temperature=0.7,
+                enable_thinking=False
+            )
+            raw_text = await llm_client.get_llm_chat_response(chat_request)
 
             # Parsing de la réponse
             match = re.search(r'\{.*\}', raw_text, re.DOTALL)
