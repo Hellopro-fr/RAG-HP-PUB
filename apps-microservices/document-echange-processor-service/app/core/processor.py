@@ -132,11 +132,25 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
             "temperature": 0.7
         }
 
-        try: 
+        try:
             response = await llm_client.get_llm_chat_response(payload)
-            text_to_embed_clean = extract_contenu(response.json())
+
+            # Vérification du type de réponse
+            if isinstance(response, dict):
+                api_response = response
+            elif hasattr(response, "json"):
+                api_response = response.json()
+            else:
+                logger.warning("Format de réponse LLM inattendu, utilisation brute de la réponse.")
+                api_response = {"response": str(response)}
+
+            # Extraction du texte nettoyé
+            text_to_embed_clean = extract_contenu(api_response)
+
         except Exception as e:
-            logger.warning(f"Erreur lors du nettoyage LLM : {e}")
+            logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
+            # On garde le texte nettoyé localement si le LLM échoue
+            text_to_embed_clean = text_to_embed_clean
 
         # Étape 3: Construire le message de sortie
         output_message = {
