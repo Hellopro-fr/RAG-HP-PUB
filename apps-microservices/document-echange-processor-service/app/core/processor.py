@@ -99,11 +99,11 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         try:
             chat_request = ChatRequest(
                 prompt=json.dumps(PROMPT_NETTOYAGE.format(content=text_to_embed_clean)),
-                max_tokens=32700,
+                max_tokens=30000,
                 temperature=0.7,
                 enable_thinking=False
             )
-            
+
             raw_text = await llm_client.get_llm_chat_response(chat_request)
 
             # Parsing de la réponse
