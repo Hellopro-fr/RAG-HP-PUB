@@ -3,7 +3,7 @@ import asyncio
 import aio_pika
 import aiormq
 from document_echange_processor_service.messaging.publisher import Publisher
-from document_echange_processor_service.messaging.consumer_async import AsyncConsumer  # consumer adapté à aio-pika
+from document_echange_processor_service.messaging.consumer import AsyncConsumer  # consumer adapté à aio-pika
 
 
 async def main():
