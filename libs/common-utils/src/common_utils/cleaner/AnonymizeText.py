@@ -1,4 +1,14 @@
 import re
+import uuid
+
+DOMAIN = "gmail.com"
+PREFIX = "anonym"
+
+def gen_email_uuid(prefix: str = PREFIX, domain: str = DOMAIN, truncate: int | None = 12) -> str:
+    h = uuid.uuid4().hex  # 32 hex chars (0-9a-f)
+    if truncate:
+        h = h[:truncate]
+    return f"{prefix}_{h.lower()}@{domain}"
 
 class AnonymizeText:
     def anonymize_text(self,text: str) -> str:
@@ -8,7 +18,8 @@ class AnonymizeText:
         processed_text = re.sub(phone_pattern, "06 23 42 43 23", processed_text, flags=re.VERBOSE)
 
         email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-        processed_text = re.sub(email_pattern, "n.cruchon@gmail.com", processed_text)
+        random_email = gen_email_uuid(truncate=12)
+        processed_text = re.sub(email_pattern, random_email, processed_text)
         
         page_number_pattern = r'Page\s*\d+\s*of\s*\d+\s*'
         processed_text = re.sub(page_number_pattern,"", processed_text)
