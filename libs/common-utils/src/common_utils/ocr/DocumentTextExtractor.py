@@ -322,30 +322,35 @@ class DocumentTextExtractor:
             Texte extrait
         """
         try:
-            doc = fitz.open(pdf_path)
             text = ""
-            
-            for page_num in range(doc.page_count):
-                page = doc.load_page(page_num)
-                page_text = page.get_text()
+
+            if use_ocr:
+                text = self.extract_text_from_image_ocr(pdf_path)
+            else:
+                doc = fitz.open(pdf_path)
                 
-                if not page_text.strip() and use_ocr:
-                    # Si pas de texte extractible, utiliser OCR
-                    pix = page.get_pixmap()
-                    img_data = pix.tobytes("png")
+                for page_num in range(doc.page_count):
+                    page = doc.load_page(page_num)
+                    page_text = page.get_text()
                     
-                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                        tmp.write(img_data)
-                        tmp_path = Path(tmp.name)
+                    if not page_text.strip() and use_ocr:
+                        # Si pas de texte extractible, utiliser OCR
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        
+                        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                            tmp.write(img_data)
+                            tmp_path = Path(tmp.name)
+                        
+                        try:
+                            page_text = self.extract_text_from_image_ocr(tmp_path)
+                        finally:
+                            tmp_path.unlink(missing_ok=True)
                     
-                    try:
-                        page_text = self.extract_text_from_image_ocr(tmp_path)
-                    finally:
-                        tmp_path.unlink(missing_ok=True)
+                    text += page_text + "\n"
                 
-                text += page_text + "\n"
+                doc.close()
             
-            doc.close()
             return text.strip()
             
         except Exception as e:
