@@ -135,6 +135,8 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         try:
             response = await llm_client.get_llm_chat_response(payload)
 
+            logger.info(f"reponse LLM: {response}")
+
             # Vérification du type de réponse
             if isinstance(response, dict):
                 api_response = response
