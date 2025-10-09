@@ -78,9 +78,45 @@ def insertion_data(echange_data: dict) -> dict:
 
         elif status == "success":
             if len(data) > 0:
-                logging.info("La conversation_id %s existe déjà dans la base de données. Insertion ignorée.", conversation_id)
-                result = data
+                # Conversation existe déjà → MISE À JOUR
+                logging.info("La conversation_id %s existe déjà. Mise à jour en cours...", conversation_id)
+
+                if bdd.lower() == "milvus":
+                    # Appeler la méthode update_echange qui gère toute la logique
+                    result = base_vectorielle.update_echange(echanges, conversation_id, correspondance_echange)
+
+                    if result.get("status") == "error":
+                        logging.error("Erreur mise à jour pour %s: %s", conversation_id, result.get("message"))
+                        output_message = {
+                            "database"       : bdd,
+                            "collection"     : collection,
+                            "data"           : [],
+                            "conversation_id": conversation_id,
+                            "error"          : result.get("message")
+                        }
+                        return output_message
+
+                    output_message = {
+                        "database"        : bdd,
+                        "collection"      : collection,
+                        "data"            : result.get("data"),
+                        "conversation_id" : conversation_id,
+                        "already_in_bdd"  : result.get("already_in_bdd", True),
+                        "updated"         : result.get("updated", True)
+                    }
+                else:
+                    # Pour Qdrant, garder l'ancien comportement (skip)
+                    logging.info("La conversation_id %s existe déjà dans la base de données. Insertion ignorée.", conversation_id)
+                    result = data
+                    output_message = {
+                        "database"        : bdd,
+                        "collection"      : collection,
+                        "data"            : result,
+                        "conversation_id" : conversation_id,
+                        "already_in_bdd"  : True
+                    }
             else:
+                # Conversation n'existe pas → INSERTION NORMALE
                 result = func(echanges)
                 data_bo_milvus.append({
                     "embedding"       : [0.0]*1024,
@@ -90,15 +126,15 @@ def insertion_data(echange_data: dict) -> dict:
                     "date_maj"         : ""
                 })
 
-            output_message = {
-                "database"        : bdd,
-                "collection"      : collection,
-                "data"            : result,
-                "conversation_id" : conversation_id,
-                "already_in_bdd"  : len(data) > 0
-            }
+                output_message = {
+                    "database"        : bdd,
+                    "collection"      : collection,
+                    "data"            : result,
+                    "conversation_id" : conversation_id,
+                    "already_in_bdd"  : False
+                }
 
-        if len(data_bo_milvus) > 0 and bdd == "milvus":
+        if len(data_bo_milvus) > 0 and bdd.lower() == "milvus":
             correspondance_echange.insert_correspondance_echange(data_bo_milvus)
         
         return output_message
