@@ -138,6 +138,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
                     temperature=float(request.llm.temperature)
                 )
                 llm_response = completion.choices[0].message.content
+            completion = completion.model_dump()
         else:
             client_or = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
@@ -160,9 +161,10 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
                 ]
             )
             llm_response = completion.choices[0].message.content
+            completion = completion.model_dump()
             
         llm_duration = time.perf_counter() - start_llm_time
-    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context,response=completion.model_dump())
+    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context,response=completion)
 
 async def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
