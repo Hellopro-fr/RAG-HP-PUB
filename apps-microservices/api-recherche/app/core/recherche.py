@@ -423,7 +423,8 @@ async def search_in_milvus(request: SearchRequest) -> dict:
     context = ""
     full_user_prompt = ""
     final_filter_expr_str = "" # Pour stocker une représentation du filtre appliqué
-
+    llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
+    
     try:
         # --- ÉTAPE 1: EMBEDDING ---
         start_embed = time.perf_counter()
@@ -673,7 +674,7 @@ async def search_in_milvus_classique(request: SearchRequest) -> dict:
 
     search_duration, llm_duration = 0, 0
     llm_response_content, context, full_user_prompt, final_filter_expr_str = "", "", "", ""
-
+    llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
     try:
         # --- ÉTAPE 1: PAS D'EMBEDDING ---
 
