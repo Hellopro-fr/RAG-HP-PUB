@@ -108,6 +108,7 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
         
 def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
     llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
+    completion = {}
     if request.action == 2 and context_texts:
         context = "\n-----\n\n\n".join(context_texts)
         # full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
@@ -126,7 +127,9 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
             if request.llm.chat_model == "deepseek":
                 deepseek = DeepSeek()
                 deepseek.set_temperature(request.llm.temperature)
-                llm_response = deepseek.chat(full_user_prompt)['content']
+                response = deepseek.chat(full_user_prompt)
+                llm_response = response['content']
+                completion = response["response"]
             else:
                 openai_client = get_openai_client()
                 completion = openai_client.chat.completions.create(
@@ -157,10 +160,9 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
                 ]
             )
             llm_response = completion.choices[0].message.content
-            # llm_response = chat_with_openrouter(request.chat_model, full_user_prompt).choices[0].message.content
             
         llm_duration = time.perf_counter() - start_llm_time
-    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
+    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context,response=completion.model_dump())
 
 async def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
@@ -273,11 +275,6 @@ async def search_in_milvus_stream(request: SearchRequest):
         # On récupère plus de documents si le reranking est activé
         top_k_retrieval = top_k_final * 2 if request.options.use_reranker else top_k_final
         
-        # NOTE: La logique de filtrage complexe (filtre_source) doit maintenant être gérée
-        # soit ici (pour construire la chaîne `filter_expr`), soit déléguée au service de recherche.
-        # Pour l'instant, nous supposons un filtre simple.
-        # filter_expr = " and ".join(request.filtre) if request.filtre else ""
-        
         all_source_results = []
         start_search_time = time.perf_counter()
         
@@ -362,19 +359,6 @@ async def search_in_milvus_stream(request: SearchRequest):
                 
                 rerank_duration = time.perf_counter() - start_rerank_time
                 yield {"type": "rerank_complete", "payload": {"results": final_results[:top_k_final], "duration": round(rerank_duration, 2)}}
-            # Préparation des documents pour le reranker
-            # HYPOTHÈSE: Le texte est dans metadata.text
-            # docs_to_rerank = [res['metadata']['entity']['text'] for res in initial_matches]
-            
-            # # Appel au microservice de reranking
-            # ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
-            
-            # # Reconstruction de la liste de résultats dans le nouvel ordre
-            # result_map = {res['metadata']['entity']['text']: res for res in initial_matches}
-            # final_results = [result_map[text] for text in ranked_texts if text in result_map]
-            
-            # rerank_duration = time.perf_counter() - start_rerank_time
-            # yield {"type": "rerank_complete", "payload": {"results": final_results[:top_k_final], "duration": round(rerank_duration, 2)}}
         
         # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
         llm_duration = 0
@@ -439,7 +423,8 @@ async def search_in_milvus(request: SearchRequest) -> dict:
     context = ""
     full_user_prompt = ""
     final_filter_expr_str = "" # Pour stocker une représentation du filtre appliqué
-
+    llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
+    
     try:
         # --- ÉTAPE 1: EMBEDDING ---
         start_embed = time.perf_counter()
@@ -561,6 +546,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             "llm_execution": round(llm_req.llm_duration, 2),
             "total_process": round(total_duration, 2),
             "import_duration": 0, # Maintenu de l'original, non calculé ici
+            "llm_reponse": llm_req.response
         }
 
     except Exception as e:
@@ -583,6 +569,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             "llm_execution": round(llm_duration, 2),
             "total_process": round(time.perf_counter() - start_total_time, 2),
             "import_duration": 0,
+            "llm_reponse": llm_req.response
         }
         
 async def search_in_milvus_classique_stream(request: SearchRequest):
@@ -687,7 +674,7 @@ async def search_in_milvus_classique(request: SearchRequest) -> dict:
 
     search_duration, llm_duration = 0, 0
     llm_response_content, context, full_user_prompt, final_filter_expr_str = "", "", "", ""
-
+    llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
     try:
         # --- ÉTAPE 1: PAS D'EMBEDDING ---
 
@@ -754,6 +741,7 @@ async def search_in_milvus_classique(request: SearchRequest) -> dict:
             "llm_execution": round(llm_req.llm_duration, 2),
             "total_process": round(total_duration, 2),
             "import_duration": 0,
+            "llm_reponse": llm_req.response
         }
 
     except Exception as e:
@@ -775,4 +763,5 @@ async def search_in_milvus_classique(request: SearchRequest) -> dict:
             "llm_execution": round(llm_duration, 2),
             "total_process": round(time.perf_counter() - start_total_time, 2),
             "import_duration": 0,
+            "llm_reponse": llm_req.response
         }

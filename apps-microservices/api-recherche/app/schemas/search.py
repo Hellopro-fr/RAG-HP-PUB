@@ -62,12 +62,14 @@ class SearchResponse(BaseModel):
     total_process: float
     llm_execution: float
     import_duration: float
+    llm_reponse: Optional[dict] = {}
 
 class LLMPipeline(BaseModel):
     llm_response: str = ""
     llm_duration: float = ""
     full_user_prompt: str = ""
     context: str = ""
+    response: dict = {}
     error: Optional[bool] = False
     
 class SearchReponse(BaseModel):
