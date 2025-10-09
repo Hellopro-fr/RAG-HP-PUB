@@ -110,15 +110,16 @@ class Consumer:
             )
 
     async def start_consuming(self):
-        """Démarre le consumer."""
+        """Démarre le consumer sans boucle explicite."""
+        # 1. Crée le channel et configure le prefetch
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=10) # Traiter jusqu'à 10 messages en parallèle
-        
+        await channel.set_qos(prefetch_count=2)  # Traiter jusqu'à 2 messages en parallèle
+
+        # 2. Déclare et bind les queues/exchanges
         queue = await self._setup_queues(channel)
-        
+
+        # 3. Commence à consommer les messages
         print("👂 Document-Processor: En attente de messages...")
-        async with queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                # Lance le traitement de chaque message comme une tâche de fond
-                # Le service peut ainsi continuer à recevoir des messages pendant que les autres sont traités.
-                asyncio.create_task(self._process_message_task(message))
+        await queue.consume(
+            lambda message: asyncio.create_task(self._process_message_task(message))
+        )
