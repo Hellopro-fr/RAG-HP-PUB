@@ -110,16 +110,29 @@ class Consumer:
             )
 
     async def start_consuming(self):
-        """Démarre le consumer sans boucle explicite."""
+        """Démarre le consumer avec contrôle du parallélisme et gestion des erreurs."""
+        
         # 1. Crée le channel et configure le prefetch
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=2)  # Traiter jusqu'à 2 messages en parallèle
-
+        await channel.set_qos(prefetch_count=2)  # Nombre maximum de messages traités en parallèle
+        
         # 2. Déclare et bind les queues/exchanges
         queue = await self._setup_queues(channel)
-
-        # 3. Commence à consommer les messages
+        
+        # 3. Crée un semaphore pour limiter le nombre de traitements simultanés
+        semaphore = asyncio.Semaphore(2)
+        
+        async def safe_process(message):
+            """Wrapper pour limiter le parallélisme et capturer les erreurs."""
+            async with semaphore:
+                try:
+                    await self._process_message_task(message)
+                except Exception as e:
+                    print(f"⚠️ Erreur lors du traitement du message: {e}")
+                    # NACK pour remettre le message en queue
+                    await message.nack(requeue=True)
+        
+        # 4. Commence à consommer les messages
         print("👂 Document-Processor: En attente de messages...")
-        await queue.consume(
-            lambda message: asyncio.create_task(self._process_message_task(message))
-        )
+        await queue.consume(lambda message: asyncio.create_task(safe_process(message)))
+

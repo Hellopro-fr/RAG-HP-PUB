@@ -1,10 +1,10 @@
-import aio_pika
 import os
 import asyncio
+import aio_pika
 import aiormq
-
-from document_echange_processor_service.messaging.consumer import Consumer
 from document_echange_processor_service.messaging.publisher import Publisher
+from document_echange_processor_service.messaging.consumer_async import AsyncConsumer  # consumer adapté à aio-pika
+
 
 async def main():
     """
@@ -18,25 +18,30 @@ async def main():
 
     print("🚀 Document-Processor: Démarrage...")
     
-    # Créer le répertoire de récupération s'il n'existe pas
     os.makedirs('recovery_data', exist_ok=True)
 
     loop = asyncio.get_event_loop()
     
     while True:
         try:
-            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
+            # 1️⃣ Connexion robuste avec heartbeat élevé (10 minutes)
+            connection = await aio_pika.connect_robust(
+                rabbitmq_url,
+                loop=loop,
+                heartbeat=600
+            )
             print("✅ Document-Processor: Connecté à RabbitMQ.")
             
             async with connection:
+                # 2️⃣ Instanciation du publisher et du consumer asynchrone
                 publisher = Publisher(connection)
-                consumer = Consumer(connection, publisher)
-                
-                # Lancer le consumer, qui va démarrer ses propres tâches de fond
+                consumer = AsyncConsumer(publisher)
+
+                # 3️⃣ Lancement du consumer
                 await consumer.start_consuming()
-                
-                # Garder le service en vie pour que les tâches de fond continuent de tourner
-                await asyncio.Future()
+
+                # 4️⃣ Maintenir le service vivant
+                await asyncio.Future()  # bloquant jusqu'à arrêt
 
         except (aiormq.exceptions.AMQPConnectionError, aiormq.exceptions.ChannelInvalidStateError) as e:
             print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
