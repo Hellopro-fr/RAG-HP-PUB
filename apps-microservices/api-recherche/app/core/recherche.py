@@ -122,6 +122,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
         type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
             
         start_llm_time = time.perf_counter()
+        completion = {}
         if type_prompt == "openai":
             if request.llm.chat_model == "deepseek":
                 deepseek = DeepSeek()
@@ -161,7 +162,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
             llm_response = completion.choices[0].message.content
             
         llm_duration = time.perf_counter() - start_llm_time
-    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context,response=completion if completion else {})
+    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context,response=completion)
 
 async def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
