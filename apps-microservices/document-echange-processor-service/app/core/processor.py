@@ -11,58 +11,24 @@ from common_utils.grpc_clients import llm_client
 
 PROMPT_NETTOYAGE = """
 **Rôles** :
-
 1. **Expert en contenu B2B** : connaît les documents B2B (devis, catalogues, plaquettes, fiches techniques) et distingue le contenu métier/produit des mentions légales, CGV, disclaimers et informations marketing.
 2. **Nettoyeur / Formateur JSON** : s’assure que le résultat est strictement en JSON avec la clé "contenu", sans ajouter ni supprimer d’autres informations que celles à exclure.
-
 Instructions :
-
 Voici le texte initial à nettoyer :
 {content}
-
 Tu es **Expert en contenu B2B** et **JSON Formatter**.
 Ta tâche est de supprimer uniquement les informations suivantes :
-
 1. **Mentions légales** : informations administratives ou légales de l’entreprise (RCS, SIRET, TVA, capital, forme juridique, adresse du siège).
 2. **Conditions contractuelles** : clauses de contrats ou devis (CGV, CGA, CGU, réserve de propriété, conditions de paiement/livraison, mentions d’acceptation implicite).
 3. **Mentions de non-responsabilité / disclaimers** : limitations de responsabilité ou avertissements (modifications sans préavis, photos non contractuelles, informations données à titre indicatif).
 4. **Mentions réglementaires / légales spécifiques** : références à des lois, propriété intellectuelle, normes, certifications si elles apparaissent uniquement en footer ou bas de page.
 5. **Mentions marketing institutionnelles** : slogans, accroches, messages de notoriété ou labels branding.
 Ne pas ajouter ni supprimer d’autres informations.
-
 Retourne le texte strictement dans ce format JSON :
-
-```json
-{{
-  "contenu": "<texte nettoyé>"
-}}
-```
-
+json
+{{ "contenu": "<texte nettoyé>" }}
 Si aucune information à exclure n’est présente, retourne le texte d’entrée exact dans le même format JSON.
 """
-
-def extract_contenu(api_response: dict) -> str:
-    """
-    Extrait automatiquement la clé 'contenu' 
-    depuis un champ 'response' contenant du JSON encodé en markdown.
-    """
-    if "response" not in api_response:
-        raise KeyError("La clé 'response' est absente de la réponse API")
-
-    texte = api_response["response"]
-
-    # Nettoyer les balises markdown ```json ... ```
-    json_str = re.sub(r"^```json\n|\n```$", "", texte.strip(), flags=re.MULTILINE)
-
-    # Charger en dictionnaire Python
-    try:
-        json_data = json.loads(json_str)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Impossible de parser la réponse en JSON: {e}")
-
-    # Retourner la valeur de 'contenu'
-    return json_data.get("contenu", "")
-
 
 async def process_document_data_for_templating(document_data: dict, bdd: str = "milvus") -> dict:
     
@@ -133,21 +99,21 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         }
 
         try:
-            response = await llm_client.get_llm_chat_response(payload)
+            raw_text = await llm_client.get_llm_chat_response(payload)
 
-            logger.info(f"reponse LLM: {response}")
-
-            # Vérification du type de réponse
-            if isinstance(response, dict):
-                api_response = response
-            elif hasattr(response, "json"):
-                api_response = response.json()
+            # Parsing de la réponse
+            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if match:
+                json_string = match.group(0)
+                parsed_json = json.loads(json_string)
+                contenu = parsed_json.get("contenu")
+                if not contenu:
+                    raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
             else:
-                logger.warning("Format de réponse LLM inattendu, utilisation brute de la réponse.")
-                api_response = {"response": str(response)}
+                raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
             # Extraction du texte nettoyé
-            text_to_embed_clean = extract_contenu(api_response)
+            text_to_embed_clean = contenu
 
         except Exception as e:
             logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
