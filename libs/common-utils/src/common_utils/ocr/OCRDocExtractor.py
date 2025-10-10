@@ -31,9 +31,14 @@ class OCRDocExtractor:
         file_inputs = [{"image": handle_file(file_path)} for file_path in file_paths]
 
         # Convert to markdown (non-streaming)
-        result = client.predict(
-            images=file_inputs,
-            api_name="/process_markdown_streaming"
-        )
+        start_time = time.time()
+        result = client.predict(images=file_inputs, api_name="/process_markdown_streaming")
+        elapsed = time.time() - start_time
+
+        # Log dans un fichier
+        with open("ocr_log.txt", "a") as log:
+            for f in file_paths:
+                log.write(f"{f} - {elapsed:.3f} seconds\n")
+
 
         return result

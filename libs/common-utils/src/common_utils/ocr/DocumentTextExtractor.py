@@ -55,7 +55,7 @@ class DocumentTextExtractor:
         
         # Formats supportés
         self.image_formats = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
-        self.ocr_supported = {'.png', '.bmp', '.pdf', '.gif'}
+        self.ocr_supported = {'.png', '.bmp', '.pdf', '.gif', '.jpg', '.jpeg'}
         self.document_formats = {'.doc', '.docx', '.xlsx', '.xls', '.pptx', '.ppt', '.odt'}
         
         # Configuration du logging
@@ -239,14 +239,15 @@ class DocumentTextExtractor:
             raise ValueError(f"Le chemin fourni n'est pas un fichier valide : {file_path}")
 
         ext = file_path.suffix.lower()
-        try:
+        # try:
             # Vérifier l'extension
-            if ext in self.ocr_supported:
-                return self.ocr_processor.convert_doc_to_markdown([file_path])
-            else:
-                raise ValueError(f"Format de fichier non supporté : {ext}")
-        except:
-            return self.extract_text_from_pdf(file_path) if ext == ".pdf" else ""
+        if ext in self.ocr_supported:
+            return self.ocr_processor.convert_doc_to_markdown([file_path])
+        else:
+            raise ValueError(f"Format de fichier non supporté : {ext}")
+        # except Exception as e:
+        #     self.logger.error(f"Erreur OCR: {e}")
+        #     return f"error ocr {e}"
         
     def has_extractable_images(self, file_path: Path) -> bool:
         """
@@ -321,30 +322,35 @@ class DocumentTextExtractor:
             Texte extrait
         """
         try:
-            doc = fitz.open(pdf_path)
             text = ""
-            
-            for page_num in range(doc.page_count):
-                page = doc.load_page(page_num)
-                page_text = page.get_text()
+
+            if use_ocr:
+                text = self.extract_text_from_image_ocr(pdf_path)
+            else:
+                doc = fitz.open(pdf_path)
                 
-                if not page_text.strip() and use_ocr:
-                    # Si pas de texte extractible, utiliser OCR
-                    pix = page.get_pixmap()
-                    img_data = pix.tobytes("png")
+                for page_num in range(doc.page_count):
+                    page = doc.load_page(page_num)
+                    page_text = page.get_text()
                     
-                    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-                        tmp.write(img_data)
-                        tmp_path = Path(tmp.name)
+                    if not page_text.strip() and use_ocr:
+                        # Si pas de texte extractible, utiliser OCR
+                        pix = page.get_pixmap()
+                        img_data = pix.tobytes("png")
+                        
+                        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                            tmp.write(img_data)
+                            tmp_path = Path(tmp.name)
+                        
+                        try:
+                            page_text = self.extract_text_from_image_ocr(tmp_path)
+                        finally:
+                            tmp_path.unlink(missing_ok=True)
                     
-                    try:
-                        page_text = self.extract_text_from_image_ocr(tmp_path)
-                    finally:
-                        tmp_path.unlink(missing_ok=True)
+                    text += page_text + "\n"
                 
-                text += page_text + "\n"
+                doc.close()
             
-            doc.close()
             return text.strip()
             
         except Exception as e:
@@ -482,8 +488,8 @@ class DocumentTextExtractor:
             
             # Traitement des PDFs
             elif file_ext == '.pdf':
-                result['text'] = self.extract_text_from_pdf(file_path)
-                result['method'] += 'PDF extraction'
+                result['text'] = self.extract_text_from_pdf(file_path,use_ocr=True)
+                result['method'] += 'PDF extraction + OCR'
             
             # Traitement des documents avec vérification d'images
             elif file_ext in self.document_formats:
@@ -512,7 +518,7 @@ class DocumentTextExtractor:
                             pdf_path = self.convert_to_pdf(file_path)
                             self.add_file_for_cleanup(pdf_path)
                             result['text'] = self.extract_text_from_pdf(pdf_path)
-                            result['method'] += 'XLS -> PDF + OCRExtractor'
+                            result['method'] += 'XLS -> PDF'
                     elif file_ext in {'.pptx', '.ppt'}:
                         if file_ext == '.pptx':
                             result['text'] = self.extract_text_from_pptx(file_path)
@@ -522,7 +528,7 @@ class DocumentTextExtractor:
                             pdf_path = self.convert_to_pdf(file_path)
                             self.add_file_for_cleanup(pdf_path)
                             result['text'] = self.extract_text_from_pdf(pdf_path)
-                            result['method'] += 'PPT -> PDF + OCRExtractor'
+                            result['method'] += 'PPT -> PDF'
                     elif file_ext == '.odt':
                         result['text'] = self.extract_text_from_odt(file_path)
                         result['method'] += 'ODT direct'

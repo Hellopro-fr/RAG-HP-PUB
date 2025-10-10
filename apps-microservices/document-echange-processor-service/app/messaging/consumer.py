@@ -1,86 +1,138 @@
-import pika
+
+import aio_pika
 import json
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
+from common_utils.autres.DLQProperties import DLQProperties
+
+MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
+RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
 
 class Consumer:
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
-        """
-        Initialise le consumer.
-        Il a besoin d'une connexion ET d'une instance du publisher.
-        """
-        self.channel = connection.channel()
+    def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
+        self.connection = connection
         self.publisher = publisher
+        self.executor = ThreadPoolExecutor()
+        
         self.exchange_name = 'data_exchange_document'
         self.routing_key = 'new_data.document'
         self.queue_name = 'document_processing_queue'
-        self.rabbitmq_connection = RabbitMQConnection()
-        self.connect()
+        self.retry_exchange = 'retry_exchange'
+        self.retry_queue_name = f'{self.queue_name}_retry'
+        self.dead_letter_exchange = 'dead_letter_exchange'
+        self.dead_letter_queue_name = f'{self.queue_name}_dlq'
+        
         print("✅ Consumer initialisé.")
 
-    def connect(self):
-        """
-        Établit une connexion RabbitMQ via la fonction utilitaire.
-        """
-        self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-        self.channel = self.connection.channel()
-        # Déclare l'exchange où il consomme
-        self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-        self.channel.queue_declare(queue=self.queue_name, durable=True)
-        self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
+    async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
+        dlx = await channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
+        dlq = await channel.declare_queue(self.dead_letter_queue_name, durable=True)
+        await dlq.bind(dlx, self.routing_key)
 
-    def _on_message_callback(self, ch, method, properties, body):
-        """
-        Callback privé qui orchestre le traitement d'un message.
-        """
-        print("📥 Document-Echange-Processor: Message reçu.")
-        data = json.loads(body)
-        document_data = data.get('data', {})
-        bdd = data.get('database', "qdrant")
+        retry_exchange = await channel.declare_exchange(self.retry_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
+        retry_queue = await channel.declare_queue(
+            self.retry_queue_name, durable=True,
+            arguments={'x-message-ttl': RETRY_TTL_MS, 'x-dead-letter-exchange': self.exchange_name, 'x-dead-letter-routing-key': self.routing_key}
+        )
+        await retry_queue.bind(retry_exchange, self.routing_key)
 
-        
-        if not document_data:
-            print("❌ Document-Echange-Processor: Aucune donnée trouvée dans le message.")
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            return
+        exchange = await channel.declare_exchange(self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True)
+        queue = await channel.declare_queue(
+            self.queue_name, durable=True,
+            arguments={'x-dead-letter-exchange': self.retry_exchange, 'x-dead-letter-routing-key': self.routing_key}
+        )
+        await queue.bind(exchange, self.routing_key)
+        return queue
 
-        print(f"\n📥 Document-Echange-Processor: Message reçu")
-        
+    def _get_retry_count(self, message: aio_pika.abc.AbstractIncomingMessage) -> int:
+        if message.headers and 'x-death' in message.headers:
+            for death in message.headers['x-death']:
+                if death.get('queue') == self.retry_queue_name:
+                    return death.get('count', 0)
+        return 0
+
+    async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
+        """Tâche pour traiter un seul message, y compris la logique de retry/dlq."""
         try:
+            data = json.loads(message.body)
+            document_data = data.get('data', {})
+            bdd = data.get('database', "milvus")
 
-            import asyncio
-            output_message = asyncio.run(process_document_data_for_templating(document_data, bdd))
-            
-            self.publisher.routing_key = 'data.ready_for_templating'
-            print(f"➡️ Document-Echange-Processor: Message prêt pour templating : {output_message.get('data',{}).get('text','texte ocr nok')}")
-            
-            try:
-                # 2. Utilise le publisher pour envoyer le résultat
-                self.publisher.publish_message(output_message)
+            if not document_data or not document_data.get('document'):
+                raise ValueError("Données invalides (contenu vide ou 'document' manquant).")
 
-                # 3. Acquitte le message original
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-            except Exception as e:
-                print(f"   -> ❌ Erreur de publication pour message {method.delivery_tag}. NACK. Erreur: {e}")
-                # Si la publication échoue, on NACK le message pour qu'il soit retraité.
-                self.channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            print(f"\n📥 Document-Processor: Message reçu pour URL: {document_data.get('fichier_source', 'Source inconnue')}")
             
+            # loop = asyncio.get_running_loop()
+            # output_message = await loop.run_in_executor(
+            #     self.executor, process_document_data_for_templating, document_data, bdd
+            # )
+            output_message = await process_document_data_for_templating(document_data, bdd)
+            
+            routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
+            output_message['routing_key'] = routing_key
+            
+            async with self.connection.channel() as channel:
+                await self.publisher.publish_message(output_message, channel)
+            
+            await message.ack()
+
+        except (json.JSONDecodeError, ValueError) as e:
+            # Erreur permanente: le message ne sera jamais valide.
+            print(f"❌ Document-Processor: Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
+            await self._send_to_dlq(message, e, 0)
+            await message.ack()
+
         except Exception as e:
-            print(f"❌ Document-Echange-Processor: Erreur lors du traitement des données: {e}")
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)  # Ne pas remettre en queue pour éviter les boucles infinies
-            return
+            retry_count = self._get_retry_count(message)
+            if retry_count < MAX_RETRIES:
+                print(f"❌ Document-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                await message.nack(requeue=False)
+            else:
+                print(f"❌ Document-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                await self._send_to_dlq(message, e, MAX_RETRIES)
+                await message.ack()
 
-    def start_consuming(self):
-        for i in range(3):
-            try: 
-                """
-                Démarre la boucle d'écoute des messages.
-                """
-                self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-                print("👂 Document-Echange-Processor: En attente de messages...")
-                self.channel.start_consuming()
-                break  # Si start_consuming se termine normalement, on sort de la boucle
-            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
-                self.connect()
+    async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
+        async with self.connection.channel() as channel:
+            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+            dlq_headers = DLQProperties.create_dlq_headers(error, 'Document-processor-service', retry_count, message)
+            await dlx.publish(
+                aio_pika.Message(
+                    body=message.body,
+                    headers=dlq_headers,
+                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                ),
+                routing_key=self.routing_key
+            )
+
+    async def start_consuming(self):
+        """Démarre le consumer avec contrôle du parallélisme et gestion des erreurs."""
+        
+        # 1. Crée le channel et configure le prefetch
+        channel = await self.connection.channel()
+        await channel.set_qos(prefetch_count=2)  # Nombre maximum de messages traités en parallèle
+        
+        # 2. Déclare et bind les queues/exchanges
+        queue = await self._setup_queues(channel)
+        
+        # 3. Crée un semaphore pour limiter le nombre de traitements simultanés
+        semaphore = asyncio.Semaphore(2)
+        
+        async def safe_process(message):
+            """Wrapper pour limiter le parallélisme et capturer les erreurs."""
+            async with semaphore:
+                try:
+                    await self._process_message_task(message)
+                except Exception as e:
+                    print(f"⚠️ Erreur lors du traitement du message: {e}")
+                    # NACK pour remettre le message en queue
+                    await message.nack(requeue=True)
+        
+        # 4. Commence à consommer les messages
+        print("👂 Document-Processor: En attente de messages...")
+        await queue.consume(lambda message: asyncio.create_task(safe_process(message)))
+
