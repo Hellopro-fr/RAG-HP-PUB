@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -108,3 +109,128 @@ class MilvusEchangeInserer:
         except Exception as e:
             self.logger.error(f"[Correspondace Echange BO-Milvus] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {datas}")
+
+    def get_correspondance_by_conversation_id(self, conversation_id: str) -> Dict[str, Any]:
+        """
+        Récupère l'enregistrement de correspondance par conversation_id
+
+        Args:
+            conversation_id: L'identifiant de la conversation
+
+        Returns:
+            Dict avec status et data ou message d'erreur
+        """
+        model_config = ModelConfig()
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not conversation_id:
+                return {
+                    "status": "error",
+                    "message": "Conversation ID requise pour la récupération."
+                }
+
+            self.logger.info(f"[Correspondance Echange BO-Milvus] Récupération pour conversation_id: {conversation_id}")
+
+            result = self.collection.query(
+                expr=f'conversation_id == "{conversation_id}"',
+                output_fields=["id", "id_echange_milvus", "conversation_id", "date_ajout", "date_maj"]
+            )
+
+            if not result or len(result) == 0:
+                return {
+                    "status": "error",
+                    "message": f"Aucune correspondance trouvée pour conversation_id: {conversation_id}"
+                }
+
+            self.logger.info(f"[Correspondance Echange BO-Milvus] ✓ Récupération terminée avec succès.")
+
+            return {
+                "status": "success",
+                "data": result[0]  # Retourne le premier (et normalement unique) résultat
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[Correspondance Echange BO-Milvus] Erreur Milvus lors de la récupération : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
+        except Exception as e:
+            self.logger.error(f"[Correspondance Echange BO-Milvus] Erreur de récupération : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
+
+    def delete_correspondance_by_conversation_id(self, conversation_id: str) -> Dict[str, Any]:
+        """
+        Supprime l'enregistrement de correspondance par conversation_id avec retry
+
+        Args:
+            conversation_id: L'identifiant de la conversation
+
+        Returns:
+            Dict avec status success ou error
+        """
+        model_config = ModelConfig()
+        max_retries = 3
+        retry_delay = 0.5  # 500ms
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not conversation_id:
+                return {
+                    "status": "error",
+                    "message": "Conversation ID requise pour la suppression."
+                }
+
+            # Retry logic
+            for attempt in range(max_retries):
+                try:
+                    self.logger.info(f"[Correspondance Echange BO-Milvus] Suppression pour conversation_id: {conversation_id} (tentative {attempt + 1}/{max_retries})")
+
+                    self.collection.delete(f'conversation_id == "{conversation_id}"')
+                    self.collection.flush()
+
+                    self.logger.info(f"[Correspondance Echange BO-Milvus] ✓ Suppression terminée avec succès.")
+
+                    return {
+                        "status": "success",
+                        "message": f"Correspondance supprimée pour conversation_id: {conversation_id}"
+                    }
+
+                except MilvusException as e:
+                    if attempt < max_retries - 1:  # Pas le dernier essai
+                        self.logger.warning(f"[Correspondance Echange BO-Milvus] Tentative {attempt + 1} échouée, retry dans {retry_delay}s : {e}")
+                        time.sleep(retry_delay)
+                    else:
+                        # Dernier essai, on lève l'exception
+                        self.logger.error(f"[Correspondance Echange BO-Milvus] Erreur Milvus après {max_retries} tentatives : {e}")
+                        return {
+                            "status": "error",
+                            "message": f"Erreur Milvus après {max_retries} tentatives: {str(e)}"
+                        }
+
+        except Exception as e:
+            self.logger.error(f"[Correspondance Echange BO-Milvus] Erreur de suppression : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
