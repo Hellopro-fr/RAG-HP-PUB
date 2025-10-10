@@ -31,7 +31,7 @@ class AnonymizeText:
     def normalize_text(self,text: str) -> str:
         processed_text = text
 
-        processed_text = re.sub(r'<[^>]+>', '', processed_text)
+        processed_text = re.sub(r'</?[a-zA-Z][a-zA-Z0-9_:-]*[^>]*>', '', processed_text)
 
         url_pattern = r'\b(?:https?|ftp):\/\/[^\s<>()]+(?:\([^\s<>()]*\)|[^\s`!()\[\]{};:\'".,<>?«»“”‘’])|\bwww\.[^\s<>()]+(?:\([^\s<>()]*\)|[^\s`!()\[\]{};:\'".,<>?«»“”‘’])'
         processed_text = re.sub(url_pattern, '', processed_text, flags=re.IGNORECASE)
