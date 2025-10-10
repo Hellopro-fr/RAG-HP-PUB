@@ -379,7 +379,7 @@ async def search_in_milvus_stream(request: SearchRequest):
             # token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
             token_generator = await asyncio.to_thread(llm_prompt, request, context_texts)
             # token_generator = llm_prompt(request, context_texts)
-            yield {"type": "llm_chunk" if not token_generator.error else "error", "payload": token_generator.llm_response}
+            yield {"type": "llm_chunk" if not token_generator.error else "error", "payload": token_generator.llm_response, "llm_response": token_generator.response}
             
             # for token in token_generator:
             #     yield {"type": "llm_chunk", "payload": token}
@@ -640,7 +640,7 @@ async def search_in_milvus_classique_stream(request: SearchRequest):
             # token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
             token_generator = await asyncio.to_thread(llm_prompt, request, context_texts)
             # token_generator = llm_prompt(request, context_texts)
-            yield {"type": "llm_chunk", "payload": token_generator.llm_response}
+            yield {"type": "llm_chunk" if not token_generator.error else "error", "payload": token_generator.llm_response, "llm_response": token_generator.response}
             
             # for token in token_generator:
             #     yield {"type": "llm_chunk", "payload": token}
