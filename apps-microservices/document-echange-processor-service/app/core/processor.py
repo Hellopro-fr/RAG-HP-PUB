@@ -93,8 +93,10 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         anonymized_text     = anonymize.anonymize_text(cleaned_text)
         text_to_embed_clean = anonymize.normalize_text(anonymized_text)
 
+        logger.info(f"\n\nTexte juste après anonymisation : {text_to_embed_clean}")
+
         # Suppression des info inutiles via llm
-    
+        return 
 
         try:
             chat_request = ChatRequest(
