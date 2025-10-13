@@ -9,6 +9,13 @@ from common_utils.cleaner.AnonymizeText import AnonymizeText
 from common_utils.ocr.DocumentTextExtractor import DocumentTextExtractor
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
+from vllm.transformers_utils.tokenizer import get_tokenizer
+
+
+TOKENIZER = get_tokenizer("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
+MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
+# On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
+SAFE_MAX_LEN = MAX_MODEL_LEN - 512
 
 
 PROMPT_NETTOYAGE = """
@@ -31,6 +38,45 @@ json
 {{ "contenu": "<texte nettoyé>" }}
 Si aucune information à exclure n’est présente, retourne le texte d’entrée exact dans le même format JSON.
 """
+
+def make_chat_request(prompt_template, content,temperature=0.7):
+    """
+    Crée une requête chat en ajustant automatiquement les tokens de sortie
+    selon la taille du prompt.
+
+    Args:
+        prompt_template (str): template du prompt avec placeholder {content}
+        content (str): texte à insérer dans le prompt
+
+    Returns:
+        ChatRequest prêt à être envoyé au modèle
+    """
+    
+    # Construire le texte complet du prompt
+    prompt_text = prompt_template.format(content=content)
+    prompt_json = json.dumps(prompt_text)
+    
+    # Compter les tokens du prompt
+    input_tokens = len(TOKENIZER.encode(prompt_json))
+    
+    # Calculer le nombre maximum de tokens possibles pour la sortie
+    remaining_tokens = SAFE_MAX_LEN - input_tokens
+    
+    # Sécurité : éviter les valeurs négatives ou trop hautes
+    max_output_tokens = max(0,remaining_tokens)
+    
+    # Message d’avertissement utile pour le débogage
+    print(f"[INFO] Prompt = {input_tokens} tokens | Output = {max_output_tokens} tokens disponibles.")
+    
+    # Construire la requête
+    chat_request = ChatRequest(
+        prompt=prompt_json,
+        max_tokens=max_output_tokens,
+        temperature=temperature,
+        enable_thinking=False
+    )
+    
+    return chat_request
 
 async def process_document_data_for_templating(document_data: dict, bdd: str = "milvus") -> dict:
     
@@ -97,13 +143,8 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
 
         # Suppression des info inutiles via llm
         try:
-            chat_request = ChatRequest(
-                prompt=json.dumps(PROMPT_NETTOYAGE.format(content=text_to_embed_clean)),
-                max_tokens=30000,
-                temperature=0.7,
-                enable_thinking=False
-            )
 
+            chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
             raw_text = await llm_client.get_llm_chat_response(chat_request)
 
             # Parsing de la réponse
