@@ -96,8 +96,6 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         logger.info(f"\n\nTexte juste après anonymisation : {text_to_embed_clean}")
 
         # Suppression des info inutiles via llm
-        return 
-
         try:
             chat_request = ChatRequest(
                 prompt=json.dumps(PROMPT_NETTOYAGE.format(content=text_to_embed_clean)),
@@ -116,16 +114,15 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
                 contenu = parsed_json.get("contenu")
                 if not contenu:
                     raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
+                else:
+                    text_to_embed_clean = contenu
             else:
                 raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
             # Extraction du texte nettoyé
-            text_to_embed_clean = contenu
 
         except Exception as e:
             logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
-            # On garde le texte nettoyé localement si le LLM échoue
-            text_to_embed_clean = text_to_embed_clean
 
         # Étape 3: Construire le message de sortie
         output_message = {
