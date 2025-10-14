@@ -157,6 +157,10 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         logger.info(f"\n\nTexte juste après extraction : {texts}")
 
         # Néttoyage
+        #Suppression des balises img | watermark + ses contenus
+        pattern = re.compile(r"<(img|watermark)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+        texts = re.sub(pattern, "", texts)
+
         cleaner      = CleanHTML(texts)
         cleaned_text = cleaner.clean()
 
