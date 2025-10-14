@@ -368,7 +368,41 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "status", "payload": f"Génération de la réponse avec le LLM..."}
             
             # Préparation du contexte pour le LLM
-            context_texts = [res['metadata']['entity']['text'] for res in final_results[:top_k_final]]
+            context_texts = []
+            for res in final_results[:top_k_final]:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                fournisseur = 'N/A'
+                title = 'N/A'
+                if source == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "siteweb_2":
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {fournisseur}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
+            # context_texts = [
+            #     f"""
+            #         Titre : {title}
+            #         Source : {source}
+            #         Fournisseur : {res['metadata']['entity']['fournisseur']}
+            #         Catégorie : {categorie}
+            #         Texte : {res['metadata']['entity']['text']}
+            #     """ for res in final_results[:top_k_final]
+            # ]
             context = "\n-----\n".join(context_texts)
             full_user_prompt = f"Contexte:\n{context}\n\nQuestion:\n{request.prompt}" # Template simplifié
 
@@ -523,8 +557,34 @@ async def search_in_milvus(request: SearchRequest) -> dict:
         # Reconstruire le contexte à partir des résultats finaux (potentiellement rerankés)
         context_texts = []
         for source, matches in all_results.items():
-            for match in matches:
-                context_texts.append(match['metadata']['entity']['text'])
+            # context_texts = []
+            for res in matches:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                fournisseur = 'N/A'
+                title = 'N/A'
+                if source == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "siteweb_2":
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {fournisseur}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
+            # for match in matches:
+            #     context_texts.append(match['metadata']['entity']['text'])
 
         llm_req = llm_prompt(request, context_texts)
 
@@ -632,7 +692,33 @@ async def search_in_milvus_classique_stream(request: SearchRequest):
         llm_duration = 0
         if request.action == 2 and final_results:
             yield {"type": "status", "payload": "Génération de la réponse avec le LLM..."}
-            context_texts = [res['metadata']['entity']['text'] for res in final_results]
+            # context_texts = [res['metadata']['entity']['text'] for res in final_results]
+            context_texts = []
+            for res in final_results:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                fournisseur = 'N/A'
+                title = 'N/A'
+                if source == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "siteweb_2":
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {fournisseur}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
             
             yield {"type": "llm_start"}
             start_llm_time = time.perf_counter()
@@ -718,7 +804,34 @@ async def search_in_milvus_classique(request: SearchRequest) -> dict:
         # --- ÉTAPE 3: PAS DE RERANKING ---
 
         # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
-        context_texts = [match['metadata']['entity']['text'] for matches in all_results.values() for match in matches]
+        # context_texts = [match['metadata']['entity']['text'] for matches in all_results.values() for match in matches]
+        context_texts = []
+        for matches in all_results.values():
+            for res in matches:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                fournisseur = 'N/A'
+                title = 'N/A'
+                if source == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "siteweb_2":
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {fournisseur}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
         
         # llm_req = llm_prompt(request, context_texts)
         llm_req = await asyncio.to_thread(llm_prompt, request, context_texts)
