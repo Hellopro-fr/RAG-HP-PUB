@@ -21,24 +21,26 @@ SAFE_MAX_LEN = MAX_MODEL_LEN - 512
 
 
 PROMPT_NETTOYAGE = """
-**Rôles** :
-1. **Expert en contenu B2B** : connaît les documents B2B (devis, catalogues, plaquettes, fiches techniques) et distingue le contenu métier/produit des mentions légales, CGV, disclaimers et informations marketing.
-2. **Nettoyeur / Formateur JSON** : s’assure que le résultat est strictement en JSON avec la clé "contenu", sans ajouter ni supprimer d’autres informations que celles à exclure.
-Instructions :
-Voici le texte initial à nettoyer :
+Tu es un expert en analyse de documents B2B (devis, catalogues, fiches techniques, plaquettes commerciales).
+**Tâche**:
+Nettoyer le texte en supprimant **uniquement et exactement** les 5 catégories d'informations listées ci-dessous. Ne modifie, n'ajoute ni ne supprime aucune autre information.
+**Texte à analyser** : 
 {content}
-Tu es **Expert en contenu B2B** et **JSON Formatter**.
-Ta tâche est de supprimer uniquement les informations suivantes :
-1. **Mentions légales** : informations administratives ou légales de l’entreprise (RCS, SIRET, TVA, capital, forme juridique, adresse du siège).
-2. **Conditions contractuelles** : clauses de contrats ou devis (CGV, CGA, CGU, réserve de propriété, conditions de paiement/livraison, mentions d’acceptation implicite).
-3. **Mentions de non-responsabilité / disclaimers** : limitations de responsabilité ou avertissements (modifications sans préavis, photos non contractuelles, informations données à titre indicatif).
-4. **Mentions réglementaires / légales spécifiques** : références à des lois, propriété intellectuelle, normes, certifications si elles apparaissent uniquement en footer ou bas de page.
-5. **Mentions marketing institutionnelles** : slogans, accroches, messages de notoriété ou labels branding.
-Ne pas ajouter ni supprimer d’autres informations.
-Retourne le texte strictement dans ce format JSON :
+**Informations à supprimer** :
+1. **Mentions légales administratives** : RCS, SIRET, SIREN, TVA intracommunautaire, capital social, forme juridique, adresse du siège social
+2. **Clauses contractuelles** : CGV, CGA, CGU, conditions de paiement, conditions de livraison, réserve de propriété, clauses d'acceptation
+3. **Disclaimers** : limitations de responsabilité, mentions "sous réserve de modifications", "photos non contractuelles", "informations à titre indicatif"
+4. **Mentions réglementaires isolées** : références légales, propriété intellectuelle, normes ou certifications situées uniquement en footer/bas de page
+5. **Slogans marketing institutionnels** : accroches génériques, messages de notoriété, labels de marque sans lien direct avec le produit/service
+**Règles strictes** :
+- Conserve tout le contenu métier : descriptions produits, caractéristiques techniques, prix, références, données opérationnelles
+- Si tu supprimes du texte, préserve la cohérence et la lisibilité du contenu restant
+- Ne reformule rien, ne corrige aucune faute, ne réorganise pas le texte
+**Format de sortie obligatoire** :
+Si des informations ont été supprimées  → retourne uniquement:
 json
-{{ "contenu": "<texte nettoyé>" }}
-Si aucune information à exclure n’est présente, retourne:
+{{ "contenu": "texte nettoyé ici" }}
+Si aucune information à supprimer n'est détectée  → retourne:
 json
 {{ "contenu": "ok" }}
 """
