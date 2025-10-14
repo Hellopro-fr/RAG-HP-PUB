@@ -5,7 +5,7 @@ WORKDIR /app
 # --- Étape 1: Définir le PYTHONPATH ---
 ENV PYTHONPATH=/app
 
-RUN apt-get update && apt-get install -y libreoffice git protobuf-compiler \
+RUN apt-get update && apt-get install -y libreoffice protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Copier les requirements du service
@@ -27,22 +27,5 @@ RUN pip install --no-cache-dir -e ./libs/grpc-stubs
 COPY apps-microservices/document-echange-processor-service/app/ \
      /app/document_echange_processor_service
 
-# # Installer docext depuis PyPI (optionnel)
-# RUN uv pip install docext
-
-# Installer docext depuis la source
-RUN git clone https://github.com/nanonets/docext.git
-WORKDIR /app/docext
-RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
-RUN pip install -e .
-
-WORKDIR /app
-# --- Étape 4: Copier le script entrypoint ---
-COPY apps-microservices/document-echange-processor-service/entrypoint.sh .
-RUN chmod +x entrypoint.sh
-
-# --- Étape 5: Exposer le port du serveur docext ---
-EXPOSE 8559
-
 # --- Étape 6: Définir le point d'entrée ---
-CMD ["/app/entrypoint.sh"]
+CMD ["python", "-u" ,"-m" ,"document_echange_processor_service.main"]

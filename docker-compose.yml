@@ -365,20 +365,15 @@ services:
     deploy:
       replicas: 4
 
-  document-echange-processor-service:
+  ocr-service:
     build:
       context: .
-      dockerfile: ./apps-microservices/document-echange-processor-service/Dockerfile
+      dockerfile: ./apps-microservices/ocr-service/Dockerfile
     restart: unless-stopped
     ports:
       - "8559:8559"
-    volumes:
-      - ./apps-microservices/document-echange-processor-service/app:/app/document_echange_processor_service:rw
     environment:
-      - LLM_SERVICE_URL=llm-service:50051
       - VLLM_DEVICE=cuda
-    depends_on:
-      - llm-service
     env_file:
       - .env
     networks:
@@ -390,6 +385,22 @@ services:
             - driver: nvidia
               device_ids: ['1']
               capabilities: [gpu]
+  document-echange-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/document-echange-processor-service/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./apps-microservices/document-echange-processor-service/app:/app/document_echange_processor_service:rw
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    env_file:
+      - .env
+    networks:
+      - services-net
+    depends_on:
+      - ocr-service
+      - llm-service
 
   template-llm-service:
     build:
