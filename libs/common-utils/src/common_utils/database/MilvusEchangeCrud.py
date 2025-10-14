@@ -233,17 +233,22 @@ class MilvusEchangeCrud:
 
             self.logger.info(f"[{model_key}][Echange] Suppression réussie. Réinsertion en cours...")
 
-            # 5. Réinsérer les nouvelles données
+            # 5. Ajouter date_maj à tous les échanges avant réinsertion
+            date_maj = datetime.now().isoformat()
+            for echange in echanges:
+                echange["date_maj"] = date_maj
+
+            # 6. Réinsérer les nouvelles données
             insert_result = self.insert_echange(echanges)
 
             if insert_result and insert_result.get("status") == "success":
-                # 6. Réinsérer dans la table de correspondance
+                # 7. Réinsérer dans la table de correspondance
                 data_bo_milvus = [{
                     "embedding": [0.0]*1024,
                     "id_echange_milvus": insert_result.get("ids", ""),
                     "conversation_id": conversation_id,
                     "date_ajout": datetime.now().isoformat(),
-                    "date_maj": ""
+                    "date_maj": datetime.now().isoformat()
                 }]
                 correspondance_echange.insert_correspondance_echange(data_bo_milvus)
 
