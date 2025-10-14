@@ -5,7 +5,7 @@ WORKDIR /app
 # --- Étape 1: Définir le PYTHONPATH ---
 ENV PYTHONPATH=/app
 
-RUN apt-get update && apt-get install -y libreoffice git protobuf-compiler netcat-traditional \
+RUN apt-get update && apt-get install -y libreoffice git protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Copier les requirements du service
