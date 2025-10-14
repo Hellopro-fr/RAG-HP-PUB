@@ -38,7 +38,9 @@ Ne pas ajouter ni supprimer d’autres informations.
 Retourne le texte strictement dans ce format JSON :
 json
 {{ "contenu": "<texte nettoyé>" }}
-Si aucune information à exclure n’est présente, retourne le texte d’entrée exact dans le même format JSON.
+Si aucune information à exclure n’est présente, retourne:
+json
+{{ "contenu": "ok" }}
 """
 def _run_ocr_sync(document_path: str):
     # L'instance de DocumentTextExtractor doit être créée ICI,
@@ -177,7 +179,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
                 contenu = parsed_json.get("contenu")
                 if not contenu:
                     raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
-                else:
+                elif contenu != "ok":
                     text_to_embed_clean = contenu
             else:
                 raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
