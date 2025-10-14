@@ -3,14 +3,9 @@ import asyncio
 import aio_pika
 import aiormq
 from document_echange_processor_service.messaging.publisher import Publisher
-from document_echange_processor_service.messaging.consumer import Consumer  # consumer adapté à aio-pika
-
+from document_echange_processor_service.messaging.consumer import Consumer
 
 async def main():
-    """
-    Point d'entrée principal asynchrone du service.
-    Met en place la connexion et lance les composants.
-    """
     rabbitmq_url = os.environ.get("RABBITMQ_URL")
     if not rabbitmq_url:
         print("❌ ERREUR: La variable d'environnement RABBITMQ_URL n'est pas définie.")
@@ -20,41 +15,43 @@ async def main():
     
     os.makedirs('recovery_data', exist_ok=True)
 
+    # Récupérer la boucle d'événements une seule fois
     loop = asyncio.get_event_loop()
     
     while True:
         try:
-            # 1️⃣ Connexion robuste avec heartbeat élevé (10 minutes)
             connection = await aio_pika.connect_robust(
                 rabbitmq_url,
                 loop=loop,
-                heartbeat=600
+                heartbeat=600 # 10 minutes, c'est bien pour des tâches longues
             )
             print("✅ Document-Processor: Connecté à RabbitMQ.")
             
             async with connection:
-                # 2️⃣ Instanciation du publisher et du consumer asynchrone
                 publisher = Publisher(connection)
                 consumer = Consumer(connection, publisher)
 
-                # 3️⃣ Lancement du consumer
-                await consumer.start_consuming()
+                # Démarrer le consumer comme une tâche
+                consumer_task = asyncio.create_task(consumer.start_consuming())
 
-                # 4️⃣ Maintenir le service vivant
-                await asyncio.Future()  # bloquant jusqu'à arrêt
+                # Attendre que le consumer (ou la connexion) se termine.
+                # Cela permet de réagir si le consumer s'arrête pour une raison interne.
+                await consumer_task
+                
+                print("⚠️ Document-Processor: Le consommateur s'est arrêté. Tentative de redémarrage...")
 
         except (aiormq.exceptions.AMQPConnectionError, aiormq.exceptions.ChannelInvalidStateError) as e:
             print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
             await asyncio.sleep(10)
         except KeyboardInterrupt:
             print("\n🛑 Document-Processor: Arrêt demandé.")
+            if 'consumer' in locals() and consumer.executor:
+                consumer.executor.shutdown(wait=True, cancel_futures=True) # cancel_futures pour les processus
             break
         except Exception as e:
             print(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
+            if 'consumer' in locals() and consumer.executor:
+                consumer.executor.shutdown(wait=True, cancel_futures=True)
             await asyncio.sleep(10)
     
     print("✅ Document-Processor: Service arrêté.")
-
-
-if __name__ == '__main__':
-    asyncio.run(main())

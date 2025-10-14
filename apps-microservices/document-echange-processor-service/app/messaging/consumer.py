@@ -2,7 +2,7 @@
 import aio_pika
 import json
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
@@ -15,7 +15,7 @@ class Consumer:
     def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
         self.connection = connection
         self.publisher = publisher
-        self.executor = ThreadPoolExecutor()
+        self.executor = ProcessPoolExecutor(max_workers=1)
         
         self.exchange_name = 'data_exchange_document'
         self.routing_key = 'new_data.document'
@@ -70,7 +70,7 @@ class Consumer:
             # output_message = await loop.run_in_executor(
             #     self.executor, process_document_data_for_templating, document_data, bdd
             # )
-            output_message = await process_document_data_for_templating(document_data, bdd)
+            output_message = await process_document_data_for_templating(document_data, bdd, self.executor)
             
             routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
             output_message['routing_key'] = routing_key
