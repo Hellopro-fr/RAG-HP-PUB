@@ -3,7 +3,7 @@ import re
 import logging
 import os
 import asyncio
-from concurrent.futures import ProcessPoolExecutor 
+from concurrent.futures import ProcessPoolExecutor , ThreadPoolExecutor
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
@@ -85,7 +85,7 @@ def make_chat_request(prompt_template, content,temperature=0.7):
     
     return chat_request
 
-async def process_document_data_for_templating(document_data: dict, bdd: str = "milvus" , executor: ProcessPoolExecutor  = None) -> dict:
+async def process_document_data_for_templating(document_data: dict, bdd: str = "milvus" , executor: ProcessPoolExecutor | ThreadPoolExecutor = None) -> dict:
     
     # Étape 0: Initialisation du message de sortie
     output_message = {}
@@ -140,9 +140,9 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
             # Fallback si aucun executor n'est fourni (moins recommandé pour ce cas)
             # extractor = DocumentTextExtractor() 
             # results = extractor.process_single_file(document_data.get("document"))
-            error_msg = ("CRITIQUE: Aucun ProcessPoolExecutor n'a été fourni pour l'OCR basé sur GPU. "
+            error_msg = ("CRITIQUE: Aucun ThreadPoolExecutor n'a été fourni pour l'OCR basé sur GPU. "
                          "L'exécution synchrone bloquerait l'event loop. "
-                         "Veuillez configurer un ProcessPoolExecutor dans le Consumer.")
+                         "Veuillez configurer un ThreadPoolExecutor dans le Consumer.")
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 

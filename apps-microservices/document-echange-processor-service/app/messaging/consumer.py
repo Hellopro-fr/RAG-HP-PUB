@@ -1,8 +1,9 @@
 
 import aio_pika
+import os
 import json
 import asyncio
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
@@ -15,7 +16,8 @@ class Consumer:
     def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
         self.connection = connection
         self.publisher = publisher
-        self.executor = ProcessPoolExecutor(max_workers=1)
+        # self.executor = ProcessPoolExecutor(max_workers=1)
+        self.executor = ThreadPoolExecutor(max_workers=os.cpu_count() * 2)
         
         self.exchange_name = 'data_exchange_document'
         self.routing_key = 'new_data.document'
