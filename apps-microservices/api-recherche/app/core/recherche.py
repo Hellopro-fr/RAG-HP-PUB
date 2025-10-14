@@ -368,8 +368,39 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "status", "payload": f"Génération de la réponse avec le LLM..."}
             
             # Préparation du contexte pour le LLM
-            context_texts = [res['metadata']['entity']['text'] for res in final_results[:top_k_final]]
+            context_texts = []
+            for res in final_results[:top_k_final]:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                title = res["metadata"]["entity"]["id_produit"] if res["metadata"]["entity"]["id_produit"] else 'N/A'
+                if res["source"] == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                elif res["source"] == "siteweb_2":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                elif res["source"] == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif res["source"] == "echanges":
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {res['metadata']['entity']['fournisseur']}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
+            # context_texts = [
+            #     f"""
+            #         Titre : {title}
+            #         Source : {source}
+            #         Fournisseur : {res['metadata']['entity']['fournisseur']}
+            #         Catégorie : {categorie}
+            #         Texte : {res['metadata']['entity']['text']}
+            #     """ for res in final_results[:top_k_final]
+            # ]
             context = "\n-----\n".join(context_texts)
+            logger.info(f"context_texts : {context_texts[:4]}")
             full_user_prompt = f"Contexte:\n{context}\n\nQuestion:\n{request.prompt}" # Template simplifié
 
             yield {"type": "llm_start"}
