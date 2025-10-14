@@ -372,21 +372,25 @@ async def search_in_milvus_stream(request: SearchRequest):
             for res in final_results[:top_k_final]:
                 categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
                 source = res["source"]
+                fournisseur = 'N/A'
                 title = res["metadata"]["entity"]["id_produit"] if res["metadata"]["entity"]["id_produit"] else 'N/A'
                 if source == "produits_3":
                     title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
                     source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
                 elif source == "siteweb_2":
                     title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["url"] else title
                     source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
                 elif source == "devis":
                     title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
                 elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
                     title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
                 context_texts.append(f"""
                     Titre : {title}
                     Source : {source}
-                    Fournisseur : {res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] and source != "devis" else 'N/A'}
+                    Fournisseur : {fournisseur}
                     Catégorie : {categorie}
                     Texte : {res['metadata']['entity']['text']}
                 """)
