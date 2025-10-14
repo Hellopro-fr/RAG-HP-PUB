@@ -386,7 +386,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                 context_texts.append(f"""
                     Titre : {title}
                     Source : {source}
-                    Fournisseur : {res['metadata']['entity']['fournisseur']}
+                    Fournisseur : {res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'}
                     Catégorie : {categorie}
                     Texte : {res['metadata']['entity']['text']}
                 """)
