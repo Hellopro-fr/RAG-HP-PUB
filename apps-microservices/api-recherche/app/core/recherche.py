@@ -373,20 +373,20 @@ async def search_in_milvus_stream(request: SearchRequest):
                 categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
                 source = res["source"]
                 title = res["metadata"]["entity"]["id_produit"] if res["metadata"]["entity"]["id_produit"] else 'N/A'
-                if res["source"] == "produits_3":
+                if source == "produits_3":
                     title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
                     source = "Produits"
-                elif res["source"] == "siteweb_2":
+                elif source == "siteweb_2":
                     title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["url"] else title
                     source = "Siteweb"
-                elif res["source"] == "devis":
+                elif source == "devis":
                     title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
-                elif res["source"] == "echanges":
+                elif source == "echanges":
                     title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
                 context_texts.append(f"""
                     Titre : {title}
                     Source : {source}
-                    Fournisseur : {res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'}
+                    Fournisseur : {res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] and source != "devis" else 'N/A'}
                     Catégorie : {categorie}
                     Texte : {res['metadata']['entity']['text']}
                 """)
