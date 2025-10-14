@@ -379,7 +379,7 @@ async def search_in_milvus_stream(request: SearchRequest):
                     source = "Produits"
                     fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
                 elif source == "siteweb_2":
-                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["url"] else title
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
                     source = "Siteweb"
                     fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
                 elif source == "devis":
