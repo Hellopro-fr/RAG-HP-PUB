@@ -21,6 +21,14 @@ async def embed_input_data(input_data: dict, **kwargs) -> dict:
     if not datas:
         raise ValueError("Le champ 'data' est vide ou manquant dans le message.")
 
+    # Log de diagnostic pour voir ce qui arrive
+    logging.info(f"Données reçues pour embedding - Collection: {collection}")
+    logging.info(f"Clés présentes dans 'data': {list(datas.keys())}")
+    text_content = datas.get("text", "")
+    logging.info(f"Longueur du champ 'text': {len(text_content) if text_content else 0} caractères")
+    if not text_content:
+        logging.warning(f"⚠️ Le champ 'text' est vide ou absent. Données complètes: {datas}")
+
     try:
         result_embedding = await embedding_service.embed_data_clean(datas)
         
