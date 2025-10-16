@@ -22,20 +22,21 @@ async def embed_input_data(input_data: dict, **kwargs) -> dict:
         raise ValueError("Le champ 'data' est vide ou manquant dans le message.")
 
     # Log de diagnostic pour voir ce qui arrive
-    logging.info(f"Données reçues pour embedding - Collection: {collection}")
-    logging.info(f"Clés présentes dans 'data': {list(datas.keys())}")
+    print(f"🔍 Données reçues pour embedding - Collection: {collection}")
+    print(f"🔍 Clés présentes dans 'data': {list(datas.keys())}")
     text_content = datas.get("text", "")
-    logging.info(f"Longueur du champ 'text': {len(text_content) if text_content else 0} caractères")
+    print(f"🔍 Longueur du champ 'text': {len(text_content) if text_content else 0} caractères")
     if not text_content:
-        logging.warning(f"⚠️ Le champ 'text' est vide ou absent. Données complètes: {datas}")
+        print(f"⚠️ Le champ 'text' est vide ou absent. Données complètes: {datas}")
 
     try:
         result_embedding = await embedding_service.embed_data_clean(datas)
-        
+
         if not result_embedding:
             # Ceci est une erreur de données, pas une erreur transitoire.
             # Le message ne devrait pas être réessayé.
-            raise ValueError("Aucun contenu textuel valide trouvé pour l'embedding après nettoyage.")
+            error_msg = f"Aucun contenu textuel valide trouvé pour l'embedding après nettoyage. Clés reçues: {list(datas.keys())}, text présent: {'text' in datas}, longueur: {len(text_content)}"
+            raise ValueError(error_msg)
 
         output_message = {
             "collection": collection,
