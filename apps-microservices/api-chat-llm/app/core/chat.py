@@ -83,7 +83,7 @@ def llm_prompt_chatgpt(request: ChatRequest) -> str:
     # Appel chat completion avec Chatgpt , model fixe pour l'instant
     openai_client = get_openai_client()
     tab_response = openai_client.chat.completions.create(
-        model="gpt-4.1-2025-04-14",
+        model="gpt-4o-2024-11-20",
         messages=[{"role": "user", "content": request.prompt}],
         temperature=float(request.temperature),
         stream=False
