@@ -19,7 +19,8 @@ $(function () {
     templatePrompt: $("#llmPrompt").val(),
     useReranker: true,
     rerankerModel: "BAAI/bge-reranker-v2-m3",
-    selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
+    // selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
+    selectedModel: "qwen/qwen3-coder", // Mis à jour avec la nouvelle valeur par défaut
     isFilterOpen: true,
     isLlmEnabled: false,
     isSidebarOpen: false,
@@ -42,7 +43,8 @@ $(function () {
     searchMetrics: { totalResults: 0, searchTime: 0, sourcesUsed: [] },
     expandedSections: { sources: true, categories: false, insights: true },
     copiedContent: "",
-    selectedCategoriesRubrique: {}
+    selectedCategoriesRubrique: {},
+    typeRecherche: 1
   };
 
   // DOM elements
@@ -87,7 +89,8 @@ $(function () {
     mainContentWrapper: $("#mainContentWrapper"),
     categorieFilter: $("#categorieDropdown"),
     fournisseurFilter: $("#fournisseurDropdown"),
-    btnTranscription: $("#btn-transcription")
+    btnTranscription: $("#btn-transcription"),
+    typeRecherche: $("input[name='type-recherche']")
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -902,6 +905,12 @@ $(function () {
         }).get();
     });
 
+    elements.typeRecherche.on("change", function(e) {
+      e.preventDefault();
+      state.typeRecherche = $(this).val();
+      updateSearchButtons()
+    });
+
 
     // Mise à jour pour correspondre aux noms de sources de `index3.html`
     ["produits", "devis", "siteweb", "echanges"].forEach((source) => {
@@ -1054,14 +1063,25 @@ $(function () {
   }
 
   function updateSearchButtons() {
-    const hasQuery = state.searchQuery.trim().length > 0;
-    const isDisabled = state.isSearching || !hasQuery;
-    elements.searchBtn
-      .add(elements.searchBtnDesktop)
-      .prop("disabled", isDisabled);
-    elements.searchBtnText.text(
-      state.isSearching ? "Recherche..." : "Rechercher"
-    );
+    if (state.typeRecherche == 1) {
+      const hasQuery = state.searchQuery.trim().length > 0;
+      const isDisabled = state.isSearching || !hasQuery;
+      elements.searchBtn
+        .add(elements.searchBtnDesktop)
+        .prop("disabled", isDisabled);
+      elements.searchBtnText.text(
+        state.isSearching ? "Recherche..." : "Rechercher"
+      );
+    } else {
+        const hasQuery = true;
+        const isDisabled = state.isSearching || !hasQuery;
+        elements.searchBtn
+          .add(elements.searchBtnDesktop)
+          .prop("disabled", isDisabled);
+        elements.searchBtnText.text(
+          state.isSearching ? "Recherche..." : "Rechercher"
+        );
+    }
   }
 
   function updateUI() {
@@ -1220,8 +1240,10 @@ $(function () {
         title = meta.lead_id || title;
       case "echanges":
         title = meta.conversation_id || title;
-      case "siteweb":
+      case "siteweb_2":
+      // case "siteweb":
         title = meta.url || title;
+        result.source = "siteweb"
       default:
         break;
     }
@@ -1266,7 +1288,14 @@ $(function () {
    * Remplace la fonction de recherche par le système WebSocket.
    */
   async function executeSearch() {
-    if (!state.searchQuery.trim() || state.isSearching) return;
+    console.log(state.typeRecherche)
+    if (
+      state.typeRecherche == 1
+      && (
+        !state.searchQuery.trim() 
+        || state.isSearching 
+      )
+    ) return;
 
     if(state.isLlmEnabled) {
       if(elements.templatePrompt.val().trim() === "") {
@@ -1314,7 +1343,9 @@ $(function () {
 
     socket.onopen = () => {
       console.log('WebSocket connecté.');
-
+      if (elements.llmResponseText.hasClass('text-custom-rouge')) {
+        elements.llmResponseText.removeClass('text-custom-rouge');
+      }
       // --- DÉBUT DE LA MODIFICATION : Construction de la requête conforme au schéma ---
 
       // 1. Construire la liste `source` au format `List[SourcesFiltre]`
@@ -1384,6 +1415,7 @@ $(function () {
               if (fournisseurSiteweb.length > 0) {
                 filtreSpecifique.id_fournisseur = fournisseurSiteweb;
               }
+              sourceName = 'siteweb_2';
               break;
             case 'echanges':
               const fournisseurMcf = $("#fournisseurMcf").val() || [];
@@ -1441,7 +1473,8 @@ $(function () {
           use_reranker: state.useReranker,
           reranker_model: state.rerankerModel,
           rrf: GetURLParameter("rrf") == 1
-        }
+        },
+        type: $("input[name='type-recherche']:checked").val()
       };
 
       // --- FIN DE LA MODIFICATION ---
@@ -1462,6 +1495,30 @@ $(function () {
           break;
         case 'error':
           console.error(`[WS Error] ${data.payload}`);
+          if (!state.isSidebarOpen) {
+            state.isSidebarOpen = true;
+            updateUI();
+          }
+          // Cacher l'indicateur de chargement
+          elements.llmAnalyzeState.hide();
+          // Afficher le conteneur de réponse
+          elements.llmResponseContainer.show();
+          // Créer un élément HTML pour l'erreur et l'afficher
+          const errorHtml = `<div class="llm-error">${data.payload}</div>`;
+          elements.llmResponseText.html(errorHtml);
+          state.llmResponse = data.payload;
+          updateResultsSidebar();
+          if (!elements.llmResponseText.hasClass('text-custom-rouge')) {
+            elements.llmResponseText.addClass('text-custom-rouge');
+          }
+          show_toast(generate_error_message("Une erreur s'est produite"), "error");
+          $('html, body').animate({
+            scrollTop: $('body').offset().top
+          }, 800);
+          // La recherche est terminée à cause de l'erreur
+          state.isSearching = false;
+          updateUI(); // Mettre à jour les boutons, etc.
+          socket.close();
           break;
         case 'initial_results':
           console.log("Réception des résultats initiaux (pré-reranking).");
@@ -1577,7 +1634,7 @@ $(function () {
     elements.searchResultsList.empty();
     state.copiedContent = "";
     state.searchResults.forEach((result) => {
-      const relevanceHtml = getRelevanceCard(result.confidence / 100);
+      const relevanceHtml = (state.typeRecherche == 1) ? getRelevanceCard(result.confidence / 100) : "";
       const sourceBadgeHtml = getSourceBadge(result.source);
       const class_supplier = result.source == "devis" ? "hidden" : ""
 
@@ -1668,7 +1725,10 @@ $(document).on('click', '#copier-texte', function() {
   let transcriptionSilenceTimeoutId;
 
   const TRANSCRIPTION_AUTH_TOKEN = "h3ll0pro2k25-stt356";
-  const TRANSCRIPTION_WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/google/transcription?token=${TRANSCRIPTION_AUTH_TOKEN}`;
+  let TRANSCRIPTION_WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/google/transcription?token=${TRANSCRIPTION_AUTH_TOKEN}`;
+  if (GetURLParameter("server") == "chatgpt") {
+    TRANSCRIPTION_WEBSOCKET_URL = `wss://api.hellopro.eu/transcription-service/ws/openai/transcription?token=${TRANSCRIPTION_AUTH_TOKEN}`;
+  }
 
   const transcriptionStartColor = { r: 51, g: 83, b: 255, a: 1 };
   const transcriptionEndColor = { r: 253, g: 187, b: 155, a: 1 };
@@ -1799,7 +1859,7 @@ $(document).on('click', '#copier-texte', function() {
       transcriptionSocket.send(JSON.stringify({
         config: {
           sampleRate: transcriptionAudioContext.sampleRate,
-          languageCode: 'fr-FR',
+          languageCode: (GetURLParameter("server") == "chatgpt") ? 'fr' : 'fr-FR',
           enablePunctuation: true,
           interimResults: true
         }

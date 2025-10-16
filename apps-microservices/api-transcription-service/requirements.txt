@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
-websockets
+websockets==12.0
 google-cloud-speech
 pydantic-settings
 pytest
+openai

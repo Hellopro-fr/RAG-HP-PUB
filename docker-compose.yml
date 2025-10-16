@@ -13,14 +13,27 @@ services:
   vllm-server:
     image: vllm/vllm-openai:latest
     command: >
-      --model Qwen/Qwen3-14B-AWQ
-      --quantization awq_marlin
+      --model ${MODEL_NAME}
       --trust-remote-code
-      --max-model-len 4096
-      --gpu-memory-utilization 0.90
-      --max-num-seqs 256
+      --gpu-memory-utilization 0.95
+      --max-num-seqs 64
+      --max-num-batched-tokens 8192
+      --enable-chunked-prefill
+      --enable-prefix-caching
+      --disable-log-stats
+      --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
+      --swap-space 4
+      --max-model-len 32768
+      --enforce-eager
+      --dtype auto
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 24 # Wait up to 4 minutes for the model to load
+      start_period: 30s
     deploy:
       resources:
         reservations:
@@ -29,6 +42,7 @@ services:
               device_ids: ['0']
               # count: all
               capabilities: [gpu]
+    restart: unless-stopped
     volumes:
       - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
     networks:
@@ -40,6 +54,12 @@ services:
     ports:
       - "8001:8001" # Port gRPC de Triton
       - "8002:8002" # Port de métriques
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v2/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 24 # Wait up to 4 minutes for models to load
+      start_period: 30s
     deploy:
       resources:
         reservations:
@@ -53,16 +73,59 @@ services:
     networks:
       - services-net
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
+    container_name: elasticsearch
+    profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - http.host=0.0.0.0
+    ports:
+      # Mappe le port sur toutes les interfaces réseau de l'hôte
+      # Assurez-vous que le pare-feu de votre Host VM autorise les connexions sur le port 9200
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - services-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.1.1
+    container_name: kibana
+    profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - services-net
+
   # --- Services Applicatifs (Clients) ---
 
   llm-service:
     build:
       context: .
       dockerfile: ./apps-microservices/llm-service/Dockerfile
+      # - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
     environment:
-      - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
-    depends_on:
-      - vllm-server
+      - VLLM_API_URL=http://34.34.5.41:8000/v1/chat/completions
+      - MODEL_NAME=${MODEL_NAME}
+    env_file:
+      - .env
+    # depends_on:
+    #   vllm-server:
+    #     condition: service_healthy
     networks:
       - services-net
 
@@ -74,7 +137,8 @@ services:
     environment:
       - TRITON_URL=triton-server:8001
     depends_on:
-      - triton-server
+      triton-server:
+        condition: service_healthy
     networks:
       - services-net
 
@@ -86,7 +150,8 @@ services:
     environment:
       - TRITON_URL=triton-server:8001
     depends_on:
-      - triton-server
+      triton-server:
+        condition: service_healthy
     networks:
       - services-net
 
@@ -133,11 +198,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-recherche/Dockerfile
-    container_name: api-recherche-service
     restart: unless-stopped
-    # TODO: à supprimer en PROD
-    # volumes:
-    #   - ./apps-microservices/api-recherche:/app:rw
     ports:
       - "8510:8510"
     environment:
@@ -152,13 +213,22 @@ services:
       - database-recherche-service
     env_file:
       - .env
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    networks:
+      - services-net
+
+  api-embedding-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-embedding-service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8555:8555"
+    environment:
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+    # depends_on:
+    #   - embedding-model-service
+    env_file:
+      - .env
     networks:
       - services-net
 
@@ -264,7 +334,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 8
 
   product-processor-service:
     build:
@@ -299,43 +369,62 @@ services:
     deploy:
       replicas: 4
 
-  template-llm-service:
+  ocr-service:
     build:
       context: .
-      dockerfile: ./apps-microservices/template-llm-service/Dockerfile
-    container_name: template-llm-service
+      dockerfile: ./apps-microservices/ocr-service/Dockerfile
     restart: unless-stopped
-    volumes:
-      - ./apps-microservices/template-llm-service/app:/app/template_llm_service:rw
+    ports:
+      - "8559:8559"
+    environment:
+      - VLLM_DEVICE=cuda
     env_file:
       - .env
-    
-    # SOLUTION PRINCIPALE : Mémoire partagée pour NCCL
-    shm_size: '16gb'  # Essentiel pour la communication inter-GPU
-    
-    # Variables d'environnement pour optimiser NCCL et multi-GPU
-    environment:
-      - NCCL_DEBUG=INFO           # Debug NCCL pour diagnostiquer les problèmes
-      - NCCL_SHM_DISABLE=0        # Active la mémoire partagée NCCL
-      - NCCL_P2P_DISABLE=0        # Active la communication P2P entre GPUs
-      - NCCL_IB_DISABLE=1         # Désactive InfiniBand (pas nécessaire)
-      - NCCL_SOCKET_IFNAME=eth0   # Interface réseau pour NCCL
-      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512  # Optimise l'allocateur CUDA
-      - TORCH_NCCL_BLOCKING_WAIT=1  # Évite les timeouts NCCL
-    
-    # Configuration GPU optimisée
+    networks:
+      - services-net
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              device_ids: ['1']
               capabilities: [gpu]
-    
-    # Optimisations système pour les performances
-    ulimits:
-      memlock: -1      # Pas de limite sur la mémoire verrouillée
-      stack: 67108864  # Stack plus grande pour les threads CUDA
+  document-echange-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/document-echange-processor-service/Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ./apps-microservices/document-echange-processor-service/app:/app/document_echange_processor_service:rw
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    env_file:
+      - .env
+    networks:
+      - services-net
+    depends_on:
+      - ocr-service
+      - llm-service
+
+  template-llm-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/template-llm-service/Dockerfile
+    # container_name: template-llm-service
+    restart: unless-stopped
+    volumes:
+      - ./apps-microservices/template-llm-service/app:/app/template_llm_service:rw
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    depends_on:
+      - llm-service
+    networks:
+      - services-net
+
               
   embedding-service:
     build:
@@ -375,7 +464,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 12
+      replicas: 4
 
   echange-database-qdrant-service:
     build:
@@ -408,7 +497,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 20
+      replicas: 4
 
   categories-database-qdrant-service:
     build:
@@ -425,6 +514,17 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/fournisseurs-database-qdrant-service/Dockerfile
+    # container_name: fournisseurs-database-qdrant-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    deploy:
+      replicas: 4
+  
+  document-database-qdrant-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/document-database-qdrant-service/Dockerfile
     # container_name: fournisseurs-database-qdrant-service
     restart: unless-stopped
     env_file:
@@ -468,34 +568,104 @@ services:
       dockerfile: ./apps-microservices/optimize-service/Dockerfile
     container_name: optimize-service
     restart: unless-stopped
-    # TODO: à supprimer en PROD
-    volumes:
-      - ./apps-microservices/optimize-service:/app:rw
+    # volumes:
+    #   - ./apps-microservices/optimize-service:/app:rw
     ports:
       - "8563:8563"
     env_file:
       - .env
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['1']
-              # count: all
-              capabilities: [gpu]
-    
-  api-pdf-to-text:
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    depends_on:
+      - llm-service
+    networks:
+      - services-net
+
+  dlq-archiver-host:
     build:
       context: .
-      dockerfile: ./apps-microservices/api-pdf-to-text/Dockerfile
-    container_name: api-pdf-to-text
+      dockerfile: tools/Dockerfile
+    profiles: ["disabled"]
     restart: unless-stopped
-    ports:
-      - "8569:8569"
     env_file:
       - .env
+    environment:
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - services-net
+
+  dlq-archiver-client:
+    build:
+      context: .
+      dockerfile: tools/Dockerfile
+    profiles: ["disabled"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - services-net
+  
+  dlq-requeuer-tool:
+    build:
+      context: .
+      dockerfile: tools/Dockerfile
+    profiles: ["disabled"]
+    env_file:
+      - .env
+    environment:
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - services-net
+    command: tail -f /dev/null
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command: --config.file=/etc/prometheus/prometheus.yml
+    networks:
+      - services-net
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana  # Persist Grafana data
+      - ./grafana/dashboards:/var/lib/grafana/dashboards  # Mount custom dashboards
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards  # Auto-provision dashboards
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources  # Auto-provision data sources
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    depends_on:
+      - prometheus
+    networks:
+      - services-net
     
 networks:
   services-net:
     driver: bridge
     
+volumes:
+  elasticsearch-data:
+    driver: local
+  grafana-storage:

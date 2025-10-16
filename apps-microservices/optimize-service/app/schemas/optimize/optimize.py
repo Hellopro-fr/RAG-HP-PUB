@@ -33,7 +33,7 @@ class BatchOptimResponse(BaseModel):
         ..., 
         description="Liste des résultats d'optimisation"
     )
-    metadata: BatchMetadata = Field(
-        ..., 
-        description="Métadonnées sur le traitement"
-    )
+    # metadata: BatchMetadata = Field(
+    #     ..., 
+    #     description="Métadonnées sur le traitement"
+    # )

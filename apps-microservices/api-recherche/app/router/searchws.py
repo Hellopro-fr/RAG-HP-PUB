@@ -5,11 +5,15 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 # from app.core.searchws import search_in_milvus_reranker, search_in_milvus_stream  # We will create this new streaming function
 from app.schemas.search import SearchRequestWs as SearchRequest
-from app.core.recherche import search_in_milvus_stream as search
+from app.core.recherche import search_in_milvus_stream as search, search_in_milvus_classique_stream as search_classique
 from app.core.ConnexionManager import manager
+import os
+
+log_format = "%(asctime)s - %(levelname)s - [WORKER_PID:%(process)d] - %(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format)
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 @router.websocket("/ws/search")
 async def websocket_search(websocket: WebSocket):
@@ -23,24 +27,15 @@ async def websocket_search(websocket: WebSocket):
     # await websocket.accept()
     logger.info("WebSocket connection accepted.")
     try:
-        # Wait for the client to send the search request
         data = await websocket.receive_text()
         request_data = json.loads(data)
-        
-        # Validate the request data using our Pydantic model
         search_request = SearchRequest(**request_data)
-        
-        # Call the streaming search function and send updates
-        # if search_request.options.rrf:
-        #     async for update in search_in_milvus_reranker(search_request):
-        #         await websocket.send_json(update)
-        # # elif search_request.option.grpc:
-        # else:
-        async for update in search(search_request):
-            await websocket.send_json(update)
-        # else:
-        #     async for update in search_in_milvus_stream(search_request):
-        #         await websocket.send_json(update)
+        if search_request.type and search_request.type == 2:
+            async for update in search_classique(search_request):
+                await websocket.send_json(update)
+        else:
+            async for update in search(search_request):
+                await websocket.send_json(update)
 
     except WebSocketDisconnect:
         logger.warning(f"Client {websocket.client} disconnected.")

@@ -61,7 +61,14 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
     Génère une réponse LLM en streaming et yield chaque token.
     """
     context = "\n-----\n\n\n".join(context_texts)
-    full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
+    try:
+        full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
+    except Exception as e:
+        error_message = f"Erreur de formatage du prompt : la clé '{e}' est manquante ou le format est invalide.\nMerci de doubler les accolades dans le prompt à part {{chunks}} et {{recherche}} : {{{{'key_1': 'value_1', 'key_2': 'value_2'}}}}"
+        logger.error(error_message)
+        # On envoie un message d'erreur clair via le WebSocket
+        yield {"type": "error", "payload": error_message}
+        return
     
     type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
 
@@ -87,6 +94,7 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
             stream = client_or.chat.completions.create(
                 model=request.llm.chat_model,
                 messages=[{"role": "user", "content": full_user_prompt}],
+                temperature=float(request.llm.temperature),
                 stream=True
             )
 
@@ -100,9 +108,17 @@ def llm_prompt_stream(request: SearchRequest, context_texts):
         
 def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
     llm_response, full_user_prompt, llm_duration, context = "", "", 0, ""
+    completion = {}
     if request.action == 2 and context_texts:
         context = "\n-----\n\n\n".join(context_texts)
-        full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
+        # full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
+        try:
+            full_user_prompt = request.llm.template_prompt.format(chunks=context, recherche=request.prompt)
+        except (KeyError, ValueError) as e:
+            error_message = f"Erreur de formatage du prompt : la clé '{e}' est manquante ou le format est invalide.\nMerci de doubler les accolades dans le prompt à part {{chunks}} et {{recherche}} : {{{{'key_1': 'value_1', 'key_2': 'value_2'}}}}"
+            logger.error(error_message)
+            # On retourne un objet LLMPipeline avec le message d'erreur
+            return LLMPipeline(llm_response=error_message, context=context,error=True)
         
         type_prompt = next((key for key, values in model_settings.items() if request.llm.chat_model in values), "openai")
             
@@ -111,7 +127,9 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
             if request.llm.chat_model == "deepseek":
                 deepseek = DeepSeek()
                 deepseek.set_temperature(request.llm.temperature)
-                llm_response = deepseek.chat(full_user_prompt)['content']
+                response = deepseek.chat(full_user_prompt)
+                llm_response = response['content']
+                completion = response["response"]
             else:
                 openai_client = get_openai_client()
                 completion = openai_client.chat.completions.create(
@@ -120,6 +138,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
                     temperature=float(request.llm.temperature)
                 )
                 llm_response = completion.choices[0].message.content
+            completion = completion.model_dump()
         else:
             client_or = OpenAI(
                 base_url="https://openrouter.ai/api/v1",
@@ -128,6 +147,7 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
             completion = client_or.chat.completions.create(
                 extra_body={},
                 model=request.llm.chat_model,
+                temperature=float(request.llm.temperature),
                 messages=[
                     {
                         "role": "user",
@@ -141,10 +161,10 @@ def llm_prompt(request: SearchRequest, context_texts) -> LLMPipeline:
                 ]
             )
             llm_response = completion.choices[0].message.content
-            # llm_response = chat_with_openrouter(request.chat_model, full_user_prompt).choices[0].message.content
+            completion = completion.model_dump()
             
         llm_duration = time.perf_counter() - start_llm_time
-    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context)
+    return LLMPipeline(llm_duration=llm_duration,llm_response=llm_response,full_user_prompt=full_user_prompt,context=context,response=completion)
 
 async def filtre_source (filtre: dict, source: str = "") -> list:
     clauses = []
@@ -152,9 +172,19 @@ async def filtre_source (filtre: dict, source: str = "") -> list:
     if not field_types:
         logger.warning(f"Impossible de récupérer le schéma pour la collection '{source}'. Le filtrage sera ignoré pour cette source.")
         return []
-    NUMERIC_DTYPES = {DataType.INT8, DataType.INT16, DataType.INT32, DataType.INT64, DataType.FLOAT, DataType.DOUBLE}
+    NUMERIC_DTYPES = {
+        DataType.INT8.value, DataType.INT16.value, DataType.INT32.value, 
+        DataType.INT64.value, DataType.FLOAT.value, DataType.DOUBLE.value
+    }
+    logger.info(f"numeric_dtypes : {NUMERIC_DTYPES}")
     for key, val in filtre.items():
         dtype = field_types.get(key)
+        if isinstance(dtype, DataType):
+            # Si oui, on extrait sa valeur entière (ex: 5)
+            dtype = dtype.value
+        else:
+            # Sinon (c'est un string comme 'VARCHAR' ou None), on l'utilise directement
+            dtype = dtype
         if key == 'id_categorie' and source == 'produits':
             key = 'categorie'
         elif key == 'id_categorie' and source == 'siteweb':
@@ -163,6 +193,8 @@ async def filtre_source (filtre: dict, source: str = "") -> list:
         if not dtype:
             logger.info(f"dtype none {key}")
             continue
+        
+        logger.info(f'dtype {key} : {dtype}, val : {val}')
         
         if dtype == DataType.ARRAY:
             if isinstance(val, list):
@@ -173,6 +205,7 @@ async def filtre_source (filtre: dict, source: str = "") -> list:
                 clauses.append(f"array_contains({key}, {repr(str(val))})")
                 
         elif dtype in NUMERIC_DTYPES:
+            logger.info(f"numeric {key} : {dtype}, val : {val}")
             if isinstance(val, dict):
                 if 'operator' in val and 'values' in val:
                     operator = val['operator']
@@ -205,6 +238,11 @@ async def filtre_source (filtre: dict, source: str = "") -> list:
                         clauses.append(f"{key} {operator} {actual_value}")
             elif isinstance(val, list):
                 # Format as: field_name in ["val1", "val2"]
+                if key == 'id_categorie' and source == 'devis':
+                    logger.info("forcer numéric pour id_categorie dans devis")
+                    numeric_vals = [int(v) for v in val]
+                    clauses.append(f"{key} in {numeric_vals}")
+                    continue
                 quoted_vals = [repr(str(v)) for v in val]
                 clauses.append(f"{key} in [{', '.join(quoted_vals)}]")
             else:
@@ -239,46 +277,51 @@ async def search_in_milvus_stream(request: SearchRequest):
         # On récupère plus de documents si le reranking est activé
         top_k_retrieval = top_k_final * 2 if request.options.use_reranker else top_k_final
         
-        # NOTE: La logique de filtrage complexe (filtre_source) doit maintenant être gérée
-        # soit ici (pour construire la chaîne `filter_expr`), soit déléguée au service de recherche.
-        # Pour l'instant, nous supposons un filtre simple.
-        # filter_expr = " and ".join(request.filtre) if request.filtre else ""
-
         all_source_results = []
-        search_duration = 0
-
-        # Boucle sur les sources demandées
+        start_search_time = time.perf_counter()
+        
+        search_tasks = []
         for item in request.source:
             source_name = item.source
             filtre = item.filtre
-            yield {"type": "status", "payload": f"Recherche dans la source '{source_name}'..."}
-            start_search_source = time.perf_counter()
+            yield {"type": "status", "payload": f"Préparation de la recherche pour '{source_name}'..."}
 
-            filters = []
-            filter_expr = await filtre_source(request.filtre, source_name)
-            if filter_expr:
-                filters.append(" and ".join(filter_expr))
-            
-            filter_expr_source = await filtre_source(filtre, source_name) if filtre else ""
-            if filter_expr_source:
-                filters.append(" and ".join(filter_expr_source))
+            # Fonction interne pour créer la coroutine de recherche avec le bon contexte
+            async def create_search_task(s_name=source_name, s_filtre=filtre):
+                filters = []
+                filter_expr_global = await filtre_source(request.filtre, s_name)
+                if filter_expr_global:
+                    filters.append(" and ".join(filter_expr_global))
+                
+                filter_expr_source = await filtre_source(s_filtre, s_name) if s_filtre else ""
+                if filter_expr_source:
+                    filters.append(" and ".join(filter_expr_source))
+                
+                final_filter_expr = " and ".join(filters) if filters else ""
 
-            # Appel au microservice de recherche en base de données
-            # Le client gRPC gère la conversion en dictionnaire
-            source_results = await database_client.search_vector(
-                collection=source_name,
-                vector=query_vector,
-                k=top_k_retrieval,
-                filter_expr=" and ".join(filters) if filters else "" # Le filtre est passé directement
-            )
-            
-            search_duration += time.perf_counter() - start_search_source
-            
-            if source_results is None:
-                yield {"type": "warning", "payload": f"Erreur lors de la recherche dans la source '{source_name}'."}
+                # Retourne la coroutine de recherche prête à être exécutée
+                return await database_client.search_vector(
+                    collection=s_name,
+                    vector=query_vector,
+                    k=top_k_retrieval,
+                    filter_expr=final_filter_expr
+                )
+
+            search_tasks.append(create_search_task())
+
+        # Exécuter toutes les tâches de recherche en parallèle
+        yield {"type": "status", "payload": f"Lancement de la recherche parallèle sur {len(search_tasks)} source(s)..."}
+        # asyncio.gather exécute toutes les coroutines en même temps et attend leurs résultats
+        list_of_results_groups = await asyncio.gather(*search_tasks, return_exceptions=True)
+        search_duration = time.perf_counter() - start_search_time
+
+        # Aplatir la liste de listes de résultats et gérer les erreurs
+        for source_results in list_of_results_groups:
+            if isinstance(source_results, Exception):
+                logging.error(f"Une tâche de recherche a échoué: {source_results}")
                 continue
-            
-            all_source_results.extend([MessageToDict(res) for res in source_results])
+            if source_results:
+                all_source_results.extend([MessageToDict(res) for res in source_results])
 
         # On trie tous les résultats par score de similarité initial
         initial_matches = sorted(all_source_results, key=lambda x: x['score'], reverse=True)
@@ -293,19 +336,31 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "status", "payload": "Reclassement (reranking) des résultats..."}
             start_rerank_time = time.perf_counter()
 
-            # Préparation des documents pour le reranker
-            # HYPOTHÈSE: Le texte est dans metadata.text
-            docs_to_rerank = [res['metadata']['entity']['text'] for res in initial_matches]
-            
-            # Appel au microservice de reranking
-            ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
-            
-            # Reconstruction de la liste de résultats dans le nouvel ordre
-            result_map = {res['metadata']['entity']['text']: res for res in initial_matches}
-            final_results = [result_map[text] for text in ranked_texts if text in result_map]
-            
-            rerank_duration = time.perf_counter() - start_rerank_time
-            yield {"type": "rerank_complete", "payload": {"results": final_results[:top_k_final], "duration": round(rerank_duration, 2)}}
+            # Préparation optimisée pour le reranker
+            docs_to_rerank = []
+            # Créer une map pour reconstruire les résultats après le reranking
+            result_map = {}
+            for res in initial_matches:
+                # On s'assure que le texte existe et n'est pas déjà dans la map (cas de doublons)
+                doc_text = res.get('metadata', {}).get('entity', {}).get('text')
+                if doc_text and doc_text not in result_map:
+                    docs_to_rerank.append(doc_text)
+                    result_map[doc_text] = res
+
+            if not docs_to_rerank:
+                yield {"type": "status", "payload": "Reranking annulé: aucun texte trouvé dans les résultats."}
+            else:
+                yield {"type": "status", "payload": f"Reclassement de {len(docs_to_rerank)} documents..."}
+                start_rerank_time = time.perf_counter()
+
+                # Appel au microservice avec une charge utile minimale
+                ranked_texts = await reranking_client.rerank_documents(request.prompt, docs_to_rerank)
+                
+                # Reconstruction de la liste de résultats dans le nouvel ordre
+                final_results = [result_map[text] for text in ranked_texts if text in result_map]
+                
+                rerank_duration = time.perf_counter() - start_rerank_time
+                yield {"type": "rerank_complete", "payload": {"results": final_results[:top_k_final], "duration": round(rerank_duration, 2)}}
         
         # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
         llm_duration = 0
@@ -313,7 +368,41 @@ async def search_in_milvus_stream(request: SearchRequest):
             yield {"type": "status", "payload": f"Génération de la réponse avec le LLM..."}
             
             # Préparation du contexte pour le LLM
-            context_texts = [res['metadata']['entity']['text'] for res in final_results[:top_k_final]]
+            context_texts = []
+            for res in final_results[:top_k_final]:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                fournisseur = 'N/A'
+                title = 'N/A'
+                if source == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "siteweb_2":
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {fournisseur}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
+            # context_texts = [
+            #     f"""
+            #         Titre : {title}
+            #         Source : {source}
+            #         Fournisseur : {res['metadata']['entity']['fournisseur']}
+            #         Catégorie : {categorie}
+            #         Texte : {res['metadata']['entity']['text']}
+            #     """ for res in final_results[:top_k_final]
+            # ]
             context = "\n-----\n".join(context_texts)
             full_user_prompt = f"Contexte:\n{context}\n\nQuestion:\n{request.prompt}" # Template simplifié
 
@@ -321,10 +410,13 @@ async def search_in_milvus_stream(request: SearchRequest):
             start_llm_time = time.perf_counter()
             
             # Appel au microservice LLM en streaming
-            token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            # token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            token_generator = await asyncio.to_thread(llm_prompt, request, context_texts)
+            # token_generator = llm_prompt(request, context_texts)
+            yield {"type": "llm_chunk" if not token_generator.error else "error", "payload": token_generator.llm_response, "llm_response": token_generator.response}
             
-            for token in token_generator:
-                yield {"type": "llm_chunk", "payload": token}
+            # for token in token_generator:
+            #     yield {"type": "llm_chunk", "payload": token}
             
             llm_duration = time.perf_counter() - start_llm_time
         
@@ -367,7 +459,8 @@ async def search_in_milvus(request: SearchRequest) -> dict:
     context = ""
     full_user_prompt = ""
     final_filter_expr_str = "" # Pour stocker une représentation du filtre appliqué
-
+    llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
+    
     try:
         # --- ÉTAPE 1: EMBEDDING ---
         start_embed = time.perf_counter()
@@ -445,6 +538,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
                 reranked_results_by_source[source] = [
                     result_map[text] for text in ranked_texts if text in result_map
                 ]
+                reranked_results_by_source[source] = reranked_results_by_source[source][:top_k_final]
                 logging.info(
                     f"Temps de reconstruction : {round((time.perf_counter() - start_reconstruction), 2)}"
                 )
@@ -463,24 +557,35 @@ async def search_in_milvus(request: SearchRequest) -> dict:
         # Reconstruire le contexte à partir des résultats finaux (potentiellement rerankés)
         context_texts = []
         for source, matches in all_results.items():
-            for match in matches:
-                context_texts.append(match['metadata']['entity']['text'])
+            # context_texts = []
+            for res in matches:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                fournisseur = 'N/A'
+                title = 'N/A'
+                if source == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "siteweb_2":
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {fournisseur}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
+            # for match in matches:
+            #     context_texts.append(match['metadata']['entity']['text'])
 
-        # if request.action == 2 and context_texts:
-        #     logger.info("Début de la génération de réponse par le LLM...")
-        #     start_llm_time = time.perf_counter()
-            
-        #     context = "\n-----\n".join(context_texts)
-        #     full_user_prompt = f"Contexte:\n{context}\n\nQuestion:\n{request.prompt}"
-
-        #     # Appel au microservice LLM et agrégation de la réponse
-        #     response_chunks = []
-        #     async for token in llm_client.stream_llm_chat(full_user_prompt):
-        #         response_chunks.append(token)
-        #     llm_response_content = "".join(response_chunks)
-            
-        #     llm_duration = time.perf_counter() - start_llm_time
-        #     logger.info(f"Génération LLM terminée en {llm_duration:.2f}s.")
         llm_req = llm_prompt(request, context_texts)
 
         # --- FIN: Construction du dictionnaire de retour ---
@@ -503,6 +608,7 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             "llm_execution": round(llm_req.llm_duration, 2),
             "total_process": round(total_duration, 2),
             "import_duration": 0, # Maintenu de l'original, non calculé ici
+            "llm_reponse": llm_req.response
         }
 
     except Exception as e:
@@ -525,4 +631,252 @@ async def search_in_milvus(request: SearchRequest) -> dict:
             "llm_execution": round(llm_duration, 2),
             "total_process": round(time.perf_counter() - start_total_time, 2),
             "import_duration": 0,
+            "llm_reponse": llm_req.response
+        }
+        
+async def search_in_milvus_classique_stream(request: SearchRequest):
+    """
+    Orchestre le flux de recherche CLASSIQUE (par filtre) en streaming.
+    """
+    start_total_time = time.perf_counter()
+    
+    try:
+        # --- ÉTAPE 1: PAS D'EMBEDDING ---
+        yield {"type": "status", "payload": "Lancement de la recherche par filtre..."}
+
+        # --- ÉTAPE 2: RÉCUPÉRATION (QUERY) ---
+        top_k_final = int(request.top_k)
+        all_source_results = []
+        search_duration = 0
+
+        for item in request.source:
+            source_name = item.source
+            filtre = item.filtre
+            yield {"type": "status", "payload": f"Recherche classique dans '{source_name}'..."}
+            start_search_source = time.perf_counter()
+
+            filters = []
+            filter_expr_global = await filtre_source(request.filtre, source_name)
+            if filter_expr_global:
+                filters.append(" and ".join(filter_expr_global))
+            
+            filter_expr_source = await filtre_source(filtre, source_name) if filtre else ""
+            if filter_expr_source:
+                filters.append(" and ".join(filter_expr_source))
+            
+            final_filter_expr = " and ".join(filters) if filters else ""
+            # if not final_filter_expr:
+            #      yield {"type": "error", "payload": f"L'expression de filtre est obligatoire pour une recherche classique."}
+            #      return
+
+            # Appel au NOUVEAU client gRPC pour la recherche classique
+            source_results = await database_client.classic_search_vector(
+                collection=source_name,
+                filter_expr=final_filter_expr,
+                k=top_k_final
+            )
+            
+            search_duration += time.perf_counter() - start_search_source
+            
+            if source_results is None:
+                yield {"type": "warning", "payload": f"Erreur lors de la recherche dans '{source_name}'."}
+                continue
+            
+            all_source_results.extend([MessageToDict(res) for res in source_results])
+
+        # --- ÉTAPE 3: PAS DE RERANKING ---
+        # Le reranking n'est pas applicable car il n'y a pas de score de similarité initial.
+        final_results = all_source_results
+        yield {"type": "initial_results", "payload": {"results": final_results, "duration": round(search_duration, 2)}}
+        # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
+        llm_duration = 0
+        if request.action == 2 and final_results:
+            yield {"type": "status", "payload": "Génération de la réponse avec le LLM..."}
+            # context_texts = [res['metadata']['entity']['text'] for res in final_results]
+            context_texts = []
+            for res in final_results:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                fournisseur = 'N/A'
+                title = 'N/A'
+                if source == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "siteweb_2":
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {fournisseur}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
+            
+            yield {"type": "llm_start"}
+            start_llm_time = time.perf_counter()
+            
+            # token_generator = await asyncio.to_thread(llm_prompt_stream, request, context_texts)
+            token_generator = await asyncio.to_thread(llm_prompt, request, context_texts)
+            # token_generator = llm_prompt(request, context_texts)
+            yield {"type": "llm_chunk" if not token_generator.error else "error", "payload": token_generator.llm_response, "llm_response": token_generator.response}
+            
+            # for token in token_generator:
+            #     yield {"type": "llm_chunk", "payload": token}
+            
+            llm_duration = time.perf_counter() - start_llm_time
+        
+        # --- FIN DU FLUX ---
+        total_duration = time.perf_counter() - start_total_time
+        final_summary = {
+            "timings": {
+                "embedding": 0, # Pas d'embedding
+                "vector_search": round(search_duration, 2),
+                "rerank": 0, # Pas de reranking
+                "llm_execution": round(llm_duration, 2),
+                "total_process": round(total_duration, 2),
+            },
+            "result_count": len(final_results)
+        }
+        yield {"type": "end_of_stream", "payload": final_summary}
+
+    except Exception as e:
+        logger.error(f"Erreur majeure dans le flux de recherche classique: {e}", exc_info=True)
+        yield {"type": "error", "payload": f"Erreur serveur: {e}"}
+    finally:
+        logger.info("Flux de recherche classique terminé.")
+        
+async def search_in_milvus_classique(request: SearchRequest) -> dict:
+    """
+    Orchestre une recherche CLASSIQUE complète (non-streamée).
+    """
+    logger.info(f"[gRPC] Recherche classique (non-stream): filtre='{request.filtre}', sources={[s.source for s in request.source]}")
+    start_total_time = time.perf_counter()
+
+    search_duration, llm_duration = 0, 0
+    llm_response_content, context, full_user_prompt, final_filter_expr_str = "", "", "", ""
+    llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
+    try:
+        # --- ÉTAPE 1: PAS D'EMBEDDING ---
+
+        # --- ÉTAPE 2: RÉCUPÉRATION (QUERY) ---
+        start_search = time.perf_counter()
+        top_k_final = int(request.top_k)
+        all_results = {}
+
+        for item in request.source:
+            source_name = item.source
+            filtre = item.filtre
+
+            filters = []
+            filter_expr_global = await filtre_source(request.filtre, source_name)
+            if filter_expr_global:
+                filters.append(" and ".join(filter_expr_global))
+            
+            filter_expr_source = await filtre_source(filtre, source_name) if filtre else []
+            if filter_expr_source:
+                filters.append(" and ".join(filter_expr_source))
+            
+            final_filter_expr = " and ".join(filters) if filters else ""
+            final_filter_expr_str = final_filter_expr
+            # if not final_filter_expr:
+            #     raise ValueError("L'expression de filtre est obligatoire pour une recherche classique.")
+
+            logger.info(f"Recherche classique dans '{source_name}' avec filtre: {final_filter_expr}")
+
+            source_results = await database_client.classic_search_vector(
+                collection=source_name,
+                filter_expr=final_filter_expr,
+                k=top_k_final
+            )
+            
+            all_results[source_name] = [MessageToDict(res) for res in source_results]
+        
+        search_duration = time.perf_counter() - start_search
+
+        # --- ÉTAPE 3: PAS DE RERANKING ---
+
+        # --- ÉTAPE 4: GÉNÉRATION LLM (Optionnel) ---
+        # context_texts = [match['metadata']['entity']['text'] for matches in all_results.values() for match in matches]
+        context_texts = []
+        for matches in all_results.values():
+            for res in matches:
+                categorie = res["metadata"]["entity"]["categorie"] if res["metadata"]["entity"]["categorie"] else "N/A"
+                source = res["source"]
+                fournisseur = 'N/A'
+                title = 'N/A'
+                if source == "produits_3":
+                    title = res["metadata"]["entity"]["nom_produit"] if res["metadata"]["entity"]["nom_produit"] else title
+                    source = "Produits"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "siteweb_2":
+                    title = res["metadata"]["entity"]["url"] if res["metadata"]["entity"]["url"] else title
+                    source = "Siteweb"
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                elif source == "devis":
+                    title = res["metadata"]["entity"]["lead_id"] if res["metadata"]["entity"]["lead_id"] else title
+                elif source == "echanges":
+                    fournisseur = res['metadata']['entity']['fournisseur'] if res['metadata']['entity']['fournisseur'] else 'N/A'
+                    title = res["metadata"]["entity"]["conversation_id"] if res["metadata"]["entity"]["conversation_id"] else title
+                context_texts.append(f"""
+                    Titre : {title}
+                    Source : {source}
+                    Fournisseur : {fournisseur}
+                    Catégorie : {categorie}
+                    Texte : {res['metadata']['entity']['text']}
+                """)
+        
+        # llm_req = llm_prompt(request, context_texts)
+        llm_req = await asyncio.to_thread(llm_prompt, request, context_texts)
+
+        # --- FIN: Construction du dictionnaire de retour ---
+        total_duration = time.perf_counter() - start_total_time
+        
+        return {
+            "database": "milvus",
+            "user_query": request.prompt,
+            "filter": final_filter_expr_str,
+            "matches": all_results,
+            "context": llm_req.context,
+            "response": llm_req.llm_response,
+            "embedding": 0,
+            "fournisseur_non_vide": None,
+            "full_user_prompt": llm_req.full_user_prompt,
+            "chat_model": request.llm.chat_model,
+            "temperature": request.llm.temperature,
+            "vector_search": round(search_duration, 2),
+            "rerank_duration": 0,
+            "llm_execution": round(llm_req.llm_duration, 2),
+            "total_process": round(total_duration, 2),
+            "import_duration": 0,
+            "llm_reponse": llm_req.response
+        }
+
+    except Exception as e:
+        logger.error(f"Erreur majeure dans la recherche classique (non-stream): {e}", exc_info=True)
+        return {
+            "database": "milvus",
+            "user_query": request.prompt,
+            "filter": final_filter_expr_str,
+            "matches": {},
+            "context": "",
+            "response": f"Erreur serveur: {e}",
+            "embedding": 0,
+            "fournisseur_non_vide": None,
+            "full_user_prompt": "",
+            "chat_model": request.llm.chat_model,
+            "temperature": request.llm.temperature,
+            "vector_search": round(search_duration, 2),
+            "rerank_duration": 0,
+            "llm_execution": round(llm_duration, 2),
+            "total_process": round(time.perf_counter() - start_total_time, 2),
+            "import_duration": 0,
+            "llm_reponse": llm_req.response
         }

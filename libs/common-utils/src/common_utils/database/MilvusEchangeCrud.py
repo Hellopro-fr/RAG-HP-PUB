@@ -154,52 +154,130 @@ class MilvusEchangeCrud:
             self.logger.error(f"[{model_key}][Echange] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {data}")
     
-    def update_echange(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def update_echange(self, echanges: List[Dict[str, Any]], conversation_id: str, correspondance_echange=None) -> Dict[str, Any]:
+        """
+        Met à jour les échanges pour une conversation_id donnée.
+        Supprime les anciennes données et réinsère les nouvelles.
+
+        Args:
+            echanges: Liste des nouveaux échanges à insérer
+            conversation_id: L'identifiant de la conversation
+            correspondance_echange: Instance de MilvusEchangeInserer pour gérer la table de correspondance
+
+        Returns:
+            Dict avec status, data et flags (already_in_bdd, updated)
+        """
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
-            
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
-            
-            if not data or self.collection is None:
+
+            if not echanges or self.collection is None:
                 return {
                     "status": "error",
                     "message": "Aucune donnée à mettre à jour ou collection non initialisée."
                 }
-            
-            if not data.get("id"):
-                self.logger.error(f"[{model_key}][Echange] Mise à jour sans ID.")
+
+            if not conversation_id:
                 return {
                     "status": "error",
-                    "message": "Clé primaire (ID) requise pour la mise à jour."
+                    "message": "Conversation ID requise pour la mise à jour."
                 }
 
-            self.logger.info(f"[{model_key}][Echange] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
-            
-            
-            data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+            self.logger.info(f"[{model_key}][Echange] Mise à jour pour conversation_id: {conversation_id}")
 
-            # Sanitize the record to ensure no None values
-            # This is important for Milvus compatibility
-            data = Utils.sanitize_record(data)  
+            # 1. Récupérer la correspondance
+            if correspondance_echange is None:
+                from common_utils.database.MilvusEchangeInserer import MilvusEchangeInserer
+                correspondance_echange = MilvusEchangeInserer()
 
-            result = self.collection.upsert(data)
-            self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
-            
-            return {
-                "ids": ",".join(map(str, result.primary_keys)) if result.primary_keys else "",
-                "status": "success",
-            }
+            correspondance_result = correspondance_echange.get_correspondance_by_conversation_id(conversation_id)
+            if correspondance_result["status"] == "error":
+                self.logger.error(f"[{model_key}][Echange] Erreur récupération correspondance: {correspondance_result['message']}")
+                return {
+                    "status": "error",
+                    "message": f"Échec récupération correspondance: {correspondance_result['message']}"
+                }
+
+            # 2. Parser les IDs
+            ids_str = correspondance_result["data"].get("id_echange_milvus", "")
+            if not ids_str:
+                self.logger.error(f"[{model_key}][Echange] Aucun ID trouvé dans la correspondance")
+                return {
+                    "status": "error",
+                    "message": "Aucun ID trouvé dans la correspondance"
+                }
+
+            ids = [int(x.strip()) for x in ids_str.split(",") if x.strip()]
+            self.logger.info(f"[{model_key}][Echange] IDs à supprimer: {ids}")
+
+            # 3. Supprimer les anciennes données dans 'echanges'
+            delete_result = self.delete_echanges_by_ids(ids)
+            if delete_result["status"] == "error":
+                self.logger.error(f"[{model_key}][Echange] Erreur suppression: {delete_result['message']}")
+                return {
+                    "status": "error",
+                    "message": f"Échec suppression echanges: {delete_result['message']}"
+                }
+
+            # 4. Supprimer dans la table de correspondance (avec retry)
+            delete_corr_result = correspondance_echange.delete_correspondance_by_conversation_id(conversation_id)
+            if delete_corr_result["status"] == "error":
+                self.logger.error(f"[{model_key}][Echange] Erreur suppression correspondance: {delete_corr_result['message']}")
+                return {
+                    "status": "error",
+                    "message": f"Échec suppression correspondance: {delete_corr_result['message']}"
+                }
+
+            self.logger.info(f"[{model_key}][Echange] Suppression réussie. Réinsertion en cours...")
+
+            # 5. Ajouter date_maj à tous les échanges avant réinsertion
+            date_maj = datetime.now().isoformat()
+            for echange in echanges:
+                echange["date_maj"] = date_maj
+
+            # 6. Réinsérer les nouvelles données
+            insert_result = self.insert_echange(echanges)
+
+            if insert_result and insert_result.get("status") == "success":
+                # 7. Réinsérer dans la table de correspondance
+                data_bo_milvus = [{
+                    "embedding": [0.0]*1024,
+                    "id_echange_milvus": insert_result.get("ids", ""),
+                    "conversation_id": conversation_id,
+                    "date_ajout": datetime.now().isoformat(),
+                    "date_maj": datetime.now().isoformat()
+                }]
+                correspondance_echange.insert_correspondance_echange(data_bo_milvus)
+
+                self.logger.info(f"[{model_key}][Echange] ✓ Mise à jour terminée avec succès.")
+
+                return {
+                    "status": "success",
+                    "data": insert_result,
+                    "already_in_bdd": True,
+                    "updated": True
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": "Échec de la réinsertion après suppression"
+                }
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de mise à jour : {e}")
-            self.logger.error(f"Data : {data}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
         except Exception as e:
-            self.logger.error(f"[{model_key}][Echange] Mise à jour de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"[{model_key}][Echange] Mise à jour : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
 
     def delete_echange(self,data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -242,7 +320,7 @@ class MilvusEchangeCrud:
         list_conversation_id = [conversation_id]
         model_config = ModelConfig()
         model_key = model_config.model_id
-        
+
         try:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
@@ -277,3 +355,62 @@ class MilvusEchangeCrud:
             self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}")
         except Exception as e:
             self.logger.error(f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}", exc_info=True)
+
+    def delete_echanges_by_ids(self, ids: List[int]) -> Dict[str, Any]:
+        """
+        Supprime plusieurs entités par leurs IDs
+
+        Args:
+            ids: Liste des IDs à supprimer
+
+        Returns:
+            Dict avec status success ou error
+        """
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not ids or len(ids) == 0:
+                self.logger.error(f"[{model_key}][Echange] Suppression sans IDs.")
+                return {
+                    "status": "error",
+                    "message": "Liste d'IDs requise pour la suppression."
+                }
+
+            self.logger.info(f"[{model_key}][Echange] Suppression de {len(ids)} entités avec IDs {ids} dans '{self.collection.name}'...")
+
+            # Construire l'expression pour Milvus
+            ids_str = ", ".join(map(str, ids))
+            expr = f"id in [{ids_str}]"
+
+            self.collection.delete(expr)
+            self.collection.flush()
+
+            self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
+
+            return {
+                "status": "success",
+                "message": f"{len(ids)} échanges supprimés."
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la suppression : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Echange] Suppression : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }

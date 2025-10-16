@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.core.credentials import settings
 from app.utils.params import params
 from app.utils.response import error_response
@@ -62,9 +63,14 @@ def startup_event():
 
 @app.exception_handler(Exception)
 async def error_handler(request, exc: Exception):
-    logging.error(str(exc))
-    return error_response(
-        "EXCEPTION_ERROR", f"{exc}", str(status.HTTP_500_INTERNAL_SERVER_ERROR))
+    logging.error(str(exc), exc_info=True)
+    error_content = error_response(
+        "EXCEPTION_ERROR", f"{exc}", str(status.HTTP_500_INTERNAL_SERVER_ERROR)
+    )
+    return JSONResponse(
+        content=error_content.model_dump(),
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
 
 @app.on_event("shutdown")
 def shutdown_event():

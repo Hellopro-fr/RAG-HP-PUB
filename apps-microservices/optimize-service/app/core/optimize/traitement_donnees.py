@@ -51,5 +51,31 @@ class TraitementDonnees:
             DESCRIPTION PRODUIT = {data.get('description_produit', '')}
             """
         return prompt
+
+    def fix_json_quotes(self, resp: str) -> str:
+        # Corrige les "" en "
+        resp = resp.replace('""', '"')
         
+        # Optionnel : si jamais le texte contient des guillemets dans la valeur, les échapper
+        # Exemple: 1"1/2 doit devenir 1\"1/2
+        resp = re.sub(r'(\d)"(\d)', r'\1\"\2', resp)
+
+        return resp
+
+    def clean_json_response(self, resp: str) -> str:
+        resp = resp.strip()
+
+        if resp.startswith("{{") and resp.endswith("}}"):
+            resp = resp[1:-1].strip()
+
+        match = re.search(r'\{.*\}', resp, re.DOTALL)
+        if match:
+            resp = match.group(0)
+
+        # tentative de réparation
+        resp = self.fix_json_quotes(resp)
+
+        return resp
+
+
     

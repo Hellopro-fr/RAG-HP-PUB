@@ -34,6 +34,30 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Une erreur interne est survenue: {e}")
             return llm_pb2.FullChatResponse()
+        
+    async def ChatBatch(self, request, context):
+        """
+        Implémentation de la méthode RPC unaire ChatBatch.
+        """
+        num_messages = len(request.messages)
+        logging.info(f"Nouvelle requête ChatBatch reçue pour {num_messages} messages.")
+        try:
+            temperature = request.temperature if request.HasField('temperature') else 0.7
+            max_tokens = request.max_tokens if request.HasField('max_tokens') else 1024
+            enable_thinking = request.enable_thinking if request.HasField('enable_thinking') else False
+
+            responses = await self.chat_service.handle_chat_batch_completion(
+                list(request.messages),
+                temperature,
+                max_tokens,
+                enable_thinking
+            )
+            return llm_pb2.ChatBatchResponse(full_messages=responses)
+        except Exception as e:
+            logging.error(f"Erreur dans ChatBatch: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(f"Une erreur interne est survenue: {e}")
+            return llm_pb2.ChatBatchResponse()
 
 async def serve(chat_service: ChatApplicationService):
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=100))

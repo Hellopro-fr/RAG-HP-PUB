@@ -1,3 +1,4 @@
+from os import error
 from pydantic import BaseModel, Field
 from typing import Annotated, List, Optional, Dict, Any
 
@@ -42,6 +43,7 @@ class SearchRequestWs(BaseModel):
     filtre_source: Optional[Dict[str, List[str]]] = {}
     llm: Optional[LLMOptions] = LLMOptions(chat_model="gpt-4.1-2025-04-14", temperature=0.0)
     options: Optional[RerankerOptions] = RerankerOptions()
+    type: int = 1
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
 class SearchResponse(BaseModel):
@@ -60,12 +62,15 @@ class SearchResponse(BaseModel):
     total_process: float
     llm_execution: float
     import_duration: float
+    llm_reponse: Optional[dict] = {}
 
 class LLMPipeline(BaseModel):
     llm_response: str = ""
     llm_duration: float = ""
     full_user_prompt: str = ""
     context: str = ""
+    response: dict = {}
+    error: Optional[bool] = False
     
 class SearchReponse(BaseModel):
     results: Annotated[SearchResponse, Field(title="Contient l'objet du résultat depuis les recherches")]

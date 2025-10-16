@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # A simple token for authenticating WebSocket connections.
     # In a production environment, use a more robust authentication mechanism.
     AUTH_TOKEN: str = "your-secret-token"
+    OPENAI_API_KEY: str
 
     class Config:
         # Specifies the file to load environment variables from.
