@@ -3,7 +3,7 @@ from common_utils.database.MilvusDocumentCrud import MilvusDocumentCrud
 from common_utils.autres.CollectionName import CollectionName
 import logging
 
-def insertion_data(document_data: dict) -> dict:
+async def insertion_data(document_data: dict) -> dict:
     """
     Prend toutes les resultats de l'embedding puis ensuite inserer les chunk sur bdd vectoriel
     
@@ -12,7 +12,7 @@ def insertion_data(document_data: dict) -> dict:
 
     documents = document_data.get("data",[])
     collection = document_data.get("collection", CollectionName.DOCUMENT)
-    bdd = document_data.get("database", "milvus") 
+    bdd = "milvus" 
 
     try:
         collection_enum = CollectionName(collection)
@@ -33,7 +33,7 @@ def insertion_data(document_data: dict) -> dict:
 
     if func and len(documents) > 0:
         fichier_source = documents[0].get("fichier_source", "fichier source inconnu")
-        res = base_vectorielle.get_document(fichier_source=fichier_source)
+        res = await base_vectorielle.get_document(fichier_source=fichier_source)
 
         status = res.get("status")
         data   = res.get("data", [])
@@ -42,7 +42,7 @@ def insertion_data(document_data: dict) -> dict:
 
         if status == "error":
             if code == 404:
-                result = func(documents)
+                result = await func(documents)
                 output_message = {
                     "database"       : bdd,
                     "collection"     : collection,

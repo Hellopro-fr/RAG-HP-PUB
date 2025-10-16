@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -106,14 +107,14 @@ class MilvusDocumentCrud:
         return collection
 
 
-    def insert_document(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def insert_document(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            await asyncio.to_thread(self._connect_to_milvus)
+            self.collection = await asyncio.to_thread(self._get_or_create_collection,model_config)
             
             if not datas or self.collection is None:
                 return {
@@ -133,7 +134,7 @@ class MilvusDocumentCrud:
                 data = Utils.sanitize_record(data)
                 sanitized_batch.append(data)  
             
-            result = self.collection.insert(sanitized_batch)
+            result = await asyncio.to_thread(self.collection.insert,sanitized_batch)
 
             self.logger.info(f"Clé primaire : {result.primary_keys}") 
             
@@ -151,14 +152,14 @@ class MilvusDocumentCrud:
             self.logger.error(f"[{model_key}][document] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {data}")
     
-    def update_document(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_document(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
             
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            await asyncio.to_thread(self._connect_to_milvus)
+            self.collection = await asyncio.to_thread(self._get_or_create_collection,model_config)
             
             if not data or self.collection is None:
                 return {
@@ -182,7 +183,7 @@ class MilvusDocumentCrud:
             # This is important for Milvus compatibility
             data = Utils.sanitize_record(data)  
 
-            result = self.collection.upsert(data)
+            result = await asyncio.to_thread(self.collection.upsert,data)
             self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             
@@ -198,14 +199,14 @@ class MilvusDocumentCrud:
             self.logger.error(f"[{model_key}][document] Mise à jour de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {data}")
 
-    def delete_document(self,data: Dict[str, Any]) -> Dict[str, Any]:
+    async def delete_document(self,data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
         id_entity_milvus = data.get("id")
         
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            await asyncio.to_thread(self._connect_to_milvus)
+            self.collection = await asyncio.to_thread(self._get_or_create_collection,model_config)
 
             if not self.collection:
                 return {
@@ -221,7 +222,7 @@ class MilvusDocumentCrud:
                 }
 
             self.logger.info(f"[{model_key}][document] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
-            result = self.collection.delete(f"id == {id_entity_milvus}")
+            result = await asyncio.to_thread(self.collection.delete,f"id == {id_entity_milvus}")
             self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
 
             return {
@@ -234,14 +235,14 @@ class MilvusDocumentCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][document] Suppression : {e}", exc_info=True)
 
-    def get_document(self,fichier_source: str) -> Dict[str, Any]:
+    async def get_document(self,fichier_source: str) -> Dict[str, Any]:
         list_fichier_source = [fichier_source]
         model_config = ModelConfig()
         model_key = model_config.model_id
         
         try:
-            self._connect_to_milvus()
-            self.collection = self._get_or_create_collection(model_config)
+            await asyncio.to_thread(self._connect_to_milvus)
+            self.collection = await asyncio.to_thread(self._get_or_create_collection,model_config)
 
             if not self.collection:
                 return {
@@ -257,7 +258,7 @@ class MilvusDocumentCrud:
                     "code" : 400
                 }
 
-            result = self.collection.query(
+            result = await asyncio.to_thread(self.collection.query,
                 expr=f"fichier_source in {list_fichier_source}",
                 output_fields=["id"]
             )

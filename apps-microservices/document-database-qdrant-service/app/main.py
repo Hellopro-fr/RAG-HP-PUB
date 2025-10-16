@@ -1,48 +1,56 @@
-import pika
-import time
 import os
+import asyncio
+import aio_pika
+import aiormq
     
 from document_database_qdrant_service.messaging.consumer import Consumer
 from document_database_qdrant_service.messaging.publisher import Publisher
 
-def main():
+
+async def main():
     """
-    Point d'entrée principal du service.
+    Point d'entrée principal asynchrone du service.
     Met en place la connexion et lance les composants.
     """
-    rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
-    connection = None
-
-    # Boucle de connexion robuste
-    for i in range(10):
-        try:
-            connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ Database-Document-Processor: Connecté à RabbitMQ.")
-            break
-        except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ Database-Document-Processor: En attente de RabbitMQ... {i+1}s")
-            time.sleep(1)
-
-    if not connection:
-        print("❌ Database-Document-Processor: Impossible de se connecter, arrêt du service.")
+    rabbitmq_url = os.environ.get("RABBITMQ_URL")
+    if not rabbitmq_url:
+        print("❌ ERREUR: La variable d'environnement RABBITMQ_URL n'est pas définie.")
         exit(1)
 
-    try:
-        # 1. Créer une instance du publisher
-        publisher = Publisher(connection)
-        
-        # 2. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher)
-        
-        # 3. Lancer l'écoute
-        consumer.start_consuming()
+    print("🚀 Database-Document-processor-service: Démarrage...")
+    
+    # Créer le répertoire de récupération s'il n'existe pas
+    os.makedirs('recovery_data', exist_ok=True)
 
-    except KeyboardInterrupt:
-        print("\n🛑 Database-Document-Processor: Arrêt demandé.")
-    finally:
-        if connection and not connection.is_closed:
-            connection.close()
-            print("✅ Database-Document-Processor: Connexion RabbitMQ fermée.")
+    loop = asyncio.get_event_loop()
+    
+    while True:
+        try:
+            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
+            print("✅ Database-Document-processor-service: Connecté à RabbitMQ.")
+            
+            async with connection:
+                publisher = Publisher(connection)
+                consumer = Consumer(connection, publisher)
+                
+                # Lancer le consumer, qui va démarrer ses propres tâches de fond
+                await consumer.start_consuming()
+                
+                # Garder le service en vie pour que les tâches de fond continuent de tourner
+                await asyncio.Future()
+
+        except (aiormq.exceptions.AMQPConnectionError, aiormq.exceptions.ChannelInvalidStateError) as e:
+            print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
+            await asyncio.sleep(10)
+        except KeyboardInterrupt:
+            print("\n🛑 Database-Document-processor-service: Arrêt demandé.")
+            break
+        except Exception as e:
+            print(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
+            await asyncio.sleep(10)
+    
+    print("✅ Database-Document-processor-service: Service arrêté.")
+
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())

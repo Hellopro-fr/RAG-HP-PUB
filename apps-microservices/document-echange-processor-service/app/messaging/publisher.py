@@ -7,14 +7,19 @@ class Publisher:
         Initialise le publisher asynchrone.
         """
         self.connection = connection
+        # self.exchange_name = 'processed_data_exchange'
         self.exchange_name = 'processed_data_exchange'
+
+        # à modifier selon le flow de l'application
+        self.routing_key = 'data.document.ready_for_insertion'
         print(f"✅ Publisher initialisé (vers exchange '{self.exchange_name}').")
 
     async def publish_message(self, message_dict: dict, channel: aio_pika.abc.AbstractChannel):
         """
         Publie un message de manière asynchrone sur le canal fourni.
         """
-        routing_key = message_dict.get('routing_key', 'data.ready_for_embedding')
+        # routing_key = message_dict.get('routing_key', 'data.ready_for_embedding')
+        routing_key = self.routing_key
         exchange = await channel.get_exchange(self.exchange_name, ensure=True)
         
         await exchange.publish(
