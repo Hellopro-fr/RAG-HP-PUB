@@ -14,10 +14,10 @@ from common_utils.grpc_clients.schemas.chat import ChatRequest
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
 
-TOKENIZER = get_tokenizer("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
-MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
-# On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
-SAFE_MAX_LEN = MAX_MODEL_LEN - 512
+# TOKENIZER = get_tokenizer("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
+# MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
+# # On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
+# SAFE_MAX_LEN = MAX_MODEL_LEN - 512
 
 
 PROMPT_NETTOYAGE = """
@@ -50,44 +50,44 @@ def _run_ocr_sync(document_path: str):
     extractor = DocumentTextExtractor()
     return extractor.process_single_file(document_path)
 
-def make_chat_request(prompt_template, content,temperature=0.7):
-    """
-    Crée une requête chat en ajustant automatiquement les tokens de sortie
-    selon la taille du prompt.
+# def make_chat_request(prompt_template, content,temperature=0.7):
+#     """
+#     Crée une requête chat en ajustant automatiquement les tokens de sortie
+#     selon la taille du prompt.
 
-    Args:
-        prompt_template (str): template du prompt avec placeholder {content}
-        content (str): texte à insérer dans le prompt
+#     Args:
+#         prompt_template (str): template du prompt avec placeholder {content}
+#         content (str): texte à insérer dans le prompt
 
-    Returns:
-        ChatRequest prêt à être envoyé au modèle
-    """
+#     Returns:
+#         ChatRequest prêt à être envoyé au modèle
+#     """
     
-    # Construire le texte complet du prompt
-    prompt_text = prompt_template.format(content=content)
-    prompt_json = json.dumps(prompt_text)
+#     # Construire le texte complet du prompt
+#     prompt_text = prompt_template.format(content=content)
+#     prompt_json = json.dumps(prompt_text)
     
-    # Compter les tokens du prompt
-    input_tokens = len(TOKENIZER.encode(prompt_json))
+#     # Compter les tokens du prompt
+#     input_tokens = len(TOKENIZER.encode(prompt_json))
     
-    # Calculer le nombre maximum de tokens possibles pour la sortie
-    remaining_tokens = SAFE_MAX_LEN - input_tokens
+#     # Calculer le nombre maximum de tokens possibles pour la sortie
+#     remaining_tokens = SAFE_MAX_LEN - input_tokens
     
-    # Sécurité : éviter les valeurs négatives ou trop hautes
-    max_output_tokens = max(0,remaining_tokens)
+#     # Sécurité : éviter les valeurs négatives ou trop hautes
+#     max_output_tokens = max(0,remaining_tokens)
     
-    # Message d’avertissement utile pour le débogage
-    print(f"[INFO] Prompt = {input_tokens} tokens | Output = {max_output_tokens} tokens disponibles.")
+#     # Message d’avertissement utile pour le débogage
+#     print(f"[INFO] Prompt = {input_tokens} tokens | Output = {max_output_tokens} tokens disponibles.")
     
-    # Construire la requête
-    chat_request = ChatRequest(
-        prompt=prompt_json,
-        max_tokens=max_output_tokens,
-        temperature=temperature,
-        enable_thinking=False
-    )
+#     # Construire la requête
+#     chat_request = ChatRequest(
+#         prompt=prompt_json,
+#         max_tokens=max_output_tokens,
+#         temperature=temperature,
+#         enable_thinking=False
+#     )
     
-    return chat_request
+#     return chat_request
 
 async def process_document_data_for_templating(document_data: dict, bdd: str = "milvus" , executor: ProcessPoolExecutor | ThreadPoolExecutor = None) -> dict:
     
@@ -154,7 +154,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         method    = results['method']
 
         logger.info(f"\n\nMéthode utilisée : {method}")
-        logger.info(f"\n\nTexte juste après extraction : {texts}")
+        # logger.info(f"\n\nTexte juste après extraction : {texts}")
 
         # Néttoyage
         
@@ -170,37 +170,39 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         anonymized_text     = anonymize.anonymize_text(cleaned_text)
         text_to_embed_clean = anonymize.normalize_text(anonymized_text)
 
-        logger.info(f"\n\nTexte juste après anonymisation : {text_to_embed_clean}")
+        # logger.info(f"\n\nTexte juste après anonymisation : {text_to_embed_clean}")
 
         # Suppression des info inutiles via llm
-        try:
+        # try:
 
-            chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
-            raw_text = await llm_client.get_llm_chat_response(chat_request)
+        #     chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
+        #     raw_text = await llm_client.get_llm_chat_response(chat_request)
 
-            # Parsing de la réponse
-            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-            if match:
-                json_string = match.group(0)
-                parsed_json = json.loads(json_string)
-                contenu = parsed_json.get("contenu")
-                if not contenu:
-                    raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
-                elif contenu != "ok":
-                    text_to_embed_clean = contenu
-            else:
-                raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
+        #     # Parsing de la réponse
+        #     match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        #     if match:
+        #         json_string = match.group(0)
+        #         parsed_json = json.loads(json_string)
+        #         contenu = parsed_json.get("contenu")
+        #         if not contenu:
+        #             raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
+        #         elif contenu != "ok":
+        #             text_to_embed_clean = contenu
+        #     else:
+        #         raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
-            # Extraction du texte nettoyé
+        #     # Extraction du texte nettoyé
 
-        except Exception as e:
-            logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
+        # except Exception as e:
+        #     logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
 
         # Étape 3: Construire le message de sortie
         output_message = {
             "data": {
                 "text": text_to_embed_clean,
-                **{k.replace("-", "_"): v for k, v in document_data.items() if k not in ['document']}
+                "embedding" : [0.0]*1024,
+                "fichier_source" : document_data.get("fichier_source","inconnu")
+                # **{k.replace("-", "_"): v for k, v in document_data.items() if k in ['fichier_source']}
             },
             "collection": CollectionName.DOCUMENT,
             "database": bdd,
@@ -208,7 +210,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
             "base_name": base_name
         }
 
-        logger.info(f"\n\nTexte juste après nettoyage bruit via LLM : {text_to_embed_clean}")
+        # logger.info(f"\n\nTexte juste après nettoyage bruit via LLM : {text_to_embed_clean}")
         
         # Étape 4: Afficher le message de sortie pour débogage
         print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
