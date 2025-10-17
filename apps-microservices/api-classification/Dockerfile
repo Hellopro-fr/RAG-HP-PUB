@@ -12,21 +12,21 @@ ENV PYTHONPATH=/app
 COPY libs/common-utils /app/libs/common-utils
 RUN pip install -e /app/libs/common-utils
 
+# Ensuite, on copie et installe les requirements spécifiques à ce service
+COPY apps-microservices/api-classification/requirements.txt .
+RUN pip install -r requirements.txt
+
 # Copier et installer les stubs gRPC
 COPY libs/grpc-stubs /app/libs/grpc-stubs
 RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
 
-# Copier les protos AVANT de générer les stubs
+# Copier les protos
 COPY protos /app/protos
 
-# Générer les stubs gRPC à partir des protos (utiliser -exec au lieu de xargs pour plus de robustesse)
-RUN find /app/protos/grpc_stubs -name "*.proto" -exec python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src {} \;
+# Générer les stubs gRPC à partir des protos
+RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
 
 RUN pip install -e /app/libs/grpc-stubs
-
-# Ensuite, on copie et installe les requirements spécifiques à ce service
-COPY apps-microservices/api-classification/requirements.txt .
-RUN pip install -r requirements.txt
 
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
