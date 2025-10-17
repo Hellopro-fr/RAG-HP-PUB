@@ -15,7 +15,8 @@ class Consumer:
         self.publisher = publisher
 
         # Todo: à vérifier si le nom de la queue est correct
-        self.exchange_name = 'document_embedded_data_exchange'
+        # self.exchange_name = 'document_embedded_data_exchange' # Todo à modifier si pipeline normal
+        self.exchange_name = 'inserted_data_exchange'
         self.routing_key = 'data.document.ready_for_insertion'
         self.queue_name = 'insertion_document_queue'
         self.retry_exchange = 'retry_exchange'
