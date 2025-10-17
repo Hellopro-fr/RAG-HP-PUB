@@ -404,7 +404,7 @@ services:
       - services-net
     depends_on:
       - ocr-service
-      - llm-service
+      # - llm-service
 
   template-llm-service:
     build:
