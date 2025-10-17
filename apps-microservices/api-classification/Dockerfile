@@ -30,7 +30,8 @@ RUN pip install -e /app/libs/grpc-stubs
 
 # Étape 3: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
-COPY apps-microservices/api-classification .
+COPY apps-microservices/api-classification/app ./app
+COPY apps-microservices/api-classification/main.py .
 
 # Étape 4: Exposer le port
 EXPOSE 8577
