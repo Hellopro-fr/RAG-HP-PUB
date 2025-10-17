@@ -4,13 +4,13 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
-ENV PYTHONPATH=/app
-
 # Étape 2: Installer TOUTES les dépendances dans l'environnement global du conteneur
 # D'abord, on copie et installe notre librairie partagée
 COPY libs/common-utils /app/libs/common-utils
-RUN pip install -e /app/libs/common-utils 
+RUN pip install -e /app/libs/common-utils
+
+# Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent (APRÈS installation)
+ENV PYTHONPATH=/app:/app/libs/common-utils/src 
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service
 COPY apps-microservices/api-classification/requirements.txt .
