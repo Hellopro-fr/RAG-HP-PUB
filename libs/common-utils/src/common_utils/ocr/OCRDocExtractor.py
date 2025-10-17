@@ -3,7 +3,7 @@ import os
 from typing import List
 from gradio_client import Client, handle_file
 
-CLIENT_URL = os.getenv("CLIENT_URL_OCR", "http://34.34.5.41:8559")
+CLIENT_URL = os.getenv("CLIENT_URL_OCR", "http://34.34.166.5:8559")
 USERNAME = os.getenv("USERNAME_OCR", "admin")
 PASSWORD = os.getenv("PASSWORD_OCR", "admin")
 
