@@ -8,6 +8,7 @@ class ProductInput(BaseModel):
     nom_produit: str = Field(..., description="Nom/titre du produit")
     description: str = Field(..., description="Description détaillée du produit")
     id_categorie_attendue: Optional[str] = Field(None, description="ID de catégorie attendue (optionnel)")
+    llm: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="LLM à utiliser pour ce produit (par défaut: DeepSeek)")
 
     class Config:
         json_schema_extra = {
@@ -22,6 +23,7 @@ class ProductInput(BaseModel):
 class BatchProductsInput(BaseModel):
     """Modèle pour traiter plusieurs produits en lot"""
     produits: List[ProductInput] = Field(..., description="Liste des produits à classifier")
+    llm: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="LLM à utiliser pour ce batch (par défaut: DeepSeek)")
     
     class Config:
         json_schema_extra = {
@@ -53,7 +55,7 @@ class ClassificationResult(BaseModel):
     nom_categorie: Optional[str] = Field(None, description="Nom de la catégorie assignée")
     score_llm: Optional[int] = Field(None, description="Score de confiance (0 ou 1)")
     processing_time: float = Field(..., description="Temps de traitement en secondes")
-    llm_type: Optional[Literal["OpenAI", "DeepSeek"]] = Field(None, description="Type de LLM utilisé pour la classification")
+    llm_type: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="Type de LLM utilisé pour la classification")
     llm_response: Optional[List[Dict[str, Any]]] = Field(None, description="Réponse brute de DeepSeek (si applicable)")
     error: Optional[str] = Field(None, description="Message d'erreur si échec")
 
@@ -63,12 +65,12 @@ class BatchClassificationResponse(BaseModel):
     success_count: int = Field(..., description="Nombre de succès")
     error_count: int = Field(..., description="Nombre d'erreurs")
     resultats: List[ClassificationResult] = Field(..., description="Résultats détaillés")
-    llm_type: Optional[Literal["OpenAI", "DeepSeek"]] = Field(None, description="Type de LLM utilisé pour la classification")
+    llm_type: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="Type de LLM utilisé pour la classification")
     processing_time_total: float = Field(..., description="Temps total de traitement")
 
 class ConfigurationRequest(BaseModel):
     """Configuration pour l'API de classification"""
-    llm_choice: Literal["OpenAI", "DeepSeek"] = Field(default="DeepSeek", description="Choix du LLM")
+    llm_choice: Literal["OpenAI", "DeepSeek", "Qwen"] = Field(default="DeepSeek", description="Choix du LLM")
     search_results_limit: int = Field(default=30, description="Nombre de résultats de recherche")
     categories_limit: int = Field(default=10, description="Nombre max de catégories à considérer")
     

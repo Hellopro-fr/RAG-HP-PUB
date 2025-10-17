@@ -57,9 +57,12 @@ async def get_configuration():
 async def classify_single_product(product: ProductInput):
     """Classifie un seul produit"""
     try:
+        # Déterminer le LLM à utiliser : celui spécifié dans la requête ou DeepSeek par défaut
+        llm_to_use = product.llm if product.llm else "DeepSeek"
+
         if not classifier.is_llm_configured():
             raise HTTPException(status_code=503, detail="LLM non configuré")
-        
+
         # Conversion du modèle Pydantic en dict
         product_dict = {
             'id_produit': product.id_produit,
@@ -67,9 +70,9 @@ async def classify_single_product(product: ProductInput):
             'description': product.description,
             'id_categorie_attendue': product.id_categorie_attendue
         }
-        
-        result = classifier.classify_single(product_dict)
-        
+
+        result = await classifier.classify_single(product_dict, llm_override=llm_to_use)
+
         # Conversion en modèle de réponse
         return ClassificationResult(**result)
         
@@ -83,15 +86,18 @@ async def classify_single_product(product: ProductInput):
 async def classify_batch_products(batch_input: BatchProductsInput):
     """Classifie plusieurs produits en lot"""
     try:
+        # Déterminer le LLM à utiliser : celui spécifié dans la requête ou DeepSeek par défaut
+        llm_to_use = batch_input.llm if batch_input.llm else "DeepSeek"
+
         if not classifier.is_llm_configured():
             raise HTTPException(status_code=503, detail="LLM non configuré")
-        
+
         if len(batch_input.produits) == 0:
             raise HTTPException(status_code=400, detail="Liste de produits vide")
-        
+
         if len(batch_input.produits) > 100:  # Limite de sécurité
             raise HTTPException(status_code=400, detail="Trop de produits (max 100)")
-        
+
         # Conversion des modèles Pydantic en dicts
         products_dict = []
         for product in batch_input.produits:
@@ -101,9 +107,9 @@ async def classify_batch_products(batch_input: BatchProductsInput):
                 'description': product.description,
                 'id_categorie_attendue': product.id_categorie_attendue
             })
-        
-        result = classifier.classify_batch(products_dict)
-        
+
+        result = await classifier.classify_batch(products_dict, llm_override=llm_to_use)
+
         # Conversion en modèle de réponse
         classification_results = [ClassificationResult(**res) for res in result['resultats']]
         
@@ -283,14 +289,45 @@ async def test_classification():
         'description': 'Perceuse électrique professionnelle 750W avec mandrin automatique',
         'id_categorie_attendue': None
     }
-    
+
     try:
         if not classifier.is_llm_configured():
             return {"error": "LLM non configuré", "test_product": test_product}
-        
-        result = classifier.classify_single(test_product)
+
+        result = await classifier.classify_single(test_product)
         return {"test_result": result, "test_product": test_product}
-        
+
     except Exception as e:
         logger.error(f"Erreur test: {e}")
         return {"error": str(e), "test_product": test_product}
+
+@router.get("/test/qwen")
+async def test_qwen_classification():
+    """Endpoint de test spécifique pour Qwen via gRPC"""
+    test_product = {
+        'id_produit': 'test_qwen_001',
+        'nom_produit': 'Marteau pneumatique',
+        'description': 'Marteau pneumatique industriel 25kg pour travaux de démolition',
+        'id_categorie_attendue': None
+    }
+
+    try:
+        # Forcer l'utilisation de Qwen pour ce test
+        original_choice = classifier.llm_choice
+        classifier.llm_choice = 'Qwen'
+
+        if not classifier.is_llm_configured():
+            return {"error": "Qwen gRPC non configuré", "test_product": test_product}
+
+        result = await classifier.classify_single(test_product)
+
+        # Restaurer le choix original
+        classifier.llm_choice = original_choice
+
+        return {"test_result": result, "test_product": test_product, "llm_used": "Qwen"}
+
+    except Exception as e:
+        logger.error(f"Erreur test Qwen: {e}")
+        # Restaurer le choix original en cas d'erreur
+        classifier.llm_choice = original_choice
+        return {"error": str(e), "test_product": test_product, "llm_used": "Qwen"}

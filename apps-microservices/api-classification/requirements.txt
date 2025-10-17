@@ -6,3 +6,7 @@ openai
 python-dotenv
 tqdm
 python-multipart
+grpcio
+grpcio-tools
+protobuf
+googleapis-common-protos
