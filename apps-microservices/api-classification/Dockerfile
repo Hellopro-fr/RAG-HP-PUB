@@ -6,14 +6,12 @@ RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/ap
 WORKDIR /app
 
 # Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
-ENV PYTHONPATH=/app:/app/libs/common-utils/src:/app/libs/grpc-stubs/src
+ENV PYTHONPATH=/app
 
 # Étape 2: Installer TOUTES les dépendances dans l'environnement global du conteneur
 # D'abord, on copie et installe notre librairie partagée
 COPY libs/common-utils /app/libs/common-utils
-RUN pip install -e /app/libs/common-utils && \
-    python -c "import sys; print('Python path:', sys.path)" && \
-    python -c "import common_utils; print('common_utils imported successfully from:', common_utils.__file__)"
+RUN pip install -e /app/libs/common-utils
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service
 COPY apps-microservices/api-classification/requirements.txt .
