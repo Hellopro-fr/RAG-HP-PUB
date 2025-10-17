@@ -1,7 +1,6 @@
 # apps-microservices/api-classification/Dockerfile
 
 FROM python:3.10-slim
-RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -11,15 +10,15 @@ ENV PYTHONPATH=/app
 # Étape 2: Installer TOUTES les dépendances dans l'environnement global du conteneur
 # D'abord, on copie et installe notre librairie partagée
 COPY libs/common-utils /app/libs/common-utils
-RUN pip install -e /app/libs/common-utils
-
-# Copier et installer les stubs gRPC
-COPY libs/grpc-stubs /app/libs/grpc-stubs
-RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
+RUN pip install -e /app/libs/common-utils 
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service
 COPY apps-microservices/api-classification/requirements.txt .
 RUN pip install -r requirements.txt
+
+# Copier et installer les stubs gRPC
+COPY libs/grpc-stubs /app/libs/grpc-stubs
+RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
 
 # Copier les protos
 COPY protos /app/protos

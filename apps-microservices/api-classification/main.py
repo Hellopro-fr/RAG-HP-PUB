@@ -4,6 +4,7 @@ API de Classification de Produits
 """
 
 import uvicorn
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.router.classification import router as classification_router
@@ -14,6 +15,16 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+# Debug: Test d'import de common_utils
+logging.info(f"Python path: {sys.path}")
+try:
+    import common_utils
+    logging.info(f"✅ common_utils importé avec succès depuis: {common_utils.__file__}")
+    from common_utils.grpc_clients import llm_client
+    logging.info("✅ llm_client importé avec succès")
+except ImportError as e:
+    logging.error(f"❌ Erreur import common_utils: {e}")
 
 app = FastAPI(
     title="API Classification Produits",
