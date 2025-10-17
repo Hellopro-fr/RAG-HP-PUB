@@ -33,6 +33,8 @@ except ImportError as e:
 from common_utils.grpc_clients import (llm_client)
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
+QWEN_AVAILABLE = True
+
 class ProductClassifier:
     def __init__(self, llm_choice: str = 'DeepSeek'):
         self.llm_choice = llm_choice
