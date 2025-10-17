@@ -29,13 +29,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-os.makedirs(f'logs', exist_ok=True)
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    filename="logs/app.log",
-    filemode="a"
+    format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 @app.on_event("startup")
