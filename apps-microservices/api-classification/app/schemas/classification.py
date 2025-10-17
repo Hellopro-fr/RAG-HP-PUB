@@ -8,6 +8,7 @@ class ProductInput(BaseModel):
     nom_produit: str = Field(..., description="Nom/titre du produit")
     description: str = Field(..., description="Description détaillée du produit")
     id_categorie_attendue: Optional[str] = Field(None, description="ID de catégorie attendue (optionnel)")
+    llm: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="LLM à utiliser pour ce produit (par défaut: DeepSeek)")
 
     class Config:
         json_schema_extra = {
@@ -22,6 +23,7 @@ class ProductInput(BaseModel):
 class BatchProductsInput(BaseModel):
     """Modèle pour traiter plusieurs produits en lot"""
     produits: List[ProductInput] = Field(..., description="Liste des produits à classifier")
+    llm: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="LLM à utiliser pour ce batch (par défaut: DeepSeek)")
     
     class Config:
         json_schema_extra = {

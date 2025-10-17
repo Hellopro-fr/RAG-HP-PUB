@@ -2,20 +2,33 @@ import os
 import json
 import time
 import logging
+import asyncio
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
 import openai
 
 from .search import (
-    call_search_api, 
-    get_product_details, 
+    call_search_api,
+    get_product_details,
     get_category_details,
     EXTERNAL_PRODUCT_API_URL,
     EXTERNAL_CATEGORY_API_URL
 )
 
 logger = logging.getLogger(__name__)
+
+# Import du client gRPC pour Qwen
+try:
+    from common_utils.grpc_clients import llm_client
+    from common_utils.grpc_clients.schemas.chat import ChatRequest
+    QWEN_AVAILABLE = True
+    logger.info("Client gRPC Qwen importé avec succès")
+except ImportError as e:
+    logger.warning(f"Impossible d'importer le client gRPC Qwen: {e}")
+    QWEN_AVAILABLE = False
+    llm_client = None
+    ChatRequest = None
 
 class ProductClassifier:
     def __init__(self, llm_choice: str = 'DeepSeek'):
@@ -37,7 +50,7 @@ class ProductClassifier:
                 logger.info("Client OpenAI configuré")
             else:
                 raise ValueError("OPENAI_API_KEY manquante")
-                
+
         elif self.llm_choice == 'DeepSeek':
             api_key = os.getenv('DEEPSEEK_API_KEY')
             if api_key:
@@ -49,6 +62,15 @@ class ProductClassifier:
                 logger.info("Client DeepSeek configuré")
             else:
                 raise ValueError("DEEPSEEK_API_KEY manquante")
+
+        elif self.llm_choice == 'Qwen':
+            if not QWEN_AVAILABLE:
+                raise ValueError("Client gRPC Qwen non disponible. Vérifiez que common_utils est installé.")
+            # Vérifier que la variable d'environnement LLM_SERVICE_URL est définie
+            llm_service_url = os.getenv('LLM_SERVICE_URL')
+            if not llm_service_url:
+                logger.warning("LLM_SERVICE_URL non définie, utilisation de la valeur par défaut: llm-service:50051")
+            logger.info(f"Client gRPC Qwen configuré (URL: {llm_service_url or 'llm-service:50051'})")
     
     def update_configuration(self, config: Dict[str, Any]):
         """Met à jour la configuration du classificateur"""
@@ -72,6 +94,8 @@ class ProductClassifier:
     
     def is_llm_configured(self) -> bool:
         """Vérifie si un LLM est configuré"""
+        if self.llm_choice == 'Qwen':
+            return QWEN_AVAILABLE
         return (self.openai_client is not None) or (self.deepseek_client is not None)
     
     def search_similar_products(self, title: str, n_results: int = None) -> List[Dict]:
@@ -251,13 +275,92 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 }}
 """
 
-    def query_llm(self, prompt: str) -> Dict:
-        """Appel au LLM selon le choix"""
+    async def query_llm_qwen(self, prompt: str) -> Dict:
+        """Appel au LLM Qwen via gRPC"""
+        if not QWEN_AVAILABLE:
+            return {
+                "success": False,
+                "error": "Client gRPC Qwen non disponible",
+                "error_type": "ImportError",
+                "raw_response": {
+                    "error": "Client gRPC Qwen non disponible",
+                    "error_type": "ImportError"
+                }
+            }
+
+        try:
+            # Créer la requête ChatRequest pour Qwen
+            chat_request = ChatRequest(
+                prompt=prompt,
+                temperature=0.0,
+                max_tokens=1024,
+                enable_thinking=False
+            )
+
+            # Appel gRPC asynchrone
+            response_text = await llm_client.get_llm_chat_response(chat_request)
+
+            # Parser la réponse JSON
+            try:
+                response_json = json.loads(response_text)
+            except json.JSONDecodeError:
+                # Si la réponse n'est pas du JSON valide, essayer de l'extraire
+                logger.warning(f"Réponse Qwen non-JSON, tentative d'extraction: {response_text[:200]}")
+                return {
+                    "success": False,
+                    "error": "Réponse Qwen invalide (pas de JSON)",
+                    "error_type": "JSONDecodeError",
+                    "raw_response": {
+                        "error": "Réponse non-JSON",
+                        "raw_text": response_text
+                    }
+                }
+
+            # Créer un objet simulé similaire à OpenAI pour compatibilité
+            class QwenResponse:
+                def __init__(self, content):
+                    self.choices = [type('obj', (object,), {
+                        'message': type('obj', (object,), {'content': content})()
+                    })()]
+
+            qwen_response = QwenResponse(response_text)
+
+            return {
+                "success": True,
+                "response": qwen_response,
+                "raw_response": {
+                    "model": "Qwen3-14B-AWQ",
+                    "response_text": response_text,
+                    "parsed_json": response_json
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Erreur lors de l'appel gRPC Qwen: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "raw_response": {
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "exception_details": str(e)
+                }
+            }
+
+    async def query_llm(self, prompt: str) -> Dict:
+        """Appel au LLM selon le choix (asynchrone pour supporter Qwen)"""
         messages = [{"role": "user", "content": prompt}]
 
         try:
-            if self.llm_choice == 'OpenAI' and self.openai_client:
-                response = self.openai_client.chat.completions.create(
+            if self.llm_choice == 'Qwen':
+                # Appel asynchrone à Qwen via gRPC
+                return await self.query_llm_qwen(prompt)
+
+            elif self.llm_choice == 'OpenAI' and self.openai_client:
+                # Exécuter l'appel synchrone dans un thread pour ne pas bloquer
+                response = await asyncio.to_thread(
+                    self.openai_client.chat.completions.create,
                     model="gpt-4o-2024-05-13",
                     messages=messages,
                     temperature=0,
@@ -268,7 +371,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 return {"success": True, "response": response, "raw_response": raw_response_dict}
 
             elif self.llm_choice == 'DeepSeek' and self.deepseek_client:
-                response = self.deepseek_client.chat.completions.create(
+                # Exécuter l'appel synchrone dans un thread pour ne pas bloquer
+                response = await asyncio.to_thread(
+                    self.deepseek_client.chat.completions.create,
                     model="deepseek-chat",
                     messages=messages,
                     temperature=0,
@@ -294,10 +399,39 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 }
             }
 
-    def classify_single(self, product: Dict) -> Dict:
-        """Classifie un seul produit"""
+    async def classify_single(self, product: Dict, llm_override: Optional[str] = None) -> Dict:
+        """Classifie un seul produit (asynchrone)"""
         start_time = time.time()
-        
+
+        # Gestion de l'override du LLM
+        original_llm_choice = self.llm_choice
+        original_openai_client = self.openai_client
+        original_deepseek_client = self.deepseek_client
+
+        if llm_override:
+            try:
+                self.llm_choice = llm_override
+                self._initialize_clients()
+            except Exception as e:
+                logger.error(f"Erreur lors de l'initialisation du LLM override {llm_override}: {e}")
+                # Restaurer les valeurs originales
+                self.llm_choice = original_llm_choice
+                self.openai_client = original_openai_client
+                self.deepseek_client = original_deepseek_client
+                return {
+                    'id_produit': product['id_produit'],
+                    'titre_produit': product.get('nom_produit', ''),
+                    'description_produit': product.get('description', ''),
+                    'status': 'ERROR',
+                    'id_categorie': None,
+                    'nom_categorie': None,
+                    'score_llm': None,
+                    'error': f'Erreur configuration LLM {llm_override}: {str(e)}',
+                    'llm_type': llm_override,
+                    'llm_response': None,
+                    'processing_time': time.time() - start_time
+                }
+
         try:
             # Recherche de produits similaires
             similar_products = self.search_similar_products(product['nom_produit'])
@@ -336,9 +470,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             # Récupération des descriptions de catégories
             descriptions = self.get_category_descriptions(categories)
             
-            # Construction du prompt et appel LLM
+            # Construction du prompt et appel LLM (asynchrone)
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
-            llm_result_wrapper = self.query_llm(prompt)
+            llm_result_wrapper = await self.query_llm(prompt)
 
             # Vérifier si l'appel LLM a échoué
             if not llm_result_wrapper.get('success', False):
@@ -439,16 +573,22 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'llm_response': [f'Exception générale: {str(e)}'],
                 'processing_time': time.time() - start_time
             }
+        finally:
+            # Restaurer le LLM original si un override était utilisé
+            if llm_override:
+                self.llm_choice = original_llm_choice
+                self.openai_client = original_openai_client
+                self.deepseek_client = original_deepseek_client
 
-    def classify_batch(self, products: List[Dict]) -> Dict:
-        """Classifie plusieurs produits en lot"""
+    async def classify_batch(self, products: List[Dict], llm_override: Optional[str] = None) -> Dict:
+        """Classifie plusieurs produits en lot (asynchrone)"""
         start_time = time.time()
         results = []
         success_count = 0
         error_count = 0
-        
+
         for product in products:
-            result = self.classify_single(product)
+            result = await self.classify_single(product, llm_override=llm_override)
             results.append(result)
             
             if result['status'] == 'SUCCESS':
