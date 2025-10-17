@@ -146,10 +146,16 @@ class MilvusDocumentCrud:
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][document] Erreur Milvus lors de l'insertion : {e}")
-            self.logger.error(f"Data : {data}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus lors de l'insertion : {e}"
+            }
         except Exception as e:
             self.logger.error(f"[{model_key}][document] insertion de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            return {
+                "status": "error",
+                "message": f"Erreur inattendue : {e}"
+            }
     
     async def update_document(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -271,5 +277,15 @@ class MilvusDocumentCrud:
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][document] Erreur Milvus lors de la récupération : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus : {e}",
+                "code": 500
+            }
         except Exception as e:
             self.logger.error(f"[{model_key}][document] Erreur de Récupèration de document : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur inattendue : {e}",
+                "code": 500
+            }
