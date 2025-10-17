@@ -1,6 +1,8 @@
-# apps-microservices/api-ingestion/Dockerfile
+# apps-microservices/api-classification/Dockerfile
 
 FROM python:3.10-slim
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
@@ -15,8 +17,11 @@ RUN pip install -e /app/libs/common-utils
 COPY libs/grpc-stubs /app/libs/grpc-stubs
 RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
 
+# Copier les fichiers proto AVANT de générer les stubs
+COPY protos /app/protos
+
 # Générer les stubs gRPC à partir des protos
-RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
+RUN find /app/protos/grpc_stubs -name "*.proto" -exec python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src {} \;
 
 RUN pip install -e /app/libs/grpc-stubs
 
