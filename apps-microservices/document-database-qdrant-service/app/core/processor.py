@@ -10,7 +10,9 @@ async def insertion_data(document_data: dict) -> dict:
     Retourne: Un dictionnaire prêt à être publié.
     """
 
-    documents = document_data.get("data",[])
+    # todo rollbacker si pipeline normal
+    document = document_data.get("data",{})
+    documents = [document]
     collection = document_data.get("collection", CollectionName.DOCUMENT)
     bdd = "milvus" 
 

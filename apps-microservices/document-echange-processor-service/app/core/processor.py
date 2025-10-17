@@ -197,14 +197,13 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         #     logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
 
         # Étape 3: Construire le message de sortie
-        # Todo rollbacker data en dictionnaire si pipeline normal
         output_message = {
-            "data": [{
+            "data": {
                 "text": text_to_embed_clean,
                 "embedding" : [0.0]*1024,
-                "fichier_source" : document_data.get("fichier_source","inconnu")
+                "fichier_source" : document_data.get("fichier_source","inconnu"),
                 # **{k.replace("-", "_"): v for k, v in document_data.items() if k in ['fichier_source']}
-            }],
+            },
             "collection": CollectionName.DOCUMENT,
             "database": bdd,
             "log_file": log_file,
