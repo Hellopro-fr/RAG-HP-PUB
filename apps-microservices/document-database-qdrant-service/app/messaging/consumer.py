@@ -1,6 +1,7 @@
 import aio_pika
 import json
 import asyncio
+import traceback
 
 from document_database_qdrant_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_database_qdrant_service.core.processor import insertion_data # Importe la logique métier
@@ -76,8 +77,9 @@ class Consumer:
 
         except Exception as e:
             retry_count = self._get_retry_count(message)
+            stack = traceback.format_exc()
             if retry_count < MAX_RETRIES:
-                print(f"❌ Database-Document-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                print(f"❌ Database-Document-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}",stack)
                 await message.nack(requeue=False)
             else:
                 print(f"❌ Database-Document-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
