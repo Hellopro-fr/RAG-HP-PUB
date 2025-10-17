@@ -19,7 +19,7 @@ from .search import (
 logger = logging.getLogger(__name__)
 
 # Import du client gRPC pour Qwen
-try:
+""" try:
     from common_utils.grpc_clients import (llm_client)
     from common_utils.grpc_clients.schemas.chat import ChatRequest
     QWEN_AVAILABLE = True
@@ -29,6 +29,9 @@ except ImportError as e:
     QWEN_AVAILABLE = False
     llm_client = None
     ChatRequest = None
+ """
+from common_utils.grpc_clients import (llm_client)
+from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 class ProductClassifier:
     def __init__(self, llm_choice: str = 'DeepSeek'):
