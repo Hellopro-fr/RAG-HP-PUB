@@ -327,8 +327,9 @@ services:
     container_name: api-classification-service
     restart: unless-stopped
     # TODO: à supprimer en PROD
-    volumes:
-      - ./apps-microservices/api-classification:/app:rw
+    # IMPORTANT: Volume commenté car il écrase /app/libs/common-utils installé pendant le build
+    # volumes:
+    #   - ./apps-microservices/api-classification:/app:rw
     ports:
       - "8577:8577"
     environment:
