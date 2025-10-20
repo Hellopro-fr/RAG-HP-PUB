@@ -202,6 +202,8 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
                 "text": text_to_embed_clean,
                 "embedding" : [0.0]*1024,
                 "fichier_source" : document_data.get("fichier_source","inconnu"),
+                "id_demande" : document_data.get("id_demande","inconnu"),
+                "id_fournisseur" : document_data.get("id_fournisseur","inconnu"),
                 # **{k.replace("-", "_"): v for k, v in document_data.items() if k in ['fichier_source']}
             },
             "collection": CollectionName.DOCUMENT,
