@@ -23,7 +23,6 @@ try:
     from common_utils.grpc_clients import (llm_client)
     from common_utils.grpc_clients.schemas.chat import ChatRequest
     QWEN_AVAILABLE = True
-    logger.info("Client gRPC Qwen importé avec succès")
 except ImportError as e:
     logger.warning(f"Impossible d'importer le client gRPC Qwen: {e}")
     QWEN_AVAILABLE = False
