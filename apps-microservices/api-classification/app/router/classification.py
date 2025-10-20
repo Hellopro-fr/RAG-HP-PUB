@@ -328,6 +328,7 @@ async def test_qwen_classification():
 
     except Exception as e:
         logger.error(f"Erreur test Qwen: {e}")
-        # Restaurer le choix original en cas d'erreur
-        classifier.llm_choice = original_choice
         return {"error": str(e), "test_product": test_product, "llm_used": "Qwen"}
+    finally:
+        # Toujours restaurer le choix original
+        classifier.llm_choice = original_choice
