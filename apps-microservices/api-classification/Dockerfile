@@ -1,16 +1,17 @@
 # apps-microservices/api-classification/Dockerfile
 
 FROM python:3.10-slim
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
+ENV PYTHONPATH=/app
 
 # Étape 2: Installer TOUTES les dépendances dans l'environnement global du conteneur
 # D'abord, on copie et installe notre librairie partagée
 COPY libs/common-utils /app/libs/common-utils
-RUN pip install -e /app/libs/common-utils
-
-# Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent (APRÈS installation)
-ENV PYTHONPATH=/app:/app/libs/common-utils/src 
+RUN pip install -e /app/libs/common-utils 
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service
 COPY apps-microservices/api-classification/requirements.txt .
@@ -37,6 +38,5 @@ COPY apps-microservices/api-classification/main.py .
 EXPOSE 8577
 
 # Étape 5: Définir la commande de lancement directement
-# On lance Uvicorn en lui disant de trouver le module 'main' dans le paquet 'api_ingestion_service'
-# Le port est défini dynamiquement par la variable $PORT de Render, avec une valeur par défaut de 8510.
+# On lance Uvicorn pour le service api-classification sur le port 8577
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8577"]

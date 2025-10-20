@@ -23,7 +23,6 @@ try:
     from common_utils.grpc_clients import (llm_client)
     from common_utils.grpc_clients.schemas.chat import ChatRequest
     QWEN_AVAILABLE = True
-    logger.info("Client gRPC Qwen importé avec succès")
 except ImportError as e:
     logger.warning(f"Impossible d'importer le client gRPC Qwen: {e}")
     QWEN_AVAILABLE = False
@@ -301,21 +300,10 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             # Appel gRPC asynchrone
             response_text = await llm_client.get_llm_chat_response(chat_request)
 
-            # Parser la réponse JSON
-            try:
-                response_json = json.loads(response_text)
-            except json.JSONDecodeError:
-                # Si la réponse n'est pas du JSON valide, essayer de l'extraire
-                logger.warning(f"Réponse Qwen non-JSON, tentative d'extraction: {response_text[:200]}")
-                return {
-                    "success": False,
-                    "error": "Réponse Qwen invalide (pas de JSON)",
-                    "error_type": "JSONDecodeError",
-                    "raw_response": {
-                        "error": "Réponse non-JSON",
-                        "raw_text": response_text
-                    }
-                }
+            # Vérification que la réponse contient du JSON valide
+            # Note: response_text peut être du JSON brut ou du texte contenant du JSON
+            # On le laisse tel quel pour que le parsing se fasse plus tard (ligne ~497)
+            # Cela assure une cohérence avec OpenAI et DeepSeek
 
             # Créer un objet simulé similaire à OpenAI pour compatibilité
             class QwenResponse:
@@ -331,8 +319,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 "response": qwen_response,
                 "raw_response": {
                     "model": "Qwen3-14B-AWQ",
-                    "response_text": response_text,
-                    "parsed_json": response_json
+                    "response_text": response_text
                 }
             }
 
