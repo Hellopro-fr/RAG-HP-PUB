@@ -10,7 +10,9 @@ async def insertion_data(document_data: dict) -> dict:
     Retourne: Un dictionnaire prêt à être publié.
     """
 
-    documents = document_data.get("data",[])
+    # todo rollbacker si pipeline normal
+    document = document_data.get("data",{})
+    documents = [document]
     collection = document_data.get("collection", CollectionName.DOCUMENT)
     bdd = "milvus" 
 
@@ -65,7 +67,7 @@ async def insertion_data(document_data: dict) -> dict:
                 logging.info("Le fichier source %s existe déjà dans la base de données. Insertion ignorée.", fichier_source)
                 result = data
             else:
-                result = func(documents)
+                result = await func(documents)
 
             output_message = {
                 "database"       : bdd,

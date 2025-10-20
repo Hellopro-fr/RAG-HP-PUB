@@ -10,6 +10,11 @@ services:
       - ./triton-model-repo:/output
     # Exécute les deux scripts l'un après l'autre. Le conteneur s'arrêtera après.
     command: /bin/bash -c "python export_embedding_to_onnx.py && python export_reranker_to_onnx.py"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   vllm-server:
     image: vllm/vllm-openai:latest
     command: >
@@ -47,6 +52,11 @@ services:
       - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   triton-server:
     image: nvcr.io/nvidia/tritonserver:24.01-py3 # Utilisez une image récente
@@ -72,6 +82,11 @@ services:
       - ./triton-model-repo:/models
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
@@ -96,6 +111,11 @@ services:
       start_period: 30s
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   kibana:
     image: docker.elastic.co/kibana/kibana:9.1.1
@@ -110,6 +130,11 @@ services:
         condition: service_healthy
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # --- Services Applicatifs (Clients) ---
 
@@ -128,6 +153,11 @@ services:
     #     condition: service_healthy
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   embedding-model-service:
     build:
@@ -141,6 +171,11 @@ services:
         condition: service_healthy
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   reranking-model-service:
     build:
@@ -154,6 +189,11 @@ services:
         condition: service_healthy
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   database-recherche-service:
     build:
@@ -163,6 +203,11 @@ services:
       - .env
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api-model-service:
     build:
@@ -182,6 +227,11 @@ services:
       - database-recherche-service
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api-ingestion-service:
     build:
@@ -193,6 +243,11 @@ services:
       - "8509:8509"
     env_file:
       - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api-recherche-service:
     build:
@@ -215,6 +270,11 @@ services:
       - .env
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api-embedding-service:
     build:
@@ -231,6 +291,11 @@ services:
       - .env
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api-chat-llm-service:
     build:
@@ -248,6 +313,11 @@ services:
       - .env
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 
   api-classification-service:
@@ -263,6 +333,11 @@ services:
       - "8577:8577"
     env_file:
       - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api-transcription-service:
     build:
@@ -274,6 +349,11 @@ services:
       - "8515:8515"
     env_file:
       - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   
   api-html-recherche-service:
     build:
@@ -289,6 +369,11 @@ services:
       - "8550:8550"
     env_file:
       - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api-gateway-service:
     build:
@@ -302,6 +387,11 @@ services:
       - "8500:8500"
     env_file:
       - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   devis-processor-service:
     build:
@@ -313,6 +403,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   echange-processor-service:
     build:
@@ -324,6 +419,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   website-processor-service:
     build:
@@ -335,6 +435,11 @@ services:
       - .env
     deploy:
       replicas: 8
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   product-processor-service:
     build:
@@ -346,6 +451,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   categories-processor-service:
     build:
@@ -357,6 +467,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   fournisseurs-processor-service:
     build:
@@ -368,6 +483,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   ocr-service:
     build:
@@ -389,6 +509,11 @@ services:
             - driver: nvidia
               device_ids: ['0']
               capabilities: [gpu]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   document-echange-processor-service:
     build:
       context: .
@@ -405,6 +530,11 @@ services:
     depends_on:
       - ocr-service
       # - llm-service
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   template-llm-service:
     build:
@@ -424,6 +554,11 @@ services:
       - llm-service
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
               
   embedding-service:
@@ -454,6 +589,11 @@ services:
       #         capabilities: [gpu]
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   di-database-qdrant-service:
     build:
@@ -465,6 +605,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   echange-database-qdrant-service:
     build:
@@ -476,6 +621,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   website-database-qdrant-service:
     build:
@@ -487,6 +637,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   
   product-database-qdrant-service:
     build:
@@ -498,6 +653,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   categories-database-qdrant-service:
     build:
@@ -509,6 +669,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   fournisseurs-database-qdrant-service:
     build:
@@ -520,6 +685,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   
   document-database-qdrant-service:
     build:
@@ -531,6 +701,11 @@ services:
       - .env
     deploy:
       replicas: 4
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   webhook-service:
     build:
@@ -540,6 +715,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   api-rest-milvus-service:
       build:
         context: .
@@ -550,6 +730,11 @@ services:
         - "8517:8517"
       env_file:
         - .env
+      logging:
+        driver: "json-file"
+        options:
+          max-size: "10m"
+          max-file: "3"
 
   api-check-doublon-produit:
     build:
@@ -561,6 +746,11 @@ services:
       - "8516:8516"
     env_file:
       - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   optimize-service:
     build:
@@ -580,6 +770,11 @@ services:
       - llm-service
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   dlq-archiver-host:
     build:
@@ -597,6 +792,11 @@ services:
         condition: service_healthy
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   dlq-archiver-client:
     build:
@@ -614,6 +814,11 @@ services:
         condition: service_healthy
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
   
   dlq-requeuer-tool:
     build:
@@ -630,6 +835,11 @@ services:
     networks:
       - services-net
     command: tail -f /dev/null
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   prometheus:
     image: prom/prometheus
@@ -641,6 +851,11 @@ services:
     command: --config.file=/etc/prometheus/prometheus.yml
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   grafana:
     image: grafana/grafana
@@ -660,6 +875,11 @@ services:
       - prometheus
     networks:
       - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     
 networks:
   services-net:
