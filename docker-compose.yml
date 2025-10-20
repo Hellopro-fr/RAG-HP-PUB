@@ -331,8 +331,14 @@ services:
       - ./apps-microservices/api-classification:/app:rw
     ports:
       - "8577:8577"
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    depends_on:
+      - llm-service
     env_file:
       - .env
+    networks:
+      - services-net
     logging:
       driver: "json-file"
       options:
