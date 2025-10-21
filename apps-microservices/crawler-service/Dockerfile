@@ -7,9 +7,9 @@ WORKDIR /app/crawler
 COPY apps-microservices/crawler-service/crawler/package*.json ./
 RUN npm install
 
-# Install Playwright's OS dependencies using its bundled command.
-# This is crucial for running headless browsers in a minimal environment like slim images.
-RUN npx playwright install-deps
+# Install Playwright browsers AND their OS dependencies.
+# This is the most reliable way to set up the environment.
+RUN npx playwright install --with-deps
 
 # Copy the rest of the crawler source code
 COPY apps-microservices/crawler-service/crawler/ ./
@@ -37,9 +37,12 @@ COPY apps-microservices/crawler-service/app ./app
 COPY apps-microservices/crawler-service/main.py .
 
 # Copy the compiled crawler and its dependencies from the builder stage
-# The source path is relative to the builder's WORKDIR
 COPY --from=builder /app/crawler/dist ./crawler/dist
 COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
+
+# Copy the downloaded Playwright browser binaries from the builder stage
+COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
+
 
 # Expose the port for the FastAPI application
 EXPOSE 8503

@@ -17,8 +17,7 @@
     "scripts": {
         "start": "node dist/main.js",
         "dev": "tsx src/main.ts",
-        "build": "tsc",
-        "postinstall": "npx crawlee install-playwright-browsers"
+        "build": "tsc"
     },
     "author": "It's not you it's me",
     "license": "ISC"
