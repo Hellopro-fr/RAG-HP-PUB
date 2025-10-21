@@ -3,7 +3,7 @@ FROM node:22-slim AS builder
 
 WORKDIR /app/crawler
 
-# Copy package files and install dependencies. This will download the playwright npm package.
+# Copy package files and install dependencies.
 COPY apps-microservices/crawler-service/crawler/package*.json ./
 RUN npm install
 
@@ -14,20 +14,20 @@ COPY apps-microservices/crawler-service/crawler/ ./
 RUN npm run build
 
 
-# Stage 2: Create the final Python application image using the official Playwright image
-# This image contains the browser binaries and all OS dependencies for a specific Playwright version.
-FROM mcr.microsoft.com/playwright/python:v1.56.1-noble
+# Stage 2: Create the final application image using the official Playwright image
+# This image contains Node.js, the browser binaries, and all OS dependencies for Playwright v1.56.1.
+FROM mcr.microsoft.com/playwright:v1.56.1-noble
 
 WORKDIR /app
 
 ENV PYTHONPATH=/app
 
-# Install the Node.js runtime, required for our Python app to call the Node.js crawler.
-RUN apt-get update && apt-get install -y nodejs npm --no-install-recommends && rm -rf /var/lib/apt/lists/*
+# Install Python and pip, as this base image does not include them.
+RUN apt-get update && apt-get install -y python3 python3-pip --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY apps-microservices/crawler-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy the Python application code
 COPY apps-microservices/crawler-service/app ./app
