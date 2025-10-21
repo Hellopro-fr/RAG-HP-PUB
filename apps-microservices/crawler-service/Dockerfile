@@ -41,6 +41,10 @@ COPY apps-microservices/crawler-service/main.py .
 COPY --from=builder /app/crawler/dist ./crawler/dist
 COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
 
+# Copy package.json to provide module context ("type": "module") to the Node.js runtime
+COPY --from=builder /app/crawler/package.json /app/crawler/package-json
+COPY --from=builder /app/crawler/package-lock.json /app/crawler/package-lock.json
+
 # Copy the downloaded Playwright browser binaries from the builder stage to ensure version consistency
 COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
