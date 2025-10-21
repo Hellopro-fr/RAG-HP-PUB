@@ -31,7 +31,9 @@ class VLLMClient:
                         "max_tokens": max_tokens,
                         "chat_template_kwargs": {
                             "enable_thinking": enable_thinking
-                        }
+                        },
+                        "top_p": float(0.8),
+                        "top_k": int(20)
                     }
                     async with client.stream("POST", VLLM_API_URL, json=request_payload) as response:
                         response.raise_for_status()
