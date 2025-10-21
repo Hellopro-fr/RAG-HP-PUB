@@ -6,6 +6,7 @@ import logging
 import urllib.parse
 from urllib.error import URLError, HTTPError
 import mimetypes
+from tempfile import NamedTemporaryFile
 
 from common_utils.ocr.OCRDocExtractor import OCRDocExtractor
 
@@ -222,32 +223,60 @@ class DocumentTextExtractor:
 
     def extract_text_from_image_ocr(self, file_path: Path) -> str:
         """
-        Extrait le texte d'une image ou d'un PDF avec OCRExtractor
-        
-        Args:
-            image_path: Chemin vers l'image ou le PDF
-            
-        Returns:
-            Texte extrait
+        Extrait le texte d'une image ou d'un PDF avec OCRExtractor.
+        - Si un PDF contient plus de 10 pages, il est traité par blocs de 4 pages.
         """
-        # Vérifier si le chemin existe
+        # --- Vérifications de base ---
         if not file_path.exists():
             raise FileNotFoundError(f"Fichier introuvable : {file_path}")
 
-        # Vérifier si c'est bien un fichier
         if not file_path.is_file():
             raise ValueError(f"Le chemin fourni n'est pas un fichier valide : {file_path}")
 
         ext = file_path.suffix.lower()
-        # try:
-            # Vérifier l'extension
-        if ext in self.ocr_supported:
-            return self.ocr_processor.convert_doc_to_markdown([file_path])
-        else:
+
+        if ext not in self.ocr_supported:
             raise ValueError(f"Format de fichier non supporté : {ext}")
-        # except Exception as e:
-        #     self.logger.error(f"Erreur OCR: {e}")
-        #     return f"error ocr {e}"
+
+        # --- Si PDF ---
+        if ext == ".pdf":
+            try:
+                doc = fitz.open(file_path)
+                num_pages = doc.page_count
+            except Exception as e:
+                raise RuntimeError(f"Impossible d'ouvrir le PDF : {e}")
+
+            # --- Si plus de 10 pages, traitement par blocs de 4 pages ---
+            if num_pages > 10:
+                all_text = []
+                block_size = 4
+
+                for start in range(0, num_pages, block_size):
+                    end = min(start + block_size - 1, num_pages - 1)
+
+                    # Nouveau document temporaire contenant 4 pages
+                    block_doc = fitz.open()
+                    block_doc.insert_pdf(doc, from_page=start, to_page=end)
+
+                    # Créer le fichier temporaire
+                    with NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+                        block_doc.save(temp_pdf.name)
+                        temp_path = Path(temp_pdf.name)
+
+                    # OCR sur le bloc de 4 pages
+                    try:
+                        text = self.ocr_processor.convert_doc_to_markdown([temp_path])
+                        all_text.append(text)
+                    finally:
+                        temp_path.unlink(missing_ok=True)  # suppression du fichier temporaire
+
+                doc.close()
+                return "\n".join(all_text)
+
+            doc.close()
+
+        # --- Sinon : image ou petit PDF ---
+        return self.ocr_processor.convert_doc_to_markdown([file_path])
         
     def has_extractable_images(self, file_path: Path) -> bool:
         """
