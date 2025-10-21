@@ -25,8 +25,9 @@ WORKDIR /app
 
 ENV PYTHONPATH=/app
 
-# The official Playwright image already contains Node.js, npm, procps,
-# and all necessary system libraries, so no apt-get is needed.
+# Install the Node.js runtime. The official Playwright Python image does not
+# include it, but it's required for our Python app to call the Node.js crawler.
+RUN apt-get update && apt-get install -y nodejs npm --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY apps-microservices/crawler-service/requirements.txt .
