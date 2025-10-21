@@ -54,18 +54,24 @@ if (!domain || !site || !id || !storagePath || !callbackUrl) {
     process.exit(1);
 }
 
-// --- Configure storage paths to be unique for this job ---
-Configuration.set('storageClientOptions', {
-    storagePath: storagePath,
-});
+// --- Change the current working directory to the unique job storage path ---
+// This ensures that all of Crawlee's default storage locations (datasets, request_queues, etc.)
+// are created inside the job-specific folder, providing perfect isolation.
+try {
+    process.chdir(storagePath);
+    console.info(`Changed working directory to: ${storagePath}`);
+} catch (err) {
+    console.error(`Failed to change directory to ${storagePath}:`, err);
+    process.exit(1);
+}
 
 const nameLogs = `${domain}-logs-${now}.log`;
-attachFSLogger(nameLogs); // Logs will be inside the job's storagePath
+attachFSLogger(nameLogs); // Logs will now be created inside the job's storagePath
 
 console.info("Crawler starting with arguments:");
 console.info(JSON.stringify(args, null, 2));
 
-// --- Main crawler logic (largely the same, but paths are now relative to storagePath) ---
+// --- Main crawler logic (largely the same, but paths are now relative to the new CWD) ---
 
 export let robots = await RobotsFile.find(site);
 if (!robots || Object.keys(robots).length === 0) {
