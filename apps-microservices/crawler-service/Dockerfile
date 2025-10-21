@@ -18,15 +18,15 @@ COPY apps-microservices/crawler-service/crawler/ ./
 RUN npm run build
 
 
-# Stage 2: Create the final Python application image
-FROM python:3.11-slim
+# Stage 2: Create the final Python application image using the official Playwright image
+FROM mcr.microsoft.com/playwright/python:v1.55.0-noble
 
 WORKDIR /app
 
 ENV PYTHONPATH=/app
 
-# Install Node.js runtime and procps (for `ps` command required by crawlee/playwright)
-RUN apt-get update && apt-get install -y nodejs npm procps --no-install-recommends && rm -rf /var/lib/apt/lists/*
+# The official Playwright image already contains Node.js, npm, procps,
+# and all necessary system libraries, so no apt-get is needed.
 
 # Install Python dependencies
 COPY apps-microservices/crawler-service/requirements.txt .
@@ -40,7 +40,7 @@ COPY apps-microservices/crawler-service/main.py .
 COPY --from=builder /app/crawler/dist ./crawler/dist
 COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
 
-# Copy the downloaded Playwright browser binaries from the builder stage
+# Copy the downloaded Playwright browser binaries from the builder stage to ensure version consistency
 COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 
