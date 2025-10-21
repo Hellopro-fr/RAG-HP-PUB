@@ -17,19 +17,21 @@ services:
         max-file: "3"
   vllm-server:
     image: vllm/vllm-openai:latest
+    shm_size: 16g
+    # --enable-prefix-caching
+    # --enforce-eager
     command: >
       --model ${MODEL_NAME}
+      --tensor-parallel-size 2
       --trust-remote-code
       --gpu-memory-utilization 0.95
       --max-num-seqs 64
       --max-num-batched-tokens 8192
       --enable-chunked-prefill
-      --enable-prefix-caching
       --disable-log-stats
       --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
       --swap-space 4
       --max-model-len 32768
-      --enforce-eager
       --dtype auto
     ports:
       - "8000:8000"
@@ -44,8 +46,8 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']
-              # count: all
+              # device_ids: ['0']
+              count: all
               capabilities: [gpu]
     restart: unless-stopped
     volumes:
@@ -146,11 +148,6 @@ services:
     environment:
       - VLLM_API_URL=http://34.34.5.41:8000/v1/chat/completions
       - MODEL_NAME=${MODEL_NAME}
-    env_file:
-      - .env
-    # depends_on:
-    #   vllm-server:
-    #     condition: service_healthy
     networks:
       - services-net
     logging:
@@ -164,11 +161,12 @@ services:
       context: .
       dockerfile: ./apps-microservices/embedding-model-service/Dockerfile
     # Le GPU n'est plus nécessaire ici, Triton s'en charge !
+      # - TRITON_URL=triton-server:8001
     environment:
-      - TRITON_URL=triton-server:8001
-    depends_on:
-      triton-server:
-        condition: service_healthy
+      - TRITON_URL=34.34.166.5:8001
+    # depends_on:
+    #   triton-server:
+    #     condition: service_healthy
     networks:
       - services-net
     logging:

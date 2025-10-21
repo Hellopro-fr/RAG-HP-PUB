@@ -1,3 +1,4 @@
+import re
 import httpx
 import json
 import os
@@ -83,7 +84,8 @@ class VLLMClient:
                     response.raise_for_status()
                     response_data = response.json()
                     if 'choices' in response_data and len(response_data['choices']) > 0:
-                        return response_data['choices'][0].get('message', {}).get('content', '')
+                        # return re.sub(r'<think>.*?</think>', '', response_data['choices'][0].get('message', {}).get('content', ''), flags=re.DOTALL)
+                        return re.sub(r'\s+', ' ', re.sub(r'<think>.*?</think>', '', response_data['choices'][0].get('message', {}).get('content', ''), flags=re.DOTALL)).strip()
                     return "[ERREUR: Réponse inattendue du service LLM]"
             except httpx.TimeoutException:
                 logging.error(f"Timeout dépassé lors de la requête non-streamée vers vLLM.")
