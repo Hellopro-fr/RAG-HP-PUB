@@ -65,6 +65,7 @@ Voici les types de pages possibles :
 "fiche_technique" : document décrivant les caractéristiques, fonctionnalités et spécifications d’un produit ou service.
 "catalogue" : recueil structuré présentant l’ensemble ou une partie des produits/services proposés par une entreprise.
 "plaquette_prix" : support listant les tarifs des produits ou services, généralement sous forme simplifiée et claire pour les clients.
+"savoir-faire" : page mettant en avant les compétences, expertises, méthodes ou réalisations spécifiques d’une entreprise, illustrant sa maîtrise dans un domaine donné.
 "autre" : si aucun de ces types ne correspond.
 Rappels :
 Si "page_type" ≠ "autre", ne génère pas de champ "commentaire_si_autre".

@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str
     M_PARAMS: str
     EF_PARAMS: str
+    MODEL_NAME: str = "Qwen/Qwen3-14B"
 
     MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
         "devis_poc": [
