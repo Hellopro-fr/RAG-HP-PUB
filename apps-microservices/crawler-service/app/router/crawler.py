@@ -24,6 +24,12 @@ async def start_new_crawl(payload: CrawlRequest):
             "skipdiez": payload.skip_diez,
             "tokeep": ";".join(payload.to_keep) if payload.to_keep else None,
             "toremove": ";".join(payload.to_remove) if payload.to_remove else None,
+            "proxyapify": payload.proxy_apify,
+            "bypassquestionmark": payload.bypass_question_mark,
+            "bypassdiez": payload.bypass_diez,
+            "breaklimit": payload.break_limit,
+            "percrawl": payload.per_crawl,
+            "perminute": payload.per_minute,
         }
         
         crawl_id = await crawler_manager.start_crawl(

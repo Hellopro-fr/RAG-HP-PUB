@@ -16,6 +16,12 @@ class CrawlRequest(BaseModel):
     skip_diez: Optional[bool] = Field(False, description="Process and filter URLs with '#'")
     to_keep: Optional[List[str]] = Field(None, description="List of URL query parameters to keep.", example=["page", "id"])
     to_remove: Optional[List[str]] = Field(None, description="List of URL query parameters to remove.", example=["utm_source"])
+    proxy_apify: Optional[str] = Field(None, description="Apify proxy key.", example="my_apify_proxy_key")
+    bypass_question_mark: Optional[bool] = Field(False, description="Bypass filtering of URLs with '?'")
+    bypass_diez: Optional[bool] = Field(False, description="Bypass filtering of URLs with '#'")
+    break_limit: Optional[bool] = Field(False, description="Enable break limit of 5000 URLs to be crawled.")
+    per_crawl: Optional[int] = Field(None, description="Number of URLs to crawl per job. 0 means unlimited.", example=1000)
+    per_minute: Optional[int] = Field(None, description="Crawling speed in URLs per minute. 0 means unlimited.", example=60)
 
 class CrawlResponse(BaseModel):
     message: str
