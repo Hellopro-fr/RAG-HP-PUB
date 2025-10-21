@@ -27,7 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the Python application code
 COPY apps-microservices/crawler-service/app ./app
-COPY main.py .
+COPY apps-microservices/crawler-service/main.py .
 
 # Copy the compiled crawler from the builder stage
 COPY --from=builder apps-microservices/crawler-service/app/crawler/dist ./crawler/dist
