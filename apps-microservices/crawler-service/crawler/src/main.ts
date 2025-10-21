@@ -1,4 +1,4 @@
-import { RequestQueue, RobotsFile, Configuration } from "crawlee";
+import { RequestQueue, RobotsFile } from "crawlee";
 import axios from "axios";
 import { router } from "./routes.js";
 import {

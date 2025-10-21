@@ -170,7 +170,8 @@ export const startCrawler = async (
     let proxyConfiguration: ProxyConfiguration | undefined;
 
     let configuration = new Configuration({
-        maxUsedCpuRatio: 0.2,
+        maxUsedCpuRatio: 0.95,
+        availableMemoryRatio: 0.95
     });
 
     if (PROXY_PASSWORD) {
