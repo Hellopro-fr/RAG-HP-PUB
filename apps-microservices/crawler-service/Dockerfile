@@ -4,11 +4,11 @@ FROM node:22-slim AS builder
 WORKDIR /app/crawler
 
 # Copy package files and install dependencies
-COPY crawler/package*.json ./
+COPY apps-microservices/crawler-service/crawler/package*.json ./
 RUN npm install
 
 # Copy the rest of the crawler source code
-COPY crawler/ ./
+COPY apps-microservices/crawler-service/crawler/ ./
 
 # Build the TypeScript project into JavaScript
 RUN npm run build
@@ -22,16 +22,16 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY apps-microservices/crawler-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the Python application code
-COPY app ./app
+COPY apps-microservices/crawler-service/app ./app
 COPY main.py .
 
 # Copy the compiled crawler from the builder stage
-COPY --from=builder /app/crawler/dist ./crawler/dist
-COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
+COPY --from=builder apps-microservices/crawler-service/app/crawler/dist ./crawler/dist
+COPY --from=builder apps-microservices/crawler-service/app/crawler/node_modules ./crawler/node_modules
 
 # Expose the port for the FastAPI application
 EXPOSE 8503
