@@ -25,6 +25,9 @@ WORKDIR /app
 
 ENV PYTHONPATH=/app
 
+# Install Node.js runtime, which is required to execute the crawler subprocess
+RUN apt-get update && apt-get install -y nodejs npm --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
 # Install Python dependencies
 COPY apps-microservices/crawler-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -33,7 +36,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY apps-microservices/crawler-service/app ./app
 COPY apps-microservices/crawler-service/main.py .
 
-# Copy the compiled crawler from the builder stage
+# Copy the compiled crawler and its dependencies from the builder stage
+# The source path is relative to the builder's WORKDIR
 COPY --from=builder /app/crawler/dist ./crawler/dist
 COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
 
