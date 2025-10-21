@@ -25,8 +25,8 @@ WORKDIR /app
 
 ENV PYTHONPATH=/app
 
-# Install Node.js runtime, which is required to execute the crawler subprocess
-RUN apt-get update && apt-get install -y nodejs npm --no-install-recommends && rm -rf /var/lib/apt/lists/*
+# Install Node.js runtime and procps (for `ps` command required by crawlee/playwright)
+RUN apt-get update && apt-get install -y nodejs npm procps --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY apps-microservices/crawler-service/requirements.txt .
