@@ -148,7 +148,7 @@ class CrawlerManager:
         urls_crawled = 0
         last_url_time = None
         
-        dataset_path = os.path.join(storage_path, 'datasets', domain)
+        dataset_path = os.path.join(storage_path, 'storage', 'datasets', domain)
         if os.path.exists(dataset_path):
             try:
                 # Count files which represent crawled pages
@@ -183,9 +183,10 @@ class CrawlerManager:
             if job_info["status"] == "running":
                  raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
 
-        # Path to the data we want to zip
-        domain_folder = [d for d in os.listdir(os.path.join(job_storage_path, 'datasets')) if os.path.isdir(os.path.join(job_storage_path, 'datasets', d))][0]
-        data_path = os.path.join(job_storage_path, 'datasets', domain_folder)
+        # Path to the data we want to zip, accounting for Crawlee's default 'storage' subdirectory
+        datasets_root_path = os.path.join(job_storage_path, 'storage', 'datasets')
+        domain_folder = [d for d in os.listdir(datasets_root_path) if os.path.isdir(os.path.join(datasets_root_path, d))][0]
+        data_path = os.path.join(datasets_root_path, domain_folder)
 
         if not os.path.exists(data_path):
             raise HTTPException(status_code=404, detail="No result data found for this crawl.")
