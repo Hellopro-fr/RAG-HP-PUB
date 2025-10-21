@@ -7,6 +7,10 @@ WORKDIR /app/crawler
 COPY apps-microservices/crawler-service/crawler/package*.json ./
 RUN npm install
 
+# Install Playwright's OS dependencies using its bundled command.
+# This is crucial for running headless browsers in a minimal environment like slim images.
+RUN npx playwright install-deps
+
 # Copy the rest of the crawler source code
 COPY apps-microservices/crawler-service/crawler/ ./
 
