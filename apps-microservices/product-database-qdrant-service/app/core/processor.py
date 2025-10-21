@@ -92,23 +92,17 @@ def insertion_data(produits_data: dict) -> dict:
                 existing_sources = [item.get('source', '') for item in data]
                 existing_sources_set = set(existing_sources)
 
-                 # Vérifier si BO existe ou si les deux sources BO et SITEWEB existent
-                has_bo = "BO" in existing_sources_set
-                has_siteweb = "SITEWEB" in existing_sources_set
-                has_both_bo_and_siteweb = has_bo and has_siteweb
+                # Normaliser la source à insérer
+                source_to_insert = origin.upper()
 
-                if has_bo or has_both_bo_and_siteweb:
-                    # Cas où on ne doit pas insérer
-                    if has_both_bo_and_siteweb:
-                        reason = "les deux sources BO et SITEWEB existent déjà"
-                    else:
-                        reason = "source BO existe déjà"
-                        
-                    print(f"Le produit ID {id_produit} : {reason}. Insertion ignorée.")
+                # Logique : on insère uniquement si la source qu'on veut ajouter n'existe pas déjà
+                if source_to_insert in existing_sources_set:
+                    # La source existe déjà, on n'insère pas
+                    print(f"Le produit ID {id_produit} : source {source_to_insert} existe déjà. Insertion ignorée.")
                     result = data
                 else:
-                    # Aucune des conditions d'exclusion n'est remplie → Insertion
-                    print(f"Le produit ID {id_produit} existe avec sources '{list(existing_sources_set)}' (pas de BO). Insertion autorisée.")
+                    # La source n'existe pas encore, on insère
+                    print(f"Le produit ID {id_produit} : source {source_to_insert} n'existe pas. Insertion autorisée.")
                     result = func(produits)
                     if not result:
                         id_produit_milvus = ""
@@ -123,7 +117,7 @@ def insertion_data(produits_data: dict) -> dict:
                         "already_in_bdd": len(data) > 0,
                         "origin"        : origin
                     }
-                    
+
                     data_bo_milvus.append({
                         "embedding"       : [0.0]*1024,
                         "id_produit"       : id_produit,
