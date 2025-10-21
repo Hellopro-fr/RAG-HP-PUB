@@ -22,12 +22,16 @@ WORKDIR /app
 
 ENV PYTHONPATH=/app
 
-# Install Python and pip, as this base image does not include them.
-RUN apt-get update && apt-get install -y python3 python3-pip --no-install-recommends && rm -rf /var/lib/apt/lists/*
+# Install Python, pip, and venv module.
+RUN apt-get update && apt-get install -y python3 python3-pip python3-venv --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Create and activate a virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies into the virtual environment
 COPY apps-microservices/crawler-service/requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the Python application code
 COPY apps-microservices/crawler-service/app ./app
@@ -42,5 +46,5 @@ COPY --from=builder /app/crawler/package-lock.json /app/crawler/package-lock.jso
 # Expose the port for the FastAPI application
 EXPOSE 8503
 
-# Command to run the FastAPI server
+# Command to run the FastAPI server. Uvicorn will be found in the venv's PATH.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8503"]
