@@ -887,6 +887,23 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  crawler-service:
+    build: .
+    ports:
+      - "8503:8503"
+    volumes:
+      # Mount a volume to persist crawl data outside the container
+      - crawler_data:/app/storage
+    environment:
+      # Example: Set max concurrent crawls for this instance to 2
+      - MAX_CONCURRENT_CRAWLS=2
+    deploy:
+      replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
+      resources:
+        limits:
+          cpus: '2.0' # Limit to 1 CPU core
+          memory: 4G   # Limit to 2GB of RAM
     
 networks:
   services-net:
@@ -896,3 +913,4 @@ volumes:
   elasticsearch-data:
     driver: local
   grafana-storage:
+  crawler_data:
