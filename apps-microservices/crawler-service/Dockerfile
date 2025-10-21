@@ -34,8 +34,8 @@ COPY apps-microservices/crawler-service/app ./app
 COPY apps-microservices/crawler-service/main.py .
 
 # Copy the compiled crawler from the builder stage
-COPY --from=builder apps-microservices/crawler-service/app/crawler/dist ./crawler/dist
-COPY --from=builder apps-microservices/crawler-service/app/crawler/node_modules ./crawler/node_modules
+COPY --from=builder /app/crawler/dist ./crawler/dist
+COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
 
 # Expose the port for the FastAPI application
 EXPOSE 8503
