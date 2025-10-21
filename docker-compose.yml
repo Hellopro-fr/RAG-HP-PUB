@@ -887,7 +887,9 @@ services:
         max-file: "3"
 
   crawler-service:
-    build: .
+    build:
+      context: .
+      dockerfile: ./apps-microservices/crawler-service/Dockerfile
     ports:
       - "8503:8503"
     volumes:
