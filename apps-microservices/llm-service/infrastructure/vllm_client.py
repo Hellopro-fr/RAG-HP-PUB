@@ -50,7 +50,6 @@ class VLLMClient:
                         request_payload["top_p"] = float(0.8)
                         request_payload["top_k"] = int(20)
                         request_payload["repetition_penalty"] = float(1.0)
-                    logging.info(f"request_payload : {request_payload}")
                     async with client.stream(
                         "POST", VLLM_API_URL, json=request_payload
                     ) as response:
@@ -117,7 +116,6 @@ class VLLMClient:
                         request_payload["top_p"] = float(0.8)
                         request_payload["top_k"] = int(20)
                         request_payload["repetition_penalty"] = float(1.0)
-                    logging.info(f"request_payload : {request_payload}")
                     response = await client.post(VLLM_API_URL, json=request_payload)
                     response.raise_for_status()
                     response_data = response.json()
