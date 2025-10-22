@@ -15,5 +15,8 @@ class Settings:
     # Path to the compiled Node.js crawler entry point
     CRAWLER_EXECUTABLE_PATH: str = "/app/crawler/dist/main.js"
 
+    # URL for connecting to the Redis instance
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
+
 
 settings = Settings()

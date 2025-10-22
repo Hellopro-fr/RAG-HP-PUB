@@ -1,22 +1,36 @@
 version: "3.8"
 
 services:
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+
   crawler-service:
-    build: .
+    build:
+      context: .
+      dockerfile: ./apps-microservices/crawler-service/Dockerfile
     ports:
       - "8503:8503"
     volumes:
       # Mount a volume to persist crawl data outside the container
       - crawler_data:/app/storage
     environment:
-      # Example: Set max concurrent crawls for this instance to 2
-      - MAX_CONCURRENT_CRAWLS=2
+      # Example: Set max concurrent crawls for this instance to 1 for stability
+      - MAX_CONCURRENT_CRAWLS=1
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
     deploy:
       replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
         limits:
           cpus: '1.0' # Limit to 1 CPU core
-          memory: 2G   # Limit to 2GB of RAM
+          memory: 4G   # Limit to 4GB of RAM
 
 volumes:
   crawler_data:
+  redis_data:

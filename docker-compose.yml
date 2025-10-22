@@ -899,15 +899,27 @@ services:
     volumes:
       # Mount a volume to persist crawl data outside the container
       - crawler_data:/app/storage
+    env_file:
+      - .env
     environment:
-      # Example: Set max concurrent crawls for this instance to 2
+      # Example: Set max concurrent crawls for this instance to 1 for stability
       - MAX_CONCURRENT_CRAWLS=1
+    depends_on:
+      - redis
     deploy:
       replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
         limits:
           cpus: '1.0' # Limit to 1 CPU core
           memory: 4G   # Limit to 4GB of RAM
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --save 60 1 --loglevel warning
     
 networks:
   services-net:
@@ -918,3 +930,4 @@ volumes:
     driver: local
   grafana-storage:
   crawler_data:
+  redis_data:
