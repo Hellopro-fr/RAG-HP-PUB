@@ -274,7 +274,7 @@ class DocumentTextExtractor:
                         temp_path.unlink(missing_ok=True)  # suppression du fichier temporaire
 
                 doc.close()
-                return "\n".join(all_text)
+                return " ".join(all_text)
 
             doc.close()
 

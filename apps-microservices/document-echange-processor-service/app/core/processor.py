@@ -153,7 +153,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         texts     = results['text']
         method    = results['method']
 
-        logger.info(f"\n\nMéthode utilisée : {method}")
+        # logger.info(f"\n\nMéthode utilisée : {method}")
         # logger.info(f"\n\nTexte juste après extraction : {texts}")
 
         # Néttoyage
@@ -215,7 +215,8 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         # logger.info(f"\n\nTexte juste après nettoyage bruit via LLM : {text_to_embed_clean}")
         
         # Étape 4: Afficher le message de sortie pour débogage
-        print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
+        # print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
+        print(f"🔍Document-Echange-Processor: Message prêt")
         
         return output_message
     

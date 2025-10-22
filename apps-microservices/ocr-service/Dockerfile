@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y git \
 
 # Copier les requirements du service
 COPY apps-microservices/ocr-service/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Installer docext depuis la source
 RUN git clone https://github.com/nanonets/docext.git
@@ -20,6 +20,8 @@ RUN pip install -e .
 
 WORKDIR /app
 
+RUN pip install --no-cache-dir flash-attn --no-build-isolation
+
 EXPOSE 8559
 
 CMD [ \
@@ -27,7 +29,7 @@ CMD [ \
   "-m", "docext.app.app",\
   "--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", \
   "--gpu_memory_utilization", "0.95",\
-  "--concurrency_limit", "10",\
+  "--concurrency_limit", "15",\
   "--dtype", "float16",\
   "--server_port", "8559",\
   "--vlm_server_port", "8181"\

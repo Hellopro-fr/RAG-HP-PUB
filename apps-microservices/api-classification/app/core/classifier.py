@@ -593,12 +593,18 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             else:
                 error_count += 1
                 logger.warning(f"Erreur produit {result['id_produit']}: {result.get('error', 'Inconnue')}")
-        
+
+        # Déterminer le llm_type réellement utilisé
+        # Priorité 1: llm_override s'il est fourni
+        # Priorité 2: llm_type du premier résultat
+        # Priorité 3: self.llm_choice (fallback)
+        actual_llm_type = llm_override if llm_override else (results[0].get('llm_type') if results else self.llm_choice)
+
         return {
             'total_produits': len(products),
             'success_count': success_count,
             'error_count': error_count,
             'resultats': results,
-            'llm_type': self.llm_choice,
+            'llm_type': actual_llm_type,
             'processing_time_total': time.time() - start_time
         }
