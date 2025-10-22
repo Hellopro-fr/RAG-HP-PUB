@@ -24,7 +24,6 @@ services:
       --model ${MODEL_NAME}
       --tensor-parallel-size 2
       --trust-remote-code
-      --enable-reasoning
       --reasoning-parser qwen3
       --gpu-memory-utilization 0.95
       --max-num-seqs 64
