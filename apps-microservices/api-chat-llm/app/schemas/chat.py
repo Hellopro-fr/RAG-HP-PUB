@@ -19,4 +19,4 @@ class chatResponse(BaseModel):
     chat_model: Optional[str] = "gpt-4.1-2025-04-14"
     temperature: float = 0.0
     time_elapsed: Optional[float] = None
-
+    options: Optional[Dict[str, Any]] = None

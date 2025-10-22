@@ -248,6 +248,9 @@ class DocumentTextExtractor:
 
             # --- Si plus de 10 pages, traitement par blocs de 4 pages ---
             if num_pages > 10:
+
+                # return "NOK"
+
                 all_text = []
                 block_size = 4
 

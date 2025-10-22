@@ -4,6 +4,7 @@ from concurrent import futures
 from grpc_stubs import llm_pb2, llm_pb2_grpc
 from application.chat_service import ChatApplicationService
 
+
 class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
     def __init__(self, chat_service: ChatApplicationService):
         self.chat_service = chat_service
@@ -21,12 +22,23 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
     async def Chat(self, request, context):
         logging.info(f"Nouvelle requête Chat reçue.")
         try:
-            temperature = request.temperature if request.HasField('temperature') else 0.7
-            max_tokens = request.max_tokens if request.HasField('max_tokens') else 1024
-            enable_thinking = request.enable_thinking if request.HasField('enable_thinking') else False
+            temperature = (
+                request.temperature if request.HasField("temperature") else 0.7
+            )
+            max_tokens = request.max_tokens if request.HasField("max_tokens") else 1024
+            enable_thinking = (
+                request.enable_thinking
+                if request.HasField("enable_thinking")
+                else False
+            )
+            options = request.options if request.HasField("options") else {}
 
             full_message = await self.chat_service.handle_chat_completion(
-                request.message, temperature, max_tokens, enable_thinking
+                request.message,
+                temperature,
+                max_tokens,
+                enable_thinking,
+                options=options,
             )
             return llm_pb2.FullChatResponse(full_message=full_message)
         except Exception as e:
@@ -34,7 +46,7 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(f"Une erreur interne est survenue: {e}")
             return llm_pb2.FullChatResponse()
-        
+
     async def ChatBatch(self, request, context):
         """
         Implémentation de la méthode RPC unaire ChatBatch.
@@ -42,15 +54,23 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
         num_messages = len(request.messages)
         logging.info(f"Nouvelle requête ChatBatch reçue pour {num_messages} messages.")
         try:
-            temperature = request.temperature if request.HasField('temperature') else 0.7
-            max_tokens = request.max_tokens if request.HasField('max_tokens') else 1024
-            enable_thinking = request.enable_thinking if request.HasField('enable_thinking') else False
+            temperature = (
+                request.temperature if request.HasField("temperature") else 0.7
+            )
+            max_tokens = request.max_tokens if request.HasField("max_tokens") else 1024
+            enable_thinking = (
+                request.enable_thinking
+                if request.HasField("enable_thinking")
+                else False
+            )
+            options = request.options if request.HasField("options") else {}
 
             responses = await self.chat_service.handle_chat_batch_completion(
                 list(request.messages),
                 temperature,
                 max_tokens,
-                enable_thinking
+                enable_thinking,
+                options=options,
             )
             return llm_pb2.ChatBatchResponse(full_messages=responses)
         except Exception as e:
@@ -59,10 +79,11 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             context.set_details(f"Une erreur interne est survenue: {e}")
             return llm_pb2.ChatBatchResponse()
 
+
 async def serve(chat_service: ChatApplicationService):
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=100))
     llm_pb2_grpc.add_LLMServiceServicer_to_server(LLMServiceImpl(chat_service), server)
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port("[::]:50051")
     logging.info("Serveur gRPC LLM démarré sur le port 50051...")
     await server.start()
     await server.wait_for_termination()

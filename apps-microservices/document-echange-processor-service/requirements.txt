@@ -1,5 +1,6 @@
 pika
 aio_pika
+aiofiles
 asyncio
 beautifulsoup4
 bs4

@@ -3,6 +3,8 @@ import aio_pika
 import os
 import json
 import asyncio
+import hashlib
+import aiofiles
 from concurrent.futures import ThreadPoolExecutor
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
@@ -49,62 +51,130 @@ class Consumer:
         await queue.bind(exchange, self.routing_key)
         return queue
 
-    def _get_retry_count(self, message: aio_pika.abc.AbstractIncomingMessage) -> int:
-        if message.headers and 'x-death' in message.headers:
-            for death in message.headers['x-death']:
-                if death.get('queue') == self.retry_queue_name:
-                    return death.get('count', 0)
-        return 0
-
     async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
-        """Tâche pour traiter un seul message, y compris la logique de retry/dlq."""
         try:
             data = json.loads(message.body)
             document_data = data.get('data', {})
-            bdd = data.get('database', "milvus")
+            document_id = document_data.get('fichier_source')
+            bdd = "milvus"
 
-            if not document_data or not document_data.get('document'):
-                raise ValueError("Données invalides (contenu vide ou 'document' manquant).")
-
-            print(f"\n📥 Document-Processor: Message reçu pour URL: {document_data.get('fichier_source', 'Source inconnue')}")
-            
-            # loop = asyncio.get_running_loop()
-            # output_message = await loop.run_in_executor(
-            #     self.executor, process_document_data_for_templating, document_data, bdd
-            # )
-            output_message = await process_document_data_for_templating(document_data, bdd, self.executor)
-            
-            routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
-            output_message['routing_key'] = routing_key
-            
-            async with self.connection.channel() as channel:
-                await self.publisher.publish_message(output_message, channel)
-            
-            await message.ack()
-
-        except (json.JSONDecodeError, ValueError) as e:
-            # Erreur permanente: le message ne sera jamais valide.
-            print(f"❌ Document-Processor: Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
-            await self._send_to_dlq(message, e, 0)
-            await message.ack()
-
-        except Exception as e:
-            retry_count = self._get_retry_count(message)
-            if retry_count < MAX_RETRIES:
-                print(f"❌ Document-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
-                await message.nack(requeue=False)
-            else:
-                print(f"❌ Document-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
-                await self._send_to_dlq(message, e, MAX_RETRIES)
+            # Vérifie si déjà en cours de traitement
+            if await self._is_processing(document_id):
+                print(f"⚠️ Document {document_id} déjà en traitement, skip")
                 await message.ack()
+                return
+            
+            # Marque comme "en cours" AVANT l'ACK
+            await self._mark_as_processing(document_id, message.body)
+            
+            # ✅ ACK immédiat
+            await message.ack()
+            
+            print(f"📥 Traitement OCR démarré pour {document_id}...")
+            
+            try:
+                # Traitement long
+                output_message = await process_document_data_for_templating(
+                    document_data, bdd, self.executor
+                )
+                
+                # Publie le résultat
+                routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
+                output_message['routing_key'] = routing_key
+                
+                async with self.connection.channel() as channel:
+                    await self.publisher.publish_message(output_message, channel)
+                
+                # ✅ Marque comme terminé
+                await self._mark_as_completed(document_id)
+                print(f"✅ Traitement terminé pour {document_id}")
+                
+            except Exception as e:
+                # ❌ En cas d'erreur, republier le message
+                print(f"❌ Erreur durant traitement: {e}")
+                await self._handle_processing_error(message.body, e, document_id)
+                
+        except Exception as e:
+            print(f"❌ Erreur critique: {e}")
+            await message.nack(requeue=True)
 
-    async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
+    def _get_processing_filepath(self, document_id: str) -> str:
+        """Génère un chemin de fichier sécurisé basé sur un hash"""
+        # Crée un hash unique du document_id
+        hash_id = hashlib.md5(document_id.encode()).hexdigest()
+        return f"/tmp/processing_{hash_id}.json"
+
+    async def _mark_as_processing(self, document_id: str, message_body: bytes):
+        """Sauvegarde l'état 'en cours'"""
+        filepath = self._get_processing_filepath(document_id)
+        
+        # Sauvegarde aussi l'ID original pour debug
+        data = {
+            'original_id': document_id,
+            'message': message_body.decode()
+        }
+        
+        async with aiofiles.open(filepath, 'w') as f:
+            await f.write(json.dumps(data))
+
+    async def _is_processing(self, document_id: str) -> bool:
+        """Vérifie si le document est déjà en traitement"""
+        import os
+        filepath = self._get_processing_filepath(document_id)
+        return os.path.exists(filepath)
+
+    async def _mark_as_completed(self, document_id: str):
+        """Supprime l'état 'en cours'"""
+        import os
+        filepath = self._get_processing_filepath(document_id)
+        try:
+            os.remove(filepath)
+        except FileNotFoundError:
+            pass
+
+    async def _handle_processing_error(self, message_body: bytes, error: Exception, document_id: str):
+        """Gère les erreurs après ACK"""
+        try:
+            data = json.loads(message_body)
+            retry_count = data.get('_retry_count', 0)
+            
+            if retry_count < MAX_RETRIES:
+                data['_retry_count'] = retry_count + 1
+                
+                async with self.connection.channel() as channel:
+                    exchange = await channel.get_exchange(self.retry_exchange)
+                    await exchange.publish(
+                        aio_pika.Message(
+                            body=json.dumps(data).encode(),
+                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                        ),
+                        routing_key=self.routing_key
+                    )
+                
+                print(f"🔄 Message republié (tentative {retry_count + 1}/{MAX_RETRIES})")
+            else:
+                await self._send_to_dlq_manual(message_body, error, MAX_RETRIES)
+            
+            # Nettoie l'état
+            await self._mark_as_completed(document_id)
+            
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la gestion d'erreur: {e}")
+
+    async def _send_to_dlq_manual(self, message_body: bytes, error: Exception, retry_count: int):
+        """Envoie à la DLQ manuellement (message déjà ACK)"""
         async with self.connection.channel() as channel:
             dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-            dlq_headers = DLQProperties.create_dlq_headers(error, 'Document-processor-service', retry_count, message)
+            # Créer un faux message pour DLQProperties
+            dlq_headers = {
+                'x-error': str(error),
+                'x-service': 'Document-processor-service',
+                'x-retry-count': retry_count,
+                'x-timestamp': asyncio.get_event_loop().time()
+            }
             await dlx.publish(
                 aio_pika.Message(
-                    body=message.body,
+                    body=message_body,
                     headers=dlq_headers,
                     delivery_mode=aio_pika.DeliveryMode.PERSISTENT
                 ),
@@ -116,13 +186,13 @@ class Consumer:
         
         # 1. Crée le channel et configure le prefetch
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=2)  # Nombre maximum de messages traités en parallèle
+        await channel.set_qos(prefetch_count=10)  # Nombre maximum de messages traités en parallèle
         
         # 2. Déclare et bind les queues/exchanges
         queue = await self._setup_queues(channel)
         
         # 3. Crée un semaphore pour limiter le nombre de traitements simultanés
-        semaphore = asyncio.Semaphore(2)
+        semaphore = asyncio.Semaphore(10)
         
         async def safe_process(message):
             """Wrapper pour limiter le parallélisme et capturer les erreurs."""
