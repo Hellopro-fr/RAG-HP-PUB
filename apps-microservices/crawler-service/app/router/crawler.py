@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 @router.post("/start", response_model=CrawlResponse, status_code=status.HTTP_202_ACCEPTED)
 async def start_new_crawl(payload: CrawlRequest):
     """
-    Starts a new web crawling job.
+    Starts or resumes a web crawling job. A job is uniquely identified by the `id` field.
+    If a job with the same `id` is already running, an error will be returned.
     """
     try:
         params = {
@@ -33,11 +34,12 @@ async def start_new_crawl(payload: CrawlRequest):
             "perminute": payload.per_minute,
         }
         
+        # The user-provided `id` is now the stable and unique identifier for the crawl job.
         crawl_id = await crawler_manager.start_crawl(
             domain=payload.domain,
-            start_url=payload.start_url,
-            crawl_id_prefix=payload.id,
-            callback_url=payload.callback_url,
+            start_url=str(payload.start_url),
+            crawl_id=payload.id,
+            callback_url=str(payload.callback_url),
             params=params
         )
         return CrawlResponse(
