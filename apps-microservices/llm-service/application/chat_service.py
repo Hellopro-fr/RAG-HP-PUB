@@ -1,6 +1,5 @@
 import asyncio
 
-from more_itertools import first
 from infrastructure.vllm_client import VLLMClient
 
 
