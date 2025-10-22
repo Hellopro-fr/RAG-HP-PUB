@@ -1,12 +1,21 @@
 # --- Étape 0: Base ---
-FROM python:3.11-slim
+FROM vllm/vllm-openai:v0.8.2 AS dev
+
+# Install Python 3.11
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends python3.11 python3.11-venv python3-pip python3.11-dev git && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Ensure Python 3.11 is default
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python
+
 WORKDIR /app
 
 # --- Étape 1: Définir le PYTHONPATH ---
 ENV PYTHONPATH=/app
-
-RUN apt-get update && apt-get install -y git \
-    && rm -rf /var/lib/apt/lists/*
+ENV CUDA_HOME=/usr/local/cuda/bin/nvcc
+ENV PATH=$CUDA_HOME/bin:$PATH
+ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
 # Copier les requirements du service
 COPY apps-microservices/ocr-service/requirements.txt .
