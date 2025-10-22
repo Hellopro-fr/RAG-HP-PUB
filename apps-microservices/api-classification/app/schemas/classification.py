@@ -9,6 +9,7 @@ class ProductInput(BaseModel):
     description: str = Field(..., description="Description détaillée du produit")
     id_categorie_attendue: Optional[str] = Field(None, description="ID de catégorie attendue (optionnel)")
     llm: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="LLM à utiliser pour ce produit (par défaut: DeepSeek)")
+    enable_thinking: Optional[bool] = Field(False, description="Activer le mode thinking pour Qwen (par défaut: False)")
 
     class Config:
         json_schema_extra = {
@@ -16,7 +17,9 @@ class ProductInput(BaseModel):
                 "id_produit": "12345",
                 "nom_produit": "Perceuse électrique Bosch",
                 "description": "Perceuse électrique professionnelle 750W avec mandrin automatique",
-                "id_categorie_attendue": "cat_123"
+                "id_categorie_attendue": "cat_123",
+                "llm": "Qwen",
+                "enable_thinking": True
             }
         }
 
@@ -24,7 +27,8 @@ class BatchProductsInput(BaseModel):
     """Modèle pour traiter plusieurs produits en lot"""
     produits: List[ProductInput] = Field(..., description="Liste des produits à classifier")
     llm: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="LLM à utiliser pour ce batch (par défaut: DeepSeek)")
-    
+    enable_thinking: Optional[bool] = Field(False, description="Activer le mode thinking pour Qwen (par défaut: False)")
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -36,12 +40,14 @@ class BatchProductsInput(BaseModel):
                         "id_categorie_attendue": "cat_123"
                     },
                     {
-                        "id_produit": "12346", 
+                        "id_produit": "12346",
                         "nom_produit": "Marteau-piqueur",
                         "description": "Marteau-piqueur pneumatique 25kg",
                         "id_categorie_attendue": None
                     }
-                ]
+                ],
+                "llm": "Qwen",
+                "enable_thinking": True
             }
         }
 

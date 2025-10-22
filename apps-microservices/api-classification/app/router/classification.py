@@ -59,6 +59,7 @@ async def classify_single_product(product: ProductInput):
     try:
         # Déterminer le LLM à utiliser : celui spécifié dans la requête ou DeepSeek par défaut
         llm_to_use = product.llm if product.llm else "DeepSeek"
+        enable_thinking = product.enable_thinking if product.enable_thinking is not None else False
 
         if not classifier.is_llm_configured():
             raise HTTPException(status_code=503, detail="LLM non configuré")
@@ -71,7 +72,7 @@ async def classify_single_product(product: ProductInput):
             'id_categorie_attendue': product.id_categorie_attendue
         }
 
-        result = await classifier.classify_single(product_dict, llm_override=llm_to_use)
+        result = await classifier.classify_single(product_dict, llm_override=llm_to_use, enable_thinking=enable_thinking)
 
         # Conversion en modèle de réponse
         return ClassificationResult(**result)
@@ -88,6 +89,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
     try:
         # Déterminer le LLM à utiliser : celui spécifié dans la requête ou DeepSeek par défaut
         llm_to_use = batch_input.llm if batch_input.llm else "DeepSeek"
+        enable_thinking = batch_input.enable_thinking if batch_input.enable_thinking is not None else False
 
         if not classifier.is_llm_configured():
             raise HTTPException(status_code=503, detail="LLM non configuré")
@@ -108,7 +110,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
                 'id_categorie_attendue': product.id_categorie_attendue
             })
 
-        result = await classifier.classify_batch(products_dict, llm_override=llm_to_use)
+        result = await classifier.classify_batch(products_dict, llm_override=llm_to_use, enable_thinking=enable_thinking)
 
         # Conversion en modèle de réponse
         classification_results = [ClassificationResult(**res) for res in result['resultats']]

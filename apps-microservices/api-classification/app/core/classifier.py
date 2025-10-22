@@ -275,7 +275,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 }}
 """
 
-    async def query_llm_qwen(self, prompt: str) -> Dict:
+    async def query_llm_qwen(self, prompt: str, enable_thinking: bool = False) -> Dict:
         """Appel au LLM Qwen via gRPC"""
         if not QWEN_AVAILABLE:
             return {
@@ -294,7 +294,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 prompt=prompt,
                 temperature=0.0,
                 max_tokens=1024,
-                enable_thinking=False
+                enable_thinking=enable_thinking
             )
 
             # Appel gRPC asynchrone
@@ -336,14 +336,14 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 }
             }
 
-    async def query_llm(self, prompt: str) -> Dict:
+    async def query_llm(self, prompt: str, enable_thinking: bool = False) -> Dict:
         """Appel au LLM selon le choix (asynchrone pour supporter Qwen)"""
         messages = [{"role": "user", "content": prompt}]
 
         try:
             if self.llm_choice == 'Qwen':
                 # Appel asynchrone à Qwen via gRPC
-                return await self.query_llm_qwen(prompt)
+                return await self.query_llm_qwen(prompt, enable_thinking=enable_thinking)
 
             elif self.llm_choice == 'OpenAI' and self.openai_client:
                 # Exécuter l'appel synchrone dans un thread pour ne pas bloquer
@@ -387,7 +387,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 }
             }
 
-    async def classify_single(self, product: Dict, llm_override: Optional[str] = None) -> Dict:
+    async def classify_single(self, product: Dict, llm_override: Optional[str] = None, enable_thinking: bool = False) -> Dict:
         """Classifie un seul produit (asynchrone)"""
         start_time = time.time()
 
@@ -457,10 +457,10 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             
             # Récupération des descriptions de catégories
             descriptions = self.get_category_descriptions(categories)
-            
+
             # Construction du prompt et appel LLM (asynchrone)
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
-            llm_result_wrapper = await self.query_llm(prompt)
+            llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking)
 
             # Vérifier si l'appel LLM a échoué
             if not llm_result_wrapper.get('success', False):
@@ -568,7 +568,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 self.openai_client = original_openai_client
                 self.deepseek_client = original_deepseek_client
 
-    async def classify_batch(self, products: List[Dict], llm_override: Optional[str] = None) -> Dict:
+    async def classify_batch(self, products: List[Dict], llm_override: Optional[str] = None, enable_thinking: bool = False) -> Dict:
         """Classifie plusieurs produits en lot (asynchrone)"""
         start_time = time.time()
         results = []
@@ -576,9 +576,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
         error_count = 0
 
         for product in products:
-            result = await self.classify_single(product, llm_override=llm_override)
+            result = await self.classify_single(product, llm_override=llm_override, enable_thinking=enable_thinking)
             results.append(result)
-            
+
             if result['status'] == 'SUCCESS':
                 success_count += 1
             else:
