@@ -10,7 +10,8 @@ RUN apt-get update && apt-get install -y git \
 
 # Copier les requirements du service
 COPY apps-microservices/ocr-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Installer docext depuis la source
 RUN git clone https://github.com/nanonets/docext.git
