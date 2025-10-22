@@ -186,13 +186,13 @@ class Consumer:
         
         # 1. Crée le channel et configure le prefetch
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=10)  # Nombre maximum de messages traités en parallèle
+        await channel.set_qos(prefetch_count=15)  # Nombre maximum de messages traités en parallèle
         
         # 2. Déclare et bind les queues/exchanges
         queue = await self._setup_queues(channel)
         
         # 3. Crée un semaphore pour limiter le nombre de traitements simultanés
-        semaphore = asyncio.Semaphore(10)
+        semaphore = asyncio.Semaphore(15)
         
         async def safe_process(message):
             """Wrapper pour limiter le parallélisme et capturer les erreurs."""

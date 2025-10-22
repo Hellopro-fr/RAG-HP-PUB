@@ -27,7 +27,7 @@ CMD [ \
   "-m", "docext.app.app",\
   "--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", \
   "--gpu_memory_utilization", "0.95",\
-  "--concurrency_limit", "10",\
+  "--concurrency_limit", "15",\
   "--dtype", "float16",\
   "--server_port", "8559",\
   "--vlm_server_port", "8181"\
