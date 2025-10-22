@@ -28,7 +28,7 @@ services:
       --tensor-parallel-size 2
       --trust-remote-code
       --reasoning-parser qwen3
-      --gpu-memory-utilization 0.9
+      --gpu-memory-utilization 0.95
       --max-num-seqs 32
       --max-num-batched-tokens 8192
       --enable-chunked-prefill
