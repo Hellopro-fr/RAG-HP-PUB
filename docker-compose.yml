@@ -34,6 +34,7 @@ services:
       --swap-space 4
       --max-model-len 32768
       --dtype auto
+      --load-format safetensors
     ports:
       - "8000:8000"
     healthcheck:
