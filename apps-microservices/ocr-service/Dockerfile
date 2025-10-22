@@ -1,26 +1,16 @@
 # --- Étape 0: Base ---
-FROM vllm/vllm-openai:v0.8.2 AS dev
-
-# Install Python 3.11
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends python3.11 python3.11-venv python3-pip python3.11-dev git && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Ensure Python 3.11 is default
-RUN ln -sf /usr/bin/python3.11 /usr/bin/python
-
+FROM python:3.11-slim
 WORKDIR /app
 
 # --- Étape 1: Définir le PYTHONPATH ---
 ENV PYTHONPATH=/app
-ENV CUDA_HOME=/usr/local/cuda/bin/nvcc
-ENV PATH=$CUDA_HOME/bin:$PATH
-ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
+RUN apt-get update && apt-get install -y git \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copier les requirements du service
 COPY apps-microservices/ocr-service/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Installer docext depuis la source
 RUN git clone https://github.com/nanonets/docext.git
@@ -30,7 +20,7 @@ RUN pip install -e .
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir flash-attn --no-build-isolation
+# RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
 EXPOSE 8559
 
