@@ -897,12 +897,12 @@ services:
       - crawler_data:/app/storage
     environment:
       # Example: Set max concurrent crawls for this instance to 2
-      - MAX_CONCURRENT_CRAWLS=2
+      - MAX_CONCURRENT_CRAWLS=1
     deploy:
       replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
         limits:
-          cpus: '2.0' # Limit to 2 CPU core
+          cpus: '1.0' # Limit to 1 CPU core
           memory: 4G   # Limit to 4GB of RAM
     
 networks:

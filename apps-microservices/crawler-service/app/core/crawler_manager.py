@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, Optional, Any
 
 import aiofiles
+import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
@@ -23,7 +24,7 @@ class CrawlerManager:
     def __init__(self):
         self.active_crawls: Dict[str, Dict[str, Any]] = {}
 
-    async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, params: Dict[str, Any]) -> str:
+    async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any]) -> str:
         # Check if a crawl with this ID is already running on this instance
         if crawl_id in self.active_crawls:
             proc = self.active_crawls[crawl_id].get("process")
@@ -84,7 +85,8 @@ class CrawlerManager:
             "start_url": start_url,
             "start_time": datetime.utcnow(),
             "storage_path": job_storage_path,
-            "status": "running"
+            "status": "running",
+            "failure_callback_url": failure_callback_url,
         }
         
         # Start a background task to log stdout/stderr
@@ -92,9 +94,29 @@ class CrawlerManager:
 
         return crawl_id
 
+    async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int):
+        """Sends a GET request to the provided webhook URL in a fire-and-forget manner."""
+        params = {
+            "crawl_id": crawl_id,
+            "domain": domain,
+            "exit_code": exit_code,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=30.0)
+                logger.info(f"Successfully sent failure notification for crawl '{crawl_id}' to {url}. Status: {response.status_code}")
+        except httpx.RequestError as e:
+            logger.error(f"Failed to send failure notification for crawl '{crawl_id}' to {url}. Error: {e}")
+
     async def _log_output(self, crawl_id: str, process: asyncio.subprocess.Process):
         """Logs stdout and stderr of a crawler subprocess."""
-        log_path = os.path.join(self.active_crawls[crawl_id]['storage_path'], 'crawler.log')
+        job_info = self.active_crawls.get(crawl_id)
+        if not job_info:
+            logger.warning(f"Could not find job info for '{crawl_id}' at start of logging.")
+            return
+
+        log_path = os.path.join(job_info['storage_path'], 'crawler.log')
         try:
             async with aiofiles.open(log_path, 'a') as log_file:
                 # We can read both streams concurrently
@@ -116,9 +138,22 @@ class CrawlerManager:
         
         # Once process finishes, update its status
         await process.wait()
-        if crawl_id in self.active_crawls:
-             self.active_crawls[crawl_id]["status"] = "finished" if process.returncode == 2 else "failed"
-             logger.info(f"Crawl '{crawl_id}' finished with exit code {process.returncode}.")
+        
+        # Re-fetch job_info in case it was modified
+        job_info = self.active_crawls.get(crawl_id)
+        if job_info:
+            exit_code = process.returncode
+            is_success = (exit_code == 2)
+            
+            job_info["status"] = "finished" if is_success else "failed"
+            logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}.")
+
+            # If the crawl failed and a failure URL was provided, send the notification.
+            if not is_success and job_info.get("failure_callback_url"):
+                failure_url = job_info["failure_callback_url"]
+                domain = job_info["domain"]
+                logger.info(f"Crawl '{crawl_id}' failed. Triggering failure webhook.")
+                asyncio.create_task(self._send_failure_webhook(str(failure_url), crawl_id, domain, exit_code))
 
 
     async def stop_crawl(self, crawl_id: str) -> bool:
@@ -230,9 +265,9 @@ class CrawlerManager:
         os.makedirs(archive_path, exist_ok=True)
         archive_name = os.path.join(archive_path, f"{crawl_id}-results")
         
-        shutil.make_archive(archive_name, 'zip', data_path)
+        shutil.make_archive(archive_name, 'gztar', data_path)
         
-        return f"{archive_name}.zip"
+        return f"{archive_name}.tar.gz"
 
     async def shutdown(self):
         """Gracefully stop all running crawlers."""

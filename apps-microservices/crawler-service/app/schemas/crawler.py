@@ -6,7 +6,8 @@ class CrawlRequest(BaseModel):
     id: str = Field(..., description="An identifier for the crawl job, e.g., from a database.", example="domaine_123")
     domain: str = Field(..., description="The domain name being crawled.", example="example.com")
     start_url: HttpUrl = Field(..., description="The initial URL to start crawling from.", example="https://example.com")
-    callback_url: HttpUrl = Field(..., description="URL to be called when the crawl finishes.", example="https://api.example.com/crawl_finished_hook")
+    callback_url: HttpUrl = Field(..., description="URL to be called when the crawl finishes successfully.", example="https://api.example.com/crawl_finished_hook")
+    failure_callback_url: Optional[HttpUrl] = Field(None, description="URL to be called if the crawl job fails.", example="https://api.example.com/crawl_failed_hook")
 
     # Optional parameters mirroring the old shell script
     type_crawling: Optional[str] = Field(None, example="default")

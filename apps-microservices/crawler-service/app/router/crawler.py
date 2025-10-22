@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, status
 from fastapi.responses import FileResponse
@@ -40,6 +40,7 @@ async def start_new_crawl(payload: CrawlRequest):
             start_url=str(payload.start_url),
             crawl_id=payload.id,
             callback_url=str(payload.callback_url),
+            failure_callback_url=str(payload.failure_callback_url) if payload.failure_callback_url else None,
             params=params
         )
         return CrawlResponse(
@@ -92,7 +93,7 @@ async def download_crawl_results(crawl_id: str, background_tasks: BackgroundTask
         # Delete the temporary archive file after the response is sent
         background_tasks.add_task(lambda path: os.remove(path), archive_path)
         
-        return FileResponse(path=archive_path, media_type='application/zip', filename=f"{crawl_id}-results.zip")
+        return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
     except HTTPException as e:
         raise e
     except Exception as e:
