@@ -3,6 +3,8 @@ import aio_pika
 import os
 import json
 import asyncio
+import hashlib
+import aiofiles
 from concurrent.futures import ThreadPoolExecutor
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
@@ -55,7 +57,7 @@ class Consumer:
             document_data = data.get('data', {})
             document_id = document_data.get('fichier_source')
             bdd = "milvus"
-            
+
             # Vérifie si déjà en cours de traitement
             if await self._is_processing(document_id):
                 print(f"⚠️ Document {document_id} déjà en traitement, skip")
@@ -96,44 +98,39 @@ class Consumer:
             print(f"❌ Erreur critique: {e}")
             await message.nack(requeue=True)
 
+    def _get_processing_filepath(self, document_id: str) -> str:
+        """Génère un chemin de fichier sécurisé basé sur un hash"""
+        # Crée un hash unique du document_id
+        hash_id = hashlib.md5(document_id.encode()).hexdigest()
+        return f"/tmp/processing_{hash_id}.json"
 
     async def _mark_as_processing(self, document_id: str, message_body: bytes):
-        """Sauvegarde l'état 'en cours' (Redis, DB, fichier...)"""
-        # Option 1: Redis avec expiration
-        # await redis.setex(f"processing:{document_id}", 7200, message_body)
+        """Sauvegarde l'état 'en cours'"""
+        filepath = self._get_processing_filepath(document_id)
         
-        # Option 2: Fichier temporaire
-        import aiofiles
-        async with aiofiles.open(f"/tmp/processing_{document_id}.json", 'w') as f:
-            await f.write(message_body.decode())
+        # Sauvegarde aussi l'ID original pour debug
+        data = {
+            'original_id': document_id,
+            'message': message_body.decode()
+        }
         
-        # Option 3: Base de données
-        # await db.execute("INSERT INTO processing_tasks VALUES (?, ?, ?)", 
-        #                  document_id, message_body, datetime.now())
-
+        async with aiofiles.open(filepath, 'w') as f:
+            await f.write(json.dumps(data))
 
     async def _is_processing(self, document_id: str) -> bool:
         """Vérifie si le document est déjà en traitement"""
-        # Option 1: Redis
-        # return await redis.exists(f"processing:{document_id}")
-        
-        # Option 2: Fichier
         import os
-        return os.path.exists(f"/tmp/processing_{document_id}.json")
-
+        filepath = self._get_processing_filepath(document_id)
+        return os.path.exists(filepath)
 
     async def _mark_as_completed(self, document_id: str):
         """Supprime l'état 'en cours'"""
-        # Option 1: Redis
-        # await redis.delete(f"processing:{document_id}")
-        
-        # Option 2: Fichier
         import os
+        filepath = self._get_processing_filepath(document_id)
         try:
-            os.remove(f"/tmp/processing_{document_id}.json")
+            os.remove(filepath)
         except FileNotFoundError:
             pass
-
 
     async def _handle_processing_error(self, message_body: bytes, error: Exception, document_id: str):
         """Gère les erreurs après ACK"""
@@ -142,7 +139,6 @@ class Consumer:
             retry_count = data.get('_retry_count', 0)
             
             if retry_count < MAX_RETRIES:
-                # Republier avec compteur incrémenté
                 data['_retry_count'] = retry_count + 1
                 
                 async with self.connection.channel() as channel:
