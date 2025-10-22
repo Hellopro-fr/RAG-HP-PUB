@@ -902,8 +902,8 @@ services:
       replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
         limits:
-          cpus: '2.0' # Limit to 1 CPU core
-          memory: 4G   # Limit to 2GB of RAM
+          cpus: '2.0' # Limit to 2 CPU core
+          memory: 4G   # Limit to 4GB of RAM
     
 networks:
   services-net:
