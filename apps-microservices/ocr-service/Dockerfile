@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y git \
 
 # Copier les requirements du service
 COPY apps-microservices/ocr-service/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Installer docext depuis la source
 RUN git clone https://github.com/nanonets/docext.git
@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/li
 RUN pip install -e .
 
 WORKDIR /app
+
+RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
 EXPOSE 8559
 
