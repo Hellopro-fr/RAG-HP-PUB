@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package llm;
+import "google/protobuf/struct.proto";
 
 service LLMService {
   // RPC de streaming bi-directionnel pour une conversation interactive.
@@ -19,6 +20,7 @@ message ChatRequest {
   optional float temperature = 2;
   optional int32 max_tokens = 3;
   optional bool enable_thinking = 4;
+  optional google.protobuf.Struct options = 5;
 }
 
 message ChatResponse {

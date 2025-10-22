@@ -4,6 +4,8 @@ import logging
 import asyncio
 from typing import List
 
+from httpx import options
+
 from grpc_stubs import  llm_pb2
 from grpc_stubs import  llm_pb2_grpc
 
@@ -24,7 +26,8 @@ async def stream_llm_chat(
                     message=data.prompt,
                     temperature=data.temperature,
                     max_tokens=data.max_tokens,
-                    enable_thinking=data.enable_thinking
+                    enable_thinking=data.enable_thinking,
+                    options=data.options
                 )
 
             stream = stub.ChatStream(request_generator())
@@ -47,7 +50,8 @@ async def get_llm_chat_response(
                 message=data.prompt,
                 temperature=data.temperature,
                 max_tokens=data.max_tokens,
-                enable_thinking=data.enable_thinking
+                enable_thinking=data.enable_thinking,
+                options=data.options
             )
             response = await stub.Chat(request)
             return response.full_message
@@ -55,7 +59,7 @@ async def get_llm_chat_response(
         logging.error(f"Erreur gRPC en appelant le service LLM (non-streamé): {e.details()}")
         return f"[ERREUR_CLIENT: {e.details()}]"
     
-async def get_llm_chat_batch_response(messages: List[str], temperature: float, max_tokens: int, enable_thinking: bool) -> List[str]:
+async def get_llm_chat_batch_response(messages: List[str], temperature: float, max_tokens: int, enable_thinking: bool, **kwargs) -> List[str]:
     """
     Appelle le service gRPC LLM pour obtenir des réponses complètes pour un lot de messages.
     """
@@ -68,7 +72,8 @@ async def get_llm_chat_batch_response(messages: List[str], temperature: float, m
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                enable_thinking=enable_thinking
+                enable_thinking=enable_thinking,
+                options=kwargs.get("options", {})
             )
             response = await stub.ChatBatch(request)
             return list(response.full_messages)
