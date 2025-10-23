@@ -228,7 +228,8 @@ services:
     environment:
       # URL dynamique pointant vers le backend d'inférence choisi.
       # Par défaut, pointe vers VLLM.
-      - INFERENCE_SERVER_URL=http://vllm-server:8000/v1/chat/completions
+      # - INFERENCE_SERVER_URL=http://vllm-server:8000/v1/chat/completions
+      - INFERENCE_SERVER_URL=http://34.34.5.41:8000/v1/chat/completions
       - MODEL_NAME=${MODEL_NAME}
     networks:
       - services-net

@@ -12,7 +12,6 @@ MAX_RETRIES = 3
 INITIAL_BACKOFF_DELAY = 15  # seconds
 ADDING_TIME = 30  # seconds
 
-logging.info(f'INFERENCE_SERVER_URL : {INFERENCE_SERVER_URL}')')
 class InferenceClient:
     def __init__(self):
         # Créer une seule instance client avec un timeout généreux
@@ -97,6 +96,7 @@ class InferenceClient:
         for attempt in range(MAX_RETRIES):
             try:
                 timeout_config = httpx.Timeout(None)
+                logging.info(f'INFERENCE_SERVER_URL : {INFERENCE_SERVER_URL}')
                 async with httpx.AsyncClient(timeout=timeout_config) as client:
                     request_payload = {
                         "model": MODEL_NAME,
