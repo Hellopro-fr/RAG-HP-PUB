@@ -118,7 +118,12 @@ async def main():
         "chiffres_cles": {"annee_creation": 1999, "effectif": "Non renseigné", "nombre_clients": "Non renseigné"},
         "cibles_commerciales": ["Particuliers", "Professionnels", "Collectivités (écoles, micro-crèches)", "Projets de rénovation de patrimoine ancien (bâtisse ancienne, manoir, abbaye, moulin)"],
         "positionnement_marche": "La SARL DOUBLIER se positionne comme une entreprise innovante et respectueuse de l’environnement...",
-        # ... (le reste de votre brief JSON)
+        "resume_activite_100_mots": "Depuis 1999, la SARL DOUBLIER propose des services dans le neuf et la rénovation...",
+        "engagements_rse": "La SARL DOUBLIER adopte une démarche RSE complète : tri des déchets...",
+        "projets_realises": "L’entreprise a réalisé son propre bureau en container maritime...",
+        "pays_activite": ["FR"],
+        "france_metropolitaine": "certaines-regions",
+        "regions_france": ["FR-BRE"],
         "caracteristique": "### Types de Containers aménagés proposés :\\n- **Maisons individuelles**..."
     }
     
