@@ -1,10 +1,11 @@
 import asyncio
 
-from infrastructure.vllm_client import VLLMClient
+# from infrastructure.vllm_client import VLLMClient
+from infrastructure.inference_client import InferenceClient
 
 
 class ChatApplicationService:
-    def __init__(self, vllm_client: VLLMClient):
+    def __init__(self, vllm_client: InferenceClient):
         self.vllm_client = vllm_client
 
     async def handle_chat_stream(self, request_iterator):

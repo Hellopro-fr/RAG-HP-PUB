@@ -3,7 +3,8 @@ import logging
 import uvloop
 
 from infrastructure.grpc_server import serve
-from infrastructure.vllm_client import VLLMClient
+# from infrastructure.vllm_client import VLLMClient
+from infrastructure.inference_client import InferenceClient
 from application.chat_service import ChatApplicationService
 
 # Configuration du logging
@@ -15,7 +16,7 @@ async def main():
     C'est ici que l'injection de dépendances a lieu.
     """
     # 1. Initialisation de la couche d'infrastructure
-    vllm_client = VLLMClient()
+    vllm_client = InferenceClient()
 
     # 2. Initialisation de la couche application avec ses dépendances
     chat_service = ChatApplicationService(vllm_client)
