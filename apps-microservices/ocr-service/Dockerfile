@@ -33,13 +33,5 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
-CMD [ \
-  "python", \
-  "-m", "docext.app.app",\
-  "--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", \
-  "--gpu_memory_utilization", "0.95",\
-  "--concurrency_limit", "15",\
-  "--dtype", "float16",\
-  "--server_port", "8559",\
-  "--vlm_server_port", "8181"\
-]
+ENTRYPOINT ["/app/.venv/bin/python", "-m", "docext.app.app", "--no-share", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
+
