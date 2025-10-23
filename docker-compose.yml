@@ -32,7 +32,7 @@ services:
   trtllm-builder:
     profiles: ["builder"]
     image: nvcr.io/nvidia/tensorrtllm-python:latest-builder
-    command: /bin/bash -c "chmod +x /app/model-optimizer/build_trt_engine.sh && /app/model-optimizer/build_trt_engine.sh"
+    command: python /app/model-optimizer/build_trt_engine.py
     environment:
       - MODEL_NAME=${MODEL_NAME}
     deploy:
