@@ -29,6 +29,24 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  trtllm-builder:
+    profiles: ["builder"]
+    image: nvcr.io/nvidia/tensorrtllm-python:latest-builder
+    command: /bin/bash -c "chmod +x /app/model-optimizer/build_trt_engine.sh && /app/model-optimizer/build_trt_engine.sh"
+    environment:
+      - MODEL_NAME=${MODEL_NAME}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
+      - ./triton_model_repo:/output
+      - ./model-optimizer:/app/model-optimizer
+
   # --- Backend d'inférence n°1 : VLLM (Actif par défaut) ---
   vllm-server:
     image: vllm/vllm-openai:latest
