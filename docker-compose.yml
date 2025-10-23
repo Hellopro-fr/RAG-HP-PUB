@@ -31,7 +31,8 @@ services:
 
   trtllm-builder:
     profiles: ["builder"]
-    image: nvcr.io/nvidia/tensorrtllm-python:latest-builder
+    build:
+      context: ./apps-microservices/trtllm-builder
     command: python /app/model-optimizer/build_trt_engine.py
     environment:
       - MODEL_NAME=${MODEL_NAME}
@@ -43,7 +44,6 @@ services:
               count: all
               capabilities: [gpu]
     volumes:
-      - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
       - ./triton_model_repo:/output
       - ./model-optimizer:/app/model-optimizer
 
