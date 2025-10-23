@@ -19,7 +19,7 @@ RUN python -m venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Install dependencies
-COPY requirements.txt setup.py README.md /app/
+COPY apps-microservices/ocr-service/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
