@@ -33,12 +33,6 @@ services:
   vllm-server:
     image: vllm/vllm-openai:latest
     shm_size: 16g
-    # --enable-prefix-caching
-    # --enforce-eager
-    # --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
-    # --max-num-seqs 64
-    # --gpu-memory-utilization 0.95
-    # --reasoning-parser qwen3
     command: >
       --model ${MODEL_NAME}
       --tensor-parallel-size 2
@@ -112,11 +106,13 @@ services:
   # --- Backend d'inférence n°3 : Llama.cpp ---
   # À décommenter pour tester Llama.cpp. Nécessite un modèle au format GGUF.
   llamacpp-server:
-    image: ghcr.io/abetlen/llama-cpp-python:latest
     profiles: ["disabled"] # Désactivé par défaut
+    build:
+      context: ./apps-microservices/llamacpp-server
+    environment:
+      # REMPLACEZ CETTE URL PAR LE LIEN DIRECT DE VOTRE MODÈLE GGUF
+      - GGUF_MODEL_URL=https://huggingface.co/TheBloke/Qwen3-14B-Chat-GGUF/resolve/main/qwen3-14b-chat.Q4_K_M.gguf
     command: >
-      python -m llama_cpp.server
-      --model /models/${MODEL_NAME_GGUF}
       --n_gpu_layers -1
       --host 0.0.0.0
       --port 8000
@@ -132,7 +128,34 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
     volumes:
-      - ./models:/models # Assurez-vous de placer votre modèle .gguf dans un dossier ./models
+      - llamacpp-models-cache:/models
+    networks:
+      - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- Backend d'inférence n°4 : Triton + TensorRT-LLM (Performance Max) ---
+  triton-trtllm-server:
+    image: nvcr.io/nvidia/tritonserver:24.05-trtllm-python-py3
+    profiles: ["disabled"] # Désactivé par défaut
+    command: tritonserver --model-repository=/models
+    ports:
+      - "8000:8000" # Port HTTP / OpenAI API
+      - "8001:8001" # Port gRPC
+      - "8002:8002" # Port des métriques
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    volumes:
+      - ./triton_model_repo:/models
     networks:
       - services-net
     logging:
