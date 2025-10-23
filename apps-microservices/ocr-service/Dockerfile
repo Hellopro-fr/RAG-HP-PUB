@@ -33,5 +33,5 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
-ENTRYPOINT ["/app/.venv/bin/python", "-m", "docext.app.app", "--no-share", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
+ENTRYPOINT ["/app/.venv/bin/python", "-m", "docext.app.app", "--no-share", ,"--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
 
