@@ -40,6 +40,7 @@ class InferenceClient:
                         "stream": True,
                         "temperature": temperature,
                         "max_tokens": max_tokens,
+                        "chat_template_kwargs": {"enable_thinking": enable_thinking},
                     }
 
                     if kwargs.get("options"):
@@ -104,6 +105,7 @@ class InferenceClient:
                         "stream": False,
                         "temperature": temperature,
                         "max_tokens": max_tokens,
+                        "chat_template_kwargs": {"enable_thinking": enable_thinking},
                     }
                     if kwargs.get("options"):
                         for key, value in kwargs["options"].items():

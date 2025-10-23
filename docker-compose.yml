@@ -32,7 +32,8 @@ services:
   trtllm-builder:
     profiles: ["builder"]
     build:
-      context: ./apps-microservices/trtllm-builder
+      context: .
+      dockerfile: ./apps-microservices/trtllm-builder/Dockerfile
     command: python /app/model-optimizer/build_trt_engine.py
     environment:
       - MODEL_NAME=${MODEL_NAME}
