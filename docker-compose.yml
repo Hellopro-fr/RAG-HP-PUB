@@ -26,10 +26,8 @@ services:
     # --reasoning-parser qwen3
     command: >
       --model ${MODEL_NAME}
-      --speculative-model Qwen/Qwen3-14B-AWQ
-      --speculative-model-max-tokens 1024
-      --speculative-model-draft-window-size 1024
-      --speculative-model-quantization awq_marlin
+      --speculative-config '{"model": "Qwen/Qwen3-14B-AWQ", "num_speculative_tokens": 1024, "draft_window_size": 1024, "quantization": "awq_marlin"}'
+      --max-seq-len-to-capture 4096
       -O 3
       --tensor-parallel-size 2
       --trust-remote-code
@@ -39,7 +37,6 @@ services:
       --enable-chunked-prefill
       --device xpu
       --swap-space 16
-      --max-seq-len-to-capture 4096
       --max-model-len 32768
       --dtype bfloat16
       --load-format safetensors
