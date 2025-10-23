@@ -12,7 +12,7 @@ MAX_RETRIES = 3
 INITIAL_BACKOFF_DELAY = 15  # seconds
 ADDING_TIME = 30  # seconds
 
-
+logging.info(f'INFERENCE_SERVER_URL : {INFERENCE_SERVER_URL}')')
 class InferenceClient:
     def __init__(self):
         # Créer une seule instance client avec un timeout généreux
@@ -109,7 +109,7 @@ class InferenceClient:
                         for key, value in kwargs["options"].items():
                             request_payload[key] = value
 
-                    logging.info(f'request payload : {request_payload}')
+                    # logging.info(f'request payload : {request_payload}')
                     response = await client.post(INFERENCE_SERVER_URL, json=request_payload)
                     response.raise_for_status()
                     response_data = response.json()
