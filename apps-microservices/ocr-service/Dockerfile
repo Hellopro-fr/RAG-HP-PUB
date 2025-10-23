@@ -15,8 +15,8 @@ EXPOSE 8559
 WORKDIR /app
 
 # Create and activate virtual environment
-RUN python -m venv /app/.venv
-ENV PATH="/app/.venv/bin:$PATH"
+# RUN python -m venv /app/.venv
+# ENV PATH="/app/.venv/bin:$PATH"
 
 # Install dependencies
 COPY apps-microservices/ocr-service/requirements.txt .
@@ -33,5 +33,5 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
-ENTRYPOINT ["/app/.venv/bin/python", "-m", "docext.app.app", "--no-share", ,"--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
+ENTRYPOINT ["python", "-m", "docext.app.app", "--no-share", ,"--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
 
