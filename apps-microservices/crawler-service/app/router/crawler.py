@@ -1,12 +1,12 @@
 import os
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Query
 from fastapi.responses import FileResponse
 
 from app.core.crawler_manager import crawler_manager
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -81,14 +81,16 @@ async def get_crawl_status(crawl_id: str):
     return status
 
 @router.get("/results/{crawl_id}")
-async def download_crawl_results(crawl_id: str, background_tasks: BackgroundTasks):
+async def download_crawl_results(
+    crawl_id: str,
+    background_tasks: BackgroundTasks,
+    include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues).")
+):
     """
-    Downloads the results of a completed crawl job as a ZIP archive.
+    Downloads a custom archive of a completed crawl job, including only the specified components.
     """
     try:
-        archive_path = await crawler_manager.get_results_archive(crawl_id)
-        if not archive_path:
-            raise HTTPException(status_code=404, detail="Results not found or crawl is still in progress.")
+        archive_path = await crawler_manager.get_results_archive(crawl_id, include)
         
         # Delete the temporary archive file after the response is sent
         background_tasks.add_task(lambda path: os.remove(path), archive_path)

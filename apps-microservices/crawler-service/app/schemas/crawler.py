@@ -1,6 +1,16 @@
+from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel, Field, HttpUrl
 from datetime import datetime
+
+class IncludeInArchive(str, Enum):
+    """Enumeration of components that can be included in the results archive."""
+    DATASET = "dataset"
+    DATASET_NFR = "dataset_nfr"
+    DATASET_ERROR = "dataset_error"
+    REQUEST_QUEUES = "request_queues"
+    REQUEST_URLS = "request_urls"
+    MISCELLANEOUS = "miscellaneous"
 
 class CrawlRequest(BaseModel):
     id: str = Field(..., description="An identifier for the crawl job, e.g., from a database.", example="domaine_123")

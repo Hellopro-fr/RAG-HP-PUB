@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import os
+import tempfile
 import shutil
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 
 import aiofiles
 import httpx
@@ -11,7 +12,7 @@ from fastapi import HTTPException, status
 
 from app.core.config import settings
 from app.core.redis_service import redis_service
-from app.schemas.crawler import CrawlStatus
+from app.schemas.crawler import CrawlStatus, IncludeInArchive
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,19 @@ class CrawlerManager:
         self.local_processes: Dict[str, asyncio.subprocess.Process] = {}
 
     async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any]) -> str:
+        # Check if a crawl with this ID is already running on this instance
+        if crawl_id in self.local_processes:
+            proc = self.local_processes[crawl_id]
+            if proc.returncode is None:
+                logger.warning(f"Crawl job '{crawl_id}' is already running on this instance. Request rejected.")
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"A crawl job with ID '{crawl_id}' is already in progress on this service instance."
+                )
+            else:
+                logger.info(f"Crawl job '{crawl_id}' found in local processes but is finished. Clearing for restart.")
+                del self.local_processes[crawl_id]
+        
         # Global concurrency check against Redis
         existing_job = await redis_service.get_data(f"{CRAWL_JOB_PREFIX}{crawl_id}")
         if existing_job and existing_job.get("status") == "running":
@@ -178,7 +192,7 @@ class CrawlerManager:
             urls_crawled=urls_crawled, last_activity=last_url_time
         )
         
-    async def get_results_archive(self, crawl_id: str) -> Optional[str]:
+    async def get_results_archive(self, crawl_id: str, include: List[IncludeInArchive]) -> Optional[str]:
         job_info = await redis_service.get_data(f"{CRAWL_JOB_PREFIX}{crawl_id}")
         if not job_info:
              raise HTTPException(status_code=404, detail="Crawl ID not found.")
@@ -187,22 +201,56 @@ class CrawlerManager:
              raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
         
         job_storage_path = job_info["storage_path"]
-        datasets_root_path = os.path.join(job_storage_path, 'storage', 'datasets')
-        if not os.path.exists(datasets_root_path) or not os.listdir(datasets_root_path):
-            raise HTTPException(status_code=404, detail="No dataset found for this crawl.")
-
-        domain_folder = [d for d in os.listdir(datasets_root_path) if os.path.isdir(os.path.join(datasets_root_path, d))][0]
-        data_path = os.path.join(datasets_root_path, domain_folder)
-
-        if not os.path.exists(data_path):
-            raise HTTPException(status_code=404, detail="No result data found for this crawl.")
-
-        archive_path = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
-        os.makedirs(archive_path, exist_ok=True)
-        archive_name = os.path.join(archive_path, f"{crawl_id}-results")
+        domain = job_info["domain"]
         
-        shutil.make_archive(archive_name, 'gztar', data_path)
-        return f"{archive_name}.tar.gz"
+        # Use a temporary directory to stage the files for archiving
+        with tempfile.TemporaryDirectory() as staging_dir:
+            # This is the root inside the staging area that will mirror the on-disk structure
+            archive_content_root = os.path.join(staging_dir, "storage")
+            os.makedirs(archive_content_root, exist_ok=True)
+            
+            # Map the user's request to the actual folder names
+            path_mappings = {
+                IncludeInArchive.DATASET: os.path.join("datasets", domain),
+                IncludeInArchive.DATASET_NFR: os.path.join("datasets", f"nfr-{domain}"),
+                IncludeInArchive.DATASET_ERROR: os.path.join("datasets", f"error-{domain}"),
+                IncludeInArchive.REQUEST_QUEUES: os.path.join("request_queues", domain),
+                IncludeInArchive.REQUEST_URLS: os.path.join("request_urls", domain),
+                IncludeInArchive.MISCELLANEOUS: os.path.join("miscellaneous", domain),
+            }
+
+            crawlee_storage_base = os.path.join(job_storage_path, 'storage')
+            
+            copied_anything = False
+            for item in set(include): # Use set to avoid processing duplicate requests
+                relative_path = path_mappings.get(item)
+                if not relative_path: continue
+                
+                source_path = os.path.join(crawlee_storage_base, relative_path)
+                
+                if os.path.exists(source_path):
+                    destination_path = os.path.join(archive_content_root, relative_path)
+                    # Ensure parent directories exist in the staging area
+                    os.makedirs(os.path.dirname(destination_path), exist_ok=True)
+                    shutil.copytree(source_path, destination_path)
+                    copied_anything = True
+            
+            if not copied_anything:
+                raise HTTPException(status_code=404, detail="None of the requested components were found for this crawl job.")
+
+            # Create the final archive from the contents of the staging directory
+            archive_base_path = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
+            os.makedirs(archive_base_path, exist_ok=True)
+            archive_name = os.path.join(archive_base_path, f"{crawl_id}-results")
+            
+            # This will create an archive containing a single 'storage' folder at its root
+            final_archive_path = shutil.make_archive(
+                base_name=archive_name,
+                format='gztar',
+                root_dir=staging_dir
+            )
+            
+            return final_archive_path
 
     async def shutdown(self):
         """Gracefully stop all locally running crawlers."""
