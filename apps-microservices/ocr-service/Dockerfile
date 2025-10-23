@@ -1,16 +1,27 @@
-# --- Étape 0: Base ---
-FROM python:3.11-slim
+FROM vllm/vllm-openai:v0.8.2 AS dev
+
+# Install Python 3.11
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends python3.11 python3.11-venv python3-pip python3.11-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Ensure Python 3.11 is default
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python
+
+ENV GRADIO_SERVER_PORT=8559
+ENV GRADIO_SERVER_NAME="0.0.0.0"
+EXPOSE 8559
+
 WORKDIR /app
 
-# --- Étape 1: Définir le PYTHONPATH ---
-ENV PYTHONPATH=/app
+# Create and activate virtual environment
+RUN python -m venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
-RUN apt-get update && apt-get install -y git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copier les requirements du service
-COPY apps-microservices/ocr-service/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies
+COPY requirements.txt setup.py README.md /app/
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Installer docext depuis la source
 RUN git clone https://github.com/nanonets/docext.git
@@ -20,9 +31,7 @@ RUN pip install -e .
 
 WORKDIR /app
 
-# RUN pip install --no-cache-dir flash-attn --no-build-isolation
-
-EXPOSE 8559
+RUN pip install --no-cache-dir flash-attn --no-build-isolation
 
 CMD [ \
   "python", \
