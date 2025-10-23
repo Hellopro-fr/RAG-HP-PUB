@@ -24,21 +24,21 @@ services:
     # --max-num-seqs 64
     # --gpu-memory-utilization 0.95
     # --reasoning-parser qwen3
+    # --max-num-seqs 64
+    # --max-num-batched-tokens 8192
+    # --enable-chunked-prefill
+    # --disable-log-stats
+    # --swap-space 4
+    # --max-model-len 32768
+    # --dtype auto
+    # --load-format safetensors
+    # --enable-prefix-caching
+    # --enforce-eager
     command: >
       --model ${MODEL_NAME}
       --tensor-parallel-size 2
       --trust-remote-code
       --gpu-memory-utilization 0.95
-      --max-num-seqs 64
-      --max-num-batched-tokens 8192
-      --enable-chunked-prefill
-      --disable-log-stats
-      --swap-space 4
-      --max-model-len 32768
-      --dtype auto
-      --load-format safetensors
-      --enable-prefix-caching
-      --enforce-eager
     ports:
       - "8000:8000"
     healthcheck:
