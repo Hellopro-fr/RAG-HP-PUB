@@ -5,3 +5,4 @@ httpx
 asyncio
 uvloop
 python-dotenv
+openai
