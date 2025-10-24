@@ -2,8 +2,9 @@ import grpc
 import os
 import logging
 import asyncio
-import json
 from typing import List, Dict
+from google.protobuf.json_format import MessageToDict
+from google.protobuf import struct_pb2
 
 from httpx import options
 
@@ -21,6 +22,11 @@ async def stream_llm_chat(
         async with grpc.aio.insecure_channel(LLM_SERVICE_URL) as channel:
             stub = llm_pb2_grpc.LLMServiceStub(channel)
             
+            # Create a Struct for the options
+            options_struct = struct_pb2.Struct()
+            if data.options:
+                options_struct.update(data.options)
+
             # Crée un générateur asynchrone pour envoyer la requête initiale
             async def request_generator():
                 yield llm_pb2.ChatRequest(
@@ -28,7 +34,7 @@ async def stream_llm_chat(
                     temperature=data.temperature,
                     max_tokens=data.max_tokens,
                     enable_thinking=data.enable_thinking,
-                    options=data.options
+                    options=options_struct
                 )
 
             stream = stub.ChatStream(request_generator())
@@ -48,23 +54,24 @@ async def get_llm_chat_response(
     try:
         async with grpc.aio.insecure_channel(LLM_SERVICE_URL) as channel:
             stub = llm_pb2_grpc.LLMServiceStub(channel)
+
+            # Create a Struct for the options
+            options_struct = struct_pb2.Struct()
+            if data.options:
+                options_struct.update(data.options)
+
             request = llm_pb2.ChatRequest(
                 message=data.prompt,
                 temperature=data.temperature,
                 max_tokens=data.max_tokens,
                 enable_thinking=data.enable_thinking,
-                options=data.options
+                options=options_struct
             )
             response = await stub.Chat(request)
-            try:
-                # Désérialise la chaîne JSON reçue en dictionnaire Python
-                return json.loads(response.full_message)
-            except json.JSONDecodeError:
-                logging.error(f"Erreur de décodage JSON de la réponse du LLM-service: {response.full_message}")
-                return {
-                    "full_message": "[ERREUR_CLIENT: Réponse JSON invalide du service LLM]",
-                    "response": {"raw": response.full_message}
-                }
+            
+            # Convert the Protobuf Struct back to a Python dictionary
+            return MessageToDict(response.full_message)
+
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service LLM (non-streamé): {e.details()}")
         return {
@@ -72,7 +79,7 @@ async def get_llm_chat_response(
             "response": {"error": e.details(), "type": "AioRpcError"}
         }
     
-async def get_llm_chat_batch_response(messages: List[str], temperature: float, max_tokens: int, enable_thinking: bool, **kwargs) -> List[str]:
+async def get_llm_chat_batch_response(messages: List[str], temperature: float, max_tokens: int, enable_thinking: bool, **kwargs) -> List[Dict]:
     """
     Appelle le service gRPC LLM pour obtenir des réponses complètes pour un lot de messages.
     """
@@ -81,15 +88,27 @@ async def get_llm_chat_batch_response(messages: List[str], temperature: float, m
     try:
         async with grpc.aio.insecure_channel(LLM_SERVICE_URL) as channel:
             stub = llm_pb2_grpc.LLMServiceStub(channel)
+
+            options_struct = struct_pb2.Struct()
+            if "options" in kwargs and kwargs["options"]:
+                options_struct.update(kwargs["options"])
+
             request = llm_pb2.ChatBatchRequest(
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 enable_thinking=enable_thinking,
-                options=kwargs.get("options", {})
+                options=options_struct
             )
             response = await stub.ChatBatch(request)
-            return list(response.full_messages)
+
+            # Convert each Struct in the response to a Python dictionary
+            return [MessageToDict(msg) for msg in response.full_messages]
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service LLM (batch): {e.details()}")
-        return [f"[ERREUR_CLIENT: {e.details()}]" for _ in messages]
+        # Return a list of error dictionaries matching the expected structure
+        error_response = {
+            "full_message": f"[ERREUR_CLIENT: {e.details()}]",
+            "response": {"error": e.details(), "type": "AioRpcError"}
+        }
+        return [error_response for _ in messages]
