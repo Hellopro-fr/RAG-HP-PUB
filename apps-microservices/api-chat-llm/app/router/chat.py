@@ -17,7 +17,7 @@ async def chat_completion_llm(request: ChatRequest = Body(...)):
             raise ValueError("Le promt ne peut pas être vide.")        
         
         results = await get_chat_completion_response(request)
-        return chatResponse(response=results.get("response", ""), chat_model=settings.MODEL_NAME , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None), options=request.options)
+        return chatResponse(response=results.get("response", ""), chat_model=settings.MODEL_NAME if settings.LLM_PROVIDER != "deepseek" else settings.DEEPSEEK_MODEL_NAME , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None), options=request.options)
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
         raise HTTPException(status_code=400, detail=str(ve))
