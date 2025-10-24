@@ -29,7 +29,7 @@ WORKDIR /app/docext
 RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -e .
 
-RUN pip install --no-cache-dir flash-attn 
+RUN pip install flash-attn==2.1.0+cu124 -f https://download.pytorch.org/whl/torch_stable.html
 
 WORKDIR /app/
 # Vérifie qu'il existe (debug)
