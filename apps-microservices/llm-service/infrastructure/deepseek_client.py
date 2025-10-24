@@ -26,9 +26,9 @@ class DeepSeekClient:
                 "max_tokens": max_tokens,
             }
 
-            if kwargs.get("options"):
-                for key, value in kwargs["options"].items():
-                    request_payload[key] = value
+            # if kwargs.get("options"):
+            #     for key, value in kwargs["options"].items():
+            #         request_payload[key] = value
 
             response = await self.client.chat.completions.create(**request_payload)
 
@@ -59,9 +59,9 @@ class DeepSeekClient:
                 "stream": True,
             }
 
-            if kwargs.get("options"):
-                for key, value in kwargs["options"].items():
-                    request_payload[key] = value
+            # if kwargs.get("options"):
+            #     for key, value in kwargs["options"].items():
+            #         request_payload[key] = value
 
             stream = await self.client.chat.completions.create(**request_payload)
 
