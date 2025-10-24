@@ -29,10 +29,6 @@ class DeepSeekClient:
             if kwargs.get("options"):
                 for key, value in kwargs["options"].items():
                     request_payload[key] = value
-            else:
-                request_payload["top_p"] = float(0.8)
-                request_payload["top_k"] = int(20)
-                request_payload["repetition_penalty"] = float(1.0)
 
             response = await self.client.chat.completions.create(**request_payload)
 
@@ -66,10 +62,6 @@ class DeepSeekClient:
             if kwargs.get("options"):
                 for key, value in kwargs["options"].items():
                     request_payload[key] = value
-            else:
-                request_payload["top_p"] = float(0.8)
-                request_payload["top_k"] = int(20)
-                request_payload["repetition_penalty"] = float(1.0)
 
             stream = await self.client.chat.completions.create(**request_payload)
 
