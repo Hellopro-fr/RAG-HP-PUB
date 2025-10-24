@@ -154,8 +154,14 @@ services:
     environment:
       - VLLM_API_URL=http://34.34.5.41:8000/v1/chat/completions
       - MODEL_NAME=${MODEL_NAME}
+      - DEEPSEEK_MODEL_NAME=${DEEPSEEK_MODEL_NAME}
+      - DEEPSEEK_API_URL=${DEEPSEEK_API_URL}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER}
     networks:
       - services-net
+    env_file:
+      - .env
     logging:
       driver: "json-file"
       options:
