@@ -2,7 +2,8 @@ import grpc
 import os
 import logging
 import asyncio
-from typing import List
+import json
+from typing import List, Dict
 
 from httpx import options
 
@@ -39,9 +40,10 @@ async def stream_llm_chat(
 
 async def get_llm_chat_response(
     data: ChatRequest
-) -> str:
+) -> Dict:
     """
-    Appelle le service gRPC LLM pour obtenir une réponse complète (non-streamée).
+    Appelle le service gRPC LLM pour obtenir une réponse complète (non-streamée)
+    et la parse en dictionnaire.
     """
     try:
         async with grpc.aio.insecure_channel(LLM_SERVICE_URL) as channel:
@@ -54,10 +56,21 @@ async def get_llm_chat_response(
                 options=data.options
             )
             response = await stub.Chat(request)
-            return response.full_message
+            try:
+                # Désérialise la chaîne JSON reçue en dictionnaire Python
+                return json.loads(response.full_message)
+            except json.JSONDecodeError:
+                logging.error(f"Erreur de décodage JSON de la réponse du LLM-service: {response.full_message}")
+                return {
+                    "full_message": "[ERREUR_CLIENT: Réponse JSON invalide du service LLM]",
+                    "response": {"raw": response.full_message}
+                }
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service LLM (non-streamé): {e.details()}")
-        return f"[ERREUR_CLIENT: {e.details()}]"
+        return {
+            "full_message": f"[ERREUR_CLIENT: {e.details()}]",
+            "response": {"error": e.details(), "type": "AioRpcError"}
+        }
     
 async def get_llm_chat_batch_response(messages: List[str], temperature: float, max_tokens: int, enable_thinking: bool, **kwargs) -> List[str]:
     """
