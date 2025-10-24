@@ -29,12 +29,9 @@ WORKDIR /app/docext
 RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -e .
 
-# Remplacer l'installation flash-attn par :
-RUN pip install flash-attn==2.5.9 --no-build-isolation --no-cache-dir --force-reinstall
+RUN pip install flash-attn --no-cache-dir --no-build-isolation
+RUN pip install --upgrade torch --no-cache-dir
 
 WORKDIR /app/
-# Vérifie qu'il existe (debug)
-RUN ls -l /app/.venv/bin/
-
 ENTRYPOINT ["/app/.venv/bin/python", "-m", "docext.app.app", "--no-share","--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
 
