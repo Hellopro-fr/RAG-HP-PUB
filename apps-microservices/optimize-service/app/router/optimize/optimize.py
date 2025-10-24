@@ -43,55 +43,55 @@ async def optimizeQwen(payload: BatchOptimRequest):
 
                 print(f"Réponse brute LLM: {response}")
 
-    #             response = instancetraitement.clean_json_response(response)
+                response = instancetraitement.clean_json_response(response)
 
-    #             try:
-    #                 parsed_response = json.loads(response)
-    #                 if not parsed_response:
-    #                     print("LLM n'a pas retourné de résultat")
-    #                     results.append({
-    #                         "id_produit_scrapping": product["id_produit_scrapping"],
-    #                         "error": "LLM n'a pas retourné de résultat"
-    #                     })
-    #                 else:
-    #                     print("tentative de parsing reussie")
-    #                     print(parsed_response)
-    #                     results.append({
-    #                         "id_produit_scrapping": product["id_produit_scrapping"],
-    #                         "success": parsed_response
-    #                     })
+                try:
+                    parsed_response = json.loads(response)
+                    if not parsed_response:
+                        print("LLM n'a pas retourné de résultat")
+                        results.append({
+                            "id_produit_scrapping": product["id_produit_scrapping"],
+                            "error": "LLM n'a pas retourné de résultat"
+                        })
+                    else:
+                        print("tentative de parsing reussie")
+                        print(parsed_response)
+                        results.append({
+                            "id_produit_scrapping": product["id_produit_scrapping"],
+                            "success": parsed_response
+                        })
 
-    #             except json.JSONDecodeError:
-    #                 try:
-    #                     parsed_response = ast.literal_eval(response)
-    #                 except Exception:
-    #                     print("tentative de parsing échouée")
-    #                     print(response)
-    #                     results.append({
-    #                         "id_produit_scrapping": product["id_produit_scrapping"],
-    #                         "error": f"Tentative de parsing échouée: {response}"
-    #                     })
+                except json.JSONDecodeError:
+                    try:
+                        parsed_response = ast.literal_eval(response)
+                    except Exception:
+                        print("tentative de parsing échouée")
+                        print(response)
+                        results.append({
+                            "id_produit_scrapping": product["id_produit_scrapping"],
+                            "error": f"Tentative de parsing échouée: {response}"
+                        })
 
-    #         except Exception as e:
-    #             print(f"Erreur lors du traitement du produit {product['id_produit_scrapping']}: {str(e)}")
-    #             results.append({
-    #                 "id_produit_scrapping": product["id_produit_scrapping"],
-    #                 "error": f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
-    #             })
+            except Exception as e:
+                print(f"Erreur lors du traitement du produit {product['id_produit_scrapping']}: {str(e)}")
+                results.append({
+                    "id_produit_scrapping": product["id_produit_scrapping"],
+                    "error": f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
+                })
 
-    #     end_time = time.time()
-    #     processing_time = end_time - start_time
+        end_time = time.time()
+        processing_time = end_time - start_time
         
-    #     print(f"Fin traitement en {processing_time:.2f} secondes")
-    #     print (f"Résultats: {results}")
-    #     print(f"lots traité, taille results: {len(results)}")
-    #     return {"data": results}
+        print(f"Fin traitement en {processing_time:.2f} secondes")
+        print (f"Résultats: {results}")
+        print(f"lots traité, taille results: {len(results)}")
+        return {"data": results}
 
-    # except Exception as e:
-    #     error_msg = f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
-    #     debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
-    #     response_error = {
-    #         "ERROR": error_msg
-    #     }
-    #     print(debug_msg)
-    #     return response_error
+    except Exception as e:
+        error_msg = f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
+        debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
+        response_error = {
+            "ERROR": error_msg
+        }
+        print(debug_msg)
+        return response_error
