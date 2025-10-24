@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Installation des dépendances système requises pour la compilation de TensorRT-LLM
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 python3.10-venv python3-pip git git-lfs openmpi-bin libopenmpi-dev \
+    python3.10 python3.10-venv python3-pip git git-lfs openmpi-bin libopenmpi-dev build-essential cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Mettre à jour pip et créer un lien symbolique pour python -> python3
