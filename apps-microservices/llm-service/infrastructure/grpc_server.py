@@ -3,6 +3,7 @@ import logging
 from concurrent import futures
 from grpc_stubs import llm_pb2, llm_pb2_grpc
 from application.chat_service import ChatApplicationService
+from google.protobuf import struct_pb2
 
 
 class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
@@ -33,14 +34,19 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             )
             options = request.options if request.HasField("options") else {}
 
-            full_message = await self.chat_service.handle_chat_completion(
+            full_message_dict = await self.chat_service.handle_chat_completion(
                 request.message,
                 temperature,
                 max_tokens,
                 enable_thinking,
                 options=options,
             )
-            return llm_pb2.FullChatResponse(full_message=full_message)
+            
+            # Convert the Python dictionary to a Protobuf Struct
+            response_struct = struct_pb2.Struct()
+            response_struct.update(full_message_dict)
+
+            return llm_pb2.FullChatResponse(full_message=response_struct)
         except Exception as e:
             logging.error(f"Erreur dans Chat: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
@@ -65,14 +71,22 @@ class LLMServiceImpl(llm_pb2_grpc.LLMServiceServicer):
             )
             options = request.options if request.HasField("options") else {}
 
-            responses = await self.chat_service.handle_chat_batch_completion(
+            responses_list_of_dicts = await self.chat_service.handle_chat_batch_completion(
                 list(request.messages),
                 temperature,
                 max_tokens,
                 enable_thinking,
                 options=options,
             )
-            return llm_pb2.ChatBatchResponse(full_messages=responses)
+
+            # Convert each Python dictionary in the list to a Protobuf Struct
+            response_structs = []
+            for resp_dict in responses_list_of_dicts:
+                struct = struct_pb2.Struct()
+                struct.update(resp_dict)
+                response_structs.append(struct)
+
+            return llm_pb2.ChatBatchResponse(full_messages=response_structs)
         except Exception as e:
             logging.error(f"Erreur dans ChatBatch: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)

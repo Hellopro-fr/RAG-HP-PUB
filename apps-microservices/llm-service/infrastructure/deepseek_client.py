@@ -17,7 +17,7 @@ class DeepSeekClient:
         max_tokens: int,
         enable_thinking: bool,
         **kwargs,
-    ) -> str:
+    ) -> dict:
         try:
             request_payload = {
                 "model": MODEL_NAME,
@@ -32,15 +32,21 @@ class DeepSeekClient:
 
             response = await self.client.chat.completions.create(**request_payload)
 
+            content = "[ERREUR: Réponse inattendue du service LLM]"
             if response.choices:
                 content = response.choices[0].message.content
                 if not enable_thinking:
                     content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
                     content = re.sub(r"\s+", " ", content).strip()
-                return content
-            return "[ERREUR: Réponse inattendue du service LLM]"
+            return {
+                "full_message": content,
+                "response": response.model_dump()
+            }
         except Exception as e:
-            return f"[ERREUR: {e}]"
+            return {
+                "full_message": f"[ERREUR: {e}]",
+                "response": {"error": str(e), "type": type(e).__name__}
+            }
 
     async def stream_chat(
         self,

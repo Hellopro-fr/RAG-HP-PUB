@@ -65,7 +65,7 @@ class ChatApplicationService:
 
     async def handle_chat_completion(
         self, message: str, temperature: float, max_tokens: int, enable_thinking: bool, **kwargs
-    ) -> str:
+    ) -> dict:
         message_history = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": message},
