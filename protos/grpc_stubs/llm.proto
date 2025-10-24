@@ -28,7 +28,8 @@ message ChatResponse {
 }
 
 message FullChatResponse {
-  string full_message = 1;
+  // string full_message = 1;
+  google.protobuf.Struct full_message = 1;
 }
 
 message ChatBatchRequest {
