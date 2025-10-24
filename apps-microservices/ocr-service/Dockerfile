@@ -15,8 +15,11 @@ EXPOSE 8559
 WORKDIR /app
 
 # Create and activate virtual environment
-RUN python -m venv /app/.venv
+RUN python3.11 -m venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
+
+# Vérifie qu'il existe (debug)
+RUN ls -l /app/.venv/bin/
 
 # Install dependencies
 COPY apps-microservices/ocr-service/requirements.txt .
