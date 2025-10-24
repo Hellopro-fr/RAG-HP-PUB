@@ -29,7 +29,7 @@ WORKDIR /app/docext
 RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -e .
 
-RUN pip install --no-cache-dir flash-attn --no-build-isolation
+RUN pip install --no-cache-dir flash-attn 
 
 WORKDIR /app/
 # Vérifie qu'il existe (debug)
