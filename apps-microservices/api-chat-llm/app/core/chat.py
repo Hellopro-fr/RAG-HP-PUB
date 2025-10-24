@@ -76,7 +76,7 @@ async def get_chat_completion_response(request: ChatRequest):
     time_elapsed = time.perf_counter() - start_time
     logger.info(f"Temps écoulé pour get_next_questinon: {time_elapsed:.2f} secondes")
 
-    return {"response": response , "time_elapsed": time_elapsed}
+    return {"response": response.get("full_message", ""), "api_response": response.get("response", {}) , "time_elapsed": time_elapsed}
 
 # Chat completion via chatGpt 40
 def llm_prompt_chatgpt(request: ChatRequest) -> str:
