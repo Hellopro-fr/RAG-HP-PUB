@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 # A prefix for all crawl-related keys in Redis
 CRAWL_JOB_PREFIX = "crawl_job:"
+# The global counter for running jobs
+CRAWL_RUNNING_COUNT_KEY = "crawl_jobs:running_count"
+
 
 class CrawlerManager:
     """
@@ -94,6 +97,9 @@ class CrawlerManager:
         }
         await redis_service.set_data(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_data)
         
+        # Atomically increment the global running count
+        await redis_service._client.incr(CRAWL_RUNNING_COUNT_KEY)
+        
         asyncio.create_task(self._monitor_process(crawl_id, process))
         return crawl_id
 
@@ -123,6 +129,9 @@ class CrawlerManager:
         
         await process.wait()
         
+        # Atomically decrement the global running count as the process has finished
+        await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
+        
         job_info = await redis_service.get_data(job_key)
         if job_info:
             exit_code = process.returncode
@@ -131,7 +140,7 @@ class CrawlerManager:
             job_info["status"] = "finished" if is_success else "failed"
             job_info["pid"] = None # Process is no longer running
             await redis_service.set_data(job_key, job_info)
-            logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status updated in Redis.")
+            logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status updated in Redis and counter decremented.")
 
             if not is_success and job_info.get("failure_callback_url"):
                 logger.info(f"Crawl '{crawl_id}' failed. Triggering failure webhook.")
@@ -259,8 +268,13 @@ class CrawlerManager:
         logger.info(f"Terminating {len(self.local_processes)} active local crawls on this replica.")
         for crawl_id, process in list(self.local_processes.items()):
             if process.returncode is None:
-                try: process.terminate()
-                except Exception as e: logger.error(f"Error terminating process for '{crawl_id}': {e}")
+                try: 
+                    process.terminate()
+                    # After terminating, we need to ensure the counter is decremented
+                    await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
+                    logger.info(f"Terminated process for '{crawl_id}' and decremented global counter.")
+                except Exception as e: 
+                    logger.error(f"Error terminating process for '{crawl_id}': {e}")
         
         self.local_processes.clear()
 

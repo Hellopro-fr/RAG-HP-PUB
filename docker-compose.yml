@@ -909,6 +909,9 @@ services:
     environment:
       # Example: Set max concurrent crawls for this instance to 1 for stability
       - MAX_CONCURRENT_CRAWLS=1
+      # Should always be the same as replica count * MAX_CONCURRENT_CRAWLS
+      - MAX_GLOBAL_CONCURRENT_CRAWLS=1
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
     deploy:
@@ -917,6 +920,11 @@ services:
         limits:
           cpus: '1.0' # Limit to 1 CPU core
           memory: 4G   # Limit to 4GB of RAM
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   redis:
     image: redis:latest

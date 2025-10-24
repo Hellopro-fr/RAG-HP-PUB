@@ -5,9 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
-    # Max concurrent crawls allowed per service instance.
+    # Max concurrent crawls allowed PER service instance.
     # Can be set via environment variable.
     MAX_CONCURRENT_CRAWLS: int = int(os.getenv("MAX_CONCURRENT_CRAWLS", "10"))
+
+    # Max concurrent crawls allowed ACROSS ALL service instances.
+    MAX_GLOBAL_CONCURRENT_CRAWLS: int = int(os.getenv("MAX_GLOBAL_CONCURRENT_CRAWLS", "10"))
 
     # Base directory for storing all crawl data (logs, datasets, etc.)
     CRAWLER_STORAGE_PATH: str = os.getenv("CRAWLER_STORAGE_PATH", "/app/storage")
