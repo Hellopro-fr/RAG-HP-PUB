@@ -91,7 +91,9 @@ def llm_prompt_chatgpt(request: ChatRequest) -> str:
 
     response = tab_response.choices[0].message.content
 
-    return {"message" : response , "api_response" : tab_response} 
+    tab_response_dict = tab_response.model_dump() if hasattr(tab_response, 'model_dump') else tab_response.dict()
+    
+    return {"message" : response , "api_response" : tab_response_dict} 
 
 async def get_chatgpt_chat_completion_response(request: ChatRequest):
 
@@ -115,7 +117,9 @@ def llm_prompt_deepseek(request: ChatRequest) -> str:
     tab_response = deepseek.chat(request.prompt , stream=False)
     response = tab_response['content']
 
-    return {"message" : response , "api_response" : tab_response} 
+    tab_response_dict = tab_response.model_dump() if hasattr(tab_response, 'model_dump') else tab_response.dict()
+
+    return {"message" : response , "api_response" : tab_response_dict} 
 
 async def get_deepseek_chat_completion_response(request: ChatRequest):
 
@@ -155,7 +159,9 @@ def llm_prompt_gemini(request: ChatRequest) -> str:
     )
     response = completion.choices[0].message.content
 
-    return {"message" : response , "api_response" : completion} 
+    completion_dict = completion.model_dump() if hasattr(completion, 'model_dump') else completion.dict()
+
+    return {"message" : response , "api_response" : completion_dict} 
 
 async def get_gemini_chat_completion_response(request: ChatRequest):
 
