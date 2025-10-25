@@ -41,13 +41,8 @@ services:
       retries: 24 # Wait up to 4 minutes for the model to load
       start_period: 30s
     shm_size: '16g'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['0', '1']
-              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     restart: unless-stopped
     volumes:
       - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
