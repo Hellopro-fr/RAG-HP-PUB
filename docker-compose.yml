@@ -40,13 +40,13 @@ services:
       timeout: 5s
       retries: 24 # Wait up to 4 minutes for the model to load
       start_period: 30s
+    shm_size: '16g'
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              # device_ids: ['0']
-              count: all
+              device_ids: ['0', '1']
               capabilities: [gpu]
     restart: unless-stopped
     volumes:
