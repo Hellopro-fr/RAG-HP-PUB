@@ -17,28 +17,21 @@ services:
         max-file: "3"
   vllm-server:
     image: vllm/vllm-openai:latest
-    shm_size: 16g
-    # --enable-prefix-caching
-    # --enforce-eager
-    # --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
-    # --max-num-seqs 64
-    # --gpu-memory-utilization 0.95
     command: >
       --model ${MODEL_NAME}
-      --quantization awq
-      --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
       --tensor-parallel-size 2
       --trust-remote-code
-      --reasoning-parser qwen3
       --gpu-memory-utilization 0.95
-      --max-num-seqs 2
+      --max-num-seqs 64
       --max-num-batched-tokens 8192
       --enable-chunked-prefill
+      --enable-prefix-caching
       --disable-log-stats
+      --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
       --swap-space 4
       --max-model-len 32768
+      --enforce-eager
       --dtype auto
-      --load-format safetensors
     ports:
       - "8000:8000"
     healthcheck:
