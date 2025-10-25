@@ -143,9 +143,8 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/llm-service/Dockerfile
-      # - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
     environment:
-      - VLLM_API_URL=http://34.34.5.41:8000/v1/chat/completions
+      - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
       - MODEL_NAME=${MODEL_NAME}
     networks:
       - services-net
