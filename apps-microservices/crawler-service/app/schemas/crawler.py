@@ -49,4 +49,6 @@ class CrawlStatus(BaseModel):
     start_url: HttpUrl
     start_time: datetime
     urls_crawled: int = Field(0, description="Number of URLs successfully crawled and saved.")
+    error_urls_crawled: int = Field(0, description="Number of URLs that failed during crawling.")
+    nfr_urls_crawled: int = Field(0, description="Number of URLs that were skipped for not being in French.")
     last_activity: Optional[datetime] = Field(None, description="Timestamp of the last saved URL.")

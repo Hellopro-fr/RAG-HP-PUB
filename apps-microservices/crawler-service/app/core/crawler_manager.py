@@ -21,6 +21,14 @@ CRAWL_JOB_PREFIX = "crawl_job:"
 # The global counter for running jobs
 CRAWL_RUNNING_COUNT_KEY = "crawl_jobs:running_count"
 
+def _count_files_in_dir(path: str) -> int:
+    """Safely counts files in a directory."""
+    if not os.path.isdir(path):
+        return 0
+    try:
+        return len([name for name in os.listdir(path) if os.path.isfile(os.path.join(path, name))])
+    except OSError:
+        return 0
 
 class CrawlerManager:
     """
@@ -98,7 +106,8 @@ class CrawlerManager:
         await redis_service.set_data(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_data)
         
         # Atomically increment the global running count
-        await redis_service._client.incr(CRAWL_RUNNING_COUNT_KEY)
+        if redis_service._client:
+            await redis_service._client.incr(CRAWL_RUNNING_COUNT_KEY)
         
         asyncio.create_task(self._monitor_process(crawl_id, process))
         return crawl_id
@@ -130,7 +139,8 @@ class CrawlerManager:
         await process.wait()
         
         # Atomically decrement the global running count as the process has finished
-        await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
+        if redis_service._client:
+            await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
         
         job_info = await redis_service.get_data(job_key)
         if job_info:
@@ -182,11 +192,22 @@ class CrawlerManager:
         job_info = await redis_service.get_data(f"{CRAWL_JOB_PREFIX}{crawl_id}")
         if not job_info: return None
 
+        # --- START: ENHANCED STATS CALCULATION ---
+        storage_path = job_info["storage_path"]
+        domain = job_info["domain"]
+        crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
+
         urls_crawled, last_url_time = 0, None
-        dataset_path = os.path.join(job_info["storage_path"], 'storage', 'datasets', job_info["domain"])
-        if os.path.exists(dataset_path):
+        dataset_path = os.path.join(crawlee_storage_base, domain)
+        error_dataset_path = os.path.join(crawlee_storage_base, f"error-{domain}")
+        nfr_dataset_path = os.path.join(crawlee_storage_base, f"nfr-{domain}")
+
+        error_urls_crawled = _count_files_in_dir(error_dataset_path)
+        nfr_urls_crawled = _count_files_in_dir(nfr_dataset_path)
+        
+        if os.path.isdir(dataset_path):
             try:
-                files = [os.path.join(dataset_path, f) for f in os.listdir(dataset_path)]
+                files = [os.path.join(dataset_path, f) for f in os.listdir(dataset_path) if os.path.isfile(os.path.join(dataset_path, f))]
                 urls_crawled = len(files)
                 if files:
                     latest_file = max(files, key=os.path.getmtime)
@@ -196,10 +217,16 @@ class CrawlerManager:
         
         return CrawlStatus(
             crawl_id=crawl_id,
-            status=job_info["status"], domain=job_info["domain"],
-            start_url=job_info["start_url"], start_time=job_info["start_time"],
-            urls_crawled=urls_crawled, last_activity=last_url_time
+            status=job_info["status"], 
+            domain=job_info["domain"],
+            start_url=job_info["start_url"], 
+            start_time=job_info["start_time"],
+            urls_crawled=urls_crawled,
+            error_urls_crawled=error_urls_crawled,
+            nfr_urls_crawled=nfr_urls_crawled,
+            last_activity=last_url_time
         )
+        # --- END: ENHANCED STATS CALCULATION ---
         
     async def get_results_archive(self, crawl_id: str, include: List[IncludeInArchive]) -> Optional[str]:
         job_info = await redis_service.get_data(f"{CRAWL_JOB_PREFIX}{crawl_id}")
@@ -270,8 +297,8 @@ class CrawlerManager:
             if process.returncode is None:
                 try: 
                     process.terminate()
-                    # After terminating, we need to ensure the counter is decremented
-                    await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
+                    if redis_service._client:
+                        await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
                     logger.info(f"Terminated process for '{crawl_id}' and decremented global counter.")
                 except Exception as e: 
                     logger.error(f"Error terminating process for '{crawl_id}': {e}")
