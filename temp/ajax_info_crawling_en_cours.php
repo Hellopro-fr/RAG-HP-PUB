@@ -6,8 +6,9 @@ require_once($_SERVER['DOCUMENT_ROOT'] . "include/connexion.php");
 require_once($_SERVER['DOCUMENT_ROOT'] . "no_read_access/connexion_bdd_hellopro_ia.php");
 require_once($_SERVER['DOCUMENT_ROOT'] . "fonctions/fonctions_hellopro.php");
 require_once($_SERVER['DOCUMENT_ROOT'] . "fonctions/fonctions_generales.php");
+require_once($_SERVER['DOCUMENT_ROOT'] . 'admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_scrapping.php');
 
-
+// --- START: Legacy Functions ---
 function get_nb_fichier($repertoire) {
     $count = shell_exec("find ". $repertoire ." -type f | wc -l");    
     return $count;
@@ -44,7 +45,7 @@ function obtenir_fichier_plus_recent($chemin_dossier)
         'erreur' => null
     ];
 }
-
+// --- END: Legacy Functions ---
 
 $id_domaine = $_POST["id_domaine"];
 
@@ -54,7 +55,7 @@ if(empty($id_domaine)) {
 
 $sql_info_domaine = "
     SELECT
-        domaine_dspi
+        domaine_dspi, systeme_dspi
     FROM
         domaine_scrapping_produit_ia DSPI
     WHERE
@@ -63,18 +64,43 @@ $sql_info_domaine = "
 $res_info_domaine = mysqli_query($GLOBALS['LINK_MYSQLI_HELLOPRO_IA'], $sql_info_domaine) or die(hellopro_mysql_error($sql_info_domaine, $GLOBALS['LINK_MYSQLI_HELLOPRO_IA']));
 $lig_info_domaine = mysqli_fetch_assoc($res_info_domaine);
 
+if (!$lig_info_domaine) {
+    exit("Domaine non trouvé");
+}
+
 $nom_domaine = $lig_info_domaine["domaine_dspi"];
+$systeme = (int)$lig_info_domaine["systeme_dspi"];
 
-$chemin_crawling_ok = $_SERVER["DOCUMENT_ROOT"] . "admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/storage/datasets/{$nom_domaine}/";
-$chemin_crawling_erreur = $_SERVER["DOCUMENT_ROOT"] . "admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/storage/datasets/error-{$nom_domaine}/";
-$nb_fichier_crawler_ok          = get_nb_fichier($chemin_crawling_ok);
-$nb_fichier_crawler_avec_erreur = get_nb_fichier($chemin_crawling_erreur);
+$nb_fichier_crawler_ok = 0;
+$nb_fichier_crawler_avec_erreur = 0;
+$date_modification = "N/A";
 
+if ($systeme === SYSTEM_API) {
+    // --- New API System Logic ---
+    $api_service = get_crawler_api_service();
+    $status = $api_service->getStatus($id_domaine);
 
-$info_fichier_recent = obtenir_fichier_plus_recent($chemin_crawling_ok);
+    if ($status && isset($status['urls_crawled'])) {
+        $nb_fichier_crawler_ok = $status['urls_crawled'];
+        $nb_fichier_crawler_avec_erreur = $status['error_urls_crawled'];
+        if (!empty($status['last_activity'])) {
+            $date_modification = date("d/m/Y H:i", strtotime($status['last_activity']));
+        }
+    } else {
+        $date_modification = "Erreur API";
+    }
 
-$date_modification = $info_fichier_recent["date_modification"];
+} else {
+    // --- Legacy System Logic ---
+    $chemin_crawling_ok = $_SERVER["DOCUMENT_ROOT"] . "admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/storage/datasets/{$nom_domaine}/";
+    $chemin_crawling_erreur = $_SERVER["DOCUMENT_ROOT"] . "admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/storage/datasets/error-{$nom_domaine}/";
+    
+    $nb_fichier_crawler_ok = get_nb_fichier($chemin_crawling_ok);
+    $nb_fichier_crawler_avec_erreur = get_nb_fichier($chemin_crawling_erreur);
 
+    $info_fichier_recent = obtenir_fichier_plus_recent($chemin_crawling_ok);
+    $date_modification = $info_fichier_recent["date_modification"] ?? "N/A";
+}
 ?>
 
 <div>

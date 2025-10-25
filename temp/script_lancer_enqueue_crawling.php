@@ -17,18 +17,18 @@ require_once($_SERVER['DOCUMENT_ROOT'] . 'admin/repertoire_test/moulinettes_inte
 
 /**Les differents valeurs du statuts
  * statut_scraper_eci : 
-* 0 => non commencé
-* 1 => en cours
-* 2 => terminé 
-* 3 => n'as pas de traitement scraper 
-* 4 => erreur
-* 
-* statut_crawler_eci : 
-* 0 => non commencé
-* 1 => en cours
-* 2 => terminé 
-* 3 => partiellement términé
-* 4 => erreur
+ * 0 => non commencé
+ * 1 => en cours
+ * 2 => terminé 
+ * 3 => n'as pas de traitement scraper 
+ * 4 => erreur
+ * 
+ * statut_crawler_eci : 
+ * 0 => non commencé
+ * 1 => en cours
+ * 2 => terminé 
+ * 3 => partiellement términé
+ * 4 => erreur
  * 
  */
 
@@ -81,7 +81,7 @@ $pendigScraper = hasPending("scraper");
 $type = $_GET['type'];
 
 /**
- * verification des pid crawler encours 
+ * verification des pid crawler encours (LEGACY SYSTEM ONLY)
  * - Si pid n'esiste plus , et le domaine est encours de crawling, on met à jour le statut du domaine et de l'enqueue en erreur
  * - Si pid n'esiste plus , on supprime le fichier pid
  */
@@ -97,7 +97,15 @@ foreach($processFiles as $processFile)
     $pid = trim(explode(":",$tab_pid[0])[1]);
     $domain_pid = trim(explode(":",$tab_pid[1])[1]);
     $verif_pid =  shell_exec("ps -p $pid");
-    if(!empty($verif_pid) && !stripos($verif_pid  , $pid ) && hasPending("crawler" , $domain_pid) > 0)
+
+    // --- START: Crawler Service Migration ---
+    $sql_system = "SELECT systeme_dspi FROM domaine_scrapping_produit_ia WHERE id_domaine_scrapping_produit_ia = '" . hellopro_traitement_donnee_annuaire_bo($domain_pid) . "'";
+    $res_system = mysqli_query($GLOBALS['LINK_MYSQLI_HELLOPRO_IA'], $sql_system);
+    $lig_system = mysqli_fetch_assoc($res_system);
+    $is_legacy = !$lig_system || (int)$lig_system['systeme_dspi'] === SYSTEM_LEGACY;
+    // --- END: Crawler Service Migration ---
+
+    if(!empty($verif_pid) && !stripos($verif_pid, $pid) && hasPending("crawler", $domain_pid) > 0 && $is_legacy)
     {
         $data_maj =[ 
             "statut_crawler_eci" => 4,
@@ -435,6 +443,22 @@ if(!empty($id_domaine_to_delete) || !empty($doublon_nok))
     envoyer_mail_scripts($objet, "", "haingatiana@hellopro.fr,randrianjanaka@hellopro.fr,tandriatsiferantsoa@hellopro.fr" , $message, 1); //PROD
 }
 
+// --- START: MODIFIED FOR MIGRATION ---
+// Fetch the global capacity of the API service once at the beginning of the script.
+$api_capacity = null;
+try {
+    $context = stream_context_create(['http' => ['timeout' => 5]]);
+    $capacity_json = @file_get_contents(CRAWLER_API_BASE_URL . '/crawler/capacity', false, $context);
+    if ($capacity_json) {
+        $api_capacity = json_decode($capacity_json, true);
+    } else {
+        error_log("Could not fetch capacity from crawler service. API jobs will not be launched in this run.");
+    }
+} catch (Exception $e) {
+    error_log("Exception when fetching crawler capacity: " . $e->getMessage());
+}
+// --- END: MODIFIED FOR MIGRATION ---
+
 $sql_enqueue = "SELECT
         ECI.id_enqueue_crawling_ia,
         ECI.id_domaine_scrapping_produit_ia,
@@ -442,6 +466,7 @@ $sql_enqueue = "SELECT
         ECI.statut_scraper_eci,
         DSPI.data_crawling_dspi,
         DSPI.domaine_dspi,
+        DSPI.systeme_dspi, -- <<< Added for migration
         ECI.method_detect_eci,
         ECI.date_continuation_eci,
         ECI.nb_retry_eci,
@@ -460,6 +485,7 @@ while($lig_enqueue = mysqli_fetch_assoc($res_enqueue)){
     $id_domaine         = $lig_enqueue['id_domaine_scrapping_produit_ia'];
     $id_eci             = $lig_enqueue['id_enqueue_crawling_ia'];
     $domaine            = $lig_enqueue['domaine_dspi'];
+    $systeme            = (int)$lig_enqueue['systeme_dspi']; // <<< Added for migration
     $method             = $lig_enqueue['method_detect_eci'];
     $statut_crawler_eci = $lig_enqueue['statut_crawler_eci'];
     $statut_scraper_eci = $lig_enqueue['statut_scraper_eci'];
@@ -529,119 +555,163 @@ while($lig_enqueue = mysqli_fetch_assoc($res_enqueue)){
         continue;
     }
 
-    /**
-     * condition crawler:
-     * - si le crawler est en attente (0) ou partiellement terminé (3)
-     * - si les rawlers en cours sont inferieur au max par crawl
-     * - si le scraper est terminé (2) ou n'en as pas (3) || si le domaine est en cours de scrapping
-     * - si le crawler n'y a pas encore de crawler lancé
-     */
-    //
-    if( in_array($statut_crawler_eci , [0 , 3 , 4])  && $crawlerLaunched < $max_crawl && ( in_array($statut_scraper_eci , [2,3])  || $domaineScraper == $id_domaine ) )
-    {
-        if($method != "auto" && $statut_scraper_eci != "2" && $domaineScraper != $id_domaine )
-        {
-            continue;
-        }
+    if (in_array($statut_crawler_eci, [0, 3, 4]) && (in_array($statut_scraper_eci, [2, 3]) || $domaineScraper == $id_domaine)) {
+        if ($systeme === SYSTEM_API) {
+            // --- START: API System Launch ---
+            if ($api_capacity === null) {
+                $retour .= "\n API service is unreachable. Skipping API jobs.";
+                continue; 
+            }
+            
+            if ($api_capacity['running_jobs'] < $api_capacity['max_global_jobs']) {
+                $retour .= "\n Attempting to launch API job for domain: {$id_domaine}";
+                // There is global capacity, so we can launch the job.
+                $data_crawling = [
+                    "id" => $id_domaine,
+                    "typecrawling" => "link",
+                    "method" => $method
+                ];
+                
+                // Add optional parameters from data_crawling_dspi if they exist
+                $parametersMap = ['dropData', 'skipQuestionMark', 'skipDiez', 'bypassQuestionMark', 'bypassDiez', 'breakLimit', 'toKeep', 'toRemove'];
+                foreach ($parametersMap as $param) {
+                    if (isset($data[$param]) && !empty($data[$param])) {
+                        $data_crawling[strtolower($param)] = $data[$param];
+                    }
+                }
 
-        //verification si fichier pid du domaine 
-        $file_pid_domaine = $repertoire_pid_domaine . 'pid_' . $domaine . '.txt';
-        if(file_exists($file_pid_domaine))
-        {
-            continue; //si le fichier pid existe, on skip le domaine
-        }
-        //verification si le domaine n'est pas déjà en cours de crawling
-        if (hasPending("crawler" , $id_domaine) > 0)
-        {
-            continue; //si le domaine est déjà en cours de crawling, on skip le domaine
-        }
+                $param_crawling = http_build_query($data_crawling);
 
-        //TODO lancement shell_exec crawling domaine
-        $data_crawling = [
-            "id" => $id_domaine,
-            // "domain" => $domaine,
-            // "site" => $homepage,
-            "typecrawling" => "link",
-            "method" => $method
-        ];
+                $test_temp = $_SERVER['DOCUMENT_ROOT'] . 'tmp/shell_lancement_api_crawling_' . $id_domaine . '_' . date('Ymdhis') . '.log';
+                // Using -O- to get output, but not running in background (-b) to check response
+                $command = "cd " . $_SERVER['DOCUMENT_ROOT'] . "tmp/; wget -q -O- '" . $server_name . "/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/shell.php?" . $param_crawling . "' >> '" . $test_temp . "' 2>&1";
+                $response_json = shell_exec($command);
+                $response = json_decode($response_json, true);
 
+                // Check if the API accepted the job
+                if (isset($response['crawl_id'])) {
+                    $retour .= "\n API Crawler accepted job for domain: " . $id_domaine . " - " . $domaine;
+                    // Increment our local counter to not exceed capacity in this single run
+                    $api_capacity['running_jobs']++; 
+                    
+                    // --- Ported Logic Start ---
+                    $data_maj_eci = ["statut_crawler_eci" => 1];
+                    if ($statut_crawler_eci == 4 && !in_array($id_domaine, $domaine_retry)) {
+                        $retry = getNbRetry($id_domaine);
+                        $data_maj_eci["nb_retry_eci"] = $retry + 1;
+                    }
+                    sql_update_info($data_maj_eci, "enqueue_crawling_ia", ["id_domaine_scrapping_produit_ia" => $id_domaine]);
+    
+                    $data_maj_dspi = [];
+                    if ($statut_crawler_eci == 4) {
+                        $data_maj_dspi["statut_dspi"] = 1;
+                    }
+    
+                    if (!empty($data_crawling['dropdata'])) {
+                        unset($data['dropData']);
+                        $data_maj_dspi['data_crawling_dspi'] = json_encode($data, JSON_UNESCAPED_UNICODE);
+                    }
+    
+                    if (!empty($data_maj_dspi)) {
+                        sql_update_info($data_maj_dspi, "domaine_scrapping_produit_ia", ["id_domaine_scrapping_produit_ia" => $id_domaine]);
+                    }
+                } else {
+                    $error_message = $response['message'] ?? 'API rejected the job.';
+                    $retour .= "\n API Crawler REJECTED job for domain: " . $id_domaine . ". Reason: " . $error_message;
+                    error_log("API rejected crawl for {$id_domaine}: {$error_message}");
+                }
+            } else {
+                // Global capacity is full, stop trying to launch API jobs for this run.
+                $retour .= "\n API global capacity is full. Halting API job scheduling for this run.";
+                break; // Exit the while loop
+            }
+            // --- END: API System Launch ---
 
-        $data_maj_dspi = [];
+        } else {
+            // --- START: Legacy System Launch ---
+            if ($crawlerLaunched < $max_crawl) {
+                if($method != "auto" && $statut_scraper_eci != "2" && $domaineScraper != $id_domaine )
+                {
+                    continue;
+                }
 
-        //parametre pour drop dataset et requestEnqueue et pour skipper les liens avec un ? et #
-        $parametersMap = [
-            'dropData' => 'dropdata',
-            'skipQuestionMark' => 'skipquestionmark',
-            'skipDiez' => 'skipdiez',
-            'bypassQuestionMark' => 'bypassquestionmark',
-            'bypassDiez' => 'bypassdiez',
-            'breakLimit' => 'breaklimit',
-            'toKeep' => 'tokeep',
-            'toRemove' => 'toremove',
-        ];
-        
-        $paramUnset = ['dropData'];
-        
-        // Traitement de chaque paramètre
-        foreach ($parametersMap as $sourceKey => $targetKey) {
-            if (isset($data[$sourceKey]) && !empty($data[$sourceKey])) {
-                $data_crawling[$targetKey] = $data[$sourceKey] == 1 ? 1 : $data[$sourceKey];
+                //verification si fichier pid du domaine 
+                $file_pid_domaine = $repertoire_pid_domaine . 'pid_' . $domaine . '.txt';
+                if(file_exists($file_pid_domaine))
+                {
+                    continue; //si le fichier pid existe, on skip le domaine
+                }
+                //verification si le domaine n'est pas déjà en cours de crawling
+                if (hasPending("crawler" , $id_domaine) > 0)
+                {
+                    continue; //si le domaine est déjà en cours de crawling, on skip le domaine
+                }
 
-                if (in_array($sourceKey, $paramUnset)) {
-                    unset($data[$sourceKey]);
+                //Lancement shell_exec crawling domaine
+                $data_crawling = [
+                    "id" => $id_domaine,
+                    "typecrawling" => "link",
+                    "method" => $method
+                ];
+
+                $data_maj_dspi = [];
+
+                $parametersMap = ['dropData', 'skipQuestionMark', 'skipDiez', 'bypassQuestionMark', 'bypassDiez', 'breakLimit', 'toKeep', 'toRemove'];
+                $paramUnset = ['dropData'];
+                
+                // Traitement de chaque paramètre
+                foreach ($parametersMap as $sourceKey => $targetKey) {
+                    if (isset($data[$sourceKey]) && !empty($data[$sourceKey])) {
+                        $data_crawling[strtolower($targetKey)] = $data[$sourceKey] == 1 ? 1 : $data[$sourceKey];
+                        if (in_array($sourceKey, $paramUnset)) unset($data[$sourceKey]);
+                        $data_maj_dspi['data_crawling_dspi'] = json_encode($data, JSON_UNESCAPED_UNICODE);
+                    }
                 }
                 
-                $data_maj_dspi['data_crawling_dspi'] = json_encode($data, JSON_UNESCAPED_UNICODE);
+                $param_crawling = http_build_query($data_crawling);
+
+                $test_temp = $_SERVER['DOCUMENT_ROOT'] . 'tmp/shell_lancement_crawling_' . $id_domaine . '_' . date('Ymdhis') . '.log';
+                $command = "cd " . $_SERVER['DOCUMENT_ROOT'] . "tmp/; wget -q -b -t 1 '" . $server_name . "/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/shell.php?" . $param_crawling . "' -a '" . $test_temp . "'";
+                $a = shell_exec($command);
+
+                $retour .= "\n Legacy Crawler lancé pour le domaine : " .$id_domaine . " - " . $domaine;
+                $crawlerLaunched++;
+
+                //maj statut enqueue => en cours
+                $data_maj_eci = [ "statut_crawler_eci" => 1 ];
+                if($statut_crawler_eci == 4 && !in_array($id_domaine , $domaine_retry))
+                {
+                    $retry = getNbRetry($id_domaine);
+                    $data_maj_eci["nb_retry_eci"] = $retry + 1;
+                }
+                sql_update_info(
+                    $data_maj_eci,
+                    "enqueue_crawling_ia",
+                    [
+                        "id_domaine_scrapping_produit_ia" => $id_domaine
+                    ]
+                );
+
+                //maj statut domaine => en cours
+                if($statut_crawler_eci == 4 )
+                {
+                    $data_maj_dspi["statut_dspi"] = 1;
+                }
+
+                if(!empty($data_maj_dspi))
+                {
+                    sql_update_info(
+                        $data_maj_dspi,
+                        "domaine_scrapping_produit_ia",
+                        [
+                            "id_domaine_scrapping_produit_ia" => $id_domaine
+                        ]
+                    );
+                }
             }
-        }
-        
-        
-        $param_crawling = [];
-        foreach ($data_crawling as $key => $value) {
-            $param_crawling[] = $key . "=" . $value;
-        }
-
-        $test_temp = $_SERVER['DOCUMENT_ROOT'] . 'tmp/shell_lancement_crawling_' . $id_domaine . '_' . date('Ymdhis') . '.log';
-        $command = "cd " . $_SERVER['DOCUMENT_ROOT'] . "tmp/; wget -q -b -t 1 '" . $server_name . "/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/shell.php?" . implode( "&" , $param_crawling) . "' -a '" . $test_temp . "'";
-        $a = shell_exec($command);
-
-        $retour .= "\n Crawler lancé pour le domaine : " .$id_domaine . " - " . $domaine;
-
-        $crawlerLaunched++;
-
-        //maj statut enqueue => en cours
-        $data_maj_eci = [ "statut_crawler_eci" => 1 ];
-        if($statut_crawler_eci == 4 && !in_array($id_domaine , $domaine_retry))
-        {
-            $retry = getNbRetry($id_domaine);
-            $data_maj_eci["nb_retry_eci"] = $retry + 1;
-        }
-        sql_update_info(
-            $data_maj_eci,
-            "enqueue_crawling_ia",
-            [
-                "id_domaine_scrapping_produit_ia" => $id_domaine
-            ]
-        );
-
-        //maj statut domaine => en cours
-        if($statut_crawler_eci == 4 )
-        {
-            $data_maj_dspi["statut_dspi"] = 1;
-        }
-
-        if(!empty($data_maj_dspi))
-        {
-            sql_update_info(
-                $data_maj_dspi,
-                "domaine_scrapping_produit_ia",
-                [
-                    "id_domaine_scrapping_produit_ia" => $id_domaine
-                ]
-            );
+            // --- END: Legacy System Launch ---
         }
     }
-    
 }
 
 

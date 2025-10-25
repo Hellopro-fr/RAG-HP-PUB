@@ -5,11 +5,21 @@ require_once($_SERVER["DOCUMENT_ROOT"] . "admin/repertoire_test/moulinettes_inte
 require_once($_SERVER["DOCUMENT_ROOT"] . "admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/class/ImageComparator.php"); # Image Comparator
 require_once($_SERVER["DOCUMENT_ROOT"] . "admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/class/TopFicheEvaluator.php"); # TopFicheEvaluator
 
-// --- START: Crawler Service Migration Code ---
+// --- START: Crawler Service Migration ---
 
+/**
+ * Centralized configuration for the new Crawler Service.
+ */
+// The internal Docker network DNS name for the crawler service.
 define('CRAWLER_API_BASE_URL', 'http://34.34.5.41:8500/crawling-service');
+
+// Field values for the `systeme_dspi` database column.
 define('SYSTEM_LEGACY', 0);
 define('SYSTEM_API', 1);
+
+// A shared secret to secure webhooks.
+// @TODO: IMPORTANT - Move this to a secure, environment-specific config file and do not commit to version control.
+define('CRAWLER_WEBHOOK_SECRET', 'YOUR_SUPER_SECRET_TOKEN');
 
 /**
  * Singleton class to interact with the new Crawler Microservice API.
@@ -33,9 +43,9 @@ class CrawlerApiService {
      * Sends a request to the crawler API.
      * @param string $method HTTP method (GET, POST).
      * @param string $endpoint The API endpoint to call.
-     * @param array $payload The data to send (for POST requests).
+     * @param array $payload The data to send. For GET, it's used as query params. For POST, it's the JSON body.
      * @param bool $isDownload Whether to expect a file download.
-     * @return array|string The decoded JSON response or file content.
+     * @return array|string|false The decoded JSON response, raw file content, or false on failure.
      */
     private function sendRequest($method, $endpoint, $payload = [], $isDownload = false) {
         $url = $this->baseUrl . $endpoint;
@@ -47,7 +57,7 @@ class CrawlerApiService {
 
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 300); // 5 minutes timeout for potentially long operations
+        curl_setopt($ch, CURLOPT_TIMEOUT, 300); // 5 minutes timeout for potentially long operations like downloading large archives
 
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -92,6 +102,10 @@ class CrawlerApiService {
 
     public function stopCrawl(string $crawl_id) {
         return $this->sendRequest('POST', "/crawler/stop/{$crawl_id}");
+    }
+
+    public function getStatus(string $crawl_id) {
+        return $this->sendRequest('GET', "/crawler/status/{$crawl_id}");
     }
 
     /**
@@ -216,7 +230,70 @@ function get_crawler_api_service() {
     return CrawlerApiService::getInstance();
 }
 
-// --- END: Crawler Service Migration Code ---
+/**
+ * Returns a singleton instance of the Redis client.
+ * @return Redis|null A connected Redis client instance or null on failure.
+ * @todo: Function to use if Redis extension is activated
+ */
+function get_redis_client() {
+    static $redis_client = null;
+    if ($redis_client === null) {
+        if (class_exists('Redis')) {
+            try {
+                $redis_client = new Redis();
+                // Assumes Redis is running on localhost or a standard Docker network name 'redis'
+                $redis_client->connect(getenv('REDIS_HOST') ?: 'redis', getenv('REDIS_PORT') ?: 6379);
+            } catch (Exception $e) {
+                error_log("Failed to connect to Redis: " . $e->getMessage());
+                $redis_client = false; // Mark as failed to prevent retries in the same request
+            }
+        } else {
+            error_log("phpredis extension is not installed.");
+            $redis_client = false;
+        }
+    }
+    return $redis_client ?: null;
+}
+
+/**
+ * Returns a singleton instance of the Redis client
+ * @return Redis|null A connected Redis client instance or null on failure.
+ * @todo: Function to use if Redis extension is not activated and we need to use predis/predis and add this in composer or run composer install predis/predis
+ * **File:** `composer.json`
+ * **Content:**
+ * ```json
+ * {
+ *     "require": {
+ *         "predis/predis": "^2.2"
+ *     },
+ *     "autoload": {
+ *         "psr-4": {
+ *             "App\\": "src/"
+ *         }
+ *     }
+ * }
+ * ```
+ */
+function get_redis_client() {
+    static $redis_client = null;
+    if ($redis_client === null) {
+        try {
+            // Predis uses a connection string or an array for configuration.
+            $redis_client = new Predis\Client([
+                'scheme' => 'tcp',
+                'host'   => getenv('REDIS_HOST') ?: 'redis',
+                'port'   => getenv('REDIS_PORT') ?: 6379,
+            ]);
+            $redis_client->ping(); // Verify connection
+        } catch (Exception $e) {
+            error_log("Failed to connect to Redis using Predis: " . $e->getMessage());
+            $redis_client = false;
+        }
+    }
+    return $redis_client ?: null;
+}
+
+// --- END: Crawler Service Migration ---
 
 
 ini_set("memory_limit", -1);

@@ -17,6 +17,89 @@ require_once($_SERVER['DOCUMENT_ROOT'] . '/fonctions/fonctions_hellopro.php');
 require_once($_SERVER['DOCUMENT_ROOT'] . '/fonctions/fonctions_generales.php');
 require_once($_SERVER['DOCUMENT_ROOT'] . 'admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_scrapping.php');
 
+// --- START: Crawler Service Migration ---
+define('CRAWLER_WEBHOOK_SECRET', 'YOUR_SUPER_SECRET_TOKEN'); // @TODO: Move to a secure config file
+
+// --- Webhook Router ---
+
+// Scenario 1: API Failure Webhook (unique parameter: exit_code)
+if (isset($_GET['crawl_id']) && isset($_GET['exit_code'])) {
+    if (($_GET['secret'] ?? '') !== CRAWLER_WEBHOOK_SECRET) {
+        http_response_code(403);
+        error_log("Invalid secret on API failure webhook.");
+        exit("Forbidden");
+    }
+
+    $id_domaine = (int)$_GET['crawl_id'];
+    error_log("API Failure Webhook received for domain ID: {$id_domaine}, exit code: {$_GET['exit_code']}");
+
+    // Update status to error
+    sql_update_info(
+        ["statut_dspi" => 9], // Erreur crawling
+        "domaine_scrapping_produit_ia",
+        ["id_domaine_scrapping_produit_ia" => $id_domaine]
+    );
+    sql_update_info(
+        ["statut_crawler_eci" => 4], // Erreur
+        "enqueue_crawling_ia",
+        ["id_domaine_scrapping_produit_ia" => $id_domaine]
+    );
+
+    launchEnqueueCrawler('crawler');
+    http_response_code(200);
+    echo json_encode(["status" => "failure processed"]);
+    exit();
+}
+
+$temporary_path_to_clean = null;
+// This shutdown function ensures our temporary directory is always cleaned up.
+register_shutdown_function(function() {
+    global $temporary_path_to_clean;
+    if ($temporary_path_to_clean) {
+        get_crawler_api_service()->cleanupTemporaryPath($temporary_path_to_clean);
+    }
+});
+
+// Scenario 2: API Success/Partial Webhook (unique parameter: storagePath)
+if (isset($_GET['id_domaine']) && isset($_GET['storagePath'])) {
+    if (($_GET['secret'] ?? '') !== CRAWLER_WEBHOOK_SECRET) {
+        http_response_code(403);
+        error_log("Invalid secret on API success webhook.");
+        exit("Forbidden");
+    }
+
+    $id_domaine   = $_GET['id_domaine'];
+    $isFinished   = $_GET['isFinished'];
+    $isError      = $_GET['isError'];
+    $domaine      = getDomaine($id_domaine);
+
+    if (!empty($isError)) {
+        // For errors that need data (like limit reports), we MUST download a temporary copy.
+        $api_service = get_crawler_api_service();
+        $temporary_path_to_clean = $api_service->getTemporaryResultsPath($id_domaine, ['dataset']);
+        if ($temporary_path_to_clean) {
+            $_GET['allUrlCrawled'] = $temporary_path_to_clean . '/storage/datasets/' . $domaine;
+        } else {
+            error_log("Failed to get temporary results for API error report on domain {$id_domaine}");
+        }
+    } elseif ($isFinished == 1) {
+        // Crawl is fully complete, perform the final sync.
+        $api_service = get_crawler_api_service();
+        $final_path = $api_service->syncFinalResults($id_domaine, $domaine);
+        if ($final_path) {
+            $_GET['allUrlCrawled'] = $_SERVER['DOCUMENT_ROOT'] . $final_path;
+        } else {
+             error_log("Failed to sync final results for API crawl on domain {$id_domaine}");
+        }
+    }
+    // If not finished and no error, `allUrlCrawled` will be empty, and the script will gracefully exit later.
+}
+
+// Scenario 3: Legacy call or other script modes (no specific webhook params)
+// The script proceeds with the existing logic, using the parameters now set in $_GET.
+
+// --- END: Webhook Router ---
+
 function classifyUrls($otherUrlsContent, $cms_name, $results) 
 {
     $classifiedUrls = [];
