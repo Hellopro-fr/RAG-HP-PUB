@@ -16,6 +16,7 @@ class LLMOptions(BaseModel):
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
 class chatResponse(BaseModel):
     response: str
+    api_response: Dict[str, Any] = {}
     chat_model: Optional[str] = "gpt-4.1-2025-04-14"
     temperature: float = 0.0
     time_elapsed: Optional[float] = None

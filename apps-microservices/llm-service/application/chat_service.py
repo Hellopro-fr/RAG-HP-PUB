@@ -1,11 +1,17 @@
 import asyncio
+import os
 
 from infrastructure.vllm_client import VLLMClient
+from infrastructure.deepseek_client import DeepSeekClient
 
 
 class ChatApplicationService:
-    def __init__(self, vllm_client: VLLMClient):
-        self.vllm_client = vllm_client
+    def __init__(self):
+        llm_provider = os.getenv("LLM_PROVIDER", "deepseek").lower()
+        if llm_provider == "deepseek":
+            self.llm_client = DeepSeekClient()
+        else:
+            self.llm_client = VLLMClient()
 
     async def handle_chat_stream(self, request_iterator):
         message_history = [
@@ -36,7 +42,7 @@ class ChatApplicationService:
             return
 
         while True:
-            response_generator = self.vllm_client.stream_chat(
+            response_generator = self.llm_client.stream_chat(
                 message_history, temperature, max_tokens, enable_thinking, options=options
             )
 
@@ -59,13 +65,13 @@ class ChatApplicationService:
 
     async def handle_chat_completion(
         self, message: str, temperature: float, max_tokens: int, enable_thinking: bool, **kwargs
-    ) -> str:
+    ) -> dict:
         message_history = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": message},
         ]
 
-        return await self.vllm_client.get_chat_completion(
+        return await self.llm_client.get_chat_completion(
             message_history, temperature, max_tokens, enable_thinking, options=kwargs.get("options", {})
         )
 

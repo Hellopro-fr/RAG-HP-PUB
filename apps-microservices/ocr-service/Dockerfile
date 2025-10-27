@@ -1,34 +1,44 @@
-# --- Étape 0: Base ---
-FROM python:3.11-slim
+FROM vllm/vllm-openai:v0.8.2 AS dev
+
+# Install Python 3.11
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3.11-dev \
+    python3-pip \
+    poppler-utils \
+    git && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Ensure Python 3.11 is default
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python
+
+ENV GRADIO_SERVER_PORT=8559
+ENV GRADIO_SERVER_NAME="0.0.0.0"
+EXPOSE 8559
+
 WORKDIR /app
 
-# --- Étape 1: Définir le PYTHONPATH ---
-ENV PYTHONPATH=/app
+# Create venv without system-site-packages
+RUN python3.11 -m venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
-RUN apt-get update && apt-get install -y git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copier les requirements du service
+# Install dependencies
 COPY apps-microservices/ocr-service/requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Installer docext depuis la source
 RUN git clone https://github.com/nanonets/docext.git
 WORKDIR /app/docext
 RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/lists/*
-RUN pip install -e .
+RUN pip install --no-cache-dir -e .
 
-WORKDIR /app
+WORKDIR /app/
+# Installer flash-attn AVANT ou vérifier la version de PyTorch
+RUN pip install --no-cache-dir ninja packaging && \
+    pip install --no-cache-dir flash-attn==2.5.9.post1 --no-build-isolation
 
-EXPOSE 8559
+ENTRYPOINT ["/app/.venv/bin/python", "-m", "docext.app.app", "--no-share","--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
 
-CMD [ \
-  "python", \
-  "-m", "docext.app.app",\
-  "--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", \
-  "--gpu_memory_utilization", "0.95",\
-  "--concurrency_limit", "10",\
-  "--dtype", "float16",\
-  "--server_port", "8559",\
-  "--vlm_server_port", "8181"\
-]

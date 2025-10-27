@@ -95,7 +95,7 @@ class VLLMClient:
         max_tokens: int,
         enable_thinking: bool,
         **kwargs,
-    ) -> str:
+    ) -> dict:
         delay = INITIAL_BACKOFF_DELAY
         for attempt in range(MAX_RETRIES):
             try:
@@ -120,8 +120,10 @@ class VLLMClient:
                     response = await client.post(VLLM_API_URL, json=request_payload)
                     response.raise_for_status()
                     response_data = response.json()
+                    
+                    content = "[ERREUR: Réponse inattendue du service LLM]"
                     if "choices" in response_data and len(response_data["choices"]) > 0:
-                        return re.sub(
+                        content = re.sub(
                             r"\s+",
                             " ",
                             re.sub(
@@ -133,12 +135,18 @@ class VLLMClient:
                                 flags=re.DOTALL,
                             ),
                         ).strip()
-                    return "[ERREUR: Réponse inattendue du service LLM]"
+                    return {
+                        "full_message": content,
+                        "response": response_data
+                    }
             except httpx.TimeoutException:
                 logging.error(
                     f"Timeout dépassé lors de la requête non-streamée vers vLLM."
                 )
-                return "[ERREUR: La génération de la réponse a pris trop de temps]"
+                return {
+                    "full_message": "[ERREUR: La génération de la réponse a pris trop de temps]",
+                    "response": {"error": "TimeoutException"}
+                }
             except httpx.RequestError as e:
                 logging.warning(
                     f"Tentative {attempt + 1}/{MAX_RETRIES} échouée pour contacter vLLM: {e}"
@@ -147,7 +155,13 @@ class VLLMClient:
                     logging.error(
                         f"Échec final pour contacter vLLM après {MAX_RETRIES} tentatives."
                     )
-                    return "[ERREUR: Le service LLM est indisponible après plusieurs tentatives]"
+                    return {
+                        "full_message": "[ERREUR: Le service LLM est indisponible après plusieurs tentatives]",
+                        "response": {"error": str(e), "type": type(e).__name__}
+                    }
                 await asyncio.sleep(delay)
                 delay += ADDING_TIME
-        return "[ERREUR: Le service LLM est indisponible après plusieurs tentatives]"
+        return {
+            "full_message": "[ERREUR: Le service LLM est indisponible après plusieurs tentatives]",
+            "response": {"error": "Max retries exceeded"}
+        }

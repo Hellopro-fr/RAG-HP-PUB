@@ -41,40 +41,68 @@ async def optimizeQwen(payload: BatchOptimRequest):
 
                 response = await llm_client.get_llm_chat_response(chat_request)
 
-                response = instancetraitement.clean_json_response(response)
+                print(f"Réponse brute LLM: {response}")
+
+                # Extraction du contenu JSON depuis la nouvelle structure
+                if isinstance(response, dict) and 'full_message' in response:
+                    llm_content = response['full_message']
+                    usage = response.get('response', {}).get('usage', {})
+                    model = response.get('response', {}).get('model')
+                    llm_usage_info = {
+                        "prompt_tokens": usage.get('prompt_tokens'),
+                        "completion_tokens": usage.get('completion_tokens'),
+                        "total_tokens": usage.get('total_tokens'),
+                        "model": model
+                    }
+
+                llm_content = instancetraitement.clean_json_response(llm_content)
 
                 try:
-                    parsed_response = json.loads(response)
+                    parsed_response = json.loads(llm_content)
                     if not parsed_response:
                         print("LLM n'a pas retourné de résultat")
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
-                            "error": "LLM n'a pas retourné de résultat"
+                            "error": "LLM n'a pas retourné de résultat",
+                            "info": llm_usage_info
                         })
                     else:
                         print("tentative de parsing reussie")
                         print(parsed_response)
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
-                            "success": parsed_response
+                            "success": parsed_response,
+                            "info": llm_usage_info
                         })
 
                 except json.JSONDecodeError:
                     try:
-                        parsed_response = ast.literal_eval(response)
-                    except Exception:
-                        print("tentative de parsing échouée")
-                        print(response)
+                        parsed_response = ast.literal_eval(llm_content)
                         results.append({
                             "id_produit_scrapping": product["id_produit_scrapping"],
-                            "error": f"Tentative de parsing échouée: {response}"
+                            "success": parsed_response,
+                            "info": llm_usage_info
+                        })
+                    except Exception:
+                        print("tentative de parsing échouée")
+                        print(llm_content)
+                        results.append({
+                            "id_produit_scrapping": product["id_produit_scrapping"],
+                            "error": f"Tentative de parsing échouée: {llm_content}",
+                            "info": llm_usage_info
                         })
 
             except Exception as e:
                 print(f"Erreur lors du traitement du produit {product['id_produit_scrapping']}: {str(e)}")
                 results.append({
                     "id_produit_scrapping": product["id_produit_scrapping"],
-                    "error": f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
+                    "error": f"Erreur lors du traitement: {type(e).__name__}: {str(e)}",
+                    "info": {
+                        "prompt_tokens": None,
+                        "completion_tokens": None,
+                        "total_tokens": None,
+                        "model": None
+                    }
                 })
 
         end_time = time.time()
