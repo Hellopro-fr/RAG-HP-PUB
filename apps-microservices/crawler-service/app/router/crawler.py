@@ -14,7 +14,7 @@ from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopRe
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/reindex-storage", response_model=ReindexResponse, tags=["Admin"])
+@router.post("/reindex-storage", response_model=ReindexResponse)
 async def reindex_storage():
     """
     Scans the storage volume for orphaned crawl jobs (present on disk but not in Redis)
