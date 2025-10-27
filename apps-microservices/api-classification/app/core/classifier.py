@@ -578,16 +578,33 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 self.deepseek_client = original_deepseek_client
 
     async def classify_batch(self, products: List[Dict], llm_override: Optional[str] = None, enable_thinking: bool = False) -> Dict:
-        """Classifie plusieurs produits en lot (asynchrone)"""
+        """Classifie plusieurs produits en lot (asynchrone avec traitement parallèle)"""
         start_time = time.time()
-        results = []
+
+        if not products:
+            return {
+                'total_produits': 0,
+                'success_count': 0,
+                'error_count': 0,
+                'resultats': [],
+                'llm_type': llm_override if llm_override else self.llm_choice,
+                'processing_time_total': time.time() - start_time
+            }
+
+        # Créer une tâche asynchrone pour chaque produit
+        tasks = [
+            self.classify_single(product, llm_override=llm_override, enable_thinking=enable_thinking)
+            for product in products
+        ]
+
+        # Exécuter toutes les tâches en parallèle et attendre leurs résultats
+        results = await asyncio.gather(*tasks)
+
+        # Compter les succès et les erreurs
         success_count = 0
         error_count = 0
 
-        for product in products:
-            result = await self.classify_single(product, llm_override=llm_override, enable_thinking=enable_thinking)
-            results.append(result)
-
+        for result in results:
             if result['status'] == 'SUCCESS':
                 success_count += 1
             else:
