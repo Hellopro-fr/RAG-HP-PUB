@@ -17,6 +17,13 @@ class CapacityResponse(BaseModel):
     max_global_jobs: int
     is_full: bool
 
+class ReindexResponse(BaseModel):
+    """Summary of the re-indexing operation."""
+    scanned_directories: int
+    reindexed_jobs: int
+    already_indexed: int
+    errors: int
+
 class CrawlRequest(BaseModel):
     id: str = Field(..., description="An identifier for the crawl job, e.g., from a database.", example="domaine_123")
     domain: str = Field(..., description="The domain name being crawled.", example="example.com")

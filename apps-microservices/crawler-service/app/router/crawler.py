@@ -9,10 +9,23 @@ from pydantic import BaseModel
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY
 from app.core.redis_service import redis_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+@router.post("/reindex-storage", response_model=ReindexResponse, tags=["Admin"])
+async def reindex_storage():
+    """
+    Scans the storage volume for orphaned crawl jobs (present on disk but not in Redis)
+    and re-indexes them. This is a recovery tool.
+    """
+    try:
+        summary = await crawler_manager.reindex_storage()
+        return summary
+    except Exception as e:
+        logger.error(f"Failed during storage re-indexing: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred during re-indexing.")
 
 @router.get("/capacity", response_model=CapacityResponse)
 async def get_capacity():

@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 import os
+import re
 import tempfile
 import shutil
 from datetime import datetime
@@ -12,7 +14,7 @@ from fastapi import HTTPException, status
 
 from app.core.config import settings
 from app.core.redis_service import redis_service
-from app.schemas.crawler import CrawlStatus, IncludeInArchive
+from app.schemas.crawler import CrawlStatus, IncludeInArchive, ReindexResponse
 
 logger = logging.getLogger(__name__)
 
@@ -147,10 +149,26 @@ class CrawlerManager:
             exit_code = process.returncode
             is_success = (exit_code == 2)
             
-            job_info["status"] = "finished" if is_success else "failed"
-            job_info["pid"] = None # Process is no longer running
+            final_status = "finished" if is_success else "failed"
+            job_info["status"] = final_status
+            job_info["pid"] = None
             await redis_service.set_data(job_key, job_info)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status updated in Redis and counter decremented.")
+            
+            # --- START: Create Completion Marker ---
+            marker_path = os.path.join(job_info['storage_path'], '_completion_marker.json')
+            marker_data = {
+                "final_status": final_status,
+                "exit_code": exit_code,
+                "end_timestamp": datetime.utcnow().isoformat()
+            }
+            try:
+                async with aiofiles.open(marker_path, 'w') as f:
+                    await f.write(json.dumps(marker_data, indent=2))
+                logger.info(f"Created completion marker for crawl '{crawl_id}'.")
+            except Exception as e:
+                logger.error(f"Failed to write completion marker for '{crawl_id}': {e}", exc_info=True)
+            # --- END: Create Completion Marker ---
 
             if not is_success and job_info.get("failure_callback_url"):
                 logger.info(f"Crawl '{crawl_id}' failed. Triggering failure webhook.")
@@ -287,6 +305,75 @@ class CrawlerManager:
             )
             
             return final_archive_path
+        
+    async def reindex_storage(self) -> ReindexResponse:
+        """Scans storage for orphaned jobs and re-indexes them in Redis."""
+        logger.info("Starting storage re-indexing process.")
+        
+        summary = {"scanned_directories": 0, "reindexed_jobs": 0, "already_indexed": 0, "errors": 0}
+        
+        try:
+            redis_keys = await redis_service.get_all_keys_by_prefix(CRAWL_JOB_PREFIX)
+            redis_key_set = set(redis_keys)
+            
+            storage_dirs = [d for d in os.listdir(settings.CRAWLER_STORAGE_PATH) if os.path.isdir(os.path.join(settings.CRAWLER_STORAGE_PATH, d))]
+            summary["scanned_directories"] = len(storage_dirs)
+
+            for crawl_id in storage_dirs:
+                job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+                if job_key in redis_key_set:
+                    summary["already_indexed"] += 1
+                    continue
+
+                # This is an orphaned job, let's re-index it.
+                logger.warning(f"Found orphaned crawl job on disk: '{crawl_id}'. Re-indexing.")
+                job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
+                marker_path = os.path.join(job_storage_path, '_completion_marker.json')
+                
+                final_status = "failed" # Default status for orphans
+                
+                if os.path.exists(marker_path):
+                    try:
+                        with open(marker_path, 'r') as f:
+                            marker_data = json.load(f)
+                        final_status = marker_data.get("final_status", "failed")
+                    except Exception:
+                        logger.error(f"Could not parse completion marker for '{crawl_id}'. Defaulting to 'failed'.")
+                else:
+                    # No marker means the job was killed mid-run
+                    final_status = "failed"
+                
+                # Reconstruct metadata by parsing the log file (best effort)
+                domain, start_url = "unknown", "http://unknown.com"
+                log_path = os.path.join(job_storage_path, 'crawler.log')
+                if os.path.exists(log_path):
+                    with open(log_path, 'r', errors='ignore') as f:
+                        for line in f:
+                            if '"domain":' in line:
+                                match = re.search(r'"domain":\s*"([^"]+)"', line)
+                                if match: domain = match.group(1)
+                            if '"site":' in line:
+                                match = re.search(r'"site":\s*"([^"]+)"', line)
+                                if match: start_url = match.group(1)
+                            if domain != "unknown" and start_url != "http://unknown.com":
+                                break
+                
+                reindexed_data = {
+                    "crawl_id": crawl_id, "status": final_status, "domain": domain,
+                    "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)),
+                    "storage_path": job_storage_path,
+                    "failure_callback_url": None, "pid": None
+                }
+                
+                await redis_service.set_data(job_key, reindexed_data)
+                summary["reindexed_jobs"] += 1
+        
+        except Exception as e:
+            summary["errors"] += 1
+            logger.error(f"An error occurred during re-indexing: {e}", exc_info=True)
+
+        logger.info(f"Re-indexing complete: {summary}")
+        return ReindexResponse(**summary)
 
     async def shutdown(self):
         """Gracefully stop all locally running crawlers."""
