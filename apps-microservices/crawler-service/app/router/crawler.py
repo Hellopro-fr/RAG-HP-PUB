@@ -9,15 +9,10 @@ from pydantic import BaseModel
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY
 from app.core.redis_service import redis_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-class CapacityResponse(BaseModel):
-    running_jobs: int
-    max_global_jobs: int
-    is_full: bool
 
 @router.get("/capacity", response_model=CapacityResponse)
 async def get_capacity():

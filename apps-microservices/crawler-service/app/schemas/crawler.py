@@ -12,6 +12,11 @@ class IncludeInArchive(str, Enum):
     REQUEST_URLS = "request_urls"
     MISCELLANEOUS = "miscellaneous"
 
+class CapacityResponse(BaseModel):
+    running_jobs: int
+    max_global_jobs: int
+    is_full: bool
+
 class CrawlRequest(BaseModel):
     id: str = Field(..., description="An identifier for the crawl job, e.g., from a database.", example="domaine_123")
     domain: str = Field(..., description="The domain name being crawled.", example="example.com")
