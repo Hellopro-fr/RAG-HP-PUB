@@ -184,7 +184,7 @@ class CrawlerManager:
         if not job_info or job_info.get("status") != "running":
             return False
         
-        stopper_dir = os.path.join(job_info["storage_path"], 'storage', 'stopper')
+        stopper_dir = os.path.join(job_info["storage_path"], 'stopper')
         os.makedirs(stopper_dir, exist_ok=True)
         stopper_file = os.path.join(stopper_dir, f"{job_info['domain']}.txt")
         
