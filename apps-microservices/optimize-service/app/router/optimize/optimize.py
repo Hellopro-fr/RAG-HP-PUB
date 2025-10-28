@@ -47,10 +47,12 @@ async def optimizeQwen(payload: BatchOptimRequest):
                 if isinstance(response, dict) and 'full_message' in response:
                     llm_content = response['full_message']
                     usage = response.get('response', {}).get('usage', {})
+                    model = response.get('response', {}).get('model')
                     llm_usage_info = {
                         "prompt_tokens": usage.get('prompt_tokens'),
                         "completion_tokens": usage.get('completion_tokens'),
-                        "total_tokens": usage.get('total_tokens')
+                        "total_tokens": usage.get('total_tokens'),
+                        "model": model
                     }
 
                 llm_content = instancetraitement.clean_json_response(llm_content)
@@ -98,7 +100,8 @@ async def optimizeQwen(payload: BatchOptimRequest):
                     "info": {
                         "prompt_tokens": None,
                         "completion_tokens": None,
-                        "total_tokens": None
+                        "total_tokens": None,
+                        "model": None
                     }
                 })
 
