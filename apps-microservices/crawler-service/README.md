@@ -1,6 +1,6 @@
 # Crawler Service
 
-This project is a high-concurrency, stateful web crawling service built with FastAPI and Node.js/Crawlee. It uses Redis for persistent job state management.
+This project is a high-concurrency, stateful web crawling service built with FastAPI and Node.js/Crawlee. It uses Redis for persistent job state management and Nginx as a reverse proxy for scalability.
 
 ## Dependencies
 
@@ -15,55 +15,46 @@ This project is a high-concurrency, stateful web crawling service built with Fas
     -   `router/`: API endpoint definitions.
     -   `schemas/`: Pydantic data models.
 -   `crawler/`: The Node.js/TypeScript web crawler engine.
--   `storage/`: (Created at runtime via Docker volume) Persisted storage for crawl data, logs, and queues.
--   `Dockerfile`: Defines the container image for production.
--   `docker-compose.yaml`: For running the service and its Redis dependency locally.
+-   `docker-compose.yaml`: For running the service, its Redis dependency, and the reverse proxy.
+-   `Dockerfile`: Defines the multi-stage container image for production.
+-   `nginx.conf`: Nginx configuration file that acts as a reverse proxy and load balancer for the crawler service replicas.
+-   `scale_crawlers.sh`: A helper script for correctly scaling the number of crawler service instances.
 -   `main.py`: Main entry point for the FastAPI application.
 -   `requirements.txt`: Python dependencies.
 
 ## 🚀 Installation & Running
 
-### Using Docker (Recommended)
+The services are designed to be run as a group using Docker Compose profiles. The `crawling` profile includes the `crawler-service`, the `reverse-proxy`, and `redis`.
 
-The `docker-compose.yaml` file will start both the `crawler-service` and its required `redis` database.
-
-1.  **Build the image:**
+1.  **Start the Services:**
+    To start the entire crawling system (defaulting to 3 crawler instances), run:
     ```sh
-    docker-compose build
+    docker-compose --profile crawling up -d
+    ```
+    This will create two persistent Docker volumes: `crawler_data` (for crawl artifacts) and `redis_data` (for job statuses). Your data will be safe across restarts.
+
+2.  **Scaling the Service (Recommended Method):**
+    A helper script, `scale_crawlers.sh`, is provided to handle scaling safely. It automatically calculates the `MAX_GLOBAL_CONCURRENT_CRAWLS` environment variable, which is crucial for the system's concurrency logic.
+
+    First, make the script executable:
+    ```sh
+    chmod +x apps-microservices/crawler-service/scale_crawlers.sh
     ```
 
-2.  **Run the services:**
+    Then, run the script with the desired number of replicas.
     ```sh
-    docker-compose up
-    ```
-    This will also create two persistent Docker volumes: `crawler_data` (for crawl artifacts) and `redis_data` (for job statuses). Your data will be safe across restarts.
+    # Example: Scale to 5 instances
+    ./apps-microservices/crawler-service/scale_crawlers.sh 5
 
-3.  **Scale the service (e.g., to 3 instances):**
-    ```sh
-    docker-compose up --scale crawler-service=3
+    # Example: Scale back down to 2 instances
+    ./apps-microservices/crawler-service/scale_crawlers.sh 2
     ```
 
-### Local Development
-
-1.  **Initialize the Python environment:**
+3.  **Stopping the Services:**
+    To stop all services associated with the crawling profile, run:
     ```sh
-    ./init.sh 
+    docker-compose --profile crawling down
     ```
-    (Note: This is no longer present in the project but would be used for local venv setup).
-
-2.  **Install Node.js dependencies:**
-    ```sh
-    cd crawler && npm install && cd ..
-    ```
-
-3.  **Install PHP dependencies for calling scripts:**
-    The PHP scripts that call this service now require the `predis/predis` library. Make sure you have a `composer.json` and run `composer install`.
-
-4.  **Run the FastAPI application:**
-    ```sh
-    ./run.sh
-    ```
-    (Note: This is no longer present in the project but would be used for local execution).
 
 ## ⚙️ API Usage
 
