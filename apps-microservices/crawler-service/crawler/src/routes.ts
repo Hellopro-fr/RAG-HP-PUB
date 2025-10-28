@@ -127,8 +127,7 @@ router.addDefaultHandler(
         //     enqueueLinksExcludePath.push(`${baseUrl}/**/*[#]*`);
         //     enqueueLinksExcludePath.push(`${baseUrl}/**/*[#]*/**`);
         // }
-        log.info(`Processing ${url} ( ${request.url} ) ...`);
-        log.info("HTTP Code: " + response?.status())
+        log.info(`Processing ${url} ( ${request.url} ) ... (HTTP Status: ${response?.status()})`);
 
         let isDoublon = false;
 
