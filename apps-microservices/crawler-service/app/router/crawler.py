@@ -1,18 +1,90 @@
 import os
 import logging
+import re
+import json
+from datetime import datetime
 from typing import Dict, Optional, List
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Query
+import aiofiles
+from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Query, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY
+from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX
 from app.core.redis_service import redis_service
 from app.core.config import settings
 from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def get_job_or_recover(crawl_id: str) -> dict:
+    """
+    FastAPI dependency to retrieve a crawl job from Redis.
+    If the job is not found in Redis, it attempts to recover it from
+    the persistent storage and re-index it.
+    Raises a 404 HTTPException if the job cannot be found in Redis or on disk.
+    """
+    job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+    job_info = await redis_service.get_data(job_key)
+
+    if job_info:
+        return job_info
+
+    # --- Job not in Redis, attempt recovery from disk ---
+    logger.warning(f"Job '{crawl_id}' not found in Redis. Attempting recovery from storage.")
+    job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
+
+    if not os.path.isdir(job_storage_path):
+        logger.error(f"Recovery failed: Storage directory not found for job '{crawl_id}'.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl job not found.")
+
+    marker_path = os.path.join(job_storage_path, '_completion_marker.json')
+    final_status = "failed"  # Default for orphans
+
+    try:
+        if os.path.exists(marker_path):
+            async with aiofiles.open(marker_path, 'r') as f:
+                content = await f.read()
+                marker_data = json.loads(content)
+            final_status = marker_data.get("final_status", "failed")
+    except Exception:
+        logger.error(f"Could not parse completion marker for '{crawl_id}'. Defaulting to 'failed'.")
+
+    # Reconstruct metadata by parsing the log file (best effort)
+    domain, start_url = "unknown", "http://unknown.com"
+    log_path = os.path.join(job_storage_path, 'crawler.log')
+    if os.path.exists(log_path):
+        try:
+            async with aiofiles.open(log_path, 'r', errors='ignore') as f:
+                # Read a limited number of lines to avoid loading huge logs
+                line_count = 0
+                async for line in f:
+                    if '"domain":' in line:
+                        match = re.search(r'"domain":\s*"([^"]+)"', line)
+                        if match: domain = match.group(1)
+                    if '"site":' in line:
+                        match = re.search(r'"site":\s*"([^"]+)"', line)
+                        if match: start_url = match.group(1)
+                    if (domain != "unknown" and start_url != "http://unknown.com") or line_count > 200:
+                        break
+                    line_count += 1
+        except Exception as e:
+            logger.error(f"Error reading log file for '{crawl_id}' during recovery: {e}")
+
+    recovered_data = {
+        "crawl_id": crawl_id, "status": final_status, "domain": domain,
+        "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)),
+        "storage_path": job_storage_path,
+        "failure_callback_url": None, "pid": None
+    }
+
+    logger.info(f"Successfully recovered job '{crawl_id}' from storage with status '{final_status}'. Re-indexing in Redis.")
+    await redis_service.set_data(job_key, recovered_data)
+
+    return recovered_data
+
 
 @router.post("/reindex-storage", response_model=ReindexResponse)
 async def reindex_storage():
@@ -91,13 +163,13 @@ async def start_new_crawl(payload: CrawlRequest):
         raise HTTPException(status_code=500, detail="An internal error occurred while starting the crawl.")
 
 @router.post("/stop/{crawl_id}", response_model=StopResponse)
-async def stop_existing_crawl(crawl_id: str):
+async def stop_existing_crawl(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     """
     Stops a currently running crawl job.
     """
-    success = await crawler_manager.stop_crawl(crawl_id)
+    success = await crawler_manager.stop_crawl(job_info)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Crawl job with ID '{crawl_id}' not found or already stopped.")
+        raise HTTPException(status_code=409, detail=f"Crawl job with ID '{crawl_id}' not found or not in a running state.")
     return StopResponse(message="Stop signal sent to crawl job.", crawl_id=crawl_id)
 
 @router.get("/status", response_model=Dict[str, CrawlStatus])
@@ -108,26 +180,25 @@ async def get_all_crawl_statuses():
     return await crawler_manager.get_all_statuses()
 
 @router.get("/status/{crawl_id}", response_model=CrawlStatus)
-async def get_crawl_status(crawl_id: str):
+async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):
     """
-    Gets the detailed status of a specific crawl job.
+    Gets the detailed status of a specific crawl job. Recovers from storage if missing from Redis.
     """
-    status = await crawler_manager.get_status(crawl_id)
-    if status is None:
-        raise HTTPException(status_code=404, detail="Crawl job not found.")
-    return status
+    return await crawler_manager.get_status(job_info)
 
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
-    crawl_id: str,
     background_tasks: BackgroundTasks,
-    include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues).")
+    include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues)."),
+    job_info: dict = Depends(get_job_or_recover)
 ):
     """
     Downloads a custom archive of a completed crawl job, including only the specified components.
+    Recovers from storage if missing from Redis.
     """
     try:
-        archive_path = await crawler_manager.get_results_archive(crawl_id, include)
+        crawl_id = job_info['crawl_id']
+        archive_path = await crawler_manager.get_results_archive(job_info, include)
         
         # Delete the temporary archive file after the response is sent
         background_tasks.add_task(lambda path: os.remove(path), archive_path)
@@ -136,5 +207,6 @@ async def download_crawl_results(
     except HTTPException as e:
         raise e
     except Exception as e:
+        crawl_id = job_info.get('crawl_id', 'unknown')
         logger.error(f"Error generating results for crawl '{crawl_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate results archive.")

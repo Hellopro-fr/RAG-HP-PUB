@@ -177,11 +177,12 @@ class CrawlerManager:
         if crawl_id in self.local_processes:
             del self.local_processes[crawl_id]
 
-    async def stop_crawl(self, crawl_id: str) -> bool:
+    async def stop_crawl(self, job_info: dict) -> bool:
+        crawl_id = job_info['crawl_id']
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
-        job_info = await redis_service.get_data(job_key)
         
-        if not job_info or job_info.get("status") != "running":
+        if job_info.get("status") != "running":
+            logger.warning(f"Attempted to stop crawl '{crawl_id}' which is not in a 'running' state (status: {job_info.get('status')}).")
             return False
         
         stopper_dir = os.path.join(job_info["storage_path"], 'stopper')
@@ -201,14 +202,16 @@ class CrawlerManager:
         statuses = {}
         for key in all_job_keys:
             crawl_id = key.replace(CRAWL_JOB_PREFIX, "")
-            status_data = await self.get_status(crawl_id)
-            if status_data:
-                statuses[crawl_id] = status_data
+            # This uses the public get_status which now needs job_info, so we get it first.
+            job_info = await redis_service.get_data(key)
+            if job_info:
+                status_data = await self.get_status(job_info)
+                if status_data:
+                    statuses[crawl_id] = status_data
         return statuses
 
-    async def get_status(self, crawl_id: str) -> Optional[CrawlStatus]:
-        job_info = await redis_service.get_data(f"{CRAWL_JOB_PREFIX}{crawl_id}")
-        if not job_info: return None
+    async def get_status(self, job_info: dict) -> CrawlStatus:
+        crawl_id = job_info['crawl_id']
 
         # --- START: ENHANCED STATS CALCULATION ---
         storage_path = job_info["storage_path"]
@@ -246,10 +249,8 @@ class CrawlerManager:
         )
         # --- END: ENHANCED STATS CALCULATION ---
         
-    async def get_results_archive(self, crawl_id: str, include: List[IncludeInArchive]) -> Optional[str]:
-        job_info = await redis_service.get_data(f"{CRAWL_JOB_PREFIX}{crawl_id}")
-        if not job_info:
-             raise HTTPException(status_code=404, detail="Crawl ID not found.")
+    async def get_results_archive(self, job_info: dict, include: List[IncludeInArchive]) -> str:
+        crawl_id = job_info['crawl_id']
         
         if job_info["status"] == "running":
              raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
