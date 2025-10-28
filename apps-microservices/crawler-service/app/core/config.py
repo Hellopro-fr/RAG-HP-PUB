@@ -9,8 +9,9 @@ class Settings:
     # Can be set via environment variable.
     MAX_CONCURRENT_CRAWLS: int = int(os.getenv("MAX_CONCURRENT_CRAWLS", "10"))
 
-    # Max concurrent crawls allowed ACROSS ALL service instances.
-    MAX_GLOBAL_CONCURRENT_CRAWLS: int = int(os.getenv("MAX_GLOBAL_CONCURRENT_CRAWLS", "10"))
+    # A sensible fallback for the global max crawls if the Redis key is missing.
+    # This should ideally be set to the default number of replicas.
+    DEFAULT_MAX_GLOBAL_CRAWLS: int = int(os.getenv("DEFAULT_MAX_GLOBAL_CRAWLS", "3"))
 
     # Base directory for storing all crawl data (logs, datasets, etc.)
     CRAWLER_STORAGE_PATH: str = os.getenv("CRAWLER_STORAGE_PATH", "/app/storage")

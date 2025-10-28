@@ -939,10 +939,8 @@ services:
     environment:
       # Max concurrent crawls for each individual instance.
       - MAX_CONCURRENT_CRAWLS=1
-      # IMPORTANT: This default value should be overridden when scaling via the command line.
-      # It should equal (replica count * MAX_CONCURRENT_CRAWLS).
-      # Example for scaling to 5: MAX_GLOBAL_CONCURRENT_CRAWLS=5 docker-compose ...
-      - MAX_GLOBAL_CONCURRENT_CRAWLS=1
+      # Fallback value if the Redis config key is missing. Set to default replica count.
+      - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://redis:6379
     depends_on:
       - redis

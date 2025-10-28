@@ -18,6 +18,9 @@ from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopRe
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Centralized key for storing the dynamic global max crawls value in Redis
+CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
+
 
 async def get_job_or_recover(crawl_id: str) -> dict:
     """
@@ -102,13 +105,20 @@ async def reindex_storage():
 @router.get("/capacity", response_model=CapacityResponse)
 async def get_capacity():
     """
-    Checks the current global capacity of the crawler service.
+    Checks the current global capacity of the crawler service by reading
+    shared values from Redis.
     """
     try:
-        running_jobs = await redis_service._client.get(CRAWL_RUNNING_COUNT_KEY)
-        running_jobs = int(running_jobs) if running_jobs else 0
+        if not redis_service._client:
+            raise HTTPException(status_code=503, detail="Redis connection not available.")
+
+        running_jobs_raw = await redis_service._client.get(CRAWL_RUNNING_COUNT_KEY)
+        running_jobs = int(running_jobs_raw) if running_jobs_raw else 0
         
-        max_global = settings.MAX_GLOBAL_CONCURRENT_CRAWLS
+        # Read the max global jobs value from the central Redis key.
+        max_global_raw = await redis_service._client.get(CRAWL_MAX_GLOBAL_KEY)
+        # If the key is missing, use the configurable fallback from settings.
+        max_global = int(max_global_raw) if max_global_raw else settings.DEFAULT_MAX_GLOBAL_CRAWLS
         
         return CapacityResponse(
             running_jobs=running_jobs,

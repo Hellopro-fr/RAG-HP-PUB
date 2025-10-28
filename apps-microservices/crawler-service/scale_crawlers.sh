@@ -3,8 +3,9 @@
 # ==============================================================================
 # Script to scale the crawler-service correctly.
 #
-# This script automates the calculation of MAX_GLOBAL_CONCURRENT_CRAWLS
-# based on the desired number of replicas, preventing configuration errors.
+# This script automates the calculation of the global concurrent crawl limit
+# and stores it in Redis, which acts as the single source of truth for the
+# entire cluster.
 #
 # Usage:
 #   ./scale_crawlers.sh [number_of_replicas]
@@ -30,12 +31,15 @@ GLOBAL_MAX=$((REPLICAS * CRAWLS_PER_INSTANCE))
 
 echo "----------------------------------------------------"
 echo "Scaling crawler-service to $REPLICAS instances..."
-echo "Setting MAX_GLOBAL_CONCURRENT_CRAWLS = $GLOBAL_MAX"
+echo "Setting central config in Redis: crawl_jobs:max_global_crawls = $GLOBAL_MAX"
 echo "----------------------------------------------------"
 
-# Export the variable so Docker Compose can use it, then run the command.
-export MAX_GLOBAL_CONCURRENT_CRAWLS=$GLOBAL_MAX
+# Set the authoritative global max value in Redis.
+# The `docker-compose exec` command runs `redis-cli` inside the running redis container.
+docker compose exec redis redis-cli SET crawl_jobs:max_global_crawls $GLOBAL_MAX
 
+# Bring up the services with the new scale.
+# The containers will read the new value from Redis via the /capacity endpoint.
 docker compose --profile crawling up -d --scale crawler-service=$REPLICAS
 
 echo "Scaling command complete."
