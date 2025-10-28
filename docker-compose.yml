@@ -19,21 +19,27 @@ services:
   vllm-server:
     image: vllm/vllm-openai:latest
     profiles: ["app"] # Profile for the main application stack
+    shm_size: 16g
+    # --enable-prefix-caching
+    # --enforce-eager
+    # --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
+    # --max-num-seqs 64
+    # --gpu-memory-utilization 0.95
     command: >
       --model ${MODEL_NAME}
+      -O 3
       --tensor-parallel-size 2
       --trust-remote-code
       --gpu-memory-utilization 0.95
-      --max-num-seqs 64
+      --max-num-seqs 32
       --max-num-batched-tokens 8192
       --enable-chunked-prefill
-      --enable-prefix-caching
-      --disable-log-stats
-      --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
-      --swap-space 4
+      --swap-space 16
       --max-model-len 32768
-      --enforce-eager
-      --dtype auto
+      --dtype bfloat16
+      --load-format safetensors
+      --enable-prefix-caching
+      --rope-scaling '{"type":"dynamic","factor":2.0}'
     ports:
       - "8000:8000"
     healthcheck:
@@ -145,11 +151,14 @@ services:
     environment:
       - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
       - MODEL_NAME=${MODEL_NAME}
+      - DEEPSEEK_MODEL_NAME=${DEEPSEEK_MODEL_NAME}
+      - DEEPSEEK_API_URL=${DEEPSEEK_API_URL}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER}
     networks:
       - services-net
-    depends_on:
-      vllm-server:
-        condition: service_healthy
+    env_file:
+      - .env
     logging:
       driver: "json-file"
       options:
