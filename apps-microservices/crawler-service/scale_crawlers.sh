@@ -36,6 +36,6 @@ echo "----------------------------------------------------"
 # Export the variable so Docker Compose can use it, then run the command.
 export MAX_GLOBAL_CONCURRENT_CRAWLS=$GLOBAL_MAX
 
-docker-compose --profile crawling up -d --scale crawler-service=$REPLICAS
+docker compose --profile crawling up -d --scale crawler-service=$REPLICAS
 
 echo "Scaling command complete."
