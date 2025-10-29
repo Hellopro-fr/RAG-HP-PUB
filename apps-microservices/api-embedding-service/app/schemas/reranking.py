@@ -3,5 +3,5 @@ from pydantic import BaseModel, Field
 from typing import Annotated, List, Optional, Dict, Any
 
 class RerankingRequest(BaseModel):
-    documents: List[Dict[str, Any]]
+    documents: List[Any]
     query: str
