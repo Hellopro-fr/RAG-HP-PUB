@@ -37,11 +37,11 @@ RUN pip install --no-cache-dir -e .
 
 WORKDIR /app/
 
-# Copier le fichier modifié dans un dossier temporaire
-COPY apps-microservices/ocr-service/app_server.py /tmp/app_server.py
+RUN sed -i "/uvloop.run(run_server(args))/i \
+    if hasattr(args, 'enforce_eager'): args.enforce_eager=False\n\
+    if hasattr(args, 'disable_async_output_proc'): args.disable_async_output_proc=False" \
+    /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
 
-# Déplacer le fichier dans le venv (remplace l’existant)
-RUN mv /tmp/app_server.py /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
 
 # Installer flash-attn AVANT ou vérifier la version de PyTorch
 RUN pip install --no-cache-dir ninja packaging && \
