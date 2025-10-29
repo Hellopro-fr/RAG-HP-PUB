@@ -1,7 +1,7 @@
 import grpc
 import os
 import logging
-from typing import List
+from typing import Dict, List
 
 from grpc_stubs import reranking_pb2
 from grpc_stubs import reranking_pb2_grpc
