@@ -36,6 +36,11 @@ RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/li
 RUN pip install --no-cache-dir -e .
 
 WORKDIR /app/
+
+# Copier ton fichier modifié pour désactiver enforce_eager
+COPY apps-microservices/ocr-service/app_server.py \
+     /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
+
 # Installer flash-attn AVANT ou vérifier la version de PyTorch
 RUN pip install --no-cache-dir ninja packaging && \
     pip install --no-cache-dir flash-attn==2.5.9.post1 flashinfer-python --no-build-isolation
