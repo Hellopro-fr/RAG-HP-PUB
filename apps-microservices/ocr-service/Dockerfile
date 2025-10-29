@@ -38,14 +38,14 @@ RUN pip install --no-cache-dir -e .
 WORKDIR /app/
 
 RUN sed -i "/uvloop.run(run_server(args))/i \
-    if hasattr(args, 'enforce_eager'): args.enforce_eager=False\n\
-    if hasattr(args, 'disable_async_output_proc'): args.disable_async_output_proc=False" \
+    \tif hasattr(args, 'enforce_eager'):\n\targs.enforce_eager=False\n\
+    if hasattr(args, 'disable_async_output_proc'):\n\targs.disable_async_output_proc=False" \
     /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
 
 
 # Installer flash-attn AVANT ou vérifier la version de PyTorch
 RUN pip install --no-cache-dir ninja packaging && \
-    pip install --no-cache-dir flash-attn==2.5.9.post1 flashinfer-python --no-build-isolation
+    pip install flash-attn==2.5.9.post1 flashinfer-python --no-build-isolation
 
 ENTRYPOINT ["/app/.venv/bin/python", "-m", "docext.app.app", "--no-share","--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
 
