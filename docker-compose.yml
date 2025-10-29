@@ -19,15 +19,8 @@ services:
   vllm-server:
     image: vllm/vllm-openai:latest
     profiles: ["app"] # Profile for the main application stack
-    shm_size: 16g
-    # --enable-prefix-caching
-    # --enforce-eager
-    # --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
-    # --max-num-seqs 64
-    # --gpu-memory-utilization 0.95
     command: >
       --model ${MODEL_NAME}
-      -O 3
       --tensor-parallel-size 2
       --trust-remote-code
       --gpu-memory-utilization 0.95
@@ -48,6 +41,7 @@ services:
       timeout: 5s
       retries: 24 # Wait up to 4 minutes for the model to load
       start_period: 30s
+    shm_size: '16g'
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
     restart: unless-stopped
