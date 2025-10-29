@@ -38,9 +38,14 @@ RUN pip install --no-cache-dir -e .
 WORKDIR /app/
 
 RUN sed -i "/uvloop.run(run_server(args))/i \
-    \tif hasattr(args, 'enforce_eager'):\n\targs.enforce_eager=False\n\
-    if hasattr(args, 'disable_async_output_proc'):\n\targs.disable_async_output_proc=False" \
+    # --- Patch CUDA Graph ---\n\
+    if hasattr(args, 'enforce_eager'):\n\
+        args.enforce_eager = False\n\
+    if hasattr(args, 'disable_async_output_proc'):\n\
+        args.disable_async_output_proc = False\n\
+    # --- End Patch ---" \
     /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
+
 
 
 # Installer flash-attn AVANT ou vérifier la version de PyTorch
