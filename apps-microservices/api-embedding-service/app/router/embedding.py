@@ -43,7 +43,7 @@ async def rerank(request: RerankingRequest):
     try:
         if not request.query.strip() or not request.documents:
             raise ValueError("Le query et les documents ne peuvent pas être vide.")
-        results = await reranking_client.rerank_documents(request.query, request.documents)
+        results = await reranking_client.rerank_documents_with_scores(request.query, request.documents)
         if not results or not any(results): # Check if results is empty or contains only empty elements
             raise ValueError("Aucun contenu reranked avec le query trouvé ou les documents sont vides après reranking.")
         return results
