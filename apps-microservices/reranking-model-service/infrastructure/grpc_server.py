@@ -23,6 +23,23 @@ class RerankingServiceImpl(reranking_pb2_grpc.RerankingServiceServicer):
             context.set_details("Erreur interne lors du reranking.")
             return reranking_pb2.RerankResponse()
 
+    async def RerankDocuments(self, request, context):
+        logging.info(f"Requête RerankDocuments reçue pour la query: '{request.query[:50]}...' avec {len(request.documents)} documents.")
+        try:
+            ranked_docs_with_scores = await self.use_case.rerank_documents_with_scores(request.query, list(request.documents))
+            
+            scores = [
+                reranking_pb2.RerankScore(document=item['document'], score=item['score'])
+                for item in ranked_docs_with_scores
+            ]
+            
+            return reranking_pb2.RerankWithScoresResponse(scores=scores)
+        except Exception as e:
+            logging.error(f"Erreur dans RerankDocuments: {e}", exc_info=True)
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details("Erreur interne lors du reranking avec scores.")
+            return reranking_pb2.RerankWithScoresResponse()
+
 async def serve(use_case: RerankingUseCase):
     server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=50))
     reranking_pb2_grpc.add_RerankingServiceServicer_to_server(RerankingServiceImpl(use_case), server)

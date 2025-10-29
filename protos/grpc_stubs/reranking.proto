@@ -3,8 +3,10 @@ syntax = "proto3";
 package reranking;
 
 service RerankingService {
-  // TODO: Sécuriser ce flux (authentification, validation des entrées)
+  // Existing RPC for backward compatibility
   rpc Rerank(RerankRequest) returns (RerankResponse);
+  // New RPC that returns scores
+  rpc RerankDocuments(RerankRequest) returns (RerankWithScoresResponse);
 }
 
 message RerankRequest {
@@ -14,4 +16,13 @@ message RerankRequest {
 
 message RerankResponse {
   repeated string ranked_documents = 1;
+}
+
+message RerankScore {
+    string document = 1;
+    float score = 2;
+}
+
+message RerankWithScoresResponse {
+    repeated RerankScore scores = 1;
 }
