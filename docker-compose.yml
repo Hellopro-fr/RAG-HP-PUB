@@ -48,7 +48,6 @@ services:
       timeout: 5s
       retries: 24 # Wait up to 4 minutes for the model to load
       start_period: 30s
-    shm_size: '16g'
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
     restart: unless-stopped
