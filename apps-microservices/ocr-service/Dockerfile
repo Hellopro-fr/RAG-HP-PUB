@@ -40,9 +40,7 @@ WORKDIR /app/
 RUN sed -i "/uvloop.run(run_server(args))/i \
     # --- Patch CUDA Graph ---\n\
     if hasattr(args, 'enforce_eager'):\n\
-        args.enforce_eager = False\n\
-    if hasattr(args, 'disable_async_output_proc'):\n\
-        args.disable_async_output_proc = False"\
+        args.enforce_eager = False\n"\
     /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
 
 
