@@ -528,6 +528,8 @@ services:
       - .env
     networks:
       - services-net
+    volumes:
+      - ./apps-microservices/ocr-service/app_server.py:/app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py:rw
     deploy:
       resources:
         reservations:
