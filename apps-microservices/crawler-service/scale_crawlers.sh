@@ -28,7 +28,7 @@
 REPLICAS=${1:-3}
 
 # This value MUST match the MAX_CONCURRENT_CRAWLS value set for the
-# crawler-service in the docker-compose.yaml file.
+# crawler-service in the docker compose.yaml file.
 CRAWLS_PER_INSTANCE=1
 
 # Calculate the global maximum based on the replica count.
@@ -45,7 +45,7 @@ echo ""
 # --- PHASE 1: Ensure Redis is running ---
 echo "[PHASE 1/4] Starting Redis dependency..."
 # The '--no-deps' flag ensures we only start Redis itself.
-docker-compose --profile crawling up -d --no-deps redis
+docker compose --profile crawling up -d --no-deps redis
 echo "Redis container is up."
 echo ""
 
@@ -54,7 +54,7 @@ echo "[PHASE 2/4] Waiting for Redis to become healthy..."
 # This loop will run until `redis-cli ping` returns "PONG".
 # It has a timeout of 30 seconds to prevent it from running forever.
 counter=0
-until docker-compose exec redis redis-cli ping | grep -q "PONG"; do
+until docker compose exec redis redis-cli ping | grep -q "PONG"; do
     if [ $counter -ge 30 ]; then
         echo "ERROR: Redis did not become healthy after 30 seconds. Aborting."
         exit 1
@@ -68,7 +68,7 @@ echo ""
 
 # --- PHASE 3: Set the central configuration in Redis ---
 echo "[PHASE 3/4] Setting central config key in Redis..."
-docker-compose exec redis redis-cli SET crawl_jobs:max_global_crawls $GLOBAL_MAX
+docker compose exec redis redis-cli SET crawl_jobs:max_global_crawls $GLOBAL_MAX
 echo "Set 'crawl_jobs:max_global_crawls' -> '$GLOBAL_MAX'"
 echo ""
 
@@ -77,7 +77,7 @@ echo "[PHASE 4/4] Scaling application services..."
 # Now that Redis is configured, start the crawler and proxy services.
 # The `--no-deps` flag prevents it from trying to restart Redis.
 # The `up` command is idempotent and will create/start the reverse-proxy if needed.
-docker-compose --profile crawling up -d --no-deps --scale crawler-service=$REPLICAS
+docker compose --profile crawling up -d --no-deps --scale crawler-service=$REPLICAS
 echo ""
 echo "----------------------------------------------------"
 echo "Scaling command complete. System is now running with $REPLICAS replicas."
