@@ -21,6 +21,7 @@ class Settings:
 
     # URL for connecting to the Redis instance
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
+    REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD")
 
 
 settings = Settings()

@@ -64,3 +64,4 @@ class CrawlStatus(BaseModel):
     error_urls_crawled: int = Field(0, description="Number of URLs that failed during crawling.")
     nfr_urls_crawled: int = Field(0, description="Number of URLs that were skipped for not being in French.")
     last_activity: Optional[datetime] = Field(None, description="Timestamp of the last saved URL.")
+    last_heartbeat: Optional[datetime] = Field(None, description="Timestamp of the last monitor heartbeat for a running job.")
