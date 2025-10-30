@@ -38,12 +38,13 @@ RUN pip install --no-cache-dir -e .
 WORKDIR /app/
 
 RUN awk '/uvloop.run\(run_server\(args\)\)/ { \
-    print "    # --- Patch CUDA Graph ---" \
-    print "    if hasattr(args, '\''enforce_eager'\''):" \
-    print "        args.enforce_eager = False" \
+    print "    # --- Patch CUDA Graph ---"; \
+    print "    if hasattr(args, '\''enforce_eager'\''):"; \
+    print "        args.enforce_eager = False"; \
 }1' /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py \
 > /tmp/api_server.py \
 && mv /tmp/api_server.py /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
+
 
 # Installer flash-attn AVANT ou vérifier la version de PyTorch
 RUN pip install --no-cache-dir ninja packaging && \
