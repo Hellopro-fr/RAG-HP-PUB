@@ -1,5 +1,6 @@
 import { RequestQueue, RobotsFile } from "crawlee";
 import axios from "axios";
+import fs from "fs/promises"; // Added for file system operations
 import { router } from "./routes.js";
 import {
     getPathAfterDomain,
@@ -237,8 +238,8 @@ if (isStoppedManualy(domain, true)) {
     isError = "stoppedManually";
 }
 
-// Execute callback to alert the system
-async function executeCallback() {
+// Instead of calling the webhook directly, write a payload file for the manager.
+if (callShell) {
     const payload = {
         id_domaine: id,
         success: stats?.requestsFinished ?? 0,
@@ -250,22 +251,12 @@ async function executeCallback() {
     };
 
     try {
-        console.info(`Executing GET callback to ${callbackUrl} with params:`, JSON.stringify(payload, null, 2));
-        // Use GET and pass payload as URL query parameters to match original wget behavior
-        await axios.get(callbackUrl, {
-            params: payload,
-            timeout: 30000
-        });
-        console.info("GET Callback successful.");
+        const payloadPath = `${storagePath}/_callback_payload.json`;
+        await fs.writeFile(payloadPath, JSON.stringify(payload, null, 2));
+        console.info(`Callback payload for manager written to ${payloadPath}`);
     } catch (error: any) {
-        console.error(`Callback failed: ${error.message}`);
-        // In a real system, you might retry or queue this for later.
+        console.error(`Failed to write callback payload file: ${error.message}`);
     }
-}
-
-if (callShell) {
-    console.log("Executing callback...");
-    await executeCallback();
 }
 
 // Exit with code 2 to signal graceful completion to the manager

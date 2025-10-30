@@ -11,11 +11,15 @@ services:
     env_file:
       - .env # Load the REDIS_PASSWORD from the .env file
     command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD} --appendonly yes --loglevel warning
-    profiles:
-      - crawling
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   reverse-proxy:
     image: nginx:alpine
+    profiles: ["crawling"] # This was already correct
     ports:
       # The reverse proxy is the ONLY service that maps a port to the host.
       # This is the single entry point for all external traffic.
@@ -25,13 +29,17 @@ services:
       - ./apps-microservices/crawler-service/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - crawler-service
-    profiles:
-      - crawling
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   crawler-service:
     build:
       context: .
       dockerfile: ./apps-microservices/crawler-service/Dockerfile
+    profiles: ["crawling"]
     # The 'ports' mapping has been removed to prevent conflicts.
     # We now 'expose' the port, making it accessible to other services
     # on the Docker network (like our reverse-proxy), but NOT to the host.
@@ -40,6 +48,8 @@ services:
     volumes:
       # Mount a volume to persist crawl data outside the container
       - crawler_data:/app/storage
+    env_file:
+      - .env
     environment:
       # Max concurrent crawls for each individual instance.
       - MAX_CONCURRENT_CRAWLS=1
@@ -49,15 +59,17 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD} # Pass the password from .env file
     depends_on:
       - redis
-    profiles:
-      - crawling
     deploy:
-      # You can now safely scale this service.
-      replicas: 1
+      replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
         limits:
           cpus: '1.0' # Limit to 1 CPU core
           memory: 4G   # Limit to 4GB of RAM
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   crawler_data:
