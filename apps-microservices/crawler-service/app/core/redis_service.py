@@ -22,7 +22,12 @@ class RedisService:
         if self._client:
             return
         try:
-            self._client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            redis_url = settings.REDIS_URL
+            # If a password is provided, inject it into the URL for authentication.
+            if settings.REDIS_PASSWORD:
+                redis_url = redis_url.replace("://", f"://:{settings.REDIS_PASSWORD}@")
+
+            self._client = redis.from_url(redis_url, decode_responses=True)
             await self._client.ping()
             logger.info("Successfully connected to Redis.")
         except Exception as e:

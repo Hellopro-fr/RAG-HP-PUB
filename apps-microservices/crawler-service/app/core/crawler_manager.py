@@ -68,10 +68,19 @@ class CrawlerManager:
 
         # Local concurrency check for this replica
         if len(self.local_processes) >= settings.MAX_CONCURRENT_CRAWLS:
-            logger.warning("Max concurrent crawls for this replica reached. Request rejected.")
+            logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'.")
+            detail_payload = {
+                "error_code": "REPLICA_CAPACITY_EXCEEDED",
+                "message": "This service instance is at its maximum capacity.",
+                "replica_capacity": settings.MAX_CONCURRENT_CRAWLS,
+                "rejected_request": {
+                    "crawl_id": crawl_id,
+                    "domain": domain
+                }
+            }
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"This service instance is at its maximum capacity with {settings.MAX_CONCURRENT_CRAWLS} active crawls."
+                detail=detail_payload
             )
 
         job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
@@ -125,22 +134,48 @@ class CrawlerManager:
 
     async def _monitor_process(self, crawl_id: str, process: asyncio.subprocess.Process):
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
-        job_info = await redis_service.get_data(job_key)
-        if not job_info: return
+        
+        job_info_initial = await redis_service.get_data(job_key)
+        if not job_info_initial:
+            logger.error(f"Cannot monitor process for '{crawl_id}': job info vanished immediately after start.")
+            return
 
-        log_path = os.path.join(job_info['storage_path'], 'crawler.log')
+        log_path = os.path.join(job_info_initial['storage_path'], 'crawler.log')
+        log_file_handle = await aiofiles.open(log_path, 'a')
+
+        async def log_stream(stream, prefix):
+            try:
+                async for line in stream:
+                    await log_file_handle.write(f"[{prefix}] {line.decode('utf-8', errors='ignore')}")
+            except Exception as e:
+                logger.error(f"Error in log stream for crawl '{crawl_id}': {e}")
+
+        stdout_task = asyncio.create_task(log_stream(process.stdout, "stdout"))
+        stderr_task = asyncio.create_task(log_stream(process.stderr, "stderr"))
+
         try:
-            async with aiofiles.open(log_path, 'a') as log_file:
-                async def log_stream(stream, prefix):
-                    async for line in stream:
-                        await log_file.write(f"[{prefix}] {line.decode('utf-8', errors='ignore')}")
-                await asyncio.gather(log_stream(process.stdout, "stdout"), log_stream(process.stderr, "stderr"))
-        except Exception as e:
-            logger.error(f"Error logging output for crawl '{crawl_id}': {e}")
-        
-        await process.wait()
-        
-        # Atomically decrement the global running count as the process has finished
+            # --- Heartbeat Loop ---
+            while process.returncode is None:
+                await asyncio.sleep(60)  # Heartbeat interval
+
+                if process.returncode is not None:
+                    break
+
+                job_info = await redis_service.get_data(job_key)
+                if job_info and job_info.get("status") == "running":
+                    job_info["last_heartbeat"] = datetime.utcnow()
+                    await redis_service.set_data(job_key, job_info)
+                    logger.debug(f"Heartbeat sent for running crawl '{crawl_id}'.")
+                elif not job_info:
+                    logger.warning(f"Heartbeat for '{crawl_id}' skipped: job key disappeared from Redis mid-run. It may be recovered later.")
+
+            await process.wait()
+            await asyncio.gather(stdout_task, stderr_task)
+
+        finally:
+            await log_file_handle.close()
+
+        # --- Finalization Logic (after process has finished) ---
         if redis_service._client:
             await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
         
@@ -152,6 +187,8 @@ class CrawlerManager:
             final_status = "finished" if is_success else "failed"
             job_info["status"] = final_status
             job_info["pid"] = None
+            if "last_heartbeat" in job_info:
+                del job_info["last_heartbeat"]  # Clean up heartbeat field
             await redis_service.set_data(job_key, job_info)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status updated in Redis and counter decremented.")
             
@@ -245,7 +282,8 @@ class CrawlerManager:
             urls_crawled=urls_crawled,
             error_urls_crawled=error_urls_crawled,
             nfr_urls_crawled=nfr_urls_crawled,
-            last_activity=last_url_time
+            last_activity=last_url_time,
+            last_heartbeat=job_info.get("last_heartbeat")
         )
         # --- END: ENHANCED STATS CALCULATION ---
         

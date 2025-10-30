@@ -945,6 +945,7 @@ services:
       # Fallback value if the Redis config key is missing. Set to default replica count.
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD} # Pass the password from .env file
     depends_on:
       - redis
     deploy:
@@ -964,8 +965,16 @@ services:
     ports:
       - "6379:6379"
     volumes:
+      - ./apps-microservices/crawler-service/redis.conf:/usr/local/etc/redis/redis.conf
       - redis_data:/data
-    command: redis-server --appendonly yes --loglevel warning
+    env_file:
+      - .env # Load the REDIS_PASSWORD from the .env file
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD} --appendonly yes --loglevel warning
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   reverse-proxy:
     image: nginx:alpine
@@ -979,6 +988,11 @@ services:
       - ./apps-microservices/crawler-service/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - crawler-service
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     
 networks:
   services-net:
