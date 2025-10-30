@@ -10,7 +10,7 @@ services:
       - redis_data:/data
     env_file:
       - .env # Load the REDIS_PASSWORD from the .env file
-    command: redis-server /usr/local/etc/redis/redis.conf --appendonly yes --loglevel warning
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD} --appendonly yes --loglevel warning
     profiles:
       - crawling
 
