@@ -37,12 +37,11 @@ RUN pip install --no-cache-dir -e .
 
 WORKDIR /app/
 
-RUN sed -i "/uvloop.run(run_server(args))/i \
-    # --- Patch CUDA Graph ---\n\
-    if hasattr(args, 'enforce_eager'):\n\
-        args.enforce_eager = False\n"\
-    /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
-
+RUN awk -i inplace '/uvloop.run\(run_server\(args\)\)/{
+    print "    # --- Patch CUDA Graph ---"
+    print "    if hasattr(args, '\''enforce_eager'\''):"
+    print "        args.enforce_eager = False"
+}1' /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
 
 
 # Installer flash-attn AVANT ou vérifier la version de PyTorch
