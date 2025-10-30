@@ -1,14 +1,12 @@
 #!/bin/bash
 
 # ==============================================================================
-# Script to robustly scale the crawler-service.
+# Script to robustly scale the crawler-service with Redis authentication.
 #
 # This script follows a multi-stage process to prevent race conditions:
 # 1. Starts the 'redis' service and waits for it to be healthy.
-# 2. Sets the global concurrent crawl limit in Redis, which acts as the
-#    single source of truth for the entire cluster.
-# 3. Starts and scales the 'crawler-service' replicas, which will now
-#    read the correct configuration on startup.
+# 2. Authenticates and sets the global concurrent crawl limit in Redis.
+# 3. Starts and scales the 'crawler-service' replicas.
 #
 # Usage:
 #   ./scale_crawlers.sh [number_of_replicas]
@@ -21,6 +19,28 @@
 # IMPORTANT: Before first use, make this script executable:
 #   chmod +x apps-microservices/crawler-service/scale_crawlers.sh
 # ==============================================================================
+
+# --- PHASE 0: Load Environment and Validate ---
+echo "[PHASE 0/5] Loading environment variables..."
+
+# The .env file must be in the same directory where docker-compose is run.
+if [ ! -f .env ]; then
+    echo "ERROR: .env file not found. Please create it and add REDIS_PASSWORD."
+    exit 1
+fi
+
+# Source the .env file to load variables into the environment for this script.
+set -o allexport
+source .env
+set +o allexport
+
+if [ -z "$REDIS_PASSWORD" ]; then
+    echo "ERROR: REDIS_PASSWORD is not set or is empty in the .env file."
+    exit 1
+fi
+echo "Environment loaded."
+echo ""
+
 
 # --- CONFIGURATION ---
 
@@ -54,21 +74,23 @@ echo "[PHASE 2/4] Waiting for Redis to become healthy..."
 # This loop will run until `redis-cli ping` returns "PONG".
 # It has a timeout of 30 seconds to prevent it from running forever.
 counter=0
-until docker compose exec redis redis-cli ping | grep -q "PONG"; do
+# Loop until `redis-cli -a <password> ping` returns "PONG".
+until docker compose exec redis redis-cli -a "$REDIS_PASSWORD" ping | grep -q "PONG"; do
     if [ $counter -ge 30 ]; then
-        echo "ERROR: Redis did not become healthy after 30 seconds. Aborting."
+        echo "ERROR: Redis did not become healthy after 30 seconds. Check Redis logs and password. Aborting."
         exit 1
     fi
-    echo "Redis not ready yet, waiting 1 second..."
+    echo "Redis not ready or authentication failed, retrying in 1 second..."
     sleep 1
     counter=$((counter+1))
 done
-echo "Redis is healthy and ready for commands."
+echo "Redis is healthy and authenticated."
 echo ""
 
 # --- PHASE 3: Set the central configuration in Redis ---
 echo "[PHASE 3/4] Setting central config key in Redis..."
-docker compose exec redis redis-cli SET crawl_jobs:max_global_crawls $GLOBAL_MAX
+# Use the -a flag to authenticate the SET command.
+docker compose exec redis redis-cli -a "$REDIS_PASSWORD" SET crawl_jobs:max_global_crawls $GLOBAL_MAX
 echo "Set 'crawl_jobs:max_global_crawls' -> '$GLOBAL_MAX'"
 echo ""
 
