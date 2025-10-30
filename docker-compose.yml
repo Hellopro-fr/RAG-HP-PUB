@@ -556,7 +556,8 @@ services:
       - services-net
     depends_on:
       - ocr-service
-      # - llm-service
+    deploy:
+      replicas: 3
     logging:
       driver: "json-file"
       options:
