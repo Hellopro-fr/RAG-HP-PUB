@@ -25,12 +25,12 @@ Voici les types de pages possibles :
 "listing_produit" : page présentant une **gamme de produits** ou une **catégorie de produits**, listant plusieurs modèles ou variantes, avec navigation possible vers des fiches détaillées. Peut contenir des descriptions générales, comparatifs, avantages, caractéristiques et prix de plusieurs modèles.
 "fiche_produit" : page présentant en détail un seul produit spécifique.
 "fiche_realisation" : page montrant un projet ou cas client réalisé.
-"Presentation-societe" : présentation institutionnelle de l’entreprise (histoire, équipe, mission), sans mention produit.
+"presentation_societe" : présentation institutionnelle de l’entreprise (histoire, équipe, mission), sans mention produit.
 "contact" : prise de contact (formulaire, téléphone, carte, email), ou liste des points de vente.
 "cgv_mentions_legales_cgu" : page juridique : CGV, CGU, mentions légales, droits, responsabilités, propriété intellectuelle.
 "article" : contenu éditorial (blog, guide, actualité) visant à informer, conseiller ou expliquer un sujet.
-"Savoir_faire" : page valorisant une expertise technique ou métier liée au matériel ou service proposé.
-"Page_local" : page SEO dédiée à une localisation précise, avec une offre ou un savoir-faire ciblé localement.
+"savoir_faire" : page valorisant une expertise technique ou métier liée au matériel ou service proposé.
+"page_local" : page SEO dédiée à une localisation précise, avec une offre ou un savoir-faire ciblé localement.
 "demande_devis" : page pour obtenir un devis sur un ou plusieurs produits.
 "compte_client" : espace personnel de connexion ou gestion client (commandes, devis, infos personnelles, etc).
 "recrutement" : page de recrutement avec un ou plusieurs offres d’emploi.
