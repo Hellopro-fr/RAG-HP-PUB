@@ -112,6 +112,7 @@ class CrawlerManager:
             "crawl_id": crawl_id, "status": "running", "domain": domain,
             "start_url": start_url, "start_time": datetime.utcnow(),
             "storage_path": job_storage_path,
+            "callback_url": callback_url,
             "failure_callback_url": failure_callback_url, "pid": process.pid
         }
         await redis_service.set_data(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_data)
@@ -122,6 +123,35 @@ class CrawlerManager:
         
         asyncio.create_task(self._monitor_process(crawl_id, process))
         return crawl_id
+
+    async def _send_success_webhook(self, job_info: dict):
+        callback_url = job_info.get("callback_url")
+        if not callback_url:
+            return
+
+        crawl_id = job_info["crawl_id"]
+        payload_path = os.path.join(job_info["storage_path"], '_callback_payload.json')
+
+        params = {}
+        if os.path.exists(payload_path):
+            try:
+                async with aiofiles.open(payload_path, 'r') as f:
+                    content = await f.read()
+                    params = json.loads(content)
+            except Exception as e:
+                logger.error(f"Failed to read callback payload for '{crawl_id}'. Error: {e}", exc_info=True)
+                # Fallback to a minimal payload indicating an error
+                params = {"id_domaine": crawl_id, "isError": "PAYLOAD_READ_ERROR"}
+        else:
+            logger.warning(f"Callback payload file not found for '{crawl_id}'. Sending minimal callback.")
+            params = {"id_domaine": crawl_id}
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(str(callback_url), params=params, timeout=30.0)
+                logger.info(f"Successfully sent success notification for '{crawl_id}'. Status: {response.status_code}")
+        except httpx.RequestError as e:
+            logger.error(f"Failed to send success notification for '{crawl_id}'. Error: {e}")
 
     async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int):
         params = {"crawl_id": crawl_id, "domain": domain, "exit_code": exit_code, "timestamp": datetime.utcnow().isoformat()}
@@ -207,7 +237,11 @@ class CrawlerManager:
                 logger.error(f"Failed to write completion marker for '{crawl_id}': {e}", exc_info=True)
             # --- END: Create Completion Marker ---
 
-            if not is_success and job_info.get("failure_callback_url"):
+            # --- WEBHOOK LOGIC ---
+            if is_success and job_info.get("callback_url"):
+                logger.info(f"Crawl '{crawl_id}' succeeded. Triggering success webhook.")
+                asyncio.create_task(self._send_success_webhook(job_info))
+            elif not is_success and job_info.get("failure_callback_url"):
                 logger.info(f"Crawl '{crawl_id}' failed. Triggering failure webhook.")
                 asyncio.create_task(self._send_failure_webhook(str(job_info["failure_callback_url"]), crawl_id, job_info["domain"], exit_code))
         
