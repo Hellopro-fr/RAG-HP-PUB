@@ -37,10 +37,10 @@ RUN pip install --no-cache-dir -e .
 
 WORKDIR /app/
 
-RUN awk -i inplace '/uvloop.run\(run_server\(args\)\)/{
-    print "    # --- Patch CUDA Graph ---"
-    print "    if hasattr(args, '\''enforce_eager'\''):"
-    print "        args.enforce_eager = False"
+RUN awk -i inplace '/uvloop.run\(run_server\(args\)\)/{ \
+    print "    # --- Patch CUDA Graph ---"; \
+    print "    if hasattr(args, '\''enforce_eager'\''):"; \
+    print "        args.enforce_eager = False"; \
 }1' /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
 
 
