@@ -248,6 +248,8 @@ services:
       - "8509:8509"
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     logging:
       driver: "json-file"
       options:
@@ -421,6 +423,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -438,6 +442,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -455,6 +461,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 8
     logging:
@@ -472,6 +480,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -579,6 +589,7 @@ services:
       replicas: 4
     environment:
       - LLM_SERVICE_URL=llm-service:50051
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       - llm-service
     networks:
@@ -602,6 +613,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       - embedding-model-service
     env_file:
@@ -634,6 +646,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -651,6 +665,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -668,6 +684,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -685,6 +703,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -828,6 +848,7 @@ services:
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -850,6 +871,7 @@ services:
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -870,6 +892,7 @@ services:
       - .env
     environment:
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
