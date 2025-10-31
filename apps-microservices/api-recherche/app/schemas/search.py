@@ -36,11 +36,11 @@ class RerankerOptions(BaseModel):
 
 class SearchRequestWs(BaseModel):
     prompt: str
-    source: Optional[List[SourcesFiltre]] = [SourcesFiltre(source="produits", filtre={})]
+    source: Optional[List[SourcesFiltre]] = [SourcesFiltre(source="produits_3", filtre={})]
     action: Optional[int] = 1
     top_k: Optional[int] = 10
     filtre: Optional[Dict[str, Any]] = {}
-    filtre_source: Optional[Dict[str, List[str]]] = {}
+    fields: Optional[List[str]] = []
     llm: Optional[LLMOptions] = LLMOptions(chat_model="gpt-4.1-2025-04-14", temperature=0.0)
     options: Optional[RerankerOptions] = RerankerOptions()
     type: int = 1
