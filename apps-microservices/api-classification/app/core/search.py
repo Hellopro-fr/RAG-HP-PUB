@@ -129,7 +129,7 @@ async def call_search_api_async(prompt: str, num_results: int, use_reranker: boo
     Utilise maintenant l'API de recherche en interne (search_in_milvus) au lieu d'un appel HTTP.
     """
     try:
-        logger.info(f"[INTERNAL] Recherche interne avec prompt='{prompt}', num_results={num_results}")
+        # logger.info(f"[INTERNAL] Recherche interne avec prompt='{prompt}', num_results={num_results}")
 
         # Créer la requête pour l'API de recherche interne
         request = SearchRequestWs(
@@ -144,29 +144,28 @@ async def call_search_api_async(prompt: str, num_results: int, use_reranker: boo
             )
         )
 
-        logger.info(f"[INTERNAL] Requête créée: {request}")
+        # logger.info(f"[INTERNAL] Requête créée: {request}")
 
         # Appel direct à la fonction de recherche
         results_data = await search_in_milvus(request)
 
-        logger.info(f"[INTERNAL] Résultat brut de search_in_milvus: {type(results_data)}")
-        logger.info(f"[INTERNAL] Clés du résultat: {results_data.keys() if results_data else 'None'}")
+        # logger.info(f"[INTERNAL] Résultat brut de search_in_milvus: {type(results_data)}")
+        # logger.info(f"[INTERNAL] Clés du résultat: {results_data.keys() if results_data else 'None'}")
 
         # Extraire les correspondances de produits
         product_matches = results_data.get('matches', {}).get('produits_3', [])
-        logger.info(f"[INTERNAL] Récupéré {len(product_matches)} correspondances de la recherche interne")
+        # logger.info(f"[INTERNAL] Récupéré {len(product_matches)} correspondances de la recherche interne")
 
-        if product_matches:
-            logger.info(f"[INTERNAL] Premier résultat (exemple): {product_matches[0]}")
-        else:
-            logger.warning(f"[INTERNAL] Aucun résultat trouvé. Résultat complet: {results_data}")
+        # Log seulement si aucun résultat (pour débogage)
+        if not product_matches:
+            logger.warning(f"[INTERNAL] Aucun résultat pour prompt='{prompt[:50]}...'")
 
         return product_matches
 
     except Exception as e:
-        logger.error(f"[INTERNAL] Erreur lors de la recherche interne: {type(e).__name__} - {str(e)}")
-        import traceback
-        logger.error(f"[INTERNAL] Traceback: {traceback.format_exc()}")
+        logger.error(f"[INTERNAL] Erreur recherche: {type(e).__name__} - {str(e)}")
+        # import traceback
+        # logger.error(f"[INTERNAL] Traceback: {traceback.format_exc()}")
         return None
 
 
@@ -193,7 +192,7 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
                             'nom_categorie': str(item.get('nom_categorie', '')),
                             'description_categorie': str(item.get('description_categorie', ''))
                         })
-                logger.info(f"[ASYNC] {len(category_details)} descriptions de catégories récupérées")
+                #logger.info(f"[ASYNC] {len(category_details)} descriptions de catégories récupérées")
                 return category_details
             else:
                 logger.error(f"[ASYNC] Format de réponse inattendu pour get_category_details: {data}")
