@@ -284,6 +284,36 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # TODO:
+  # à supprimer lorsque déployement final
+  api-recherche-test-modification:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-recherche/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
+    restart: unless-stopped
+    ports:
+      - "8511:8511"
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - RERANKING_SERVICE_URL=reranking-model-service:50053
+      - DATABASE_SERVICE_URL=database-recherche-service:50054
+    # depends_on:
+    #   - llm-service
+    #   - embedding-model-service
+    #   - reranking-model-service
+    #   - database-recherche-service
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   api-embedding-service:
     build:
       context: .
