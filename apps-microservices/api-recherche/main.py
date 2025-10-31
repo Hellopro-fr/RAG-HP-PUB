@@ -10,7 +10,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import os
 
-from libs.common_utils.src.common_utils.redis.cache_service import init_redis_pool, close_redis_pool, cache_or_execute
+from common_utils.redis.cache_service import init_redis_pool, close_redis_pool, cache_or_execute
 
 log_format = "%(asctime)s - %(levelname)s - [WORKER_PID:%(process)d] - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
