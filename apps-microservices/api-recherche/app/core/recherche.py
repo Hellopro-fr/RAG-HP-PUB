@@ -293,7 +293,7 @@ class SearchOrchestrator:
         """Orchestrates a complete non-streaming search."""
         start_total_time = time.perf_counter()
         embed_duration, search_duration, rerank_duration, llm_duration = 0, 0, 0, 0
-        llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
+        llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={}, llm_duration=0)
         final_filter_expr_str = ""
         all_results = {}
 
@@ -410,7 +410,7 @@ class SearchOrchestrator:
     async def search_classique(self) -> dict:
         start_total_time = time.perf_counter()
         search_duration, llm_duration = 0, 0
-        llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
+        llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={}, llm_duration=0)
         final_filter_expr_str = ""
         all_results = {}
 
@@ -559,7 +559,7 @@ class SearchOrchestrator:
 
     async def _run_llm_pipeline(self, context_texts: list) -> LLMPipeline:
         if not context_texts or self.request.action != 2:
-            return LLMPipeline(llm_response="", context="", full_user_prompt="", response={})
+            return LLMPipeline(llm_response="", context="", full_user_prompt="", response={}, llm_duration=0)
 
         context ="""
             -----
@@ -596,11 +596,11 @@ class SearchOrchestrator:
             completion = completion.model_dump()
         except Exception as e:
             logger.error(f"Error during LLM execution: {e}")
-            return LLMPipeline(llm_response=str(e), context=context, full_user_prompt=full_user_prompt, error=True)
+            return LLMPipeline(llm_response=str(e), context=context, full_user_prompt=full_user_prompt, error=True, llm_duration=0)
 
         llm_duration = time.perf_counter() - start_llm_time
         return LLMPipeline(
-            llm_duration=llm_duration,
+            llm_duration=float(llm_duration),
             llm_response=llm_response,
             full_user_prompt=full_user_prompt,
             context=context,
