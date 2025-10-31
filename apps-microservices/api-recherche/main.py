@@ -52,6 +52,14 @@ def startup():
     logger.info("Pré-chargement du modèle de reranking ONNX...")
     logger.info("--- MODÈLES PRÊTS : LE SERVEUR EST OPÉRATIONNEL ---")
 
+@app.on_event("shutdown")
+def shutdown_event():
+    logger.info("--- SHUTTING DOWN : STOPPING BATCH PROCESSORS ---")
+    from app.core.recherche import batching_manager
+    batching_manager.embedding_batch_processor.shutdown()
+    batching_manager.reranking_batch_processor.shutdown()
+    logger.info("--- BATCH PROCESSORS STOPPED ---")
+
 app.include_router(search_router.router)
 app.include_router(search_ws_router.router)
 

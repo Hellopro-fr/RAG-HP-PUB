@@ -18,11 +18,47 @@ from app.schemas.search import (
     SearchRequest,
 )
 from app.core.credentials import settings, model_settings
+from app.core.batch_processing import BatchProcessor
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+class BatchingManager:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(BatchingManager, cls).__new__(cls)
+            cls._instance.embedding_batch_processor = BatchProcessor(
+                cls._instance._get_embeddings_batch, 
+                batch_size=settings.EMBEDDING_BATCH_SIZE, 
+                max_latency=settings.EMBEDDING_MAX_LATENCY
+            )
+            cls._instance.reranking_batch_processor = BatchProcessor(
+                cls._instance._rerank_results_batch,
+                batch_size=settings.RERANKING_BATCH_SIZE,
+                max_latency=settings.RERANKING_MAX_LATENCY
+            )
+        return cls._instance
+
+    async def _get_embeddings_batch(self, prompts: List[str]) -> List[Optional[list]]:
+        try:
+            return await asyncio.gather(*[embedding_client.get_embedding(prompt) for prompt in prompts])
+        except Exception as e:
+            logger.error(f"Error getting embeddings for batch: {e}", exc_info=True)
+            return [None] * len(prompts)
+
+    async def _rerank_results_batch(self, rerank_requests: List[Tuple[str, List[str]]]) -> List[list]:
+        try:
+            return await asyncio.gather(*[reranking_client.rerank_documents_with_scores(prompt, docs) for prompt, docs in rerank_requests])
+        except Exception as e:
+            logger.error(f"Error reranking results for batch: {e}", exc_info=True)
+            return [[] for _ in rerank_requests]
+
+batching_manager = BatchingManager()
+
 
 
 class LLMClientFactory:
@@ -250,7 +286,11 @@ class SearchOrchestrator:
             query_vector, embed_duration = await self._get_embedding()
             yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
 
-            initial_matches, search_duration = await self._perform_search(query_vector)
+            initial_matches_dict, search_duration = await self._perform_search(query_vector)
+            initial_matches = []
+            for matches in initial_matches_dict.values():
+                initial_matches.extend(matches)
+            initial_matches = sorted(initial_matches, key=lambda x: x.get("score", 0.0), reverse=True)
             yield {"type": "initial_results", "payload": {"results": initial_matches, "duration": round(search_duration, 2)}}
 
             final_results, rerank_duration = await self._rerank_results(initial_matches)
@@ -300,36 +340,18 @@ class SearchOrchestrator:
         try:
             query_vector, embed_duration = await self._get_embedding()
             
-            start_search = time.perf_counter()
-            top_k_final = int(self.request.top_k)
-            top_k_retrieval = top_k_final * 2 if self.request.options.use_reranker else top_k_final
-
-            for item in self.request.source:
-                source_name = item.source
-                filtre = item.filtre
-                
-                final_filter_expr = await self._build_filter_expression(filtre, source_name)
-                final_filter_expr_str = final_filter_expr
-
-                source_results = await database_client.search_vector(
-                    collection=source_name,
-                    vector=query_vector,
-                    k=top_k_retrieval,
-                    filter_expr=final_filter_expr,
-                    output_fields=self.request.fields if self.request.fields and self.request.action == 1 else None
-                )
-                all_results[source_name] = [MessageToDict(res) for res in source_results]
-            
-            search_duration = time.perf_counter() - start_search
+            all_results, search_duration = await self._perform_search(query_vector)
 
             if self.request.options.use_reranker and all_results:
                 start_rerank_time = time.perf_counter()
                 reranked_results_by_source = {}
                 for source, matches in all_results.items():
+                    if not matches:
+                        reranked_results_by_source[source] = []
+                        continue
                     docs_to_rerank = [match["metadata"]["entity"]["text"] for match in matches]
-                    ranked_texts = await reranking_client.rerank_documents_with_scores(self.request.prompt, docs_to_rerank)
+                    ranked_texts = await batching_manager.reranking_batch_processor.process((self.request.prompt, docs_to_rerank))
                     result_map = {res["metadata"]["entity"]["text"]: res for res in matches}
-                    # reranked_results_by_source[source] = [result_map[text['document']] for text in ranked_texts if text in result_map][:top_k_final]
                     res_by_source = []
                     for item in ranked_texts:
                         score = float(item.get("score", 0.0))
@@ -343,7 +365,7 @@ class SearchOrchestrator:
                             result_map[document].get('metadata', {}).get('entity', {}).pop('text', None)
                             
                         res_by_source.append(result_map[document])
-                    reranked_results_by_source[source] = res_by_source[:top_k_final]
+                    reranked_results_by_source[source] = res_by_source[:int(self.request.top_k)]
                         
 
                 all_results = reranked_results_by_source
@@ -482,33 +504,39 @@ class SearchOrchestrator:
 
     async def _get_embedding(self) -> Tuple[Optional[list], float]:
         start_embed = time.perf_counter()
-        query_vector = await embedding_client.get_embedding(self.request.prompt)
+        query_vector = await batching_manager.embedding_batch_processor.process(self.request.prompt)
         embed_duration = time.perf_counter() - start_embed
         if not query_vector:
             raise ValueError("Could not generate embedding for the query.")
         return query_vector, embed_duration
 
-    async def _perform_search(self, query_vector: list) -> Tuple[list, float]:
+    async def _perform_search(self, query_vector: list) -> Tuple[Dict[str, list], float]:
         top_k_final = int(self.request.top_k)
         top_k_retrieval = top_k_final * 2 if self.request.options.use_reranker else top_k_final
         
         start_search_time = time.perf_counter()
         search_tasks = []
+        source_names = []
         for item in self.request.source:
+            source_names.append(item.source)
             search_tasks.append(self._create_search_task(item.source, item.filtre, query_vector, top_k_retrieval))
 
         list_of_results_groups = await asyncio.gather(*search_tasks, return_exceptions=True)
         search_duration = time.perf_counter() - start_search_time
 
-        all_source_results = []
-        for source_results in list_of_results_groups:
+        all_results = {}
+        for i, source_results in enumerate(list_of_results_groups):
+            source_name = source_names[i]
             if isinstance(source_results, Exception):
-                logger.error(f"A search task failed: {source_results}")
+                logger.error(f"A search task failed for source {source_name}: {source_results}")
+                all_results[source_name] = []
                 continue
             if source_results:
-                all_source_results.extend([MessageToDict(res) for res in source_results])
-        
-        return sorted(all_source_results, key=lambda x: x["score"], reverse=True), search_duration
+                all_results[source_name] = [MessageToDict(res) for res in source_results]
+            else:
+                all_results[source_name] = []
+
+        return all_results, search_duration
 
     async def _perform_classic_search(self) -> Tuple[list, float]:
         top_k_final = int(self.request.top_k)

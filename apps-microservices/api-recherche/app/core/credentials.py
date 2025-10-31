@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     M_PARAMS: str
     EF_PARAMS: str
 
+    EMBEDDING_BATCH_SIZE: int = 16
+    EMBEDDING_MAX_LATENCY: float = 0.1
+    RERANKING_BATCH_SIZE: int = 16
+    RERANKING_MAX_LATENCY: float = 0.1
+
     MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
         "devis_poc": [
             "chunk_id", "lead_id", "message", "message_hellopro", "categorie", "id_categorie", "effectif",
