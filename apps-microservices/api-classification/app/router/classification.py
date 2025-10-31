@@ -431,10 +431,12 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                     "enable_thinking": enable_thinking
                 }
 
-                # Créer un nouveau client pour chaque requête pour forcer une nouvelle résolution DNS
-                async with httpx.AsyncClient(timeout=300.0) as client:
+                # Créer un nouveau client pour chaque requête avec keep-alive désactivé
+                # Cela force une nouvelle connexion TCP et donc une nouvelle résolution DNS round-robin
+                limits = httpx.Limits(max_keepalive_connections=0, max_connections=1)
+                async with httpx.AsyncClient(timeout=300.0, limits=limits) as client:
                     # logger.info(f"  → Envoi du sous-batch {batch_index + 1}/{len(sub_batches)} ({len(sub_batch)} produits) à {url}")
-                    response = await client.post(url, json=payload)
+                    response = await client.post(url, json=payload, headers={"Connection": "close"})
                     response.raise_for_status()
                     result = response.json()
 
