@@ -172,7 +172,7 @@ async def call_search_api_async(prompt: str, num_results: int, use_reranker: boo
 
     try:
         logger.info(f"[ASYNC] Envoi requête à l'API de recherche: {SEARCH_API_URL} avec prompt='{prompt}'")
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(SEARCH_API_URL, headers=search_headers, json=search_payload)
             response.raise_for_status()
 
@@ -181,11 +181,23 @@ async def call_search_api_async(prompt: str, num_results: int, use_reranker: boo
             logger.info(f"[ASYNC] Récupéré {len(product_matches)} correspondances de l'API de recherche")
             return product_matches
 
-    except httpx.HTTPError as e:
-        logger.error(f"[ASYNC] Erreur lors de l'appel à l'API de recherche: {e}")
+    except httpx.TimeoutException as e:
+        logger.error(f"[ASYNC] Timeout lors de l'appel à l'API de recherche (30s): {str(e)}")
         return None
-    except json.JSONDecodeError:
-        logger.error("[ASYNC] Erreur lors du décodage JSON de l'API de recherche")
+    except httpx.ConnectError as e:
+        logger.error(f"[ASYNC] Erreur de connexion à l'API de recherche ({SEARCH_API_URL}): {str(e)}")
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[ASYNC] Erreur HTTP {e.response.status_code} de l'API de recherche: {str(e)}")
+        return None
+    except httpx.HTTPError as e:
+        logger.error(f"[ASYNC] Erreur HTTP lors de l'appel à l'API de recherche: {str(e)}")
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"[ASYNC] Erreur lors du décodage JSON de l'API de recherche: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"[ASYNC] Erreur inattendue lors de l'appel à l'API de recherche: {type(e).__name__} - {str(e)}")
         return None
 
 
@@ -218,9 +230,21 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
                 logger.error(f"[ASYNC] Format de réponse inattendu pour get_category_details: {data}")
                 return None
 
-    except httpx.HTTPError as e:
-        logger.error(f"[ASYNC] Erreur dans get_category_details: {e}")
+    except httpx.TimeoutException as e:
+        logger.error(f"[ASYNC] Timeout lors de get_category_details (30s): {str(e)}")
         return None
-    except json.JSONDecodeError:
-        logger.error("[ASYNC] Erreur lors du décodage JSON dans get_category_details")
+    except httpx.ConnectError as e:
+        logger.error(f"[ASYNC] Erreur de connexion pour get_category_details ({url}): {str(e)}")
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[ASYNC] Erreur HTTP {e.response.status_code} pour get_category_details: {str(e)}")
+        return None
+    except httpx.HTTPError as e:
+        logger.error(f"[ASYNC] Erreur HTTP dans get_category_details: {str(e)}")
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"[ASYNC] Erreur lors du décodage JSON dans get_category_details: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"[ASYNC] Erreur inattendue dans get_category_details: {type(e).__name__} - {str(e)}")
         return None
