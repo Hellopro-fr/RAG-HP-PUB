@@ -351,8 +351,6 @@ services:
       - .env
     deploy:
       replicas: 4
-    deploy:
-      replicas: 4
     networks:
       - services-net
     logging:
