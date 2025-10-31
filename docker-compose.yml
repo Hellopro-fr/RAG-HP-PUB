@@ -269,11 +269,11 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
-    depends_on:
-      - llm-service
-      - embedding-model-service
-      - reranking-model-service
-      - database-recherche-service
+    # depends_on:
+    #   - llm-service
+    #   - embedding-model-service
+    #   - reranking-model-service
+    #   - database-recherche-service
     env_file:
       - .env
     networks:
