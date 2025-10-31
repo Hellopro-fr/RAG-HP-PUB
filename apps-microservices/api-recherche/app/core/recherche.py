@@ -340,7 +340,7 @@ class SearchOrchestrator:
                         result_map[document]["reranking"] = score
                         
                         if 'text' not in self.request.fields:
-                            result_map[document].pop('metadata', None)
+                            result_map[document].get('metadata', None).get('entity', None).pop('text')
                             
                         res_by_source.append(result_map[document])
                     reranked_results_by_source[source] = res_by_source[:top_k_final]
