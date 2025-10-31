@@ -334,7 +334,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-classification/Dockerfile
-    container_name: api-classification-service
+    #container_name: api-classification-service
     profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     # TODO: à supprimer en PROD
@@ -349,6 +349,8 @@ services:
       - llm-service
     env_file:
       - .env
+    deploy:
+      replicas: 4
     deploy:
       replicas: 4
     networks:
