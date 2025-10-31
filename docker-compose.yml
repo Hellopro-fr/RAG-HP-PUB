@@ -289,7 +289,7 @@ services:
   api-recherche-test-modification:
     build:
       context: .
-      dockerfile: ./apps-microservices/api-recherche/Dockerfile
+      dockerfile: ./apps-microservices/api-recherche-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     ports:
