@@ -574,8 +574,9 @@ services:
         max-size: "10m"
         max-file: "3"
   deepseek-ocr:
-    build: .
-    dockerfile: ./apps-microservices/DeepSeek-OCR/Dockerfile
+    build: 
+      context: .
+      dockerfile: ./apps-microservices/DeepSeek-OCR/Dockerfile
     container_name: deepseek-ocr-vllm
     ports:
       - "8501:8501"
