@@ -21,7 +21,7 @@ class SearchUseCase:
         if filter_expression:
             search_kwargs['expr'] = filter_expression
         if output_fields:
-            search_kwargs['fields'] = output_fields
+            search_kwargs['output_fields'] = output_fields
 
         return self.db_client.search(collection_name, vector, top_k, **search_kwargs)
     

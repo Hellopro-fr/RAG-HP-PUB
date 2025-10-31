@@ -28,6 +28,8 @@ COPY ./apps-microservices/DeepSeek-OCR/start_server.py .
 # Copy requirements file and install additional dependencies
 COPY ./apps-microservices/DeepSeek-OCR/requirements.txt .
 
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
 # Install Python dependencies excluding conflicting packages
 RUN pip install --no-cache-dir \
     PyMuPDF \
