@@ -17,6 +17,10 @@ RUN pip install -e /app/libs/common-utils
 COPY apps-microservices/api-classification/requirements.txt .
 RUN pip install -r requirements.txt
 
+# Installer aussi les dépendances de l'API recherche (nécessaires pour api_recherche_lib)
+COPY apps-microservices/api-recherche/requirements.txt /tmp/api-recherche-requirements.txt
+RUN pip install -r /tmp/api-recherche-requirements.txt && rm /tmp/api-recherche-requirements.txt
+
 # Copier et installer les stubs gRPC
 COPY libs/grpc-stubs /app/libs/grpc-stubs
 RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
