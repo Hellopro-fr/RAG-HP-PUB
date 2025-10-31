@@ -3,7 +3,7 @@ from app.schemas.search import SearchRequestWs as SearchRequest, SearchResponse,
 from app.core.recherche import search_in_milvus as search
 import logging
 import os
-from libs.common_utils.src.common_utils.redis.cache_service import cache_or_execute
+from common_utils.redis.cache_service import cache_or_execute
 
 log_format = "%(asctime)s - %(levelname)s - [WORKER_PID:%(process)d] - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
