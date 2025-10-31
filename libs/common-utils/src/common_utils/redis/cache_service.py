@@ -23,8 +23,9 @@ async def init_redis_pool():
     Connects to Redis using the URL from environment variables.
     """
     global redis_client
-    redis_url = os.getenv("REDIS_URL", "redis://default:hRepass%40258@34.14.100.226:6380")
+    redis_url = os.getenv("REDIS_URL")
     try:
+        logging.info(f"Trying to connect to Redis at {redis_url}")
         redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
         await redis_client.ping()
         logger.info("Successfully connected to Redis.")
