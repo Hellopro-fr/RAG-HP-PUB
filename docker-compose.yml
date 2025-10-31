@@ -359,6 +359,25 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  api-classification-lb:
+    image: nginx:alpine
+    container_name: api-classification-lb
+    profiles: ["app"]
+    ports:
+      - "8577:80"
+    volumes:
+      - ./nginx-classification.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-classification-service
+    networks:
+      - services-net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   api-transcription-service:
     build:
       context: .
@@ -410,6 +429,8 @@ services:
       - "8500:8500"
     env_file:
       - .env
+    networks:
+      - services-net
     logging:
       driver: "json-file"
       options:
