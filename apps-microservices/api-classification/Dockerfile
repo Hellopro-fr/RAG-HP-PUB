@@ -36,6 +36,12 @@ RUN pip install -e /app/libs/grpc-stubs
 # Étape 3: Copier les modules de l'API recherche pour utilisation interne
 # Créer un package Python nommé "api_recherche_lib" pour éviter les conflits avec "app"
 COPY apps-microservices/api-recherche/app /app/api_recherche_lib
+
+# Corriger les imports internes: remplacer "from app." par "from api_recherche_lib."
+# Cela permet aux modules de api_recherche_lib de s'importer entre eux correctement
+RUN find /app/api_recherche_lib -type f -name "*.py" -exec sed -i 's/from app\./from api_recherche_lib./g' {} \;
+RUN find /app/api_recherche_lib -type f -name "*.py" -exec sed -i 's/import app\./import api_recherche_lib./g' {} \;
+
 # Le PYTHONPATH /app permet d'importer: from api_recherche_lib.core.recherche import ...
 
 # Étape 4: Copier le code source de manière propre
