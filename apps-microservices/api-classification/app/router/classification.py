@@ -397,7 +397,8 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
         async def send_sub_batch(sub_batch: List[ProductInput], batch_index: int):
             """Envoie un sous-batch au service de classification"""
             try:
-                # URL du service (le load balancer Docker DNS distribue automatiquement)
+                # Utilise le nom du service Docker - le DNS round-robin distribue automatiquement
+                # IMPORTANT: Chaque nouvelle connexion TCP = nouveau round-robin
                 url = f"http://{service_name}:{service_port}/classification/classify/batch"
 
                 payload = {
@@ -406,7 +407,8 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                     "enable_thinking": enable_thinking
                 }
 
-                async with httpx.AsyncClient(timeout=300.0) as client:  # Timeout de 5 minutes
+                # Créer un nouveau client pour chaque requête pour forcer une nouvelle résolution DNS
+                async with httpx.AsyncClient(timeout=300.0) as client:
                     logger.info(f"  → Envoi du sous-batch {batch_index + 1}/{len(sub_batches)} ({len(sub_batch)} produits) à {url}")
                     response = await client.post(url, json=payload)
                     response.raise_for_status()
@@ -470,6 +472,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                 }
 
         # Envoyer tous les sous-batches en parallèle
+        # Docker DNS round-robin distribue automatiquement sur les replicas disponibles
         tasks = [send_sub_batch(sub_batch, i) for i, sub_batch in enumerate(sub_batches)]
         results = await asyncio.gather(*tasks)
 
