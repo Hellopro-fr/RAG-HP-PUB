@@ -1,7 +1,12 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
+from typing import List
 import logging
 import time
+import asyncio
+import httpx
+import math
+import os
 
 from app.schemas.classification import (
     ProductInput,
@@ -334,3 +339,168 @@ async def test_qwen_classification():
     finally:
         # Toujours restaurer le choix original
         classifier.llm_choice = original_choice
+
+
+@router.post("/classify/batch/distributed", response_model=BatchClassificationResponse)
+async def classify_batch_distributed(batch_input: BatchProductsInput):
+    """
+    Classifie plusieurs produits en distribuant intelligemment la charge sur les replicas disponibles.
+
+    Cette méthode divise automatiquement le batch en sous-batches et les envoie en parallèle
+    aux différentes instances du service via des requêtes HTTP, exploitant ainsi tous les replicas
+    pour accélérer le traitement global.
+
+    Avantages:
+    - Utilise tous les replicas disponibles (4x plus rapide avec 4 replicas)
+    - Division automatique selon le nombre de produits
+    - Agrégation transparente des résultats
+    """
+    try:
+        start_time = time.time()
+
+        # Déterminer le LLM à utiliser
+        llm_to_use = batch_input.llm if batch_input.llm else "DeepSeek"
+        enable_thinking = batch_input.enable_thinking if batch_input.enable_thinking is not None else False
+
+        if not classifier.is_llm_configured():
+            raise HTTPException(status_code=503, detail="LLM non configuré")
+
+        if len(batch_input.produits) == 0:
+            raise HTTPException(status_code=400, detail="Liste de produits vide")
+
+        if len(batch_input.produits) > 100:
+            raise HTTPException(status_code=400, detail="Trop de produits (max 100)")
+
+        # Configuration de distribution
+        # Récupérer le nom du service depuis une variable d'environnement ou utiliser le nom par défaut
+        service_name = os.getenv("CLASSIFICATION_SERVICE_NAME", "api-classification-service")
+        service_port = os.getenv("CLASSIFICATION_SERVICE_PORT", "8577")
+        num_replicas = int(os.getenv("CLASSIFICATION_NUM_REPLICAS", "4"))
+
+        total_products = len(batch_input.produits)
+
+        # Si on a moins de produits que de replicas, on utilise seulement le nombre nécessaire
+        replicas_to_use = min(num_replicas, total_products)
+
+        # Calculer la taille de chaque sous-batch
+        batch_size = math.ceil(total_products / replicas_to_use)
+
+        logger.info(f"📦 Distribution de {total_products} produits sur {replicas_to_use} replicas ({batch_size} produits/replica)")
+
+        # Diviser les produits en sous-batches
+        sub_batches = []
+        for i in range(0, total_products, batch_size):
+            sub_batch = batch_input.produits[i:i + batch_size]
+            sub_batches.append(sub_batch)
+
+        # Créer les requêtes HTTP pour chaque sous-batch
+        async def send_sub_batch(sub_batch: List[ProductInput], batch_index: int):
+            """Envoie un sous-batch au service de classification"""
+            try:
+                # URL du service (le load balancer Docker DNS distribue automatiquement)
+                url = f"http://{service_name}:{service_port}/classification/classify/batch"
+
+                payload = {
+                    "produits": [p.dict() for p in sub_batch],
+                    "llm": llm_to_use,
+                    "enable_thinking": enable_thinking
+                }
+
+                async with httpx.AsyncClient(timeout=300.0) as client:  # Timeout de 5 minutes
+                    logger.info(f"  → Envoi du sous-batch {batch_index + 1}/{len(sub_batches)} ({len(sub_batch)} produits) à {url}")
+                    response = await client.post(url, json=payload)
+                    response.raise_for_status()
+                    result = response.json()
+                    logger.info(f"  ✅ Sous-batch {batch_index + 1} terminé : {result.get('success_count', 0)} succès, {result.get('error_count', 0)} erreurs")
+                    return result
+
+            except httpx.HTTPError as e:
+                logger.error(f"  ❌ Erreur HTTP pour sous-batch {batch_index + 1}: {e}")
+                # Retourner des résultats d'erreur pour tous les produits du sous-batch
+                error_results = []
+                for product in sub_batch:
+                    error_results.append({
+                        'id_produit': product.id_produit,
+                        'titre_produit': product.nom_produit,
+                        'description_produit': product.description,
+                        'status': 'ERROR',
+                        'id_categorie': None,
+                        'nom_categorie': None,
+                        'score_llm': None,
+                        'error': f'Erreur HTTP: {str(e)}',
+                        'llm_type': llm_to_use,
+                        'enable_thinking': enable_thinking,
+                        'llm_response': None,
+                        'processing_time': 0.0
+                    })
+                return {
+                    'total_produits': len(sub_batch),
+                    'success_count': 0,
+                    'error_count': len(sub_batch),
+                    'resultats': error_results,
+                    'llm_type': llm_to_use,
+                    'processing_time_total': 0.0
+                }
+            except Exception as e:
+                logger.error(f"  ❌ Erreur inattendue pour sous-batch {batch_index + 1}: {e}")
+                # Retourner des résultats d'erreur
+                error_results = []
+                for product in sub_batch:
+                    error_results.append({
+                        'id_produit': product.id_produit,
+                        'titre_produit': product.nom_produit,
+                        'description_produit': product.description,
+                        'status': 'ERROR',
+                        'id_categorie': None,
+                        'nom_categorie': None,
+                        'score_llm': None,
+                        'error': f'Erreur: {str(e)}',
+                        'llm_type': llm_to_use,
+                        'enable_thinking': enable_thinking,
+                        'llm_response': None,
+                        'processing_time': 0.0
+                    })
+                return {
+                    'total_produits': len(sub_batch),
+                    'success_count': 0,
+                    'error_count': len(sub_batch),
+                    'resultats': error_results,
+                    'llm_type': llm_to_use,
+                    'processing_time_total': 0.0
+                }
+
+        # Envoyer tous les sous-batches en parallèle
+        tasks = [send_sub_batch(sub_batch, i) for i, sub_batch in enumerate(sub_batches)]
+        results = await asyncio.gather(*tasks)
+
+        # Agréger tous les résultats
+        all_results = []
+        total_success = 0
+        total_errors = 0
+
+        for result in results:
+            all_results.extend(result['resultats'])
+            total_success += result['success_count']
+            total_errors += result['error_count']
+
+        processing_time = time.time() - start_time
+
+        logger.info(f"✅ Distribution terminée en {processing_time:.2f}s : {total_success} succès, {total_errors} erreurs")
+
+        # Conversion en modèle de réponse
+        classification_results = [ClassificationResult(**res) for res in all_results]
+
+        return BatchClassificationResponse(
+            total_produits=total_products,
+            success_count=total_success,
+            error_count=total_errors,
+            resultats=classification_results,
+            llm_type=llm_to_use,
+            processing_time_total=processing_time
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur classification batch distribuée: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
