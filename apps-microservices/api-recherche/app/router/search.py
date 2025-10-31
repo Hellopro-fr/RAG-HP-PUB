@@ -4,6 +4,7 @@ from app.schemas.search import SearchRequestWs as SearchRequest, SearchResponse,
 from app.core.recherche import search_in_milvus as search
 import logging
 import os
+from fastapi_cache.decorator import cache
 
 log_format = "%(asctime)s - %(levelname)s - [WORKER_PID:%(process)d] - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/search", tags=["Recherche - MILVUS"])
+@cache(expire=3600)
 async def milvus_search_endpoint(request: SearchRequest = Body(...)):
     try:
         logger.info(f"Requête reçue sur /search pour les sources: {request.source}")

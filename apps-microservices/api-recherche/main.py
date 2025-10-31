@@ -9,6 +9,9 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 import os
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.decorator import cache
 
 log_format = "%(asctime)s - %(levelname)s - [WORKER_PID:%(process)d] - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
@@ -42,12 +45,21 @@ async def log_requests(request: Request, call_next):
     return response
 
 @app.on_event("startup")
-def startup():
+async def startup():
     """
     Événement exécuté au démarrage de l'application.
     """
     logger.info("--- DÉMARRAGE DU SERVEUR ---")
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    try:
+        redis = RedisBackend(redis_url)
+        FastAPICache.init(redis, prefix="fastapi-cache")
+        logger.info("--- CACHE REDIS INITIALISÉ ---")
+    except Exception as e:
+        logger.error(f"--- ERREUR INITIALISATION CACHE REDIS: {e} ---")
+    
     logger.info("--- LE SERVEUR EST OPÉRATIONNEL ---")
+
 
 @app.on_event("shutdown")
 def shutdown_event():
@@ -57,5 +69,6 @@ app.include_router(search_router.router)
 app.include_router(search_ws_router.router)
 
 @app.get("/", tags=["Monitoring"])
+@cache(expire=60)
 def read_root():
     return {"message": f"Bienvenue sur l'API {settings.PROJECT_NAME} v{settings.PROJECT_VERSION}"}

@@ -10,3 +10,5 @@ grpcio-tools
 protobuf
 googleapis-common-protos
 gunicorn
+redis
+fastapi-cache2[redis]
