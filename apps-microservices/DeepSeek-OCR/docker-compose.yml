@@ -1,0 +1,28 @@
+services:
+  deepseek-ocr:
+    build: .
+    container_name: deepseek-ocr-vllm
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models  # Mount directory for model weights
+      - ./outputs:/app/outputs  # Mount directory for output files
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - MODEL_PATH=/app/models/deepseek-ai/DeepSeek-OCR  # Update with your model path
+      - MAX_CONCURRENCY=5  # Adjust based on your GPU memory
+      - GPU_MEMORY_UTILIZATION=0.85  # Adjust based on your GPU memory
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Give time for model to load
