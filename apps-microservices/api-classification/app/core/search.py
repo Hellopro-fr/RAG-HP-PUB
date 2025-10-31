@@ -4,11 +4,21 @@ import json
 import logging
 import asyncio
 from typing import Any, Optional, List, Dict
+import sys
+from pathlib import Path
+
+# Ajouter le chemin vers api-recherche pour importer ses modules
+api_recherche_path = Path(__file__).resolve().parent.parent.parent.parent / "api-recherche"
+if str(api_recherche_path) not in sys.path:
+    sys.path.insert(0, str(api_recherche_path))
+
+# Imports depuis api-recherche pour utilisation interne
+from app.core.recherche import search_in_milvus
+from app.schemas.search import SearchRequestWs, SourcesFiltre, RerankerOptions
 
 logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
-SEARCH_API_URL = "http://34.34.166.5:8510/search"
 EXTERNAL_PRODUCT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_produit.php"
 EXTERNAL_CATEGORY_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_categorie.php"
 
@@ -80,65 +90,37 @@ def get_category_details(category_ids: List[str], url: str) -> Optional[List[Dic
         logger.error("Erreur lors du décodage JSON dans get_category_details")
         return None
 
+# Fonction conservée pour compatibilité descendante mais utilise maintenant la version async
 def call_search_api(prompt: str, num_results: int, use_reranker: bool = True, reranker_model: str = "BAAI/bge-reranker-v2-m3") -> Optional[List[Dict[str, Any]]]:
     """
-    Appelle l'API de recherche centralisée avec le prompt donné.
+    Appelle l'API de recherche de manière synchrone (wrapper autour de la version async).
+    DEPRECATED: Utilisez call_search_api_async directement pour de meilleures performances.
     """
-    search_payload = {
-        'prompt': prompt,
-        'source': [
-            {
-                'source': 'produits_3',
-                'filtre': {}
-            }
-        ],
-        'action': 1,
-        'top_k': str(num_results),
-        'options': {
-            'use_reranker': use_reranker,
-            'reranker_model': reranker_model,
-            'rrf': False
-        }
-    }
-
-    search_headers = {'Content-Type': 'application/json'}
-
-    try:
-        logger.info(f"Envoi requête à l'API de recherche: {SEARCH_API_URL} avec prompt='{prompt}'")
-        response = requests.post(SEARCH_API_URL, headers=search_headers, data=json.dumps(search_payload), timeout=30)
-        response.raise_for_status()
-
-        results_data = response.json()
-        product_matches = results_data.get('results', {}).get('matches', {}).get('produits_3', [])
-        logger.info(f"Récupéré {len(product_matches)} correspondances de l'API de recherche")
-        return product_matches
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Erreur lors de l'appel à l'API de recherche: {e}")
-        return None
-    except json.JSONDecodeError:
-        logger.error("Erreur lors du décodage JSON de l'API de recherche")
-        return None
+    return asyncio.run(call_search_api_async(prompt, num_results, use_reranker, reranker_model))
 
 def test_search_api_connection() -> bool:
-    """Test de connexion à l'API de recherche"""
+    """Test de connexion à l'API de recherche interne"""
     try:
-        test_payload = {
-            'prompt': 'test',
-            'source': [{'source': 'produits_3', 'filtre': {}}],
-            'action': 1,
-            'top_k': '1',
-            'options': {'use_reranker': False, 'rrf': False}
-        }
-        response = requests.post(
-            SEARCH_API_URL,
-            headers={'Content-Type': 'application/json'},
-            data=json.dumps(test_payload),
-            timeout=30
-        )
-        return response.status_code == 200
+        # Test avec un appel direct à search_in_milvus
+        return asyncio.run(_test_search_internal())
     except Exception as e:
         logger.error(f"Erreur test connexion API recherche: {e}")
+        return False
+
+async def _test_search_internal() -> bool:
+    """Test interne asynchrone"""
+    try:
+        request = SearchRequestWs(
+            prompt="test",
+            source=[SourcesFiltre(source="produits_3", filtre={})],
+            action=1,
+            top_k=1,
+            options=RerankerOptions(use_reranker=False, rrf=False)
+        )
+        result = await search_in_milvus(request)
+        return result is not None
+    except Exception as e:
+        logger.error(f"Erreur test interne: {e}")
         return False
 
 
@@ -149,55 +131,35 @@ def test_search_api_connection() -> bool:
 async def call_search_api_async(prompt: str, num_results: int, use_reranker: bool = True, reranker_model: str = "BAAI/bge-reranker-v2-m3") -> Optional[List[Dict[str, Any]]]:
     """
     Version asynchrone de call_search_api pour parallélisation.
-    Utilise httpx pour des appels HTTP non-bloquants.
+    Utilise maintenant l'API de recherche en interne (search_in_milvus) au lieu d'un appel HTTP.
     """
-    search_payload = {
-        'prompt': prompt,
-        'source': [
-            {
-                'source': 'produits_3',
-                'filtre': {}
-            }
-        ],
-        'action': 1,
-        'top_k': str(num_results),
-        'options': {
-            'use_reranker': use_reranker,
-            'reranker_model': reranker_model,
-            'rrf': False
-        }
-    }
-
-    search_headers = {'Content-Type': 'application/json'}
-
     try:
-        logger.info(f"[ASYNC] Envoi requête à l'API de recherche: {SEARCH_API_URL} avec prompt='{prompt}'")
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(SEARCH_API_URL, headers=search_headers, json=search_payload)
-            response.raise_for_status()
+        logger.info(f"[INTERNAL] Recherche interne avec prompt='{prompt}', num_results={num_results}")
 
-            results_data = response.json()
-            product_matches = results_data.get('results', {}).get('matches', {}).get('produits_3', [])
-            logger.info(f"[ASYNC] Récupéré {len(product_matches)} correspondances de l'API de recherche")
-            return product_matches
+        # Créer la requête pour l'API de recherche interne
+        request = SearchRequestWs(
+            prompt=prompt,
+            source=[SourcesFiltre(source="produits_3", filtre={})],
+            action=1,
+            top_k=num_results,
+            options=RerankerOptions(
+                use_reranker=use_reranker,
+                reranker_model=reranker_model,
+                rrf=False
+            )
+        )
 
-    except httpx.TimeoutException as e:
-        logger.error(f"[ASYNC] Timeout lors de l'appel à l'API de recherche (30s): {str(e)}")
-        return None
-    except httpx.ConnectError as e:
-        logger.error(f"[ASYNC] Erreur de connexion à l'API de recherche ({SEARCH_API_URL}): {str(e)}")
-        return None
-    except httpx.HTTPStatusError as e:
-        logger.error(f"[ASYNC] Erreur HTTP {e.response.status_code} de l'API de recherche: {str(e)}")
-        return None
-    except httpx.HTTPError as e:
-        logger.error(f"[ASYNC] Erreur HTTP lors de l'appel à l'API de recherche: {str(e)}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"[ASYNC] Erreur lors du décodage JSON de l'API de recherche: {str(e)}")
-        return None
+        # Appel direct à la fonction de recherche
+        results_data = await search_in_milvus(request)
+
+        # Extraire les correspondances de produits
+        product_matches = results_data.get('matches', {}).get('produits_3', [])
+        logger.info(f"[INTERNAL] Récupéré {len(product_matches)} correspondances de la recherche interne")
+
+        return product_matches
+
     except Exception as e:
-        logger.error(f"[ASYNC] Erreur inattendue lors de l'appel à l'API de recherche: {type(e).__name__} - {str(e)}")
+        logger.error(f"[INTERNAL] Erreur lors de la recherche interne: {type(e).__name__} - {str(e)}")
         return None
 
 
