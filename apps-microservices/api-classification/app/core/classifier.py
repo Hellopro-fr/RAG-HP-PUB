@@ -49,7 +49,7 @@ class ProductClassifier:
             api_key = os.getenv('OPENAI_API_KEY')
             if api_key:
                 self.openai_client = openai.OpenAI(api_key=api_key)
-                logger.info("Client OpenAI configuré")
+                #logger.info("Client OpenAI configuré")
             else:
                 raise ValueError("OPENAI_API_KEY manquante")
 
@@ -61,7 +61,7 @@ class ProductClassifier:
                     base_url="https://api.deepseek.com",
                     timeout=60
                 )
-                logger.info("Client DeepSeek configuré")
+                #logger.info("Client DeepSeek configuré")
             else:
                 raise ValueError("DEEPSEEK_API_KEY manquante")
 
