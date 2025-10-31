@@ -327,9 +327,24 @@ class SearchOrchestrator:
                 reranked_results_by_source = {}
                 for source, matches in all_results.items():
                     docs_to_rerank = [match["metadata"]["entity"]["text"] for match in matches]
-                    ranked_texts = await reranking_client.rerank_documents(self.request.prompt, docs_to_rerank)
+                    ranked_texts = await reranking_client.rerank_documents_with_scores(self.request.prompt, docs_to_rerank)
                     result_map = {res["metadata"]["entity"]["text"]: res for res in matches}
-                    reranked_results_by_source[source] = [result_map[text] for text in ranked_texts if text in result_map][:top_k_final]
+                    # reranked_results_by_source[source] = [result_map[text['document']] for text in ranked_texts if text in result_map][:top_k_final]
+                    for item in ranked_texts:
+                        score = float(item.get("score", 0.0))
+                        document = item.get("document", "")
+                        if document not in result_map:
+                            continue
+                        
+                        result_map[document]["reranking"] = score
+                        
+                        if 'text' not in self.request.fields:
+                            result_map[document].pop('metadata', None)
+                            
+                        reranked_results_by_source[source].append(result_map[document])
+                    reranked_results_by_source[source] = reranked_results_by_source[source][:top_k_final]
+                        
+
                 all_results = reranked_results_by_source
                 rerank_duration = time.perf_counter() - start_rerank_time
             else:
