@@ -49,6 +49,8 @@ def startup():
     - Étape 2: Pré-charge tous les modèles en mémoire pour une latence minimale.
     """
     logger.info("--- DÉMARRAGE DU SERVEUR : PRÉPARATION DES MODÈLES ---")
+    from app.core.recherche import batching_manager
+    batching_manager.startup()
     logger.info("Pré-chargement du modèle de reranking ONNX...")
     logger.info("--- MODÈLES PRÊTS : LE SERVEUR EST OPÉRATIONNEL ---")
 

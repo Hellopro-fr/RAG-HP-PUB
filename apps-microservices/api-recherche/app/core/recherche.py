@@ -31,17 +31,23 @@ class BatchingManager:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(BatchingManager, cls).__new__(cls)
-            cls._instance.embedding_batch_processor = BatchProcessor(
-                cls._instance._get_embeddings_batch, 
+            cls._instance.embedding_batch_processor = None
+            cls._instance.reranking_batch_processor = None
+        return cls._instance
+
+    def startup(self):
+        if self.embedding_batch_processor is None:
+            self.embedding_batch_processor = BatchProcessor(
+                self._get_embeddings_batch, 
                 batch_size=settings.EMBEDDING_BATCH_SIZE, 
                 max_latency=settings.EMBEDDING_MAX_LATENCY
             )
-            cls._instance.reranking_batch_processor = BatchProcessor(
-                cls._instance._rerank_results_batch,
+        if self.reranking_batch_processor is None:
+            self.reranking_batch_processor = BatchProcessor(
+                self._rerank_results_batch,
                 batch_size=settings.RERANKING_BATCH_SIZE,
                 max_latency=settings.RERANKING_MAX_LATENCY
             )
-        return cls._instance
 
     async def _get_embeddings_batch(self, prompts: List[str]) -> List[Optional[list]]:
         try:
