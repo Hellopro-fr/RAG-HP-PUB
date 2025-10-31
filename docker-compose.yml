@@ -366,7 +366,7 @@ services:
     ports:
       - "8577:80"
     volumes:
-      - ./nginx-classification.conf:/etc/nginx/nginx.conf:ro
+      - /apps-microservices/api-classification/nginx-classification.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - api-classification-service
     networks:
