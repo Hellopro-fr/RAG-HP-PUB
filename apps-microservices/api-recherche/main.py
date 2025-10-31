@@ -45,22 +45,13 @@ async def log_requests(request: Request, call_next):
 def startup():
     """
     Événement exécuté au démarrage de l'application.
-    - Étape 1: Vérifie si le modèle ONNX existe. Si non, le convertit.
-    - Étape 2: Pré-charge tous les modèles en mémoire pour une latence minimale.
     """
-    logger.info("--- DÉMARRAGE DU SERVEUR : PRÉPARATION DES MODÈLES ---")
-    from app.core.recherche import batching_manager
-    batching_manager.startup()
-    logger.info("Pré-chargement du modèle de reranking ONNX...")
-    logger.info("--- MODÈLES PRÊTS : LE SERVEUR EST OPÉRATIONNEL ---")
+    logger.info("--- DÉMARRAGE DU SERVEUR ---")
+    logger.info("--- LE SERVEUR EST OPÉRATIONNEL ---")
 
 @app.on_event("shutdown")
 def shutdown_event():
-    logger.info("--- SHUTTING DOWN : STOPPING BATCH PROCESSORS ---")
-    from app.core.recherche import batching_manager
-    batching_manager.embedding_batch_processor.shutdown()
-    batching_manager.reranking_batch_processor.shutdown()
-    logger.info("--- BATCH PROCESSORS STOPPED ---")
+    logger.info("--- SHUTTING DOWN ---")
 
 app.include_router(search_router.router)
 app.include_router(search_ws_router.router)
