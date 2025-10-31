@@ -41,6 +41,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def startup():
+    """
+    Événement exécuté au démarrage de l'application.
+    - Étape 1: Vérifie si le modèle ONNX existe. Si non, le convertit.
+    - Étape 2: Pré-charge tous les modèles en mémoire pour une latence minimale.
+    """
+    from api_recherche_lib.core.recherche import batching_manager
+    batching_manager.startup()
+
+@app.on_event("shutdown")
+def shutdown_event():
+    from api_recherche_lib.core.recherche import batching_manager
+    batching_manager.embedding_batch_processor.shutdown()
+    batching_manager.reranking_batch_processor.shutdown()
+
 # Inclusion des routers
 app.include_router(
     classification_router,
