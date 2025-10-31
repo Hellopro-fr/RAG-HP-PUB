@@ -334,7 +334,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-classification/Dockerfile
-    container_name: api-classification-service
+    # container_name: api-classification-service
     restart: unless-stopped
     # TODO: à supprimer en PROD
     # IMPORTANT: Volume commenté car il écrase /app/libs/common-utils installé pendant le build
@@ -348,6 +348,8 @@ services:
       - llm-service
     env_file:
       - .env
+    deploy:
+      replicas: 4
     networks:
       - services-net
     logging:
