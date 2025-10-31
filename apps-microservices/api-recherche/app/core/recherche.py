@@ -316,6 +316,7 @@ class SearchOrchestrator:
                     vector=query_vector,
                     k=top_k_retrieval,
                     filter_expr=final_filter_expr,
+                    output_fields=self.request.fields if self.request.fields else None
                 )
                 all_results[source_name] = [MessageToDict(res) for res in source_results]
             
@@ -426,7 +427,7 @@ class SearchOrchestrator:
                 final_filter_expr_str = final_filter_expr
 
                 source_results = await database_client.classic_search_vector(
-                    collection=source_name, filter_expr=final_filter_expr, k=top_k_final
+                    collection=source_name, filter_expr=final_filter_expr, k=top_k_final, output_fields=self.request.fields if self.request.fields else None
                 )
                 all_results[source_name] = [MessageToDict(res) for res in source_results]
             
