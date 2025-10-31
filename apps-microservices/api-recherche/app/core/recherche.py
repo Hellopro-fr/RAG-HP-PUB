@@ -337,7 +337,7 @@ class SearchOrchestrator:
                         if document not in result_map:
                             continue
                         
-                        result_map[document]["reranking"] = score
+                        result_map[document]["reranking"] = round(score, 8)
                         
                         if 'text' not in self.request.fields and self.request.fields != []:
                             result_map[document].get('metadata', {}).get('entity', {}).pop('text', None)
@@ -576,7 +576,7 @@ class SearchOrchestrator:
             if item.get("document", "") not in result_map:
                 continue
             
-            result_map[item.get("document")]["reranking"] = score
+            result_map[item.get("document")]["reranking"] = round(score, 8)
             final_results.append(result_map[item.get("document")])
 
         rerank_duration = time.perf_counter() - start_rerank_time
