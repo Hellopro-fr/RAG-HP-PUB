@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: ./model-optimizer/Dockerfile
+    profiles: ["tools"] # Profile for one-off build/tooling tasks
     volumes:
       # Monte le répertoire local pour que les modèles ONNX y soient écrits
       - ./triton-model-repo:/output
@@ -17,16 +18,9 @@ services:
         max-file: "3"
   vllm-server:
     image: vllm/vllm-openai:latest
-    shm_size: 16g
-    # --enable-prefix-caching
-    # --enforce-eager
-    # --rope-scaling '{"rope_type":"yarn","factor":2.0,"original_max_position_embeddings":32768}'
-    # --max-num-seqs 64
-    # --gpu-memory-utilization 0.95
-    # --reasoning-parser qwen3
+    profiles: ["app"] # Profile for the main application stack
     command: >
       --model ${MODEL_NAME}
-      -O 3
       --tensor-parallel-size 2
       --trust-remote-code
       --gpu-memory-utilization 0.95
@@ -47,14 +41,9 @@ services:
       timeout: 5s
       retries: 24 # Wait up to 4 minutes for the model to load
       start_period: 30s
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              # device_ids: ['0']
-              count: all
-              capabilities: [gpu]
+    shm_size: '16g'
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     restart: unless-stopped
     volumes:
       - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
@@ -68,6 +57,7 @@ services:
 
   triton-server:
     image: nvcr.io/nvidia/tritonserver:24.01-py3 # Utilisez une image récente
+    profiles: ["app"] # Profile for the main application stack
     command: tritonserver --model-repository=/models --log-verbose=1
     ports:
       - "8001:8001" # Port gRPC de Triton
@@ -150,9 +140,9 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/llm-service/Dockerfile
-      # - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
+    profiles: ["app"] # Profile for the main application stack
     environment:
-      - VLLM_API_URL=http://34.34.5.41:8000/v1/chat/completions
+      - VLLM_API_URL=http://vllm-server:8000/v1/chat/completions
       - MODEL_NAME=${MODEL_NAME}
       - DEEPSEEK_MODEL_NAME=${DEEPSEEK_MODEL_NAME}
       - DEEPSEEK_API_URL=${DEEPSEEK_API_URL}
@@ -172,6 +162,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/embedding-model-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # Le GPU n'est plus nécessaire ici, Triton s'en charge !
       # - TRITON_URL=triton-server:8001
     environment:
@@ -191,6 +182,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/reranking-model-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # Le GPU n'est plus nécessaire ici
     environment:
       - TRITON_URL=triton-server:8001
@@ -209,6 +201,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/database-recherche-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     env_file:
       - .env
     networks:
@@ -223,6 +216,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-model-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     ports:
       - "8599:8599"
     environment:
@@ -248,11 +242,14 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-ingestion/Dockerfile
     container_name: api-ingestion-service
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     ports:
       - "8509:8509"
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     logging:
       driver: "json-file"
       options:
@@ -263,6 +260,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-recherche/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     ports:
       - "8510:8510"
@@ -290,6 +288,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-embedding-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     ports:
       - "8555:8555"
@@ -312,6 +311,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-chat-llm/Dockerfile
     container_name: api-chat-llm-service
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     ports:
       - "8540:8540"
@@ -334,7 +334,8 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-classification/Dockerfile
-    # container_name: api-classification-service
+    container_name: api-classification-service
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     # TODO: à supprimer en PROD
     # IMPORTANT: Volume commenté car il écrase /app/libs/common-utils installé pendant le build
@@ -363,6 +364,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-transcription-service/Dockerfile
     container_name: api-transcription-service
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     ports:
       - "8515:8515"
@@ -379,6 +381,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-html-recherche/Dockerfile
     container_name: api-html-recherche-service
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     # TODO: à supprimer en PROD
     volumes:
@@ -399,6 +402,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-gateway/Dockerfile
     container_name: api-gateway-service
+    profiles: ["app"] # Profile for the main application stack
     volumes:
       - ./apps-microservices/api-gateway:/app:rw
     restart: unless-stopped
@@ -416,10 +420,13 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/devis-processor-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: devis-processor-service
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -432,10 +439,13 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/echange-processor-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: echange-processor-service
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -448,10 +458,13 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/website-processor-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: website-processor-service
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 8
     logging:
@@ -464,10 +477,13 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/product-processor-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: product-processor-service
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -480,6 +496,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/categories-processor-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: categories-processor-service
     restart: unless-stopped
     env_file:
@@ -496,6 +513,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/fournisseurs-processor-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: fournisseurs-processor-service
     restart: unless-stopped
     env_file:
@@ -512,6 +530,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/ocr-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     ports:
       - "8559:8559"
@@ -533,10 +552,38 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+  deepseek-ocr:
+    build: .
+    container_name: deepseek-ocr-vllm
+    ports:
+      - "8501:8501"
+    volumes:
+      - /mnt/data/models:/app/models  # Mount directory for model weights
+      - ./apps-microservices/DeepSeek-OCR/outputs:/app/outputs  # Mount directory for output files
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - MODEL_PATH=/app/models/deepseek-ocr  # Update with your model path
+      - MAX_CONCURRENCY=50  # Adjust based on your GPU memory
+      - GPU_MEMORY_UTILIZATION=0.85  # Adjust based on your GPU memory
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
   document-echange-processor-service:
     build:
       context: .
       dockerfile: ./apps-microservices/document-echange-processor-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     volumes:
       - ./apps-microservices/document-echange-processor-service/app:/app/document_echange_processor_service:rw
@@ -548,7 +595,8 @@ services:
       - services-net
     depends_on:
       - ocr-service
-      # - llm-service
+    deploy:
+      replicas: 3
     logging:
       driver: "json-file"
       options:
@@ -559,6 +607,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/template-llm-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: template-llm-service
     restart: unless-stopped
     volumes:
@@ -569,6 +618,7 @@ services:
       replicas: 4
     environment:
       - LLM_SERVICE_URL=llm-service:50051
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       - llm-service
     networks:
@@ -584,6 +634,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/embedding-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: embedding-service
     restart: unless-stopped
     environment:
@@ -591,6 +642,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       - embedding-model-service
     env_file:
@@ -618,10 +670,13 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/di-database-qdrant-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: di-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -634,10 +689,13 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/echange-database-qdrant-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: echange-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -650,10 +708,13 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/website-database-qdrant-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: website-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -666,10 +727,13 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/product-database-qdrant-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: product-database-qdrant-service
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
     logging:
@@ -682,6 +746,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/categories-database-qdrant-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: categories-database-qdrant-service
     restart: unless-stopped
     env_file:
@@ -698,6 +763,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/fournisseurs-database-qdrant-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: fournisseurs-database-qdrant-service
     restart: unless-stopped
     env_file:
@@ -714,6 +780,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/document-database-qdrant-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
     # container_name: fournisseurs-database-qdrant-service
     restart: unless-stopped
     env_file:
@@ -731,6 +798,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/webhook-service/Dockerfile
     container_name: webhook-service
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     env_file:
       - .env
@@ -744,6 +812,7 @@ services:
         context: .
         dockerfile: ./apps-microservices/api-rest-milvus/Dockerfile
       container_name: api-rest-milvus
+      profiles: ["app"] # Profile for the main application stack
       restart: unless-stopped
       ports:
         - "8517:8517"
@@ -760,6 +829,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-check-doublon-produit/Dockerfile
     container_name: api-check-doublon-produit
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     ports:
       - "8516:8516"
@@ -776,6 +846,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/optimize-service/Dockerfile
     container_name: optimize-service
+    profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     # volumes:
     #   - ./apps-microservices/optimize-service:/app:rw
@@ -806,6 +877,7 @@ services:
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -828,6 +900,7 @@ services:
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -848,6 +921,7 @@ services:
       - .env
     environment:
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -863,6 +937,7 @@ services:
   prometheus:
     image: prom/prometheus
     container_name: prometheus
+    profiles: ["monitoring"] # Profile for monitoring stack
     ports:
       - "9090:9090"
     volumes:
@@ -879,6 +954,7 @@ services:
   grafana:
     image: grafana/grafana
     container_name: grafana
+    profiles: ["monitoring"] # Profile for monitoring stack
     ports:
       - "3000:3000"
     volumes:
@@ -899,6 +975,76 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  crawler-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/crawler-service/Dockerfile
+    profiles: ["crawling"]
+    # The 'ports' mapping has been removed to prevent conflicts.
+    # We now 'expose' the port, making it accessible to other services
+    # on the Docker network (like our reverse-proxy), but NOT to the host.
+    expose:
+      - "8503"
+    volumes:
+      # Mount a volume to persist crawl data outside the container
+      - crawler_data:/app/storage
+    env_file:
+      - .env
+    environment:
+      # Max concurrent crawls for each individual instance.
+      - MAX_CONCURRENT_CRAWLS=1
+      # Fallback value if the Redis config key is missing. Set to default replica count.
+      - DEFAULT_MAX_GLOBAL_CRAWLS=3
+      - REDIS_URL=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD} # Pass the password from .env file
+    depends_on:
+      - redis
+    deploy:
+      replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
+      resources:
+        limits:
+          cpus: '1.0' # Limit to 1 CPU core
+          memory: 4G   # Limit to 4GB of RAM
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./apps-microservices/crawler-service/redis.conf:/usr/local/etc/redis/redis.conf
+      - redis_data:/data
+    env_file:
+      - .env # Load the REDIS_PASSWORD from the .env file
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD} --appendonly yes --loglevel warning
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  reverse-proxy:
+    image: nginx:alpine
+    profiles: ["crawling"] # This was already correct
+    ports:
+      # The reverse proxy is the ONLY service that maps a port to the host.
+      # This is the single entry point for all external traffic.
+      - "8503:8503"
+    volumes:
+      # Mount our new nginx configuration file into the container.
+      - ./apps-microservices/crawler-service/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - crawler-service
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     
 networks:
   services-net:
@@ -908,3 +1054,5 @@ volumes:
   elasticsearch-data:
     driver: local
   grafana-storage:
+  crawler_data:
+  redis_data:

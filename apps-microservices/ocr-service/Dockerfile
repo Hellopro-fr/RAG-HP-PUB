@@ -36,9 +36,19 @@ RUN apt-get update && apt-get install -y poppler-utils && rm -rf /var/lib/apt/li
 RUN pip install --no-cache-dir -e .
 
 WORKDIR /app/
+
+RUN awk '/uvloop.run\(run_server\(args\)\)/ { \
+    print "    # --- Patch CUDA Graph ---"; \
+    print "    if hasattr(args, '\''enforce_eager'\''):"; \
+    print "        args.enforce_eager = False"; \
+}1' /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py \
+> /tmp/api_server.py \
+&& mv /tmp/api_server.py /app/.venv/lib/python3.11/site-packages/vllm/entrypoints/openai/api_server.py
+
+
 # Installer flash-attn AVANT ou vérifier la version de PyTorch
 RUN pip install --no-cache-dir ninja packaging && \
-    pip install --no-cache-dir flash-attn==2.5.9.post1 --no-build-isolation
+    pip install flash-attn==2.5.9.post1 flashinfer-python --no-build-isolation
 
 ENTRYPOINT ["/app/.venv/bin/python", "-m", "docext.app.app", "--no-share","--model_name", "hosted_vllm/nanonets/Nanonets-OCR-s", "--server_port", "8559","--concurrency_limit", "15","--vlm_server_port", "8181"]
 
