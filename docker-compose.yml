@@ -552,6 +552,7 @@ services:
         max-file: "3"
   deepseek-ocr:
     build: .
+    dockerfile: ./apps-microservices/DeepSeek-OCR/Dockerfile
     container_name: deepseek-ocr-vllm
     ports:
       - "8501:8501"
