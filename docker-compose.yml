@@ -345,12 +345,15 @@ services:
     #   - "8577:8577"  # Port commenté car replicas multiples - accessible via le réseau Docker interne
     environment:
       - LLM_SERVICE_URL=llm-service:50051
+      - CLASSIFICATION_SERVICE_NAME=api-classification-service
+      - CLASSIFICATION_SERVICE_PORT=8577
+      - CLASSIFICATION_NUM_REPLICAS=4
     depends_on:
       - llm-service
     env_file:
       - .env
     deploy:
-      replicas: 20
+      replicas: 4
     networks:
       - services-net
     logging:
