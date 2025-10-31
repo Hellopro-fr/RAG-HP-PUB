@@ -6,10 +6,10 @@ import asyncio
 from typing import Any, Optional, List, Dict
 
 # Imports depuis api-recherche (modules copiés dans le conteneur Docker via Dockerfile)
-# Le Dockerfile copie les modules dans /app/shared_modules/api_recherche et ajoute ce chemin au PYTHONPATH
-# Ces imports fonctionnent car le PYTHONPATH contient /app/shared_modules/api_recherche
-from app.core.recherche import search_in_milvus
-from app.schemas.search import SearchRequestWs, SourcesFiltre, RerankerOptions
+# Le Dockerfile copie les modules de l'API recherche dans /app/api_recherche_lib
+# Ces imports utilisent le namespace "api_recherche_lib" au lieu de "app" pour éviter les conflits
+from api_recherche_lib.core.recherche import search_in_milvus
+from api_recherche_lib.schemas.search import SearchRequestWs, SourcesFiltre, RerankerOptions
 
 logger = logging.getLogger(__name__)
 
