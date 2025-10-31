@@ -229,7 +229,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
-      - REDIS_URL=redis://:hRepass%40258@34.14.100.226:6380
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     # depends_on:
     #   - llm-service
     #   - embedding-model-service
