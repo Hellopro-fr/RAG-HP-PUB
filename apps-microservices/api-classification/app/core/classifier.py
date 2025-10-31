@@ -293,7 +293,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             chat_request = ChatRequest(
                 prompt=prompt,
                 temperature=0.0,
-                max_tokens=1024,
+                max_tokens=256,  # Optimisé: réduit de 1024 → 256 (la réponse JSON est petite)
                 enable_thinking=enable_thinking
             )
 
