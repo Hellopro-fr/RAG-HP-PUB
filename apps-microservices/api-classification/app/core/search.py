@@ -1,6 +1,8 @@
 import requests
+import httpx
 import json
 import logging
+import asyncio
 from typing import Any, Optional, List, Dict
 
 logger = logging.getLogger(__name__)
@@ -138,3 +140,87 @@ def test_search_api_connection() -> bool:
     except Exception as e:
         logger.error(f"Erreur test connexion API recherche: {e}")
         return False
+
+
+# ============================================================================
+# VERSIONS ASYNCHRONES (OPTIMISÉES) - Pour pipeline parallèle
+# ============================================================================
+
+async def call_search_api_async(prompt: str, num_results: int, use_reranker: bool = True, reranker_model: str = "BAAI/bge-reranker-v2-m3") -> Optional[List[Dict[str, Any]]]:
+    """
+    Version asynchrone de call_search_api pour parallélisation.
+    Utilise httpx pour des appels HTTP non-bloquants.
+    """
+    search_payload = {
+        'prompt': prompt,
+        'source': [
+            {
+                'source': 'produits_3',
+                'filtre': {}
+            }
+        ],
+        'action': 1,
+        'top_k': str(num_results),
+        'options': {
+            'use_reranker': use_reranker,
+            'reranker_model': reranker_model,
+            'rrf': False
+        }
+    }
+
+    search_headers = {'Content-Type': 'application/json'}
+
+    try:
+        logger.info(f"[ASYNC] Envoi requête à l'API de recherche: {SEARCH_API_URL} avec prompt='{prompt}'")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(SEARCH_API_URL, headers=search_headers, json=search_payload)
+            response.raise_for_status()
+
+            results_data = response.json()
+            product_matches = results_data.get('results', {}).get('matches', {}).get('produits_3', [])
+            logger.info(f"[ASYNC] Récupéré {len(product_matches)} correspondances de l'API de recherche")
+            return product_matches
+
+    except httpx.HTTPError as e:
+        logger.error(f"[ASYNC] Erreur lors de l'appel à l'API de recherche: {e}")
+        return None
+    except json.JSONDecodeError:
+        logger.error("[ASYNC] Erreur lors du décodage JSON de l'API de recherche")
+        return None
+
+
+async def get_category_details_async(category_ids: List[str], url: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    Version asynchrone de get_category_details pour parallélisation.
+    Utilise httpx pour des appels HTTP non-bloquants.
+    """
+    headers = {'Content-Type': 'application/json'}
+    payload = {'category_ids': category_ids}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+            if isinstance(data, list):
+                category_details = []
+                for item in data:
+                    if isinstance(item, dict):
+                        category_details.append({
+                            'id_categorie': str(item.get('id_categorie', '')),
+                            'nom_categorie': str(item.get('nom_categorie', '')),
+                            'description_categorie': str(item.get('description_categorie', ''))
+                        })
+                logger.info(f"[ASYNC] {len(category_details)} descriptions de catégories récupérées")
+                return category_details
+            else:
+                logger.error(f"[ASYNC] Format de réponse inattendu pour get_category_details: {data}")
+                return None
+
+    except httpx.HTTPError as e:
+        logger.error(f"[ASYNC] Erreur dans get_category_details: {e}")
+        return None
+    except json.JSONDecodeError:
+        logger.error("[ASYNC] Erreur lors du décodage JSON dans get_category_details")
+        return None
