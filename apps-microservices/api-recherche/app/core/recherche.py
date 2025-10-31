@@ -567,8 +567,17 @@ class SearchOrchestrator:
         if not docs_to_rerank:
             return initial_matches, 0
 
-        ranked_texts = await reranking_client.rerank_documents(self.request.prompt, docs_to_rerank)
-        final_results = [result_map[text] for text in ranked_texts if text in result_map]
+        ranked_texts = await reranking_client.rerank_documents_with_scores(self.request.prompt, docs_to_rerank)
+        # final_results = [result_map[text] for text in ranked_texts if text in result_map]
+        final_results = []
+        for item in ranked_texts:
+            score = float(item.get("score", 0.0))
+            if item.get("document", "") not in result_map:
+                continue
+            
+            result_map[item.get("document")]["reranking"] = score
+            final_results.append(result_map[item.get("document")])
+
         rerank_duration = time.perf_counter() - start_rerank_time
         
         return final_results, rerank_duration
