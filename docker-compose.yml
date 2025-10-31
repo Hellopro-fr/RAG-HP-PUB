@@ -341,8 +341,8 @@ services:
     # IMPORTANT: Volume commenté car il écrase /app/libs/common-utils installé pendant le build
     # volumes:
     #   - ./apps-microservices/api-classification:/app:rw
-    ports:
-      - "8577:8577"
+    # ports:
+    #   - "8577:8577"  # Port commenté car replicas multiples - accessible via le réseau Docker interne
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
