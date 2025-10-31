@@ -362,7 +362,7 @@ services:
   api-classification-lb:
     image: nginx:alpine
     container_name: api-classification-lb
-    profiles: ["classification"]
+    profiles: ["app"]
     ports:
       - "8577:80"
     volumes:
