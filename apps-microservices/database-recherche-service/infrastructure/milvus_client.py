@@ -1,3 +1,4 @@
+from dataclasses import field
 from functools import lru_cache
 import os
 import logging
@@ -85,6 +86,10 @@ class MilvusClient:
             if not output_fields:
                 all_fields = [field.name for field in collection.schema.fields]
                 output_fields = [f for f in all_fields if f != "embedding"]
+                
+            if 'text' not in output_fields:
+                output_fields.append('text')
+
 
             results = collection.query(
                 expr=expr,
@@ -114,8 +119,15 @@ class MilvusClient:
 
             collection = self._ensure_collection_loaded(collection_name)
 
-            all_fields = [field.name for field in collection.schema.fields]
-            fields_without_embedding = [f for f in all_fields if f != "embedding"]
+            fields_without_embedding = []
+            if kwargs.get("output_fields"):
+                fields_without_embedding = [f for f in kwargs.get("output_fields") if f != "embedding"]
+            else:
+                all_fields = [field.name for field in collection.schema.fields]
+                fields_without_embedding = [f for f in all_fields if f != "embedding"]
+                
+            if 'text' not in fields_without_embedding:
+                fields_without_embedding.append('text')
             
             # Définition des paramètres de recherche
             search_params = {"metric_type": "COSINE", "params": {"ef": self._ef_search(top_k)}}

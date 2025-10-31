@@ -1,12 +1,14 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
-from typing import List
+from typing import List, Dict
 import logging
 import time
 import asyncio
 import httpx
 import math
 import os
+from collections import defaultdict
+from datetime import datetime
 
 from app.schemas.classification import (
     ProductInput,
@@ -25,6 +27,25 @@ router = APIRouter()
 
 # Instance globale du classificateur
 classifier = ProductClassifier()
+
+# Métriques de distribution (stockage en mémoire)
+distribution_metrics = {
+    "total_requests": 0,
+    "total_products_processed": 0,
+    "total_success": 0,
+    "total_errors": 0,
+    "total_processing_time": 0.0,
+    "replica_stats": defaultdict(lambda: {
+        "requests": 0,
+        "products": 0,
+        "success": 0,
+        "errors": 0,
+        "total_time": 0.0,
+        "avg_time": 0.0,
+        "last_used": None
+    }),
+    "batch_history": []  # Garder les 100 dernières requêtes
+}
 
 @router.get("/status", response_model=ApiStatus)
 async def get_status():
@@ -368,8 +389,8 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
         if len(batch_input.produits) == 0:
             raise HTTPException(status_code=400, detail="Liste de produits vide")
 
-        if len(batch_input.produits) > 100:
-            raise HTTPException(status_code=400, detail="Trop de produits (max 100)")
+        if len(batch_input.produits) > 1000:
+            raise HTTPException(status_code=400, detail="Trop de produits (max 1000)")
 
         # Configuration de distribution
         # Récupérer le nom du service depuis une variable d'environnement ou utiliser le nom par défaut
@@ -385,7 +406,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
         # Calculer la taille de chaque sous-batch
         batch_size = math.ceil(total_products / replicas_to_use)
 
-        logger.info(f"📦 Distribution de {total_products} produits sur {replicas_to_use} replicas ({batch_size} produits/replica)")
+        # logger.info(f"📦 Distribution de {total_products} produits sur {replicas_to_use} replicas ({batch_size} produits/replica)")
 
         # Diviser les produits en sous-batches
         sub_batches = []
@@ -396,8 +417,12 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
         # Créer les requêtes HTTP pour chaque sous-batch
         async def send_sub_batch(sub_batch: List[ProductInput], batch_index: int):
             """Envoie un sous-batch au service de classification"""
+            sub_batch_start = time.time()
+            replica_used = None
+
             try:
-                # URL du service (le load balancer Docker DNS distribue automatiquement)
+                # Utilise le nom du service Docker - le DNS round-robin distribue automatiquement
+                # IMPORTANT: Chaque nouvelle connexion TCP = nouveau round-robin
                 url = f"http://{service_name}:{service_port}/classification/classify/batch"
 
                 payload = {
@@ -406,12 +431,30 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                     "enable_thinking": enable_thinking
                 }
 
-                async with httpx.AsyncClient(timeout=300.0) as client:  # Timeout de 5 minutes
-                    logger.info(f"  → Envoi du sous-batch {batch_index + 1}/{len(sub_batches)} ({len(sub_batch)} produits) à {url}")
+                # Créer un nouveau client pour chaque requête pour forcer une nouvelle résolution DNS
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    # logger.info(f"  → Envoi du sous-batch {batch_index + 1}/{len(sub_batches)} ({len(sub_batch)} produits) à {url}")
                     response = await client.post(url, json=payload)
                     response.raise_for_status()
                     result = response.json()
-                    logger.info(f"  ✅ Sous-batch {batch_index + 1} terminé : {result.get('success_count', 0)} succès, {result.get('error_count', 0)} erreurs")
+
+                    # Extraire l'identifiant du replica depuis les headers (si disponible) ou générer un ID
+                    replica_used = response.headers.get("X-Replica-ID", f"replica-{batch_index % num_replicas}")
+                    sub_batch_time = time.time() - sub_batch_start
+
+                    # Mettre à jour les métriques du replica
+                    distribution_metrics["replica_stats"][replica_used]["requests"] += 1
+                    distribution_metrics["replica_stats"][replica_used]["products"] += len(sub_batch)
+                    distribution_metrics["replica_stats"][replica_used]["success"] += result.get('success_count', 0)
+                    distribution_metrics["replica_stats"][replica_used]["errors"] += result.get('error_count', 0)
+                    distribution_metrics["replica_stats"][replica_used]["total_time"] += sub_batch_time
+                    distribution_metrics["replica_stats"][replica_used]["avg_time"] = (
+                        distribution_metrics["replica_stats"][replica_used]["total_time"] /
+                        distribution_metrics["replica_stats"][replica_used]["requests"]
+                    )
+                    distribution_metrics["replica_stats"][replica_used]["last_used"] = datetime.now().isoformat()
+
+                    # logger.info(f"  ✅ Sous-batch {batch_index + 1} terminé sur {replica_used} en {sub_batch_time:.2f}s : {result.get('success_count', 0)} succès, {result.get('error_count', 0)} erreurs")
                     return result
 
             except httpx.HTTPError as e:
@@ -470,6 +513,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                 }
 
         # Envoyer tous les sous-batches en parallèle
+        # Docker DNS round-robin distribue automatiquement sur les replicas disponibles
         tasks = [send_sub_batch(sub_batch, i) for i, sub_batch in enumerate(sub_batches)]
         results = await asyncio.gather(*tasks)
 
@@ -485,7 +529,28 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
 
         processing_time = time.time() - start_time
 
-        logger.info(f"✅ Distribution terminée en {processing_time:.2f}s : {total_success} succès, {total_errors} erreurs")
+        # Mettre à jour les métriques globales
+        distribution_metrics["total_requests"] += 1
+        distribution_metrics["total_products_processed"] += total_products
+        distribution_metrics["total_success"] += total_success
+        distribution_metrics["total_errors"] += total_errors
+        distribution_metrics["total_processing_time"] += processing_time
+
+        # Ajouter à l'historique (garder les 100 dernières)
+        batch_record = {
+            "timestamp": datetime.now().isoformat(),
+            "products": total_products,
+            "replicas_used": replicas_to_use,
+            "success": total_success,
+            "errors": total_errors,
+            "processing_time": round(processing_time, 2),
+            "products_per_second": round(total_products / processing_time, 2) if processing_time > 0 else 0
+        }
+        distribution_metrics["batch_history"].append(batch_record)
+        if len(distribution_metrics["batch_history"]) > 100:
+            distribution_metrics["batch_history"].pop(0)
+
+        logger.info(f"Batch distribué: {total_products} produits, {replicas_to_use} replicas, {processing_time:.2f}s, {total_products/processing_time:.2f} p/s")
 
         # Conversion en modèle de réponse
         classification_results = [ClassificationResult(**res) for res in all_results]
@@ -504,3 +569,83 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
     except Exception as e:
         logger.error(f"Erreur classification batch distribuée: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/metrics/distribution")
+async def get_distribution_metrics():
+    """
+    Récupère les métriques de distribution des batches sur les replicas.
+
+    Affiche:
+    - Statistiques globales (requêtes, produits, succès/erreurs, temps)
+    - Statistiques par replica (charge, performance, dernière utilisation)
+    - Historique des 100 dernières requêtes batch
+    """
+    # Convertir defaultdict en dict normal pour le JSON
+    replica_stats_dict = {
+        replica_id: stats
+        for replica_id, stats in distribution_metrics["replica_stats"].items()
+    }
+
+    # Calculer des statistiques agrégées
+    avg_processing_time = (
+        distribution_metrics["total_processing_time"] / distribution_metrics["total_requests"]
+        if distribution_metrics["total_requests"] > 0
+        else 0
+    )
+
+    avg_products_per_request = (
+        distribution_metrics["total_products_processed"] / distribution_metrics["total_requests"]
+        if distribution_metrics["total_requests"] > 0
+        else 0
+    )
+
+    success_rate = (
+        (distribution_metrics["total_success"] / distribution_metrics["total_products_processed"]) * 100
+        if distribution_metrics["total_products_processed"] > 0
+        else 0
+    )
+
+    return {
+        "global_stats": {
+            "total_requests": distribution_metrics["total_requests"],
+            "total_products_processed": distribution_metrics["total_products_processed"],
+            "total_success": distribution_metrics["total_success"],
+            "total_errors": distribution_metrics["total_errors"],
+            "total_processing_time": round(distribution_metrics["total_processing_time"], 2),
+            "avg_processing_time_per_request": round(avg_processing_time, 2),
+            "avg_products_per_request": round(avg_products_per_request, 2),
+            "success_rate_percent": round(success_rate, 2),
+            "total_throughput_products_per_sec": round(
+                distribution_metrics["total_products_processed"] / distribution_metrics["total_processing_time"]
+                if distribution_metrics["total_processing_time"] > 0
+                else 0,
+                2
+            )
+        },
+        "replica_stats": replica_stats_dict,
+        "recent_batches": distribution_metrics["batch_history"][-20:],  # 20 dernières
+        "total_batches_in_history": len(distribution_metrics["batch_history"])
+    }
+
+@router.post("/metrics/distribution/reset")
+async def reset_distribution_metrics():
+    """Réinitialise les métriques de distribution"""
+    global distribution_metrics
+    distribution_metrics = {
+        "total_requests": 0,
+        "total_products_processed": 0,
+        "total_success": 0,
+        "total_errors": 0,
+        "total_processing_time": 0.0,
+        "replica_stats": defaultdict(lambda: {
+            "requests": 0,
+            "products": 0,
+            "success": 0,
+            "errors": 0,
+            "total_time": 0.0,
+            "avg_time": 0.0,
+            "last_used": None
+        }),
+        "batch_history": []
+    }
+    return {"message": "Métriques réinitialisées", "timestamp": datetime.now().isoformat()}

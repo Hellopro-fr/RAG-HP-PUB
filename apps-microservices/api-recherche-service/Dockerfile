@@ -42,11 +42,11 @@ EXPOSE 8511
 #      "--error-logfile", "-", \
 #      "main:app"]
 
-CMD ["/bin/bash", "-c", "exec python -m gunicorn \
-     -w $((2 * $(nproc) + 1)) \
-     -k uvicorn.workers.UvicornWorker \
-     --bind 0.0.0.0:8511 \
-     --timeout 120 \
-     --access-logfile - \
-     --error-logfile - \
-     main:app"]
+CMD ["python","-m","gunicorn", \
+     "-w", "3", \
+     "-k", "uvicorn.workers.UvicornWorker", \
+     "--bind", "0.0.0.0:8511", \
+     "--timeout", "120", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "main:app"]

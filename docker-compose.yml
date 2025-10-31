@@ -11,7 +11,7 @@ services:
       - ./triton-model-repo:/output
     # Exécute les deux scripts l'un après l'autre. Le conteneur s'arrêtera après.
     command: /bin/bash -c "python export_embedding_to_onnx.py && python export_reranker_to_onnx.py"
-    logging:
+    logging: &logging_defaults
       driver: "json-file"
       options:
         max-size: "10m"
@@ -49,11 +49,7 @@ services:
       - /mnt/data/docker/images/huggingface_cache:/root/.cache/huggingface
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   triton-server:
     image: nvcr.io/nvidia/tritonserver:24.01-py3 # Utilisez une image récente
@@ -80,11 +76,7 @@ services:
       - ./triton-model-repo:/models
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
@@ -109,11 +101,7 @@ services:
       start_period: 30s
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   kibana:
     image: docker.elastic.co/kibana/kibana:9.1.1
@@ -128,11 +116,7 @@ services:
         condition: service_healthy
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   # --- Services Applicatifs (Clients) ---
 
@@ -152,11 +136,7 @@ services:
       - services-net
     env_file:
       - .env
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   embedding-model-service:
     build:
@@ -172,11 +152,7 @@ services:
     #     condition: service_healthy
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   reranking-model-service:
     build:
@@ -191,11 +167,7 @@ services:
         condition: service_healthy
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   database-recherche-service:
     build:
@@ -206,11 +178,7 @@ services:
       - .env
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   api-model-service:
     build:
@@ -231,11 +199,7 @@ services:
       - database-recherche-service
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   api-ingestion-service:
     build:
@@ -250,11 +214,7 @@ services:
       - .env
     environment:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   api-recherche-service:
     build:
@@ -278,11 +238,33 @@ services:
       - .env
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
+
+  # TODO:
+  # à supprimer lorsque déployement final
+  api-recherche-test-modification:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-recherche-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
+    restart: unless-stopped
+    ports:
+      - "8511:8511"
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - RERANKING_SERVICE_URL=reranking-model-service:50053
+      - DATABASE_SERVICE_URL=database-recherche-service:50054
+    # depends_on:
+    #   - llm-service
+    #   - embedding-model-service
+    #   - reranking-model-service
+    #   - database-recherche-service
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
 
   api-embedding-service:
     build:
@@ -300,11 +282,7 @@ services:
       - .env
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   api-chat-llm-service:
     build:
@@ -323,11 +301,7 @@ services:
       - .env
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
 
   api-classification-service:
@@ -347,20 +321,23 @@ services:
       - LLM_SERVICE_URL=llm-service:50051
       - CLASSIFICATION_SERVICE_NAME=api-classification-service
       - CLASSIFICATION_SERVICE_PORT=8577
-      - CLASSIFICATION_NUM_REPLICAS=4
+      - CLASSIFICATION_NUM_REPLICAS=10
+      # Variables nécessaires pour api_recherche_lib (recherche interne)
+      - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - RERANKING_SERVICE_URL=reranking-model-service:50053
+      - DATABASE_SERVICE_URL=database-recherche-service:50054
     depends_on:
       - llm-service
+      - embedding-model-service
+      - reranking-model-service
+      - database-recherche-service
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 10
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   api-classification-lb:
     image: nginx:alpine
@@ -375,11 +352,7 @@ services:
     networks:
       - services-net
     restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   api-transcription-service:
     build:
@@ -392,11 +365,7 @@ services:
       - "8515:8515"
     env_file:
       - .env
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
   
   api-html-recherche-service:
     build:
@@ -413,11 +382,7 @@ services:
       - "8550:8550"
     env_file:
       - .env
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   api-gateway-service:
     build:
@@ -434,11 +399,7 @@ services:
       - .env
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   devis-processor-service:
     build:
@@ -453,11 +414,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   echange-processor-service:
     build:
@@ -472,11 +429,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   website-processor-service:
     build:
@@ -491,11 +444,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 8
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   product-processor-service:
     build:
@@ -510,11 +459,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   categories-processor-service:
     build:
@@ -527,11 +472,7 @@ services:
       - .env
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   fournisseurs-processor-service:
     build:
@@ -544,11 +485,7 @@ services:
       - .env
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   ocr-service:
     build:
@@ -571,11 +508,7 @@ services:
             - driver: nvidia
               device_ids: ['0']
               capabilities: [gpu]
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
   deepseek-ocr:
     build: 
       context: .
@@ -623,11 +556,7 @@ services:
       - ocr-service
     deploy:
       replicas: 3
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   template-llm-service:
     build:
@@ -649,11 +578,7 @@ services:
       - llm-service
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
               
   embedding-service:
@@ -686,11 +611,7 @@ services:
       #         capabilities: [gpu]
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   di-database-qdrant-service:
     build:
@@ -705,11 +626,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   echange-database-qdrant-service:
     build:
@@ -724,11 +641,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   website-database-qdrant-service:
     build:
@@ -743,11 +656,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
   
   product-database-qdrant-service:
     build:
@@ -762,11 +671,7 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   categories-database-qdrant-service:
     build:
@@ -779,11 +684,7 @@ services:
       - .env
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   fournisseurs-database-qdrant-service:
     build:
@@ -796,11 +697,7 @@ services:
       - .env
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
   
   document-database-qdrant-service:
     build:
@@ -813,11 +710,7 @@ services:
       - .env
     deploy:
       replicas: 4
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   webhook-service:
     build:
@@ -828,27 +721,19 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
   api-rest-milvus-service:
-      build:
-        context: .
-        dockerfile: ./apps-microservices/api-rest-milvus/Dockerfile
-      container_name: api-rest-milvus
-      profiles: ["app"] # Profile for the main application stack
-      restart: unless-stopped
-      ports:
-        - "8517:8517"
-      env_file:
-        - .env
-      logging:
-        driver: "json-file"
-        options:
-          max-size: "10m"
-          max-file: "3"
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-rest-milvus/Dockerfile
+    container_name: api-rest-milvus
+    profiles: ["app"] # Profile for the main application stack
+    restart: unless-stopped
+    ports:
+      - "8517:8517"
+    env_file:
+      - .env
+    logging: *logging_defaults
 
   api-check-doublon-produit:
     build:
@@ -861,11 +746,7 @@ services:
       - "8516:8516"
     env_file:
       - .env
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   optimize-service:
     build:
@@ -886,11 +767,7 @@ services:
       - llm-service
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   dlq-archiver-host:
     build:
@@ -909,11 +786,7 @@ services:
         condition: service_healthy
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   dlq-archiver-client:
     build:
@@ -932,11 +805,7 @@ services:
         condition: service_healthy
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
   
   dlq-requeuer-tool:
     build:
@@ -954,11 +823,7 @@ services:
     networks:
       - services-net
     command: tail -f /dev/null
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   prometheus:
     image: prom/prometheus
@@ -971,11 +836,7 @@ services:
     command: --config.file=/etc/prometheus/prometheus.yml
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   grafana:
     image: grafana/grafana
@@ -996,11 +857,7 @@ services:
       - prometheus
     networks:
       - services-net
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   crawler-service:
     build:
@@ -1032,11 +889,7 @@ services:
         limits:
           cpus: '1.0' # Limit to 1 CPU core
           memory: 4G   # Limit to 4GB of RAM
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   redis:
     image: redis:latest
@@ -1048,11 +901,7 @@ services:
     env_file:
       - .env # Load the REDIS_PASSWORD from the .env file
     command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD} --appendonly yes --loglevel warning
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
 
   reverse-proxy:
     image: nginx:alpine
@@ -1066,11 +915,7 @@ services:
       - ./apps-microservices/crawler-service/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - crawler-service
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *logging_defaults
     
 networks:
   services-net:

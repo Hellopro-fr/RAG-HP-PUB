@@ -13,7 +13,8 @@ async def search_vector(
     collection: str, 
     vector: List[float], 
     k: int,
-    filter_expr: Optional[str] = None
+    filter_expr: Optional[str] = None,
+    **kwargs
 ):
     try:
         async with grpc.aio.insecure_channel(DATABASE_SERVICE_URL) as channel:
@@ -27,6 +28,8 @@ async def search_vector(
             )
             if filter_expr:
                 request.filter_expression = filter_expr
+            if kwargs.get("output_fields") and isinstance(kwargs.get("output_fields"), list):
+                request.output_fields.extend(kwargs.get("output_fields", []))
 
             response = await stub.Search(request)
             return response.results

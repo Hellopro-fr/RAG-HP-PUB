@@ -12,6 +12,8 @@ from .search import (
     call_search_api,
     get_product_details,
     get_category_details,
+    call_search_api_async,
+    get_category_details_async,
     EXTERNAL_PRODUCT_API_URL,
     EXTERNAL_CATEGORY_API_URL
 )
@@ -185,6 +187,73 @@ class ProductClassifier:
         
         return descriptions
 
+    async def search_similar_products_async(self, title: str, n_results: int = None) -> List[Dict]:
+        """
+        Version asynchrone de search_similar_products pour pipeline parallèle.
+        Utilise call_search_api_async pour des appels HTTP non-bloquants.
+        """
+        if n_results is None:
+            n_results = self.search_results_limit
+
+        try:
+            raw_results = await call_search_api_async(title, num_results=n_results, use_reranker=True)
+            if not raw_results:
+                return []
+
+            # Construire les résultats
+            results = []
+            for item in raw_results:
+                metadata = item.get('metadata', {}).get('entity', {})
+                prod_id = metadata.get('id_produit')
+                if not prod_id:
+                    continue
+
+                result = {
+                    'id_produit': prod_id,
+                    'nom_produit': metadata.get('nom_produit', 'N/A'),
+                    'categorie': metadata.get('categorie', 'N/A'),
+                    'id_categorie': metadata.get('id_categorie', 'N/A'),
+                    'score': item.get('rerank_score', item.get('score', 0.0))
+                }
+                results.append(result)
+
+            return sorted(results, key=lambda x: x['score'], reverse=True)
+
+        except Exception as e:
+            logger.error(f"[ASYNC] Erreur recherche similaires: {e}")
+            return []
+
+    async def get_category_descriptions_async(self, categories: List[Dict]) -> Dict[str, str]:
+        """
+        Version asynchrone de get_category_descriptions pour pipeline parallèle.
+        Utilise get_category_details_async pour des appels HTTP non-bloquants.
+        """
+        descriptions = {}
+
+        # Récupérer les IDs non mis en cache
+        ids_to_fetch = [c['id'] for c in categories if c['id'] not in self.category_cache]
+
+        if ids_to_fetch:
+            try:
+                details = await get_category_details_async(ids_to_fetch, EXTERNAL_CATEGORY_API_URL)
+                if details:
+                    for detail in details:
+                        cat_id = str(detail['id_categorie'])
+                        desc = detail['description_categorie']
+                        if len(desc) > 200:
+                            desc = desc[:200] + "..."
+                        self.category_cache[cat_id] = desc
+            except Exception as e:
+                logger.error(f"[ASYNC] Erreur descriptions catégories: {e}")
+                for cat_id in ids_to_fetch:
+                    self.category_cache[cat_id] = "Description non disponible"
+
+        # Retourner les descriptions
+        for cat in categories:
+            descriptions[cat['id']] = self.category_cache.get(cat['id'], "N/A")
+
+        return descriptions
+
     def build_prompt(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> str:
         """Construit le prompt pour le LLM"""
         formatted_categories = "\n".join([
@@ -293,7 +362,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             chat_request = ChatRequest(
                 prompt=prompt,
                 temperature=0.0,
-                max_tokens=1024,
+                max_tokens=256,  # Optimisé: réduit de 1024 → 256 (la réponse JSON est petite)
                 enable_thinking=enable_thinking
             )
 
@@ -422,8 +491,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 }
 
         try:
-            # Recherche de produits similaires
-            similar_products = self.search_similar_products(product['nom_produit'])
+            # ⚡ OPTIMISATION: Recherche asynchrone de produits similaires (pipeline parallèle)
+            similar_products = await self.search_similar_products_async(product['nom_produit'])
             if not similar_products:
                 return {
                     'id_produit': product['id_produit'],
@@ -439,8 +508,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'llm_response': None,
                     'processing_time': time.time() - start_time
                 }
-            
-            # Groupement par catégorie
+
+            # Groupement par catégorie (synchrone, rapide)
             categories = self.group_by_category(similar_products)
             if not categories:
                 return {
@@ -457,9 +526,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'llm_response': None,
                     'processing_time': time.time() - start_time
                 }
-            
-            # Récupération des descriptions de catégories
-            descriptions = self.get_category_descriptions(categories)
+
+            # ⚡ OPTIMISATION: Récupération asynchrone des descriptions (pipeline parallèle)
+            descriptions = await self.get_category_descriptions_async(categories)
 
             # Construction du prompt et appel LLM (asynchrone)
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
