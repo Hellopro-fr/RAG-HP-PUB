@@ -30,11 +30,11 @@ RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.pro
 RUN pip install -e /app/libs/grpc-stubs
 
 # Étape 3: Copier les modules de l'API recherche pour utilisation interne
-# Créer un répertoire pour les modules partagés api-recherche
-RUN mkdir -p /app/api_recherche_modules
-COPY apps-microservices/api-recherche/app /app/api_recherche_modules/app
+# Créer un répertoire avec un nom unique pour éviter les conflits de noms
+RUN mkdir -p /app/shared_modules/api_recherche
+COPY apps-microservices/api-recherche/app /app/shared_modules/api_recherche/app
 # Ajouter le chemin au PYTHONPATH pour permettre les imports
-ENV PYTHONPATH="${PYTHONPATH}:/app/api_recherche_modules"
+ENV PYTHONPATH="${PYTHONPATH}:/app/shared_modules/api_recherche"
 
 # Étape 4: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE

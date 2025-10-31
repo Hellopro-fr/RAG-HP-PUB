@@ -6,8 +6,8 @@ import asyncio
 from typing import Any, Optional, List, Dict
 
 # Imports depuis api-recherche (modules copiés dans le conteneur Docker via Dockerfile)
-# Le Dockerfile copie les modules dans /app/api_recherche_modules et ajoute ce chemin au PYTHONPATH
-# Ces imports fonctionnent car le PYTHONPATH contient /app/api_recherche_modules
+# Le Dockerfile copie les modules dans /app/shared_modules/api_recherche et ajoute ce chemin au PYTHONPATH
+# Ces imports fonctionnent car le PYTHONPATH contient /app/shared_modules/api_recherche
 from app.core.recherche import search_in_milvus
 from app.schemas.search import SearchRequestWs, SourcesFiltre, RerankerOptions
 
