@@ -316,7 +316,7 @@ class SearchOrchestrator:
                     vector=query_vector,
                     k=top_k_retrieval,
                     filter_expr=final_filter_expr,
-                    output_fields=self.request.fields if self.request.fields else None
+                    output_fields=self.request.fields if self.request.fields and self.request.action == 1 else None
                 )
                 all_results[source_name] = [MessageToDict(res) for res in source_results]
             
