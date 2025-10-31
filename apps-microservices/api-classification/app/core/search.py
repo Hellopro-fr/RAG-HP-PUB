@@ -109,7 +109,7 @@ async def _test_search_internal() -> bool:
             prompt="test",
             source=[SourcesFiltre(source="produits_3", filtre={})],
             action=1,
-            top_k=1,
+            top_k=30,
             options=RerankerOptions(use_reranker=False, rrf=False)
         )
         result = await search_in_milvus(request)
@@ -144,17 +144,29 @@ async def call_search_api_async(prompt: str, num_results: int, use_reranker: boo
             )
         )
 
+        logger.info(f"[INTERNAL] Requête créée: {request}")
+
         # Appel direct à la fonction de recherche
         results_data = await search_in_milvus(request)
+
+        logger.info(f"[INTERNAL] Résultat brut de search_in_milvus: {type(results_data)}")
+        logger.info(f"[INTERNAL] Clés du résultat: {results_data.keys() if results_data else 'None'}")
 
         # Extraire les correspondances de produits
         product_matches = results_data.get('matches', {}).get('produits_3', [])
         logger.info(f"[INTERNAL] Récupéré {len(product_matches)} correspondances de la recherche interne")
 
+        if product_matches:
+            logger.info(f"[INTERNAL] Premier résultat (exemple): {product_matches[0]}")
+        else:
+            logger.warning(f"[INTERNAL] Aucun résultat trouvé. Résultat complet: {results_data}")
+
         return product_matches
 
     except Exception as e:
         logger.error(f"[INTERNAL] Erreur lors de la recherche interne: {type(e).__name__} - {str(e)}")
+        import traceback
+        logger.error(f"[INTERNAL] Traceback: {traceback.format_exc()}")
         return None
 
 
