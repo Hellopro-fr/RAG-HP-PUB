@@ -4,15 +4,10 @@ import json
 import logging
 import asyncio
 from typing import Any, Optional, List, Dict
-import sys
-from pathlib import Path
 
-# Ajouter le chemin vers api-recherche pour importer ses modules
-api_recherche_path = Path(__file__).resolve().parent.parent.parent.parent / "api-recherche"
-if str(api_recherche_path) not in sys.path:
-    sys.path.insert(0, str(api_recherche_path))
-
-# Imports depuis api-recherche pour utilisation interne
+# Imports depuis api-recherche (modules copiés dans le conteneur Docker via Dockerfile)
+# Le Dockerfile copie les modules dans /app/api_recherche_modules et ajoute ce chemin au PYTHONPATH
+# Ces imports fonctionnent car le PYTHONPATH contient /app/api_recherche_modules
 from app.core.recherche import search_in_milvus
 from app.schemas.search import SearchRequestWs, SourcesFiltre, RerankerOptions
 

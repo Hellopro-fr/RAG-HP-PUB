@@ -29,14 +29,21 @@ RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.pro
 
 RUN pip install -e /app/libs/grpc-stubs
 
-# Étape 3: Copier le code source de manière propre
+# Étape 3: Copier les modules de l'API recherche pour utilisation interne
+# Créer un répertoire pour les modules partagés api-recherche
+RUN mkdir -p /app/api_recherche_modules
+COPY apps-microservices/api-recherche/app /app/api_recherche_modules/app
+# Ajouter le chemin au PYTHONPATH pour permettre les imports
+ENV PYTHONPATH="${PYTHONPATH}:/app/api_recherche_modules"
+
+# Étape 4: Copier le code source de manière propre
 # On copie le code de l'application dans son propre dossier NOMMÉ et UNIQUE
 COPY apps-microservices/api-classification/app ./app
 COPY apps-microservices/api-classification/main.py .
 
-# Étape 4: Exposer le port
+# Étape 5: Exposer le port
 EXPOSE 8577
 
-# Étape 5: Définir la commande de lancement directement
+# Étape 6: Définir la commande de lancement directement
 # On lance Uvicorn pour le service api-classification sur le port 8577
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8577"]
