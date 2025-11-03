@@ -1,4 +1,3 @@
-
 import aio_pika
 import os
 import json
@@ -6,6 +5,7 @@ import asyncio
 import hashlib
 import aiofiles
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
@@ -92,7 +92,7 @@ class Consumer:
             except Exception as e:
                 # ❌ En cas d'erreur, republier le message
                 print(f"❌ Erreur durant traitement: {e}")
-                await self._handle_processing_error(message.body, e, document_id)
+                await self._handle_processing_error(message.body, message.headers, e, document_id)
                 
         except Exception as e:
             print(f"❌ Erreur critique: {e}")
@@ -132,7 +132,7 @@ class Consumer:
         except FileNotFoundError:
             pass
 
-    async def _handle_processing_error(self, message_body: bytes, error: Exception, document_id: str):
+    async def _handle_processing_error(self, message_body: bytes, message_headers: dict, error: Exception, document_id: str):
         """Gère les erreurs après ACK"""
         try:
             data = json.loads(message_body)
@@ -153,7 +153,7 @@ class Consumer:
                 
                 print(f"🔄 Message republié (tentative {retry_count + 1}/{MAX_RETRIES})")
             else:
-                await self._send_to_dlq_manual(message_body, error, MAX_RETRIES)
+                await self._send_to_dlq(message_body, message_headers, error, MAX_RETRIES)
             
             # Nettoie l'état
             await self._mark_as_completed(document_id)
@@ -161,17 +161,22 @@ class Consumer:
         except Exception as e:
             print(f"⚠️ Erreur lors de la gestion d'erreur: {e}")
 
-    async def _send_to_dlq_manual(self, message_body: bytes, error: Exception, retry_count: int):
-        """Envoie à la DLQ manuellement (message déjà ACK)"""
+    async def _send_to_dlq(self, message_body: bytes, message_headers: dict, error: Exception, retry_count: int):
+        """Envoie à la DLQ en utilisant l'utilitaire partagé (après un ACK)."""
         async with self.connection.channel() as channel:
             dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-            # Créer un faux message pour DLQProperties
-            dlq_headers = {
-                'x-error': str(error),
-                'x-service': 'Document-processor-service',
-                'x-retry-count': retry_count,
-                'x-timestamp': asyncio.get_event_loop().time()
-            }
+            
+            # Create a mock message object that DLQProperties.create_dlq_headers can use.
+            # This is necessary because the original message was already ACK'd.
+            mock_message = SimpleNamespace(body=message_body, headers=message_headers)
+
+            dlq_headers = DLQProperties.create_dlq_headers(
+                error,
+                'document-echange-processor-service',
+                retry_count,
+                mock_message
+            )
+
             await dlx.publish(
                 aio_pika.Message(
                     body=message_body,
@@ -207,4 +212,3 @@ class Consumer:
         # 4. Commence à consommer les messages
         print("👂 Document-Processor: En attente de messages...")
         await queue.consume(lambda message: asyncio.create_task(safe_process(message)))
-

@@ -780,9 +780,9 @@ services:
     env_file:
       - .env
     environment:
-      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
-      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
+      # - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -799,9 +799,9 @@ services:
     env_file:
       - .env
     environment:
-      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
-      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
+      # - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -818,7 +818,7 @@ services:
       - .env
     environment:
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
-      - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
+      # - RABBITMQ_URL=${RABBITMQ_URL_TEMP} # Use temporary RabbitMQ URL the time JP treatment finishes
     depends_on:
       elasticsearch:
         condition: service_healthy
