@@ -28,8 +28,8 @@ def insertion_data(produits_data: dict) -> dict:
     bdd        = produits_data.get("database", "qdrant")
     origin     = produits_data.get("origin", "bo")
 
-    print(f"═══════════════════════════════════════════════════════════")
-    print(f"🔄 DÉBUT TRAITEMENT - Database: {bdd}, Collection: {collection}, Origin: {origin}")
+    # print(f"═══════════════════════════════════════════════════════════")
+    # print(f"🔄 DÉBUT TRAITEMENT - Database: {bdd}, Collection: {collection}, Origin: {origin}")
 
     try:
         collection_enum = CollectionName(collection)
@@ -52,7 +52,7 @@ def insertion_data(produits_data: dict) -> dict:
 
     if func and len(produits) > 0:
         id_produit = produits[0].get('id_produit', 'ID produit inconnu')
-        print(f"📦 Produit ID: {id_produit} | Nombre de chunks: {len(produits)}")
+        # print(f"📦 Produit ID: {id_produit} | Nombre de chunks: {len(produits)}")
 
         res = base_vectorielle.get_produit(id_produit=id_produit)
         correspondance_produit = MilvusProduitInserer()
@@ -63,23 +63,23 @@ def insertion_data(produits_data: dict) -> dict:
         message = res.get("message", "")
         data_bo_milvus = []
 
-        print(f"🔍 Vérification produit - Status: {status}, Code: {code}, Data count: {len(data)}")
+        # print(f"🔍 Vérification produit - Status: {status}, Code: {code}, Data count: {len(data)}")
 
         # CAS 1 : Produit n'existe pas (404)
         if status == "error":
             if code == 404:
-                print(f"✅ CAS 1 - PRODUIT INEXISTANT (404) → INSERTION")
+                # print(f"✅ CAS 1 - PRODUIT INEXISTANT (404) → INSERTION")
                 # Ajouter le champ source aux produits avant insertion
                 for produit in produits:
                     produit["source"] = origin.upper()
-                print(f"📝 Champ 'source' ajouté aux produits: {origin.upper()}")
+                # print(f"📝 Champ 'source' ajouté aux produits: {origin.upper()}")
                 result = func(produits)
                 if not result:  # None, {}, ou False
                     id_produit_milvus = ""
-                    print(f"⚠️  Insertion échouée, result est vide")
+                    # print(f"⚠️  Insertion échouée, result est vide")
                 else:
                     id_produit_milvus = result.get("ids", "")
-                    print(f"✅ Insertion réussie - ID Milvus: {id_produit_milvus}")
+                    # print(f"✅ Insertion réussie - ID Milvus: {id_produit_milvus}")
                 output_message = {
                     "database"      : bdd,
                     "collection"    : collection,
@@ -110,7 +110,7 @@ def insertion_data(produits_data: dict) -> dict:
 
         # CAS 2 : Produit existe déjà
         elif status == "success":
-            print(f"📋 CAS 2 - PRODUIT EXISTE DÉJÀ")
+            # print(f"📋 CAS 2 - PRODUIT EXISTE DÉJÀ")
             if len(data) > 0:
                 # Récupérer la source du produit existant en base
                 existing_sources = [item.get('source', '') for item in data]
@@ -119,22 +119,22 @@ def insertion_data(produits_data: dict) -> dict:
                 # Normaliser la source à insérer
                 source_to_insert = origin.upper()
 
-                print(f"🔎 Sources existantes: {existing_sources_set} | Source à insérer: {source_to_insert}")
+                # print(f"🔎 Sources existantes: {existing_sources_set} | Source à insérer: {source_to_insert}")
 
                 # SOUS-CAS A : Source DIFFÉRENTE - Insérer nouvelle source
                 if source_to_insert not in existing_sources_set:
-                    print(f"✅ SOUS-CAS 2A - SOURCE DIFFÉRENTE → INSERTION de nouvelle source {source_to_insert}")
+                    # print(f"✅ SOUS-CAS 2A - SOURCE DIFFÉRENTE → INSERTION de nouvelle source {source_to_insert}")
                     # Ajouter le champ source aux produits avant insertion
                     for produit in produits:
                         produit["source"] = source_to_insert
-                    print(f"📝 Champ 'source' ajouté aux produits: {source_to_insert}")
+                    # print(f"📝 Champ 'source' ajouté aux produits: {source_to_insert}")
                     result = func(produits)
                     if not result:
                         id_produit_milvus = ""
-                        print(f"⚠️  Insertion nouvelle source échouée")
+                        # print(f"⚠️  Insertion nouvelle source échouée")
                     else:
                         id_produit_milvus = result.get("ids", "")
-                        print(f"✅ Insertion nouvelle source réussie - ID Milvus: {id_produit_milvus}")
+                        # print(f"✅ Insertion nouvelle source réussie - ID Milvus: {id_produit_milvus}")
 
                     output_message = {
                         "database"      : bdd,
@@ -157,7 +157,7 @@ def insertion_data(produits_data: dict) -> dict:
 
                 # SOUS-CAS B : Source IDENTIQUE - Vérifier conditions de mise à jour (Milvus uniquement)
                 else:
-                    print(f"🔄 SOUS-CAS 2B - SOURCE IDENTIQUE ({source_to_insert})")
+                    # print(f"🔄 SOUS-CAS 2B - SOURCE IDENTIQUE ({source_to_insert})")
                     # Trouver le record exact avec la même source
                     existing_record = next(
                         (item for item in data if item.get('source', '').upper() == source_to_insert),
@@ -165,7 +165,7 @@ def insertion_data(produits_data: dict) -> dict:
                     )
 
                     if bdd.lower() == "milvus" and existing_record:
-                        print(f"🔍 Mode MILVUS - Vérification des conditions de mise à jour")
+                        # print(f"🔍 Mode MILVUS - Vérification des conditions de mise à jour")
                         # Définir les 5 champs critiques à comparer
                         critical_fields = ["nom_produit", "id_categorie", "prix_ht", "prix_ttc", "type_produit"]
 
@@ -186,39 +186,39 @@ def insertion_data(produits_data: dict) -> dict:
                         if len(fields_changed) > 0:
                             should_update = True
                             update_reason = f"field_change: {', '.join(fields_changed)}"
-                            print(f"🔄 CONDITION 1 ACTIVÉE - Champs critiques modifiés: {', '.join(fields_changed)} → UPDATE")
+                            #print(f"🔄 CONDITION 1 ACTIVÉE - Champs critiques modifiés: {', '.join(fields_changed)} → UPDATE")
 
                         # CONDITION 2 : Tous champs identiques, vérifier similarité du texte
                         else:
-                            print(f"✅ CONDITION 1 NON ACTIVÉE - Tous les champs critiques sont identiques")
+                            #print(f"✅ CONDITION 1 NON ACTIVÉE - Tous les champs critiques sont identiques")
                             old_text = existing_record.get("text", "")
                             new_text = produits[0].get("text", "")
 
                             # Calculer la similarité avec difflib
                             similarity_ratio = difflib.SequenceMatcher(None, old_text, new_text).ratio()
-                            print(f"📊 Calcul similarité textuelle: {similarity_ratio:.4f}")
+                            #print(f"📊 Calcul similarité textuelle: {similarity_ratio:.4f}")
 
                             if similarity_ratio < 0.85:
                                 should_update = True
                                 update_reason = f"text_similarity: {similarity_ratio:.2f}"
-                                print(f"🔄 CONDITION 2 ACTIVÉE - Similarité {similarity_ratio:.2f} < 0.85 → UPDATE")
+                                #print(f"🔄 CONDITION 2 ACTIVÉE - Similarité {similarity_ratio:.2f} < 0.85 → UPDATE")
                             else:
-                                print(f"⏭️  CONDITION 2 NON ACTIVÉE - Similarité {similarity_ratio:.2f} >= 0.85 → SKIP")
+                                #print(f"⏭️  CONDITION 2 NON ACTIVÉE - Similarité {similarity_ratio:.2f} >= 0.85 → SKIP")
 
                         # Exécuter la mise à jour si nécessaire
                         if should_update:
-                            print(f"✅ DÉCISION: UPDATE - Raison: {update_reason}")
+                            #print(f"✅ DÉCISION: UPDATE - Raison: {update_reason}")
                             # Ajouter le champ source aux produits avant update
                             for produit in produits:
                                 produit["source"] = source_to_insert
-                            print(f"📝 Champ 'source' ajouté aux produits: {source_to_insert}")
+                            #print(f"📝 Champ 'source' ajouté aux produits: {source_to_insert}")
                             result = base_vectorielle.update_produits(
                                 produits,
                                 id_produit,
                                 correspondance_produit,
                                 origin  # Passer l'origin pour la table de correspondance
                             )
-                            print(f"✅ Mise à jour effectuée avec succès")
+                            #print(f"✅ Mise à jour effectuée avec succès")
 
                             output_message = {
                                 "database"      : bdd,
@@ -232,7 +232,7 @@ def insertion_data(produits_data: dict) -> dict:
                             }
                         else:
                             # SKIP - données identiques
-                            print(f"⏭️  DÉCISION: SKIP - Produit ID {id_produit} inchangé (source {source_to_insert})")
+                            #print(f"⏭️  DÉCISION: SKIP - Produit ID {id_produit} inchangé (source {source_to_insert})")
                             result = data
                             output_message = {
                                 "database"      : bdd,
@@ -246,7 +246,7 @@ def insertion_data(produits_data: dict) -> dict:
 
                     # Qdrant : garder l'ancien comportement (skip)
                     else:
-                        print(f"⏭️  Mode QDRANT ou record non trouvé - SKIP (pas de logique de mise à jour)")
+                        #print(f"⏭️  Mode QDRANT ou record non trouvé - SKIP (pas de logique de mise à jour)")
                         result = data
                         output_message = {
                             "database"      : bdd,
@@ -259,18 +259,18 @@ def insertion_data(produits_data: dict) -> dict:
                         }
             else:
                 # Cas où data est vide mais status success (ne devrait pas arriver)
-                print(f"⚠️  CAS ANORMAL - Status success mais data vide → Tentative d'insertion")
+                #print(f"⚠️  CAS ANORMAL - Status success mais data vide → Tentative d'insertion")
                 # Ajouter le champ source aux produits avant insertion
                 for produit in produits:
                     produit["source"] = origin.upper()
-                print(f"📝 Champ 'source' ajouté aux produits: {origin.upper()}")
+                #print(f"📝 Champ 'source' ajouté aux produits: {origin.upper()}")
                 result = func(produits)
                 if not result:  # None, {}, ou False
                     id_produit_milvus = ""
-                    print(f"⚠️  Insertion échouée")
+                    #print(f"⚠️  Insertion échouée")
                 else:
                     id_produit_milvus = result.get("ids", "")
-                    print(f"✅ Insertion réussie - ID Milvus: {id_produit_milvus}")
+                    #print(f"✅ Insertion réussie - ID Milvus: {id_produit_milvus}")
                 data_bo_milvus.append({
                     "embedding"       : [0.0]*1024,
                     "id_produit"       : id_produit,
@@ -293,7 +293,7 @@ def insertion_data(produits_data: dict) -> dict:
     # Insérer la correspondance si nécessaire (uniquement pour les insertions, pas les updates)
     # On vérifie également que id_produit_milvus est non vide avant d'insérer
     if len(data_bo_milvus) > 0 and bdd == "milvus":
-        print(f"📝 Préparation insertion correspondance - {len(data_bo_milvus)} entrée(s) à traiter")
+        # print(f"📝 Préparation insertion correspondance - {len(data_bo_milvus)} entrée(s) à traiter")
         # Filtrer uniquement les entrées avec id_produit_milvus non vide
         data_bo_milvus_valid = [
             item for item in data_bo_milvus
@@ -301,12 +301,11 @@ def insertion_data(produits_data: dict) -> dict:
         ]
 
         if len(data_bo_milvus_valid) > 0:
-            print(f"✅ Insertion correspondance pour {len(data_bo_milvus_valid)} produit(s) avec ID valide")
+            # print(f"✅ Insertion correspondance pour {len(data_bo_milvus_valid)} produit(s) avec ID valide")
             res_correspondance = correspondance_produit.insert_correpondance_produit(data_bo_milvus_valid)
-            print(f"✅ Correspondance insérée avec succès")
-        else:
-            print(f"⚠️  Aucune correspondance à insérer : tous les id_produit_milvus sont vides")
+            # print(f"✅ Correspondance insérée avec succès")
+        
 
-    print(f"🏁 FIN TRAITEMENT - Produit ID: {id_produit}")
-    print(f"═══════════════════════════════════════════════════════════")
+    # print(f"🏁 FIN TRAITEMENT - Produit ID: {id_produit}")
+    # print(f"═══════════════════════════════════════════════════════════")
     return output_message
