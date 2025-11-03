@@ -1,15 +1,22 @@
 from fastapi import APIRouter, HTTPException, Body
 from app.schemas.search import SearchRequestWs as SearchRequest, SearchResponse, SearchReponse
-# from app.core.search import search_in_milvus
 from app.core.recherche import search_in_milvus as search
 import logging
 import os
+from common_utils.redis.cache_service import cache_or_execute
 
 log_format = "%(asctime)s - %(levelname)s - [WORKER_PID:%(process)d] - %(message)s"
 logging.basicConfig(level=logging.INFO, format=log_format)
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+async def _perform_milvus_search(request: SearchRequest):
+    """
+    Internal function to perform the actual Milvus search.
+    """
+    logger.info(f"Performing actual search for sources: {request.source}")
+    return await search(request)
 
 @router.post("/search", tags=["Recherche - MILVUS"])
 async def milvus_search_endpoint(request: SearchRequest = Body(...)):
@@ -20,7 +27,11 @@ async def milvus_search_endpoint(request: SearchRequest = Body(...)):
         if not request.source:
             raise ValueError("Au moins une source doit être spécifiée.")
         
-        results = await search(request)
+        results = await cache_or_execute(
+            _perform_milvus_search,
+            request,
+            expire_seconds=3600  # Cache for 1 hour
+        )
         return SearchReponse(results=results, post=request)
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
