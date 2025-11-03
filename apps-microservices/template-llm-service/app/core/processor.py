@@ -6,6 +6,37 @@ from vllm.transformers_utils.tokenizer import get_tokenizer
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
+# Liste des pages types autorisées
+page_types_siteweb = [
+    "home",
+    "listing_produit",
+    "fiche_produit",
+    "fiche_realisation",
+    "presentation_societe",
+    "contact",
+    "cgv_mentions_legales_cgu",
+    "article",
+    "savoir_faire",
+    "page_local",
+    "demande_devis",
+    "compte_client",
+    "recrutement",
+    "references_clients",
+    "faq",
+    "plan_du_site",
+    "politique_confidentialite",
+    "autre"
+]
+
+page_types_ocr = [
+    "devis",
+    "fiche_technique",
+    "catalogue",
+    "plaquette_prix",
+    "savoir-faire",
+    "autre"
+]
+
 # Le prompt est défini ici, avec la logique métier
 PROMPT_TEMPLATE_FR = """
 Tu es un classifieur de type de pages pour sites de fournisseurs de matériel professionnel.
@@ -132,6 +163,15 @@ async def _process_single_message(message: dict) -> dict:
             page_type = parsed_json.get("page_type")
             if not page_type:
                 raise ValueError(f"Le champ 'page_type' est manquant ou vide dans la réponse JSON: {raw_text}")
+            
+            page_type = page_type.strip().lower()
+            
+            if collection == "document":
+                if page_type not in page_types_ocr:
+                    raise ValueError(f"Type de page inconnu pour OCR: '{page_type}' dans la réponse JSON: {raw_text}")
+            else:
+                if page_type not in page_types_siteweb:
+                    raise ValueError(f"Type de page inconnu pour site web: '{page_type}' dans la réponse JSON: {raw_text}")
             
             original_message["data"]["page_type"] = page_type
             return {
