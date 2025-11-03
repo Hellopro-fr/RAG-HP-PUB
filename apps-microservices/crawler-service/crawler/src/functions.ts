@@ -149,11 +149,11 @@ export const startCrawler = async (
     paramPerCrawl: number,
     paramPerMinute: number,
     apifyProxyPassword?: string,
-    breakLimit?: number,
-    bypassQuestionMark?: number,
-    bypassDiez?: number,
-    skipquestionmark?: string,
-    skipdiez?: string
+    breakLimit?: boolean,
+    bypassQuestionMark?: boolean,
+    bypassDiez?: boolean,
+    skipquestionmark?: boolean,
+    skipdiez?: boolean
 ) => {
     const requestQueue = await RequestQueue.open(domain);
 
@@ -296,7 +296,7 @@ export const startCrawler = async (
                     );
                 }
 
-                if (breakLimit !== 1) {
+                if (!breakLimit) {
                     const data = await getScrapingData(domain);
                     const count = data.total;
                     const limitUrls = 5000;
@@ -316,8 +316,8 @@ export const startCrawler = async (
                 const limitQuestionMarkDiez = 50;
 
                 if (
-                    (bypassQuestionMark !== 1 && !skipquestionmark) ||
-                    (bypassDiez !== 1 && !skipdiez)
+                    (!bypassQuestionMark && !skipquestionmark) ||
+                    (!bypassDiez && !skipdiez)
                 ) {
                     const data = await getScrapingData(domain);
                     const patternQuestionMark = new RegExp(
@@ -339,7 +339,7 @@ export const startCrawler = async (
                         }
 
                         if (
-                            bypassQuestionMark !== 1 &&
+                            !bypassQuestionMark &&
                             !skipquestionmark &&
                             countQuestionMark >= limitQuestionMarkDiez
                         ) {
@@ -351,7 +351,7 @@ export const startCrawler = async (
                         }
 
                         if (
-                            bypassDiez !== 1 &&
+                            !bypassDiez &&
                             !skipdiez &&
                             countDiez >= limitQuestionMarkDiez
                         ) {

@@ -38,12 +38,12 @@ const callbackUrl = args.callbackUrl;
 const typeCrawling = args.typecrawling;
 const method = args.method; // Variable for post-processing logic
 const apifyProxyPassword = args.proxyapify;
-const breakLimit = Number(args.breaklimit) ?? 0;
-const dropData = args.dropdata === 'true';
-export const skipquestionmark = args.skipquestionmark === 'true';
-export const skipdiez = args.skipdiez === 'true';
-const bypassQuestionMark = Number(args.bypassquestionmark) ?? 0;
-const bypassDiez = Number(args.bypassdiez) ?? 0;
+const breakLimit = args.breaklimit === 'True';
+const dropData = args.dropdata === 'True';
+export const skipquestionmark = args.skipquestionmark === 'True';
+export const skipdiez = args.skipdiez === 'True';
+const bypassQuestionMark = args.bypassquestionmark === 'True';
+const bypassDiez = args.bypassdiez === 'True';
 
 let paramPerCrawl = Number(args.percrawl) ?? 500;
 let paramPerMinute = Number(args.perminute) ?? 100;
@@ -146,8 +146,8 @@ if (typeCrawling === "generate_data") {
         breakLimit,
         bypassQuestionMark,
         bypassDiez,
-        String(skipquestionmark), // Ensure it's passed as string
-        String(skipdiez)
+        skipquestionmark, // Ensure it's passed as string
+        skipdiez
     );
 }
 
@@ -182,8 +182,8 @@ if (isFinished === 0) {
 
     // Checking if the case is the question mark/diez limit
     if (
-        (bypassQuestionMark !== 1 && !skipquestionmark) ||
-        (bypassDiez !== 1 && !skipdiez)
+        (!bypassQuestionMark && !skipquestionmark) ||
+        (!bypassDiez && !skipdiez)
     ) {
         // Need to be in sync with the limit in functions.ts/startCrawler() → limitQuestionMarkDiez
         const limitQuestionMarkDiez = 50;
@@ -206,7 +206,7 @@ if (isFinished === 0) {
             }
 
             if (
-                bypassQuestionMark !== 1 &&
+                !bypassQuestionMark &&
                 !skipquestionmark &&
                 countQuestionMark >= limitQuestionMarkDiez
             ) {
@@ -215,7 +215,7 @@ if (isFinished === 0) {
             }
 
             if (
-                bypassDiez !== 1 &&
+                !bypassDiez &&
                 !skipdiez &&
                 countDiez >= limitQuestionMarkDiez
             ) {

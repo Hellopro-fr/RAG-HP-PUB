@@ -312,8 +312,8 @@ router.addDefaultHandler(
                             }
                             request.url = processUrl(
                                 request.url,
-                                Boolean(skipquestionmark),
-                                Boolean(skipdiez),
+                                skipquestionmark,
+                                skipdiez,
                                 parameters
                             );
                         }

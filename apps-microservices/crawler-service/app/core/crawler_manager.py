@@ -448,21 +448,64 @@ class CrawlerManager:
         logger.info(f"Re-indexing complete: {summary}")
         return ReindexResponse(**summary)
 
+    async def _cleanup_running_job(self, crawl_id: str, process: asyncio.subprocess.Process):
+        """Helper function to handle the cleanup of a single running job during shutdown."""
+        logger.info(f"Cleaning up job '{crawl_id}' due to service shutdown.")
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+
+        try:
+            # 1. Terminate the subprocess
+            process.terminate()
+            
+            # 2. Update state in Redis
+            job_info = await redis_service.get_data(job_key)
+            if job_info and job_info.get("status") == "running":
+                job_info["status"] = "failed"
+                job_info["shutdown_reason"] = "Service instance terminated"
+                if "last_heartbeat" in job_info:
+                    del job_info["last_heartbeat"]
+                
+                await redis_service.set_data(job_key, job_info)
+                logger.info(f"Marked job '{crawl_id}' as 'failed' in Redis.")
+
+                # 3. Decrement the global running counter
+                if redis_service._client:
+                    await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
+                logger.info(f"Decremented global running counter for job '{crawl_id}'.")
+
+                # 4. Send failure webhook
+                if job_info.get("failure_callback_url"):
+                    logger.info(f"Sending failure webhook for job '{crawl_id}'.")
+                    # Use a special exit code like -1 for shutdown
+                    await self._send_failure_webhook(
+                        str(job_info["failure_callback_url"]),
+                        crawl_id,
+                        job_info["domain"],
+                        -1  
+                    )
+            else:
+                 logger.warning(f"Could not find job '{crawl_id}' in Redis during shutdown or it was not in 'running' state.")
+
+        except Exception as e:
+            logger.error(f"Error during graceful shutdown for job '{crawl_id}': {e}", exc_info=True)
+
     async def shutdown(self):
-        """Gracefully stop all locally running crawlers."""
-        if not self.local_processes: return
+        """Gracefully shut down all locally running crawlers on this replica."""
+        if not self.local_processes:
+            return
+
+        logger.info(f"Graceful shutdown initiated. Terminating {len(self.local_processes)} active local crawl(s) on this replica.")
         
-        logger.info(f"Terminating {len(self.local_processes)} active local crawls on this replica.")
-        for crawl_id, process in list(self.local_processes.items()):
-            if process.returncode is None:
-                try: 
-                    process.terminate()
-                    if redis_service._client:
-                        await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
-                    logger.info(f"Terminated process for '{crawl_id}' and decremented global counter.")
-                except Exception as e: 
-                    logger.error(f"Error terminating process for '{crawl_id}': {e}")
-        
+        shutdown_tasks = [
+            self._cleanup_running_job(crawl_id, process)
+            for crawl_id, process in self.local_processes.items()
+            if process.returncode is None
+        ]
+
+        if shutdown_tasks:
+            await asyncio.gather(*shutdown_tasks)
+
         self.local_processes.clear()
+        logger.info("Graceful shutdown complete for this replica.")
 
 crawler_manager = CrawlerManager()
