@@ -106,8 +106,8 @@ Contenu en entrée (Markdown) :
 {content}
 """
 
-TOKENIZER = get_tokenizer("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
-MAX_MODEL_LEN = 32768 # Correspond à la limite théorique du modèle Qwen3 avec rope-scaling
+TOKENIZER = get_tokenizer("deepseek-ai/DeepSeek-R1", trust_remote_code=True)
+MAX_MODEL_LEN = 128000 # Correspond à la limite théorique du modèle DeepSeek-R1
 # On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
 SAFE_MAX_LEN = MAX_MODEL_LEN - 512
 
