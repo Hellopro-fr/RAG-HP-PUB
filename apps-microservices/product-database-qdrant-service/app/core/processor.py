@@ -203,6 +203,7 @@ def insertion_data(produits_data: dict) -> dict:
                                 update_reason = f"text_similarity: {similarity_ratio:.2f}"
                                 #print(f"🔄 CONDITION 2 ACTIVÉE - Similarité {similarity_ratio:.2f} < 0.85 → UPDATE")
                             else:
+                                pass
                                 #print(f"⏭️  CONDITION 2 NON ACTIVÉE - Similarité {similarity_ratio:.2f} >= 0.85 → SKIP")
 
                         # Exécuter la mise à jour si nécessaire
