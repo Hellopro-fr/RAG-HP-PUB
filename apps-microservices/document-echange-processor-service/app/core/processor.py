@@ -216,7 +216,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         
         # Étape 4: Afficher le message de sortie pour débogage
         # print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
-        print(f"🔍Document-Echange-Processor: Message prêt")
+        print(f"🔍Document-Echange-Processor: Message prêt : {output_message} ")
         
         return output_message
     
