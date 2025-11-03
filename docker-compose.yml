@@ -556,13 +556,13 @@ services:
       dockerfile: ./apps-microservices/template-llm-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
     # container_name: template-llm-service
-    restart: unless-stopped
+    restart: "no"
     volumes:
       - ./apps-microservices/template-llm-service/app:/app/template_llm_service:rw
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 1
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:

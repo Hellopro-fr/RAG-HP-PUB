@@ -26,30 +26,26 @@ async def main():
 
     loop = asyncio.get_event_loop()
     
-    while True:
-        try:
-            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
-            print("✅ template-llm-service: Connecté à RabbitMQ.")
+    try:
+        connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
+        print("✅ template-llm-service: Connecté à RabbitMQ.")
+        
+        async with connection:
+            publisher = Publisher(connection)
+            consumer = Consumer(connection, publisher, loop=loop)
             
-            async with connection:
-                publisher = Publisher(connection)
-                consumer = Consumer(connection, publisher)
-                
-                # Lancer le consumer, qui va démarrer ses propres tâches de fond
-                await consumer.start_consuming()
-                
-                # Garder le service en vie pour que les tâches de fond continuent de tourner
-                await asyncio.Future()
+            # Lancer le consumer, qui va démarrer ses propres tâches de fond
+            await consumer.start_consuming()
+            
+            # Garder le service en vie pour que les tâches de fond continuent de tourner
+            await asyncio.Future()
 
-        except (aiormq.exceptions.AMQPConnectionError, aiormq.exceptions.ChannelInvalidStateError) as e:
-            print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
-            await asyncio.sleep(10)
-        except KeyboardInterrupt:
-            print("\n🛑 template-llm-service: Arrêt demandé.")
-            break
-        except Exception as e:
-            print(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
-            await asyncio.sleep(10)
+    except (aiormq.exceptions.AMQPConnectionError, aiormq.exceptions.ChannelInvalidStateError) as e:
+        print(f"🔴 Erreur de connexion RabbitMQ: {e}. Le service va s'arrêter.")
+    except KeyboardInterrupt:
+        print("\n🛑 template-llm-service: Arrêt demandé.")
+    except Exception as e:
+        print(f"❌ Erreur inattendue dans main: {e}. Le service va s'arrêter.")
     
     print("✅ template-llm-service: Service arrêté.")
 

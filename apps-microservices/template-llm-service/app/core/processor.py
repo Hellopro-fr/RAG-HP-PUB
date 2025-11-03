@@ -155,6 +155,9 @@ async def _process_single_message(message: dict) -> dict:
         )
         raw_text = await llm_client.get_llm_chat_response(chat_request)
         
+        # Print LLM raw response for debugging
+        print(f"   -> Réponse brute du LLM pour l'URL {url} : {raw_text}")
+        
         # Parsing de la réponse
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if match:
