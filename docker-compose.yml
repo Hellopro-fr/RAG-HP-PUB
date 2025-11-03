@@ -612,7 +612,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
     deploy:
       replicas: 4
     logging: *logging_defaults
