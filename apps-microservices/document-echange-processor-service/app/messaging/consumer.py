@@ -7,6 +7,8 @@ import aiofiles
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
+import traceback
+
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
 from common_utils.autres.DLQProperties import DLQProperties
@@ -101,7 +103,7 @@ class Consumer:
             except Exception as e:
                 # ❌ En cas d'erreur, republier le message
                 print(f"❌ Erreur durant traitement: {e}")
-                print(f"Message body : {message.body}")
+                traceback.print_exc()
                 await self._handle_processing_error(message.body, message.headers, e, document_id)
                 
         except Exception as e:
