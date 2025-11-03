@@ -69,6 +69,10 @@ def insertion_data(produits_data: dict) -> dict:
         if status == "error":
             if code == 404:
                 print(f"✅ CAS 1 - PRODUIT INEXISTANT (404) → INSERTION")
+                # Ajouter le champ source aux produits avant insertion
+                for produit in produits:
+                    produit["source"] = origin.upper()
+                print(f"📝 Champ 'source' ajouté aux produits: {origin.upper()}")
                 result = func(produits)
                 if not result:  # None, {}, ou False
                     id_produit_milvus = ""
@@ -120,6 +124,10 @@ def insertion_data(produits_data: dict) -> dict:
                 # SOUS-CAS A : Source DIFFÉRENTE - Insérer nouvelle source
                 if source_to_insert not in existing_sources_set:
                     print(f"✅ SOUS-CAS 2A - SOURCE DIFFÉRENTE → INSERTION de nouvelle source {source_to_insert}")
+                    # Ajouter le champ source aux produits avant insertion
+                    for produit in produits:
+                        produit["source"] = source_to_insert
+                    print(f"📝 Champ 'source' ajouté aux produits: {source_to_insert}")
                     result = func(produits)
                     if not result:
                         id_produit_milvus = ""
@@ -200,10 +208,15 @@ def insertion_data(produits_data: dict) -> dict:
                         # Exécuter la mise à jour si nécessaire
                         if should_update:
                             print(f"✅ DÉCISION: UPDATE - Raison: {update_reason}")
+                            # Ajouter le champ source aux produits avant update
+                            for produit in produits:
+                                produit["source"] = source_to_insert
+                            print(f"📝 Champ 'source' ajouté aux produits: {source_to_insert}")
                             result = base_vectorielle.update_produits(
                                 produits,
                                 id_produit,
-                                correspondance_produit
+                                correspondance_produit,
+                                origin  # Passer l'origin pour la table de correspondance
                             )
                             print(f"✅ Mise à jour effectuée avec succès")
 
@@ -247,6 +260,10 @@ def insertion_data(produits_data: dict) -> dict:
             else:
                 # Cas où data est vide mais status success (ne devrait pas arriver)
                 print(f"⚠️  CAS ANORMAL - Status success mais data vide → Tentative d'insertion")
+                # Ajouter le champ source aux produits avant insertion
+                for produit in produits:
+                    produit["source"] = origin.upper()
+                print(f"📝 Champ 'source' ajouté aux produits: {origin.upper()}")
                 result = func(produits)
                 if not result:  # None, {}, ou False
                     id_produit_milvus = ""

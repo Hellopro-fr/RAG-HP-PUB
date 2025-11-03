@@ -173,7 +173,7 @@ class MilvusProduitsCrud:
             self.logger.error(f"[{model_key}][Produits] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {datas}")
     
-    def update_produits(self, produits: List[Dict[str, Any]], id_produit: str, correspondance_produit) -> Dict[str, Any]:
+    def update_produits(self, produits: List[Dict[str, Any]], id_produit: str, correspondance_produit, origin: str = "bo") -> Dict[str, Any]:
         """
         Met à jour les produits pour un id_produit donné
         Logique: DELETE ancien + INSERT nouveau + MAJ correspondance
@@ -182,6 +182,7 @@ class MilvusProduitsCrud:
             produits: Liste des nouveaux produits à insérer
             id_produit: L'identifiant du produit à mettre à jour
             correspondance_produit: Instance de MilvusProduitInserer pour gérer la correspondance
+            origin: Source du produit (bo, siteweb, api, etc.)
 
         Returns:
             Dict avec status, data et flags (already_in_bdd, updated)
@@ -258,13 +259,12 @@ class MilvusProduitsCrud:
             insert_result = self.insert_produits(produits)
 
             if insert_result and insert_result.get("status") == "success":
-                # 7. Réinsérer dans la table de correspondance
-                origin = produits[0].get("origin", "bo") if len(produits) > 0 else "bo"
+                # 7. Réinsérer dans la table de correspondance avec l'origin passé en paramètre
                 data_bo_milvus = [{
                     "embedding": [0.0]*1024,
                     "id_produit_milvus": insert_result.get("ids", ""),
                     "id_produit": id_produit,
-                    "origin": origin,
+                    "origin": origin,  # Utilise l'origin passé en paramètre
                     "date_ajout": datetime.now().isoformat(),
                     "date_maj": datetime.now().isoformat()
                 }]
