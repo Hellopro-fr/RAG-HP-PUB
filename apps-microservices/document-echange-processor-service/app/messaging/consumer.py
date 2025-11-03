@@ -93,6 +93,7 @@ class Consumer:
                 # ❌ En cas d'erreur, republier le message
                 print(f"❌ Erreur durant traitement: {e}")
                 print(f"Message body : {message.body}")
+                print(f"Output message : {output_message}")
                 await self._handle_processing_error(message.body, message.headers, e, document_id)
                 
         except Exception as e:
