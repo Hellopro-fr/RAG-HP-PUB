@@ -78,13 +78,20 @@ class Consumer:
                     document_data, bdd, self.executor
                 )
                 
+                print(f"Output message : {output_message}")
+
                 # Publie le résultat
                 routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
                 output_message['routing_key'] = routing_key
                 
+                print(f"routing_key : {routing_key}")
+
+
                 async with self.connection.channel() as channel:
                     await self.publisher.publish_message(output_message, channel)
                 
+                print(f"Après publication")
+
                 # ✅ Marque comme terminé
                 await self._mark_as_completed(document_id)
                 print(f"✅ Traitement terminé pour {document_id}")
@@ -93,7 +100,6 @@ class Consumer:
                 # ❌ En cas d'erreur, republier le message
                 print(f"❌ Erreur durant traitement: {e}")
                 print(f"Message body : {message.body}")
-                print(f"Output message : {output_message}")
                 await self._handle_processing_error(message.body, message.headers, e, document_id)
                 
         except Exception as e:
