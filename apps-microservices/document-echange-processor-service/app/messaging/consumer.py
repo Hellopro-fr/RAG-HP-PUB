@@ -73,6 +73,8 @@ class Consumer:
             print(f"📥 Traitement OCR démarré pour {document_id}...")
             
             try:
+                print(f"Document data : {document_data}")
+
                 # Traitement long
                 output_message = await process_document_data_for_templating(
                     document_data, bdd, self.executor
