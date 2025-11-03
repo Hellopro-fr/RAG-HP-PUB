@@ -152,49 +152,50 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
 
         texts     = results['text']
         method    = results['method']
-
+        text_to_embed_clean = ""
         # logger.info(f"\n\nMéthode utilisée : {method}")
         # logger.info(f"\n\nTexte juste après extraction : {texts}")
 
         # Néttoyage
         
         #Suppression des balises img | watermark + ses contenus
-        pattern = re.compile(r"<(img|watermark)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
-        texts = re.sub(pattern, "", texts)
+        if texts:  
+            pattern = re.compile(r"<(img|watermark)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+            texts = re.sub(pattern, "", texts)
 
-        cleaner      = CleanHTML(texts)
-        cleaned_text = cleaner.clean()
+            cleaner      = CleanHTML(texts)
+            cleaned_text = cleaner.clean()
 
-        # Anonymisation
-        anonymize = AnonymizeText()
-        anonymized_text     = anonymize.anonymize_text(cleaned_text)
-        text_to_embed_clean = anonymize.normalize_text(anonymized_text)
+            # Anonymisation
+            anonymize = AnonymizeText()
+            anonymized_text     = anonymize.anonymize_text(cleaned_text)
+            text_to_embed_clean = anonymize.normalize_text(anonymized_text)
 
-        # logger.info(f"\n\nTexte juste après anonymisation : {text_to_embed_clean}")
+            # logger.info(f"\n\nTexte juste après anonymisation : {text_to_embed_clean}")
 
-        # Suppression des info inutiles via llm
-        # try:
+            # Suppression des info inutiles via llm
+            # try:
 
-        #     chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
-        #     raw_text = await llm_client.get_llm_chat_response(chat_request)
+            #     chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
+            #     raw_text = await llm_client.get_llm_chat_response(chat_request)
 
-        #     # Parsing de la réponse
-        #     match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-        #     if match:
-        #         json_string = match.group(0)
-        #         parsed_json = json.loads(json_string)
-        #         contenu = parsed_json.get("contenu")
-        #         if not contenu:
-        #             raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
-        #         elif contenu != "ok":
-        #             text_to_embed_clean = contenu
-        #     else:
-        #         raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
+            #     # Parsing de la réponse
+            #     match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            #     if match:
+            #         json_string = match.group(0)
+            #         parsed_json = json.loads(json_string)
+            #         contenu = parsed_json.get("contenu")
+            #         if not contenu:
+            #             raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
+            #         elif contenu != "ok":
+            #             text_to_embed_clean = contenu
+            #     else:
+            #         raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
-        #     # Extraction du texte nettoyé
+            #     # Extraction du texte nettoyé
 
-        # except Exception as e:
-        #     logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
+            # except Exception as e:
+            #     logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
 
         # Étape 3: Construire le message de sortie
         output_message = {
