@@ -770,7 +770,7 @@ services:
     env_file:
       - .env
     environment:
-      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
     depends_on:
       elasticsearch:
@@ -788,7 +788,7 @@ services:
     env_file:
       - .env
     environment:
-      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
     depends_on:
       elasticsearch:
