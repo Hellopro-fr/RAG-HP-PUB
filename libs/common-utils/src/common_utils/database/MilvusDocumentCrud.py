@@ -174,6 +174,9 @@ class MilvusDocumentCrud:
             
             sanitized_batch = []
             for data in datas:
+                if "date_ajout" not in data.keys():
+                    data["date_ajout"] = datetime.now().isoformat()  
+
                 data["date_maj"] = datetime.now().isoformat()  
 
                 # Sanitize the record to ensure no None values
