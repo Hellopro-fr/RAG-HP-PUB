@@ -189,7 +189,7 @@ class MilvusDocumentCrud:
             data = Utils.sanitize_record(data)  
 
             result = await asyncio.to_thread(self.collection.upsert,data)
-            self.collection.flush()
+            # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             
             return {

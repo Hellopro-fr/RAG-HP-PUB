@@ -130,14 +130,13 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
 
         res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
 
-        logger.info(f"\n\nRésultat check milvus : {res.get('data')}")
         tab_data = res.get('data',[])
 
         if tab_data:
             text_bdd = tab_data[0].get('text','').strip()
             if text_bdd:
-                logger.info(f"\nPJ déjà traité : {text_bdd}")
-                raise ValueError("PJ déjà traité")
+                logger.info("PJ déjà traité")
+                return None
             
 
         # Étape 1: Vérifier les données d'entrée
@@ -166,10 +165,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         text_to_embed_clean = ""
         logger.info(f"\n\nTexte juste après extraction : {texts}")
 
-        return
-
         # Néttoyage
-        
         #Suppression des balises img | watermark + ses contenus
         if texts:  
             pattern = re.compile(r"<(img|watermark)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)

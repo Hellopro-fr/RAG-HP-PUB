@@ -25,7 +25,8 @@ async def insertion_data(document_data: dict) -> dict:
     base_vectorielle = MilvusDocumentCrud()
 
     processing_functions = {
-        CollectionName.DOCUMENT: base_vectorielle.insert_document
+        # CollectionName.DOCUMENT: base_vectorielle.insert_document
+        CollectionName.DOCUMENT: base_vectorielle.update_document
     }
 
     func = processing_functions.get(collection_enum)
@@ -37,6 +38,21 @@ async def insertion_data(document_data: dict) -> dict:
         fichier_source = documents[0].get("fichier_source", "fichier source inconnu")
         res = await base_vectorielle.get_document(fichier_source=fichier_source)
 
+        tab_data = res.get('data',[])
+        if tab_data:
+            text_bdd = tab_data[0].get('text','').strip()
+            id_bdd = tab_data[0].get('id')
+            if not text_bdd:
+                # todo mise à jour de l'existant
+                docs = []
+                for item in documents:
+                    item['id'] = id_bdd
+                    docs.append(item)
+                    
+                res_update = await func(docs)
+                return res_update
+
+        return
         status = res.get("status")
         data   = res.get("data", [])
         code   = res.get("code", None)

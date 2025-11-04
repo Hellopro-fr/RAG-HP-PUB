@@ -1,4 +1,5 @@
 import requests
+import logging
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import mimetypes
@@ -8,13 +9,14 @@ import subprocess
 import tempfile
 import os
 
-from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
+
+BASE_URL_OCR = os.environ.get("URL_OCR","http://34.34.166.5:8501")
 
 class DeepseekOCRDocExtractor:
     """Client pour l'API OCR externe utilisant Deepseek"""
     
-    def __init__(self, base_url: str = "http://localhost:8501", timeout: int = 300, download_timeout: int = 120):
+    def __init__(self, base_url: str = BASE_URL_OCR, timeout: int = 300, download_timeout: int = 120):
         """
         Initialise le client OCR
         
@@ -27,6 +29,7 @@ class DeepseekOCRDocExtractor:
         self.timeout = timeout
         self.download_timeout = download_timeout
         self.endpoint = f"{self.base_url}/ocr/batch"
+        logging.info(f"URL ocr : {self.base_url}")
     
     def _is_supported_format(self, filename: str) -> bool:
         """
@@ -135,8 +138,8 @@ class DeepseekOCRDocExtractor:
             response = requests.post(
                 self.endpoint,
                 files=files,
-                data=data if data else None,
-                timeout=self.timeout
+                data=data if data else None
+                # timeout=self.timeout
             )
             
             # Vérification de la réponse
