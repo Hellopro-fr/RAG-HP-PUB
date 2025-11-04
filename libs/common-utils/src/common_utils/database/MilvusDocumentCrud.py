@@ -272,7 +272,7 @@ class MilvusDocumentCrud:
 
             return {
                 "status": "success",
-                "data": result
+                "data": result.get('data',[])
             }
 
         except MilvusException as e:
