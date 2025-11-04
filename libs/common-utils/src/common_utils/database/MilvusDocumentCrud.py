@@ -174,6 +174,9 @@ class MilvusDocumentCrud:
             
             sanitized_batch = []
             for data in datas:
+                if "date_ajout" not in data.keys():
+                    data["date_ajout"] = datetime.now().isoformat()  
+
                 data["date_maj"] = datetime.now().isoformat()  
 
                 # Sanitize the record to ensure no None values
@@ -258,7 +261,7 @@ class MilvusDocumentCrud:
 
             result = await asyncio.to_thread(self.collection.query,
                 expr=f"fichier_source in {list_fichier_source}",
-                output_fields=["id","text"]
+                output_fields=["id","text","date_ajout"]
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
