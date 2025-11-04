@@ -766,7 +766,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/dlq-manager-service/Dockerfile
     container_name: dlq-manager-service
-    profiles: ["app"]
+    profiles: ["disabled"]
     restart: unless-stopped
     ports:
       - "8585:80"
@@ -778,7 +778,8 @@ services:
     networks:
       - services-net
     depends_on:
-      - elasticsearch
+      elasticsearch:
+        condition: service_healthy
     logging: *logging_defaults
 
   dlq-archiver-host:
