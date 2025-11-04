@@ -132,12 +132,13 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
 
         logger.info(f"\n\nRésultat check milvus : {res.get('data')}")
         tab_data = res.get('data',[])
-        text_bdd = tab_data[0].get('text','').strip()
 
-        if text_bdd:
-            logger.info(f"\nPJ déjà traité : {text_bdd}")
-            raise ValueError("PJ déjà traité")
-
+        if tab_data:
+            text_bdd = tab_data[0].get('text','').strip()
+            if text_bdd:
+                logger.info(f"\nPJ déjà traité : {text_bdd}")
+                raise ValueError("PJ déjà traité")
+            
 
         # Étape 1: Vérifier les données d'entrée
         if not isinstance(document_data, dict):
@@ -162,9 +163,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
             raise RuntimeError(error_msg)
 
         texts     = results['text']
-        # method    = results['method']
         text_to_embed_clean = ""
-        # logger.info(f"\n\nMéthode utilisée : {method}")
         logger.info(f"\n\nTexte juste après extraction : {texts}")
 
         return
