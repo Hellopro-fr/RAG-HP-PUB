@@ -130,7 +130,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
 
         res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
 
-        logger.info(f"\n\nRésultat check milvus : {res}")
+        logger.info(f"\n\nRésultat check milvus : {res.get('data')}")
 
         # Étape 1: Vérifier les données d'entrée
         if not isinstance(document_data, dict):
