@@ -157,7 +157,7 @@ class MilvusDocumentCrud:
                 "message": f"Erreur inattendue : {e}"
             }
     
-    async def update_document(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_document(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -166,43 +166,36 @@ class MilvusDocumentCrud:
             await asyncio.to_thread(self._connect_to_milvus)
             self.collection = await asyncio.to_thread(self._get_or_create_collection,model_config)
             
-            if not data or self.collection is None:
+            if not datas or self.collection is None:
                 return {
                     "status": "error",
                     "message": "Aucune donnée à mettre à jour ou collection non initialisée."
                 }
             
-            if not data.get("id"):
-                self.logger.error(f"[{model_key}][document] Mise à jour sans ID.")
-                return {
-                    "status": "error",
-                    "message": "Clé primaire (ID) requise pour la mise à jour."
-                }
+            sanitized_batch = []
+            for data in datas:
+                data["date_maj"] = datetime.now().isoformat()  
 
-            self.logger.info(f"[{model_key}][document] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
+                # Sanitize the record to ensure no None values
+                # This is important for Milvus compatibility
+                data = Utils.sanitize_record(data)
+                sanitized_batch.append(data)
             
-            
-            data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-
-            # Sanitize the record to ensure no None values
-            # This is important for Milvus compatibility
-            data = Utils.sanitize_record(data)  
-
-            result = await asyncio.to_thread(self.collection.upsert,data)
+            result = await asyncio.to_thread(self.collection.upsert,sanitized_batch)
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
             
             return {
-                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
                 "status": "success",
+                "data": result 
             }
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][document] Erreur Milvus lors de mise à jour : {e}")
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
         except Exception as e:
             self.logger.error(f"[{model_key}][document] Mise à jour de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"Data : {datas}")
 
     async def delete_document(self,data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
