@@ -36,26 +36,33 @@ class MetricsConsumer:
 
     async def batch_sender(self):
         print("⚙️  Expéditeur de batch de métriques démarré.")
-        batch = []
         while True:
+            batch = []
             try:
-                # Attendre un message avec un timeout
-                timeout = BATCH_TIMEOUT_SECONDS if batch else None
-                metric = await asyncio.wait_for(self.metrics_buffer.get(), timeout=timeout)
-                batch.append(metric)
-            except asyncio.TimeoutError:
-                pass # Le timeout a été atteint, on traite le batch actuel
+                # 1. Attendre indéfiniment le premier message pour démarrer un batch
+                first_metric = await self.metrics_buffer.get()
+                batch.append(first_metric)
 
-            if len(batch) >= BATCH_SIZE or (batch and timeout is not None):
-                batch_to_send = list(batch) # Copier le batch
-                batch.clear()
-                
-                print(f"   -> Envoi d'un batch de {len(batch_to_send)} métriques...")
+                # 2. Une fois le premier message reçu, essayer de remplir le reste du batch
+                #    en respectant le BATCH_TIMEOUT et le BATCH_SIZE.
+                while len(batch) < BATCH_SIZE:
+                    try:
+                        metric = await asyncio.wait_for(self.metrics_buffer.get(), timeout=BATCH_TIMEOUT_SECONDS)
+                        batch.append(metric)
+                    except asyncio.TimeoutError:
+                        # Le timeout a été atteint, on sort de la boucle pour envoyer le batch partiel
+                        break
+            except asyncio.CancelledError:
+                print("   -> Tâche d'envoi de batch annulée.")
+                break
+
+            if batch:
+                print(f"   -> Envoi d'un batch de {len(batch)} métriques...")
                 try:
                     async with aiohttp.ClientSession() as session:
-                        async with session.post(DEEPSEEK_METRICS_COLLECTOR_URL, json=batch_to_send) as resp:
+                        async with session.post(DEEPSEEK_METRICS_COLLECTOR_URL, json=batch) as resp:
                             if resp.status == 200:
-                                print(f"      • [SUCCESS] Batch de {len(batch_to_send)} métriques envoyé.")
+                                print(f"      • [SUCCESS] Batch de {len(batch)} métriques envoyé.")
                             else:
                                 print(f"      • [FAILURE] Le serveur de logging a répondu {resp.status}. Les métriques de ce batch sont perdues.")
                 except aiohttp.ClientError as e:
