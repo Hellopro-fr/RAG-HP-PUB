@@ -10,7 +10,7 @@ from common_utils.autres.DLQProperties import DLQProperties
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
 DEEPSEEK_METRICS_COLLECTOR_URL = os.environ.get("DEEPSEEK_METRICS_COLLECTOR_URL") # e.g., "http://api-gateway:8500/v1/log-metrics"
 
-BATCH_SIZE = 100  # Nombre de métriques à envoyer en un seul appel HTTP
+BATCH_SIZE = 10  # Nombre de métriques à envoyer en un seul appel HTTP
 BATCH_TIMEOUT_SECONDS = 15.0 # Temps d'attente fixe avant chaque envoi
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
