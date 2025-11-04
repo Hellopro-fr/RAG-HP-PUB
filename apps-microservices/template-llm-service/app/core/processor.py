@@ -116,17 +116,19 @@ async def _process_single_message(message: dict) -> dict:
     Traite un seul message en appelant le LLM. Conçu pour être exécuté en parallèle.
     """
     original_message = message
+    metric_payload = {}
     try:
         data_payload = message.get("data", {})
-        collection = message.get("collection", {})
         collection = message.get("collection", {})
         url = data_payload.get("url", "URL non fournie")
         content = data_payload.get("text")
         
         if collection == "document":
             user_prompt = PROMPT_OCR_FR.format(content=content)
+            process_id = 32
         else:
             user_prompt = PROMPT_TEMPLATE_FR.format(url=url, content=content)
+            process_id = 31
         
         # Encodage pour vérifier la longueur
         prompt_tokens = TOKENIZER.encode(user_prompt)
@@ -153,12 +155,31 @@ async def _process_single_message(message: dict) -> dict:
             max_tokens=256,
             enable_thinking=False
         )
-        raw_text = await llm_client.get_llm_chat_response(chat_request)
+        raw_response_dict = await llm_client.get_llm_chat_response(chat_request)
         
-        # Print LLM raw response for debugging
-        print(f"   -> Réponse brute du LLM pour l'URL {url} : {raw_text}")
+        # Construction du payload de métriques
+        response_details = raw_response_dict.get('response', {})
+        usage_details = response_details.get('usage', {})
+        error_details = response_details.get('error', {})
+        state_llm = 1 if not error_details else 2
+
+        metric_payload = {
+            "source_service": "template-llm-service",
+            "url": url,
+            "state_llm": state_llm,
+            "prompt_tokens": usage_details.get('prompt_tokens'),
+            "completion_tokens": usage_details.get('completion_tokens'),
+            "total_tokens": usage_details.get('total_tokens'),
+            "model": response_details.get('model'),
+            "raw_response_on_error": raw_response_dict if state_llm == 2 else None,
+            "process_id": process_id
+        }
         
+        if state_llm == 2:
+            raise ValueError(f"Erreur du LLM: {raw_response_dict}")
+
         # Parsing de la réponse
+        raw_text = raw_response_dict.get('full_message', '')
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if match:
             json_string = match.group(0)
@@ -179,17 +200,27 @@ async def _process_single_message(message: dict) -> dict:
             original_message["data"]["page_type"] = page_type
             return {
                 "status": "success",
-                "processed_message": original_message
+                "processed_message": original_message,
+                "metric_payload": metric_payload
             }
         else:
             raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
     except Exception as e:
         error_str = f"Erreur de traitement individuel. Erreur: {e}"
+        # S'assurer qu'on a un payload de métrique même en cas d'erreur
+        if not metric_payload:
+             metric_payload = {
+                "source_service": "template-llm-service",
+                "url": original_message.get("data", {}).get("url", "URL non fournie"),
+                "state_llm": 2, # Erreur
+                "error_message": error_str
+             }
         return {
             "status": "error",
             "original_message": original_message,
-            "error_message": error_str
+            "error_message": error_str,
+            "metric_payload": metric_payload
         }
 
 async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
@@ -215,8 +246,11 @@ async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
         if res['status'] == 'success':
             page_type = msg['data'].get('page_type', 'N/A')
             content_len = msg.get('_diag_content_length', 'N/A')
-            token_count = msg.get('_diag_token_count', 'N/A')
-            print(f"      • [SUCCESS] URL: {url} => Type: {page_type} [Len: {content_len}, Tokens: {token_count}]")
+            metric = res.get('metric_payload', {})
+            model = metric.get('model', 'N/A')
+            prompt_tokens = metric.get('prompt_tokens', 'N/A')
+            completion_tokens = metric.get('completion_tokens', 'N/A')
+            print(f"      • [SUCCESS] URL: {url} => Type: {page_type} [Model: {model}, PromptTokens: {prompt_tokens}, CompletionTokens: {completion_tokens}, ContentLen: {content_len}]")
         else:
             print(f"      • [FAILURE] URL: {url} => Erreur: {res.get('error_message', 'Inconnue')}")
             

@@ -556,21 +556,31 @@ services:
       dockerfile: ./apps-microservices/template-llm-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
     # container_name: template-llm-service
-    restart: "no"
-    volumes:
-      - ./apps-microservices/template-llm-service/app:/app/template_llm_service:rw
+    restart: unless-stopped
     env_file:
       - .env
     deploy:
-      replicas: 1
+      replicas: 4
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
       - llm-service
+      - deepseek-metrics-collector-service
     networks:
       - services-net
     logging: *logging_defaults
 
+  deepseek-metrics-collector-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/deepseek-metrics-collector-service/Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
               
   embedding-service:
     build:
