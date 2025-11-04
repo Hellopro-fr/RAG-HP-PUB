@@ -41,14 +41,16 @@ async def insertion_data(document_data: dict) -> dict:
         tab_data = res.get('data',[])
         if tab_data:
             text_bdd = tab_data[0].get('text','').strip()
-            id_bdd = tab_data[0].get('id')
+            id_bdd         = tab_data[0].get('id')
+            date_ajout_bdd = tab_data[0].get('date_ajout')
             if not text_bdd:
                 # todo mise à jour de l'existant
                 docs = []
                 for item in documents:
                     item['id'] = id_bdd
+                    item['date_ajout'] = date_ajout_bdd
                     docs.append(item)
-                    
+
                 res_update = await func(docs)
                 return res_update
 
