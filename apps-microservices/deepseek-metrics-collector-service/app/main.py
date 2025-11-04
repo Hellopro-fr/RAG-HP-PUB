@@ -56,13 +56,6 @@ class MetricsConsumer:
                         async with session.post(DEEPSEEK_METRICS_COLLECTOR_URL, json=batch_to_send) as resp:
                             if resp.status == 200:
                                 print(f"      • [SUCCESS] Batch de {len(batch_to_send)} métriques envoyé.")
-                                
-                                # Print for debugging
-                                print("      • Contenu du batch envoyé:")
-                                for metric in batch_to_send:
-                                    print(f"        - {metric}")
-                                response_data = await resp.json()
-                                print(f"      • Response: {response_data}")
                             else:
                                 print(f"      • [FAILURE] Le serveur de logging a répondu {resp.status}. Les métriques de ce batch sont perdues.")
                 except aiohttp.ClientError as e:
