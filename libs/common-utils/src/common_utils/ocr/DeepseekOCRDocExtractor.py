@@ -1,20 +1,22 @@
-import requests
+import httpx
 import logging
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 import mimetypes
 from io import BytesIO
 from urllib.parse import urlparse
+import asyncio
 import subprocess
 import tempfile
 import os
 
 from reportlab.lib.pagesizes import A4
 
-BASE_URL_OCR = os.environ.get("URL_OCR","http://34.34.166.5:8501")
+BASE_URL_OCR = os.environ.get("URL_OCR", "http://34.34.166.5:8501")
+
 
 class DeepseekOCRDocExtractor:
-    """Client pour l'API OCR externe utilisant Deepseek"""
+    """Client asynchrone pour l'API OCR externe utilisant Deepseek"""
     
     def __init__(self, base_url: str = BASE_URL_OCR, timeout: int = 300, download_timeout: int = 120):
         """
@@ -41,15 +43,13 @@ class DeepseekOCRDocExtractor:
         Returns:
             True si le format est supporté directement, False sinon
         """
-        # Vérifier par extension
         supported_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
         ext = Path(filename).suffix.lower()
-        
-        return True if ext in supported_extensions else False
+        return ext in supported_extensions
     
-    def _download_file(self, url: str) -> tuple[BytesIO, str]:
+    async def _download_file(self, url: str) -> tuple[BytesIO, str]:
         """
-        Télécharge un fichier depuis une URL directement en mémoire
+        Télécharge un fichier depuis une URL directement en mémoire (asynchrone)
         Aucun fichier n'est écrit sur le disque
         
         Args:
@@ -59,46 +59,47 @@ class DeepseekOCRDocExtractor:
             Tuple (contenu du fichier en BytesIO, nom du fichier)
             
         Raises:
-            requests.exceptions.RequestException: En cas d'erreur de téléchargement
+            httpx.HTTPError: En cas d'erreur de téléchargement
         """
         try:
-            response = requests.get(url, timeout=self.download_timeout)
-            response.raise_for_status()
-            
-            # Extraction du nom de fichier depuis l'URL
-            parsed_url = urlparse(url)
-            filename = Path(parsed_url.path).name
-            
-            # Si pas de nom de fichier dans l'URL, en générer un
-            if not filename:
-                filename = "document.pdf"
-            
-            # Création d'un objet BytesIO avec le contenu (reste en mémoire)
-            file_content = BytesIO(response.content)
-            
-            # Vérifier si le format est supporté
-            if not self._is_supported_format(filename):
-                print(f"⚠️  {filename} n'est pas un PDF/image - conversion en PDF...")
-                file_content, filename = self._convert_to_pdf(file_content, filename)
-                print(f"✓ Converti en {filename}")
-            
-            # Réinitialiser la position pour la lecture
-            file_content.seek(0)
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, timeout=self.download_timeout)
+                response.raise_for_status()
+                
+                # Extraction du nom de fichier depuis l'URL
+                parsed_url = urlparse(url)
+                filename = Path(parsed_url.path).name
+                
+                # Si pas de nom de fichier dans l'URL, en générer un
+                if not filename:
+                    filename = "document.pdf"
+                
+                # Création d'un objet BytesIO avec le contenu (reste en mémoire)
+                file_content = BytesIO(response.content)
+                
+                # Vérifier si le format est supporté
+                if not self._is_supported_format(filename):
+                    print(f"⚠️  {filename} n'est pas un PDF/image - conversion en PDF...")
+                    file_content, filename = await self._convert_to_pdf(file_content, filename)
+                    print(f"✓ Converti en {filename}")
+                
+                # Réinitialiser la position pour la lecture
+                file_content.seek(0)
 
-            return file_content, filename
-            
-        except requests.exceptions.RequestException as e:
-            raise requests.exceptions.RequestException(
+                return file_content, filename
+                
+        except httpx.HTTPError as e:
+            raise httpx.HTTPError(
                 f"Erreur lors du téléchargement de {url}: {str(e)}"
             )
     
-    def extract_from_urls(
+    async def extract_from_urls(
         self, 
         urls: List[str], 
         prompt: Optional[str] = "<image>\nConvert the document to markdown."
     ) -> Dict[str, Any]:
         """
-        Traite des fichiers à partir d'URLs
+        Traite des fichiers à partir d'URLs (asynchrone)
         Les fichiers sont téléchargés en mémoire et automatiquement libérés après traitement
         
         Args:
@@ -109,15 +110,17 @@ class DeepseekOCRDocExtractor:
             Dictionnaire contenant les résultats de l'extraction
             
         Raises:
-            requests.exceptions.RequestException: En cas d'erreur réseau
+            httpx.HTTPError: En cas d'erreur réseau
         """
         files = []
         downloaded_files = []
         
         try:
-            # Téléchargement de tous les fichiers en mémoire
-            for url in urls:
-                file_content, filename = self._download_file(url)
+            # Téléchargement de tous les fichiers en mémoire (en parallèle)
+            download_tasks = [self._download_file(url) for url in urls]
+            downloads = await asyncio.gather(*download_tasks)
+            
+            for file_content, filename in downloads:
                 downloaded_files.append(file_content)
                 
                 # Détection du type MIME
@@ -134,40 +137,39 @@ class DeepseekOCRDocExtractor:
             if prompt is not None:
                 data['prompt'] = prompt
             
-            # Envoi de la requête à l'API OCR
-            response = requests.post(
-                self.endpoint,
-                files=files,
-                data=data if data else None
-                # timeout=self.timeout
-            )
+            # Envoi de la requête à l'API OCR (asynchrone)
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    self.endpoint,
+                    files=files,
+                    data=data if data else None
+                )
+                
+                # Vérification de la réponse
+                response.raise_for_status()
+                
+                return response.json()
             
-            # Vérification de la réponse
-            response.raise_for_status()
-            
-            return response.json()
-            
-        except requests.exceptions.Timeout:
-            raise requests.exceptions.RequestException(
+        except httpx.TimeoutException:
+            raise httpx.HTTPError(
                 f"Timeout après {self.timeout}s lors de l'appel à l'API OCR"
             )
-        except requests.exceptions.RequestException as e:
-            raise requests.exceptions.RequestException(
+        except httpx.HTTPError as e:
+            raise httpx.HTTPError(
                 f"Erreur lors du traitement: {str(e)}"
             )
         finally:
             # Fermeture et libération automatique de la mémoire
-            # Les objets BytesIO sont fermés et garbage collected
             for file_io in downloaded_files:
                 file_io.close()
     
-    def extract_from_url(
+    async def extract_from_url(
         self, 
         url: str, 
         prompt: Optional[str] = "<image>\nConvert the document to markdown."
     ) -> Dict[str, Any]:
         """
-        Traite un seul fichier à partir d'une URL
+        Traite un seul fichier à partir d'une URL (asynchrone)
         
         Args:
             url: URL du fichier à traiter
@@ -176,31 +178,28 @@ class DeepseekOCRDocExtractor:
         Returns:
             Dictionnaire contenant le résultat de l'extraction pour ce fichier
         """
-        response = self.extract_from_urls([url], prompt)
+        response = await self.extract_from_urls([url], prompt)
         
         texts = []
 
         if response.get('success') and response.get('results'):
             results = response['results'][0]
 
-            if 'results' in results.get('result').keys():
+            if 'results' in results.get('result', {}).keys():
                 for res in results['result']['results']:
                     texts.append(res["result"])
             else:
                 texts.append(results['result']['result'])
 
             return {
-                "text" : " ".join(texts)
+                "text": " ".join(texts)
             } 
         
         return response
     
-
-    # Remplacer la méthode _convert_to_pdf par celle-ci
-
-    def _convert_to_pdf(self, content: BytesIO, filename: str) -> tuple[BytesIO, str]:
+    async def _convert_to_pdf(self, content: BytesIO, filename: str) -> tuple[BytesIO, str]:
         """
-        Convertit un fichier non-supporté en PDF en utilisant LibreOffice
+        Convertit un fichier non-supporté en PDF en utilisant LibreOffice (asynchrone)
         
         Args:
             content: Contenu du fichier en BytesIO
@@ -222,8 +221,8 @@ class DeepseekOCRDocExtractor:
             # Formats supportés par LibreOffice
             libreoffice_formats = [
                 '.doc', '.docx', '.odt',  # Word
-                '.xls', '.xlsx', # Excel
-                '.ppt', '.pptx', # PowerPoint
+                '.xls', '.xlsx',  # Excel
+                '.ppt', '.pptx',  # PowerPoint
             ]
             
             # === Si format Office, utiliser LibreOffice ===
@@ -249,17 +248,27 @@ class DeepseekOCRDocExtractor:
                     temp_input.name
                 ]
                 
-                result = subprocess.run(
-                    cmd, 
-                    capture_output=True, 
-                    text=True, 
-                    timeout=60
+                # Exécution asynchrone du subprocess
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
                 )
+                
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(), 
+                        timeout=60
+                    )
+                except asyncio.TimeoutError:
+                    process.kill()
+                    await process.wait()
+                    raise ValueError(f"Timeout lors de la conversion de {filename} (> 60s)")
                 
                 # Chemin du PDF généré
                 pdf_path = Path(temp_output_dir) / f"{Path(temp_input.name).stem}.pdf"
                 
-                if result.returncode == 0 and pdf_path.exists():
+                if process.returncode == 0 and pdf_path.exists():
                     # Lire le PDF généré
                     with open(pdf_path, 'rb') as pdf_file:
                         pdf_content = BytesIO(pdf_file.read())
@@ -269,15 +278,13 @@ class DeepseekOCRDocExtractor:
                     
                     return pdf_content, new_filename
                 else:
-                    error_msg = result.stderr if result.stderr else "Raison inconnue"
+                    error_msg = stderr.decode() if stderr else "Raison inconnue"
                     raise Exception(f"Échec de la conversion LibreOffice: {error_msg}")
             
-            # === Sinon, utiliser la méthode texte ===
+            # === Sinon, format non supporté ===
             else:
                 raise Exception("Format de document non supporté")
                 
-        except subprocess.TimeoutExpired:
-            raise ValueError(f"Timeout lors de la conversion de {filename} (> 60s)")
         except Exception as e:
             raise ValueError(f"Impossible de convertir {filename} en PDF: {str(e)}")
         finally:
@@ -300,4 +307,3 @@ class DeepseekOCRDocExtractor:
                     os.rmdir(temp_output_dir)
             except Exception as e:
                 print(f"⚠️ Impossible de supprimer le répertoire temporaire: {e}")
-                
