@@ -8,10 +8,11 @@ from concurrent.futures import ProcessPoolExecutor , ThreadPoolExecutor
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
 from common_utils.cleaner.AnonymizeText import AnonymizeText
-from common_utils.ocr.DocumentTextExtractor import DocumentTextExtractor
+from common_utils.ocr.DeepseekOCRDocExtractor import DeepseekOCRDocExtractor
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 from vllm.transformers_utils.tokenizer import get_tokenizer
+from common_utils.database.MilvusDocumentCrud import MilvusDocumentCrud
 
 
 # TOKENIZER = get_tokenizer("Qwen/Qwen3-14B-AWQ", trust_remote_code=True)
@@ -45,10 +46,8 @@ json
 {{ "contenu": "ok" }}
 """
 def _run_ocr_sync(document_path: str):
-    # L'instance de DocumentTextExtractor doit être créée ICI,
-    # dans le processus worker, pour gérer son propre contexte GPU.
-    extractor = DocumentTextExtractor()
-    return extractor.process_single_file(document_path)
+    extractor = DeepseekOCRDocExtractor()
+    return extractor.extract_from_url(document_path)
 
 # def make_chat_request(prompt_template, content,temperature=0.7):
 #     """
@@ -128,6 +127,11 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
     logger.info(f"--- Début du traitement pour le document : {document_path} ---")
 
     try:
+
+        res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
+
+        logger.info(f"\n\nRésultat check milvus : {res}")
+
         # Étape 1: Vérifier les données d'entrée
         if not isinstance(document_data, dict):
             raise ValueError("Les données doivent être un dictionnaire.")
@@ -151,10 +155,12 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
             raise RuntimeError(error_msg)
 
         texts     = results['text']
-        method    = results['method']
+        # method    = results['method']
         text_to_embed_clean = ""
         # logger.info(f"\n\nMéthode utilisée : {method}")
-        # logger.info(f"\n\nTexte juste après extraction : {texts}")
+        logger.info(f"\n\nTexte juste après extraction : {texts}")
+
+        return
 
         # Néttoyage
         
@@ -217,7 +223,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         
         # Étape 4: Afficher le message de sortie pour débogage
         # print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
-        print(f"🔍Document-Echange-Processor: Message prêt : {output_message} ")
+        print(f"🔍Document-Echange-Processor: Message prêt")
         
         return output_message
     

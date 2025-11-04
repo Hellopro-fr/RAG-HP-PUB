@@ -4,12 +4,17 @@ from pathlib import Path
 import mimetypes
 from io import BytesIO
 from urllib.parse import urlparse
+import subprocess
+import tempfile
+import os
 
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
 
 class DeepseekOCRDocExtractor:
     """Client pour l'API OCR externe utilisant Deepseek"""
     
-    def __init__(self, base_url: str = "http://localhost:8501", timeout: int = 300, download_timeout: int = 60):
+    def __init__(self, base_url: str = "http://localhost:8501", timeout: int = 300, download_timeout: int = 120):
         """
         Initialise le client OCR
         
@@ -22,6 +27,22 @@ class DeepseekOCRDocExtractor:
         self.timeout = timeout
         self.download_timeout = download_timeout
         self.endpoint = f"{self.base_url}/ocr/batch"
+    
+    def _is_supported_format(self, filename: str) -> bool:
+        """
+        Vérifie si le fichier est un format supporté (PDF ou image)
+        
+        Args:
+            filename: Nom du fichier
+            
+        Returns:
+            True si le format est supporté directement, False sinon
+        """
+        # Vérifier par extension
+        supported_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
+        ext = Path(filename).suffix.lower()
+        
+        return True if ext in supported_extensions else False
     
     def _download_file(self, url: str) -> tuple[BytesIO, str]:
         """
@@ -52,6 +73,15 @@ class DeepseekOCRDocExtractor:
             # Création d'un objet BytesIO avec le contenu (reste en mémoire)
             file_content = BytesIO(response.content)
             
+            # Vérifier si le format est supporté
+            if not self._is_supported_format(filename):
+                print(f"⚠️  {filename} n'est pas un PDF/image - conversion en PDF...")
+                file_content, filename = self._convert_to_pdf(file_content, filename)
+                print(f"✓ Converti en {filename}")
+            
+            # Réinitialiser la position pour la lecture
+            file_content.seek(0)
+
             return file_content, filename
             
         except requests.exceptions.RequestException as e:
@@ -62,7 +92,7 @@ class DeepseekOCRDocExtractor:
     def extract_from_urls(
         self, 
         urls: List[str], 
-        prompt: Optional[str] = "<image>\nFree OCR."
+        prompt: Optional[str] = "<image>\nConvert the document to markdown."
     ) -> Dict[str, Any]:
         """
         Traite des fichiers à partir d'URLs
@@ -131,7 +161,7 @@ class DeepseekOCRDocExtractor:
     def extract_from_url(
         self, 
         url: str, 
-        prompt: Optional[str] = "<image>\nFree OCR."
+        prompt: Optional[str] = "<image>\nConvert the document to markdown."
     ) -> Dict[str, Any]:
         """
         Traite un seul fichier à partir d'une URL
@@ -143,9 +173,128 @@ class DeepseekOCRDocExtractor:
         Returns:
             Dictionnaire contenant le résultat de l'extraction pour ce fichier
         """
-        result = self.extract_from_urls([url], prompt)
+        response = self.extract_from_urls([url], prompt)
         
-        if result.get('success') and result.get('results'):
-            return result['results'][0]
+        texts = []
+
+        if response.get('success') and response.get('results'):
+            results = response['results'][0]
+
+            if 'results' in results.get('result').keys():
+                for res in results['result']['results']:
+                    texts.append(res["result"])
+            else:
+                texts.append(results['result']['result'])
+
+            return {
+                "text" : " ".join(texts)
+            } 
         
-        return result
+        return response
+    
+
+    # Remplacer la méthode _convert_to_pdf par celle-ci
+
+    def _convert_to_pdf(self, content: BytesIO, filename: str) -> tuple[BytesIO, str]:
+        """
+        Convertit un fichier non-supporté en PDF en utilisant LibreOffice
+        
+        Args:
+            content: Contenu du fichier en BytesIO
+            filename: Nom du fichier original
+            
+        Returns:
+            Tuple (contenu PDF en BytesIO, nouveau nom de fichier)
+            
+        Raises:
+            ValueError: Si la conversion échoue
+        """
+        temp_input = None
+        temp_output_dir = None
+        
+        try:
+            content.seek(0)
+            ext = Path(filename).suffix.lower()
+            
+            # Formats supportés par LibreOffice
+            libreoffice_formats = [
+                '.doc', '.docx', '.odt',  # Word
+                '.xls', '.xlsx', # Excel
+                '.ppt', '.pptx', # PowerPoint
+            ]
+            
+            # === Si format Office, utiliser LibreOffice ===
+            if ext in libreoffice_formats:
+                # Créer un répertoire temporaire
+                temp_output_dir = tempfile.mkdtemp()
+                
+                # Créer un fichier temporaire avec le bon nom/extension
+                temp_input = tempfile.NamedTemporaryFile(
+                    delete=False, 
+                    suffix=ext,
+                    dir=temp_output_dir
+                )
+                temp_input.write(content.read())
+                temp_input.close()
+                
+                # Commande LibreOffice pour conversion
+                cmd = [
+                    'libreoffice',
+                    '--headless',
+                    '--convert-to', 'pdf',
+                    '--outdir', temp_output_dir,
+                    temp_input.name
+                ]
+                
+                result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=60
+                )
+                
+                # Chemin du PDF généré
+                pdf_path = Path(temp_output_dir) / f"{Path(temp_input.name).stem}.pdf"
+                
+                if result.returncode == 0 and pdf_path.exists():
+                    # Lire le PDF généré
+                    with open(pdf_path, 'rb') as pdf_file:
+                        pdf_content = BytesIO(pdf_file.read())
+                    
+                    new_filename = Path(filename).stem + '.pdf'
+                    print(f"✓ Converti avec LibreOffice: {filename} -> {new_filename}")
+                    
+                    return pdf_content, new_filename
+                else:
+                    error_msg = result.stderr if result.stderr else "Raison inconnue"
+                    raise Exception(f"Échec de la conversion LibreOffice: {error_msg}")
+            
+            # === Sinon, utiliser la méthode texte ===
+            else:
+                raise Exception("Format de document non supporté")
+                
+        except subprocess.TimeoutExpired:
+            raise ValueError(f"Timeout lors de la conversion de {filename} (> 60s)")
+        except Exception as e:
+            raise ValueError(f"Impossible de convertir {filename} en PDF: {str(e)}")
+        finally:
+            # Nettoyage des fichiers temporaires
+            try:
+                if temp_input and os.path.exists(temp_input.name):
+                    os.unlink(temp_input.name)
+            except Exception as e:
+                print(f"⚠️ Impossible de supprimer {temp_input.name}: {e}")
+            
+            try:
+                if temp_output_dir and os.path.exists(temp_output_dir):
+                    # Supprimer tous les fichiers du répertoire
+                    for file in Path(temp_output_dir).glob('*'):
+                        try:
+                            file.unlink()
+                        except:
+                            pass
+                    # Supprimer le répertoire
+                    os.rmdir(temp_output_dir)
+            except Exception as e:
+                print(f"⚠️ Impossible de supprimer le répertoire temporaire: {e}")
+                
