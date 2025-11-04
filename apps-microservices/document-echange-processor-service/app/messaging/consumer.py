@@ -75,27 +75,18 @@ class Consumer:
             print(f"📥 Traitement OCR démarré pour {document_id}...")
             
             try:
-                print(f"Document data : {document_data}")
-
                 # Traitement long
                 output_message = await process_document_data_for_templating(
                     document_data, bdd, self.executor
                 )
                 
-                print(f"Output message : {output_message}")
-
                 # Publie le résultat
                 routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
                 output_message['routing_key'] = routing_key
                 
-                print(f"routing_key : {routing_key}")
-
-
                 async with self.connection.channel() as channel:
                     await self.publisher.publish_message(output_message, channel)
                 
-                print(f"Après publication")
-
                 # ✅ Marque comme terminé
                 await self._mark_as_completed(document_id)
                 print(f"✅ Traitement terminé pour {document_id}")

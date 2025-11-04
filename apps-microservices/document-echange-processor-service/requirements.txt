@@ -7,16 +7,9 @@ bs4
 markdownify
 html5lib
 accelerate
-gradio==5.23.2
-pdf2image
-PyMuPDF
 python-dotenv
 Pillow 
-python-docx 
-openpyxl 
-python-pptx 
-mammoth 
-odfpy 
+reportlab
 grpcio
 grpcio-tools
 protobuf

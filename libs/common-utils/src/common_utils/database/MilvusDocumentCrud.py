@@ -265,7 +265,7 @@ class MilvusDocumentCrud:
 
             result = await asyncio.to_thread(self.collection.query,
                 expr=f"fichier_source in {list_fichier_source}",
-                output_fields=["id"]
+                output_fields=["id","text"]
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
