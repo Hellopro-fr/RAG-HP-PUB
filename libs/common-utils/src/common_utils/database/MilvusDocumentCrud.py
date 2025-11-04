@@ -270,9 +270,23 @@ class MilvusDocumentCrud:
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
+
+            data = None
+            # Cas 1 : result est déjà la liste de data
+            if isinstance(result, list):
+                data = result
+
+            # Cas 2 : le HybridExtraList contient un dict avec une clé "data"
+            elif hasattr(result, "data"):
+                data = result.data
+
+            # Cas 3 : il contient un dict au premier niveau
+            elif isinstance(result, dict) and "data" in result:
+                data = result["data"]
+
             return {
                 "status": "success",
-                "data": result.get('data',[])
+                "data": data
             }
 
         except MilvusException as e:
