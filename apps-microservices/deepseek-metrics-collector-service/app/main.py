@@ -10,8 +10,8 @@ from common_utils.autres.DLQProperties import DLQProperties
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
 DEEPSEEK_METRICS_COLLECTOR_URL = os.environ.get("DEEPSEEK_METRICS_COLLECTOR_URL") # e.g., "http://api-gateway:8500/v1/log-metrics"
 
-BATCH_SIZE = 100  # Nombre de métriques à envoyer en un seul appel HTTP
-BATCH_TIMEOUT_SECONDS = 5.0 # Temps max d'attente avant d'envoyer un batch partiel
+BATCH_SIZE = 250  # Nombre de métriques à envoyer en un seul appel HTTP
+BATCH_TIMEOUT_SECONDS = 30.0 # Temps d'attente fixe avant chaque envoi
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
 
@@ -77,27 +77,19 @@ class MetricsConsumer:
         await self.metrics_buffer.put(message)
 
     async def batch_sender(self):
-        """Tâche de fond qui envoie les métriques et gère les échecs avec retry/DLQ."""
+        """Tâche de fond qui envoie les métriques à intervalle fixe."""
         print("⚙️  Expéditeur de batch de métriques démarré.")
         while True:
-            batch = [] # Le batch contiendra des objets aio_pika.IncomingMessage
-            try:
-                # 1. Attendre indéfiniment le premier message pour démarrer un batch
-                first_message = await self.metrics_buffer.get()
-                batch.append(first_message)
-
-                # 2. Remplir le reste du batch en respectant le timeout
-                while len(batch) < BATCH_SIZE:
-                    try:
-                        message = await asyncio.wait_for(self.metrics_buffer.get(), timeout=BATCH_TIMEOUT_SECONDS)
-                        batch.append(message)
-                    except asyncio.TimeoutError:
-                        break # Le timeout a été atteint, on envoie le batch partiel
+            await asyncio.sleep(BATCH_TIMEOUT_SECONDS)
             
-            except asyncio.CancelledError:
-                print("   -> Tâche d'envoi de batch annulée.")
-                break
-
+            batch = []
+            while len(batch) < BATCH_SIZE:
+                try:
+                    message = self.metrics_buffer.get_nowait()
+                    batch.append(message)
+                except asyncio.QueueEmpty:
+                    break
+            
             if not batch:
                 continue
 
@@ -119,15 +111,13 @@ class MetricsConsumer:
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(DEEPSEEK_METRICS_COLLECTOR_URL, json=metrics_to_send) as resp:
-                        if resp.status == 200:
-                            print(f"      • [SUCCESS] Batch de {len(metrics_to_send)} métriques envoyé. ACK des messages.")
-                            for msg in valid_messages_in_batch:
-                                await msg.ack()
-                        else:
-                            # Provoque une exception pour entrer dans le bloc de gestion d'erreur
-                            raise aiohttp.ClientResponseError(None, None, status=resp.status, message=f"Le serveur de logging a répondu {resp.status}")
+                        resp.raise_for_status() # Lève une ClientResponseError pour les statuts 4xx/5xx
+                        
+                        print(f"      • [SUCCESS] Batch de {len(metrics_to_send)} métriques envoyé. ACK des messages.")
+                        for msg in valid_messages_in_batch:
+                            await msg.ack()
 
-            except (aiohttp.ClientError, aiohttp.ClientResponseError) as e:
+            except aiohttp.ClientError as e:
                 print(f"      • [FAILURE] Erreur lors de l'envoi du batch: {e}. Lancement de la procédure de retry/DLQ.")
                 async with self.connection.channel() as channel:
                     dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
