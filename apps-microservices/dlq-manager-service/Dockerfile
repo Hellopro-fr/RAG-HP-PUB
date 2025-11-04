@@ -4,7 +4,7 @@ WORKDIR /app/frontend
 
 # Copy package.json and potentially package-lock.json to leverage Docker cache
 COPY apps-microservices/dlq-manager-service/frontend/package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Copy the rest of the frontend source code
 COPY apps-microservices/dlq-manager-service/frontend/ ./
