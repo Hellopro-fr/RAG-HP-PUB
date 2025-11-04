@@ -2,9 +2,8 @@
 FROM node:18-alpine AS build-frontend
 WORKDIR /app/frontend
 
-# Copy package.json and package-lock.json to leverage Docker cache
-COPY apps-microservices/dlq-manager-service/frontend/package.json ./
-COPY apps-microservices/dlq-manager-service/frontend/package-lock.json ./
+# Copy package.json and potentially package-lock.json to leverage Docker cache
+COPY apps-microservices/dlq-manager-service/frontend/package*.json ./
 RUN npm install
 
 # Copy the rest of the frontend source code
