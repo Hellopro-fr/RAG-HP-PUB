@@ -1,7 +1,7 @@
 pika
 aio_pika
 aiofiles
-asyncio
+pymilvus
 beautifulsoup4
 bs4
 markdownify
