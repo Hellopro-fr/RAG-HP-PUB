@@ -208,30 +208,14 @@ class MilvusProduitsCrud:
 
             self.logger.info(f"[{model_key}][Produits] Début mise à jour pour id_produit: {id_produit}")
 
-            # 1. Récupérer correspondance par id_produit
-            correspondance_result = correspondance_produit.get_correspondance_by_id_produit(id_produit)
+            # Déterminer la source à partir du premier produit
+            source = produits[0].get("source", origin.upper()) if len(produits) > 0 else origin.upper()
 
-            if correspondance_result["status"] == "error":
-                self.logger.error(f"[{model_key}][Produits] Erreur récupération correspondance: {correspondance_result['message']}")
-                return {
-                    "status": "error",
-                    "message": f"Échec récupération correspondance: {correspondance_result['message']}"
-                }
+            self.logger.info(f"[{model_key}][Produits] Suppression des anciens produits avec id_produit={id_produit} et source={source}")
 
-            # 2. Parser les IDs
-            ids_str = correspondance_result["data"].get("id_produit_milvus", "")
-            if not ids_str:
-                self.logger.error(f"[{model_key}][Produits] Aucun ID trouvé dans la correspondance")
-                return {
-                    "status": "error",
-                    "message": "Aucun ID trouvé dans la correspondance"
-                }
-
-            ids = [int(x.strip()) for x in ids_str.split(",") if x.strip()]
-            self.logger.info(f"[{model_key}][Produits] IDs à supprimer: {ids}")
-
-            # 3. Supprimer les anciennes données dans 'produits_3'
-            delete_result = self.delete_produits_by_ids(ids)
+            # 1. Supprimer TOUS les produits avec ce id_produit ET cette source
+            # Cette méthode est plus robuste car elle ne dépend pas de la table de correspondance
+            delete_result = self.delete_produits_by_id_produit_and_source(id_produit, source)
             if delete_result["status"] == "error":
                 self.logger.error(f"[{model_key}][Produits] Erreur suppression: {delete_result['message']}")
                 return {
@@ -239,8 +223,9 @@ class MilvusProduitsCrud:
                     "message": f"Échec suppression produits: {delete_result['message']}"
                 }
 
-            # 4. Supprimer dans la table de correspondance (avec retry)
-            delete_corr_result = correspondance_produit.delete_correspondance_by_id_produit(id_produit)
+            # 2. Supprimer dans la table de correspondance
+            # Note: On utilise id_produit + origin (pas source) car la table de correspondance utilise origin
+            delete_corr_result = correspondance_produit.delete_correspondance_by_id_produit_and_origin(id_produit, origin)
             if delete_corr_result["status"] == "error":
                 self.logger.error(f"[{model_key}][Produits] Erreur suppression correspondance: {delete_corr_result['message']}")
                 return {
@@ -248,7 +233,7 @@ class MilvusProduitsCrud:
                     "message": f"Échec suppression correspondance: {delete_corr_result['message']}"
                 }
 
-            self.logger.info(f"[{model_key}][Produits] Suppression réussie. Réinsertion en cours...")
+            self.logger.info(f"[{model_key}][Produits] Suppression réussie pour id_produit={id_produit}, source={source}. Réinsertion en cours...")
 
             # 5. Ajouter date_maj à tous les produits avant réinsertion
             date_maj = datetime.now().isoformat()
@@ -378,6 +363,66 @@ class MilvusProduitsCrud:
             return {
                 "status": "success",
                 "message": f"{len(ids)} produits supprimés."
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Produits] Erreur Milvus lors de la suppression : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Produits] Suppression : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
+
+    def delete_produits_by_id_produit_and_source(self, id_produit: str, source: str) -> Dict[str, Any]:
+        """
+        Supprime tous les produits ayant un id_produit et une source donnés
+        Cette méthode est plus sûre que delete_produits_by_ids car elle ne dépend pas de la table de correspondance
+
+        Args:
+            id_produit: L'identifiant du produit
+            source: La source du produit (BO, SITEWEB, API, etc.)
+
+        Returns:
+            Dict avec status et message
+        """
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not id_produit or not source:
+                self.logger.error(f"[{model_key}][Produits] Suppression sans id_produit ou source.")
+                return {
+                    "status": "error",
+                    "message": "id_produit et source requis pour la suppression."
+                }
+
+            # Construire l'expression pour Milvus
+            expr = f'id_produit == "{id_produit}" && source == "{source}"'
+
+            self.logger.info(f"[{model_key}][Produits] Suppression avec expression: {expr}")
+
+            self.collection.delete(expr)
+            # self.collection.flush()
+
+            self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
+
+            return {
+                "status": "success",
+                "message": f"Produits avec id_produit={id_produit} et source={source} supprimés."
             }
 
         except MilvusException as e:
