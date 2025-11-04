@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pika
+elasticsearch
+python-dotenv
+aiohttp

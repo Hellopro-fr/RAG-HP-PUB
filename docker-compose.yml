@@ -761,6 +761,27 @@ services:
       - services-net
     logging: *logging_defaults
 
+  dlq-manager-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/dlq-manager-service/Dockerfile
+    container_name: dlq-manager-service
+    profiles: ["disabled"]
+    restart: unless-stopped
+    ports:
+      - "8585:80"
+    env_file:
+      - .env
+    environment:
+      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+    networks:
+      - services-net
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    logging: *logging_defaults
+
   dlq-archiver-host:
     build:
       context: .
