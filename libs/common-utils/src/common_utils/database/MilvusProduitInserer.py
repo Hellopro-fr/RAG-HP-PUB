@@ -126,3 +126,196 @@ class MilvusProduitInserer:
         except Exception as e:
             self.logger.error(f"[{model_key}][Correspondance produits BO-Milvus] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {datas}")
+
+    def get_correspondance_by_id_produit(self, id_produit: str) -> Dict[str, Any]:
+        """
+        Récupère l'enregistrement de correspondance par id_produit
+
+        Args:
+            id_produit: L'identifiant du produit
+
+        Returns:
+            Dict avec status et data ou message d'erreur
+        """
+        model_config = ModelConfig()
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not id_produit:
+                return {
+                    "status": "error",
+                    "message": "id_produit requise pour la récupération."
+                }
+
+            self.logger.info(f"[Correspondance Produit BO-Milvus] Récupération pour id_produit: {id_produit}")
+
+            result = self.collection.query(
+                expr=f'id_produit == "{id_produit}"',
+                output_fields=["id", "id_produit_milvus", "id_produit", "origin", "date_ajout", "date_maj"]
+            )
+
+            if not result or len(result) == 0:
+                return {
+                    "status": "error",
+                    "message": f"Aucune correspondance trouvée pour id_produit: {id_produit}"
+                }
+
+            self.logger.info(f"[Correspondance Produit BO-Milvus] ✓ Récupération terminée avec succès.")
+
+            return {
+                "status": "success",
+                "data": result[0]  # Retourne le premier (et normalement unique) résultat
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[Correspondance Produit BO-Milvus] Erreur Milvus lors de la récupération : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
+        except Exception as e:
+            self.logger.error(f"[Correspondance Produit BO-Milvus] Erreur de récupération : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
+
+    def delete_correspondance_by_id_produit_and_origin(self, id_produit: str, origin: str) -> Dict[str, Any]:
+        """
+        Supprime l'enregistrement de correspondance par id_produit ET origin avec retry
+        Méthode plus précise que delete_correspondance_by_id_produit
+
+        Args:
+            id_produit: L'identifiant du produit
+            origin: La source du produit (bo, siteweb, api, etc.)
+
+        Returns:
+            Dict avec status success ou error
+        """
+        model_config = ModelConfig()
+        max_retries = 3
+        retry_delay = 0.5  # 500ms
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not id_produit or not origin:
+                return {
+                    "status": "error",
+                    "message": "id_produit et origin requis pour la suppression."
+                }
+
+            self.logger.info(f"[Correspondance Produit BO-Milvus] Suppression pour id_produit: {id_produit}, origin: {origin}")
+
+            import time
+            for attempt in range(max_retries):
+                try:
+                    expr = f'id_produit == "{id_produit}" && origin == "{origin}"'
+                    self.collection.delete(expr)
+                    self.collection.flush()
+
+                    self.logger.info(f"[Correspondance Produit BO-Milvus] ✓ Suppression terminée avec succès.")
+
+                    return {
+                        "status": "success",
+                        "message": f"Correspondance pour id_produit={id_produit} et origin={origin} supprimée."
+                    }
+                except Exception as retry_error:
+                    if attempt < max_retries - 1:
+                        self.logger.warning(f"[Correspondance Produit BO-Milvus] Tentative {attempt + 1}/{max_retries} échouée: {retry_error}. Retry dans {retry_delay}s...")
+                        time.sleep(retry_delay)
+                    else:
+                        raise
+
+        except MilvusException as e:
+            self.logger.error(f"[Correspondance Produit BO-Milvus] Erreur Milvus lors de la suppression : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
+        except Exception as e:
+            self.logger.error(f"[Correspondance Produit BO-Milvus] Erreur de suppression : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
+
+    def delete_correspondance_by_id_produit(self, id_produit: str) -> Dict[str, Any]:
+        """
+        Supprime l'enregistrement de correspondance par id_produit avec retry
+
+        Args:
+            id_produit: L'identifiant du produit
+
+        Returns:
+            Dict avec status success ou error
+        """
+        model_config = ModelConfig()
+        max_retries = 3
+        retry_delay = 0.5  # 500ms
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not id_produit:
+                return {
+                    "status": "error",
+                    "message": "id_produit requise pour la suppression."
+                }
+
+            self.logger.info(f"[Correspondance Produit BO-Milvus] Suppression pour id_produit: {id_produit}")
+
+            import time
+            for attempt in range(max_retries):
+                try:
+                    expr = f'id_produit == "{id_produit}"'
+                    self.collection.delete(expr)
+                    self.collection.flush()
+
+                    self.logger.info(f"[Correspondance Produit BO-Milvus] ✓ Suppression terminée avec succès.")
+
+                    return {
+                        "status": "success",
+                        "message": f"Correspondance pour id_produit {id_produit} supprimée."
+                    }
+                except Exception as retry_error:
+                    if attempt < max_retries - 1:
+                        self.logger.warning(f"[Correspondance Produit BO-Milvus] Tentative {attempt + 1}/{max_retries} échouée: {retry_error}. Retry dans {retry_delay}s...")
+                        time.sleep(retry_delay)
+                    else:
+                        raise
+
+        except MilvusException as e:
+            self.logger.error(f"[Correspondance Produit BO-Milvus] Erreur Milvus lors de la suppression : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
+        except Exception as e:
+            self.logger.error(f"[Correspondance Produit BO-Milvus] Erreur de suppression : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }

@@ -173,58 +173,120 @@ class MilvusProduitsCrud:
             self.logger.error(f"[{model_key}][Produits] insertion de batch : {e}", exc_info=True)
             self.logger.error(f"Data : {datas}")
     
-    def update_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def update_produits(self, produits: List[Dict[str, Any]], id_produit: str, correspondance_produit, origin: str = "bo") -> Dict[str, Any]:
+        """
+        Met à jour les produits pour un id_produit donné
+        Logique: DELETE ancien + INSERT nouveau + MAJ correspondance
+
+        Args:
+            produits: Liste des nouveaux produits à insérer
+            id_produit: L'identifiant du produit à mettre à jour
+            correspondance_produit: Instance de MilvusProduitInserer pour gérer la correspondance
+            origin: Source du produit (bo, siteweb, api, etc.)
+
+        Returns:
+            Dict avec status, data et flags (already_in_bdd, updated)
+        """
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
-            
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
-            
-            if not data or self.collection is None:
+
+            if not self.collection:
                 return {
                     "status": "error",
-                    "message": "Aucune donnée à mettre à jour ou collection non initialisée."
+                    "message": "Collection non initialisée."
                 }
-            
-            if not data.get("id"):
-                self.logger.error(f"[{model_key}][Produits] Mise à jour sans ID.")
+
+            if not produits or len(produits) == 0:
                 return {
                     "status": "error",
-                    "message": "Clé primaire (ID) requise pour la mise à jour."
+                    "message": "Aucune donnée à mettre à jour."
                 }
 
-            self.logger.info(f"[{model_key}][Produits] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
-            
-            
-            data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+            self.logger.info(f"[{model_key}][Produits] Début mise à jour pour id_produit: {id_produit}")
 
-            # Sanitize the record to ensure no None values
-            # This is important for Milvus compatibility
-            data = Utils.sanitize_record(data)  
+            # Déterminer la source à partir du premier produit
+            source = produits[0].get("source", origin.upper()) if len(produits) > 0 else origin.upper()
 
-            result = self.collection.upsert(data)
-            self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
-            
-            return {
-                "ids": str(result.primary_keys[0]) if result.primary_keys else "",
-                "status": "success",
-            }
+            self.logger.info(f"[{model_key}][Produits] Suppression des anciens produits avec id_produit={id_produit} et source={source}")
+
+            # 1. Supprimer TOUS les produits avec ce id_produit ET cette source
+            # Cette méthode est plus robuste car elle ne dépend pas de la table de correspondance
+            delete_result = self.delete_produits_by_id_produit_and_source(id_produit, source)
+            if delete_result["status"] == "error":
+                self.logger.error(f"[{model_key}][Produits] Erreur suppression: {delete_result['message']}")
+                return {
+                    "status": "error",
+                    "message": f"Échec suppression produits: {delete_result['message']}"
+                }
+
+            # 2. Supprimer dans la table de correspondance
+            # Note: On utilise id_produit + origin (pas source) car la table de correspondance utilise origin
+            delete_corr_result = correspondance_produit.delete_correspondance_by_id_produit_and_origin(id_produit, origin)
+            if delete_corr_result["status"] == "error":
+                self.logger.error(f"[{model_key}][Produits] Erreur suppression correspondance: {delete_corr_result['message']}")
+                return {
+                    "status": "error",
+                    "message": f"Échec suppression correspondance: {delete_corr_result['message']}"
+                }
+
+            self.logger.info(f"[{model_key}][Produits] Suppression réussie pour id_produit={id_produit}, source={source}. Réinsertion en cours...")
+
+            # 5. Ajouter date_maj à tous les produits avant réinsertion
+            date_maj = datetime.now().isoformat()
+            for produit in produits:
+                produit["date_maj"] = date_maj
+
+            # 6. Réinsérer les nouvelles données
+            insert_result = self.insert_produits(produits)
+
+            if insert_result and insert_result.get("status") == "success":
+                # 7. Réinsérer dans la table de correspondance avec l'origin passé en paramètre
+                data_bo_milvus = [{
+                    "embedding": [0.0]*1024,
+                    "id_produit_milvus": insert_result.get("ids", ""),
+                    "id_produit": id_produit,
+                    "origin": origin,  # Utilise l'origin passé en paramètre
+                    "date_ajout": datetime.now().isoformat(),
+                    "date_maj": datetime.now().isoformat()
+                }]
+                correspondance_produit.insert_correpondance_produit(data_bo_milvus)
+
+                self.logger.info(f"[{model_key}][Produits] ✓ Mise à jour terminée avec succès.")
+
+                return {
+                    "status": "success",
+                    "data": insert_result,
+                    "already_in_bdd": True,
+                    "updated": True
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": "Échec de la réinsertion après suppression"
+                }
 
         except MilvusException as e:
             self.logger.error(f"[{model_key}][Produits] Erreur Milvus lors de mise à jour : {e}")
-            self.logger.error(f"Data : {data}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
         except Exception as e:
-            self.logger.error(f"[{model_key}][Produits] Mise à jour de batch : {e}", exc_info=True)
-            self.logger.error(f"Data : {data}")
+            self.logger.error(f"[{model_key}][Produits] Mise à jour : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
 
     def delete_produits(self,data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
         id_entity_milvus = data.get("id")
-        
+
         try:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
@@ -257,6 +319,125 @@ class MilvusProduitsCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][Produits] Suppression : {e}", exc_info=True)
 
+    def delete_produits_by_ids(self, ids: List[int]) -> Dict[str, Any]:
+        """
+        Supprime plusieurs entités par leurs IDs
+
+        Args:
+            ids: Liste des IDs à supprimer
+
+        Returns:
+            Dict avec status success ou error
+        """
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not ids or len(ids) == 0:
+                self.logger.error(f"[{model_key}][Produits] Suppression sans IDs.")
+                return {
+                    "status": "error",
+                    "message": "Liste d'IDs requise pour la suppression."
+                }
+
+            self.logger.info(f"[{model_key}][Produits] Suppression de {len(ids)} entités avec IDs {ids} dans '{self.collection.name}'...")
+
+            # Construire l'expression pour Milvus
+            ids_str = ", ".join(map(str, ids))
+            expr = f"id in [{ids_str}]"
+
+            self.collection.delete(expr)
+            #self.collection.flush()
+
+            self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
+
+            return {
+                "status": "success",
+                "message": f"{len(ids)} produits supprimés."
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Produits] Erreur Milvus lors de la suppression : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Produits] Suppression : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
+
+    def delete_produits_by_id_produit_and_source(self, id_produit: str, source: str) -> Dict[str, Any]:
+        """
+        Supprime tous les produits ayant un id_produit et une source donnés
+        Cette méthode est plus sûre que delete_produits_by_ids car elle ne dépend pas de la table de correspondance
+
+        Args:
+            id_produit: L'identifiant du produit
+            source: La source du produit (BO, SITEWEB, API, etc.)
+
+        Returns:
+            Dict avec status et message
+        """
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not id_produit or not source:
+                self.logger.error(f"[{model_key}][Produits] Suppression sans id_produit ou source.")
+                return {
+                    "status": "error",
+                    "message": "id_produit et source requis pour la suppression."
+                }
+
+            # Construire l'expression pour Milvus
+            expr = f'id_produit == "{id_produit}" && source == "{source}"'
+
+            self.logger.info(f"[{model_key}][Produits] Suppression avec expression: {expr}")
+
+            self.collection.delete(expr)
+            # self.collection.flush()
+
+            self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
+
+            return {
+                "status": "success",
+                "message": f"Produits avec id_produit={id_produit} et source={source} supprimés."
+            }
+
+        except MilvusException as e:
+            self.logger.error(f"[{model_key}][Produits] Erreur Milvus lors de la suppression : {e}")
+            return {
+                "status": "error",
+                "message": f"Erreur Milvus: {str(e)}"
+            }
+        except Exception as e:
+            self.logger.error(f"[{model_key}][Produits] Suppression : {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"Erreur: {str(e)}"
+            }
+
     def get_produit(self,id_produit: str) -> Dict[str, Any]:
         list_id_produit = [id_produit]
         model_config = ModelConfig()
@@ -282,7 +463,7 @@ class MilvusProduitsCrud:
 
             result = self.collection.query(
                 expr=f"id_produit in {list_id_produit}",
-                output_fields=["id", "source"]
+                output_fields=["id", "source", "nom_produit", "id_categorie", "prix_ht", "prix_ttc", "type_produit", "text"]
             )
             #self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
