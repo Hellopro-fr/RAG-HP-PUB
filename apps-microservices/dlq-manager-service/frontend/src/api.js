@@ -5,11 +5,14 @@ const api = axios.create({
 });
 
 // Functionality #1: Dashboard
-export const apiGetDashboardStats = () => api.get('/dashboard-stats');
+export const apiGetDashboardStats = (filters) => api.post('/dashboard-stats', filters);
 
-// Functionality #2 & #8: Search
+// Functionality #2 & #8: Search (Lightweight)
 export const apiSearchMessages = (searchParams) => api.post('/messages/search', searchParams);
 export const apiSearchGroupedMessages = (searchParams) => api.post('/messages/grouped-search', searchParams);
+
+// NEW: Endpoint to get full message details (Heavy)
+export const apiGetMessageDetails = (messageId) => api.get(`/messages/${messageId}`);
 
 // Functionality #4: Single Re-queue
 export const apiRequeueMessage = (messageId) => api.post(`/messages/${messageId}/requeue`);

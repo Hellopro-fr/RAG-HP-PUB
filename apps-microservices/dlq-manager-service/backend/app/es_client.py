@@ -10,13 +10,33 @@ class ElasticsearchClient:
     def __init__(self, client: AsyncElasticsearch):
         self.client = client
 
-    async def get_dashboard_stats(self) -> Dict[str, Any]:
-        """Runs aggregations for the dashboard."""
+    async def get_dashboard_stats(self, filters: Dict = None) -> Dict[str, Any]:
+        """Runs aggregations for the dashboard, focusing only on 'New' messages."""
+        # This is the base filter for the entire dashboard: only show actionable "New" messages.
+        query = {
+            "bool": {
+                "must": [],
+                "must_not": [
+                    {"exists": {"field": "status"}},
+                    {"exists": {"field": "requeued_at"}}
+                ]
+            }
+        }
+
+        if filters:
+            if filters.get("date_start") or filters.get("date_end"):
+                time_range = {}
+                if filters.get("date_start"):
+                    time_range["gte"] = filters["date_start"]
+                if filters.get("date_end"):
+                    time_range["lte"] = filters["date_end"]
+                query["bool"]["must"].append({"range": {"@timestamp": time_range}})
+
         body = {
             "size": 0,
+            "query": query,
             "aggs": {
-                "total_failed": {"value_count": {"field": "_id"}},
-                "by_service": {"terms": {"field": "service_name.keyword", "size": 20}},
+                "by_service": {"terms": {"field": "service_name", "size": 20}},
                 "by_error": {"terms": {"field": "error_reason.keyword", "size": 10}},
                 "over_time": {
                     "date_histogram": {
@@ -29,8 +49,10 @@ class ElasticsearchClient:
         }
         response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
         aggs = response['aggregations']
+        pending_count = response['hits']['total']['value']
+        
         return {
-            "total_failed": aggs['total_failed']['value'],
+            "pending_count": pending_count,
             "by_service": aggs['by_service']['buckets'],
             "by_error": aggs['by_error']['buckets'],
             "over_time": aggs['over_time']['buckets']
@@ -59,17 +81,26 @@ class ElasticsearchClient:
                 query["bool"]["must"].append({"range": {"@timestamp": time_range}})
             
             if filters.get("service_names"):
-                query["bool"]["must"].append({"terms": {"service_name.keyword": filters["service_names"]}})
+                # Split the comma-separated string into a list of clean strings for the 'terms' query
+                service_list = [s.strip() for s in filters["service_names"].split(',') if s.strip()]
+                if service_list:
+                    # FIX: Use 'service_name' which is the correct keyword field, not 'service_name.keyword'
+                    query["bool"]["must"].append({"terms": {"service_name": service_list}})
 
-            if filters.get("status") == "New":
+            status_filter = filters.get("status")
+            if status_filter == "New":
                  query["bool"]["must_not"].append({"exists": {"field": "status"}})
-            elif filters.get("status"):
-                query["bool"]["must"].append({"term": {"status.keyword": filters["status"]}})
+                 query["bool"]["must_not"].append({"exists": {"field": "requeued_at"}})
+            elif status_filter == "Re-queued (Legacy)":
+                 query["bool"]["must"].append({"exists": {"field": "requeued_at"}})
+                 query["bool"]["must_not"].append({"exists": {"field": "status"}})
+            elif status_filter:
+                query["bool"]["must"].append({"term": {"status.keyword": status_filter}})
 
         return query
 
     async def search_messages(self, filters: Dict, search_term: str, page: int, page_size: int) -> Tuple[List[Dict], int]:
-        """Performs a paginated search for messages."""
+        """Performs a paginated search for messages, excluding the large payload."""
         query = self._build_query(filters, search_term)
         response = await self.client.search(
             index=ELASTIC_INDEX_NAME,
@@ -78,10 +109,18 @@ class ElasticsearchClient:
                 "from": (page - 1) * page_size,
                 "size": page_size,
                 "sort": [{"@timestamp": "desc"}],
+                "_source": {"excludes": ["original_payload"]}
             }
         )
         hits = [hit for hit in response['hits']['hits']]
         total = response['hits']['total']['value']
+        
+        # Transform data for consistent presentation in the UI
+        for hit in hits:
+            source = hit['_source']
+            if 'status' not in source and 'requeued_at' in source:
+                source['status'] = 'Re-queued (Legacy)'
+                
         return hits, total
 
     async def get_grouped_errors(self, filters: Dict, search_term: str) -> List[Dict]:
@@ -108,6 +147,7 @@ class ElasticsearchClient:
         return response['aggregations']['grouped_errors']['buckets']
     
     async def get_message(self, message_id: str) -> Dict:
+        """Gets the full document for a single message, including the payload."""
         try:
             response = await self.client.get(index=ELASTIC_INDEX_NAME, id=message_id)
             return response
@@ -166,7 +206,9 @@ class ElasticsearchClient:
                 yield hits
                 
                 body['pit']['id'] = response['pit_id']
-                body['search_after'] = hits[-1]['sort']
+                if 'sort' in hits[-1]:
+                    body['search_after'] = hits[-1]['sort']
+                
         finally:
             await self.client.close_point_in_time(body={"id": pit['id']})
 
