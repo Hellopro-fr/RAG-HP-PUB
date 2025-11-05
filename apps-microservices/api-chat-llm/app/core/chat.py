@@ -16,7 +16,8 @@ from common_utils.grpc_clients import (
 from app.schemas.chat import chatResponse
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 from app.core.credentials import settings
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -32,6 +33,7 @@ class DeepSeek:
         self.MODEL = "deepseek-chat"
         self.TEMPERATURE = 0.4
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+        self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
 
     def chat(self, message, stream=False):
         response = self.client.chat.completions.create(
@@ -54,7 +56,7 @@ class DeepSeek:
         self.TEMPERATURE = float(temperature)
         
     async def stream(self, message):
-        response_stream = await self.client.chat.completions.create(
+        response_stream = await self.async_client.chat.completions.create(
             model=self.MODEL,
             messages=[
                 {"role": "system", "content": "You are a helpful and intelligent assistant."},
