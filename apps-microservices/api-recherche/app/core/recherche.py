@@ -242,7 +242,7 @@ class SearchOrchestrator:
         self.context_builder = ContextBuilder()
         
     def _get_top_k_retrieval(self, top_k_final: int) -> int:
-        return int(top_k_final * 1.5 if self.request.options.use_reranker else top_k_final)
+        return int(top_k_final * 1.2 if self.request.options.use_reranker else top_k_final)
 
 
     async def search_stream(self):
