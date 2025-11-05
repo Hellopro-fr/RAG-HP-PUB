@@ -55,7 +55,7 @@ class DLQArchiver:
             raise ConnectionError("❌ DLQ Archiver: Impossible de se connecter à Elasticsearch.")
 
     def setup_queues(self):
-        """Declares queues passively and sets up consumers."""
+        """Declares queues and sets up consumers."""
         print("   -> Configuration des files d'attente DLQ...")
         if not self.channel or self.channel.is_closed:
             raise ConnectionError("Le canal RabbitMQ n'est pas ouvert pour la configuration.")
@@ -66,16 +66,8 @@ class DLQArchiver:
             self.es_client.indices.create(index=ELASTIC_INDEX_NAME, body=INDEX_MAPPING)
 
         for queue_name in self.dlq_queues:
-            # Use passive=True to assert the queue exists without redefining its arguments.
-            # This respects the existing queue configuration and prevents the PRECONDITION_FAILED error.
-            try:
-                self.channel.queue_declare(queue=queue_name, durable=True, passive=True)
-                self.channel.basic_consume(queue=queue_name, on_message_callback=self._callback, auto_ack=False)
-            except pika.exceptions.ChannelClosedByBroker as e:
-                print(f"❌ ERREUR CRITIQUE: Impossible de déclarer la file d'attente '{queue_name}' passivement. "
-                      f"Assurez-vous qu'elle existe et qu'elle est durable. Détails: {e}")
-                # This is a fatal configuration error, so we should stop the service.
-                raise
+            self.channel.queue_declare(queue=queue_name, durable=True)
+            self.channel.basic_consume(queue=queue_name, on_message_callback=self._callback, auto_ack=False)
         print("   -> Consommation démarrée sur les files d'attente.")
 
     def _callback(self, ch, method, properties, body):
