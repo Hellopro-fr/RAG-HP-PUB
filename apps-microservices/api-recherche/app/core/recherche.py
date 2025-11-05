@@ -103,6 +103,27 @@ class FilterBuilder:
         DataType.FLOAT.value,
         DataType.DOUBLE.value,
     }
+    
+    PAGE_TYPE_SITEWEB = {
+        "home",
+        "listing_produit",
+        "fiche_produit",
+        "fiche_realisation",
+        "presentation_societe",
+        "contact",
+        "cgv_mentions_legales_cgu",
+        "article",
+        "savoir_faire",
+        "page_local",
+        "demande_devis",
+        "compte_client",
+        "recrutement",
+        "references_clients",
+        "faq",
+        "plan_du_site",
+        "politique_confidentialite",
+        "autre"
+    }
 
     async def build(self, filtre: dict, source: str = "") -> list:
         clauses = []
@@ -163,7 +184,11 @@ class FilterBuilder:
             if key == "id_categorie" and source == "devis":
                 numeric_vals = [int(v) for v in val]
                 return f"{key} in {numeric_vals}"
+            
             quoted_vals = [repr(str(v)) for v in val]
+            if key == 'page_type':
+                quoted_vals = [repr(str(v).lower()) for v in val if v in self.PAGE_TYPE_SITEWEB]
+                
             return f"{key} in [{', '.join(quoted_vals)}]"
         else:
             return f"{key} == {repr(str(val))}"
