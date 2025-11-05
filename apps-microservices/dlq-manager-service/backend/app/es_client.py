@@ -62,7 +62,8 @@ class ElasticsearchClient:
                 # Split the comma-separated string into a list of clean strings for the 'terms' query
                 service_list = [s.strip() for s in filters["service_names"].split(',') if s.strip()]
                 if service_list:
-                    query["bool"]["must"].append({"terms": {"service_name.keyword": service_list}})
+                    # FIX: Use 'service_name' which is the correct keyword field, not 'service_name.keyword'
+                    query["bool"]["must"].append({"terms": {"service_name": service_list}})
 
             if filters.get("status") == "New":
                  query["bool"]["must_not"].append({"exists": {"field": "status"}})

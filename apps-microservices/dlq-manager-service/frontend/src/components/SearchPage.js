@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { apiSearchMessages, apiRequeueByFilter, apiBulkRequeue, apiBulkArchive } from '../api';
 import MessageList from './MessageList';
 import MessageDetailModal from './MessageDetailModal';
@@ -23,11 +23,12 @@ function SearchPage() {
     
     const [viewMode, setViewMode] = useState('individual'); // 'individual' or 'grouped'
 
-    const fetchMessages = useCallback(async () => {
+    // FIX: Refactored fetch logic to be an explicit function call
+    const fetchMessages = async (currentPage = 1) => {
         try {
             setLoading(true);
             setError('');
-            const response = await apiSearchMessages({ filters, searchTerm, page, pageSize });
+            const response = await apiSearchMessages({ filters, searchTerm, page: currentPage, pageSize });
             setMessages(response.data.messages);
             setTotal(response.data.total);
             saveFiltersToStorage(filters);
@@ -37,20 +38,22 @@ function SearchPage() {
         } finally {
             setLoading(false);
         }
-    }, [filters, searchTerm, page]);
+    };
 
+    // FIX: Load initial data only once on component mount
     useEffect(() => {
-        fetchMessages();
-    }, [fetchMessages]);
+        fetchMessages(1);
+    }, []); // Empty dependency array ensures this runs only once
     
     const handleFilterChange = (e) => {
         setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
 
+    // FIX: Search is now explicitly triggered by this button handler
     const handleSearch = (e) => {
         e.preventDefault();
-        setPage(1);
-        fetchMessages();
+        setPage(1); // Reset to page 1 for every new search
+        fetchMessages(1);
     };
 
     const handleRequeueByFilter = async () => {
@@ -60,7 +63,7 @@ function SearchPage() {
                 const rate = prompt("Enter messages per second (e.g., 10). Leave blank for no limit.", "10");
                 await apiRequeueByFilter({ filters, searchTerm, rate_limit_per_second: parseInt(rate) || null });
                 alert('Re-queue by filter process started.');
-                fetchMessages(); // Refresh
+                handleSearch({ preventDefault: () => {} }); // Refresh search results
             } catch (err) {
                 alert('Failed to start re-queue by filter.');
             }
@@ -82,7 +85,7 @@ function SearchPage() {
                 await apiBulkArchive({ message_ids: ids });
             }
             setSelectedIds(new Set());
-            fetchMessages(); // Refresh
+            handleSearch({ preventDefault: () => {} }); // Refresh search results
         } catch (err) {
             alert(`Failed to ${actionVerb} messages.`);
         }
@@ -133,7 +136,7 @@ function SearchPage() {
                 <MessageDetailModal 
                     message={selectedMessage} 
                     onClose={() => setSelectedMessage(null)}
-                    onActionSuccess={fetchMessages}
+                    onActionSuccess={() => handleSearch({ preventDefault: () => {} })}
                 />
             )}
             
