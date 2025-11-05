@@ -13,9 +13,8 @@ class ElasticsearchClient:
     async def get_dashboard_stats(self) -> Dict[str, Any]:
         """Runs aggregations for the dashboard."""
         body = {
-            "size": 0,
+            "size": 0, # We don't need the documents, just the aggregations and total count
             "aggs": {
-                "total_failed": {"value_count": {"field": "_id"}},
                 "by_service": {"terms": {"field": "service_name.keyword", "size": 20}},
                 "by_error": {"terms": {"field": "error_reason.keyword", "size": 10}},
                 "over_time": {
@@ -29,8 +28,9 @@ class ElasticsearchClient:
         }
         response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
         aggs = response['aggregations']
+        total_failed = response['hits']['total']['value'] # Get total count from the main response
         return {
-            "total_failed": aggs['total_failed']['value'],
+            "total_failed": total_failed,
             "by_service": aggs['by_service']['buckets'],
             "by_error": aggs['by_error']['buckets'],
             "over_time": aggs['over_time']['buckets']
@@ -59,7 +59,10 @@ class ElasticsearchClient:
                 query["bool"]["must"].append({"range": {"@timestamp": time_range}})
             
             if filters.get("service_names"):
-                query["bool"]["must"].append({"terms": {"service_name.keyword": filters["service_names"]}})
+                # Split the comma-separated string into a list of clean strings for the 'terms' query
+                service_list = [s.strip() for s in filters["service_names"].split(',') if s.strip()]
+                if service_list:
+                    query["bool"]["must"].append({"terms": {"service_name.keyword": service_list}})
 
             if filters.get("status") == "New":
                  query["bool"]["must_not"].append({"exists": {"field": "status"}})
@@ -166,7 +169,10 @@ class ElasticsearchClient:
                 yield hits
                 
                 body['pit']['id'] = response['pit_id']
-                body['search_after'] = hits[-1]['sort']
+                # Correctly handle search_after with Point in Time (PIT)
+                if 'sort' in hits[-1]:
+                    body['search_after'] = hits[-1]['sort']
+                
         finally:
             await self.client.close_point_in_time(body={"id": pit['id']})
 
