@@ -1,0 +1,45 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        'orange-primary': '#FB5607',
+        'orange-secondary': '#F46C0E',
+        'orange-light': '#FFF5F0',
+        'orange-heavy': '#E24C04',
+        'bleu-primary': '#3353FF',
+        'bleu-light': '#F5F6FF',
+        'bleu-heavy': '#0026F5',
+        'bleu-noir': '#041325',
+        'bleu-noir-2': '#00041A',
+        'noir-primary': '#1D1D1B',
+        'noir-heavy': '#000000',
+        'gris-primary': '#5F5F5F',
+        'gris-clair': '#BFBFBF',
+        'gris-blanc': '#D7DBE0',
+        'clair-1': '#E9E9E9',
+        'clair-2': '#EAECF1',
+        'clair-3': '#F0F2F5',
+        'clair-4': '#F4F4F4',
+        'white-primary': '#FFF',
+        'white-light': '#F9FAFB',
+        'vert-primary': '#02C39A',
+        'vert-light': '#DCFFF7',
+        'vert-secondary': '#02A280',
+        'vert-light-2': '#F5FFFD',
+        'rose-heavy': '#FF3175',
+        'rose-light': '#ff317526',
+        'rouge-primary': '#EA1F38',
+        'rouge-light': '#FEF1F3',
+        'rouge-light-2': '#FEF6F7',
+        'bleu-light-2': '#ADBAFF',
+        'orange-light-2': '#FEC8AF',
+        'jaune-primary': '#FFEB84',
+      }
+    },
+  },
+  plugins: [],
+}

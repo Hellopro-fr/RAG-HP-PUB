@@ -3,6 +3,15 @@ import { apiSearchMessages, apiRequeueByFilter, apiBulkRequeue, apiBulkArchive }
 import MessageList from './MessageList';
 import MessageDetailModal from './MessageDetailModal';
 
+const loadFiltersFromStorage = () => {
+    const stored = localStorage.getItem('dlq-filters');
+    // FIX: Ensure a default is always present if nothing is stored or if stored is empty
+    if (stored) {
+        return JSON.parse(stored);
+    }
+    return { status: 'New' };
+};
+
 // Functionality #10: Saved Filters (using localStorage)
 const saveFiltersToStorage = (filters) => localStorage.setItem('dlq-filters', JSON.stringify(filters));
 
@@ -12,11 +21,7 @@ function SearchPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     
-    // Default to a focused view of 'New' messages unless otherwise specified in localStorage
-    const [filters, setFilters] = useState(() => {
-        const stored = localStorage.getItem('dlq-filters');
-        return stored ? JSON.parse(stored) : { status: 'New' };
-    });
+    const [filters, setFilters] = useState(loadFiltersFromStorage);
     const [searchTerm, setSearchTerm] = useState('');
     const [page, setPage] = useState(1);
     const pageSize = 50;
@@ -24,8 +29,6 @@ function SearchPage() {
     const [selectedMessageId, setSelectedMessageId] = useState(null); // Changed from object to ID
     const [selectedIds, setSelectedIds] = useState(new Set());
     
-    const [viewMode, setViewMode] = useState('individual'); // 'individual' or 'grouped'
-
     const fetchMessages = async (currentPage = 1) => {
         try {
             setLoading(true);
@@ -93,45 +96,48 @@ function SearchPage() {
 
 
     return (
-        <div className="search-page">
-            <div className="filter-panel">
-                <form onSubmit={handleSearch}>
-                    <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search in payload, error..." />
-                    <input type="text" name="service_names" value={filters.service_names || ''} onChange={handleFilterChange} placeholder="Service name (comma-sep)" />
-                    <select name="status" value={filters.status || ''} onChange={handleFilterChange}>
-                        <option value="">Any Status</option>
-                        <option value="New">New</option>
-                        <option value="Re-queued">Re-queued</option>
-                        <option value="Re-queued (Legacy)">Re-queued (Legacy)</option>
-                        <option value="Archived">Archived</option>
-                    </select>
-                    <input type="datetime-local" name="date_start" value={filters.date_start || ''} onChange={handleFilterChange} />
-                    <input type="datetime-local" name="date_end" value={filters.date_end || ''} onChange={handleFilterChange} />
-                    <button type="submit">Search</button>
-                </form>
-            </div>
+        <div className="space-y-6">
+            <form onSubmit={handleSearch} className="bg-bleu-noir p-4 rounded-lg shadow-lg border border-gris-primary/20 space-y-4 md:space-y-0 md:flex md:items-center md:space-x-4">
+                <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search in payload, error..." className="w-full md:w-1/4 bg-bleu-noir-2 border border-gris-primary/30 rounded-md px-3 py-2 text-white-primary focus:ring-orange-primary focus:border-orange-primary"/>
+                <input type="text" name="service_names" value={filters.service_names || ''} onChange={handleFilterChange} placeholder="Service name (comma-sep)" className="w-full md:w-1/4 bg-bleu-noir-2 border border-gris-primary/30 rounded-md px-3 py-2 text-white-primary focus:ring-orange-primary focus:border-orange-primary"/>
+                <select name="status" value={filters.status || ''} onChange={handleFilterChange} className="w-full md:w-auto bg-bleu-noir-2 border border-gris-primary/30 rounded-md px-3 py-2 text-white-primary focus:ring-orange-primary focus:border-orange-primary">
+                    <option value="">Any Status</option>
+                    <option value="New">New</option>
+                    <option value="Re-queued">Re-queued</option>
+                    <option value="Re-queued (Legacy)">Re-queued (Legacy)</option>
+                    <option value="Archived">Archived</option>
+                </select>
+                <button type="submit" className="w-full md:w-auto px-4 py-2 bg-orange-primary text-white-primary rounded-md hover:bg-orange-heavy transition-colors">Search</button>
+            </form>
 
-            <div className="actions-bar">
-                {selectedIds.size > 0 ? (
-                    <>
-                        <span>{selectedIds.size} selected</span>
-                        <button onClick={() => handleBulkAction('requeue')}>Re-queue Selected</button>
-                        <button onClick={() => handleBulkAction('archive')}>Archive Selected</button>
-                    </>
-                ) : (
-                    <button onClick={handleRequeueByFilter} disabled={total === 0}>Re-queue All Matching ({total})</button>
+            <div className="bg-bleu-noir p-4 rounded-lg shadow-lg border border-gris-primary/20">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="text-sm text-gris-clair">
+                        {selectedIds.size > 0 ? `${selectedIds.size} selected` : `${total} messages found`}
+                    </div>
+                    <div>
+                        {selectedIds.size > 0 ? (
+                            <div className="space-x-2">
+                                <button onClick={() => handleBulkAction('requeue')} className="px-3 py-1 text-sm bg-vert-primary text-white-primary rounded-md hover:bg-vert-secondary">Re-queue Selected</button>
+                                <button onClick={() => handleBulkAction('archive')} className="px-3 py-1 text-sm bg-gris-primary text-white-primary rounded-md hover:bg-gris-clair">Archive Selected</button>
+                            </div>
+                        ) : (
+                            <button onClick={handleRequeueByFilter} disabled={total === 0} className="px-3 py-1 text-sm bg-bleu-primary text-white-primary rounded-md hover:bg-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed">Re-queue All Matching</button>
+                        )}
+                    </div>
+                </div>
+
+                {loading && <div className="text-center p-8">Loading messages...</div>}
+                {error && <div className="bg-rouge-light text-rouge-primary p-4 rounded-md">{error}</div>}
+                {!loading && !error && (
+                    <MessageList 
+                        messages={messages} 
+                        onMessageSelect={(message) => setSelectedMessageId(message._id)}
+                        selectedIds={selectedIds}
+                        setSelectedIds={setSelectedIds}
+                    />
                 )}
             </div>
-
-            {loading && <div>Loading...</div>}
-            {error && <div className="error-message">{error}</div>}
-            
-            <MessageList 
-                messages={messages} 
-                onMessageSelect={(message) => setSelectedMessageId(message._id)} // Pass ID instead of object
-                selectedIds={selectedIds}
-                setSelectedIds={setSelectedIds}
-            />
 
             {selectedMessageId && ( // Render modal based on ID
                 <MessageDetailModal 
