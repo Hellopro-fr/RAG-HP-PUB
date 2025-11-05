@@ -10,7 +10,10 @@ from common_utils.autres.DLQProperties import DLQProperties
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL")
 DEEPSEEK_METRICS_COLLECTOR_URL = os.environ.get("DEEPSEEK_METRICS_COLLECTOR_URL") # e.g., "http://api-gateway:8500/v1/log-metrics"
 
-BATCH_SIZE = 50  # Nombre de métriques à envoyer en un seul appel HTTP
+# --- Adaptive Batching Configuration ---
+MAX_BATCH_SIZE = 50  # L'objectif maximum de taille de batch.
+MIN_BATCH_SIZE = 5    # La taille minimale après détection d'un blocage.
+SUCCESS_THRESHOLD_FOR_INCREASE = 5 # Nombre de succès consécutifs avant d'augmenter la taille.
 BATCH_TIMEOUT_SECONDS = 15.0 # Temps d'attente fixe avant chaque envoi
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
@@ -19,6 +22,10 @@ class MetricsConsumer:
     def __init__(self, connection: aio_pika.RobustConnection):
         self.connection = connection
         self.metrics_buffer = asyncio.Queue()
+        
+        # --- State for Adaptive Batching ---
+        self.current_batch_size = MAX_BATCH_SIZE
+        self.successful_sends_in_a_row = 0
         
         # Noms des composants RabbitMQ
         self.exchange_name = 'processed_data_exchange'
@@ -77,13 +84,14 @@ class MetricsConsumer:
         await self.metrics_buffer.put(message)
 
     async def batch_sender(self):
-        """Tâche de fond qui envoie les métriques à intervalle fixe."""
-        print("⚙️  Expéditeur de batch de métriques démarré.")
+        """Tâche de fond qui envoie les métriques avec une taille de batch adaptative."""
+        print(f"⚙️  Expéditeur de batch démarré. Taille initiale: {self.current_batch_size}, Max: {MAX_BATCH_SIZE}.")
         while True:
             await asyncio.sleep(BATCH_TIMEOUT_SECONDS)
             
             batch = []
-            while len(batch) < BATCH_SIZE:
+            # Utiliser la taille de batch adaptative actuelle pour collecter les messages
+            while len(batch) < self.current_batch_size:
                 try:
                     message = self.metrics_buffer.get_nowait()
                     batch.append(message)
@@ -107,17 +115,34 @@ class MetricsConsumer:
             if not metrics_to_send:
                 continue # Le batch ne contenait que des messages invalides
 
-            print(f"   -> Envoi d'un batch de {len(metrics_to_send)} métriques...")
+            print(f"   -> Tentative d'envoi d'un batch de {len(metrics_to_send)} métriques (Taille adaptative: {self.current_batch_size})...")
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(DEEPSEEK_METRICS_COLLECTOR_URL, json=metrics_to_send) as resp:
                         resp.raise_for_status() # Lève une ClientResponseError pour les statuts 4xx/5xx
                         
-                        print(f"      • [SUCCESS] Batch de {len(metrics_to_send)} métriques envoyé. ACK des messages.")
+                        print(f"      • [SUCCESS] Batch envoyé. ACK des {len(valid_messages_in_batch)} messages.")
                         for msg in valid_messages_in_batch:
                             await msg.ack()
+                        
+                        # Logique adaptative en cas de succès
+                        self.successful_sends_in_a_row += 1
+                        if self.successful_sends_in_a_row >= SUCCESS_THRESHOLD_FOR_INCREASE:
+                            new_size = self.current_batch_size + (MAX_BATCH_SIZE // 10) # Augmente de 10% du max
+                            self.current_batch_size = min(MAX_BATCH_SIZE, new_size)
+                            self.successful_sends_in_a_row = 0
+                            print(f"      📈 Succès consécutifs. Augmentation de la taille du batch à {self.current_batch_size}.")
 
             except aiohttp.ClientError as e:
+                # Logique adaptative en cas d'échec
+                if isinstance(e, aiohttp.ClientResponseError) and e.status == 403:
+                    new_size = self.current_batch_size // 2
+                    self.current_batch_size = max(MIN_BATCH_SIZE, new_size)
+                    print(f"      📉 ERREUR 403 (WAF Block) détectée! Réduction drastique de la taille du batch à {self.current_batch_size}.")
+                
+                # Pour toute erreur, on reset le compteur de succès
+                self.successful_sends_in_a_row = 0
+
                 print(f"      • [FAILURE] Erreur lors de l'envoi du batch: {e}. Lancement de la procédure de retry/DLQ.")
                 async with self.connection.channel() as channel:
                     dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
@@ -156,7 +181,7 @@ async def main():
             
             async with connection:
                 channel = await connection.channel()
-                await channel.set_qos(prefetch_count=BATCH_SIZE * 2) # Prefetch un peu plus que la taille du batch
+                await channel.set_qos(prefetch_count=MAX_BATCH_SIZE * 2)
 
                 consumer = MetricsConsumer(connection)
                 queue = await consumer.setup_queues(channel)
