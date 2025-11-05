@@ -1,15 +1,77 @@
+import json
 from re import A
-from fastapi import APIRouter, HTTPException, Body
+from typing import List
+from fastapi import APIRouter, HTTPException, Body, WebSocket, WebSocketDisconnect
 from app.schemas.chat import  chatResponse
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 # from app.core.search import search_in_milvus
-from app.core.chat import get_chat_completion_response , get_chatgpt_chat_completion_response , get_deepseek_chat_completion_response , get_gemini_chat_completion_response
+from app.core.chat import get_chat_completion_response , get_chatgpt_chat_completion_response , get_deepseek_chat_completion_response , get_gemini_chat_completion_response, DeepSeek
 from app.core.credentials import settings
 import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+class ConnexionManager:
+    """
+    Gère les connexions WebSocket actives.
+    Chaque client est un "channel" unique.
+    """
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        """Accepte une nouvelle connexion et l'ajoute à la liste."""
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(f"Nouvelle connexion acceptée: {websocket.client}. Total: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        """Retire une connexion de la liste."""
+        self.active_connections.remove(websocket)
+        logger.info(f"Client déconnecté: {websocket.client}. Total: {len(self.active_connections)}")
+
+    async def send_personal_message(self, message: dict, websocket: WebSocket):
+        """Envoie un message JSON à un client spécifique."""
+        await websocket.send_json(message)
+
+# Crée une instance unique du gestionnaire qui sera partagée
+manager = ConnexionManager()
     
+@router.websocket("/ws/chat")
+async def ws_search(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        # Keep the connection open to listen for messages
+        while True:
+            # Wait for a message from the client
+            data = await websocket.receive_text()
+            
+            # For simplicity, we assume the data is the prompt
+            prompt = data
+            
+            if not prompt.strip():
+                await websocket.send_text("Error: Prompt cannot be empty.")
+                continue
+
+            # Instantiate DeepSeek and start streaming
+            deepseek_client = DeepSeek()
+            
+            # Stream the response back to the client
+            async for chunk in deepseek_client.stream(prompt):
+                await websocket.send_text(chunk)
+
+            # Signal the end of the stream (optional, but good practice)
+            await websocket.send_text("[END_OF_STREAM]")
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        logger.info(f"WebSocket disconnected for client: {websocket.client}")
+    except Exception as e:
+        logger.error(f"Error in WebSocket: {e}", exc_info=True)
+        # Attempt to send an error message before closing
+        await websocket.close(code=1011, reason=f"An internal error occurred: {e}")
+        manager.disconnect(websocket)
 
 @router.post("/llm/chat", tags=["Chat - LLM"])
 async def chat_completion_llm(request: ChatRequest = Body(...)):
