@@ -42,7 +42,7 @@ function MessageList({ messages, onMessageSelect, selectedIds, setSelectedIds })
                 <thead className="text-xs text-gris-primary uppercase bg-clair-3">
                     <tr>
                         <th scope="col" className="p-4">
-                            <input type="checkbox" onChange={handleSelectAll} className="w-4 h-4 text-orange-primary bg-clair-2 border-gris-blanc rounded focus:ring-orange-secondary"/>
+                            <input type="checkbox" onChange={handleSelectAll} className="w-4 h-4 text-bleu-primary bg-clair-2 border-gris-blanc rounded focus:ring-bleu-primary"/>
                         </th>
                         <th scope="col" className="px-6 py-3">Timestamp</th>
                         <th scope="col" className="px-6 py-3">Service</th>
@@ -55,7 +55,7 @@ function MessageList({ messages, onMessageSelect, selectedIds, setSelectedIds })
                     {messages.map(msg => (
                         <tr key={msg._id} className="border-b border-clair-2 hover:bg-clair-3">
                             <td className="w-4 p-4">
-                                 <input type="checkbox" checked={selectedIds.has(msg._id)} onChange={() => handleSelect(msg._id)} className="w-4 h-4 text-orange-primary bg-clair-2 border-gris-blanc rounded focus:ring-orange-secondary"/>
+                                 <input type="checkbox" checked={selectedIds.has(msg._id)} onChange={() => handleSelect(msg._id)} className="w-4 h-4 text-bleu-primary bg-clair-2 border-gris-blanc rounded focus:ring-bleu-primary"/>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-gris-primary">{format(new Date(msg._source['@timestamp']), 'yyyy-MM-dd HH:mm:ss')}</td>
                             <td className="px-6 py-4 font-medium">{msg._source.service_name}</td>
@@ -64,7 +64,7 @@ function MessageList({ messages, onMessageSelect, selectedIds, setSelectedIds })
                                 <StatusBadge status={msg._source.status} />
                             </td>
                             <td className="px-6 py-4">
-                                <button onClick={() => onMessageSelect(msg)} className="font-medium text-orange-primary hover:underline">Details</button>
+                                <button onClick={() => onMessageSelect(msg)} className="font-medium text-bleu-primary hover:underline">Details</button>
                             </td>
                         </tr>
                     ))}

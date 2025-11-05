@@ -43,27 +43,27 @@ function Dashboard() {
     return (
         <div className="space-y-8">
             <div className="flex justify-between items-center">
-                <h2 className="text-3xl font-bold text-noir-primary">DLQ Health Overview</h2>
+                <h2 className="text-3xl font-bold text-noir-primary">Pending Messages Overview</h2>
                 <div className="flex items-center space-x-2 text-sm">
-                    <input type="datetime-local" name="date_start" value={filters.date_start} onChange={handleFilterChange} className="bg-white-primary border border-gris-blanc rounded-md px-2 py-1 focus:ring-orange-primary focus:border-orange-primary"/>
+                    <input type="datetime-local" name="date_start" value={filters.date_start} onChange={handleFilterChange} className="bg-white-primary border border-gris-blanc rounded-md px-2 py-1 focus:ring-bleu-primary focus:border-bleu-primary"/>
                     <span>to</span>
-                    <input type="datetime-local" name="date_end" value={filters.date_end} onChange={handleFilterChange} className="bg-white-primary border border-gris-blanc rounded-md px-2 py-1 focus:ring-orange-primary focus:border-orange-primary"/>
+                    <input type="datetime-local" name="date_end" value={filters.date_end} onChange={handleFilterChange} className="bg-white-primary border border-gris-blanc rounded-md px-2 py-1 focus:ring-bleu-primary focus:border-bleu-primary"/>
                 </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white-primary p-6 rounded-lg shadow-md border border-clair-2">
                     <h3 className="text-lg font-medium text-gris-primary">Pending Messages (New)</h3>
-                    <p className="text-5xl font-bold text-orange-primary mt-2">{stats.pending_count}</p>
+                    <p className="text-5xl font-bold text-bleu-primary mt-2">{stats.pending_count}</p>
                 </div>
                 <div className="bg-white-primary p-6 rounded-lg shadow-md border border-clair-2">
-                    <h3 className="text-lg font-medium text-gris-primary mb-4">Top Errors</h3>
-                    <table className="w-full text-sm text-left">
+                    <h3 className="text-lg font-medium text-gris-primary mb-4">Top Errors on Pending Messages</h3>
+                    <table className="w-full text-sm text-left table-fixed">
                         <tbody>
                         {stats.by_error.map((e, index) => 
                             <tr key={e.key} className={index % 2 === 0 ? 'bg-white-light' : 'bg-white-primary'}>
-                                <td className="p-2 truncate">{e.key}</td>
-                                <td className="p-2 text-right font-bold">{e.doc_count}</td>
+                                <td className="p-2 truncate" title={e.key}>{e.key}</td>
+                                <td className="p-2 text-right font-bold w-16">{e.doc_count}</td>
                             </tr>
                         )}
                         </tbody>
@@ -72,14 +72,14 @@ function Dashboard() {
             </div>
 
             <div className="bg-white-primary p-6 rounded-lg shadow-md border border-clair-2">
-                <h3 className="text-lg font-medium text-gris-primary mb-4">Failures by Service</h3>
+                <h3 className="text-lg font-medium text-gris-primary mb-4">Pending Messages by Service</h3>
                 <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={serviceData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                         <XAxis dataKey="name" stroke="#BFBFBF" fontSize={12} />
                         <YAxis stroke="#BFBFBF" fontSize={12}/>
                         <Tooltip contentStyle={{ backgroundColor: '#FFF', border: '1px solid #E9E9E9' }} />
                         <Legend wrapperStyle={{fontSize: "14px"}}/>
-                        <Bar dataKey="count" fill="#FB5607" />
+                        <Bar dataKey="count" fill="#3353FF" />
                     </BarChart>
                 </ResponsiveContainer>
             </div>

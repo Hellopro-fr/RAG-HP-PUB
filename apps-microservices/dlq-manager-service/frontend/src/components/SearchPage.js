@@ -7,14 +7,17 @@ import Pagination from './Pagination';
 const loadFiltersFromStorage = () => {
     try {
         const stored = localStorage.getItem('dlq-filters');
-        if (stored) {
-            return JSON.parse(stored);
+        const filters = stored ? JSON.parse(stored) : {};
+        // If there's no status, or if status is an empty string, default to 'New'
+        if (!filters.status) {
+            filters.status = 'New';
         }
+        return filters;
     } catch (e) {
         console.error("Could not parse filters from localStorage", e);
+        // On any error, return the safe default
+        return { status: 'New' };
     }
-    // Always default to 'New' if nothing valid is stored
-    return { status: 'New' };
 };
 
 const saveFiltersToStorage = (filters) => localStorage.setItem('dlq-filters', JSON.stringify(filters));
@@ -103,16 +106,16 @@ function SearchPage() {
     return (
         <div className="space-y-6">
             <form onSubmit={handleSearch} className="bg-white-primary p-4 rounded-lg shadow-md border border-clair-2 space-y-4 md:space-y-0 md:flex md:items-center md:space-x-4">
-                <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search in payload, error..." className="w-full md:flex-grow bg-white-light border border-gris-blanc rounded-md px-3 py-2 text-noir-primary focus:ring-orange-primary focus:border-orange-primary"/>
-                <input type="text" name="service_names" value={filters.service_names || ''} onChange={handleFilterChange} placeholder="Service name (comma-sep)" className="w-full md:w-auto bg-white-light border border-gris-blanc rounded-md px-3 py-2 text-noir-primary focus:ring-orange-primary focus:border-orange-primary"/>
-                <select name="status" value={filters.status || ''} onChange={handleFilterChange} className="w-full md:w-auto bg-white-light border border-gris-blanc rounded-md px-3 py-2 text-noir-primary focus:ring-orange-primary focus:border-orange-primary">
+                <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search in payload, error..." className="w-full md:flex-grow bg-white-light border border-gris-blanc rounded-md px-3 py-2 text-noir-primary focus:ring-bleu-primary focus:border-bleu-primary"/>
+                <input type="text" name="service_names" value={filters.service_names || ''} onChange={handleFilterChange} placeholder="Service name (comma-sep)" className="w-full md:w-auto bg-white-light border border-gris-blanc rounded-md px-3 py-2 text-noir-primary focus:ring-bleu-primary focus:border-bleu-primary"/>
+                <select name="status" value={filters.status || ''} onChange={handleFilterChange} className="w-full md:w-auto bg-white-light border border-gris-blanc rounded-md px-3 py-2 text-noir-primary focus:ring-bleu-primary focus:border-bleu-primary">
                     <option value="">Any Status</option>
                     <option value="New">New</option>
                     <option value="Re-queued">Re-queued</option>
                     <option value="Re-queued (Legacy)">Re-queued (Legacy)</option>
                     <option value="Archived">Archived</option>
                 </select>
-                <button type="submit" className="w-full md:w-auto px-4 py-2 bg-orange-primary text-white-primary rounded-md hover:bg-orange-heavy transition-colors">Search</button>
+                <button type="submit" className="w-full md:w-auto px-4 py-2 bg-bleu-primary text-white-primary rounded-md hover:bg-bleu-heavy transition-colors">Search</button>
             </form>
 
             <div className="bg-white-primary rounded-lg shadow-md border border-clair-2">

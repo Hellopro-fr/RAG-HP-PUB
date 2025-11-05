@@ -11,8 +11,18 @@ class ElasticsearchClient:
         self.client = client
 
     async def get_dashboard_stats(self, filters: Dict = None) -> Dict[str, Any]:
-        """Runs aggregations for the dashboard, with optional filters."""
-        query = {"bool": {"must": []}}
+        """Runs aggregations for the dashboard, focusing only on 'New' messages."""
+        # This is the base filter for the entire dashboard: only show actionable "New" messages.
+        query = {
+            "bool": {
+                "must": [],
+                "must_not": [
+                    {"exists": {"field": "status"}},
+                    {"exists": {"field": "requeued_at"}}
+                ]
+            }
+        }
+
         if filters:
             if filters.get("date_start") or filters.get("date_end"):
                 time_range = {}
@@ -21,25 +31,11 @@ class ElasticsearchClient:
                 if filters.get("date_end"):
                     time_range["lte"] = filters["date_end"]
                 query["bool"]["must"].append({"range": {"@timestamp": time_range}})
-        
-        # If the query is empty, default to match_all
-        if not query["bool"]["must"]:
-            query = {"match_all": {}}
 
         body = {
             "size": 0,
             "query": query,
             "aggs": {
-                "pending_count": {
-                    "filter": {
-                        "bool": {
-                            "must_not": [
-                                {"exists": {"field": "status"}},
-                                {"exists": {"field": "requeued_at"}}
-                            ]
-                        }
-                    }
-                },
                 "by_service": {"terms": {"field": "service_name", "size": 20}},
                 "by_error": {"terms": {"field": "error_reason.keyword", "size": 10}},
                 "over_time": {
@@ -53,8 +49,10 @@ class ElasticsearchClient:
         }
         response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
         aggs = response['aggregations']
+        pending_count = response['hits']['total']['value']
+        
         return {
-            "pending_count": aggs['pending_count']['doc_count'],
+            "pending_count": pending_count,
             "by_service": aggs['by_service']['buckets'],
             "by_error": aggs['by_error']['buckets'],
             "over_time": aggs['over_time']['buckets']
@@ -111,7 +109,7 @@ class ElasticsearchClient:
                 "from": (page - 1) * page_size,
                 "size": page_size,
                 "sort": [{"@timestamp": "desc"}],
-                "_source": {"excludes": ["original_payload"]} # OPTIMIZATION: Exclude large payload field
+                "_source": {"excludes": ["original_payload"]}
             }
         )
         hits = [hit for hit in response['hits']['hits']]
