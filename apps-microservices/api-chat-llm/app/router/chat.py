@@ -38,7 +38,7 @@ class ConnexionManager:
 # Crée une instance unique du gestionnaire qui sera partagée
 manager = ConnexionManager()
     
-@router.websocket("/ws/search")
+@router.websocket("/ws/chat")
 async def ws_search(websocket: WebSocket):
     await manager.connect(websocket)
     try:
