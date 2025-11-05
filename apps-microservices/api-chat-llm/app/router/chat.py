@@ -58,7 +58,7 @@ async def ws_search(websocket: WebSocket):
             deepseek_client = DeepSeek()
             
             # Stream the response back to the client
-            async for chunk in deepseek_client.chat_stream(prompt):
+            async for chunk in deepseek_client.stream(prompt):
                 await websocket.send_text(chunk)
 
             # Signal the end of the stream (optional, but good practice)
