@@ -240,6 +240,10 @@ class SearchOrchestrator:
         self.request = request
         self.filter_builder = FilterBuilder()
         self.context_builder = ContextBuilder()
+        
+    def _get_top_k_retrieval(self, top_k_final: int) -> int:
+        return int(top_k_final * 1.5 if self.request.options.use_reranker else top_k_final)
+
 
     async def search_stream(self):
         """Orchestrates the streaming search flow."""
@@ -302,7 +306,8 @@ class SearchOrchestrator:
             
             start_search = time.perf_counter()
             top_k_final = int(self.request.top_k)
-            top_k_retrieval = top_k_final * 1 if self.request.options.use_reranker else top_k_final
+            # top_k_retrieval = top_k_final * 1.5 if self.request.options.use_reranker else top_k_final
+            top_k_retrieval = self._get_top_k_retrieval(top_k_final)
 
             for item in self.request.source:
                 source_name = item.source
@@ -490,7 +495,8 @@ class SearchOrchestrator:
 
     async def _perform_search(self, query_vector: list) -> Tuple[list, float]:
         top_k_final = int(self.request.top_k)
-        top_k_retrieval = top_k_final * 1 if self.request.options.use_reranker else top_k_final
+        # top_k_retrieval = top_k_final * 1.5 if self.request.options.use_reranker else top_k_final
+        top_k_retrieval = self._get_top_k_retrieval(top_k_final)
         
         start_search_time = time.perf_counter()
         search_tasks = []
