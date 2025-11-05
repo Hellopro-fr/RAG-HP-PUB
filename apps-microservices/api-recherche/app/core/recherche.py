@@ -187,7 +187,7 @@ class FilterBuilder:
             
             quoted_vals = [repr(str(v)) for v in val]
             if key == 'page_type':
-                quoted_vals = [repr(str(v).lower()) for v in val if v in self.PAGE_TYPE_SITEWEB]
+                quoted_vals = [repr(str(v).lower().replace("-", "_")) for v in val if v in self.PAGE_TYPE_SITEWEB]
                 
             return f"{key} in [{', '.join(quoted_vals)}]"
         else:
