@@ -10,10 +10,25 @@ class ElasticsearchClient:
     def __init__(self, client: AsyncElasticsearch):
         self.client = client
 
-    async def get_dashboard_stats(self) -> Dict[str, Any]:
-        """Runs aggregations for the dashboard."""
+    async def get_dashboard_stats(self, filters: Dict = None) -> Dict[str, Any]:
+        """Runs aggregations for the dashboard, with optional filters."""
+        query = {"bool": {"must": []}}
+        if filters:
+            if filters.get("date_start") or filters.get("date_end"):
+                time_range = {}
+                if filters.get("date_start"):
+                    time_range["gte"] = filters["date_start"]
+                if filters.get("date_end"):
+                    time_range["lte"] = filters["date_end"]
+                query["bool"]["must"].append({"range": {"@timestamp": time_range}})
+        
+        # If the query is empty, default to match_all
+        if not query["bool"]["must"]:
+            query = {"match_all": {}}
+
         body = {
-            "size": 0, # We don't need the documents, just the aggregations and total count
+            "size": 0,
+            "query": query,
             "aggs": {
                 "pending_count": {
                     "filter": {
@@ -74,12 +89,15 @@ class ElasticsearchClient:
                     # FIX: Use 'service_name' which is the correct keyword field, not 'service_name.keyword'
                     query["bool"]["must"].append({"terms": {"service_name": service_list}})
 
-            if filters.get("status") == "New":
-                 # A message is "New" if BOTH the new `status` field AND the legacy `requeued_at` field are missing.
+            status_filter = filters.get("status")
+            if status_filter == "New":
                  query["bool"]["must_not"].append({"exists": {"field": "status"}})
                  query["bool"]["must_not"].append({"exists": {"field": "requeued_at"}})
-            elif filters.get("status"):
-                query["bool"]["must"].append({"term": {"status.keyword": filters["status"]}})
+            elif status_filter == "Re-queued (Legacy)":
+                 query["bool"]["must"].append({"exists": {"field": "requeued_at"}})
+                 query["bool"]["must_not"].append({"exists": {"field": "status"}})
+            elif status_filter:
+                query["bool"]["must"].append({"term": {"status.keyword": status_filter}})
 
         return query
 

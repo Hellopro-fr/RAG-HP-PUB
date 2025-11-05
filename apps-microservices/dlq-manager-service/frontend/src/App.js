@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Dashboard from './components/Dashboard';
 import SearchPage from './components/SearchPage';
-import './App.css';
 
 function App() {
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -9,10 +8,10 @@ function App() {
     const NavButton = ({ tabName, children }) => (
         <button
             onClick={() => setActiveTab(tabName)}
-            className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+            className={`px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
                 activeTab === tabName
-                    ? 'text-orange-primary border-b-2 border-orange-primary'
-                    : 'text-gris-clair hover:text-white-primary'
+                    ? 'bg-orange-light text-orange-primary'
+                    : 'text-gris-primary hover:bg-clair-3 hover:text-noir-primary'
             }`}
         >
             {children}
@@ -20,12 +19,12 @@ function App() {
     );
 
     return (
-        <div className="bg-bleu-noir-2 text-clair-3 min-h-screen font-sans">
-            <header className="bg-bleu-noir shadow-md">
+        <div className="bg-white-light min-h-screen font-sans">
+            <header className="bg-white-primary shadow-sm sticky top-0 z-40">
                 <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         <h1 className="text-2xl font-bold text-orange-primary">DLQ Manager</h1>
-                        <nav className="flex space-x-4">
+                        <nav className="flex items-center space-x-2 bg-clair-3 p-1 rounded-lg">
                             <NavButton tabName="dashboard">Dashboard</NavButton>
                             <NavButton tabName="search">Search & Re-queue</NavButton>
                         </nav>
