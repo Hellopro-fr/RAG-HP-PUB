@@ -103,27 +103,6 @@ class FilterBuilder:
         DataType.FLOAT.value,
         DataType.DOUBLE.value,
     }
-    
-    PAGE_TYPE_SITEWEB = {
-        "home",
-        "listing_produit",
-        "fiche_produit",
-        "fiche_realisation",
-        "presentation_societe",
-        "contact",
-        "cgv_mentions_legales_cgu",
-        "article",
-        "savoir_faire",
-        "page_local",
-        "demande_devis",
-        "compte_client",
-        "recrutement",
-        "references_clients",
-        "faq",
-        "plan_du_site",
-        "politique_confidentialite",
-        "autre"
-    }
 
     async def build(self, filtre: dict, source: str = "") -> list:
         clauses = []
@@ -184,11 +163,7 @@ class FilterBuilder:
             if key == "id_categorie" and source == "devis":
                 numeric_vals = [int(v) for v in val]
                 return f"{key} in {numeric_vals}"
-            
             quoted_vals = [repr(str(v)) for v in val]
-            if key == 'page_type':
-                quoted_vals = [repr(str(v).lower().replace("-", "_")) for v in val if v in self.PAGE_TYPE_SITEWEB]
-                
             return f"{key} in [{', '.join(quoted_vals)}]"
         else:
             return f"{key} == {repr(str(val))}"
@@ -265,10 +240,6 @@ class SearchOrchestrator:
         self.request = request
         self.filter_builder = FilterBuilder()
         self.context_builder = ContextBuilder()
-        
-    def _get_top_k_retrieval(self, top_k_final: int) -> int:
-        return int(top_k_final * 1.1 if self.request.options.use_reranker else top_k_final)
-
 
     async def search_stream(self):
         """Orchestrates the streaming search flow."""
@@ -331,8 +302,7 @@ class SearchOrchestrator:
             
             start_search = time.perf_counter()
             top_k_final = int(self.request.top_k)
-            # top_k_retrieval = top_k_final * 1.5 if self.request.options.use_reranker else top_k_final
-            top_k_retrieval = self._get_top_k_retrieval(top_k_final)
+            top_k_retrieval = top_k_final * 1 if self.request.options.use_reranker else top_k_final
 
             for item in self.request.source:
                 source_name = item.source
@@ -520,8 +490,7 @@ class SearchOrchestrator:
 
     async def _perform_search(self, query_vector: list) -> Tuple[list, float]:
         top_k_final = int(self.request.top_k)
-        # top_k_retrieval = top_k_final * 1.5 if self.request.options.use_reranker else top_k_final
-        top_k_retrieval = self._get_top_k_retrieval(top_k_final)
+        top_k_retrieval = top_k_final * 1 if self.request.options.use_reranker else top_k_final
         
         start_search_time = time.perf_counter()
         search_tasks = []
