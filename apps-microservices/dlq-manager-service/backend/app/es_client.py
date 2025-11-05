@@ -66,7 +66,9 @@ class ElasticsearchClient:
                     query["bool"]["must"].append({"terms": {"service_name": service_list}})
 
             if filters.get("status") == "New":
+                 # A message is "New" if BOTH the new `status` field AND the legacy `requeued_at` field are missing.
                  query["bool"]["must_not"].append({"exists": {"field": "status"}})
+                 query["bool"]["must_not"].append({"exists": {"field": "requeued_at"}})
             elif filters.get("status"):
                 query["bool"]["must"].append({"term": {"status.keyword": filters["status"]}})
 
@@ -172,7 +174,6 @@ class ElasticsearchClient:
                 yield hits
                 
                 body['pit']['id'] = response['pit_id']
-                # Correctly handle search_after with Point in Time (PIT)
                 if 'sort' in hits[-1]:
                     body['search_after'] = hits[-1]['sort']
                 
