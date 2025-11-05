@@ -5,7 +5,6 @@ import MessageDetailModal from './MessageDetailModal';
 
 // Functionality #10: Saved Filters (using localStorage)
 const saveFiltersToStorage = (filters) => localStorage.setItem('dlq-filters', JSON.stringify(filters));
-const loadFiltersFromStorage = () => JSON.parse(localStorage.getItem('dlq-filters')) || {};
 
 function SearchPage() {
     const [messages, setMessages] = useState([]);
@@ -13,7 +12,11 @@ function SearchPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     
-    const [filters, setFilters] = useState(loadFiltersFromStorage());
+    // Default to a focused view of 'New' messages unless otherwise specified in localStorage
+    const [filters, setFilters] = useState(() => {
+        const stored = localStorage.getItem('dlq-filters');
+        return stored ? JSON.parse(stored) : { status: 'New' };
+    });
     const [searchTerm, setSearchTerm] = useState('');
     const [page, setPage] = useState(1);
     const pageSize = 50;
@@ -99,6 +102,7 @@ function SearchPage() {
                         <option value="">Any Status</option>
                         <option value="New">New</option>
                         <option value="Re-queued">Re-queued</option>
+                        <option value="Re-queued (Legacy)">Re-queued (Legacy)</option>
                         <option value="Archived">Archived</option>
                     </select>
                     <input type="datetime-local" name="date_start" value={filters.date_start || ''} onChange={handleFilterChange} />

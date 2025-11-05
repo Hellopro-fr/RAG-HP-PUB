@@ -36,8 +36,8 @@ function Dashboard() {
             <h2>DLQ Health Overview</h2>
             <div className="stats-grid">
                 <div className="stat-card">
-                    <h3>Total Failed Messages</h3>
-                    <p>{stats.total_failed}</p>
+                    <h3>Pending Messages (New)</h3>
+                    <p>{stats.pending_count}</p>
                 </div>
                 <div className="stat-card">
                      <h3>Top Errors</h3>

@@ -15,7 +15,17 @@ class ElasticsearchClient:
         body = {
             "size": 0, # We don't need the documents, just the aggregations and total count
             "aggs": {
-                "by_service": {"terms": {"field": "service_name.keyword", "size": 20}},
+                "pending_count": {
+                    "filter": {
+                        "bool": {
+                            "must_not": [
+                                {"exists": {"field": "status"}},
+                                {"exists": {"field": "requeued_at"}}
+                            ]
+                        }
+                    }
+                },
+                "by_service": {"terms": {"field": "service_name", "size": 20}},
                 "by_error": {"terms": {"field": "error_reason.keyword", "size": 10}},
                 "over_time": {
                     "date_histogram": {
@@ -28,9 +38,8 @@ class ElasticsearchClient:
         }
         response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
         aggs = response['aggregations']
-        total_failed = response['hits']['total']['value'] # Get total count from the main response
         return {
-            "total_failed": total_failed,
+            "pending_count": aggs['pending_count']['doc_count'],
             "by_service": aggs['by_service']['buckets'],
             "by_error": aggs['by_error']['buckets'],
             "over_time": aggs['over_time']['buckets']
