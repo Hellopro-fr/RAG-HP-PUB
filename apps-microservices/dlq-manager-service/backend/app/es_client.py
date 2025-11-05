@@ -89,6 +89,13 @@ class ElasticsearchClient:
         )
         hits = [hit for hit in response['hits']['hits']]
         total = response['hits']['total']['value']
+        
+        # Transform data for consistent presentation in the UI
+        for hit in hits:
+            source = hit['_source']
+            if 'status' not in source and 'requeued_at' in source:
+                source['status'] = 'Re-queued (Legacy)'
+                
         return hits, total
 
     async def get_grouped_errors(self, filters: Dict, search_term: str) -> List[Dict]:
