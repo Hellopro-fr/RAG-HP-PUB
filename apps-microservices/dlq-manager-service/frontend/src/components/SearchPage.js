@@ -18,12 +18,11 @@ function SearchPage() {
     const [page, setPage] = useState(1);
     const pageSize = 50;
 
-    const [selectedMessage, setSelectedMessage] = useState(null);
+    const [selectedMessageId, setSelectedMessageId] = useState(null); // Changed from object to ID
     const [selectedIds, setSelectedIds] = useState(new Set());
     
     const [viewMode, setViewMode] = useState('individual'); // 'individual' or 'grouped'
 
-    // FIX: Refactored fetch logic to be an explicit function call
     const fetchMessages = async (currentPage = 1) => {
         try {
             setLoading(true);
@@ -40,7 +39,6 @@ function SearchPage() {
         }
     };
 
-    // FIX: Load initial data only once on component mount
     useEffect(() => {
         fetchMessages(1);
     }, []); // Empty dependency array ensures this runs only once
@@ -49,7 +47,6 @@ function SearchPage() {
         setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
     };
 
-    // FIX: Search is now explicitly triggered by this button handler
     const handleSearch = (e) => {
         e.preventDefault();
         setPage(1); // Reset to page 1 for every new search
@@ -127,15 +124,15 @@ function SearchPage() {
             
             <MessageList 
                 messages={messages} 
-                onMessageSelect={setSelectedMessage}
+                onMessageSelect={(message) => setSelectedMessageId(message._id)} // Pass ID instead of object
                 selectedIds={selectedIds}
                 setSelectedIds={setSelectedIds}
             />
 
-            {selectedMessage && (
+            {selectedMessageId && ( // Render modal based on ID
                 <MessageDetailModal 
-                    message={selectedMessage} 
-                    onClose={() => setSelectedMessage(null)}
+                    messageId={selectedMessageId} 
+                    onClose={() => setSelectedMessageId(null)}
                     onActionSuccess={() => handleSearch({ preventDefault: () => {} })}
                 />
             )}

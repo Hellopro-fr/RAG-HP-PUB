@@ -39,6 +39,20 @@ async def search_messages(request: SearchRequest, es_client: ElasticsearchClient
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/messages/{message_id}")
+async def get_message_details(message_id: str, es_client: ElasticsearchClient = Depends(get_es_client)):
+    """
+    Gets the full details for a single message, including its payload.
+    """
+    try:
+        message = await es_client.get_message(message_id)
+        if not message:
+            raise HTTPException(status_code=404, detail="Message not found")
+        return message
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/messages/grouped-search")
 async def search_grouped_messages(request: SearchRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
     """

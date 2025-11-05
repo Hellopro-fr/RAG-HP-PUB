@@ -73,7 +73,7 @@ class ElasticsearchClient:
         return query
 
     async def search_messages(self, filters: Dict, search_term: str, page: int, page_size: int) -> Tuple[List[Dict], int]:
-        """Performs a paginated search for messages."""
+        """Performs a paginated search for messages, excluding the large payload."""
         query = self._build_query(filters, search_term)
         response = await self.client.search(
             index=ELASTIC_INDEX_NAME,
@@ -82,6 +82,7 @@ class ElasticsearchClient:
                 "from": (page - 1) * page_size,
                 "size": page_size,
                 "sort": [{"@timestamp": "desc"}],
+                "_source": {"excludes": ["original_payload"]} # OPTIMIZATION: Exclude large payload field
             }
         )
         hits = [hit for hit in response['hits']['hits']]
@@ -112,6 +113,7 @@ class ElasticsearchClient:
         return response['aggregations']['grouped_errors']['buckets']
     
     async def get_message(self, message_id: str) -> Dict:
+        """Gets the full document for a single message, including the payload."""
         try:
             response = await self.client.get(index=ELASTIC_INDEX_NAME, id=message_id)
             return response
