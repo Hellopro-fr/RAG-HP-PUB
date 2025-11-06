@@ -84,7 +84,7 @@ export default function AIAssistantUI() {
   const [selectedBot, setSelectedBot] = useState('deepseek-chat')
   const [selectedBotName, setSelectedBotName] = useState('DeepSeek-V3.2-Exp')
   const [selectedProvider, setSelectedProvider] = useState("deepseek") // Rename selectedBot to selectedProvider
-  const [temperature, setTemperature] = useState(0.4)
+  const [temperature, setTemperature] = useState(0.1)
 
   useEffect(() => {
     const onKey = (e) => {
