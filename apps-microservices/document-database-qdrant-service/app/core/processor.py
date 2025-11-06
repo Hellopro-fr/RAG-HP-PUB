@@ -49,7 +49,6 @@ async def insertion_data(document_data: dict) -> dict:
                 for item in documents:
                     item['id'] = id_bdd
                     item['date_ajout'] = date_ajout_bdd
-                    item.pop('page_type',None)
                     docs.append(item)
 
                 res_update = await func(docs)

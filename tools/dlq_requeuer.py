@@ -47,9 +47,7 @@ def requeue_messages(es_client, rabbit_channel, args):
         "bool": {
             "must": [],
             "must_not": [
-                # Unify state: a message is "new" if it has neither the old requeued_at field nor the new status field.
-                {"exists": {"field": "requeued_at"}},
-                {"exists": {"field": "status"}}
+                {"exists": {"field": "requeued_at"}}
             ]
         }
     }
@@ -131,17 +129,11 @@ def requeue_messages(es_client, rabbit_channel, args):
                         properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent)
                     )
                     
-                    # Unify state: Update using the new `status` field system instead of the legacy `requeued_at`.
-                    update_body = {
-                        "doc": {
-                            "status": "Re-queued",
-                            "status_updated_at": datetime.utcnow().isoformat()
-                        }
-                    }
+                    update_body = {"doc": {"requeued_at": datetime.utcnow().isoformat()}}
                     es_client.update(index=ELASTIC_INDEX_NAME, id=doc_id, body=update_body)
                     
                     if args.verbose:
-                        print(f"   -> Marqué avec le status 'Re-queued' dans Elasticsearch (ID: {doc_id})")
+                        print(f"   -> Marqué comme re-publié dans Elasticsearch (ID: {doc_id})")
 
                 total_requeued += 1
             

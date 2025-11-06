@@ -148,7 +148,6 @@ class DeepseekOCRDocExtractor:
                 # Vérification de la réponse
                 response.raise_for_status()
                 
-                # todo: traitement de response en cas de batching
                 return response.json()
             
         except httpx.TimeoutException:

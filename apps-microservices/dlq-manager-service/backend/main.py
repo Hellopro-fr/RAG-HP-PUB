@@ -1,25 +1,30 @@
 import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from app.api import router as api_router
 
 app = FastAPI(title="DLQ Manager Service")
 
-# IMPORTANT: The API router must be included BEFORE the static files mount.
-# This ensures that API calls are routed correctly and not treated as file requests.
-app.include_router(api_router, prefix="/api")
+# Mount the API router
+app.mount("/api", api_router)
 
-# Define the directory where the built React app's static files are located.
-# The Dockerfile copies the entire 'build' folder into this 'static' directory.
+# Mount the static files from the built React app
 static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-# Mount the static files at the root.
-# This will catch all routes not handled by the API router above.
-# Requests to `/static/js/...` will be correctly served from the nested `/app/static/static/js/...` directory.
-# The `html=True` argument configures it to serve `index.html` for any path that
-# doesn't match a file, which is perfect for Single-Page Applications like React.
-app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_react_app(full_path: str):
+    """
+    Serve the React application.
+    This endpoint catches all other routes and serves the index.html,
+    allowing React Router to handle the client-side routing.
+    """
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "UI not found. Please build the frontend."}
 
 if __name__ == "__main__":
     import uvicorn

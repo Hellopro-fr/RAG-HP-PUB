@@ -11,13 +11,14 @@ from .models import (
 
 router = APIRouter()
 
-@router.post("/dashboard-stats")
-async def get_dashboard_stats(filters: Optional[Dict[str, Any]] = Body(None), es_client: ElasticsearchClient = Depends(get_es_client)):
+@router.get("/dashboard-stats")
+async def get_dashboard_stats(es_client: ElasticsearchClient = Depends(get_es_client)):
     """
-    Provides aggregated data for the main dashboard, with optional filters.
+    Provides aggregated data for the main dashboard.
+    Functionality #1: Central Dashboard
     """
     try:
-        return await es_client.get_dashboard_stats(filters=filters)
+        return await es_client.get_dashboard_stats()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -25,6 +26,7 @@ async def get_dashboard_stats(filters: Optional[Dict[str, Any]] = Body(None), es
 async def search_messages(request: SearchRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Performs an advanced search for messages based on multiple filters.
+    Functionality #2: Advanced Search and Multi-Filter Panel
     """
     try:
         results, total = await es_client.search_messages(
@@ -37,24 +39,11 @@ async def search_messages(request: SearchRequest, es_client: ElasticsearchClient
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/messages/{message_id}")
-async def get_message_details(message_id: str, es_client: ElasticsearchClient = Depends(get_es_client)):
-    """
-    Gets the full details for a single message, including its payload.
-    """
-    try:
-        message = await es_client.get_message(message_id)
-        if not message:
-            raise HTTPException(status_code=404, detail="Message not found")
-        return message
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.post("/messages/grouped-search")
 async def search_grouped_messages(request: SearchRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Searches for messages and groups them by service and error reason.
+    Functionality #8: Automatic Error Grouping
     """
     try:
         results = await es_client.get_grouped_errors(
@@ -69,6 +58,7 @@ async def search_grouped_messages(request: SearchRequest, es_client: Elasticsear
 async def requeue_message(message_id: str, es_client: ElasticsearchClient = Depends(get_es_client), rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)):
     """
     Re-queues a single message.
+    Functionality #4: Single Message Re-queue
     """
     try:
         message = await es_client.get_message(message_id)
@@ -86,6 +76,7 @@ async def requeue_message(message_id: str, es_client: ElasticsearchClient = Depe
 async def bulk_requeue(request: RequeueBulkRequest, es_client: ElasticsearchClient = Depends(get_es_client), rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)):
     """
     Re-queues multiple messages in a batch with optional throttling.
+    Functionality #5: Bulk Actions & #11: Throttled Re-queuing
     """
     success_count = 0
     errors = []
@@ -112,6 +103,7 @@ async def bulk_requeue(request: RequeueBulkRequest, es_client: ElasticsearchClie
 async def bulk_archive(request: UpdateStatusBulkRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Updates the status of multiple messages to 'Archived'.
+    Functionality #5: Bulk Actions (Archive)
     """
     try:
         updated_count = await es_client.update_message_status_bulk(request.message_ids, "Archived")
@@ -123,6 +115,7 @@ async def bulk_archive(request: UpdateStatusBulkRequest, es_client: Elasticsearc
 async def requeue_by_filter(request: RequeueByFilterRequest, es_client: ElasticsearchClient = Depends(get_es_client), rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)):
     """
     Finds all messages matching a filter and re-queues them.
+    Functionality #6: "Re-queue All Matching Filter" Action
     """
     try:
         total_requeued = 0
@@ -145,6 +138,7 @@ async def requeue_by_filter(request: RequeueByFilterRequest, es_client: Elastics
 async def edit_and_requeue(message_id: str, request: EditAndRequeueRequest, es_client: ElasticsearchClient = Depends(get_es_client), rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)):
     """
     Allows editing a message payload before re-queuing it.
+    Functionality #7: Live Payload Editing
     """
     try:
         message = await es_client.get_message(message_id)
@@ -165,6 +159,7 @@ async def edit_and_requeue(message_id: str, request: EditAndRequeueRequest, es_c
 async def get_requeue_history(page: int = 1, page_size: int = 50, es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Retrieves a log of all re-queue actions.
+    Functionality #9: Audit Trail / Re-queue History
     """
     try:
         results, total = await es_client.get_history(page, page_size)

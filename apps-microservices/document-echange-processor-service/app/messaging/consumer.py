@@ -76,20 +76,16 @@ class Consumer:
             
             try:
                 # Traitement long
-                result = await process_document_data_for_templating(
+                output_message = await process_document_data_for_templating(
                     document_data, bdd, self.executor
                 )
                 
+                # Publie le résultat
+                routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
+                output_message['routing_key'] = routing_key
+                
                 async with self.connection.channel() as channel:
-                    if 'metric_payload' in result.keys():
-                        await self.publisher.publish_metric_message(result['metric_payload'], channel)
-
-                    if result.get('status') == "success":
-                        output_message = result.get("processed_message")
-                        # Publie le résultat
-                        routing_key = 'data.ready_for_templating'  #if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
-                        output_message['routing_key'] = routing_key
-                        await self.publisher.publish_message(output_message, channel)
+                    await self.publisher.publish_message(output_message, channel)
                 
                 # ✅ Marque comme terminé
                 await self._mark_as_completed(document_id)
