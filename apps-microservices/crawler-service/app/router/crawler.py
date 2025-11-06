@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX
-from app.core.redis_service import redis_service
+from common_utils.redis import cache_service
 from app.core.config import settings
 from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse
 
@@ -30,7 +30,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
     Raises a 404 HTTPException if the job cannot be found in Redis or on disk.
     """
     job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
-    job_info = await redis_service.get_data(job_key)
+    job_info = await cache_service.get_json(job_key)
 
     if job_info:
         return job_info
@@ -84,7 +84,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
     }
 
     logger.info(f"Successfully recovered job '{crawl_id}' from storage with status '{final_status}'. Re-indexing in Redis.")
-    await redis_service.set_data(job_key, recovered_data)
+    await cache_service.set_json(job_key, recovered_data)
 
     return recovered_data
 
@@ -109,14 +109,14 @@ async def get_capacity():
     shared values from Redis.
     """
     try:
-        if not redis_service._client:
+        if not cache_service.redis_client:
             raise HTTPException(status_code=503, detail="Redis connection not available.")
 
-        running_jobs_raw = await redis_service._client.get(CRAWL_RUNNING_COUNT_KEY)
+        running_jobs_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
         running_jobs = int(running_jobs_raw) if running_jobs_raw else 0
         
         # Read the max global jobs value from the central Redis key.
-        max_global_raw = await redis_service._client.get(CRAWL_MAX_GLOBAL_KEY)
+        max_global_raw = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)
         # If the key is missing, use the configurable fallback from settings.
         max_global = int(max_global_raw) if max_global_raw else settings.DEFAULT_MAX_GLOBAL_CRAWLS
         

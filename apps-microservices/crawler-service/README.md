@@ -1,21 +1,20 @@
 # Crawler Service
 
-This project is a high-concurrency, stateful web crawling service built with FastAPI and Node.js/Crawlee. It uses Redis for persistent job state management and Nginx as a reverse proxy for scalability.
+This project is a high-concurrency, stateful web crawling service built with FastAPI and Node.js/Crawlee. It uses an external Redis instance for persistent job state management and Nginx as a reverse proxy for scalability.
 
 ## Dependencies
 
--   **Redis:** This service requires a running Redis instance for managing the state of crawl jobs. It is used to track running processes, handle concurrency across multiple replicas, and persist job statuses across service restarts.
+-   **External Redis:** This service requires a connection to a running Redis instance for managing the state of crawl jobs. It is used to track running processes, handle concurrency across multiple replicas, and persist job statuses across service restarts. Connection details must be provided in the project's root `.env` file (`REDIS_URL`).
 
 ## 📁 Project Structure
 
 -   `app/`: The FastAPI application code (Python).
     -   `core/`: Core logic for managing crawler subprocesses and Redis state.
         - `crawler_manager.py`: Starts/stops Node.js processes and updates Redis.
-        - `redis_service.py`: A reusable client for connecting to Redis.
     -   `router/`: API endpoint definitions.
     -   `schemas/`: Pydantic data models.
 -   `crawler/`: The Node.js/TypeScript web crawler engine.
--   `docker-compose.yaml`: For running the service, its Redis dependency, and the reverse proxy.
+-   `docker-compose.yaml`: For running the service and its reverse proxy.
 -   `Dockerfile`: Defines the multi-stage container image for production.
 -   `nginx.conf`: Nginx configuration file that acts as a reverse proxy and load balancer for the crawler service replicas.
 -   `scale_crawlers.sh`: A helper script for correctly scaling the number of crawler service instances.
@@ -24,17 +23,21 @@ This project is a high-concurrency, stateful web crawling service built with Fas
 
 ## 🚀 Installation & Running
 
-The services are designed to be run as a group using Docker Compose profiles. The `crawling` profile includes the `crawler-service`, the `reverse-proxy`, and `redis`.
+The services are designed to be run as a group using Docker Compose profiles. The `crawling` profile includes the `crawler-service` and the `reverse-proxy`.
 
 1.  **Start the Services:**
     To start the entire crawling system (defaulting to 3 crawler instances), run:
     ```sh
     docker-compose --profile crawling up -d
     ```
-    This will create two persistent Docker volumes: `crawler_data` (for crawl artifacts) and `redis_data` (for job statuses). Your data will be safe across restarts.
+    This will create one persistent Docker volume: `crawler_data` (for crawl artifacts). Job statuses are persisted in the external Redis instance.
 
 2.  **Scaling the Service (Recommended Method):**
     A helper script, `scale_crawlers.sh`, is provided to handle scaling safely. It automatically calculates the `MAX_GLOBAL_CONCURRENT_CRAWLS` environment variable, which is crucial for the system's concurrency logic.
+
+    **Prerequisites for scaling script:**
+    -   `redis-cli` must be installed on your host machine.
+    -   Your root `.env` file must contain `REDIS_HOST`, `REDIS_PORT`, and `REDIS_SECRET` for the script to connect to the external Redis.
 
     First, make the script executable:
     ```sh
@@ -99,4 +102,4 @@ The full API documentation is available via Swagger UI at `http://localhost:8503
 
 #### Re-index Storage
 -   `POST /crawler/reindex-storage`
--   **Description:** An administrative tool to recover the system's state. This endpoint scans the persistent storage volume for "orphaned" crawl jobs (present on disk but missing from Redis) and re-creates their records in Redis. This is useful for disaster recovery if the Redis data volume is lost.
+-   **Description:** An administrative tool to recover the system's state. This endpoint scans the persistent storage volume for "orphaned" crawl jobs (present on disk but missing from Redis) and re-creates their records in Redis. This is useful for disaster recovery if the Redis data is lost.

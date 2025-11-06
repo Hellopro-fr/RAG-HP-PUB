@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.router.crawler import router as CrawlerRouter
 from app.core.crawler_manager import crawler_manager
-from app.core.redis_service import redis_service
+from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -46,14 +46,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.on_event("startup")
 async def startup_event():
     logger.info("Crawler Service starting up.")
-    await redis_service.connect()
+    await init_redis_pool()
     # You can initialize other resources here if needed
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Crawler Service shutting down. Stopping all active crawls and disconnecting from Redis.")
     await crawler_manager.shutdown()
-    await redis_service.disconnect()
+    await close_redis_pool()
     logger.info("All crawl processes terminated and Redis connection closed.")
 
 app.include_router(CrawlerRouter, prefix="/crawler", tags=["Crawler"])

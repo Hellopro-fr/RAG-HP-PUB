@@ -54,15 +54,24 @@ async def ws_search(websocket: WebSocket):
                 await websocket.send_text("Error: Prompt cannot be empty.")
                 continue
 
-            # Instantiate DeepSeek and start streaming
+            # Instantiate DeepSeek
             deepseek_client = DeepSeek()
             
+            full_response_content = ""
+            api_data = {}
             # Stream the response back to the client
             async for chunk in deepseek_client.stream(prompt):
-                await websocket.send_text(chunk)
+                if chunk.choices[0].delta.content:
+                    await websocket.send_text(chunk.choices[0].delta.content)
+                else:
+                    api_data = chunk.model_dump()
+                    break
 
-            # Signal the end of the stream (optional, but good practice)
-            await websocket.send_text("[END_OF_STREAM]")
+            # Send the full data as a JSON object at the end of the stream
+            await websocket.send_json({
+                "type": "end",
+                "api_response": api_data
+            })
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)

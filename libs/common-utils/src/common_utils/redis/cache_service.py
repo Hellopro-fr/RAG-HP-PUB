@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from functools import wraps
-from typing import Callable, Any, TypeVar, ParamSpec
+from typing import Callable, Any, TypeVar, ParamSpec, Optional, Dict, List
 
 import redis.asyncio as redis
 
@@ -23,10 +23,18 @@ async def init_redis_pool():
     Connects to Redis using the URL from environment variables.
     """
     global redis_client
+    if redis_client and await redis_client.ping():
+        logger.info("Redis pool already initialized and connected.")
+        return
+        
     redis_url = os.getenv("REDIS_URL")
+    if not redis_url:
+        logger.critical("REDIS_URL environment variable not set. Caching and state management will be unavailable.")
+        redis_client = None
+        return
+        
     try:
-        # logging.info(f"Trying to connect to Redis at {redis_url}")
-        logging.info('Connexion sur redis en cours...')
+        logging.info(f"Connecting to Redis at {redis_url.split('@')[-1]}...") # Avoid logging password
         redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
         await redis_client.ping()
         logger.info("Successfully connected to Redis.")
@@ -41,7 +49,85 @@ async def close_redis_pool():
     global redis_client
     if redis_client:
         await redis_client.close()
+        redis_client = None
         logger.info("Redis connection pool closed.")
+
+# --- General Purpose Functions ---
+
+async def set_json(key: str, data: Dict[str, Any], ttl: Optional[int] = None):
+    """Sets a dictionary for a key, serializing it to JSON."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        value = json.dumps(data, default=str)
+        await redis_client.set(key, value, ex=ttl)
+    except Exception as e:
+        logger.error(f"Failed to set JSON for key '{key}' in Redis: {e}", exc_info=True)
+
+async def get_json(key: str) -> Optional[Dict[str, Any]]:
+    """Gets a dictionary for a key, deserializing it from JSON."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        value = await redis_client.get(key)
+        if value:
+            return json.loads(value)
+    except Exception as e:
+        logger.error(f"Failed to get JSON for key '{key}' from Redis: {e}", exc_info=True)
+    return None
+
+async def get_key(key: str) -> Optional[str]:
+    """Gets the raw string value of a key."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        return await redis_client.get(key)
+    except Exception as e:
+        logger.error(f"Failed to get key '{key}' from Redis: {e}", exc_info=True)
+    return None
+
+async def delete_key(key: str) -> bool:
+    """Deletes a key from Redis."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        result = await redis_client.delete(key)
+        return result > 0
+    except Exception as e:
+        logger.error(f"Failed to delete key '{key}' from Redis: {e}", exc_info=True)
+        return False
+
+async def scan_keys_by_prefix(prefix: str) -> List[str]:
+    """Gets all keys matching a given prefix using SCAN."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        return [key async for key in redis_client.scan_iter(f"{prefix}*")]
+    except Exception as e:
+        logger.error(f"Failed to scan keys with prefix '{prefix}' from Redis: {e}", exc_info=True)
+        return []
+
+async def increment_key(key: str) -> int:
+    """Atomically increments a key's value by 1."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        return await redis_client.incr(key)
+    except Exception as e:
+        logger.error(f"Failed to increment key '{key}' in Redis: {e}", exc_info=True)
+        return 0
+
+async def decrement_key(key: str) -> int:
+    """Atomically decrements a key's value by 1."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        return await redis_client.decr(key)
+    except Exception as e:
+        logger.error(f"Failed to decrement key '{key}' in Redis: {e}", exc_info=True)
+        return 0
+        
+# --- Caching Decorator (Existing Functionality) ---
 
 def _generate_cache_key(func: Callable, *args: P.args, **kwargs: P.kwargs) -> str:
     """
