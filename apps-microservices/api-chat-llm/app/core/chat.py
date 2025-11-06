@@ -66,8 +66,9 @@ class DeepSeek:
             stream=True
         )
         async for chunk in response_stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            yield chunk
+            # if chunk.choices[0].delta.content:
+            #     yield chunk.choices[0].delta.content
 
 
 logging.basicConfig(
