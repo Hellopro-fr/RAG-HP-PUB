@@ -7,13 +7,12 @@ class Publisher:
         Initialise le publisher asynchrone.
         """
         self.connection = connection
-        self.exchange_name = 'processed_data_exchange'
         #todo à modifier si process pipeline normal
-        # self.exchange_name = 'inserted_data_exchange'
+        self.exchange_name = 'inserted_data_exchange'
+        self.routing_key = 'data.document.ready_for_insertion'
 
         # à modifier selon le flow de l'application
-        # self.routing_key = 'data.document.ready_for_insertion'
-        self.routing_key = 'data.ready_for_templating'
+        self.exchange_name_metrics = 'processed_data_exchange'
         self.metric_routing_key = 'metrics.deepseek.result'
 
         print(f"✅ Publisher initialisé (vers exchange '{self.exchange_name}').")
@@ -39,7 +38,7 @@ class Publisher:
         """
         Publie un message de métrique de manière asynchrone sur le canal fourni.
         """
-        exchange = await channel.get_exchange(self.exchange_name, ensure=True)
+        exchange = await channel.get_exchange(self.exchange_name_metrics, ensure=True)
         
         await exchange.publish(
             aio_pika.Message(

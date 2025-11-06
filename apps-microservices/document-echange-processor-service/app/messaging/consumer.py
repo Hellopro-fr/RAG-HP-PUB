@@ -80,12 +80,8 @@ class Consumer:
                     document_data, bdd, self.executor
                 )
                 
-                print(f"result: {result}")
-
-
                 async with self.connection.channel() as channel:
                     if 'metric_payload' in result.keys():
-                        print("metric_payload")
                         await self.publisher.publish_metric_message(result['metric_payload'], channel)
 
                     if result.get('status') == "success":
