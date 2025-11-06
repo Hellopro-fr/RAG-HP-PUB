@@ -21,6 +21,8 @@ class Publisher:
         log_file = message_dict.get("log_file")
         collection = message_dict.get("collection")
         
+        self.routing_key = "data.document.ready_for_insertion" if collection == "document" else "data.ready_for_embedding"
+
         if log_file and collection == "document":
             # os.makedirs(os.path.dirname(log_file), exist_ok=True)
             page_type = message_dict.get("data", {}).get("page_type", "Inconnu")
