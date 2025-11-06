@@ -15,7 +15,7 @@ function ThinkingMessage({ onPause }) {
           <div className="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.15s]"></div>
           <div className="h-2 w-2 animate-bounce rounded-full bg-zinc-400"></div>
         </div>
-        <span className="text-sm text-zinc-500">En train de réfléchir...</span>
+        <span className="text-sm text-zinc-500">...</span>
         <button
           onClick={onPause}
           className="ml-auto inline-flex items-center gap-1 rounded-full border border-zinc-300 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
