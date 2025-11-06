@@ -899,6 +899,16 @@ services:
           memory: 4G   # Limit to 4GB of RAM
     logging: *logging_defaults
 
+  api-chatbot-service:
+    build:
+      context: ./apps-microservices/api-chatbot-html-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./apps-microservices/api-chatbot-html-service:/app:rw
+    ports:
+      - "3550:3000"
+    logging: *logging_defaults
+
   redis:
     image: redis:latest
     ports:
