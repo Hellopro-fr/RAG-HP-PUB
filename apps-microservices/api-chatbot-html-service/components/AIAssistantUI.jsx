@@ -177,8 +177,7 @@ export default function AIAssistantUI() {
     setThinkingConvId(convId)
 
     const currentConvId = convId
-    fetch("https://api.hellopro.eu/chat-service/llm/chat", {
-    // fetch("http://34.34.166.5:8500/chat-service/llm/chat", {
+    fetch("/api/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

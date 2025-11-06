@@ -78,19 +78,19 @@ const ChatPane = forwardRef(function ChatPane(
         <div className="mb-2 text-3xl font-serif tracking-tight sm:text-4xl md:text-5xl">
           <span className="block leading-[1.05] font-sans text-2xl">{conversation.title}</span>
         </div>
-        <div className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+        {/* <div className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
           Updated {timeAgo(conversation.updatedAt)} · {count} messages
-        </div>
+        </div> */}
 
         <div className="mb-6 flex flex-wrap gap-2 border-b border-zinc-200 pb-5 dark:border-zinc-800">
-          {tags.map((t) => (
+          {/* {tags.map((t) => (
             <span
               key={t}
               className="inline-flex items-center rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-700 dark:border-zinc-800 dark:text-zinc-200"
             >
               {t}
             </span>
-          ))}
+          ))} */}
         </div>
 
         {messages.length === 0 ? (
