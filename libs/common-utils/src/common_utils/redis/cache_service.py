@@ -25,7 +25,8 @@ async def init_redis_pool():
     global redis_client
     redis_url = os.getenv("REDIS_URL")
     try:
-        logging.info(f"Trying to connect to Redis at {redis_url}")
+        # logging.info(f"Trying to connect to Redis at {redis_url}")
+        logging.info('Connexion sur redis en cours...')
         redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
         await redis_client.ping()
         logger.info("Successfully connected to Redis.")
