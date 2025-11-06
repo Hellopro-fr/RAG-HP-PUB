@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, forwardRef, useImperativeHandle, useRef } from "react"
+import { useState, forwardRef, useImperativeHandle, useRef, useEffect } from "react" // 1. Import useEffect
 import { Pencil, RefreshCw, Check, X, Square } from "lucide-react"
 import Message from "./Message"
 import Composer from "./Composer"
@@ -35,6 +35,7 @@ const ChatPane = forwardRef(function ChatPane(
   const [draft, setDraft] = useState("")
   const [busy, setBusy] = useState(false)
   const composerRef = useRef(null)
+  const messagesEndRef = useRef(null) // 2. Create a ref for the bottom of the messages list
 
   useImperativeHandle(
     ref,
@@ -45,6 +46,12 @@ const ChatPane = forwardRef(function ChatPane(
     }),
     [],
   )
+
+  // 3. Add useEffect to scroll to the bottom when messages or thinking status change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [conversation?.messages, isThinking])
+
 
   if (!conversation) return null
 
