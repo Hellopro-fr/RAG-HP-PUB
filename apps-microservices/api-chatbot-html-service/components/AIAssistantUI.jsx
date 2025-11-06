@@ -84,6 +84,7 @@ export default function AIAssistantUI() {
   const [selectedBot, setSelectedBot] = useState('deepseek-chat')
   const [selectedBotName, setSelectedBotName] = useState('DeepSeek-V3.2-Exp')
   const [selectedProvider, setSelectedProvider] = useState("deepseek") // Rename selectedBot to selectedProvider
+  const [temperature, setTemperature] = useState(0.1)
 
   useEffect(() => {
     const onKey = (e) => {
@@ -186,7 +187,7 @@ export default function AIAssistantUI() {
     let fullAssistantResponse = ""
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ prompt: content, model: selectedBot, provider: selectedProvider })) // Send prompt, selected model, and selected provider
+      ws.send(JSON.stringify({ prompt: content, model: selectedBot, provider: selectedProvider, temperature: temperature })) // Send prompt, selected model, selected provider, and temperature
     }
 
     ws.onmessage = (event) => {
@@ -368,6 +369,8 @@ export default function AIAssistantUI() {
             setSelectedProvider={setSelectedProvider} 
             selectedBotName={selectedBotName}
             setSelectedBotName={setSelectedBotName}
+            temperature={temperature}
+            setTemperature={setTemperature}
           />
           <ChatPane
             ref={composerRef}

@@ -2,8 +2,9 @@
 import { Asterisk, MoreHorizontal, Menu, ChevronDown } from "lucide-react"
 import { useState } from "react"
 import GhostIconButton from "./GhostIconButton"
+import { Slider } from "./ui/slider"
 
-export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen, selectedBotName, setSelectedBotName, selectedBot, setSelectedBot, selectedProvider, setSelectedProvider }) {
+export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen, selectedBotName, setSelectedBotName, selectedBot, setSelectedBot, selectedProvider, setSelectedProvider, temperature, setTemperature }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const chatbots = [
@@ -11,7 +12,7 @@ export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen
     { name: "gpt-4.1-2025-04-14", provider: 'gpt', model_name: 'gpt-4.1-2025-04-14', icon: <Asterisk className="h-4 w-4" /> },
     { name: "gpt-4o-2024-08-06", provider: 'gpt', model_name: 'gpt-4o-2024-08-06', icon: <Asterisk className="h-4 w-4" /> },
     { name: "gpt-4o-2024-11-20", provider: 'gpt', model_name: 'gpt-4o-2024-11-20', icon: <Asterisk className="h-4 w-4" /> },
-    { name: "qwen/qwen3-coder", provider: 'openrouter', model_name: 'qwen/qwen3-coder', icon: <Asterisk className="h-4 w-4" /> },
+    // { name: "qwen/qwen3-coder", provider: 'openrouter', model_name: 'qwen/qwen3-coder', icon: <Asterisk className="h-4 w-4" /> },
   ]
 
   return (
@@ -59,6 +60,18 @@ export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen
             ))}
           </div>
         )}
+      </div>
+
+      <div className="flex items-center gap-2 ml-4">
+        <span className="text-sm font-medium">Temperature: {temperature.toFixed(1)}</span>
+        <Slider
+          value={[temperature]}
+          max={1}
+          min={0}
+          step={0.1}
+          className="w-[100px]"
+          onValueChange={(value) => setTemperature(value[0])}
+        />
       </div>
 
       <div className="ml-auto flex items-center gap-2">
