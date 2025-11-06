@@ -158,6 +158,7 @@ const ChatPane = forwardRef(function ChatPane(
               </div>
             ))}
             {isThinking && <ThinkingMessage onPause={onPauseThinking} />}
+            <div ref={messagesEndRef} />
           </>
         )}
       </div>
