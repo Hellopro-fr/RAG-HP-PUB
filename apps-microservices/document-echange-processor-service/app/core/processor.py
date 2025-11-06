@@ -176,7 +176,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
 
                 metric_payload = {
                     "source_service": "document-echange-processor-service",
-                    "url": document_path.replace(r"\/", "/"),
+                    "url": "not available",
                     "state_llm": state_llm,
                     "prompt_tokens": usage_details.get('prompt_tokens'),
                     "completion_tokens": usage_details.get('completion_tokens'),
