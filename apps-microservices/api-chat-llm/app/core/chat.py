@@ -71,6 +71,43 @@ class DeepSeek:
             #     yield chunk.choices[0].delta.content
 
 
+class ChatGPT:
+    def __init__(self, config=None):
+        config = config or {}
+        self.API_KEY = config.get("api_key", settings.OPENAI_API_KEY)
+        self.MODEL = "gpt-4o-2024-11-20"
+        self.TEMPERATURE = config.get("temperature", 0.4)
+        self.client = OpenAI(api_key=self.API_KEY)
+        self.async_client = AsyncOpenAI(api_key=self.API_KEY)
+
+    def chat(self, message, stream=False):
+        response = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": message},
+            ],
+            temperature=self.TEMPERATURE,
+            stream=stream,
+        )
+        if stream:
+            return response
+        return {"content": response.choices[0].message.content, "response": response}
+
+    def set_temperature(self, temperature):
+        self.TEMPERATURE = float(temperature)
+        
+    async def stream(self, message):
+        response_stream = await self.async_client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": message},
+            ],
+            temperature=self.TEMPERATURE,
+            stream=True
+        )
+        async for chunk in response_stream:
+            yield chunk
+            
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
