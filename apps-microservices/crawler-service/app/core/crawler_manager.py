@@ -13,7 +13,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import settings
-from app.core.redis_service import redis_service
+from common_utils.redis import cache_service
 from app.schemas.crawler import CrawlStatus, IncludeInArchive, ReindexResponse
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class CrawlerManager:
                 del self.local_processes[crawl_id]
         
         # Global concurrency check against Redis
-        existing_job = await redis_service.get_data(f"{CRAWL_JOB_PREFIX}{crawl_id}")
+        existing_job = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
         if existing_job and existing_job.get("status") == "running":
             logger.warning(f"Crawl job '{crawl_id}' is already running globally. Request rejected.")
             raise HTTPException(
@@ -115,11 +115,10 @@ class CrawlerManager:
             "callback_url": callback_url,
             "failure_callback_url": failure_callback_url, "pid": process.pid
         }
-        await redis_service.set_data(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_data)
+        await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_data)
         
         # Atomically increment the global running count
-        if redis_service._client:
-            await redis_service._client.incr(CRAWL_RUNNING_COUNT_KEY)
+        await cache_service.increment_key(CRAWL_RUNNING_COUNT_KEY)
         
         asyncio.create_task(self._monitor_process(crawl_id, process))
         return crawl_id
@@ -165,7 +164,7 @@ class CrawlerManager:
     async def _monitor_process(self, crawl_id: str, process: asyncio.subprocess.Process):
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
         
-        job_info_initial = await redis_service.get_data(job_key)
+        job_info_initial = await cache_service.get_json(job_key)
         if not job_info_initial:
             logger.error(f"Cannot monitor process for '{crawl_id}': job info vanished immediately after start.")
             return
@@ -191,10 +190,10 @@ class CrawlerManager:
                 if process.returncode is not None:
                     break
 
-                job_info = await redis_service.get_data(job_key)
+                job_info = await cache_service.get_json(job_key)
                 if job_info and job_info.get("status") == "running":
                     job_info["last_heartbeat"] = datetime.utcnow()
-                    await redis_service.set_data(job_key, job_info)
+                    await cache_service.set_json(job_key, job_info)
                     logger.debug(f"Heartbeat sent for running crawl '{crawl_id}'.")
                 elif not job_info:
                     logger.warning(f"Heartbeat for '{crawl_id}' skipped: job key disappeared from Redis mid-run. It may be recovered later.")
@@ -206,10 +205,9 @@ class CrawlerManager:
             await log_file_handle.close()
 
         # --- Finalization Logic (after process has finished) ---
-        if redis_service._client:
-            await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
+        await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
         
-        job_info = await redis_service.get_data(job_key)
+        job_info = await cache_service.get_json(job_key)
         if job_info:
             exit_code = process.returncode
             is_success = (exit_code == 2)
@@ -219,7 +217,7 @@ class CrawlerManager:
             job_info["pid"] = None
             if "last_heartbeat" in job_info:
                 del job_info["last_heartbeat"]  # Clean up heartbeat field
-            await redis_service.set_data(job_key, job_info)
+            await cache_service.set_json(job_key, job_info)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status updated in Redis and counter decremented.")
             
             # --- START: Create Completion Marker ---
@@ -264,17 +262,17 @@ class CrawlerManager:
             await f.write(f"Stopped by API at {datetime.utcnow().isoformat()}")
 
         job_info["status"] = "stopping"
-        await redis_service.set_data(job_key, job_info)
+        await cache_service.set_json(job_key, job_info)
         logger.info(f"Stop signal sent to crawl '{crawl_id}'. Status updated in Redis.")
         return True
 
     async def get_all_statuses(self) -> Dict[str, CrawlStatus]:
-        all_job_keys = await redis_service.get_all_keys_by_prefix(CRAWL_JOB_PREFIX)
+        all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
         statuses = {}
         for key in all_job_keys:
             crawl_id = key.replace(CRAWL_JOB_PREFIX, "")
             # This uses the public get_status which now needs job_info, so we get it first.
-            job_info = await redis_service.get_data(key)
+            job_info = await cache_service.get_json(key)
             if job_info:
                 status_data = await self.get_status(job_info)
                 if status_data:
@@ -386,7 +384,7 @@ class CrawlerManager:
         summary = {"scanned_directories": 0, "reindexed_jobs": 0, "already_indexed": 0, "errors": 0}
         
         try:
-            redis_keys = await redis_service.get_all_keys_by_prefix(CRAWL_JOB_PREFIX)
+            redis_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
             redis_key_set = set(redis_keys)
             
             storage_dirs = [d for d in os.listdir(settings.CRAWLER_STORAGE_PATH) if os.path.isdir(os.path.join(settings.CRAWLER_STORAGE_PATH, d))]
@@ -438,7 +436,7 @@ class CrawlerManager:
                     "failure_callback_url": None, "pid": None
                 }
                 
-                await redis_service.set_data(job_key, reindexed_data)
+                await cache_service.set_json(job_key, reindexed_data)
                 summary["reindexed_jobs"] += 1
         
         except Exception as e:
@@ -458,19 +456,18 @@ class CrawlerManager:
             process.terminate()
             
             # 2. Update state in Redis
-            job_info = await redis_service.get_data(job_key)
+            job_info = await cache_service.get_json(job_key)
             if job_info and job_info.get("status") == "running":
                 job_info["status"] = "failed"
                 job_info["shutdown_reason"] = "Service instance terminated"
                 if "last_heartbeat" in job_info:
                     del job_info["last_heartbeat"]
                 
-                await redis_service.set_data(job_key, job_info)
+                await cache_service.set_json(job_key, job_info)
                 logger.info(f"Marked job '{crawl_id}' as 'failed' in Redis.")
 
                 # 3. Decrement the global running counter
-                if redis_service._client:
-                    await redis_service._client.decr(CRAWL_RUNNING_COUNT_KEY)
+                await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
                 logger.info(f"Decremented global running counter for job '{crawl_id}'.")
 
                 # 4. Send failure webhook

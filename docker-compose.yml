@@ -887,10 +887,6 @@ services:
       - MAX_CONCURRENT_CRAWLS=1
       # Fallback value if the Redis config key is missing. Set to default replica count.
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
-      - REDIS_URL=redis://redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD} # Pass the password from .env file
-    depends_on:
-      - redis
     deploy:
       replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
@@ -907,18 +903,6 @@ services:
       - ./apps-microservices/api-chatbot-html-service:/app:rw
     ports:
       - "3550:3000"
-    logging: *logging_defaults
-
-  redis:
-    image: redis:latest
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./apps-microservices/crawler-service/redis.conf:/usr/local/etc/redis/redis.conf
-      - redis_data:/data
-    env_file:
-      - .env # Load the REDIS_PASSWORD from the .env file
-    command: redis-server /usr/local/etc/redis/redis.conf --requirepass ${REDIS_PASSWORD} --appendonly yes --loglevel warning
     logging: *logging_defaults
 
   reverse-proxy:
@@ -944,4 +928,3 @@ volumes:
     driver: local
   grafana-storage:
   crawler_data:
-  redis_data:
