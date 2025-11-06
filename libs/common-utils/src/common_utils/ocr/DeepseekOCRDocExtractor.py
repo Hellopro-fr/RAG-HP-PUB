@@ -6,7 +6,6 @@ import mimetypes
 from io import BytesIO
 from urllib.parse import urlparse
 import asyncio
-import subprocess
 import tempfile
 import os
 
