@@ -22,6 +22,7 @@ class Publisher:
         collection = message_dict.get("collection")
         
         self.routing_key = "data.document.ready_for_insertion" if collection == "document" else "data.ready_for_embedding"
+        self.exchange_name = "inserted_data_exchange" if collection == "document" else "processed_data_exchange"
 
         if log_file and collection == "document":
             # os.makedirs(os.path.dirname(log_file), exist_ok=True)
