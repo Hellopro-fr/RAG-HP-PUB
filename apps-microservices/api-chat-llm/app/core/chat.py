@@ -2,7 +2,7 @@ from functools import lru_cache
 import time
 import logging
 import asyncio
-from typing import List
+from typing import Dict, List, Any, Optional
 from unittest import result
 from google.protobuf.json_format import MessageToDict
 
@@ -13,7 +13,7 @@ from common_utils.grpc_clients import (
 
 
 # Import des schémas Pydantic (à adapter si les chemins ont changé)
-from app.schemas.chat import chatResponse
+from app.schemas.chat import chatResponse, BatchChatRequest,BatchResult , BatchRequestInput
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 from app.core.credentials import settings
 from openai import OpenAI, AsyncOpenAI
@@ -230,4 +230,57 @@ async def get_gemini_chat_completion_response(request: ChatRequest):
         "response": response.get("message", ""),
         "api_response": response.get("api_response", {}),
         "time_elapsed": time_elapsed,
+    }
+
+# Chat completion via Deepseek
+async def llm_prompt_batch_deepseek(requestInput: BatchRequestInput, max_tokens: int = 1024 , enable_thinking: bool = False , temperature: float = 0.7) -> BatchResult:
+
+    start_time = time.perf_counter()
+   
+
+    # appel chat en asyncio
+    
+    response = await asyncio.to_thread(llm_prompt_deepseek, ChatRequest(
+        prompt=requestInput.prompt,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        enable_thinking=enable_thinking
+    ))
+
+    time_elapsed = time.perf_counter() - start_time
+
+    return BatchResult(
+        id_request=requestInput.id_request, 
+        llm_response=response.api_response, 
+        time_elapsed=time_elapsed
+    )
+
+async def get_batch_deepseek_chat_completion_response(BatchRequest: BatchChatRequest):
+
+    start_time = time.perf_counter()
+
+    # Créer une tâche asynchrone pour chaque produit
+    tasks = [
+        llm_prompt_batch_deepseek(requestInput, max_tokens=BatchRequest.max_tokens, enable_thinking=BatchRequest.enable_thinking , temperature=BatchRequest.temperature)
+        for requestInput in BatchRequest.list_request
+    ]
+
+    # Exécuter toutes les tâches en parallèle et attendre leurs résultats
+    results = await asyncio.gather(*tasks)
+
+    # Vérifier si asyncio.gather a retourné des exceptions
+    processed_results = []
+    for res in results:
+        if isinstance(res, Exception):
+            logger.error(f"Une tâche a échoué dans le batch: {res}")
+            # Vous pouvez décider quoi faire ici, par exemple retourner un objet d'erreur
+            processed_results.append(BatchResult(id_request="unknown_error", llm_response={"error": str(res)}))
+        else:
+            processed_results.append(res)
+
+    time_elapsed = time.perf_counter() - start_time
+
+    return {
+        "resultats": processed_results,
+        "all_time_elapsed": time_elapsed,
     }
