@@ -254,7 +254,7 @@ export default function Sidebar({
                 className="flex w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-white dark:text-zinc-900"
                 title="New Chat (⌘N)"
               >
-                <Plus className="h-4 w-4" /> Start New Chat
+                <Plus className="h-4 w-4" /> Nouveau chat
               </button>
             </div>
 

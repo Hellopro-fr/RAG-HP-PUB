@@ -19,12 +19,12 @@ class DeepSeekClient:
         **kwargs,
     ) -> dict:
         try:
-
+            model_name_deepseek = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-chat")
             if enable_thinking:
-                MODEL_NAME = "deepseek-reasoner"
+                model_name_deepseek = "deepseek-reasoner"
 
             request_payload = {
-                "model": MODEL_NAME,
+                "model": model_name_deepseek,
                 "messages": message_history,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
