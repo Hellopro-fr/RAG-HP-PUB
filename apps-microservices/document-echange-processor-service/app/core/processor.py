@@ -14,11 +14,12 @@ from vllm.transformers_utils.tokenizer import get_tokenizer
 from common_utils.database.MilvusDocumentCrud import MilvusDocumentCrud
 
 
-TOKENIZER = get_tokenizer("deepseek-ai/DeepSeek-R1", trust_remote_code=True)
-MAX_MODEL_LEN = 128000 # Correspond à la limite théorique du modèle DeepSeek-R1
-# On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
-SAFE_MAX_LEN = MAX_MODEL_LEN - 512
+# TOKENIZER = get_tokenizer("deepseek-ai/DeepSeek-R1", trust_remote_code=True)
+# MAX_MODEL_LEN = 128000 # Correspond à la limite théorique du modèle DeepSeek-R1
+# # On définit une limite de sécurité un peu en dessous du max pour éviter les erreurs "off-by-one"
+# SAFE_MAX_LEN = MAX_MODEL_LEN - 512
 
+MAX_OUTPUT_TOKEN = 64000
 
 PROMPT_NETTOYAGE = """
 Tu es un expert en analyse de documents B2B (devis, catalogues, fiches techniques, plaquettes commerciales,savoir-faire, autre type).
@@ -62,24 +63,24 @@ def make_chat_request(prompt_template, content,temperature=0.7):
     prompt_text = prompt_template.format(content=content)
     prompt_json = json.dumps(prompt_text)
     
-    # Compter les tokens du prompt
-    input_tokens = len(TOKENIZER.encode(prompt_json))
+    # # Compter les tokens du prompt
+    # input_tokens = len(TOKENIZER.encode(prompt_json))
     
-    # Calculer le nombre maximum de tokens possibles pour la sortie
-    remaining_tokens = SAFE_MAX_LEN - input_tokens
+    # # Calculer le nombre maximum de tokens possibles pour la sortie
+    # remaining_tokens = SAFE_MAX_LEN - input_tokens
     
-    # Sécurité : éviter les valeurs négatives ou trop hautes
-    max_output_tokens = max(0,remaining_tokens)
+    # # Sécurité : éviter les valeurs négatives ou trop hautes
+    # max_output_tokens = max(0,remaining_tokens)
     
-    # Message d’avertissement utile pour le débogage
-    print(f"[INFO] Prompt = {input_tokens} tokens | Output = {max_output_tokens} tokens disponibles.")
+    # # Message d’avertissement utile pour le débogage
+    # print(f"[INFO] Prompt = {input_tokens} tokens | Output = {max_output_tokens} tokens disponibles.")
     
-    # Construire la requête
+    # # Construire la requête
     chat_request = ChatRequest(
         prompt=prompt_json,
-        max_tokens=max_output_tokens,
+        max_tokens=MAX_OUTPUT_TOKEN,
         temperature=temperature,
-        enable_thinking=False
+        enable_thinking=True
     )
     
     return chat_request

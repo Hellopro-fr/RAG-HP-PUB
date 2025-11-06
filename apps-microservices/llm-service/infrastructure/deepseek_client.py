@@ -19,6 +19,10 @@ class DeepSeekClient:
         **kwargs,
     ) -> dict:
         try:
+
+            if enable_thinking:
+                MODEL_NAME = "deepseek-reasoner"
+
             request_payload = {
                 "model": MODEL_NAME,
                 "messages": message_history,
