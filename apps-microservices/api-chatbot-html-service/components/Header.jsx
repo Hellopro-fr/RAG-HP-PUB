@@ -2,8 +2,9 @@
 import { Asterisk, MoreHorizontal, Menu, ChevronDown } from "lucide-react"
 import { useState } from "react"
 import GhostIconButton from "./GhostIconButton"
+import { Slider } from "./ui/slider"
 
-export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen, selectedBotName, setSelectedBotName, selectedBot, setSelectedBot, selectedProvider, setSelectedProvider }) {
+export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen, selectedBotName, setSelectedBotName, selectedBot, setSelectedBot, selectedProvider, setSelectedProvider, temperature, setTemperature }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const chatbots = [
@@ -59,6 +60,18 @@ export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen
             ))}
           </div>
         )}
+      </div>
+
+      <div className="flex items-center gap-2 ml-4">
+        <span className="text-sm font-medium">Temperature: {temperature.toFixed(1)}</span>
+        <Slider
+          value={[temperature]}
+          max={1}
+          min={0}
+          step={0.1}
+          className="w-[100px]"
+          onValueChange={(value) => setTemperature(value[0])}
+        />
       </div>
 
       <div className="ml-auto flex items-center gap-2">
