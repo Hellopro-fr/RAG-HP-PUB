@@ -29,6 +29,10 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-venv --no-i
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# We copy the shared lib
+COPY libs/common-utils /app/libs/common-utils
+RUN pip install -e /app/libs/common-utils
+
 # Install Python dependencies into the virtual environment
 COPY apps-microservices/crawler-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
