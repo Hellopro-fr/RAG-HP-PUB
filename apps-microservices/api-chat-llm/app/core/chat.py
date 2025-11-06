@@ -18,6 +18,8 @@ from common_utils.grpc_clients.schemas.chat import ChatRequest
 from app.core.credentials import settings
 from openai import OpenAI, AsyncOpenAI
 
+from common_utils.grpc_clients.schemas.chat import ChatBaseURL, ChatProvider
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -68,6 +70,60 @@ class DeepSeek:
         async for chunk in response_stream:
             yield chunk
 
+
+
+
+class LLMProvider:
+    def __init__(self, config=None):
+        config = config or {}
+        self.PROVIDER = config.get("provider", ChatProvider.DEEPSEEK)
+        if self.PROVIDER == ChatProvider.DEEPSEEK:
+            self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
+            self.BASE_URL = ChatBaseURL.DEEPSEEK
+        elif self.PROVIDER == ChatProvider.GPT:
+            self.API_KEY = config.get("api_key", settings.OPENAI_API_KEY)
+            self.BASE_URL = ChatBaseURL.OPENAI
+        elif self.PROVIDER == ChatProvider.OPENROUTER:
+            self.API_KEY = config.get("api_key", settings.OPENROUTER_API_KEY)
+            self.BASE_URL = ChatBaseURL.OPENROUTER
+
+        self.MODEL = config.get("model","deepseek-chat")
+        self.TEMPERATURE = config.get("temperature", 0.4)
+        self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+        self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+        
+    def chat(self, message, stream=False):
+        response = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Tu es un assistant intelligent et serviable.",
+                },
+                {"role": "user", "content": message},
+            ],
+            temperature=self.TEMPERATURE,
+            stream=stream,
+        )
+        if stream:
+            return response
+        return {"content": response.choices[0].message.content, "response": response}
+
+    def set_temperature(self, temperature):
+        self.TEMPERATURE = float(temperature)
+        
+    async def stream(self, message):
+        response_stream = await self.async_client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "system", "content": "You are a helpful and intelligent assistant."},
+                {"role": "user", "content": message},
+            ],
+            temperature=self.TEMPERATURE,
+            stream=True
+        )
+        async for chunk in response_stream:
+            yield chunk
 
 class ChatGPT:
     def __init__(self, config=None):
