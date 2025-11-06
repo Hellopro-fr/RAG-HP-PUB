@@ -6,6 +6,7 @@ from app.schemas.chat import  chatResponse , BatchChatRequest,BatchRequestRespon
 from common_utils.grpc_clients.schemas.chat import ChatRequest, ChatProvider
 # from app.core.search import search_in_milvus
 from app.core.chat import (
+    LLMProvider,
     get_chat_completion_response, 
     get_chatgpt_chat_completion_response, 
     get_deepseek_chat_completion_response, 
@@ -63,7 +64,7 @@ async def ws_search(websocket: WebSocket):
 
             prompt = chat_request.prompt
             model = chat_request.model
-            config = {"model": model, "temperature": chat_request.temperature}
+            config = {"model": model, "temperature": chat_request.temperature, "provider": chat_request.provider}
             if not prompt.strip():
                 await websocket.send_text("Error: Prompt cannot be empty.")
                 continue
@@ -71,33 +72,13 @@ async def ws_search(websocket: WebSocket):
             full_text = ""
             last_chunk_data = {}
 
-            if chat_request.provider == ChatProvider.DEEPSEEK:
-                deepseek_client = DeepSeek(config=config)
-                async for chunk in deepseek_client.stream(prompt):
-                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                        content_to_send = chunk.choices[0].delta.content
-                        full_text += content_to_send
-                        await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
-                    last_chunk_data = chunk.model_dump()
-            elif chat_request.provider == ChatProvider.GPT:
-                chatgpt_client = ChatGPT(config=config)
-                async for chunk in chatgpt_client.stream(prompt):
-                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                        content_to_send = chunk.choices[0].delta.content
-                        full_text += content_to_send
-                        await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
-                    last_chunk_data = chunk.model_dump()
-            elif chat_request.provider == ChatProvider.OPENROUTER:
-                openrouter_client = OpenRouter(config=config)
-                async for chunk in openrouter_client.stream(prompt):
-                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                        content_to_send = chunk.choices[0].delta.content
-                        full_text += content_to_send
-                        await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
-                    last_chunk_data = chunk.model_dump()
-            else:
-                await websocket.send_text(f"Error: Model {chat_request.model} and provider {chat_request.provider} combination not supported yet.")
-                break
+            client = LLMProvider(config=config)
+            async for chunk in client.stream(prompt):
+                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                    content_to_send = chunk.choices[0].delta.content
+                    full_text += content_to_send
+                    await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
+                last_chunk_data = chunk.model_dump()
                 
             await websocket.send_json({
                 "type": "end",
