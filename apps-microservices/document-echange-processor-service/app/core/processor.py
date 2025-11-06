@@ -162,67 +162,67 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
             anonymized_text     = anonymize.anonymize_text(cleaned_text)
             text_to_embed_clean = anonymize.normalize_text(anonymized_text)
 
-            # Suppression des info inutiles via llm
-            try:
+            # # Suppression des info inutiles via llm
+            # try:
 
-                chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
-                raw_response_dict = await llm_client.get_llm_chat_response(chat_request)
+            #     chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
+            #     raw_response_dict = await llm_client.get_llm_chat_response(chat_request)
         
-                # Construction du payload de métriques
-                response_details = raw_response_dict.get('response', {})
-                usage_details = response_details.get('usage', {})
-                error_details = response_details.get('error', {})
-                state_llm = 1 if not error_details else 2
+            #     # Construction du payload de métriques
+            #     response_details = raw_response_dict.get('response', {})
+            #     usage_details = response_details.get('usage', {})
+            #     error_details = response_details.get('error', {})
+            #     state_llm = 1 if not error_details else 2
 
-                metric_payload = {
-                    "source_service": "document-echange-processor-service",
-                    "url": document_path.replace(r"\/", "/"),
-                    "state_llm": state_llm,
-                    "prompt_tokens": usage_details.get('prompt_tokens'),
-                    "completion_tokens": usage_details.get('completion_tokens'),
-                    "total_tokens": usage_details.get('total_tokens'),
-                    "model": response_details.get('model'),
-                    "raw_response_on_error": raw_response_dict if state_llm == 2 else None,
-                    "process_id": 33
-                }
+            #     metric_payload = {
+            #         "source_service": "document-echange-processor-service",
+            #         "url": document_path.replace(r"\/", "/"),
+            #         "state_llm": state_llm,
+            #         "prompt_tokens": usage_details.get('prompt_tokens'),
+            #         "completion_tokens": usage_details.get('completion_tokens'),
+            #         "total_tokens": usage_details.get('total_tokens'),
+            #         "model": response_details.get('model'),
+            #         "raw_response_on_error": raw_response_dict if state_llm == 2 else None,
+            #         "process_id": 33
+            #     }
                 
-                if state_llm == 2:
-                    raise ValueError(f"Erreur du LLM: {raw_response_dict}")
+            #     if state_llm == 2:
+            #         raise ValueError(f"Erreur du LLM: {raw_response_dict}")
 
-                # Parsing de la réponse
-                raw_text = raw_response_dict.get('full_message', '')
+            #     # Parsing de la réponse
+            #     raw_text = raw_response_dict.get('full_message', '')
 
-                # Parsing de la réponse
-                match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                if match:
-                    json_string = match.group(0)
-                    parsed_json = json.loads(json_string)
-                    contenu = parsed_json.get("contenu")
-                    if not contenu:
-                        raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
-                    elif contenu != "ok":
-                        text_to_embed_clean = contenu
-                        logger.info(f"\n\nTexte juste après nettoyage : {text_to_embed_clean}")
-                else:
-                    raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
+            #     # Parsing de la réponse
+            #     match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            #     if match:
+            #         json_string = match.group(0)
+            #         parsed_json = json.loads(json_string)
+            #         contenu = parsed_json.get("contenu")
+            #         if not contenu:
+            #             raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
+            #         elif contenu != "ok":
+            #             text_to_embed_clean = contenu
+            #             logger.info(f"\n\nTexte juste après nettoyage : {text_to_embed_clean}")
+            #     else:
+            #         raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
-            except Exception as e:
-                logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
-                error_str = f"Erreur lors du nettoyage LLM. Erreur: {e}"
-                # S'assurer qu'on a un payload de métrique même en cas d'erreur
-                if not metric_payload:
-                    metric_payload = {
-                        "source_service": "template-llm-service",
-                        "url": document_path,
-                        "state_llm": 2, # Erreur
-                        "error_message": error_str
-                    }
-                return {
-                    "status": "error",
-                    "original_message": document_data,
-                    "error_message": error_str,
-                    "metric_payload": metric_payload
-                }
+            # except Exception as e:
+            #     logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
+            #     error_str = f"Erreur lors du nettoyage LLM. Erreur: {e}"
+            #     # S'assurer qu'on a un payload de métrique même en cas d'erreur
+            #     if not metric_payload:
+            #         metric_payload = {
+            #             "source_service": "template-llm-service",
+            #             "url": document_path,
+            #             "state_llm": 2, # Erreur
+            #             "error_message": error_str
+            #         }
+            #     return {
+            #         "status": "error",
+            #         "original_message": document_data,
+            #         "error_message": error_str,
+            #         "metric_payload": metric_payload
+            #     }
 
         # Étape 3: Construire le message de sortie
         output_message = {
@@ -249,7 +249,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
         return {
                 "status": "success",
                 "processed_message": output_message,
-                "metric_payload": metric_payload
+                # "metric_payload": metric_payload
             }
     
     finally:
