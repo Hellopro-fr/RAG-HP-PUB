@@ -199,7 +199,7 @@ export default function AIAssistantUI() {
               const asstMsg = {
                 id: assistantMessageId,
                 role: "assistant",
-                content: fullAssistantResponse,
+                content: message.full_content,
                 createdAt: new Date().toISOString(),
                 api_response: message.api_response, // Store the full API response
               }
