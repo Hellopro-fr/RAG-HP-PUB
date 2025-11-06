@@ -174,6 +174,13 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
                 error_details = response_details.get('error', {})
                 state_llm = 1 if not error_details else 2
 
+                if isinstance(document_path, str):
+                    try:
+                        document_path = json.loads(document_path)
+                    except json.JSONDecodeError:
+                        # Si ce n’est pas du JSON, on nettoie manuellement
+                        document_path = document_path.replace("\\", "")
+
                 metric_payload = {
                     "source_service": "document-echange-processor-service",
                     "url": document_path.replace("\\",""),
