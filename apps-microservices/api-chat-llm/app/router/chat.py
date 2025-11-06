@@ -3,7 +3,7 @@ from re import A
 from typing import List
 from fastapi import APIRouter, HTTPException, Body, WebSocket, WebSocketDisconnect
 from app.schemas.chat import  chatResponse , BatchChatRequest,BatchRequestResponse
-from common_utils.grpc_clients.schemas.chat import ChatRequest
+from common_utils.grpc_clients.schemas.chat import ChatRequest, ChatProvider
 # from app.core.search import search_in_milvus
 from app.core.chat import (
     get_chat_completion_response, 
@@ -52,27 +52,40 @@ async def ws_search(websocket: WebSocket):
         # Keep the connection open to listen for messages
         while True:
             # Wait for a message from the client
-            data = await websocket.receive_text()
-            
-            # For simplicity, we assume the data is the prompt
-            prompt = data
-            
+            data = await websocket.receive_json()
+            try:
+                chat_request = ChatRequest(**data)
+            except Exception as e:
+                await websocket.send_text(f"Error: Invalid chat request format: {e}")
+                continue
+
+            prompt = chat_request.prompt
+            model = chat_request.model
+
             if not prompt.strip():
                 await websocket.send_text("Error: Prompt cannot be empty.")
                 continue
 
-            # Instantiate DeepSeek
-            deepseek_client = DeepSeek()
-            
             full_text = ""
             last_chunk_data = {}
-            # Stream the response back to the client
-            async for chunk in deepseek_client.stream(prompt):
-                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                    content_to_send = chunk.choices[0].delta.content
-                    full_text += content_to_send
-                    await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
-                last_chunk_data = chunk.model_dump()
+
+            if chat_request.model == ChatProvider.DEEPSEEK:
+                deepseek_client = DeepSeek()
+                async for chunk in deepseek_client.stream(prompt):
+                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                        content_to_send = chunk.choices[0].delta.content
+                        full_text += content_to_send
+                        await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
+                    last_chunk_data = chunk.model_dump()
+            elif chat_request.model == ChatProvider.GPT:
+                # Placeholder for GPT-5 logic
+                await websocket.send_text("GPT-5 model selected. (Not implemented yet)")
+            elif chat_request.model == ChatProvider.OPENROUTER:
+                # Placeholder for Gemini logic
+                await websocket.send_text("Gemini model selected. (Not implemented yet)")
+            else:
+                await websocket.send_text(f"Error: Model {chat_request.model} not supported yet.")
+                continue
                 
             await websocket.send_json({
                 "type": "end",
