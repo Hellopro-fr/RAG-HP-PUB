@@ -11,6 +11,8 @@ from app.core.chat import (
     get_deepseek_chat_completion_response, 
     get_gemini_chat_completion_response, 
     DeepSeek,
+    ChatGPT,
+    OpenRouter,
     get_batch_deepseek_chat_completion_response
 )
 from app.core.credentials import settings
@@ -61,7 +63,7 @@ async def ws_search(websocket: WebSocket):
 
             prompt = chat_request.prompt
             model = chat_request.model
-
+            config = {"model": model, "temperature": chat_request.temperature}
             if not prompt.strip():
                 await websocket.send_text("Error: Prompt cannot be empty.")
                 continue
@@ -70,7 +72,7 @@ async def ws_search(websocket: WebSocket):
             last_chunk_data = {}
 
             if chat_request.provider == ChatProvider.DEEPSEEK:
-                deepseek_client = DeepSeek()
+                deepseek_client = DeepSeek(config=config)
                 async for chunk in deepseek_client.stream(prompt):
                     if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                         content_to_send = chunk.choices[0].delta.content
@@ -78,13 +80,23 @@ async def ws_search(websocket: WebSocket):
                         await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
                     last_chunk_data = chunk.model_dump()
             elif chat_request.provider == ChatProvider.GPT:
-                # Placeholder for GPT-5 logic
-                await websocket.send_text("GPT-5 model selected. (Not implemented yet)")
+                chatgpt_client = ChatGPT(config=config)
+                async for chunk in chatgpt_client.stream(prompt):
+                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                        content_to_send = chunk.choices[0].delta.content
+                        full_text += content_to_send
+                        await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
+                    last_chunk_data = chunk.model_dump()
             elif chat_request.provider == ChatProvider.OPENROUTER:
-                # Placeholder for Gemini logic
-                await websocket.send_text("Gemini model selected. (Not implemented yet)")
+                openrouter_client = OpenRouter(config=config)
+                async for chunk in openrouter_client.stream(prompt):
+                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                        content_to_send = chunk.choices[0].delta.content
+                        full_text += content_to_send
+                        await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
+                    last_chunk_data = chunk.model_dump()
             else:
-                await websocket.send_text(f"Error: Model {chat_request.model} not supported yet.")
+                await websocket.send_text(f"Error: Model {chat_request.model} and provider {chat_request.provider} combination not supported yet.")
                 break
                 
             await websocket.send_json({
