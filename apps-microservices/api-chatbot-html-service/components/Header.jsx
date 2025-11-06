@@ -3,15 +3,15 @@ import { Asterisk, MoreHorizontal, Menu, ChevronDown } from "lucide-react"
 import { useState } from "react"
 import GhostIconButton from "./GhostIconButton"
 
-export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen }) {
-  const [selectedBot, setSelectedBot] = useState("GPT-5")
+export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen, selectedBotName, setSelectedBotName, selectedBot, setSelectedBot, selectedProvider, setSelectedProvider }) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const chatbots = [
-    { name: "GPT-5", icon: "🤖" },
-    { name: "Claude Sonnet 4", icon: "🎭" },
-    { name: "Gemini", icon: "💎" },
-    { name: "Assistant", icon: <Asterisk className="h-4 w-4" /> },
+    { name: "DeepSeek-V3.2-Exp", provider: 'deepseek', model_name: 'deepseek-chat', icon: <Asterisk className="h-4 w-4" /> },
+    { name: "gpt-4.1-2025-04-14", provider: 'gpt', model_name: 'gpt-4.1-2025-04-14', icon: <Asterisk className="h-4 w-4" /> },
+    { name: "gpt-4o-2024-08-06", provider: 'gpt', model_name: 'gpt-4o-2024-08-06', icon: <Asterisk className="h-4 w-4" /> },
+    { name: "gpt-4o-2024-11-20", provider: 'gpt', model_name: 'gpt-4o-2024-11-20', icon: <Asterisk className="h-4 w-4" /> },
+    { name: "qwen/qwen3-coder", provider: 'openrouter', model_name: 'qwen/qwen3-coder', icon: <Asterisk className="h-4 w-4" /> },
   ]
 
   return (
@@ -27,16 +27,16 @@ export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen
       )}
 
       <div className="hidden md:flex relative">
-        {/* <button
+        <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold tracking-tight hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-800"
         >
-          {typeof chatbots.find((bot) => bot.name === selectedBot)?.icon === "string" ? (
-            <span className="text-sm">{chatbots.find((bot) => bot.name === selectedBot)?.icon}</span>
+          {typeof chatbots.find((bot) => bot.model_name === selectedBot)?.icon === "string" ? (
+            <span className="text-sm">{chatbots.find((bot) => bot.model_name === selectedBot)?.icon}</span>
           ) : (
-            chatbots.find((bot) => bot.name === selectedBot)?.icon
+            chatbots.find((bot) => bot.model_name === selectedBot)?.icon
           )}
-          {selectedBot}
+          {selectedBotName}
           <ChevronDown className="h-4 w-4" />
         </button>
 
@@ -46,8 +46,10 @@ export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen
               <button
                 key={bot.name}
                 onClick={() => {
-                  setSelectedBot(bot.name)
+                  setSelectedBot(bot.model_name)
+                  setSelectedBotName(bot.name)
                   setIsDropdownOpen(false)
+                  setSelectedProvider(bot.provider)
                 }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 first:rounded-t-lg last:rounded-b-lg"
               >
@@ -56,7 +58,7 @@ export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen
               </button>
             ))}
           </div>
-        )} */}
+        )}
       </div>
 
       <div className="ml-auto flex items-center gap-2">

@@ -81,6 +81,9 @@ export default function AIAssistantUI() {
 
   const [isThinking, setIsThinking] = useState(false)
   const [thinkingConvId, setThinkingConvId] = useState(null)
+  const [selectedBot, setSelectedBot] = useState('deepseek-chat')
+  const [selectedBotName, setSelectedBotName] = useState('DeepSeek-V3.2-Exp')
+  const [selectedProvider, setSelectedProvider] = useState("deepseek") // Rename selectedBot to selectedProvider
 
   useEffect(() => {
     const onKey = (e) => {
@@ -183,7 +186,7 @@ export default function AIAssistantUI() {
     let fullAssistantResponse = ""
 
     ws.onopen = () => {
-      ws.send(content) // Send the prompt
+      ws.send(JSON.stringify({ prompt: content, model: selectedBot, provider: selectedProvider })) // Send prompt, selected model, and selected provider
     }
 
     ws.onmessage = (event) => {
@@ -355,7 +358,17 @@ export default function AIAssistantUI() {
         />
 
         <main className="relative flex min-w-0 flex-1 flex-col">
-          <Header createNewChat={createNewChat} sidebarCollapsed={sidebarCollapsed} setSidebarOpen={setSidebarOpen} />
+          <Header 
+            createNewChat={createNewChat} 
+            sidebarCollapsed={sidebarCollapsed} 
+            setSidebarOpen={setSidebarOpen} 
+            selectedBot={selectedBot} 
+            setSelectedBot={setSelectedBot} 
+            selectedProvider={selectedProvider} 
+            setSelectedProvider={setSelectedProvider} 
+            selectedBotName={selectedBotName}
+            setSelectedBotName={setSelectedBotName}
+          />
           <ChatPane
             ref={composerRef}
             conversation={selected}
