@@ -6,9 +6,9 @@ from datetime import datetime
 from typing import Dict, Optional, List
 
 import aiofiles
-from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Query, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, status, Query, Depends, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX
 from app.core.redis_service import redis_service
@@ -131,12 +131,24 @@ async def get_capacity():
 
 
 @router.post("/start", response_model=CrawlResponse, status_code=status.HTTP_202_ACCEPTED)
-async def start_new_crawl(payload: CrawlRequest):
+async def start_new_crawl(request: Request):
     """
     Starts or resumes a web crawling job. A job is uniquely identified by the `id` field.
     If a job with the same `id` is already running, an error will be returned.
     """
+    raw_payload = {}
     try:
+        # --- START: TEMPORARY DEBUGGING ---
+        raw_payload = await request.json()
+        logger.info(f"Received raw payload for /crawler/start: {json.dumps(raw_payload, indent=2)}")
+        
+        try:
+            payload = CrawlRequest(**raw_payload)
+        except ValidationError as e:
+            logger.error(f"Payload validation failed for /crawler/start. Payload: {raw_payload}. Error: {e.errors()}")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=e.errors())
+        # --- END: TEMPORARY DEBUGGING ---
+        
         params = {
             "typecrawling": payload.type_crawling,
             "method": payload.method,
@@ -169,7 +181,8 @@ async def start_new_crawl(payload: CrawlRequest):
     except HTTPException as e:
         raise e
     except Exception as e:
-        logger.error(f"Failed to start crawl for domain {payload.domain}: {e}", exc_info=True)
+        domain_for_log = raw_payload.get('domain', 'unknown') if raw_payload else 'unknown'
+        logger.error(f"Failed to start crawl for domain {domain_for_log}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred while starting the crawl.")
 
 @router.post("/stop/{crawl_id}", response_model=StopResponse)
