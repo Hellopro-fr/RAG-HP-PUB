@@ -2,10 +2,17 @@ import json
 from re import A
 from typing import List
 from fastapi import APIRouter, HTTPException, Body, WebSocket, WebSocketDisconnect
-from app.schemas.chat import  chatResponse
+from app.schemas.chat import  chatResponse , BatchChatRequest,BatchRequestResponse
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 # from app.core.search import search_in_milvus
-from app.core.chat import get_chat_completion_response , get_chatgpt_chat_completion_response , get_deepseek_chat_completion_response , get_gemini_chat_completion_response, DeepSeek
+from app.core.chat import (
+    get_chat_completion_response, 
+    get_chatgpt_chat_completion_response, 
+    get_deepseek_chat_completion_response, 
+    get_gemini_chat_completion_response, 
+    DeepSeek,
+    get_batch_deepseek_chat_completion_response
+)
 from app.core.credentials import settings
 import logging
 
@@ -132,7 +139,7 @@ async def deepseek_chat_completion_llm(request: ChatRequest = Body(...)):
         raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
     
 @router.post("/llm/chat/gemini", tags=["Chat - Gemini"])
-async def deepseek_chat_completion_llm(request: ChatRequest = Body(...)):
+async def gemini_chat_completion_llm(request: ChatRequest = Body(...)):
     try:
         # logger.info(f"Requête chat completion sur Gemini : {request.prompt}")
         if not request.prompt.strip():
@@ -141,6 +148,23 @@ async def deepseek_chat_completion_llm(request: ChatRequest = Body(...)):
         results = await get_gemini_chat_completion_response(request)
         # logger.info(f"Résultats de la chat complesion: {results}")
         return chatResponse(response=results.get("response", ""), api_response=results.get("api_response", {}), chat_model="gemini-flash-1.5" , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None), options=request.options)
+    except ValueError as ve:
+        logger.error(f"Erreur de validation (400): {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Erreur interne du serveur (500): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
+
+@router.post("/llm/chat/deepseek/batch", tags=["Chat - Batch DeepSeek"])
+async def batch_deepseek_chat_completion_llm(BatchRequest: BatchChatRequest = Body(...)):
+    try:
+        # verification si array BatchRequest.list_request est vide        
+        if not BatchRequest.list_request:
+            raise ValueError("Le list de promt en batch ne peut pas être vide.")        
+        
+        results = await get_batch_deepseek_chat_completion_response(BatchRequest)
+        
+        return BatchRequestResponse(resultats=results.get("resultats", {}), processing_time_total=results.get("all_time_elapsed", None))
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
         raise HTTPException(status_code=400, detail=str(ve))
