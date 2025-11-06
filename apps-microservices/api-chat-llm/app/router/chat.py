@@ -69,7 +69,7 @@ async def ws_search(websocket: WebSocket):
             full_text = ""
             last_chunk_data = {}
 
-            if chat_request.model == ChatProvider.DEEPSEEK:
+            if chat_request.provider == ChatProvider.DEEPSEEK:
                 deepseek_client = DeepSeek()
                 async for chunk in deepseek_client.stream(prompt):
                     if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
@@ -77,15 +77,15 @@ async def ws_search(websocket: WebSocket):
                         full_text += content_to_send
                         await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
                     last_chunk_data = chunk.model_dump()
-            elif chat_request.model == ChatProvider.GPT:
+            elif chat_request.provider == ChatProvider.GPT:
                 # Placeholder for GPT-5 logic
                 await websocket.send_text("GPT-5 model selected. (Not implemented yet)")
-            elif chat_request.model == ChatProvider.OPENROUTER:
+            elif chat_request.provider == ChatProvider.OPENROUTER:
                 # Placeholder for Gemini logic
                 await websocket.send_text("Gemini model selected. (Not implemented yet)")
             else:
                 await websocket.send_text(f"Error: Model {chat_request.model} not supported yet.")
-                continue
+                break
                 
             await websocket.send_json({
                 "type": "end",
