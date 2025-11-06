@@ -12,7 +12,7 @@ export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen
     { name: "gpt-4.1-2025-04-14", provider: 'gpt', model_name: 'gpt-4.1-2025-04-14', icon: <Asterisk className="h-4 w-4" /> },
     { name: "gpt-4o-2024-08-06", provider: 'gpt', model_name: 'gpt-4o-2024-08-06', icon: <Asterisk className="h-4 w-4" /> },
     { name: "gpt-4o-2024-11-20", provider: 'gpt', model_name: 'gpt-4o-2024-11-20', icon: <Asterisk className="h-4 w-4" /> },
-    { name: "qwen/qwen3-coder", provider: 'openrouter', model_name: 'qwen/qwen3-coder', icon: <Asterisk className="h-4 w-4" /> },
+    // { name: "qwen/qwen3-coder", provider: 'openrouter', model_name: 'qwen/qwen3-coder', icon: <Asterisk className="h-4 w-4" /> },
   ]
 
   return (
