@@ -95,7 +95,7 @@ const ChatPane = forwardRef(function ChatPane(
 
         {messages.length === 0 ? (
           <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            No messages yet. Say hello to start.
+            Envoyer un message pour commencer
           </div>
         ) : (
           <>
