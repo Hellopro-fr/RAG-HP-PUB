@@ -887,6 +887,7 @@ services:
       - MAX_CONCURRENT_CRAWLS=1
       # Fallback value if the Redis config key is missing. Set to default replica count.
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     deploy:
       replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
