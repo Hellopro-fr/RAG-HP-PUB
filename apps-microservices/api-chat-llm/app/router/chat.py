@@ -57,15 +57,18 @@ async def ws_search(websocket: WebSocket):
             # Instantiate DeepSeek
             deepseek_client = DeepSeek()
             api_data = {}
+            full_text = "";
             # Stream the response back to the client
             async for chunk in deepseek_client.stream(prompt):
                 if chunk.choices[0].delta.content:
+                    full_text += chunk.choices[0].delta.content
                     await websocket.send_text(chunk.choices[0].delta.content)
                     logger.info(f'chunk : {chunk}')
                 api_data = chunk.model_dump()
                 
             await websocket.send_json({
                 "type": "end",
+                "response": full_text,
                 "api_response": api_data
             })
 
