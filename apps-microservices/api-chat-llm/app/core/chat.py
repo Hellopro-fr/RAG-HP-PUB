@@ -67,15 +67,13 @@ class DeepSeek:
         )
         async for chunk in response_stream:
             yield chunk
-            # if chunk.choices[0].delta.content:
-            #     yield chunk.choices[0].delta.content
 
 
 class ChatGPT:
     def __init__(self, config=None):
         config = config or {}
         self.API_KEY = config.get("api_key", settings.OPENAI_API_KEY)
-        self.MODEL = "gpt-4o-2024-11-20"
+        self.MODEL = config.get("model","gpt-4o-2024-11-20")
         self.TEMPERATURE = config.get("temperature", 0.4)
         self.client = OpenAI(api_key=self.API_KEY)
         self.async_client = AsyncOpenAI(api_key=self.API_KEY)
@@ -190,6 +188,46 @@ async def get_chatgpt_chat_completion_response(request: ChatRequest):
     }
 
 
+class OpenRouter:
+    def __init__(self, config=None):
+        config = config or {}
+        self.API_KEY = config.get("api_key", settings.OPENROUTER_API_KEY)
+        self.BASE_URL = "https://openrouter.ai/api/v1"
+        self.MODEL = config.get("model", "qwen/qwen3-coder")
+        self.TEMPERATURE = config.get("temperature", 0.4)
+        self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+        self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+
+    def chat(self, message, stream=False):
+        response = self.client.chat.completions.create(
+            extra_body={},
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": [{"type": "text", "text": message}]}
+            ],
+            temperature=self.TEMPERATURE,
+            stream=stream,
+        )
+        if stream:
+            return response
+        return {"content": response.choices[0].message.content, "response": response}
+
+    def set_temperature(self, temperature):
+        self.TEMPERATURE = float(temperature)
+        
+    async def stream(self, message):
+        response_stream = await self.async_client.chat.completions.create(
+            extra_body={},
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": [{"type": "text", "text": message}]}
+            ],
+            temperature=self.TEMPERATURE,
+            stream=True
+        )
+        async for chunk in response_stream:
+            yield chunk
+
 # Chat completion via Deepseek
 def llm_prompt_deepseek(request: ChatRequest) -> str:
     # Appel chat completion avec Deepseek
@@ -229,18 +267,10 @@ async def get_deepseek_chat_completion_response(request: ChatRequest):
 # Chat completion via Gemini by openrouter
 def llm_prompt_gemini(request: ChatRequest) -> str:
     # Appel chat completion avec openrouter de model genini flash 1.5
-    client_or = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=settings.OPENROUTER_API_KEY,
-    )
-    completion = client_or.chat.completions.create(
-        extra_body={},
-        model="google/gemini-2.0-flash-001",
-        messages=[
-            {"role": "user", "content": [{"type": "text", "text": request.prompt}]}
-        ],
-    )
-    response = completion.choices[0].message.content
+    openrouter_client = OpenRouter()
+    openrouter_client.set_temperature(request.temperature)
+    completion = openrouter_client.chat(request.prompt, stream=False)
+    response = completion["content"]
 
     completion_dict = (
         completion.model_dump()
