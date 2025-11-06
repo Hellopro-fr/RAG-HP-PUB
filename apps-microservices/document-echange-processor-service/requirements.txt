@@ -2,7 +2,6 @@ pika
 aio_pika
 aiofiles
 pymilvus
-httpx
 beautifulsoup4
 bs4
 markdownify
