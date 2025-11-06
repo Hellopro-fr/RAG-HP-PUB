@@ -2,10 +2,17 @@ import json
 from re import A
 from typing import List
 from fastapi import APIRouter, HTTPException, Body, WebSocket, WebSocketDisconnect
-from app.schemas.chat import  chatResponse
-from common_utils.grpc_clients.schemas.chat import ChatRequest
+from app.schemas.chat import  chatResponse , BatchChatRequest,BatchRequestResponse
+from common_utils.grpc_clients.schemas.chat import ChatRequest, ChatProvider
 # from app.core.search import search_in_milvus
-from app.core.chat import get_chat_completion_response , get_chatgpt_chat_completion_response , get_deepseek_chat_completion_response , get_gemini_chat_completion_response, DeepSeek
+from app.core.chat import (
+    get_chat_completion_response, 
+    get_chatgpt_chat_completion_response, 
+    get_deepseek_chat_completion_response, 
+    get_gemini_chat_completion_response, 
+    DeepSeek,
+    get_batch_deepseek_chat_completion_response
+)
 from app.core.credentials import settings
 import logging
 
@@ -45,27 +52,40 @@ async def ws_search(websocket: WebSocket):
         # Keep the connection open to listen for messages
         while True:
             # Wait for a message from the client
-            data = await websocket.receive_text()
-            
-            # For simplicity, we assume the data is the prompt
-            prompt = data
-            
+            data = await websocket.receive_json()
+            try:
+                chat_request = ChatRequest(**data)
+            except Exception as e:
+                await websocket.send_text(f"Error: Invalid chat request format: {e}")
+                continue
+
+            prompt = chat_request.prompt
+            model = chat_request.model
+
             if not prompt.strip():
                 await websocket.send_text("Error: Prompt cannot be empty.")
                 continue
 
-            # Instantiate DeepSeek
-            deepseek_client = DeepSeek()
-            
             full_text = ""
             last_chunk_data = {}
-            # Stream the response back to the client
-            async for chunk in deepseek_client.stream(prompt):
-                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                    content_to_send = chunk.choices[0].delta.content
-                    full_text += content_to_send
-                    await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
-                last_chunk_data = chunk.model_dump()
+
+            if chat_request.model == ChatProvider.DEEPSEEK:
+                deepseek_client = DeepSeek()
+                async for chunk in deepseek_client.stream(prompt):
+                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                        content_to_send = chunk.choices[0].delta.content
+                        full_text += content_to_send
+                        await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
+                    last_chunk_data = chunk.model_dump()
+            elif chat_request.model == ChatProvider.GPT:
+                # Placeholder for GPT-5 logic
+                await websocket.send_text("GPT-5 model selected. (Not implemented yet)")
+            elif chat_request.model == ChatProvider.OPENROUTER:
+                # Placeholder for Gemini logic
+                await websocket.send_text("Gemini model selected. (Not implemented yet)")
+            else:
+                await websocket.send_text(f"Error: Model {chat_request.model} not supported yet.")
+                continue
                 
             await websocket.send_json({
                 "type": "end",
@@ -132,7 +152,7 @@ async def deepseek_chat_completion_llm(request: ChatRequest = Body(...)):
         raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
     
 @router.post("/llm/chat/gemini", tags=["Chat - Gemini"])
-async def deepseek_chat_completion_llm(request: ChatRequest = Body(...)):
+async def gemini_chat_completion_llm(request: ChatRequest = Body(...)):
     try:
         # logger.info(f"Requête chat completion sur Gemini : {request.prompt}")
         if not request.prompt.strip():
@@ -141,6 +161,23 @@ async def deepseek_chat_completion_llm(request: ChatRequest = Body(...)):
         results = await get_gemini_chat_completion_response(request)
         # logger.info(f"Résultats de la chat complesion: {results}")
         return chatResponse(response=results.get("response", ""), api_response=results.get("api_response", {}), chat_model="gemini-flash-1.5" , temperature=request.temperature , time_elapsed=results.get("time_elapsed", None), options=request.options)
+    except ValueError as ve:
+        logger.error(f"Erreur de validation (400): {ve}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Erreur interne du serveur (500): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erreur interne du serveur: {e}")
+
+@router.post("/llm/chat/deepseek/batch", tags=["Chat - Batch DeepSeek"])
+async def batch_deepseek_chat_completion_llm(BatchRequest: BatchChatRequest = Body(...)):
+    try:
+        # verification si array BatchRequest.list_request est vide        
+        if not BatchRequest.list_request:
+            raise ValueError("Le list de promt en batch ne peut pas être vide.")        
+        
+        results = await get_batch_deepseek_chat_completion_response(BatchRequest)
+        
+        return BatchRequestResponse(resultats=results.get("resultats", {}), processing_time_total=results.get("all_time_elapsed", None))
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
         raise HTTPException(status_code=400, detail=str(ve))
