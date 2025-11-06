@@ -182,7 +182,7 @@ async def process_document_data_for_templating(document_data: dict, bdd: str = "
                     "completion_tokens": usage_details.get('completion_tokens'),
                     "total_tokens": usage_details.get('total_tokens'),
                     "model": response_details.get('model'),
-                    "raw_response_on_error": raw_response_dict if state_llm == 2 else "",
+                    "raw_response_on_error": raw_response_dict if state_llm == 2 else None,
                     "process_id": 33
                 }
                 
