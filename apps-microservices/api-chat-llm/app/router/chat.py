@@ -56,17 +56,21 @@ async def ws_search(websocket: WebSocket):
 
             # Instantiate DeepSeek
             deepseek_client = DeepSeek()
-            api_data = {}
+            
+            full_text = ""
+            last_chunk_data = {}
             # Stream the response back to the client
             async for chunk in deepseek_client.stream(prompt):
-                if chunk.choices[0].delta.content:
-                    await websocket.send_text(chunk.choices[0].delta.content)
-                    logger.info(f'chunk : {chunk}')
-                api_data = chunk.model_dump()
+                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                    content_to_send = chunk.choices[0].delta.content
+                    full_text += content_to_send
+                    await websocket.send_text(content_to_send) # Send chunks as they arrive for real-time display
+                last_chunk_data = chunk.model_dump()
                 
             await websocket.send_json({
                 "type": "end",
-                "api_response": api_data
+                "full_content": full_text,
+                "api_response": last_chunk_data
             })
 
     except WebSocketDisconnect:

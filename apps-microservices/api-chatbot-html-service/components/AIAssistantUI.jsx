@@ -177,52 +177,93 @@ export default function AIAssistantUI() {
     setThinkingConvId(convId)
 
     const currentConvId = convId
-    fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt: content,
-        temperature: 0.7,
-        max_tokens: 1024,
-        enable_thinking: false,
-        options: {
-          top_p: 0.8,
-          top_k: 20,
-        },
-      }),
-    })
-      .then((response) => response.json())
-      .then((data) => {
-        setIsThinking(false)
-        setThinkingConvId(null)
+    const ws = new WebSocket("wss://api.hellopro.eu/chat-service/ws/chat") // Use WebSocket
+
+    let assistantMessageId = Math.random().toString(36).slice(2)
+    let fullAssistantResponse = ""
+
+    ws.onopen = () => {
+      ws.send(content) // Send the prompt
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data)
+        if (message.type === "end") {
+          // End of stream, full data received
+          setIsThinking(false)
+          setThinkingConvId(null)
+          setConversations((prev) =>
+            prev.map((c) => {
+              if (c.id !== currentConvId) return c
+              const asstMsg = {
+                id: assistantMessageId,
+                role: "assistant",
+                content: fullAssistantResponse,
+                createdAt: new Date().toISOString(),
+                api_response: message.api_response, // Store the full API response
+              }
+              const msgs = [...(c.messages || []).filter(m => m.id !== assistantMessageId), asstMsg] // Replace temporary message
+              return {
+                ...c,
+                messages: msgs,
+                updatedAt: new Date().toISOString(),
+                messageCount: msgs.length,
+                preview: asstMsg.content.slice(0, 80),
+              }
+            }),
+          )
+          ws.close()
+        }
+      } catch (e) {
+        // It's a text chunk
+        fullAssistantResponse += event.data
         setConversations((prev) =>
           prev.map((c) => {
             if (c.id !== currentConvId) return c
-            const asstMsg = {
-              id: Math.random().toString(36).slice(2),
-              role: "assistant",
-              content: data.response,
-              createdAt: new Date().toISOString(),
+            // Find or create the assistant message
+            const existingAsstMsgIndex = (c.messages || []).findIndex(m => m.id === assistantMessageId)
+            let msgs
+            if (existingAsstMsgIndex > -1) {
+              msgs = [...c.messages]
+              msgs[existingAsstMsgIndex] = {
+                ...msgs[existingAsstMsgIndex],
+                content: fullAssistantResponse,
+              }
+            } else {
+              const asstMsg = {
+                id: assistantMessageId,
+                role: "assistant",
+                content: fullAssistantResponse,
+                createdAt: new Date().toISOString(),
+              }
+              msgs = [...(c.messages || []), asstMsg]
             }
-            const msgs = [...(c.messages || []), asstMsg]
             return {
               ...c,
               messages: msgs,
               updatedAt: new Date().toISOString(),
               messageCount: msgs.length,
-              preview: asstMsg.content.slice(0, 80),
+              preview: fullAssistantResponse.slice(0, 80),
             }
           }),
         )
-      })
-      .catch((error) => {
-        console.error("Error:", error)
-        setIsThinking(false)
-        setThinkingConvId(null)
-      })
-  }
+      }
+    }
+
+    ws.onerror = (error) => {
+      console.error("WebSocket Error:", error)
+      setIsThinking(false)
+      setThinkingConvId(null)
+      ws.close()
+    }
+
+    ws.onclose = () => {
+      console.log("WebSocket Closed")
+      setIsThinking(false)
+      setThinkingConvId(null)
+    }
+    }
 
   function editMessage(convId, messageId, newContent) {
     const now = new Date().toISOString()
