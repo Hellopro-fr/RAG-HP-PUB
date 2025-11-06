@@ -251,7 +251,7 @@ async def llm_prompt_batch_deepseek(requestInput: BatchRequestInput, max_tokens:
 
     return BatchResult(
         id_request=requestInput.id_request, 
-        llm_response=response.api_response, 
+        llm_response=response.get("api_response", {}), 
         time_elapsed=time_elapsed
     )
 
