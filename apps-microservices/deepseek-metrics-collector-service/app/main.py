@@ -12,7 +12,7 @@ DEEPSEEK_METRICS_COLLECTOR_URL = os.environ.get("DEEPSEEK_METRICS_COLLECTOR_URL"
 
 # --- Adaptive Batching Configuration ---
 MAX_BATCH_SIZE = 50  # L'objectif maximum de taille de batch.
-MIN_BATCH_SIZE = 1    # La taille minimale après détection d'un blocage.
+MIN_BATCH_SIZE = 5    # La taille minimale après détection d'un blocage.
 SUCCESS_THRESHOLD_FOR_INCREASE = 5 # Nombre de succès consécutifs avant d'augmenter la taille.
 BATCH_TIMEOUT_SECONDS = 15.0 # Temps d'attente fixe avant chaque envoi
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
