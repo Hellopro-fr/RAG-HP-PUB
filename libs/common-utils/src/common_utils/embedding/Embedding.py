@@ -84,7 +84,8 @@ class Embedding:
     def __init__(self, model_name: str = "dangvantuan/sentence-camembert-large", config: Config = Config(), source_service: Optional[str] = None, **kwargs):
         self.config = config
         self.model_name = model_name
-        self.source_service = source_service
+        # Utilise la variable d'environnement 'SERVICE_NAME' par défaut.
+        self.source_service = source_service or os.getenv("SERVICE_NAME")
         self.logger = kwargs.get("logger",logger)
         self.time_logger = kwargs.get("time_logger", time_logger)
         

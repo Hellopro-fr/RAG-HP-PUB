@@ -148,7 +148,9 @@ services:
     environment:
       - TRITON_URL=${TRITON_URL}
       - EMBEDDING_BATCH_SIZE=8
-      - MAX_CONCURRENT_REQUESTS=3
+      - TOTAL_MAX_CONCURRENT_REQUESTS=3
+      - HIGH_PRIORITY_RATIO=0.2
+      - HIGH_PRIORITY_SERVICES=api-recherche-service
     # depends_on:
     #   triton-server:
     #     condition: service_healthy
@@ -194,6 +196,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - SERVICE_NAME=api-model-service
     depends_on:
       - llm-service
       - embedding-model-service
@@ -230,6 +233,7 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - SERVICE_NAME=api-recherche-service
     # depends_on:
     #   - llm-service
     #   - embedding-model-service
@@ -257,6 +261,7 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - SERVICE_NAME=api-recherche-test-modification
     # depends_on:
     #   - llm-service
     #   - embedding-model-service
@@ -278,6 +283,7 @@ services:
       - "8555:8555"
     environment:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - SERVICE_NAME=api-embedding-service
     # depends_on:
     #   - embedding-model-service
     env_file:
@@ -328,6 +334,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - SERVICE_NAME=api-classification-service
     depends_on:
       - llm-service
       - embedding-model-service
@@ -597,6 +604,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - SERVICE_NAME=embedding-service
     depends_on:
       - embedding-model-service
     env_file:

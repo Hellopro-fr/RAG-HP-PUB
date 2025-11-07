@@ -12,11 +12,13 @@ from transformers import AutoTokenizer
 TRITON_URL = os.getenv("TRITON_URL", "localhost:8001")
 MODEL_NAME = "camembert-embedding"
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "64"))
-TOTAL_MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "10"))
-HIGH_PRIORITY_RATIO = float(os.getenv("HIGH_PRIORITY_RATIO", "0.8"))
+TOTAL_MAX_CONCURRENT_REQUESTS = int(os.getenv("TOTAL_MAX_CONCURRENT_REQUESTS", "10"))
+HIGH_PRIORITY_RATIO = float(os.getenv("HIGH_PRIORITY_RATIO", "0.2")) # High prio is now the exception
 
-# Services considérés comme basse priorité
-LOW_PRIORITY_SERVICES = {"embedding-service"}
+# --- Logique inversée - Allowlist pour les services haute priorité ---
+# Par défaut, un service est basse priorité.
+high_priority_services_str = os.getenv("HIGH_PRIORITY_SERVICES", "")
+HIGH_PRIORITY_SERVICES = {s.strip() for s in high_priority_services_str.split(',') if s.strip()}
 
 
 class EmbeddingUseCase:
@@ -31,11 +33,12 @@ class EmbeddingUseCase:
         # --- MODIFIÉ: Logique de sémaphore par priorité ---
         high_prio_slots = int(TOTAL_MAX_CONCURRENT_REQUESTS * HIGH_PRIORITY_RATIO)
         low_prio_slots = TOTAL_MAX_CONCURRENT_REQUESTS - high_prio_slots
-        # On garantit au moins un slot pour la basse priorité si le total le permet
-        if high_prio_slots >= TOTAL_MAX_CONCURRENT_REQUESTS and TOTAL_MAX_CONCURRENT_REQUESTS > 0:
-            high_prio_slots = TOTAL_MAX_CONCURRENT_REQUESTS - 1
-            low_prio_slots = 1
+        # On garantit au moins un slot pour la haute priorité si le total le permet et si des services HP sont définis
+        if low_prio_slots >= TOTAL_MAX_CONCURRENT_REQUESTS and TOTAL_MAX_CONCURRENT_REQUESTS > 0 and HIGH_PRIORITY_SERVICES:
+            low_prio_slots = TOTAL_MAX_CONCURRENT_REQUESTS - 1
+            high_prio_slots = 1
         if TOTAL_MAX_CONCURRENT_REQUESTS == 0:
+            high_prio_slots = 0
             low_prio_slots = 0
 
         self.high_prio_semaphore = asyncio.Semaphore(high_prio_slots)
@@ -43,6 +46,7 @@ class EmbeddingUseCase:
 
         logging.info(f"Taille de batch pour l'embedding configurée à: {self.batch_size}")
         logging.info(f"Total de requêtes concurrentes pour l'embedding: {TOTAL_MAX_CONCURRENT_REQUESTS}")
+        logging.info(f"Services haute priorité configurés: {HIGH_PRIORITY_SERVICES}")
         logging.info(f"Slots haute priorité: {high_prio_slots} | Slots basse priorité: {low_prio_slots}")
         
     def tokenize_texts(self, texts: List[str]) -> List[List[int]]:
@@ -82,10 +86,10 @@ class EmbeddingUseCase:
         if not texts:
             return []
         
-        # --- Sélection du sémaphore basé sur la source ---
-        is_low_priority = source_service in LOW_PRIORITY_SERVICES
-        semaphore = self.low_prio_semaphore if is_low_priority else self.high_prio_semaphore
-        priority_label = "BASSE" if is_low_priority else "HAUTE"
+        # --- MODIFIÉ: Sélection du sémaphore basé sur la source ---
+        is_high_priority = source_service in HIGH_PRIORITY_SERVICES
+        semaphore = self.high_prio_semaphore if is_high_priority else self.low_prio_semaphore
+        priority_label = "HAUTE" if is_high_priority else "BASSE"
         
         logging.info(f"Requête d'embedding reçue de '{source_service or 'inconnu'}'. Priorité: {priority_label}.")
         
