@@ -148,7 +148,7 @@ services:
     environment:
       - TRITON_URL=${TRITON_URL}
       - EMBEDDING_BATCH_SIZE=8
-      - MAX_CONCURRENT_REQUESTS=2
+      - MAX_CONCURRENT_REQUESTS=3
     # depends_on:
     #   triton-server:
     #     condition: service_healthy
