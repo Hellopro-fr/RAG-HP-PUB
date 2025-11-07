@@ -139,7 +139,7 @@ const Composer = forwardRef(function Composer({ onSend, busy }, ref) {
       </div>
 
       <div className="mx-auto mt-2 max-w-3xl px-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-        Cliquer sur{" "}
+        {" "}
         <kbd className="rounded border border-zinc-300 bg-zinc-50 px-1 dark:border-zinc-600 dark:bg-zinc-800">
           Entrer
         </kbd>{" "}
