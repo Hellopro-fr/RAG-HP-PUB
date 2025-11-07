@@ -23,6 +23,8 @@ CRAWL_JOB_PREFIX = "crawl_job:"
 # The global counter for running jobs
 CRAWL_RUNNING_COUNT_KEY = "crawl_jobs:running_count"
 
+CRAWL_UPDATES_CHANNEL = "crawl_updates"
+
 def _count_files_in_dir(path: str) -> int:
     """Safely counts files in a directory."""
     if not os.path.isdir(path):
@@ -42,6 +44,21 @@ class CrawlerManager:
         # This dictionary ONLY tracks processes running on THIS replica.
         # The global state is in Redis.
         self.local_processes: Dict[str, asyncio.subprocess.Process] = {}
+
+    async def _publish_update(self, crawl_id: str, status: str):
+        """Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis."""
+        try:
+            # Création du message au format JSON
+            message = json.dumps({
+                "crawl_id": crawl_id,
+                "status": status,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            # Publication sur le canal
+            await cache_service.publish(CRAWL_UPDATES_CHANNEL, message)
+            logger.info(f"Published update for '{crawl_id}': status changed to '{status}'")
+        except Exception as e:
+            logger.error(f"Failed to publish update for job '{crawl_id}': {e}", exc_info=True)
 
     async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any]) -> str:
         # Check if a crawl with this ID is already running on this instance
@@ -119,6 +136,8 @@ class CrawlerManager:
         
         # Atomically increment the global running count
         await cache_service.increment_key(CRAWL_RUNNING_COUNT_KEY)
+
+        await self._publish_update(crawl_id, "running")
         
         asyncio.create_task(self._monitor_process(crawl_id, process))
         return crawl_id
@@ -219,6 +238,8 @@ class CrawlerManager:
                 del job_info["last_heartbeat"]  # Clean up heartbeat field
             await cache_service.set_json(job_key, job_info)
             logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status updated in Redis and counter decremented.")
+
+            await self._publish_update(crawl_id, final_status)
             
             # --- START: Create Completion Marker ---
             marker_path = os.path.join(job_info['storage_path'], '_completion_marker.json')
@@ -263,6 +284,9 @@ class CrawlerManager:
 
         job_info["status"] = "stopping"
         await cache_service.set_json(job_key, job_info)
+
+        await self._publish_update(crawl_id, "stopping")
+
         logger.info(f"Stop signal sent to crawl '{crawl_id}'. Status updated in Redis.")
         return True
 
@@ -468,6 +492,9 @@ class CrawlerManager:
 
                 # 3. Decrement the global running counter
                 await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+
+                await self._publish_update(crawl_id, "failed")
+
                 logger.info(f"Decremented global running counter for job '{crawl_id}'.")
 
                 # 4. Send failure webhook
