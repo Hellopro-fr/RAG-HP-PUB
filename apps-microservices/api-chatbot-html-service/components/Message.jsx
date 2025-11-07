@@ -48,7 +48,7 @@ export default function Message({ role, children, rawContent }) {
       </div>
       {isUser && (
         <div className="mt-0.5 grid h-7 w-7 place-items-center rounded-full bg-zinc-900 text-[10px] font-bold text-white dark:bg-white dark:text-zinc-900">
-          JD
+          HP
         </div>
       )}
       {!isUser && (
