@@ -127,6 +127,16 @@ async def decrement_key(key: str) -> int:
         logger.error(f"Failed to decrement key '{key}' in Redis: {e}", exc_info=True)
         return 0
         
+
+async def publish(channel: str, message: str):
+    """Publishes a message to a specific Redis channel."""
+    if not redis_client:
+        raise ConnectionError("Redis is not connected.")
+    try:
+        await redis_client.publish(channel, message)
+    except Exception as e:
+        logger.error(f"Failed to publish message to channel '{channel}': {e}", exc_info=True)
+
 # --- Caching Decorator (Existing Functionality) ---
 
 def _generate_cache_key(func: Callable, *args: P.args, **kwargs: P.kwargs) -> str:
