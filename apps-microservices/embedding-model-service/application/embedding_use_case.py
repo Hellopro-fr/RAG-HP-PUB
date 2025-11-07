@@ -12,7 +12,11 @@ from transformers import AutoTokenizer
 TRITON_URL = os.getenv("TRITON_URL", "localhost:8001")
 MODEL_NAME = "camembert-embedding"
 EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "64"))
-MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "4"))
+TOTAL_MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "10"))
+HIGH_PRIORITY_RATIO = float(os.getenv("HIGH_PRIORITY_RATIO", "0.8"))
+
+# Services considérés comme basse priorité
+LOW_PRIORITY_SERVICES = {"embedding-service"}
 
 
 class EmbeddingUseCase:
@@ -23,9 +27,23 @@ class EmbeddingUseCase:
         self.tokenizer_pre = AutoTokenizer.from_pretrained(tokenizer_name)
         self.triton_client = InferenceServerClient(url=TRITON_URL)
         self.batch_size = EMBEDDING_BATCH_SIZE
-        self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        
+        # --- MODIFIÉ: Logique de sémaphore par priorité ---
+        high_prio_slots = int(TOTAL_MAX_CONCURRENT_REQUESTS * HIGH_PRIORITY_RATIO)
+        low_prio_slots = TOTAL_MAX_CONCURRENT_REQUESTS - high_prio_slots
+        # On garantit au moins un slot pour la basse priorité si le total le permet
+        if high_prio_slots >= TOTAL_MAX_CONCURRENT_REQUESTS and TOTAL_MAX_CONCURRENT_REQUESTS > 0:
+            high_prio_slots = TOTAL_MAX_CONCURRENT_REQUESTS - 1
+            low_prio_slots = 1
+        if TOTAL_MAX_CONCURRENT_REQUESTS == 0:
+            low_prio_slots = 0
+
+        self.high_prio_semaphore = asyncio.Semaphore(high_prio_slots)
+        self.low_prio_semaphore = asyncio.Semaphore(low_prio_slots)
+
         logging.info(f"Taille de batch pour l'embedding configurée à: {self.batch_size}")
-        logging.info(f"Nombre maximum de requêtes concurrentes pour l'embedding: {MAX_CONCURRENT_REQUESTS}")
+        logging.info(f"Total de requêtes concurrentes pour l'embedding: {TOTAL_MAX_CONCURRENT_REQUESTS}")
+        logging.info(f"Slots haute priorité: {high_prio_slots} | Slots basse priorité: {low_prio_slots}")
         
     def tokenize_texts(self, texts: List[str]) -> List[List[int]]:
         """
@@ -60,11 +78,18 @@ class EmbeddingUseCase:
         sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
         return (sum_embeddings / sum_mask).numpy()
 
-    async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    async def generate_embeddings(self, texts: List[str], source_service: str | None = None) -> List[List[float]]:
         if not texts:
             return []
         
-        async with self.semaphore:
+        # --- Sélection du sémaphore basé sur la source ---
+        is_low_priority = source_service in LOW_PRIORITY_SERVICES
+        semaphore = self.low_prio_semaphore if is_low_priority else self.high_prio_semaphore
+        priority_label = "BASSE" if is_low_priority else "HAUTE"
+        
+        logging.info(f"Requête d'embedding reçue de '{source_service or 'inconnu'}'. Priorité: {priority_label}.")
+        
+        async with semaphore:
             all_embeddings = []
             
             try:

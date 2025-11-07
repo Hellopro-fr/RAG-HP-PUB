@@ -13,10 +13,14 @@ class EmbeddingServiceImpl(embedding_pb2_grpc.EmbeddingServiceServicer):
 
     async def GetEmbeddings(self, request, context):
         num_texts = len(request.texts)
-        logging.info(f"Requête GetEmbeddings reçue pour {num_texts} textes.")
+        source_service = request.source_service or "non-spécifié"
+        logging.info(f"Requête GetEmbeddings reçue de '{source_service}' pour {num_texts} textes.")
         try:
-            # MODIFIÉ: Ajout du mot-clé 'await' car generate_embeddings est maintenant une coroutine.
-            list_of_vectors = await self.use_case.generate_embeddings(list(request.texts))
+            # On passe le service source à la logique métier pour la priorisation.
+            list_of_vectors = await self.use_case.generate_embeddings(
+                texts=list(request.texts),
+                source_service=request.source_service
+            )
             
             response_embeddings = [
                 embedding_pb2.EmbeddingVector(vector=vec) for vec in list_of_vectors

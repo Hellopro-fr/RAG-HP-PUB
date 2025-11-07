@@ -81,9 +81,10 @@ class Config:
     })
 
 class Embedding:
-    def __init__(self, model_name: str = "dangvantuan/sentence-camembert-large", config: Config = Config(),**kwargs):
+    def __init__(self, model_name: str = "dangvantuan/sentence-camembert-large", config: Config = Config(), source_service: Optional[str] = None, **kwargs):
         self.config = config
         self.model_name = model_name
+        self.source_service = source_service
         self.logger = kwargs.get("logger",logger)
         self.time_logger = kwargs.get("time_logger", time_logger)
         
@@ -119,7 +120,8 @@ class Embedding:
         # The model is already loaded, just use it.
         # Note: We now process a list of sentences for better batching.
         try:
-            vectors = await embedding_client.get_embeddings(sentences)
+            # Le 'source_service' est maintenant passé depuis l'attribut de l'instance.
+            vectors = await embedding_client.get_embeddings(sentences, source_service=self.source_service)
             
             if not vectors or len(vectors) != len(sentences):
                 self.logger.error("Le service d'embedding a retourné un nombre incorrect de vecteurs.")

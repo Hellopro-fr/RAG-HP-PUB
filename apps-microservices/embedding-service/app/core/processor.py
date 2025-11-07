@@ -14,7 +14,8 @@ async def embed_input_data(input_data: dict, **kwargs) -> dict:
         Exception: Pour toute autre erreur lors du processus d'embedding (ex: gRPC indisponible).
     """
     logging.info("Début du processus d'embedding.")
-    embedding_service = Embedding()
+    # On identifie ce service comme la source des requêtes.
+    embedding_service = Embedding(source_service="embedding-service")
     datas = input_data.get("data", {})
     collection = input_data.get("collection", CollectionName.PRODUIT)
 

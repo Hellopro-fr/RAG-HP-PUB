@@ -41,6 +41,8 @@ message EmbeddingVector {
 message EmbeddingsRequest {
   // Accepte une liste de textes.
   repeated string texts = 1;
+  // Ajout du champ optionnel pour identifier le service source.
+  optional string source_service = 2;
 }
 
 message EmbeddingsResponse {

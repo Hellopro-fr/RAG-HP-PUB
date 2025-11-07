@@ -508,6 +508,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/DeepSeek-OCR/Dockerfile
     container_name: deepseek-ocr-vllm
+    profiles: ["app"] # Profile for the main application stack
     ports:
       - "8501:8501"
     volumes:
