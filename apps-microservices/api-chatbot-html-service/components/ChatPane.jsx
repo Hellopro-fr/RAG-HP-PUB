@@ -138,7 +138,7 @@ const ChatPane = forwardRef(function ChatPane(
                     </div>
                   </div>
                 ) : (
-                  <Message role={m.role}>
+                  <Message role={m.role} rawContent={m.content}>
                     <div className="whitespace-pre-wrap">{m.content}</div>
                     {m.role === "user" && (
                       <div className="mt-1 flex gap-2 text-[11px] text-zinc-500">
