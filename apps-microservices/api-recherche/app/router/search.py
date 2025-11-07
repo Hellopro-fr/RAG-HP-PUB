@@ -27,11 +27,14 @@ async def milvus_search_endpoint(request: SearchRequest = Body(...)):
         if not request.source:
             raise ValueError("Au moins une source doit être spécifiée.")
         
-        results = await cache_or_execute(
-            _perform_milvus_search,
-            request,
-            expire_seconds=86400  # Cache for 1 jour
-        )
+        if not request.cache:
+            results = await _perform_milvus_search(request)
+        else:
+            results = await cache_or_execute(
+                _perform_milvus_search,
+                request,
+                expire_seconds=86400  # Cache for 1 jour
+            )
         return SearchReponse(results=results, post=request)
     except ValueError as ve:
         logger.error(f"Erreur de validation (400): {ve}")
