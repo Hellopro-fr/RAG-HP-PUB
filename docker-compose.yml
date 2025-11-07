@@ -147,6 +147,7 @@ services:
       - .env
     environment:
       - TRITON_URL=${TRITON_URL}
+      - EMBEDDING_BATCH_SIZE=16
     # depends_on:
     #   triton-server:
     #     condition: service_healthy
