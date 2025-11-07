@@ -923,6 +923,40 @@ services:
     depends_on:
       - crawler-service
     logging: *logging_defaults
+
+    crawler-monitor-backend:
+      build:
+        context: .
+        dockerfile: ./apps-microservices/crawler-monitor-backend/Dockerfile
+      container_name: crawler-monitor-backend
+      profiles: ["crawling"]
+      restart: unless-stopped
+      expose:
+        - "3001"
+      env_file:
+        - .env
+      networks:
+        - services-net
+      logging: &logging_defaults
+        driver: "json-file"
+        options:
+          max-size: "10m"
+          max-file: "3"
+    
+    crawler-monitor-frontend:
+      build:
+        context: .
+        dockerfile: ./apps-microservices/crawler-monitor-frontend/Dockerfile
+      container_name: crawler-monitor-frontend
+      profiles: ["crawling"]
+      restart: unless-stopped
+      ports:
+        - "3002:80" # Exposé sur le port 3002
+      depends_on:
+        - crawler-monitor-backend
+      networks:
+        - services-net
+      logging: *logging_defaults
     
 networks:
   services-net:
