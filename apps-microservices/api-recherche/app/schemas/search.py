@@ -44,6 +44,7 @@ class SearchRequestWs(BaseModel):
     llm: Optional[LLMOptions] = LLMOptions(chat_model="gpt-4.1-2025-04-14", temperature=0.0)
     options: Optional[RerankerOptions] = RerankerOptions()
     type: int = 1
+    cache: bool = True
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
 class SearchResponse(BaseModel):
