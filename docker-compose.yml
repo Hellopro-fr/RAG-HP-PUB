@@ -901,6 +901,7 @@ services:
     logging: *logging_defaults
 
   api-chatbot-service:
+    profiles: ["app"]
     build:
       context: ./apps-microservices/api-chatbot-html-service
       dockerfile: Dockerfile
