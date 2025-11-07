@@ -143,8 +143,10 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # Le GPU n'est plus nécessaire ici, Triton s'en charge !
       # - TRITON_URL=triton-server:8001
+    env_file:
+      - .env
     environment:
-      - TRITON_URL=34.34.166.5:8001
+      - TRITON_URL=${TRITON_URL}
     # depends_on:
     #   triton-server:
     #     condition: service_healthy

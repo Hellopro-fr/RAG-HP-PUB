@@ -10,6 +10,8 @@ from transformers import AutoTokenizer
 
 TRITON_URL = os.getenv("TRITON_URL", "localhost:8001")
 MODEL_NAME = "camembert-embedding"
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "64"))
+
 
 class EmbeddingUseCase:
     def __init__(self):
@@ -18,6 +20,8 @@ class EmbeddingUseCase:
         self.tokenizer = SentenceTransformer(tokenizer_name).tokenizer
         self.tokenizer_pre = AutoTokenizer.from_pretrained(tokenizer_name)
         self.triton_client = InferenceServerClient(url=TRITON_URL)
+        self.batch_size = EMBEDDING_BATCH_SIZE
+        logging.info(f"Taille de batch pour l'embedding configurée à: {self.batch_size}")
         
     def tokenize_texts(self, texts: List[str]) -> List[List[int]]:
         """
@@ -55,37 +59,48 @@ class EmbeddingUseCase:
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         if not texts:
             return []
+        
+        all_embeddings = []
+        
         try:
-            encoded_input = self.tokenizer(
-                texts, padding=True, truncation=True, return_tensors="np", max_length=512
-            )
-            input_ids = encoded_input["input_ids"].astype(np.int64)
-            attention_mask = encoded_input["attention_mask"].astype(np.int64)
+            # On itère sur la liste de textes par lots (batches)
+            for i in range(0, len(texts), self.batch_size):
+                batch_texts = texts[i:i + self.batch_size]
+                logging.info(f"Traitement du batch d'embedding {i // self.batch_size + 1}/{(len(texts) + self.batch_size - 1) // self.batch_size} avec {len(batch_texts)} textes.")
 
-            inputs = [
-                InferInput("input_ids", input_ids.shape, "INT64"),
-                InferInput("attention_mask", attention_mask.shape, "INT64"),
-            ]
-            inputs[0].set_data_from_numpy(input_ids)
-            inputs[1].set_data_from_numpy(attention_mask)
+                encoded_input = self.tokenizer(
+                    batch_texts, padding=True, truncation=True, return_tensors="np", max_length=512
+                )
+                input_ids = encoded_input["input_ids"].astype(np.int64)
+                attention_mask = encoded_input["attention_mask"].astype(np.int64)
 
-            # On demande la sortie brute du Transformer
-            outputs = [InferRequestedOutput("last_hidden_state")]
+                inputs = [
+                    InferInput("input_ids", input_ids.shape, "INT64"),
+                    InferInput("attention_mask", attention_mask.shape, "INT64"),
+                ]
+                inputs[0].set_data_from_numpy(input_ids)
+                inputs[1].set_data_from_numpy(attention_mask)
 
-            response = await self.triton_client.infer(
-                model_name=MODEL_NAME, inputs=inputs, outputs=outputs
-            )
+                # On demande la sortie brute du Transformer
+                outputs = [InferRequestedOutput("last_hidden_state")]
 
-            last_hidden_state = response.as_numpy("last_hidden_state")
+                response = await self.triton_client.infer(
+                    model_name=MODEL_NAME, inputs=inputs, outputs=outputs
+                )
+
+                last_hidden_state = response.as_numpy("last_hidden_state")
+                
+                # On effectue le pooling manuellement dans le client
+                sentence_embeddings = self.mean_pooling(last_hidden_state, attention_mask)
+                
+                all_embeddings.extend(sentence_embeddings.tolist())
             
-            # On effectue le pooling manuellement dans le client
-            sentence_embeddings = self.mean_pooling(last_hidden_state, attention_mask)
-            
-            return sentence_embeddings.tolist()
+            return all_embeddings
             
         except Exception as e:
             logging.error(f"Erreur lors de l'appel à Triton pour l'embedding: {e}", exc_info=True)
-            return [[] for _ in texts]
+            # On propage l'exception pour que le serveur gRPC puisse renvoyer une erreur appropriée.
+            raise e
         
     def chunk_text(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
         """

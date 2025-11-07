@@ -25,7 +25,8 @@ async def get_embeddings(texts: List[str]) -> List[List[float]]:
             return [list(e.vector) for e in response.embeddings]
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service Embedding: {e.details()}")
-        return []
+        # MODIFIÉ: L'exception est propagée pour permettre au service appelant de gérer les reintentions.
+        raise e
 
 # Gardons l'ancienne fonction pour la compatibilité avec /database/search
 # qui n'a besoin que d'un seul embedding à la fois.
