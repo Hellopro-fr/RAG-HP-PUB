@@ -13,3 +13,5 @@ lxml_html_clean
 pydantic
 aio-pika
 psutil
+prometheus-client
+Werkzeug

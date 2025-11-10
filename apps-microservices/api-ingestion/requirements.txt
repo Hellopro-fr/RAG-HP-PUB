@@ -4,3 +4,5 @@ python-dotenv
 pydantic
 pika
 pydantic-settings
+prometheus-client
+Werkzeug
