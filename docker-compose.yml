@@ -82,15 +82,24 @@ services:
     profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false
+      # TIER 2: Enable security features
+      - xpack.security.enabled=true
+      # TIER 3: Enable detailed audit logging for traceability
+      - xpack.security.audit.enabled=true
+      # TIER 2: Set the password for the 'elastic' superuser from the .env file
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
       - http.host=0.0.0.0
+      # TIER 1: Define a path inside the container for storing snapshots (backups)
+      - path.repo=/usr/share/elasticsearch/snapshots
     ports:
       # Mappe le port sur toutes les interfaces réseau de l'hôte
       # Assurez-vous que le pare-feu de votre Host VM autorise les connexions sur le port 9200
       - "9200:9200"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
+      # TIER 1: Mount a persistent volume for storing the snapshots
+      - es-snapshots:/usr/share/elasticsearch/snapshots
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
@@ -109,6 +118,9 @@ services:
       - "5601:5601"
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      # TIER 2: Provide Kibana with credentials to connect to the secured Elasticsearch
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -784,7 +796,10 @@ services:
     env_file:
       - .env
     environment:
+      # TIER 2: Pass secure credentials to the DLQ Manager service
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ES_USERNAME=${DLQ_MANAGER_ES_USER}
+      - ES_PASSWORD=${DLQ_MANAGER_ES_PASSWORD}
       - RABBITMQ_URL=${RABBITMQ_URL}
     networks:
       - services-net
@@ -802,8 +817,11 @@ services:
     env_file:
       - .env
     environment:
+      # TIER 2: Pass secure credentials to the Archiver service
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ES_USERNAME=${DLQ_ARCHIVER_ES_USER}
+      - ES_PASSWORD=${DLQ_ARCHIVER_ES_PASSWORD}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -820,8 +838,11 @@ services:
     env_file:
       - .env
     environment:
+      # TIER 2: Pass secure credentials to the Archiver service
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ES_USERNAME=${DLQ_ARCHIVER_ES_USER}
+      - ES_PASSWORD=${DLQ_ARCHIVER_ES_PASSWORD}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -838,6 +859,9 @@ services:
       - .env
     environment:
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      # TIER 2: The requeuer tool will also need credentials if run manually
+      - ES_USERNAME=elastic # Or a dedicated user
+      - ES_PASSWORD=${ELASTIC_PASSWORD}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -974,6 +998,9 @@ networks:
     
 volumes:
   elasticsearch-data:
+    driver: local
+  # TIER 1: Define the persistent volume for snapshots
+  es-snapshots:
     driver: local
   grafana-storage:
   crawler_data:

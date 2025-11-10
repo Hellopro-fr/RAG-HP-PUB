@@ -3,7 +3,11 @@ from elasticsearch import AsyncElasticsearch
 from functools import lru_cache
 from typing import List, Dict, Any, Tuple
 
+# Read connection details from environment variables
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
+ES_USERNAME = os.environ.get("ES_USERNAME")
+ES_PASSWORD = os.environ.get("ES_PASSWORD")
+
 ELASTIC_INDEX_NAME = "failed_messages_archive"
 
 class ElasticsearchClient:
@@ -230,5 +234,13 @@ class ElasticsearchClient:
 
 @lru_cache()
 def get_es_client() -> ElasticsearchClient:
-    es_instance = AsyncElasticsearch(ELASTICSEARCH_URL)
+    # Use credentials if they are provided
+    if ES_USERNAME and ES_PASSWORD:
+        es_instance = AsyncElasticsearch(
+            ELASTICSEARCH_URL,
+            basic_auth=(ES_USERNAME, ES_PASSWORD)
+        )
+    else:
+        es_instance = AsyncElasticsearch(ELASTICSEARCH_URL)
+        
     return ElasticsearchClient(es_instance)
