@@ -107,15 +107,18 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             docs.append(document_data.get("document"))
 
 
+        print(f"🔍 Docs: '{docs}'")
+
         extractor = DeepseekOCRDocExtractor()
         response = await extractor.extract_from_urls(docs)
         results = extractor.get_clean_result(response)
+        print(f"🔍 Results: '{results}'")
         
         processed_messages_result = []
 
-        for document in documents:
+        for document_item in documents:
             output_message = {}
-            document_data = document.get("data",{})
+            document_data = document_item.get("data",{})
 
             nom_doc = os.path.basename(document_data.get("document","inconnu"))
             print(f"🔍 Cherche: '{nom_doc}'")
