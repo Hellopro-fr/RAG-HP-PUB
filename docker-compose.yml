@@ -76,11 +76,20 @@ services:
       - services-net
     logging: *logging_defaults
 
+  init-elasticsearch:
+    image: alpine:latest
+    profiles: ["disabled"]
+    user: root
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+      - es-snapshots:/usr/share/elasticsearch/snapshots
+    command: sh -c 'chown -R 1000:1000 /usr/share/elasticsearch/data /usr/share/elasticsearch/snapshots'
+    logging: *logging_defaults
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
     container_name: elasticsearch
     profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
-    user: root # Start as root to allow the initial chown to run
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=true
@@ -96,9 +105,9 @@ services:
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
       - es-snapshots:/usr/share/elasticsearch/snapshots
-    command: >
-      bash -c "chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data /usr/share/elasticsearch/snapshots && 
-               exec /usr/local/bin/gosu elasticsearch /usr/local/bin/docker-entrypoint.sh elasticsearch"
+    depends_on:
+      init-elasticsearch:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
