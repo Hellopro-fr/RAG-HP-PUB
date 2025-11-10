@@ -81,7 +81,7 @@ class Config:
     })
 
 class Embedding:
-    def __init__(self, model_name: str = "dangvantuan/sentence-camembert-large", config: Config = Config(),**kwargs):
+    def __init__(self, model_name: str = "dangvantuan/sentence-camembert-large", config: Config = Config(), source_service: Optional[str] = None, **kwargs):
         self.config = config
         self.model_name = model_name
         self.logger = kwargs.get("logger",logger)
@@ -133,6 +133,7 @@ class Embedding:
             # ).tolist()
         except Exception as e:
             self.logger.error(f"Erreur lors de l'encodage des phrases: {e}", exc_info=True)
+            raise
 
         elapsed = time.perf_counter() - start_time
 
@@ -234,6 +235,6 @@ class Embedding:
                 batch_to_insert.append(data_tmp)
         except Exception as e:
             self.logger.error(f"Erreur lors de la création des chunks: {e}", exc_info=True)
-            return []
+            raise
 
         return batch_to_insert

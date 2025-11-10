@@ -280,11 +280,11 @@ class SearchOrchestrator:
             yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
 
             initial_matches, search_duration = await self._perform_search(query_vector)
-            yield {"type": "initial_results", "payload": {"results": initial_matches, "duration": round(search_duration, 2)}}
+            yield {"type": "initial_results", "payload": {"results": initial_matches[:self.request.top_k], "duration": round(search_duration, 2)}}
 
             final_results, rerank_duration = await self._rerank_results(initial_matches)
             if rerank_duration > 0:
-                yield {"type": "rerank_complete", "payload": {"results": final_results, "duration": round(rerank_duration, 2)}}
+                yield {"type": "rerank_complete", "payload": {"results": final_results[:self.request.top_k], "duration": round(rerank_duration, 2)}}
 
             llm_duration = 0
             if self.request.action == 2 and final_results:

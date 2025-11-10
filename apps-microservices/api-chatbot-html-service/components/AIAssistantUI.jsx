@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import { Calendar, LayoutGrid, MoreHorizontal } from "lucide-react"
+import { Toaster } from "sonner"
 import Sidebar from "./Sidebar"
 import Header from "./Header"
 import ChatPane from "./ChatPane"
@@ -383,6 +384,8 @@ export default function AIAssistantUI() {
           />
         </main>
       </div>
+
+    <Toaster position="bottom-right" richColors closeButton />
     </div>
   )
 }

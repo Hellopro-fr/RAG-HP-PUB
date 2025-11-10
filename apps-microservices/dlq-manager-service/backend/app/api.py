@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import List, Dict, Any, Optional
 import asyncio
+import traceback
 
 from .es_client import ElasticsearchClient, get_es_client
 from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client
@@ -19,7 +20,10 @@ async def get_dashboard_stats(filters: Optional[Dict[str, Any]] = Body(None), es
     try:
         return await es_client.get_dashboard_stats(filters=filters)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print("--- UNHANDLED ERROR IN /api/dashboard-stats ---")
+        print(traceback.format_exc())
+        print("---------------------------------------------")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
 
 @router.post("/messages/search")
 async def search_messages(request: SearchRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
@@ -35,7 +39,10 @@ async def search_messages(request: SearchRequest, es_client: ElasticsearchClient
         )
         return {"messages": results, "total": total}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print("--- UNHANDLED ERROR IN /api/messages/search ---")
+        print(traceback.format_exc())
+        print("---------------------------------------------")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
 
 @router.get("/messages/{message_id}")
 async def get_message_details(message_id: str, es_client: ElasticsearchClient = Depends(get_es_client)):

@@ -206,7 +206,7 @@ export default function Sidebar({
                 <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-sm dark:from-zinc-200 dark:to-zinc-300 dark:text-zinc-900">
                   <Asterisk className="h-4 w-4" />
                 </div>
-                <div className="text-sm font-semibold tracking-tight">Deepseek hellopro</div>
+                <div className="text-sm font-semibold tracking-tight">Deepseek Hellopro</div>
               </div>
               <div className="ml-auto flex items-center gap-1">
                 <button

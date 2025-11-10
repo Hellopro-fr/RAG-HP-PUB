@@ -10,7 +10,11 @@ from es_mapping import INDEX_MAPPING
 # --- Configuration ---
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
 DLQ_QUEUES_STR = os.environ.get("DLQ_QUEUES", "embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq")
+# TIER 2: Read Elasticsearch connection details from environment
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
+ES_USERNAME = os.environ.get("ES_USERNAME")
+ES_PASSWORD = os.environ.get("ES_PASSWORD")
+
 ELASTIC_INDEX_NAME = "failed_messages_archive"
 BATCH_SIZE = 50
 BATCH_TIMEOUT_SECONDS = 5.0
@@ -42,7 +46,15 @@ class DLQArchiver:
         # Connect to Elasticsearch
         for i in range(10):
             try:
-                self.es_client = Elasticsearch(ELASTICSEARCH_URL)
+                # TIER 2: Use credentials for Elasticsearch connection if provided
+                if ES_USERNAME and ES_PASSWORD:
+                    self.es_client = Elasticsearch(
+                        ELASTICSEARCH_URL,
+                        basic_auth=(ES_USERNAME, ES_PASSWORD)
+                    )
+                else:
+                    self.es_client = Elasticsearch(ELASTICSEARCH_URL)
+
                 if self.es_client.ping():
                     print("✅ DLQ Archiver: Connecté à Elasticsearch.")
                     break

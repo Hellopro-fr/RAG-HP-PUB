@@ -9,6 +9,8 @@ from elasticsearch import Elasticsearch
 # --- Configuration ---
 RABBITMQ_URL = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
+ES_USERNAME = os.environ.get("ES_USERNAME")
+ES_PASSWORD = os.environ.get("ES_PASSWORD")
 ELASTIC_INDEX_NAME = "failed_messages_archive" # Point to the new, correctly mapped index
 PAGE_SIZE = 100  # Number of documents to process per Elasticsearch query
 
@@ -28,7 +30,16 @@ def get_elasticsearch_client():
     """Tente de se connecter à Elasticsearch avec des retries."""
     for i in range(5):
         try:
-            es_client = Elasticsearch(ELASTICSEARCH_URL, request_timeout=30)
+            # Use credentials for Elasticsearch connection if provided
+            if ES_USERNAME and ES_PASSWORD:
+                es_client = Elasticsearch(
+                    ELASTICSEARCH_URL,
+                    basic_auth=(ES_USERNAME, ES_PASSWORD),
+                    request_timeout=30
+                )
+            else:
+                es_client = Elasticsearch(ELASTICSEARCH_URL, request_timeout=30)
+
             if es_client.ping():
                 print("✅ Re-queuer: Connecté à Elasticsearch.")
                 return es_client

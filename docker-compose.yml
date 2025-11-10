@@ -76,23 +76,40 @@ services:
       - services-net
     logging: *logging_defaults
 
+  init-elasticsearch:
+    image: alpine:latest
+    profiles: ["disabled"]
+    user: root
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+      - es-snapshots:/usr/share/elasticsearch/snapshots
+    command: sh -c 'chown -R 1000:1000 /usr/share/elasticsearch/data /usr/share/elasticsearch/snapshots'
+    logging: *logging_defaults
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
     container_name: elasticsearch
     profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false
+      - xpack.security.enabled=true
+      - xpack.security.audit.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
       - http.host=0.0.0.0
+      - path.repo=/usr/share/elasticsearch/snapshots
     ports:
       # Mappe le port sur toutes les interfaces réseau de l'hôte
       # Assurez-vous que le pare-feu de votre Host VM autorise les connexions sur le port 9200
       - "9200:9200"
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
+      - es-snapshots:/usr/share/elasticsearch/snapshots
+    depends_on:
+      init-elasticsearch:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -108,7 +125,9 @@ services:
     ports:
       - "5601:5601"
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_HOSTS=${ELASTICSEARCH_URL}
+      - ELASTICSEARCH_USERNAME=kibana_user
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -143,8 +162,14 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # Le GPU n'est plus nécessaire ici, Triton s'en charge !
       # - TRITON_URL=triton-server:8001
+    env_file:
+      - .env
     environment:
-      - TRITON_URL=34.34.166.5:8001
+      - TRITON_URL=${TRITON_URL}
+      - EMBEDDING_BATCH_SIZE=8
+      - TOTAL_MAX_CONCURRENT_REQUESTS=3
+      - HIGH_PRIORITY_RATIO=0.2
+      - HIGH_PRIORITY_SERVICES=api-recherche-service
     # depends_on:
     #   triton-server:
     #     condition: service_healthy
@@ -190,6 +215,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - SERVICE_NAME=api-model-service
     depends_on:
       - llm-service
       - embedding-model-service
@@ -226,6 +252,7 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - SERVICE_NAME=api-recherche-service
     # depends_on:
     #   - llm-service
     #   - embedding-model-service
@@ -253,6 +280,7 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - SERVICE_NAME=api-recherche-test-modification
     # depends_on:
     #   - llm-service
     #   - embedding-model-service
@@ -274,6 +302,7 @@ services:
       - "8555:8555"
     environment:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
+      - SERVICE_NAME=api-embedding-service
     # depends_on:
     #   - embedding-model-service
     env_file:
@@ -324,6 +353,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - SERVICE_NAME=api-classification-service
     depends_on:
       - llm-service
       - embedding-model-service
@@ -504,6 +534,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/DeepSeek-OCR/Dockerfile
     container_name: deepseek-ocr-vllm
+    profiles: ["app"] # Profile for the main application stack
     ports:
       - "8501:8501"
     volumes:
@@ -592,6 +623,7 @@ services:
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
+      - SERVICE_NAME=embedding-service
     depends_on:
       - embedding-model-service
     env_file:
@@ -772,6 +804,8 @@ services:
       - .env
     environment:
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ES_USERNAME=${DLQ_MANAGER_ES_USER}
+      - ES_PASSWORD=${DLQ_MANAGER_ES_PASSWORD}
       - RABBITMQ_URL=${RABBITMQ_URL}
     networks:
       - services-net
@@ -791,6 +825,8 @@ services:
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ES_USERNAME=${DLQ_ARCHIVER_ES_USER}
+      - ES_PASSWORD=${DLQ_ARCHIVER_ES_PASSWORD}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -809,6 +845,8 @@ services:
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ES_USERNAME=${DLQ_ARCHIVER_ES_USER}
+      - ES_PASSWORD=${DLQ_ARCHIVER_ES_PASSWORD}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -825,6 +863,8 @@ services:
       - .env
     environment:
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
+      - ES_USERNAME=elastic # Or a dedicated user
+      - ES_PASSWORD=${ELASTIC_PASSWORD}
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -897,6 +937,7 @@ services:
     logging: *logging_defaults
 
   api-chatbot-service:
+    profiles: ["app"]
     build:
       context: ./apps-microservices/api-chatbot-html-service
       dockerfile: Dockerfile
@@ -919,6 +960,40 @@ services:
     depends_on:
       - crawler-service
     logging: *logging_defaults
+
+  crawler-monitor-backend:
+    build:
+      context: ./apps-microservices/crawler-monitor-backend
+      dockerfile: Dockerfile
+    container_name: crawler-monitor-backend
+    profiles: ["crawling"]
+    restart: unless-stopped
+    expose:
+      - "3001"
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging: &logging_defaults
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+  crawler-monitor-frontend:
+    build:
+      context: ./apps-microservices/crawler-monitor-frontend
+      dockerfile: Dockerfile
+    container_name: crawler-monitor-frontend
+    profiles: ["crawling"]
+    restart: unless-stopped
+    ports:
+      - "3002:80" # Exposé sur le port 3002
+    depends_on:
+      - crawler-monitor-backend
+    networks:
+      - services-net
+    logging: *logging_defaults
     
 networks:
   services-net:
@@ -926,6 +1001,8 @@ networks:
     
 volumes:
   elasticsearch-data:
+    driver: local
+  es-snapshots:
     driver: local
   grafana-storage:
   crawler_data:
