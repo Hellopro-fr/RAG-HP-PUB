@@ -114,13 +114,14 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
         document_data = document_item.get("data",{})
 
         nom_doc = os.path.basename(document_data.get("document","inconnu"))
-        text_to_embed_clean = results.get(nom_doc)
+        texts = results.get(nom_doc)
+        text_to_embed_clean = ""
 
         # logging.info(f"\n\nTexte juste après extraction : {texts}")
 
         # Néttoyage
         #Suppression des balises img | watermark + ses contenus
-        if text_to_embed_clean:  
+        if texts:  
             pattern = re.compile(r"<(img|watermark)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
             texts = re.sub(pattern, "", texts)
 
