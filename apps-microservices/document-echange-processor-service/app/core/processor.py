@@ -88,7 +88,6 @@ def make_chat_request(prompt_template, content,temperature=0.7):
 async def process_document_data_for_templating(documents: List[Dict], bdd: str = "milvus") -> List[Dict]:
     
     try:
-        print(f"🔍 Liste Document: {documents}")
         docs = []
         for document in documents:
             document_data = document.get("data",{})
@@ -106,14 +105,9 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
 
             docs.append(document_data.get("document"))
 
-
-        print(f"🔍 Docs: '{docs}'")
-
         extractor = DeepseekOCRDocExtractor()
         response = await extractor.extract_from_urls(docs)
-        print(f"🔍 response: '{response}'")
         results = extractor.get_clean_result(response)
-        print(f"🔍 Results: '{results}'")
         
         processed_messages_result = []
 
@@ -122,9 +116,9 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             document_data = document_item.get("data",{})
 
             nom_doc = os.path.basename(document_data.get("document","inconnu"))
-            print(f"🔍 Cherche: '{nom_doc}'")
-            print(f"🔍 Existe? {nom_doc in results}")
-            texts     = results[nom_doc]
+            texts     = results.get(nom_doc)
+            print(f"🔍 Textes? {texts}")
+
             text_to_embed_clean = ""
             # logging.info(f"\n\nTexte juste après extraction : {texts}")
 
