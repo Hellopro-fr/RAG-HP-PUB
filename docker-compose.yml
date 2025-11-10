@@ -97,8 +97,8 @@ services:
       - elasticsearch-data:/usr/share/elasticsearch/data
       - es-snapshots:/usr/share/elasticsearch/snapshots
     command: >
-      bash -c "chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/snapshots && 
-               exec /usr/local/bin/docker-entrypoint.sh elasticsearch"
+      bash -c "chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data /usr/share/elasticsearch/snapshots &&
+               exec setpriv --reuid elasticsearch --regid elasticsearch --clear-groups /usr/local/bin/docker-entrypoint.sh elasticsearch"
     healthcheck:
       test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
