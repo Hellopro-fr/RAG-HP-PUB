@@ -1,6 +1,5 @@
 pika
 aio_pika
-aiofiles
 pymilvus
 beautifulsoup4
 bs4

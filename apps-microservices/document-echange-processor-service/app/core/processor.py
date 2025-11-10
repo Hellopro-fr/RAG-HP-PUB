@@ -2,7 +2,6 @@ import json
 import re
 import logging
 import os
-from concurrent.futures import ProcessPoolExecutor , ThreadPoolExecutor
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
@@ -85,175 +84,145 @@ def make_chat_request(prompt_template, content,temperature=0.7):
     
     return chat_request
 
-async def process_document_data_for_templating(document_data: dict, bdd: str = "milvus" , executor: ProcessPoolExecutor | ThreadPoolExecutor = None) -> dict:
+async def process_document_data_for_templating(documents: list[dict], bdd: str = "milvus") -> list[dict]:
     
-    # Étape 0: Initialisation du message de sortie
-    output_message = {}
-    
-    # --- CONFIGURATION DU LOGGING PAR DOCUMENT ---
-    document_path = document_data.get("document")
-    if not document_path:
-        raise ValueError("Le champ 'document' est manquant dans document_data")
-
-    # Extraire le nom du fichier sans extension
-    base_name = os.path.splitext(os.path.basename(document_path))[0]
-    log_file = f"{base_name}.txt"
-
-    # Créer un logger spécifique pour ce document (pas le logger root)
-    logger = logging.getLogger(f"doc_processor_{base_name}")
-    logger.setLevel(logging.INFO)
-    
-    # Supprimer les handlers existants pour ce logger
-    logger.handlers.clear()
-    
-    # Ajouter les nouveaux handlers
-    file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    # Empêcher la propagation au logger root
-    logger.propagate = False
-
-    logger.info(f"--- Début du traitement pour le document : {document_path} ---")
-
     try:
+        docs = []
+        for document_data in documents:
+            res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
 
-        res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
+            tab_data = res.get('data',[])
 
-        tab_data = res.get('data',[])
+            if tab_data:
+                text_bdd = tab_data[0].get('text','').strip()
+                if text_bdd:
+                    logging.info("PJ déjà traité")
+                    continue
+                
 
-        if tab_data:
-            text_bdd = tab_data[0].get('text','').strip()
-            if text_bdd:
-                logger.info("PJ déjà traité")
-                return None
-            
-
-        # Étape 1: Vérifier les données d'entrée
-        if not isinstance(document_data, dict):
-            raise ValueError("Les données doivent être un dictionnaire.")
+            docs.append(document_data.get("document"))
 
 
         extractor = DeepseekOCRDocExtractor()
-        results = await extractor.extract_from_url(document_data.get("document"))
+        response = await extractor.extract_from_urls(docs)
+        results = extractor.get_clean_result(response)
         
-        texts     = results['text']
-        text_to_embed_clean = ""
-        # logger.info(f"\n\nTexte juste après extraction : {texts}")
+        processed_messages_result = []
 
-        # Néttoyage
-        #Suppression des balises img | watermark + ses contenus
-        if texts:  
-            pattern = re.compile(r"<(img|watermark)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
-            texts = re.sub(pattern, "", texts)
+        for document_data in documents:
+            output_message = {}
 
-            cleaner      = CleanHTML(texts)
-            cleaned_text = cleaner.clean()
+            nom_doc = os.path.basename(document_data.get("document","inconnu"))
+            texts     = results[nom_doc]
+            text_to_embed_clean = ""
+            # logging.info(f"\n\nTexte juste après extraction : {texts}")
 
-            # Anonymisation
-            anonymize = AnonymizeText()
-            anonymized_text     = anonymize.anonymize_text(cleaned_text)
-            text_to_embed_clean = anonymize.normalize_text(anonymized_text)
+            # Néttoyage
+            #Suppression des balises img | watermark + ses contenus
+            if texts:  
+                pattern = re.compile(r"<(img|watermark)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+                texts = re.sub(pattern, "", texts)
 
-            # # Suppression des info inutiles via llm
-            # try:
+                cleaner      = CleanHTML(texts)
+                cleaned_text = cleaner.clean()
 
-            #     chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
-            #     raw_response_dict = await llm_client.get_llm_chat_response(chat_request)
-        
-            #     # Construction du payload de métriques
-            #     response_details = raw_response_dict.get('response', {})
-            #     usage_details = response_details.get('usage', {})
-            #     error_details = response_details.get('error', {})
-            #     state_llm = 1 if not error_details else 2
+                # Anonymisation
+                anonymize = AnonymizeText()
+                anonymized_text     = anonymize.anonymize_text(cleaned_text)
+                text_to_embed_clean = anonymize.normalize_text(anonymized_text)
 
-            #     metric_payload = {
-            #         "source_service": "document-echange-processor-service",
-            #         "url": document_path.replace(r"\/", "/"),
-            #         "state_llm": state_llm,
-            #         "prompt_tokens": usage_details.get('prompt_tokens'),
-            #         "completion_tokens": usage_details.get('completion_tokens'),
-            #         "total_tokens": usage_details.get('total_tokens'),
-            #         "model": response_details.get('model'),
-            #         "raw_response_on_error": raw_response_dict if state_llm == 2 else None,
-            #         "process_id": 33
-            #     }
-                
-            #     if state_llm == 2:
-            #         raise ValueError(f"Erreur du LLM: {raw_response_dict}")
+                # # Suppression des info inutiles via llm
+                # try:
 
-            #     # Parsing de la réponse
-            #     raw_text = raw_response_dict.get('full_message', '')
+                #     chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
+                #     raw_response_dict = await llm_client.get_llm_chat_response(chat_request)
+            
+                #     # Construction du payload de métriques
+                #     response_details = raw_response_dict.get('response', {})
+                #     usage_details = response_details.get('usage', {})
+                #     error_details = response_details.get('error', {})
+                #     state_llm = 1 if not error_details else 2
 
-            #     # Parsing de la réponse
-            #     match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-            #     if match:
-            #         json_string = match.group(0)
-            #         parsed_json = json.loads(json_string)
-            #         contenu = parsed_json.get("contenu")
-            #         if not contenu:
-            #             raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
-            #         elif contenu != "ok":
-            #             text_to_embed_clean = contenu
-            #             logger.info(f"\n\nTexte juste après nettoyage : {text_to_embed_clean}")
-            #     else:
-            #         raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
+                #     metric_payload = {
+                #         "source_service": "document-echange-processor-service",
+                #         "url": document_path.replace(r"\/", "/"),
+                #         "state_llm": state_llm,
+                #         "prompt_tokens": usage_details.get('prompt_tokens'),
+                #         "completion_tokens": usage_details.get('completion_tokens'),
+                #         "total_tokens": usage_details.get('total_tokens'),
+                #         "model": response_details.get('model'),
+                #         "raw_response_on_error": raw_response_dict if state_llm == 2 else None,
+                #         "process_id": 33
+                #     }
+                    
+                #     if state_llm == 2:
+                #         raise ValueError(f"Erreur du LLM: {raw_response_dict}")
 
-            # except Exception as e:
-            #     logger.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
-            #     error_str = f"Erreur lors du nettoyage LLM. Erreur: {e}"
-            #     # S'assurer qu'on a un payload de métrique même en cas d'erreur
-            #     if not metric_payload:
-            #         metric_payload = {
-            #             "source_service": "template-llm-service",
-            #             "url": document_path,
-            #             "state_llm": 2, # Erreur
-            #             "error_message": error_str
-            #         }
-            #     return {
-            #         "status": "error",
-            #         "original_message": document_data,
-            #         "error_message": error_str,
-            #         "metric_payload": metric_payload
-            #     }
+                #     # Parsing de la réponse
+                #     raw_text = raw_response_dict.get('full_message', '')
 
-        # Étape 3: Construire le message de sortie
-        output_message = {
-            "data": {
-                "text": text_to_embed_clean,
-                "embedding" : [0.0]*1024,
-                "fichier_source" : document_data.get("fichier_source","inconnu"),
-                "id_demande" : document_data.get("id_demande","inconnu"),
-                "id_fournisseur" : document_data.get("id_fournisseur","inconnu"),
-                # **{k.replace("-", "_"): v for k, v in document_data.items() if k in ['fichier_source']}
-            },
-            "collection": CollectionName.DOCUMENT,
-            "database": bdd,
-            "log_file": log_file,
-            "base_name": base_name
-        }
+                #     # Parsing de la réponse
+                #     match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                #     if match:
+                #         json_string = match.group(0)
+                #         parsed_json = json.loads(json_string)
+                #         contenu = parsed_json.get("contenu")
+                #         if not contenu:
+                #             raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
+                #         elif contenu != "ok":
+                #             text_to_embed_clean = contenu
+                #             logging.info(f"\n\nTexte juste après nettoyage : {text_to_embed_clean}")
+                #     else:
+                #         raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
 
-        # logger.info(f"\n\nTexte juste après nettoyage bruit via LLM : {text_to_embed_clean}")
+                # except Exception as e:
+                #     logging.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
+                #     error_str = f"Erreur lors du nettoyage LLM. Erreur: {e}"
+                #     # S'assurer qu'on a un payload de métrique même en cas d'erreur
+                #     if not metric_payload:
+                #         metric_payload = {
+                #             "source_service": "template-llm-service",
+                #             "url": document_path,
+                #             "state_llm": 2, # Erreur
+                #             "error_message": error_str
+                #         }
+                #     return {
+                #         "status": "error",
+                #         "original_message": document_data,
+                #         "error_message": error_str,
+                #         "metric_payload": metric_payload
+                #     }
+
+            # Étape 3: Construire le message de sortie
+            output_message = {
+                "data": {
+                    "text": text_to_embed_clean,
+                    "embedding" : [0.0]*1024,
+                    "fichier_source" : document_data.get("fichier_source","inconnu"),
+                    "id_demande" : document_data.get("id_demande","inconnu"),
+                    "id_fournisseur" : document_data.get("id_fournisseur","inconnu"),
+                    # **{k.replace("-", "_"): v for k, v in document_data.items() if k in ['fichier_source']}
+                },
+                "collection": CollectionName.DOCUMENT,
+                "database": bdd
+            }
+
+            processed_messages_result.append({
+                    "status": "success",
+                    "processed_message": output_message,
+                    # "metric_payload": metric_payload
+                })
+
+        # logging.info(f"\n\nTexte juste après nettoyage bruit via LLM : {text_to_embed_clean}")
         
         # Étape 4: Afficher le message de sortie pour débogage
         # print(f"🔍Document-Echange-Processor: Message prêt: {json.dumps(output_message, indent=2)}")
         print(f"🔍Document-Echange-Processor: Message prêt")
         
-        return {
-                "status": "success",
-                "processed_message": output_message,
-                # "metric_payload": metric_payload
-            }
+        return processed_messages_result
     
     finally:
         # Nettoyer les handlers pour libérer le fichier
-        for handler in logger.handlers[:]:
+        for handler in logging.handlers[:]:
             handler.close()
-            logger.removeHandler(handler)
+            logging.removeHandler(handler)
