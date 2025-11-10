@@ -80,6 +80,7 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
     container_name: elasticsearch
     profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
+    user: root # Start as root to allow chown command to run
     environment:
       - discovery.type=single-node
       # TIER 2: Enable security features
@@ -102,7 +103,7 @@ services:
       - es-snapshots:/usr/share/elasticsearch/snapshots
     command: >
       bash -c "chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/snapshots &&
-               /usr/local/bin/docker-entrypoint.sh elasticsearch"
+               exec /usr/local/bin/docker-entrypoint.sh elasticsearch"
     healthcheck:
       test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
