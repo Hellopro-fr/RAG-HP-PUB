@@ -90,12 +90,10 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     try:
         print(f"🔍 Liste Document: {documents}")
         docs = []
-        for document_data in documents:
-            print(f"🔍 Document data: {document_data}")
+        for document in documents:
+            document_data = document.get("data",{})
 
             res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
-            print(f"🔍 Type Res recherche: {type(res)}")
-            print(f"🔍 Res recherche: {res}")
 
             tab_data = res.get('data',[])
 
@@ -109,17 +107,19 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             docs.append(document_data.get("document"))
 
 
+        print(f"🔍 Docs: '{docs}'")
+
         extractor = DeepseekOCRDocExtractor()
         response = await extractor.extract_from_urls(docs)
+        print(f"🔍 response: '{response}'")
         results = extractor.get_clean_result(response)
+        print(f"🔍 Results: '{results}'")
         
-        print(f"🔍 Type de results: {type(results)}")
-        print(f"🔍 Clés dans results: {list(results.keys())}")
-
         processed_messages_result = []
 
-        for document_data in documents:
+        for document_item in documents:
             output_message = {}
+            document_data = document_item.get("data",{})
 
             nom_doc = os.path.basename(document_data.get("document","inconnu"))
             print(f"🔍 Cherche: '{nom_doc}'")
