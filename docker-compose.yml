@@ -80,6 +80,7 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
     container_name: elasticsearch
     profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
+    user: "1000:1000" # Run as the 'elasticsearch' user to ensure correct volume permissions
     environment:
       - discovery.type=single-node
       # TIER 2: Enable security features
