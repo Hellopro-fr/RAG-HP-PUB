@@ -692,6 +692,8 @@ services:
       - .env
     deploy:
       replicas: 4
+    networks:
+      - services-net
     logging: *logging_defaults
   
   product-database-qdrant-service:

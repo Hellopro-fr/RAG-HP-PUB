@@ -66,7 +66,8 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
     """
     # --- MANUAL INSTRUMENTATION START ---
     start_time = time.monotonic()
-    status = 'success'
+    # --- FIX 1: Rename 'status' to 'metric_status' ---
+    metric_status = 'success'
     collection_counter = Counter()
     # --- END MANUAL INSTRUMENTATION START ---
 
@@ -103,6 +104,7 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
             else:
                 response.append(
                     BaseIngestionReponseSucces(
+                        # --- FIX 1 (cont.): Use the imported 'status' module correctly ---
                         code=status.HTTP_202_ACCEPTED, 
                         message="Le message a été mis en file d'attente pour publication.", 
                         details={
@@ -116,25 +118,27 @@ def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> 
         return response
 
     except Exception:
-        status = 'failure'
-        raise # Re-raise the exception to let FastAPI handle it
+        metric_status = 'failure'
+        raise
     finally:
-        # --- MANUAL INSTRUMENTATION REPORTING ---
         duration = time.monotonic() - start_time
         if not collection_counter: # Handle case of empty payload list
              PROCESSING_TIME_SECONDS.labels(
                 service_name="api-ingestion", 
-                status=status, 
+                status=metric_status, 
                 collection_type='empty_batch'
             ).observe(duration)
         else:
+            # --- FIX 2: Use the correct .observe() pattern for manual instrumentation ---
             for collection, count in collection_counter.items():
-                # Manually increment the sum and count for the histogram
-                metric_labels = {
-                    "service_name": "api-ingestion",
-                    "status": status,
-                    "collection_type": collection
-                }
-                PROCESSING_TIME_SECONDS.labels(**metric_labels)._sum.inc(duration)
-                PROCESSING_TIME_SECONDS.labels(**metric_labels)._count.inc(count)
-        # --- END MANUAL INSTRUMENTATION REPORTING ---
+                metric = PROCESSING_TIME_SECONDS.labels(
+                    service_name="api-ingestion",
+                    status=metric_status,
+                    collection_type=collection
+                )
+                # Observe the full duration once to increment the sum correctly
+                metric.observe(duration)
+                # Observe a zero duration for the rest of the items to increment the count correctly
+                if count > 1:
+                    for _ in range(count - 1):
+                        metric.observe(0)
