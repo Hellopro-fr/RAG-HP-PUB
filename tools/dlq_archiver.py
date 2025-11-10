@@ -240,8 +240,6 @@ class DLQArchiver:
 
 def main():
     print("🚀 DLQ Archiver: Démarrage du service...")
-    print(f"--- DEBUG: Archiver ES_USERNAME = {os.environ.get('ES_USERNAME')}")
-    print(f"--- DEBUG: Archiver ES_PASSWORD is set: {bool(os.environ.get('ES_PASSWORD'))}")
     try:
         archiver = DLQArchiver()
         archiver.start_consuming()
