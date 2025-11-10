@@ -2,15 +2,19 @@
 FROM node:18-alpine AS build-frontend
 WORKDIR /app/frontend
 
-# Copy package.json and potentially package-lock.json to leverage Docker cache
-COPY apps-microservices/dlq-manager-service/frontend/package*.json ./
-RUN npm install --legacy-peer-deps
+# Install pnpm
+RUN npm install -g pnpm
+
+# Copy package manifests to leverage Docker cache
+COPY apps-microservices/dlq-manager-service/frontend/package.json ./
+COPY apps-microservices/dlq-manager-service/frontend/pnpm-lock.yaml ./
+RUN pnpm install
 
 # Copy the rest of the frontend source code
 COPY apps-microservices/dlq-manager-service/frontend/ ./
 
 # Build the static files
-RUN npm run build
+RUN pnpm run build
 
 # Stage 2: Build the FastAPI backend
 FROM python:3.10-slim AS build-backend
@@ -43,8 +47,8 @@ COPY --from=build-backend /usr/local/bin /usr/local/bin
 # Copy the backend application code
 COPY --from=build-backend /app/backend /app
 
-# Copy the built frontend static files
-COPY --from=build-frontend /app/frontend/build /app/static
+# Copy the built frontend static files from the Next.js export
+COPY --from=build-frontend /app/frontend/out /app/static
 
 # Expose the port the app runs on
 EXPOSE 8560
