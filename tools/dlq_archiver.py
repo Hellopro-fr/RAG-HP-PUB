@@ -50,10 +50,16 @@ class DLQArchiver:
                 if ES_USERNAME and ES_PASSWORD:
                     self.es_client = Elasticsearch(
                         ELASTICSEARCH_URL,
-                        basic_auth=(ES_USERNAME, ES_PASSWORD)
+                        basic_auth=(ES_USERNAME, ES_PASSWORD),
+                        verify_certs=False,
+                        ssl_show_warn=False
                     )
                 else:
-                    self.es_client = Elasticsearch(ELASTICSEARCH_URL)
+                    self.es_client = Elasticsearch(
+                        ELASTICSEARCH_URL,
+                        verify_certs=False,
+                        ssl_show_warn=False
+                    )
 
                 if self.es_client.ping():
                     print("✅ DLQ Archiver: Connecté à Elasticsearch.")
@@ -240,8 +246,6 @@ class DLQArchiver:
 
 def main():
     print("🚀 DLQ Archiver: Démarrage du service...")
-    print(f"--- DEBUG: Archiver ES_USERNAME = {os.environ.get('ES_USERNAME')}")
-    print(f"--- DEBUG: Archiver ES_PASSWORD is set: {bool(os.environ.get('ES_PASSWORD'))}")
     try:
         archiver = DLQArchiver()
         archiver.start_consuming()

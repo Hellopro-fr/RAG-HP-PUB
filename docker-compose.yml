@@ -109,7 +109,7 @@ services:
       init-elasticsearch:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      test: ["CMD", "curl", "-k", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "https://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -125,7 +125,7 @@ services:
     ports:
       - "5601:5601"
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
       - ELASTICSEARCH_USERNAME=kibana_user
       - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
     depends_on:
@@ -803,7 +803,7 @@ services:
     env_file:
       - .env
     environment:
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=https://elasticsearch:9200
       - ES_USERNAME=${DLQ_MANAGER_ES_USER}
       - ES_PASSWORD=${DLQ_MANAGER_ES_PASSWORD}
       - RABBITMQ_URL=${RABBITMQ_URL}
@@ -824,7 +824,7 @@ services:
       - .env
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=https://elasticsearch:9200
       - ES_USERNAME=${DLQ_ARCHIVER_ES_USER}
       - ES_PASSWORD=${DLQ_ARCHIVER_ES_PASSWORD}
     depends_on:
@@ -844,7 +844,7 @@ services:
       - .env
     environment:
       - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=https://elasticsearch:9200
       - ES_USERNAME=${DLQ_ARCHIVER_ES_USER}
       - ES_PASSWORD=${DLQ_ARCHIVER_ES_PASSWORD}
     depends_on:
@@ -862,7 +862,7 @@ services:
     env_file:
       - .env
     environment:
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ELASTICSEARCH_URL=https://elasticsearch:9200
       - ES_USERNAME=elastic # Or a dedicated user
       - ES_PASSWORD=${ELASTIC_PASSWORD}
     depends_on:
