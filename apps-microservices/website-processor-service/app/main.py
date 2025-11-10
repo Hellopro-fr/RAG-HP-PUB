@@ -7,6 +7,8 @@ from website_processor_service.messaging.consumer import Consumer
 from website_processor_service.messaging.publisher import Publisher
 import aio_pika
 
+from common_utils.metrics.prometheus import start_metrics_server_in_thread
+
 async def main():
     """
     Point d'entrée principal asynchrone du service.
@@ -16,6 +18,9 @@ async def main():
     
     print("🚀 Website-Processor: Démarrage...")
     
+    # --- Start Prometheus metrics server ---
+    start_metrics_server_in_thread(port=8530)
+
     loop = asyncio.get_event_loop()
     try:
         connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)

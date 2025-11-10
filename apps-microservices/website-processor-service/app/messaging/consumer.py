@@ -7,6 +7,8 @@ from website_processor_service.messaging.publisher import Publisher
 from website_processor_service.core.processor import process_website_data_for_embedding
 from common_utils.autres.DLQProperties import DLQProperties
 
+from common_utils.metrics.prometheus import measure_processing_time
+
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
 
@@ -53,29 +55,35 @@ class Consumer:
                     return death.get('count', 0)
         return 0
 
+    @measure_processing_time(service_name="website-processor-service")
+    async def _instrumented_processing_logic(self, message: aio_pika.abc.AbstractIncomingMessage):
+        """A new helper function containing the logic to be decorated."""
+        data = json.loads(message.body)
+        website_data = data.get('data', {})
+        bdd = data.get('database', "qdrant")
+
+        if not website_data or not website_data.get('text'):
+            raise ValueError("Données invalides (contenu vide ou 'text' manquant).")
+
+        print(f"\n📥 Website-Processor: Message reçu pour URL: {website_data.get('url', 'URL inconnue')}")
+        
+        loop = asyncio.get_running_loop()
+        output_message = await loop.run_in_executor(
+            self.executor, process_website_data_for_embedding, website_data, bdd
+        )
+        
+        routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
+        output_message['routing_key'] = routing_key
+        
+        async with self.connection.channel() as channel:
+            await self.publisher.publish_message(output_message, channel)
+
+
     async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
         """Tâche pour traiter un seul message, y compris la logique de retry/dlq."""
         try:
-            data = json.loads(message.body)
-            website_data = data.get('data', {})
-            bdd = data.get('database', "qdrant")
-
-            if not website_data or not website_data.get('text'):
-                raise ValueError("Données invalides (contenu vide ou 'text' manquant).")
-
-            print(f"\n📥 Website-Processor: Message reçu pour URL: {website_data.get('url', 'URL inconnue')}")
-            
-            loop = asyncio.get_running_loop()
-            output_message = await loop.run_in_executor(
-                self.executor, process_website_data_for_embedding, website_data, bdd
-            )
-            
-            routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
-            output_message['routing_key'] = routing_key
-            
-            async with self.connection.channel() as channel:
-                await self.publisher.publish_message(output_message, channel)
-            
+            # We call our new decorated function
+            await self._instrumented_processing_logic(message)
             await message.ack()
 
         except (json.JSONDecodeError, ValueError) as e:

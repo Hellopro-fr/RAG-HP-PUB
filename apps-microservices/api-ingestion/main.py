@@ -7,6 +7,8 @@ from app.core.credentials import settings
 from app.utils.params import params
 from app.utils.response import error_response
 
+from common_utils.metrics.prometheus import get_metrics_app
+
 import logging
 import time
 import os
@@ -18,6 +20,11 @@ API Ingestion pour le projet RAG Hellopro 🚀
 
 
 app = FastAPI()
+
+# --- Mount the metrics app ---
+# This adds the /metrics endpoint to your FastAPI application
+metrics_app = get_metrics_app()
+app.mount("/metrics", metrics_app)
 
 # TODO
 # ajout des origines à utiliser pour l'API

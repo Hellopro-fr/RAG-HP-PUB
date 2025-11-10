@@ -6,9 +6,12 @@ from app.messaging.publisher import publish_message
 from app.core.ingestion.ingestion import routing_key_collection
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 
+from common_utils.metrics.prometheus import measure_processing_time
+
 router = APIRouter()
 
 @router.post("/publier", summary="Publier un message sur RabbitMQ")
+@measure_processing_time(service_name="api-ingestion")
 def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseIngestionReponseSucces | BaseIngestionReponse:
     """
     Reçoit des données et les publie dans la file d'attente RabbitMQ.
@@ -53,6 +56,7 @@ def publish_to_rabbitmq(payload: IngestionRequest, request: Request) -> BaseInge
     )
 
 @router.post("/publier-lot", summary="Publier plusieurs lots sur RabbitMQ")
+@measure_processing_time(service_name="api-ingestion")
 def publish_lot_rabbitmq(payloads: list[IngestionRequest], request: Request) -> list[BaseIngestionReponseSucces | BaseIngestionReponse]:
     """
     Reçoit des données et les publie dans la file d'attente RabbitMQ.

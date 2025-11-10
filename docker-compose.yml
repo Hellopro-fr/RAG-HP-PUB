@@ -462,6 +462,8 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: website-processor-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
     deploy:
@@ -894,9 +896,7 @@ services:
       - "3000:3000"
     volumes:
       - grafana-storage:/var/lib/grafana  # Persist Grafana data
-      - ./grafana/dashboards:/var/lib/grafana/dashboards  # Mount custom dashboards
-      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards  # Auto-provision dashboards
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources  # Auto-provision data sources
+      - ./grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
