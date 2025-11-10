@@ -35,17 +35,10 @@ def get_elasticsearch_client():
                 es_client = Elasticsearch(
                     ELASTICSEARCH_URL,
                     basic_auth=(ES_USERNAME, ES_PASSWORD),
-                    request_timeout=30,
-                    verify_certs=False,
-                    ssl_show_warn=False
+                    request_timeout=30
                 )
             else:
-                es_client = Elasticsearch(
-                    ELASTICSEARCH_URL,
-                    request_timeout=30,
-                    verify_certs=False,
-                    ssl_show_warn=False
-                )
+                es_client = Elasticsearch(ELASTICSEARCH_URL, request_timeout=30)
 
             if es_client.ping():
                 print("✅ Re-queuer: Connecté à Elasticsearch.")
