@@ -5,6 +5,8 @@ from website_database_qdrant_service.core.processor import insertion_data # Impo
 from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
 from common_utils.autres.DLQProperties import DLQProperties
 
+from common_utils.metrics.prometheus import measure_processing_time
+
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 
