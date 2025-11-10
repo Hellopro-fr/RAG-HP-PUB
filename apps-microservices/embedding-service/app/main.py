@@ -7,6 +7,7 @@ import aio_pika
 # Importer les modules locaux
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
+from common_utils.metrics.prometheus import start_metrics_server_in_thread
 
 async def main():
     """
@@ -17,6 +18,9 @@ async def main():
     
     print("🚀 Embedding-Service: Démarrage...")
     
+    # --- Start Prometheus metrics server ---
+    start_metrics_server_in_thread(port=8530)
+
     loop = asyncio.get_event_loop()
     
     while True:

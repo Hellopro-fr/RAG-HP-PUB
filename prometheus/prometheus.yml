@@ -13,3 +13,27 @@ scrape_configs:
       - website-processor-service # The service name defined in docker-compose
       type: 'A'
       port: 8530
+
+  - job_name: 'website-database-qdrant-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - website-database-qdrant-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530
+
+  - job_name: 'embedding-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - embedding-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530
+
+  - job_name: 'template-llm-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - template-llm-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530

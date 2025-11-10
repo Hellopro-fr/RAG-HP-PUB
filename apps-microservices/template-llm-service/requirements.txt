@@ -12,3 +12,5 @@ pydantic
 jinja2
 aio_pika
 vllm
+prometheus-client
+waitress

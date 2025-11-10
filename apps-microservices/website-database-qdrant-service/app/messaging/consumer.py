@@ -68,6 +68,7 @@ class Consumer:
                     return death.get('count', 0)
         return 0
 
+    @measure_processing_time(service_name="website-database-qdrant-service")
     def _on_message_callback(self, ch, method, properties, body):
         try:
             website_data = json.loads(body)

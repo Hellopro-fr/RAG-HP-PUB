@@ -592,6 +592,8 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: template-llm-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
     deploy:
@@ -624,6 +626,8 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: embedding-service
     restart: unless-stopped
+    expose:
+      - "8530"
     environment:
       - LLM_SERVICE_URL=llm-service:50051
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
@@ -682,6 +686,8 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: website-database-qdrant-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
     deploy:

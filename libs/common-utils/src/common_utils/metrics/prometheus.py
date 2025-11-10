@@ -2,16 +2,16 @@ import time
 import asyncio
 import functools
 import logging
+import inspect
 from threading import Thread
 from prometheus_client import start_http_server, Histogram, REGISTRY, make_wsgi_app
 from waitress import serve
 
-# Define a Histogram metric. Histograms are ideal for measuring durations.
-# We will label it by the service name and the outcome (status).
+# 1. ADD a new label for the collection type.
 PROCESSING_TIME_SECONDS = Histogram(
     'pipeline_processing_duration_seconds',
     'Time spent processing a message or request in a service',
-    ['service_name', 'status']
+    ['service_name', 'status', 'collection_type']
 )
 
 def start_metrics_server_in_thread(port: int = 8000):
@@ -36,14 +36,50 @@ def get_metrics_app():
     return make_wsgi_app()
 
 
-def measure_processing_time(service_name: str):
+def measure_processing_time(service_name: str, payload_arg_name: str = None, collection_field_name: str = 'collection'):
     """
     A decorator that measures the execution time of a function (sync or async)
     and records it in the PROCESSING_TIME_SECONDS histogram.
+
+    It can optionally extract a 'collection_type' label from a payload argument.
     """
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            collection_value = 'unknown'
+            # 2. Logic to inspect arguments and extract the collection type
+            if payload_arg_name:
+                try:
+                    payload = None
+                    if payload_arg_name in kwargs:
+                        payload = kwargs[payload_arg_name]
+                    else:
+                        sig = inspect.signature(func)
+                        arg_names = list(sig.parameters.keys())
+                        if payload_arg_name in arg_names:
+                            payload_index = arg_names.index(payload_arg_name)
+                            if payload_index < len(args):
+                                payload = args[payload_index]
+                    
+                    # Extract the collection value
+                    if payload is not None:
+                        if isinstance(payload, list):
+                            if payload: # If the batch is not empty
+                                first_item = payload[0]
+                                if isinstance(first_item, dict):
+                                    collection_value = first_item.get(collection_field_name, 'unknown_batch_item')
+                                else:
+                                    collection_value = getattr(first_item, collection_field_name, 'unknown_batch_item')
+                            else:
+                                collection_value = 'empty_batch'
+                        elif isinstance(payload, dict):
+                            collection_value = payload.get(collection_field_name, 'unknown')
+                        else: # Assume it's an object/Pydantic model
+                            collection_value = getattr(payload, collection_field_name, 'unknown')
+                except Exception:
+                    # If anything goes wrong, we default to 'unknown' and don't fail the request
+                    collection_value = 'error_extracting_label'
+
             start_time = time.monotonic()
             status = 'success'
             try:
@@ -51,7 +87,7 @@ def measure_processing_time(service_name: str):
                 if asyncio.iscoroutinefunction(func):
                     # For async functions, we need an awaitable wrapper
                     async def async_wrapper():
-                        nonlocal status
+                        nonlocal status, collection_value
                         try:
                             return await func(*args, **kwargs)
                         except Exception:
@@ -59,7 +95,8 @@ def measure_processing_time(service_name: str):
                             raise
                         finally:
                             duration = time.monotonic() - start_time
-                            PROCESSING_TIME_SECONDS.labels(service_name=service_name, status=status).observe(duration)
+                            # 3. Use the new label when recording the metric
+                            PROCESSING_TIME_SECONDS.labels(service_name=service_name, status=status, collection_type=str(collection_value)).observe(duration)
                             logging.debug(f"[{service_name}] Finished '{func.__name__}'. Status: {status}. Duration: {duration:.4f}s")
                     return async_wrapper()
                 else:
@@ -74,7 +111,8 @@ def measure_processing_time(service_name: str):
                 # wasn't detected (which shouldn't happen with the check above).
                 if not asyncio.iscoroutinefunction(func):
                     duration = time.monotonic() - start_time
-                    PROCESSING_TIME_SECONDS.labels(service_name=service_name, status=status).observe(duration)
+                    # 3. Use the new label when recording the metric
+                    PROCESSING_TIME_SECONDS.labels(service_name=service_name, status=status, collection_type=str(collection_value)).observe(duration)
                     logging.debug(f"[{service_name}] Finished '{func.__name__}'. Status: {status}. Duration: {duration:.4f}s")
         return wrapper
     return decorator

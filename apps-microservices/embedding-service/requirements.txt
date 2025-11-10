@@ -7,3 +7,5 @@ grpcio-tools
 protobuf
 googleapis-common-protos
 aio-pika
+prometheus-client
+waitress

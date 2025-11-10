@@ -5,6 +5,8 @@ import os
 from website_database_qdrant_service.messaging.consumer import Consumer
 from website_database_qdrant_service.messaging.publisher import Publisher
 
+from common_utils.metrics.prometheus import start_metrics_server_in_thread
+
 def main():
     """
     Point d'entrée principal du service.
@@ -12,6 +14,9 @@ def main():
     """
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
     connection = None
+
+    # --- Start Prometheus metrics server ---
+    start_metrics_server_in_thread(port=8530)
 
     # Boucle de connexion robuste
     for i in range(10):

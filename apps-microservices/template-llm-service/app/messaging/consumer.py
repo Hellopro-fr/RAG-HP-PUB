@@ -4,6 +4,7 @@ import asyncio
 import time
 import aiormq
 import logging
+from collections import defaultdict
 
 from template_llm_service.messaging.publisher import Publisher
 from template_llm_service.core.processor import classify_page_template_batch
@@ -110,65 +111,80 @@ class Consumer:
             if not batch:
                 continue
 
-            start_time = time.monotonic()
-            batch_size = len(batch)
-            print(f"⚙️  Traitement d'un batch de {batch_size} messages...")
-            messages_to_process = [json.loads(msg.body) for msg in batch]
+            # --- Group messages by collection type ---
+            grouped_messages = defaultdict(list)
+            grouped_raw_data = defaultdict(list)
             
-            try:
-                processed_results = await classify_page_template_batch(messages_to_process)
+            for msg in batch:
+                try:
+                    raw_data = json.loads(msg.body)
+                    collection = raw_data.get('collection', 'unknown')
+                    grouped_messages[collection].append(msg)
+                    grouped_raw_data[collection].append(raw_data)
+                except json.JSONDecodeError:
+                    logging.error(f"Failed to decode message body: {msg.body}")
+                    # Handle poison pill message if necessary, e.g., send to DLQ
+
+            # --- Process each group as a separate batch ---
+            for collection, messages_to_process in grouped_raw_data.items():
+                original_message_group = grouped_messages[collection]
                 
-                async with self.connection.channel() as channel:
-                    for i, result in enumerate(processed_results):
-                        original_message = batch[i]
-                        
-                        # Toujours publier la métrique
-                        if 'metric_payload' in result:
-                            await self.publisher.publish_metric_message(result['metric_payload'], channel)
+                start_time = time.monotonic()
+                batch_size = len(messages_to_process)
+                print(f"⚙️  Traitement d'un batch de {batch_size} messages pour la collection '{collection}'...")
 
-                        if result['status'] == 'success':
-                            logging.info(f"\n\nTexte juste après identification template :\n{result['processed_message']}")
-                            await self.publisher.publish_message(result['processed_message'], channel)
-                            await original_message.ack()
-                        else: # status == 'error'
-                            retry_count = self._get_retry_count(original_message)
-                            if retry_count < MAX_RETRIES:
-                                print(f"   -> NACK du message (tag: {original_message.delivery_tag}) pour nouvelle tentative.")
-                                await original_message.nack(requeue=False)
-                            else:
-                                print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
-                                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-                                
-                                dlq_headers = DLQProperties.create_dlq_headers(
-                                    Exception(result['error_message']), 
-                                    'template-llm-service', 
-                                    MAX_RETRIES, 
-                                    original_message
-                                )
-                                
-                                await dlx.publish(
-                                    aio_pika.Message(
-                                        body=original_message.body,
-                                        headers=dlq_headers,
-                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                                    ),
-                                    routing_key=self.routing_key
-                                )
+                try:
+                    processed_results = await classify_page_template_batch(messages_to_process)
+                    
+                    async with self.connection.channel() as channel:
+                        for i, result in enumerate(processed_results):
+                            original_message = original_message_group[i]
+                            
+                            if 'metric_payload' in result:
+                                await self.publisher.publish_metric_message(result['metric_payload'], channel)
+
+                            if result['status'] == 'success':
+                                logging.info(f"\n\nTexte juste après identification template :\n{result['processed_message']}")
+                                await self.publisher.publish_message(result['processed_message'], channel)
                                 await original_message.ack()
+                            else: # status == 'error'
+                                retry_count = self._get_retry_count(original_message)
+                                if retry_count < MAX_RETRIES:
+                                    print(f"   -> NACK du message (tag: {original_message.delivery_tag}) pour nouvelle tentative.")
+                                    await original_message.nack(requeue=False)
+                                else:
+                                    print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
+                                    dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                                    
+                                    dlq_headers = DLQProperties.create_dlq_headers(
+                                        Exception(result['error_message']), 
+                                        'template-llm-service', 
+                                        MAX_RETRIES, 
+                                        original_message
+                                    )
+                                    
+                                    await dlx.publish(
+                                        aio_pika.Message(
+                                            body=original_message.body,
+                                            headers=dlq_headers,
+                                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                        ),
+                                        routing_key=self.routing_key
+                                    )
+                                    await original_message.ack()
 
-            except Exception as e:
-                print(f"❌ ERREUR CATASTROPHIQUE sur le batch (ex: LLM indisponible): {e}. NACK de tous les messages du batch.")
-                for msg in batch:
-                    try:
-                        await msg.nack(requeue=False)
-                    except aiormq.exceptions.ChannelInvalidStateError:
-                        # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
-                        print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
-                        break # Sortir de la boucle de nack
-            finally:
-                end_time = time.monotonic()
-                duration = end_time - start_time
-                print(f"🏁 Traitement du batch de {batch_size} message(s) terminé en {duration:.4f} secondes.")
+                except Exception as e:
+                    print(f"❌ ERREUR CATASTROPHIQUE sur le batch (ex: LLM indisponible): {e}. NACK de tous les messages du batch.")
+                    for msg in original_message_group:
+                        try:
+                            await msg.nack(requeue=False)
+                        except aiormq.exceptions.ChannelInvalidStateError:
+                            print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
+                            break
+                finally:
+                    end_time = time.monotonic()
+                    duration = end_time - start_time
+                    print(f"🏁 Traitement du batch '{collection}' de {batch_size} message(s) terminé en {duration:.4f} secondes.")
 
     async def start_consuming(self):
         """Démarre le consumer et la tâche de traitement de batch."""
