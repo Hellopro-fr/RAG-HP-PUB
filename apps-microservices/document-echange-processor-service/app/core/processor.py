@@ -2,6 +2,7 @@ import json
 import re
 import logging
 import os
+from typing import List, Dict
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
@@ -84,7 +85,7 @@ def make_chat_request(prompt_template, content,temperature=0.7):
     
     return chat_request
 
-async def process_document_data_for_templating(documents: list[dict], bdd: str = "milvus") -> list[dict]:
+async def process_document_data_for_templating(documents: List[Dict], bdd: str = "milvus") -> List[Dict]:
     
     try:
         docs = []
