@@ -5,3 +5,4 @@ pydantic
 pika
 pydantic-settings
 prometheus-client
+waitress

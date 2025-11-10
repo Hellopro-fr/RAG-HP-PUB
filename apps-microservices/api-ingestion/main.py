@@ -7,6 +7,7 @@ from app.core.credentials import settings
 from app.utils.params import params
 from app.utils.response import error_response
 
+from starlette.middleware.wsgi import WSGIMiddleware
 from common_utils.metrics.prometheus import get_metrics_app
 
 import logging
@@ -21,10 +22,10 @@ API Ingestion pour le projet RAG Hellopro 🚀
 
 app = FastAPI()
 
-# --- Mount the metrics app ---
+# --- Mount the metrics app using the WSGI adapter ---
 # This adds the /metrics endpoint to your FastAPI application
 metrics_app = get_metrics_app()
-app.mount("/metrics", metrics_app)
+app.mount("/metrics", WSGIMiddleware(metrics_app))
 
 # TODO
 # ajout des origines à utiliser pour l'API
