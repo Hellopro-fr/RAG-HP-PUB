@@ -101,7 +101,7 @@ services:
       # TIER 1: Mount a persistent volume for storing the snapshots
       - es-snapshots:/usr/share/elasticsearch/snapshots
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
       timeout: 10s
       retries: 5
