@@ -181,24 +181,25 @@ class DeepseekOCRDocExtractor:
         response = await self.extract_from_urls([url], prompt) 
         return response
     
-    def get_clean_result(response: dict) -> dict:
+    def get_clean_result(response: Dict) -> Dict:
         res_dict = {}
 
         if response.get('success') and response.get('results'):
-            for results in response['results']:
+            for result_item in response['results']:  # ✅ Renommé pour éviter confusion
 
                 texts = []
                 
-                filename = results['filename']
+                filename = result_item['filename']
+                # Normaliser la clé en utilisant basename
+                key = os.path.basename(filename)  # ✅ 
 
-                if 'results' in results.get('result', {}).keys():
-                    for res in results['result']['results']:
+                if 'results' in result_item.get('result', {}).keys():
+                    for res in result_item['result']['results']:
                         texts.append(res["result"])
                 else:
-                    texts.append(results['result']['result'])
+                    texts.append(result_item['result']['result'])
 
-
-                res_dict[filename] = " ".join(texts)
+                res_dict[key] = " ".join(texts)  # ✅ Utilise le basename comme clé
 
         return res_dict
 
