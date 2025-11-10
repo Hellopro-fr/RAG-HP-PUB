@@ -4,6 +4,7 @@ import time
 import json
 import asyncio
 import aiormq
+import traceback
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
@@ -124,6 +125,8 @@ class Consumer:
 
             except Exception as e:
                 print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
+                traceback.print_exc()
+                
                 for msg in batch:
                     try:
                         await msg.nack(requeue=False)
