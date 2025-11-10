@@ -111,6 +111,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
 
         extractor = DeepseekOCRDocExtractor()
         response = await extractor.extract_from_urls(docs)
+        print(f"🔍 response: '{response}'")
         results = extractor.get_clean_result(response)
         print(f"🔍 Results: '{results}'")
         
