@@ -576,7 +576,7 @@ services:
     # depends_on:
     #   - ocr-service
     deploy:
-      replicas: 10
+      replicas: 3
     logging: *logging_defaults
 
   template-llm-service:

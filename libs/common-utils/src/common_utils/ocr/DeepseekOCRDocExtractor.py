@@ -178,25 +178,30 @@ class DeepseekOCRDocExtractor:
         Returns:
             Dictionnaire contenant le résultat de l'extraction pour ce fichier
         """
-        response = await self.extract_from_urls([url], prompt)
-        
-        texts = []
-
-        if response.get('success') and response.get('results'):
-            results = response['results'][0]
-
-            if 'results' in results.get('result', {}).keys():
-                for res in results['result']['results']:
-                    texts.append(res["result"])
-            else:
-                texts.append(results['result']['result'])
-
-            return {
-                "text": " ".join(texts)
-            } 
-        
+        response = await self.extract_from_urls([url], prompt) 
         return response
     
+    def get_clean_result(response: dict) -> dict:
+        res_dict = {}
+
+        if response.get('success') and response.get('results'):
+            for results in response['results']:
+
+                texts = []
+                
+                filename = results['filename']
+
+                if 'results' in results.get('result', {}).keys():
+                    for res in results['result']['results']:
+                        texts.append(res["result"])
+                else:
+                    texts.append(results['result']['result'])
+
+
+                res_dict[filename] = " ".join(texts)
+
+        return res_dict
+
     async def _convert_to_pdf(self, content: BytesIO, filename: str) -> tuple[BytesIO, str]:
         """
         Convertit un fichier non-supporté en PDF en utilisant LibreOffice (asynchrone)

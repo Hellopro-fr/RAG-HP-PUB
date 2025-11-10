@@ -1,13 +1,9 @@
 import aio_pika
 import os
+import time
 import json
 import asyncio
-import hashlib
-import aiofiles
-from concurrent.futures import ThreadPoolExecutor
-from types import SimpleNamespace
-
-import traceback
+import aiormq
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
@@ -15,14 +11,15 @@ from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
+BATCH_SIZE = 10
+BATCH_TIMEOUT_SECONDS = 2.0
 
 class Consumer:
     def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
         self.connection = connection
         self.publisher = publisher
-        # self.executor = ProcessPoolExecutor(max_workers=1)
-        self.executor = ThreadPoolExecutor(max_workers=os.cpu_count() * 2)
         
+        self.message_buffer = asyncio.Queue()
         self.exchange_name = 'data_exchange_document'
         self.routing_key = 'new_data.document'
         self.queue_name = 'document_processing_queue'
@@ -53,169 +50,107 @@ class Consumer:
         await queue.bind(exchange, self.routing_key)
         return queue
 
-    async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
-        try:
-            data = json.loads(message.body)
-            document_data = data.get('data', {})
-            document_id = document_data.get('fichier_source')
-            bdd = "milvus"
+    async def batch_processor(self):
+        """Tâche de fond qui traite les messages par lots de manière asynchrone."""
+        print("⚙️  Processeur de batch démarré. En attente de messages...")
+        
+        while True:
+            batch = []
+            try:
+                # 1. Attendre indéfiniment le premier message pour démarrer un batch
+                first_message = await self.message_buffer.get()
+                batch.append(first_message)
 
-            # Vérifie si déjà en cours de traitement
-            if await self._is_processing(document_id):
-                print(f"⚠️ Document {document_id} déjà en traitement, skip")
-                await message.ack()
-                return
-            
-            # Marque comme "en cours" AVANT l'ACK
-            await self._mark_as_processing(document_id, message.body)
-            
-            # ✅ ACK immédiat
-            await message.ack()
-            
-            print(f"📥 Traitement OCR démarré pour {document_id}...")
+                # 2. Une fois le premier message reçu, essayer de remplir le reste du batch
+                #    en respectant le BATCH_TIMEOUT et le BATCH_SIZE.
+                while len(batch) < BATCH_SIZE:
+                    try:
+                        message = await asyncio.wait_for(self.message_buffer.get(), timeout=BATCH_TIMEOUT_SECONDS)
+                        batch.append(message)
+                    except asyncio.TimeoutError:
+                        # Le timeout a été atteint, on sort pour traiter le batch partiel
+                        break
+            except asyncio.CancelledError:
+                print("   -> Tâche de traitement de batch annulée.")
+                break
+
+            if not batch:
+                continue
+
+            start_time = time.monotonic()
+            batch_size = len(batch)
+            print(f"⚙️  Traitement d'un batch de {batch_size} messages...")
+            messages_to_process = [json.loads(msg.body) for msg in batch]
             
             try:
-                # Traitement long
-                result = await process_document_data_for_templating(
-                    document_data, bdd, self.executor
-                )
+                processed_results = await process_document_data_for_templating(messages_to_process)
                 
                 async with self.connection.channel() as channel:
-                    if 'metric_payload' in result.keys():
-                        await self.publisher.publish_metric_message(result['metric_payload'], channel)
+                    for i, result in enumerate(processed_results):
+                        original_message = batch[i]
+                        
+                        # Toujours publier la métrique
+                        if 'metric_payload' in result:
+                            await self.publisher.publish_metric_message(result['metric_payload'], channel)
 
-                    if result.get('status') == "success":
-                        output_message = result.get("processed_message")
-                        # Publie le résultat
-                        routing_key = 'data.ready_for_templating'  #if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
-                        output_message['routing_key'] = routing_key
-                        await self.publisher.publish_message(output_message, channel)
-                
-                # ✅ Marque comme terminé
-                await self._mark_as_completed(document_id)
-                print(f"✅ Traitement terminé pour {document_id}")
-                
+                        if result['status'] == 'success':
+                            await self.publisher.publish_message(result['processed_message'], channel)
+                            await original_message.ack()
+                        else: # status == 'error'
+                            retry_count = self._get_retry_count(original_message)
+                            if retry_count < MAX_RETRIES:
+                                print(f"   -> NACK du message (tag: {original_message.delivery_tag}) pour nouvelle tentative.")
+                                await original_message.nack(requeue=False)
+                            else:
+                                print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
+                                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                                
+                                dlq_headers = DLQProperties.create_dlq_headers(
+                                    Exception(result['error_message']), 
+                                    'document-echange-processor-service', 
+                                    MAX_RETRIES, 
+                                    original_message
+                                )
+                                
+                                await dlx.publish(
+                                    aio_pika.Message(
+                                        body=original_message.body,
+                                        headers=dlq_headers,
+                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                    ),
+                                    routing_key=self.routing_key
+                                )
+                                await original_message.ack()
+
             except Exception as e:
-                # ❌ En cas d'erreur, republier le message
-                print(f"❌ Erreur durant traitement: {e}")
-                traceback.print_exc()
-                await self._handle_processing_error(message.body, message.headers, e, document_id)
-                
-        except Exception as e:
-            print(f"❌ Erreur critique: {e}")
-            await message.nack(requeue=True)
+                print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
+                for msg in batch:
+                    try:
+                        await msg.nack(requeue=False)
+                    except aiormq.exceptions.ChannelInvalidStateError:
+                        # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
+                        print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
+                        break # Sortir de la boucle de nack
+            finally:
+                end_time = time.monotonic()
+                duration = end_time - start_time
+                print(f"🏁 Traitement du batch de {batch_size} message(s) terminé en {duration:.4f} secondes.")
+    
+    async def _on_message(self, message: aio_pika.abc.AbstractIncomingMessage):
+        """Callback léger qui met les messages dans un buffer asynchrone."""
+        await self.message_buffer.put(message)
 
-    def _get_processing_filepath(self, document_id: str) -> str:
-        """Génère un chemin de fichier sécurisé basé sur un hash"""
-        # Crée un hash unique du document_id
-        hash_id = hashlib.md5(document_id.encode()).hexdigest()
-        return f"/tmp/processing_{hash_id}.json"
-
-    async def _mark_as_processing(self, document_id: str, message_body: bytes):
-        """Sauvegarde l'état 'en cours'"""
-        filepath = self._get_processing_filepath(document_id)
-        
-        # Sauvegarde aussi l'ID original pour debug
-        data = {
-            'original_id': document_id,
-            'message': message_body.decode()
-        }
-        
-        async with aiofiles.open(filepath, 'w') as f:
-            await f.write(json.dumps(data))
-
-    async def _is_processing(self, document_id: str) -> bool:
-        """Vérifie si le document est déjà en traitement"""
-        import os
-        filepath = self._get_processing_filepath(document_id)
-        return os.path.exists(filepath)
-
-    async def _mark_as_completed(self, document_id: str):
-        """Supprime l'état 'en cours'"""
-        import os
-        filepath = self._get_processing_filepath(document_id)
-        try:
-            os.remove(filepath)
-        except FileNotFoundError:
-            pass
-
-    async def _handle_processing_error(self, message_body: bytes, message_headers: dict, error: Exception, document_id: str):
-        """Gère les erreurs après ACK"""
-        try:
-            data = json.loads(message_body)
-            retry_count = data.get('_retry_count', 0)
-            
-            if retry_count < MAX_RETRIES:
-                data['_retry_count'] = retry_count + 1
-                
-                async with self.connection.channel() as channel:
-                    exchange = await channel.get_exchange(self.retry_exchange)
-                    await exchange.publish(
-                        aio_pika.Message(
-                            body=json.dumps(data).encode(),
-                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                        ),
-                        routing_key=self.routing_key
-                    )
-                
-                print(f"🔄 Message republié (tentative {retry_count + 1}/{MAX_RETRIES})")
-            else:
-                await self._send_to_dlq(message_body, message_headers, error, MAX_RETRIES)
-            
-            # Nettoie l'état
-            await self._mark_as_completed(document_id)
-            
-        except Exception as e:
-            print(f"⚠️ Erreur lors de la gestion d'erreur: {e}")
-
-    async def _send_to_dlq(self, message_body: bytes, message_headers: dict, error: Exception, retry_count: int):
-        """Envoie à la DLQ en utilisant l'utilitaire partagé (après un ACK)."""
-        async with self.connection.channel() as channel:
-            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-            
-            # Create a mock message object that DLQProperties.create_dlq_headers can use.
-            # This is necessary because the original message was already ACK'd.
-            mock_message = SimpleNamespace(body=message_body, headers=message_headers)
-
-            dlq_headers = DLQProperties.create_dlq_headers(
-                error,
-                'document-echange-processor-service',
-                retry_count,
-                mock_message
-            )
-
-            await dlx.publish(
-                aio_pika.Message(
-                    body=message_body,
-                    headers=dlq_headers,
-                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                ),
-                routing_key=self.routing_key
-            )
 
     async def start_consuming(self):
-        """Démarre le consumer avec contrôle du parallélisme et gestion des erreurs."""
-        
-        # 1. Crée le channel et configure le prefetch
+        """Démarre le consumer et la tâche de traitement de batch."""
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=5)  # Nombre maximum de messages traités en parallèle
+        await channel.set_qos(prefetch_count=BATCH_SIZE)
         
-        # 2. Déclare et bind les queues/exchanges
         queue = await self._setup_queues(channel)
         
-        # 3. Crée un semaphore pour limiter le nombre de traitements simultanés
-        semaphore = asyncio.Semaphore(5)
+        # Démarrer la tâche de fond qui traitera les batches
+        asyncio.create_task(self.batch_processor())
         
-        async def safe_process(message):
-            """Wrapper pour limiter le parallélisme et capturer les erreurs."""
-            async with semaphore:
-                try:
-                    await self._process_message_task(message)
-                except Exception as e:
-                    print(f"⚠️ Erreur lors du traitement du message: {e}")
-                    # NACK pour remettre le message en queue
-                    await message.nack(requeue=True)
-        
-        # 4. Commence à consommer les messages
-        print("👂 Document-Processor: En attente de messages...")
-        await queue.consume(lambda message: asyncio.create_task(safe_process(message)))
+        # Commencer à consommer les messages et à les mettre dans le buffer
+        print("👂 Document-processor-service: En attente de messages...")
+        await queue.consume(self._on_message)
