@@ -108,12 +108,17 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
         response = await extractor.extract_from_urls(docs)
         results = extractor.get_clean_result(response)
         
+        print(f"🔍 Type de results: {type(results)}")
+        print(f"🔍 Clés dans results: {list(results.keys())}")
+
         processed_messages_result = []
 
         for document_data in documents:
             output_message = {}
 
             nom_doc = os.path.basename(document_data.get("document","inconnu"))
+            print(f"🔍 Cherche: '{nom_doc}'")
+            print(f"🔍 Existe? {nom_doc in results}")
             texts     = results[nom_doc]
             text_to_embed_clean = ""
             # logging.info(f"\n\nTexte juste après extraction : {texts}")
