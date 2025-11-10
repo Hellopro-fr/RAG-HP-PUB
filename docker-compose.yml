@@ -98,7 +98,7 @@ services:
       - es-snapshots:/usr/share/elasticsearch/snapshots
     command: >
       bash -c "chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/snapshots && 
-               exec gosu elasticsearch /usr/local/bin/docker-entrypoint.sh elasticsearch"
+               exec su elasticsearch -c '/usr/local/bin/docker-entrypoint.sh elasticsearch'"
     healthcheck:
       test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
