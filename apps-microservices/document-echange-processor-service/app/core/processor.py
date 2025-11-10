@@ -88,8 +88,10 @@ def make_chat_request(prompt_template, content,temperature=0.7):
 async def process_document_data_for_templating(documents: List[Dict], bdd: str = "milvus") -> List[Dict]:
     
     try:
+        print(f"🔍 Liste Document: {documents}")
         docs = []
         for document_data in documents:
+            print(f"🔍 Document data: {document_data}")
 
             res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
             print(f"🔍 Type Res recherche: {type(res)}")
