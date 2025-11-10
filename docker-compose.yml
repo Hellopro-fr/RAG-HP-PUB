@@ -236,6 +236,8 @@ services:
       - "8509:8509"
     env_file:
       - .env
+    networks:
+      - services-net
     logging: *logging_defaults
 
   api-recherche-service:
@@ -468,6 +470,8 @@ services:
       - .env
     deploy:
       replicas: 8
+    networks:
+      - services-net
     logging: *logging_defaults
 
   product-processor-service:

@@ -10,6 +10,6 @@ scrape_configs:
     # This uses Docker's internal DNS to find all running container instances (replicas) of this service
     dns_sd_configs:
     - names:
-      - tasks.website-processor-service # The service name defined in docker-compose
+      - website-processor-service # The service name defined in docker-compose
       type: 'A'
       port: 8530
