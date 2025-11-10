@@ -234,6 +234,8 @@ class ElasticsearchClient:
 
 @lru_cache()
 def get_es_client() -> ElasticsearchClient:
+    print(f"--- DEBUG: DLQ Manager ES_USERNAME = {ES_USERNAME}")
+    print(f"--- DEBUG: DLQ Manager ES_PASSWORD is set: {bool(ES_PASSWORD)}")
     # Use credentials if they are provided
     if ES_USERNAME and ES_PASSWORD:
         es_instance = AsyncElasticsearch(
