@@ -80,7 +80,6 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.1
     container_name: elasticsearch
     profiles: ["disabled"] # Désactivé par défaut, activé sur le Host VM via override
-    user: "1000:1000" # Run as the 'elasticsearch' user to ensure correct volume permissions
     environment:
       - discovery.type=single-node
       # TIER 2: Enable security features
@@ -101,6 +100,9 @@ services:
       - elasticsearch-data:/usr/share/elasticsearch/data
       # TIER 1: Mount a persistent volume for storing the snapshots
       - es-snapshots:/usr/share/elasticsearch/snapshots
+    command: >
+      bash -c "chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/snapshots &&
+               /usr/local/bin/docker-entrypoint.sh elasticsearch"
     healthcheck:
       test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
       interval: 10s
