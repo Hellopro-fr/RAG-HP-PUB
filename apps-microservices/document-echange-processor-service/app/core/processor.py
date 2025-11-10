@@ -90,7 +90,10 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     try:
         docs = []
         for document_data in documents:
+
             res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
+            print(f"🔍 Type Res recherche: {type(res)}")
+            print(f"🔍 Res recherche: {res}")
 
             tab_data = res.get('data',[])
 
