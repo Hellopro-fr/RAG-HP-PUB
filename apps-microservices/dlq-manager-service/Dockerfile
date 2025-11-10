@@ -1,5 +1,5 @@
 # Stage 1: Build the React frontend
-FROM node:18-alpine AS build-frontend
+FROM node:20-alpine AS build-frontend
 WORKDIR /app/frontend
 
 # Install pnpm
