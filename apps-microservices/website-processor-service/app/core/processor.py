@@ -86,7 +86,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     }
 
     # Étape 4: Afficher le message de sortie pour débogage
-    logging.info(f"🔍Website-Processor: Message prêt pour {log}: {json.dumps(output_message, indent=2)}")
+    logging.info(f"🔍Website-Processor: Message prêt pour {log}")
     
     # Étape 5: Retourner le message prêt à être publié
     logging.info(f"📦 Website-Processor: Website traité pour {log}.")
