@@ -14,4 +14,4 @@ pydantic
 aio-pika
 psutil
 prometheus-client
-Werkzeug
+waitress

@@ -4,8 +4,7 @@ import functools
 import logging
 from threading import Thread
 from prometheus_client import start_http_server, Histogram, REGISTRY, make_wsgi_app
-from werkzeug.middleware.dispatcher import DispatcherMiddleware
-from werkzeug.serving import run_simple
+from waitress import serve
 
 # Define a Histogram metric. Histograms are ideal for measuring durations.
 # We will label it by the service name and the outcome (status).
@@ -22,9 +21,8 @@ def start_metrics_server_in_thread(port: int = 8000):
     """
     def run_server():
         app = make_wsgi_app()
-        # Using run_simple from werkzeug for a more production-ready simple server
-        httpd = run_simple('0.0.0.0', port, app)
-        httpd.serve_forever()
+        # Using waitress for a production-ready simple server
+        serve(app, host='0.0.0.0', port=port)
 
     metrics_thread = Thread(target=run_server, daemon=True)
     metrics_thread.start()
