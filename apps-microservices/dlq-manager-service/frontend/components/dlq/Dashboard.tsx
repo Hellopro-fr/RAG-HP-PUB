@@ -4,23 +4,22 @@ import * as React from "react";
 import { useState, useEffect } from "react"
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Button } from "@/components/ui/button"
-import { Calendar } from "lucide-react"
 import { apiGetDashboardStats, DashboardStats } from "@/lib/api";
+import { DateTimePicker } from "./DateTimePicker";
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState({ date_start: "", date_end: "" });
+  const [filters, setFilters] = useState<{ date_start?: Date; date_end?: Date }>({});
 
-  // Modified to accept filters as an argument to prevent stale state issues.
-  const fetchStats = async (currentFilters: { date_start: string; date_end: string }) => {
+  const fetchStats = async (currentFilters: { date_start?: Date; date_end?: Date }) => {
     try {
         setLoading(true);
         setError(null);
         const body: { date_start?: string, date_end?: string } = {};
-        if (currentFilters.date_start) body.date_start = new Date(currentFilters.date_start).toISOString();
-        if (currentFilters.date_end) body.date_end = new Date(currentFilters.date_end).toISOString();
+        if (currentFilters.date_start) body.date_start = currentFilters.date_start.toISOString();
+        if (currentFilters.date_end) body.date_end = currentFilters.date_end.toISOString();
         
         const response = await apiGetDashboardStats(body);
         setStats(response.data);
@@ -33,16 +32,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    // Initial fetch on component mount with default empty filters.
-    fetchStats({ date_start: "", date_end: "" });
+    fetchStats({});
   }, []);
 
-  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters(prev => ({...prev, [e.target.name]: e.target.value}));
-  };
-
   const handleApplyFilter = () => {
-      // Pass the current, up-to-date filters state directly to the fetch function.
       fetchStats(filters);
   }
 
@@ -72,32 +65,20 @@ export default function Dashboard() {
   return (
     <div className="p-8 space-y-8">
       {/* Date Range Filter */}
-      <div className="flex gap-4 items-end">
-        <div className="flex-1 max-w-xs">
+      <div className="flex flex-wrap gap-4 items-end">
+        <div className="flex-1 min-w-[250px]">
           <label className="block text-sm font-medium text-noir-primary mb-2">From Date</label>
-          <div className="relative">
-            <Calendar className="absolute left-3 top-3 w-4 h-4 text-gris-primary" />
-            <input
-              type="datetime-local"
-              name="date_start"
-              value={filters.date_start}
-              onChange={handleFilterChange}
-              className="w-full pl-10 pr-4 py-2 border border-gris-blanc rounded-lg bg-white-primary text-noir-primary"
-            />
-          </div>
+          <DateTimePicker 
+            date={filters.date_start}
+            setDate={(date) => setFilters(prev => ({ ...prev, date_start: date }))}
+          />
         </div>
-        <div className="flex-1 max-w-xs">
+        <div className="flex-1 min-w-[250px]">
           <label className="block text-sm font-medium text-noir-primary mb-2">To Date</label>
-          <div className="relative">
-            <Calendar className="absolute left-3 top-3 w-4 h-4 text-gris-primary" />
-            <input
-              type="datetime-local"
-              name="date_end"
-              value={filters.date_end}
-              onChange={handleFilterChange}
-              className="w-full pl-10 pr-4 py-2 border border-gris-blanc rounded-lg bg-white-primary text-noir-primary"
-            />
-          </div>
+          <DateTimePicker
+            date={filters.date_end}
+            setDate={(date) => setFilters(prev => ({ ...prev, date_end: date }))}
+          />
         </div>
         <Button onClick={handleApplyFilter} style={{ backgroundColor: "var(--bleu-primary)", color: "white" }} className="hover:opacity-90">
           Apply Filter

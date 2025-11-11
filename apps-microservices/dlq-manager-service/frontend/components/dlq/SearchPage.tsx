@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, SearchIcon } from "lucide-react"
+import { SearchIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import MessageList from "./MessageList"
 import Pagination from "./Pagination"
@@ -10,12 +10,23 @@ import MessageDetailModal from "./MessageDetailModal";
 import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, Message } from "@/lib/api";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DateTimePicker } from "./DateTimePicker";
 
-const loadFiltersFromStorage = () => {
+interface Filters {
+    service_names: string[];
+    status: string[];
+    date_start?: Date;
+    date_end?: Date;
+}
+
+const loadFiltersFromStorage = (): Omit<Filters, 'date_start' | 'date_end'> => {
     try {
         const stored = localStorage.getItem('dlq-filters-v3');
         const filters = stored ? JSON.parse(stored) : {};
-        // Default to array for multi-select
+        // We don't persist dates from local storage
+        delete filters.date_start;
+        delete filters.date_end;
+
         if (!filters.status || !Array.isArray(filters.status)) {
             filters.status = ['New'];
         }
@@ -29,7 +40,12 @@ const loadFiltersFromStorage = () => {
     }
 };
 
-const saveFiltersToStorage = (filters: any) => localStorage.setItem('dlq-filters-v3', JSON.stringify(filters));
+const saveFiltersToStorage = (filters: Filters) => {
+    const storableFilters = { ...filters };
+    delete storableFilters.date_start;
+    delete storableFilters.date_end;
+    localStorage.setItem('dlq-filters-v3', JSON.stringify(storableFilters));
+}
 
 const statusOptions: MultiSelectOption[] = [
     { value: 'New', label: 'New' },
@@ -38,7 +54,7 @@ const statusOptions: MultiSelectOption[] = [
 ];
 
 export default function SearchPage() {
-  const [filters, setFilters] = useState(loadFiltersFromStorage);
+  const [filters, setFilters] = useState<Filters>(loadFiltersFromStorage());
   const [searchTerm, setSearchTerm] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -52,7 +68,6 @@ export default function SearchPage() {
   const [pageSize, setPageSize] = useState(20);
 
   useEffect(() => {
-    // Fetch service names for the multi-select dropdown
     apiGetDashboardStats().then(response => {
         const options = response.data.by_service.map(bucket => ({
             value: bucket.key,
@@ -69,17 +84,18 @@ export default function SearchPage() {
     setError(null);
     setSelectedIds(new Set());
     try {
-      // Clean up filters before sending
       const activeFilters: Record<string, any> = {};
-      for (const key in filters) {
+      
+      (Object.keys(filters) as Array<keyof Filters>).forEach(key => {
         const value = filters[key];
-        if (value && (!Array.isArray(value) || value.length > 0)) {
+        if (key === 'date_start' || key === 'date_end') {
+          if (value instanceof Date) {
+            activeFilters[key] = value.toISOString();
+          }
+        } else if (Array.isArray(value) && value.length > 0) {
           activeFilters[key] = value;
         }
-      }
-      if (activeFilters.date_start) activeFilters.date_start = new Date(activeFilters.date_start).toISOString();
-      if (activeFilters.date_end) activeFilters.date_end = new Date(activeFilters.date_end).toISOString();
-
+      });
 
       const response = await apiSearchMessages({
           filters: activeFilters, 
@@ -111,8 +127,8 @@ export default function SearchPage() {
     }
   };
 
-  const handleFilterChange = (name: string, value: any) => {
-    setFilters((prev: any) => ({ ...prev, [name]: value }));
+  const handleFilterChange = <K extends keyof Filters>(name: K, value: Filters[K]) => {
+    setFilters((prev) => ({ ...prev, [name]: value }));
   };
   
   const handleSelectAll = (checked: boolean) => {
@@ -220,25 +236,19 @@ export default function SearchPage() {
                 />
             </div>
 
-            <div className="flex gap-4 items-end">
-                <div className="flex-1">
+            <div>
                 <label className="block text-sm font-medium text-noir-primary mb-2">From Date</label>
-                <div className="relative">
-                    <Calendar className="absolute left-3 top-3 w-4 h-4 text-gris-primary" />
-                    <input type="datetime-local" name="date_start" value={filters.date_start || ''} onChange={(e) => handleFilterChange('date_start', e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gris-blanc rounded-lg bg-white-primary text-noir-primary"/>
-                </div>
-                </div>
+                <DateTimePicker
+                    date={filters.date_start}
+                    setDate={(date) => handleFilterChange('date_start', date)}
+                />
             </div>
-            <div className="flex gap-4 items-end">
-                <div className="flex-1">
+            <div>
                 <label className="block text-sm font-medium text-noir-primary mb-2">To Date</label>
-                <div className="relative">
-                    <Calendar className="absolute left-3 top-3 w-4 h-4 text-gris-primary" />
-                    <input type="datetime-local" name="date_end" value={filters.date_end || ''} onChange={(e) => handleFilterChange('date_end', e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gris-blanc rounded-lg bg-white-primary text-noir-primary"/>
-                </div>
-                </div>
+                <DateTimePicker
+                    date={filters.date_end}
+                    setDate={(date) => handleFilterChange('date_end', date)}
+                />
             </div>
         </div>
 

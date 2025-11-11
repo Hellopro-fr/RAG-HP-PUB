@@ -68,10 +68,10 @@ class ElasticsearchClient:
         
         if search_term:
             query["bool"]["must"].append({
-                "multi_match": {
-                    "query": search_term,
+                "query_string": {
+                    "query": f"*{search_term}*",
                     "fields": ["error_reason", "original_payload.*", "service_name"],
-                    "fuzziness": "AUTO"
+                    "lenient": True
                 }
             })
 
