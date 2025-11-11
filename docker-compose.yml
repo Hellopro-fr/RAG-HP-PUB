@@ -1005,8 +1005,13 @@ services:
     restart: unless-stopped
     expose:
       - "3001"
+    volumes:
+      # Mount a volume to persist crawl data outside the container
+      - crawler_data:/app/storage
     env_file:
       - .env
+    environment:
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     networks:
       - services-net
     logging: &logging_defaults

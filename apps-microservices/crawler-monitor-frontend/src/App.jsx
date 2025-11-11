@@ -1,384 +1,673 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Eye, Code } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import {
+  Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Code,
+  Search, Calendar, Filter, Server, Download, ChevronLeft, ChevronRight,
+  AlertCircle, Info, Zap, ExternalLink, TrendingUp
+} from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const API_URL = '/api';
+const JOBS_PER_PAGE = 20;
 
-function App() {
-  const [jobs, setJobs] = useState([]);
-  const [selectedJob, setSelectedJob] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const wsRef = useRef(null);
+const StatCard = ({ title, value, icon: Icon, color, trend }) => (
+  <div className="bg-gray-800 p-4 rounded-lg flex items-center gap-4 shadow-lg hover:bg-gray-750 transition-all">
+    <div className={`w-12 h-12 flex items-center justify-center rounded-lg bg-${color}-500/20`}>
+      <Icon className={`w-6 h-6 text-${color}-400`} />
+    </div>
+    <div className="flex-1">
+      <p className="text-2xl font-bold text-white">{value}</p>
+      <p className="text-sm text-gray-400">{title}</p>
+      {trend && (
+        <p className={`text-xs mt-1 ${trend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+          {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%
+        </p>
+      )}
+    </div>
+  </div>
+);
 
-  const fetchJobs = async () => {
-    try {
-      const response = await fetch(`${API_URL}/jobs`);
-      const data = await response.json();
-      setJobs(data);
-      if (!selectedJob && data.length > 0) {
-        // Automatically select the first job if none is selected
-        // fetchJobDetails(data[0].id);
-      }
-    } catch (error) {
-      console.error('Error fetching jobs:', error);
-    } finally {
-      setLoading(false);
+const JobCard = ({ job, onClick, isSelected }) => {
+  const getStatusInfo = (job) => {
+    const status = job.status || 'pending';
+    switch (status.toLowerCase()) {
+      case 'running': return { color: 'blue', text: 'En cours', icon: RefreshCw, spin: true };
+      case 'finished': return { color: 'green', text: 'Succès', icon: CheckCircle };
+      case 'failed': return { color: 'red', text: 'Échec', icon: XCircle };
+      case 'stopping': return { color: 'yellow', text: 'Arrêt...', icon: AlertTriangle };
+      default: return { color: 'gray', text: 'Autre', icon: Clock };
     }
   };
 
-  const fetchJobDetails = async (id) => {
-    // Dans cette architecture, les détails viennent de l'appel /api/jobs
-    const jobDetail = jobs.find(j => j.id === id);
-    setSelectedJob(jobDetail || null);
-  };
+  const status = getStatusInfo(job);
+  const StatusIcon = status.icon;
 
-  useEffect(() => {
-    fetchJobs();
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api`;
-    
-    wsRef.current = new WebSocket(wsUrl);
-    
-    wsRef.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'file_changed') { // We kept the same message type for simplicity
-        fetchJobs();
-        // If a job is selected and it's the one that was updated, refresh its details
-        if (selectedJob && data.path.includes(selectedJob.id)) {
-           // Refetching jobs will update the details in the list
-        }
-      }
-    };
-
-    return () => {
-      if (wsRef.current) wsRef.current.close();
-    };
-  }, [selectedJob]); // Re-run effect if selectedJob changes
-
-  const formatDuration = (ms) => {
-    if (!ms) return 'N/A';
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  };
-
-  const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleString('fr-FR');
-  };
-
-  const getStatusBadge = (job) => {
-    if (!job.stats) {
-      return { color: 'gray', text: 'En cours', icon: Clock };
-    }
-    if (job.stats.requestsFailed > 0 && job.stats.requestsFinished === 0) {
-      return { color: 'red', text: 'Échec', icon: XCircle };
-    }
-    if (job.stats.requestsFailed > 0) {
-      return { color: 'yellow', text: 'Partiel', icon: AlertTriangle };
-    }
-    return { color: 'green', text: 'Succès', icon: CheckCircle };
-  };
-
-  const JobCard = ({ job }) => {
-    const status = getStatusBadge(job);
-    const StatusIcon = status.icon;
-
-    return (
-      <div
-        onClick={() => fetchJobDetails(job.id)}
-        className={`bg-gray-800 rounded-lg p-4 cursor-pointer hover:bg-gray-700 border-l-4 transition-all ${
-          selectedJob?.id === job.id ? 'border-blue-500 bg-gray-700' : `border-${status.color}-500`
-        }`}
-      >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-white font-semibold">Job #{job.id}</span>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium bg-${status.color}-500/20 text-${status.color}-400`}>
-                {status.text}
-              </span>
-            </div>
-            {job.domain && (
-              <p className="text-gray-400 text-sm truncate">{job.domain}</p>
-            )}
-          </div>
-          <StatusIcon className={`w-5 h-5 text-${status.color}-400`} />
+  return (
+    <div
+      onClick={onClick}
+      className={`bg-gray-800 rounded-lg p-4 cursor-pointer hover:bg-gray-700 border-l-4 transition-all ${
+        isSelected ? 'border-blue-500 bg-gray-700 shadow-lg' : `border-${status.color}-500`
+      }`}
+    >
+      <div className="flex justify-between items-start">
+        <div className="min-w-0 flex-1">
+          <p className="text-white font-semibold truncate">Job #{job.id}</p>
+          <p className="text-gray-400 text-sm truncate">{job.domain}</p>
         </div>
-        
-        {job.stats && (
-          <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
-            <div>
-              <p className="text-gray-500">Total</p>
-              <p className="text-white font-semibold">{job.stats.requestsTotal}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Succès</p>
-              <p className="text-green-400 font-semibold">{job.stats.requestsFinished}</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Échecs</p>
-              <p className="text-red-400 font-semibold">{job.stats.requestsFailed}</p>
-            </div>
-          </div>
-        )}
-        
-        <div className="mt-3 text-xs text-gray-500">
-          {formatDate(job.lastModified)}
+        <div className="flex-shrink-0 flex items-center gap-2">
+          <span className={`px-2 py-0.5 rounded text-xs font-medium bg-${status.color}-500/20 text-${status.color}-400`}>
+            {status.text}
+          </span>
+          <StatusIcon className={`w-5 h-5 text-${status.color}-400 ${status.spin ? 'animate-spin' : ''}`} />
         </div>
       </div>
-    );
-  };
+      <p className="mt-3 text-xs text-gray-500">{new Date(job.start_time).toLocaleString('fr-FR')}</p>
+    </div>
+  );
+};
 
-  const JobDetails = ({ job }) => {
-    if (!job) return null;
-
-    const renderContent = () => {
-      if (!job.stats) {
-        return (
-          <div className="text-center py-12 text-gray-400">
-            <Clock className="w-12 h-12 mx-auto mb-4 animate-spin" />
-            <p>Job en cours d'exécution ou log incomplet...</p>
-          </div>
-        );
-      }
-
-      const successRate = job.stats.requestsTotal > 0
-        ? ((job.stats.requestsFinished / job.stats.requestsTotal) * 100).toFixed(1)
-        : 0;
-
-      if (showRaw) {
-        return (
-          <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[calc(100vh-200px)]">
-            <pre className="text-xs text-gray-300 font-mono">{job.rawContent}</pre>
-          </div>
-        );
-      }
+const AdvancedLogViewer = ({ content, jobId }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [levelFilter, setLevelFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [linesPerPage] = useState(100);
+  
+  const parsedLines = useMemo(() => {
+    return content.split('\n').map((line, index) => {
+      const lowerLine = line.toLowerCase();
+      let level = 'info';
+      if (lowerLine.includes('error')) level = 'error';
+      else if (lowerLine.includes('warn')) level = 'warn';
       
-      return (
-        <>
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-gray-800 rounded-lg p-4">
-              <Activity className="w-5 h-5 text-blue-400 mb-2" />
-              <p className="text-2xl font-bold text-white">{job.stats.requestsTotal}</p>
-              <p className="text-gray-400 text-sm">Total</p>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <CheckCircle className="w-5 h-5 text-green-400 mb-2" />
-              <p className="text-2xl font-bold text-green-400">{job.stats.requestsFinished}</p>
-              <p className="text-gray-400 text-sm">Succès</p>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <XCircle className="w-5 h-5 text-red-400 mb-2" />
-              <p className="text-2xl font-bold text-red-400">{job.stats.requestsFailed}</p>
-              <p className="text-gray-400 text-sm">Échecs</p>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <Clock className="w-5 h-5 text-purple-400 mb-2" />
-              <p className="text-2xl font-bold text-white">
-                {formatDuration(job.stats.crawlerRuntimeMillis)}
-              </p>
-              <p className="text-gray-400 text-sm">Durée</p>
-            </div>
-          </div>
+      const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
+      const url = urlMatch ? urlMatch[1] : null;
+      
+      const timestampMatch = line.match(/(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2})/);
+      const timestamp = timestampMatch ? timestampMatch[1] : null;
+      
+      return { line, level, url, timestamp, index };
+    });
+  }, [content]);
 
-          {/* Success Rate */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-white font-semibold">Taux de réussite</span>
-              <span className="text-2xl font-bold text-blue-400">{successRate}%</span>
-            </div>
-            <div className="w-full bg-gray-700 rounded-full h-3">
-              <div
-                className={`h-3 rounded-full transition-all ${
-                  successRate > 80 ? 'bg-green-500' : successRate > 50 ? 'bg-yellow-500' : 'bg-red-500'
-                }`}
-                style={{ width: `${successRate}%` }}
-              />
-            </div>
-          </div>
+  const filteredLines = useMemo(() => {
+    return parsedLines.filter(({ line, level }) => {
+      const matchesSearch = !searchTerm || line.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesLevel = levelFilter === 'all' || level === levelFilter;
+      return matchesSearch && matchesLevel;
+    });
+  }, [parsedLines, searchTerm, levelFilter]);
 
-          {/* Timeline & HTTP Codes */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="text-white font-semibold mb-3">Timeline</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Début</span>
-                  <span className="text-white">{formatDate(job.stats.crawlerStartedAt)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Fin</span>
-                  <span className="text-white">{formatDate(job.stats.crawlerFinishedAt)}</span>
-                </div>
-              </div>
-            </div>
+  const paginatedLines = useMemo(() => {
+    const startIndex = (currentPage - 1) * linesPerPage;
+    return filteredLines.slice(startIndex, startIndex + linesPerPage);
+  }, [filteredLines, currentPage, linesPerPage]);
 
-            {job.stats.requestsWithStatusCode && (
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-white font-semibold mb-3">Codes HTTP</h3>
-                <div className="flex gap-3 flex-wrap">
-                  {Object.entries(job.stats.requestsWithStatusCode).map(([code, count]) => (
-                    <div
-                      key={code}
-                      className={`px-3 py-1 rounded-lg text-center ${
-                        code.startsWith('2')
-                          ? 'bg-green-500/20 text-green-400'
-                          : code.startsWith('4')
-                          ? 'bg-red-500/20 text-red-400'
-                          : 'bg-yellow-500/20 text-yellow-400'
-                      }`}
-                    >
-                      <p className="font-bold">{code}</p>
-                      <p className="text-xs opacity-75">{count}x</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+  const totalPages = Math.ceil(filteredLines.length / linesPerPage);
 
-          {/* Errors */}
-          {job.errors && job.errors.length > 0 && (
-            <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle className="w-5 h-5 text-red-400" />
-                <h3 className="text-red-400 font-semibold">Erreurs ({job.errors.length})</h3>
-              </div>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {job.errors.map((error, idx) => (
-                  <div key={idx} className="bg-gray-900/50 rounded p-3 text-sm text-red-300 font-mono">
-                    {error}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+  const levelStats = useMemo(() => {
+    const stats = { error: 0, warn: 0, info: 0 };
+    parsedLines.forEach(({ level }) => stats[level]++);
+    return stats;
+  }, [parsedLines]);
 
-          {/* Warnings */}
-          {job.warnings && job.warnings.length > 0 && (
-            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertTriangle className="w-5 h-5 text-yellow-400" />
-                <h3 className="text-yellow-400 font-semibold">Avertissements ({job.warnings.length})</h3>
-              </div>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {job.warnings.slice(0, 10).map((warning, idx) => (
-                  <div key={idx} className="bg-gray-900/50 rounded p-3 text-sm text-yellow-300 font-mono">
-                    {warning}
-                  </div>
-                ))}
-                {job.warnings.length > 10 && (
-                  <p className="text-gray-500 text-sm mt-2">
-                    ... et {job.warnings.length - 10} autres avertissements
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </>
-      );
+  const highlightLog = (level) => {
+    switch(level) {
+      case 'error': return 'text-red-400 bg-red-900/20';
+      case 'warn': return 'text-yellow-400 bg-yellow-900/20';
+      default: return 'text-gray-300';
     }
+  };
 
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white">Job #{job.id}</h2>
-            {job.site && <p className="text-gray-400 mt-1 truncate">{job.site}</p>}
-          </div>
-          <button
-            onClick={() => setShowRaw(!showRaw)}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
-          >
-            <Code className="w-4 h-4" />
-            {showRaw ? 'Vue détaillée' : 'Logs bruts'}
-          </button>
-        </div>
-        {renderContent()}
-      </div>
+  const highlightSearchTerm = (text) => {
+    if (!searchTerm) return text;
+    const parts = text.split(new RegExp(`(${searchTerm})`, 'gi'));
+    return parts.map((part, i) => 
+      part.toLowerCase() === searchTerm.toLowerCase() 
+        ? <span key={i} className="bg-yellow-500 text-black font-bold">{part}</span>
+        : part
     );
+  };
+
+  const downloadLogs = (format) => {
+    let data, filename, type;
+    
+    if (format === 'txt') {
+      data = filteredLines.map(l => l.line).join('\n');
+      filename = `job-${jobId}-logs.txt`;
+      type = 'text/plain';
+    } else if (format === 'json') {
+      data = JSON.stringify(filteredLines, null, 2);
+      filename = `job-${jobId}-logs.json`;
+      type = 'application/json';
+    } else if (format === 'csv') {
+      data = 'Index,Level,Line,URL,Timestamp\n' + 
+        filteredLines.map(l => 
+          `${l.index},"${l.level}","${l.line.replace(/"/g, '""')}","${l.url || ''}","${l.timestamp || ''}"`
+        ).join('\n');
+      filename = `job-${jobId}-logs.csv`;
+      type = 'text/csv';
+    }
+    
+    const blob = new Blob([data], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-300">
-      <header className="bg-gray-800 border-b border-gray-700 sticky top-0 z-10">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Activity className="w-8 h-8 text-blue-400" />
-              <div>
-                <h1 className="text-2xl font-bold text-white">Crawlee Monitor</h1>
-                <p className="text-gray-400 text-sm">Surveillance en temps réel</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                  autoRefresh
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                }`}
-              >
-                <RefreshCw className={`w-4 h-4 ${autoRefresh ? 'animate-spin' : ''}`} />
-                Auto-refresh
-              </button>
-              <button
-                onClick={fetchJobs}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-              >
-                Actualiser
-              </button>
-            </div>
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3 flex items-center gap-3">
+          <XCircle className="w-8 h-8 text-red-400" />
+          <div>
+            <p className="text-2xl font-bold text-red-400">{levelStats.error}</p>
+            <p className="text-sm text-gray-400">Erreurs</p>
           </div>
         </div>
-      </header>
+        <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3">
+          <AlertTriangle className="w-8 h-8 text-yellow-400" />
+          <div>
+            <p className="text-2xl font-bold text-yellow-400">{levelStats.warn}</p>
+            <p className="text-sm text-gray-400">Avertissements</p>
+          </div>
+        </div>
+        <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex items-center gap-3">
+          <Info className="w-8 h-8 text-blue-400" />
+          <div>
+            <p className="text-2xl font-bold text-blue-400">{levelStats.info}</p>
+            <p className="text-sm text-gray-400">Info</p>
+          </div>
+        </div>
+      </div>
 
-      <div className="flex h-[calc(100vh-81px)]">
-        <aside className="w-96 bg-gray-800 border-r border-gray-700 overflow-y-auto">
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white font-semibold">Jobs ({jobs.length})</h2>
-              <span className="text-gray-400 text-sm">
-                {jobs.filter(j => j.stats).length} terminés
+      <div className="bg-gray-800 p-4 rounded-lg space-y-3">
+        <div className="flex gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              placeholder="Rechercher dans les logs..."
+              value={searchTerm}
+              onChange={e => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </div>
+          
+          <select
+            value={levelFilter}
+            onChange={e => {
+              setLevelFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="bg-gray-900 border border-gray-700 rounded-md px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+          >
+            <option value="all">Tous les niveaux</option>
+            <option value="error">Erreurs</option>
+            <option value="warn">Avertissements</option>
+            <option value="info">Info</option>
+          </select>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => downloadLogs('txt')}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              TXT
+            </button>
+            <button
+              onClick={() => downloadLogs('json')}
+              className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 rounded-md text-sm transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              JSON
+            </button>
+            <button
+              onClick={() => downloadLogs('csv')}
+              className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              CSV
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-sm text-gray-400">
+          <span>{filteredLines.length} lignes trouvées</span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span>
+                Page {currentPage} / {totalPages}
               </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
-            {loading ? (
-              <div className="text-center py-8">
-                <RefreshCw className="w-8 h-8 text-gray-500 animate-spin mx-auto mb-2" />
-                <p className="text-gray-500">Chargement...</p>
-              </div>
-            ) : jobs.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Eye className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>Aucun job détecté</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {jobs.map(job => (
-                  <JobCard key={job.id} job={job} />
-                ))}
-              </div>
-            )}
-          </div>
-        </aside>
+          )}
+        </div>
+      </div>
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-6">
-            {selectedJob ? (
-              <JobDetails job={selectedJob} />
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center text-gray-500">
-                  <Eye className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg">Sélectionnez un job pour voir les détails</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </main>
+      <div className="bg-gray-900 rounded-lg font-mono text-xs max-h-[60vh] overflow-auto">
+        <div className="p-4">
+          {paginatedLines.map(({ line, level, url, timestamp, index }) => (
+            <div 
+              key={index} 
+              className={`flex gap-4 items-start py-1 hover:bg-gray-800/50 ${highlightLog(level)} px-2 rounded`}
+            >
+              <span className="text-gray-600 select-none w-12 text-right flex-shrink-0">
+                {index + 1}
+              </span>
+              <span className="flex-1 whitespace-pre-wrap break-all">
+                {highlightSearchTerm(line)}
+              </span>
+              {url && (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0 text-blue-400 hover:text-blue-300"
+                  title="Ouvrir l'URL"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
+};
+
+const ErrorVisualization = ({ errors, warnings }) => {
+  const errorTypes = useMemo(() => {
+    const types = {};
+    errors.forEach(err => {
+      const type = err.split(':')[0] || 'Unknown';
+      types[type] = (types[type] || 0) + 1;
+    });
+    return Object.entries(types).map(([name, value]) => ({ name, value }));
+  }, [errors]);
+
+  const COLORS = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16'];
+
+  return (
+    <div className="bg-gray-800 p-4 rounded-lg">
+      <h3 className="text-lg font-semibold text-white mb-4">Distribution des Erreurs</h3>
+      <ResponsiveContainer width="100%" height={300}>
+        <PieChart>
+          <Pie
+            data={errorTypes}
+            cx="50%"
+            cy="50%"
+            labelLine={false}
+            label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+            outerRadius={80}
+            fill="#8884d8"
+            dataKey="value"
+          >
+            {errorTypes.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+const JobDetails = ({ job, onToggleRaw, showRaw }) => {
+  if (!job) return null;
+  if (job.error) {
+    return (
+      <div className="text-center py-12">
+        <XCircle className="w-16 h-16 mx-auto mb-4 text-red-400" />
+        <p className="text-red-400 text-lg mb-2">Erreur lors du chargement des détails</p>
+        <p className="text-gray-400 text-sm">{job.error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-white">Job #{job.id}</h2>
+        <button
+          onClick={onToggleRaw}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
+        >
+          <Code className="w-4 h-4" />
+          {showRaw ? 'Vue Avancée' : 'Logs Bruts'}
+        </button>
+      </div>
+      {showRaw ? (
+        <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />
+      ) : !job.hasStats && !job.stats ? (
+        <div className="text-center py-12 text-gray-400">
+          <Clock className="w-12 h-12 mx-auto mb-4 animate-spin" />
+          <p className="text-lg mb-2">Les statistiques détaillées ne sont pas encore disponibles.</p>
+          <p className="text-sm">Le job est peut-être en cours d'exécution ou le fichier de log n'est pas encore complet.</p>
+          <button
+            onClick={onToggleRaw}
+            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
+          >
+            Voir les logs avancés
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard title="Total Requêtes" value={job.stats.requestsTotal || 0} icon={Server} color="blue" />
+            <StatCard title="Succès" value={job.stats.requestsFinished || 0} icon={CheckCircle} color="green" />
+            <StatCard title="Échecs" value={job.stats.requestsFailed || 0} icon={XCircle} color="red" />
+            <StatCard title="Durée" value={`${((job.stats.crawlerRuntimeMillis || 0) / 1000).toFixed(2)}s`} icon={Clock} color="purple" />
+          </div>
+          
+          {job.errors && job.errors.length > 0 && (
+            <>
+              <ErrorVisualization errors={job.errors} warnings={job.warnings || []} />
+              <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                <h3 className="text-red-400 font-semibold mb-2 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" />
+                  Erreurs ({job.errors.length})
+                </h3>
+                <div className="max-h-40 overflow-y-auto space-y-2 font-mono text-sm text-red-300">
+                  {job.errors.slice(0, 10).map((e, i) => <p key={i} className="p-2 bg-red-900/30 rounded">{e}</p>)}
+                  {job.errors.length > 10 && (
+                    <p className="text-gray-400 italic">... et {job.errors.length - 10} autres erreurs</p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+function App() {
+  const [allJobs, setAllJobs] = useState([]);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const wsRef = useRef(null);
+  const jobCache = useRef({});
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const filteredJobs = useMemo(() => {
+    return allJobs.filter(job => {
+      const jobDate = new Date(job.start_time);
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+      
+      if (start && jobDate < start) return false;
+      if (end) {
+        const endOfDay = new Date(end);
+        endOfDay.setHours(23, 59, 59, 999);
+        if (jobDate > endOfDay) return false;
+      }
+      
+      const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
+      const matchesSearch = searchTerm === '' || 
+        job.id.includes(searchTerm) || 
+        (job.domain && job.domain.toLowerCase().includes(searchTerm.toLowerCase()));
+      
+      return matchesStatus && matchesSearch;
+    }).sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+  }, [allJobs, searchTerm, statusFilter, startDate, endDate]);
+
+  const paginatedJobs = useMemo(() => {
+    const startIndex = (currentPage - 1) * JOBS_PER_PAGE;
+    return filteredJobs.slice(startIndex, startIndex + JOBS_PER_PAGE);
+  }, [filteredJobs, currentPage]);
+
+  const totalPages = Math.ceil(filteredJobs.length / JOBS_PER_PAGE);
+
+  const globalStats = useMemo(() => {
+    const finished = filteredJobs.filter(j => j.status === 'finished').length;
+    const failed = filteredJobs.filter(j => j.status === 'failed').length;
+    const running = filteredJobs.filter(j => j.status === 'running').length;
+    return { finished, failed, running, total: filteredJobs.length };
+  }, [filteredJobs]);
+
+  const fetchJobs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/jobs`);
+      const data = await response.json();
+      setAllJobs(data);
+    } catch (error) { 
+      console.error('Error fetching jobs:', error); 
+    } finally { 
+      setLoading(false); 
+    }
+  }, []);
+
+  const fetchJobDetails = useCallback(async (id) => {
+    if (jobCache.current[id] && selectedJob?.id === id && !showRaw) {
+      return;
+    }
+    
+    setShowRaw(false);
+    setLoadingDetails(true);
+    
+    try {
+      const response = await fetch(`${API_URL}/jobs/${id}/details`);
+      if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+      const data = await response.json();
+      
+      jobCache.current[id] = data;
+      setSelectedJob(data);
+    } catch (error) {
+      console.error('Error fetching job details:', error);
+      setSelectedJob({ id, error: error.message });
+    } finally { 
+      setLoadingDetails(false); 
+    }
+  }, [selectedJob, showRaw]);
+
+  useEffect(() => {
+    fetchJobs();
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    wsRef.current = new WebSocket(wsUrl);
+    wsRef.current.onmessage = () => {
+      fetchJobs();
+      if (selectedJob) {
+        jobCache.current = {};
+        fetchJobDetails(selectedJob.id);
+      }
+    };
+    return () => { 
+      if (wsRef.current) wsRef.current.close(); 
+    };
+  }, [fetchJobs, fetchJobDetails, selectedJob]);
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-gray-300 font-sans">
+      <header className="bg-gray-800/80 backdrop-blur-sm border-b border-gray-700 sticky top-0 z-20">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Activity className="w-8 h-8 text-blue-400" />
+            <h1 className="text-xl font-bold text-white">Crawler Dashboard Pro</h1>
+          </div>
+          <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors">
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </header>
+
+      <main className="container mx-auto p-4 space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard title="Total" value={globalStats.total} icon={Server} color="gray" />
+          <StatCard title="Succès" value={globalStats.finished} icon={CheckCircle} color="green" />
+          <StatCard title="Échecs" value={globalStats.failed} icon={XCircle} color="red" />
+          <StatCard title="En cours" value={globalStats.running} icon={Zap} color="blue" />
+        </div>
+
+        <div className="bg-gray-800 p-3 rounded-lg space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-grow min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Filtrer par ID ou domaine..."
+                value={searchTerm}
+                onChange={e => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+            </div>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <select
+                value={statusFilter}
+                onChange={e => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 appearance-none focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="all">Tous les statuts</option>
+                <option value="finished">Succès</option>
+                <option value="failed">Échec</option>
+                <option value="running">En cours</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-gray-500" />
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => {
+                  setStartDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+              />
+              <span className="text-gray-500">à</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => {
+                  setEndDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-gray-900 border border-gray-700 rounded-md px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm"
+              />
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate('');
+                    setEndDate('');
+                    setCurrentPage(1);
+                  }}
+                  className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-md text-sm text-white transition-colors"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between text-sm text-gray-400 pt-2 border-t border-gray-700">
+              <span>{filteredJobs.length} jobs trouvés</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span>
+                  Page {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-4 items-start">
+          <div className="w-1/3 space-y-3 max-h-[calc(100vh-20rem)] overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw className="w-8 h-8 animate-spin text-blue-400" />
+              </div>
+            ) : paginatedJobs.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <Server className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>Aucun job trouvé</p>
+              </div>
+            ) : (
+              paginatedJobs.map(job => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  onClick={() => fetchJobDetails(job.id)}
+                  isSelected={selectedJob?.id === job.id}
+                />
+              ))
+            )}
+          </div>
+
+          <div className="flex-1 bg-gray-800 rounded-lg p-6">
+            {loadingDetails ? (
+              <div className="flex items-center justify-center py-20">
+                <RefreshCw className="w-12 h-12 animate-spin text-blue-400" />
+              </div>
+            ) : selectedJob ? (
+              <JobDetails 
+                job={selectedJob} 
+                onToggleRaw={() => setShowRaw(!showRaw)} 
+                showRaw={showRaw} 
+              />
+            ) : (
+              <div className="text-center py-20 text-gray-400">
+                <TrendingUp className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">Sélectionnez un job pour voir les détails</p>
+                <p className="text-sm mt-2">Cliquez sur un job dans la liste de gauche</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
 }
+
 export default App;
