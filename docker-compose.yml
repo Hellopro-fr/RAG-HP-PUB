@@ -438,8 +438,12 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: devis-processor-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
+    networks:
+      - services-net
     deploy:
       replicas: 4
     logging: *logging_defaults
@@ -451,8 +455,12 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: echange-processor-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
+    networks:
+      - services-net
     deploy:
       replicas: 4
     logging: *logging_defaults
@@ -481,8 +489,12 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: product-processor-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
+    networks:
+      - services-net
     deploy:
       replicas: 4
     logging: *logging_defaults
@@ -660,10 +672,14 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: di-database-qdrant-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
     deploy:
       replicas: 4
+    networks:
+      - services-net
     logging: *logging_defaults
 
   echange-database-qdrant-service:
@@ -673,10 +689,14 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: echange-database-qdrant-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
     deploy:
       replicas: 4
+    networks:
+      - services-net
     logging: *logging_defaults
 
   website-database-qdrant-service:
@@ -703,10 +723,14 @@ services:
     profiles: ["app"] # Profile for the main application stack
     # container_name: product-database-qdrant-service
     restart: unless-stopped
+    expose:
+      - "8530"
     env_file:
       - .env
     deploy:
       replicas: 4
+    networks:
+      - services-net
     logging: *logging_defaults
 
   categories-database-qdrant-service:

@@ -37,3 +37,52 @@ scrape_configs:
       - template-llm-service # The service name defined in docker-compose
       type: 'A'
       port: 8530
+
+  - job_name: 'devis-processor-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - devis-processor-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530
+
+  - job_name: 'di-database-qdrant-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - di-database-qdrant-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530
+
+  - job_name: 'echange-processor-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - echange-processor-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530
+
+  - job_name: 'echange-database-qdrant-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - echange-database-qdrant-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530
+
+  - job_name: 'product-processor-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - product-processor-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530
+
+  - job_name: 'product-database-qdrant-service'
+    # This uses Docker's internal DNS to find all running container instances (replicas) of this service
+    dns_sd_configs:
+    - names:
+      - product-database-qdrant-service # The service name defined in docker-compose
+      type: 'A'
+      port: 8530
+

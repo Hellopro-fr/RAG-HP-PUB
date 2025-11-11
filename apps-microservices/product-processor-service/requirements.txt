@@ -3,3 +3,5 @@ markdownify
 beautifulsoup4
 python-dotenv
 html5lib
+prometheus-client
+waitress
