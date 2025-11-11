@@ -5,6 +5,7 @@ import asyncio
 from vllm.transformers_utils.tokenizer import get_tokenizer
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
+from common_utils.metrics.prometheus import measure_processing_time
 
 # Liste des pages types autorisées
 page_types_siteweb = [
@@ -223,6 +224,7 @@ async def _process_single_message(message: dict) -> dict:
             "metric_payload": metric_payload
         }
 
+@measure_processing_time(service_name="template-llm-service", payload_arg_name="messages")
 async def classify_page_template_batch(messages: list[dict]) -> list[dict]:
     """
     Traite un BATCH de messages en créant des tâches concurrentes pour chaque message,

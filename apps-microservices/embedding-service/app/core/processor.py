@@ -1,7 +1,9 @@
 from common_utils.embedding.Embedding import Embedding
 from common_utils.autres.CollectionName import CollectionName
 import logging
+from common_utils.metrics.prometheus import measure_processing_time
 
+@measure_processing_time(service_name="embedding-service", payload_arg_name="input_data")
 async def embed_input_data(input_data: dict, **kwargs) -> dict:
     """
     Vectorise les données via le service d'embedding et prépare le message pour l'insertion.

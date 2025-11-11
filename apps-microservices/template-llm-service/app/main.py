@@ -8,6 +8,7 @@ from template_llm_service.messaging.consumer import Consumer
 from template_llm_service.messaging.publisher import Publisher
 import aio_pika
 import aiormq
+from common_utils.metrics.prometheus import start_metrics_server_in_thread
 
 async def main():
     """
@@ -21,6 +22,9 @@ async def main():
 
     print("🚀 template-llm-service: Démarrage...")
     
+    # --- Start Prometheus metrics server ---
+    start_metrics_server_in_thread(port=8530)
+
     # Créer le répertoire de récupération s'il n'existe pas
     os.makedirs('recovery_data', exist_ok=True)
 
