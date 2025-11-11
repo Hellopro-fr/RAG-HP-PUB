@@ -2,9 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends, Body
 from typing import List, Dict, Any, Optional
 import asyncio
 import traceback
+import time
 
 from .es_client import ElasticsearchClient, get_es_client
-from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client
+from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client, get_rabbitmq_channel
 from .models import (
     SearchRequest, RequeueBulkRequest, UpdateStatusBulkRequest,
     EditAndRequeueRequest, RequeueByFilterRequest
@@ -82,7 +83,11 @@ async def requeue_message(message_id: str, es_client: ElasticsearchClient = Depe
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
         
-        await rmq_client.publish_message(message)
+        def do_publish():
+            with get_rabbitmq_channel() as channel:
+                rmq_client.publish_message(channel, message)
+        
+        await asyncio.to_thread(do_publish)
         await es_client.update_message_status(message_id, "Re-queued")
         
         return {"status": "success", "message": f"Message {message_id} has been re-queued."}
@@ -94,19 +99,23 @@ async def bulk_requeue(request: RequeueBulkRequest, es_client: ElasticsearchClie
     """
     Re-queues multiple messages in a batch with optional throttling.
     """
-    success_count = 0
-    errors = []
-    
     messages = await es_client.get_messages_bulk(request.message_ids)
-    
-    for msg in messages:
-        try:
-            await rmq_client.publish_message(msg)
-            success_count += 1
-            if request.rate_limit_per_second and request.rate_limit_per_second > 0:
-                await asyncio.sleep(1.0 / request.rate_limit_per_second)
-        except Exception as e:
-            errors.append({"message_id": msg['_id'], "error": str(e)})
+
+    def do_bulk_publish():
+        publish_errors = []
+        publish_success_count = 0
+        with get_rabbitmq_channel() as channel:
+            for msg in messages:
+                try:
+                    rmq_client.publish_message(channel, msg)
+                    publish_success_count += 1
+                    if request.rate_limit_per_second and request.rate_limit_per_second > 0:
+                        time.sleep(1.0 / request.rate_limit_per_second)
+                except Exception as e:
+                    publish_errors.append({"message_id": msg['_id'], "error": str(e)})
+        return publish_success_count, publish_errors
+
+    success_count, errors = await asyncio.to_thread(do_bulk_publish)
 
     # Update statuses in bulk
     succeeded_ids = [msg['_id'] for msg in messages if msg['_id'] not in [e['message_id'] for e in errors]]
@@ -134,11 +143,19 @@ async def requeue_by_filter(request: RequeueByFilterRequest, es_client: Elastics
     try:
         total_requeued = 0
         async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term):
-            for msg in batch:
-                await rmq_client.publish_message(msg)
-                total_requeued += 1
-                if request.rate_limit_per_second and request.rate_limit_per_second > 0:
-                    await asyncio.sleep(1.0 / request.rate_limit_per_second)
+            
+            def do_batch_publish(current_batch):
+                batch_requeued = 0
+                with get_rabbitmq_channel() as channel:
+                    for msg in current_batch:
+                        rmq_client.publish_message(channel, msg)
+                        batch_requeued += 1
+                        if request.rate_limit_per_second and request.rate_limit_per_second > 0:
+                            time.sleep(1.0 / request.rate_limit_per_second)
+                return batch_requeued
+            
+            requeued_in_batch = await asyncio.to_thread(do_batch_publish, batch)
+            total_requeued += requeued_in_batch
 
             message_ids = [msg['_id'] for msg in batch]
             await es_client.update_message_status_bulk(message_ids, "Re-queued")
@@ -161,7 +178,11 @@ async def edit_and_requeue(message_id: str, request: EditAndRequeueRequest, es_c
         # Override the original payload with the new one
         message['_source']['original_payload'] = request.new_payload
         
-        await rmq_client.publish_message(message)
+        def do_publish():
+            with get_rabbitmq_channel() as channel:
+                rmq_client.publish_message(channel, message)
+        
+        await asyncio.to_thread(do_publish)
         await es_client.update_message_status(message_id, "Re-queued (Edited)")
         
         return {"status": "success", "message": f"Message {message_id} has been edited and re-queued."}
