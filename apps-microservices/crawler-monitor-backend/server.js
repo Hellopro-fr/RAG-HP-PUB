@@ -9,7 +9,7 @@ import { join } from 'path';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
-const LOGS_PATH = '/logs';
+const CRAWLER_STORAGE_PATH = process.env.CRAWLER_STORAGE_PATH || '/app/storage/logs';
 
 const CRAWL_UPDATES_CHANNEL = 'crawl_updates';
 const CRAWL_JOB_PREFIX = 'crawl_job:';
@@ -133,7 +133,7 @@ app.get('/api/jobs/:id/details', async (req, res) => {
     console.log(`Job ${id} found in Redis with status: ${jobData.status}`);
 
     // 2. Construire le chemin vers le fichier de log
-    const logPath = join(LOGS_PATH, id, 'crawler.log');
+    const logPath = join(CRAWLER_STORAGE_PATH, id, 'crawler.log');
     console.log(`Looking for log file at: ${logPath}`);
 
     // 3. Lire et analyser le fichier de log
