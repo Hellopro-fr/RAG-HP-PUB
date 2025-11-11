@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react";
 import { useState, useEffect } from "react"
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { Button } from "@/components/ui/button"
@@ -20,7 +21,7 @@ export default function Dashboard() {
         if (filters.date_start) body.date_start = new Date(filters.date_start).toISOString();
         if (filters.date_end) body.date_end = new Date(filters.date_end).toISOString();
         
-        const response = await apiGetDashboardStats(Object.keys(body).length > 0 ? body : undefined);
+        const response = await apiGetDashboardStats(body);
         setStats(response.data);
     } catch (err) {
         setError('Failed to load dashboard stats.');
