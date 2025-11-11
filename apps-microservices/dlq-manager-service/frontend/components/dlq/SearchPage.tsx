@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useEffect, useCallback } from "react"
-import { SearchIcon } from "lucide-react"
+import { Calendar, SearchIcon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import MessageList from "./MessageList"
 import Pagination from "./Pagination"
@@ -66,6 +66,7 @@ export default function SearchPage() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [serviceOptions, setServiceOptions] = useState<MultiSelectOption[]>([]);
   const [pageSize, setPageSize] = useState(20);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
   useEffect(() => {
     apiGetDashboardStats().then(response => {
@@ -150,11 +151,19 @@ export default function SearchPage() {
   }
 
   const handleBulkAction = async (action: 'requeue' | 'archive') => {
+    if (loadingAction) {
+        alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
+        return;
+    }
+
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     const actionVerb = action === 'requeue' ? 're-queue' : 'archive';
 
     if (!window.confirm(`Are you sure you want to ${actionVerb} ${ids.length} selected messages?`)) return;
+
+    const currentAction = action === 'requeue' ? 'requeue-selected' : 'archive-selected';
+    setLoadingAction(currentAction);
 
     try {
         if (action === 'requeue') {
@@ -173,16 +182,27 @@ export default function SearchPage() {
     } catch (err) {
         alert(`Failed to ${actionVerb} messages.`);
         console.error(err);
+    } finally {
+        setLoadingAction(null);
     }
   };
 
   const handleRequeueByFilter = async () => {
+      if (loadingAction) {
+        alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
+        return;
+      }
+
       if (!window.confirm(`Are you sure you want to re-queue all messages matching the current filter? This could be up to ${totalResults} messages.`)) return;
+      
+      setLoadingAction('requeue-all');
+
       try {
           const rateStr = prompt("Enter messages per second (e.g., 10). Leave blank for no limit.", "10");
           const rate = rateStr ? parseInt(rateStr, 10) : undefined;
           if (rateStr && isNaN(rate)) {
               alert("Invalid number for rate limit.");
+              setLoadingAction(null); // Reset on user error
               return;
           }
           await apiRequeueByFilter(filters, searchTerm, rate);
@@ -191,6 +211,8 @@ export default function SearchPage() {
       } catch (err) {
           alert('Failed to start re-queue by filter.');
           console.error(err);
+      } finally {
+          setLoadingAction(null);
       }
   };
 
@@ -256,6 +278,7 @@ export default function SearchPage() {
           type="submit"
           style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
           className="w-full hover:opacity-90"
+          disabled={!!loadingAction}
         >
           <SearchIcon className="w-4 h-4 mr-2" />
           Search
@@ -292,24 +315,33 @@ export default function SearchPage() {
         <div className="flex gap-3">
           {selectedIds.size > 0 ? (
             <>
-              <Button onClick={() => handleBulkAction('requeue')} style={{ backgroundColor: "var(--vert-primary)", color: "white" }} className="hover:opacity-90">
+              <Button 
+                onClick={() => handleBulkAction('requeue')} 
+                style={{ backgroundColor: "var(--vert-primary)", color: "white" }} 
+                className="hover:opacity-90 w-40"
+                disabled={!!loadingAction}
+              >
+                {loadingAction === 'requeue-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Re-queue Selected
               </Button>
-              <Button onClick={() => handleBulkAction('archive')} style={{ backgroundColor: "var(--gris-primary)", color: "white" }} className="hover:opacity-90">
+              <Button 
+                onClick={() => handleBulkAction('archive')} 
+                style={{ backgroundColor: "var(--gris-primary)", color: "white" }} 
+                className="hover:opacity-90 w-40"
+                disabled={!!loadingAction}
+              >
+                {loadingAction === 'archive-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Archive Selected
               </Button>
             </>
           ) : (
             <Button
               onClick={handleRequeueByFilter}
-              style={{
-                backgroundColor: "var(--bleu-primary)",
-                color: "white",
-                opacity: totalResults === 0 ? 0.5 : 1,
-              }}
-              disabled={totalResults === 0}
-              className="hover:opacity-90"
+              style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
+              disabled={totalResults === 0 || !!loadingAction}
+              className="hover:opacity-90 disabled:opacity-50 w-48"
             >
+              {loadingAction === 'requeue-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Re-queue All Matching
             </Button>
           )}
