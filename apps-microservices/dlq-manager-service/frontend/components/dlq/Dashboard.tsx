@@ -13,13 +13,14 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({ date_start: "", date_end: "" });
 
-  const fetchStats = async () => {
+  // Modified to accept filters as an argument to prevent stale state issues.
+  const fetchStats = async (currentFilters: { date_start: string; date_end: string }) => {
     try {
         setLoading(true);
         setError(null);
         const body: { date_start?: string, date_end?: string } = {};
-        if (filters.date_start) body.date_start = new Date(filters.date_start).toISOString();
-        if (filters.date_end) body.date_end = new Date(filters.date_end).toISOString();
+        if (currentFilters.date_start) body.date_start = new Date(currentFilters.date_start).toISOString();
+        if (currentFilters.date_end) body.date_end = new Date(currentFilters.date_end).toISOString();
         
         const response = await apiGetDashboardStats(body);
         setStats(response.data);
@@ -32,7 +33,8 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchStats();
+    // Initial fetch on component mount with default empty filters.
+    fetchStats({ date_start: "", date_end: "" });
   }, []);
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,7 +42,8 @@ export default function Dashboard() {
   };
 
   const handleApplyFilter = () => {
-      fetchStats();
+      // Pass the current, up-to-date filters state directly to the fetch function.
+      fetchStats(filters);
   }
 
   if (loading) {

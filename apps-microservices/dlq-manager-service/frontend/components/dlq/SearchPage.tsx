@@ -34,7 +34,6 @@ const saveFiltersToStorage = (filters: any) => localStorage.setItem('dlq-filters
 const statusOptions: MultiSelectOption[] = [
     { value: 'New', label: 'New' },
     { value: 'Re-queued', label: 'Re-queued' },
-    { value: 'Re-queued (Legacy)', label: 'Re-queued (Legacy)' },
     { value: 'Archived', label: 'Archived' },
 ];
 
