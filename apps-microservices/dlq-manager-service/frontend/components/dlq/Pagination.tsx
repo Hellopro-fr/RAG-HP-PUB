@@ -1,7 +1,9 @@
 "use client"
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button"
 import { ChevronLeft, ChevronRight } from "lucide-react"
+import { Input } from "@/components/ui/input";
 
 interface PaginationProps {
   currentPage: number
@@ -14,6 +16,26 @@ export default function Pagination({ currentPage, totalItems, itemsPerPage, onPa
   const totalPages = Math.ceil(totalItems / itemsPerPage)
   const hasPrevious = currentPage > 1
   const hasNext = currentPage < totalPages
+  const [goToPage, setGoToPage] = useState(currentPage.toString());
+
+  const handleGoToPage = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pageNum = parseInt(goToPage, 10);
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+      onPageChange(pageNum);
+    } else {
+      alert(`Please enter a valid page number between 1 and ${totalPages}.`);
+      setGoToPage(currentPage.toString());
+    }
+  };
+  
+  React.useEffect(() => {
+    setGoToPage(currentPage.toString());
+  }, [currentPage]);
+
+  if (totalPages <= 1) {
+      return null;
+  }
 
   return (
     <div className="flex justify-center items-center gap-6">
@@ -27,9 +49,21 @@ export default function Pagination({ currentPage, totalItems, itemsPerPage, onPa
         Previous
       </Button>
 
-      <div className="text-sm text-gris-primary font-medium px-4 py-2">
+      <div className="text-sm text-gris-primary font-medium px-4 py-2 hidden sm:block">
         Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
       </div>
+
+      <form onSubmit={handleGoToPage} className="flex items-center gap-2">
+        <Input 
+          type="number"
+          min="1"
+          max={totalPages}
+          value={goToPage}
+          onChange={(e) => setGoToPage(e.target.value)}
+          className="w-16 h-9 text-center"
+        />
+        <Button type="submit" variant="outline" size="sm">Go</Button>
+      </form>
 
       <Button
         variant="outline"
