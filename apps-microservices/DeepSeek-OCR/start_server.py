@@ -23,7 +23,7 @@ import fitz  # PyMuPDF
 from PIL import Image
 from tqdm import tqdm
 
-from config import INPUT_PATH, OUTPUT_PATH, PROMPT, CROP_MODE, MAX_CONCURRENCY, NUM_WORKERS , MODEL_PATH
+from config import PROMPT, CROP_MODE, MAX_CONCURRENCY , MODEL_PATH ,PDF_PAGE_CHUNK_SIZE
 
 # Add current directory to Python path
 sys.path.insert(0, '/app/DeepSeek-OCR-vllm')
@@ -218,8 +218,8 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
     """Asynchronously process a PDF file, with concurrent page processing."""
     try:
         pdf_data = await file.read()
-        
         images = await pdf_to_images_async(pdf_data, dpi=144)
+        total_pages = len(images)
         
         if not images:
             return BatchOCRResponse(
@@ -231,34 +231,48 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
             )
         
         use_prompt = prompt if prompt else PROMPT
+        final_results = []
         
-        # Create a list of concurrent OCR tasks for all pages
-        tasks = [process_single_image_async(image, use_prompt) for image in images]
+        # --- NOUVELLE LOGIQUE DE TRAITEMENT PAR LOTS (CHUNKING) ---
+        num_chunks = (total_pages + PDF_PAGE_CHUNK_SIZE - 1) // PDF_PAGE_CHUNK_SIZE
         
-        # Run all page processing tasks in parallel
-        ocr_texts = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Format the results
-        results = []
-        for i, res in enumerate(ocr_texts):
-            page_num = i + 1
-            if isinstance(res, Exception):
-                results.append(OCRResponse(
-                    success=False,
-                    error=f"Page {page_num} error: {str(res)}",
-                    page_num=page_num
-                ))
-            else:
-                results.append(OCRResponse(
-                    success=True,
-                    result=res,
-                    page_num=page_num
-                ))
+        for i in range(0, total_pages, PDF_PAGE_CHUNK_SIZE):
+            
+            chunk_index = (i // PDF_PAGE_CHUNK_SIZE) + 1
+            print(f"[INFO] Processing page chunk {chunk_index}/{num_chunks} for file {file.filename}")
+            
+            # Sélectionne un petit lot d'images à traiter
+            image_chunk = images[i:i + PDF_PAGE_CHUNK_SIZE]
+            
+            # Crée des tâches concurrentes SEULEMENT pour ce petit lot
+            tasks = [process_single_image_async(image, use_prompt) for image in image_chunk]
+            
+            # Exécute le lot en parallèle
+            chunk_ocr_texts = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Formate et ajoute les résultats du lot à la liste finale
+            for j, res in enumerate(chunk_ocr_texts):
+                # Le numéro de page global est l'index de début du lot + l'index dans le lot
+                page_num = i + j + 1
+                if isinstance(res, Exception):
+                    print(f"[ERROR] Page {page_num} failed: {res}")
+                    final_results.append(OCRResponse(
+                        success=False,
+                        error=f"Page {page_num} error: {str(res)}",
+                        page_num=page_num
+                    ))
+                else:
+                    final_results.append(OCRResponse(
+                        success=True,
+                        result=res,
+                        page_num=page_num
+                    ))
+        # --- FIN DE LA NOUVELLE LOGIQUE ---
         
         return BatchOCRResponse(
             success=True,
-            results=results,
-            total_pages=len(images),
+            results=final_results,
+            total_pages=total_pages,
             filename=file.filename
         )
         

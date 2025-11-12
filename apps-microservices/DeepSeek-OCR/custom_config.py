@@ -8,7 +8,7 @@
 # Base: base_size = 1024, image_size = 1024, crop_mode = False
 # Large: base_size = 1280, image_size = 1280, crop_mode = False
 # Gundam: base_size = 1024, image_size = 640, crop_mode = True
-
+PDF_PAGE_CHUNK_SIZE = 5
 BASE_SIZE = 1024
 IMAGE_SIZE = 640
 CROP_MODE = True
