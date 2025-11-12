@@ -86,13 +86,13 @@ def initialize_model():
             model=MODEL_PATH,
             hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
             block_size=256,
-            enforce_eager=True,
+            enforce_eager=False,
             trust_remote_code=True,
             max_model_len=8192,
             swap_space=0,
             max_num_seqs=MAX_CONCURRENCY,
             tensor_parallel_size=1,
-            gpu_memory_utilization=0.9,
+            gpu_memory_utilization=0.6,
             disable_mm_preprocessor_cache=True
         )
         
