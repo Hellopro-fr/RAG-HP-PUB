@@ -1,6 +1,7 @@
 import aio_pika
 import json
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from website_processor_service.messaging.publisher import Publisher
@@ -26,7 +27,7 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
-        print("✅ Consumer initialisé.")
+        logging.info("✅ Consumer initialisé.")
 
     async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
         dlx = await channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
@@ -65,7 +66,7 @@ class Consumer:
         if not website_data or not website_data.get('text'):
             raise ValueError("Données invalides (contenu vide ou 'text' manquant).")
 
-        print(f"\n📥 Website-Processor: Message reçu pour URL: {website_data.get('url', 'URL inconnue')}")
+        logging.info(f"\n📥 Website-Processor: Message reçu pour URL: {website_data.get('url', 'URL inconnue')}")
         
         loop = asyncio.get_running_loop()
         output_message = await loop.run_in_executor(
@@ -81,24 +82,32 @@ class Consumer:
 
     async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
         """Tâche pour traiter un seul message, y compris la logique de retry/dlq."""
+        url = "URL not available"
         try:
+            # Attempt to get URL for logging, even if processing fails
+            try:
+                data = json.loads(message.body)
+                url = data.get('data', {}).get('url', 'URL not found in data')
+            except json.JSONDecodeError:
+                url = "URL not available (JSON decode error)"
+
             # We call our new decorated function
             await self._instrumented_processing_logic(message)
             await message.ack()
 
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message ne sera jamais valide.
-            print(f"❌ Website-Processor: Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
+            logging.error(f"❌ Website-Processor: Erreur permanente pour URL: {url}. Message envoyé à la DLQ finale. Erreur: {e}")
             await self._send_to_dlq(message, e, 0)
             await message.ack()
 
         except Exception as e:
             retry_count = self._get_retry_count(message)
             if retry_count < MAX_RETRIES:
-                print(f"❌ Website-Processor: Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                logging.warning(f"⚠️ Website-Processor: Erreur transitoire pour URL: {url} (essai {retry_count + 1}/{MAX_RETRIES+1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
                 await message.nack(requeue=False)
             else:
-                print(f"❌ Website-Processor: Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                logging.error(f"❌ Website-Processor: Échec après {MAX_RETRIES + 1} tentatives pour URL: {url}. Message envoyé à la DLQ finale. Erreur: {e}")
                 await self._send_to_dlq(message, e, MAX_RETRIES)
                 await message.ack()
 
@@ -122,7 +131,7 @@ class Consumer:
         
         queue = await self._setup_queues(channel)
         
-        print("👂 Website-Processor: En attente de messages...")
+        logging.info("👂 Website-Processor: En attente de messages...")
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
                 # Lance le traitement de chaque message comme une tâche de fond
