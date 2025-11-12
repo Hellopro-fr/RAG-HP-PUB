@@ -11,6 +11,7 @@ import io
 import tempfile
 from typing import List, Optional
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
@@ -42,6 +43,8 @@ from vllm.model_executor.models.registry import ModelRegistry
 
 # Register the custom model
 ModelRegistry.register_model("DeepseekOCRForCausalLM", DeepseekOCRForCausalLM)
+
+executor = ThreadPoolExecutor(max_workers=4)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -141,7 +144,7 @@ def pdf_to_images_high_quality(pdf_data: bytes, dpi: int = 144) -> List[Image.Im
     
     return images
 
-def process_single_image(image: Image.Image, prompt: str = PROMPT) -> str:
+async def process_single_image(image: Image.Image, prompt: str = PROMPT) -> str:
     """Process a single image with DeepSeek-OCR using the specified prompt"""
     print(f"[DEBUG] process_single_image called with prompt: {repr(prompt)}")
     print(f"[DEBUG] Prompt length: {len(prompt)} characters")
@@ -167,7 +170,14 @@ def process_single_image(image: Image.Image, prompt: str = PROMPT) -> str:
     
     # Generate with vLLM
     print(f"[DEBUG] Sending request to vLLM...")
-    outputs = llm.generate([request_item], sampling_params=sampling_params)
+    loop = asyncio.get_running_loop()
+
+    # Exécute la partie bloquante dans un thread séparé
+    outputs = await loop.run_in_executor(
+        executor,
+        lambda: llm.generate([request_item], sampling_params=sampling_params)
+    )
+    
     result = outputs[0].outputs[0].text
     
     print(f"[DEBUG] Model output (first 100 chars): {repr(result[:100])}")
@@ -226,7 +236,7 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
         
         # Process with DeepSeek-OCR
         print(f"[DEBUG] Sending image to DeepSeek-OCR...")
-        result = process_single_image(image, use_prompt)
+        result = await process_single_image(image, use_prompt)
         print(f"[DEBUG] OCR complete, output length: {len(result)}")
         
         return OCRResponse(
@@ -277,7 +287,7 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         for page_num, image in enumerate(tqdm(images, desc="Processing pages")):
             try:
                 print(f"[DEBUG] Processing page {page_num + 1}/{len(images)}")
-                result = process_single_image(image, use_prompt)
+                result = await process_single_image(image, use_prompt)
                 results.append(OCRResponse(
                     success=True,
                     result=result,
