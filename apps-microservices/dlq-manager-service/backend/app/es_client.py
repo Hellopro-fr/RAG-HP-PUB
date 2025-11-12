@@ -40,7 +40,7 @@ class ElasticsearchClient:
             "size": 0,
             "query": query,
             "aggs": {
-                "by_service": {"terms": {"field": "service_name", "size": 20}},
+                "by_service": {"terms": {"field": "service_name", "size": 100}},
                 "by_error": {"terms": {"field": "error_reason.keyword", "size": 10}},
                 "over_time": {
                     "date_histogram": {
@@ -68,10 +68,10 @@ class ElasticsearchClient:
         
         if search_term:
             query["bool"]["must"].append({
-                "multi_match": {
-                    "query": search_term,
+                "query_string": {
+                    "query": f"*{search_term}*",
                     "fields": ["error_reason", "original_payload.*", "service_name"],
-                    "fuzziness": "AUTO"
+                    "lenient": True
                 }
             })
 
@@ -84,22 +84,45 @@ class ElasticsearchClient:
                     time_range["lte"] = filters["date_end"]
                 query["bool"]["must"].append({"range": {"@timestamp": time_range}})
             
-            if filters.get("service_names"):
-                # Split the comma-separated string into a list of clean strings for the 'terms' query
-                service_list = [s.strip() for s in filters["service_names"].split(',') if s.strip()]
-                if service_list:
-                    # FIX: Use 'service_name' which is the correct keyword field, not 'service_name.keyword'
-                    query["bool"]["must"].append({"terms": {"service_name": service_list}})
+            service_names = filters.get("service_names")
+            if service_names and isinstance(service_names, list) and len(service_names) > 0:
+                query["bool"]["must"].append({"terms": {"service_name": service_names}})
 
             status_filter = filters.get("status")
-            if status_filter == "New":
-                 query["bool"]["must_not"].append({"exists": {"field": "status"}})
-                 query["bool"]["must_not"].append({"exists": {"field": "requeued_at"}})
-            elif status_filter == "Re-queued (Legacy)":
-                 query["bool"]["must"].append({"exists": {"field": "requeued_at"}})
-                 query["bool"]["must_not"].append({"exists": {"field": "status"}})
-            elif status_filter:
-                query["bool"]["must"].append({"term": {"status.keyword": status_filter}})
+            if status_filter and isinstance(status_filter, list) and len(status_filter) > 0:
+                status_should_clauses = []
+                regular_statuses = []
+
+                for status in status_filter:
+                    if status == "New":
+                        status_should_clauses.append({
+                            "bool": {
+                                "must_not": [
+                                    {"exists": {"field": "status"}},
+                                    {"exists": {"field": "requeued_at"}}
+                                ]
+                            }
+                        })
+                    elif status == "Re-queued (Legacy)":
+                        status_should_clauses.append({
+                            "bool": {
+                                "must": [{"exists": {"field": "requeued_at"}}],
+                                "must_not": [{"exists": {"field": "status"}}]
+                            }
+                        })
+                    else:
+                        regular_statuses.append(status)
+                
+                if regular_statuses:
+                    status_should_clauses.append({"terms": {"status.keyword": regular_statuses}})
+
+                if status_should_clauses:
+                    query["bool"]["must"].append({
+                        "bool": {
+                            "should": status_should_clauses,
+                            "minimum_should_match": 1
+                        }
+                    })
 
         return query
 

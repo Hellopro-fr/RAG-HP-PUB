@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react";
 import { useState } from "react"
 import Sidebar from "@/components/dlq/Sidebar"
 import Dashboard from "@/components/dlq/Dashboard"
