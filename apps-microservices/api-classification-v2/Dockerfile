@@ -14,7 +14,7 @@ COPY libs/common-utils /app/libs/common-utils
 RUN pip install -e /app/libs/common-utils 
 
 # Ensuite, on copie et installe les requirements spécifiques à ce service
-COPY apps-microservices/api-classification/requirements.txt .
+COPY apps-microservices/api-classification-v2/requirements.txt .
 RUN pip install -r requirements.txt
 
 # Installer aussi les dépendances de l'API recherche (nécessaires pour api_recherche_lib)
