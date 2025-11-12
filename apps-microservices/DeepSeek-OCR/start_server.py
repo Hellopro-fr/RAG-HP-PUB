@@ -85,14 +85,14 @@ def initialize_model():
         llm = LLM(
             model=MODEL_PATH,
             hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
-            block_size=16,
-            enforce_eager=False,
+            block_size=256,
+            enforce_eager=True,
             trust_remote_code=True,
-            max_model_len=4096,
+            max_model_len=8192,
             swap_space=0,
             max_num_seqs=MAX_CONCURRENCY,
             tensor_parallel_size=1,
-            gpu_memory_utilization=0.85,
+            gpu_memory_utilization=0.9,
             disable_mm_preprocessor_cache=True
         )
         
@@ -101,7 +101,7 @@ def initialize_model():
         
         sampling_params = SamplingParams(
             temperature=0.0,
-            max_tokens=4096,
+            max_tokens=8192,
             logits_processors=logits_processors,
             skip_special_tokens=False,
             include_stop_str_in_output=True,
