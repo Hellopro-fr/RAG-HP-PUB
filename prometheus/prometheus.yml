@@ -86,3 +86,13 @@ scrape_configs:
       type: 'A'
       port: 8530
 
+  - job_name: 'api-classification-service'
+    dns_sd_configs:
+    - names:
+      - api-classification-service # The service name from docker-compose
+      type: 'A'
+      port: 8577 # The internal port of the service
+
+  - job_name: 'optimize-service'
+    static_configs:
+      - targets: ['optimize-service:8563'] # The service name and port from docker-compose
