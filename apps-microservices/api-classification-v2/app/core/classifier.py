@@ -267,6 +267,42 @@ class ProductClassifier:
 
         return descriptions
 
+    def _get_examples_per_category(
+        self,
+        similar_products: List[Dict],
+        categories: List[Dict],
+        max_per_category: int = 10
+    ) -> List[Dict]:
+        """
+        Sélectionne max_per_category produits par catégorie candidate.
+        Cela permet de donner au LLM des exemples de TOUTES les catégories,
+        pas seulement de la catégorie dominante.
+
+        Args:
+            similar_products: Liste de tous les produits similaires trouvés
+            categories: Liste des catégories candidates (triées par score)
+            max_per_category: Nombre max d'exemples par catégorie (défaut: 10)
+
+        Returns:
+            Liste de produits sélectionnés, ordonnée par catégorie
+        """
+        # Grouper les produits par catégorie
+        products_by_category = defaultdict(list)
+        for product in similar_products:
+            cat_id = product.get('id_categorie')
+            if cat_id:
+                products_by_category[cat_id].append(product)
+
+        # Sélectionner les top N produits par catégorie
+        selected = []
+        for cat in categories[:self.categories_limit]:
+            cat_products = products_by_category.get(cat['id'], [])
+            # Trier par score décroissant et prendre les N meilleurs
+            top_products = sorted(cat_products, key=lambda x: x['score'], reverse=True)[:max_per_category]
+            selected.extend(top_products)
+
+        return selected
+
     def build_prompt(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> str:
         """Construit le prompt pour le LLM"""
         formatted_categories = "\n".join([
@@ -274,10 +310,13 @@ class ProductClassifier:
             f"  Description: {descriptions.get(cat['id'], 'N/A')}"
             for cat in categories[:self.categories_limit]
         ])
-        
+
+        # Sélectionner 10 produits par catégorie au lieu des 5 premiers globaux
+        selected_examples = self._get_examples_per_category(top_k_products, categories, max_per_category=10)
+
         formatted_products = "\n".join([
             f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
-            for ex in top_k_products[:5]
+            for ex in selected_examples
         ])
         
         return f"""*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
