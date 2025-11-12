@@ -62,6 +62,8 @@ class ClassificationResult(BaseModel):
     score_llm: Optional[int] = Field(None, description="Score de confiance (0 ou 1)")
     categorie_candidates: Optional[List[Dict[str, Any]]] = Field(None, description="Liste des catégories candidates envoyées au LLM")
     processing_time: float = Field(..., description="Temps de traitement en secondes")
+    input_tokens: Optional[int] = Field(None, description="Tokens d'entrée consommés (prompt)")
+    output_tokens: Optional[int] = Field(None, description="Tokens de sortie générés (réponse)")
     llm_type: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="Type de LLM utilisé pour la classification")
     enable_thinking: Optional[bool] = Field(None, description="Indique si le mode thinking était activé (applicable pour Qwen)")
     llm_response: Optional[List[Dict[str, Any]]] = Field(None, description="Réponse brute de DeepSeek (si applicable)")
