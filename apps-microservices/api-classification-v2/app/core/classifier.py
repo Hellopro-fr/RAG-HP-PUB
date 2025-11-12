@@ -264,7 +264,7 @@ class ProductClassifier:
         
         formatted_products = "\n".join([
             f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
-!kL            for ex in top_k_products[:5]
+            for ex in top_k_products[:5]
         ])
         
         return f"""*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
