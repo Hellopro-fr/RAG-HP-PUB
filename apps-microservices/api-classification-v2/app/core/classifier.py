@@ -93,6 +93,19 @@ class ProductClassifier:
             'search_results_limit': self.search_results_limit,
             'categories_limit': self.categories_limit
         }
+
+    def _format_categories_candidates(self, categories: List[Dict]) -> List[Dict[str, Any]]:
+        """Formate la liste des catégories candidates pour le retour API"""
+        return [
+            {
+                'id': cat['id'],
+                'name': cat['name'],
+                'average_score': round(cat['average_score'], 4),
+                'total_score': round(cat['total_score'], 4),
+                'product_count': cat['product_count']
+            }
+            for cat in categories[:self.categories_limit]
+        ]
     
     def is_llm_configured(self) -> bool:
         """Vérifie si un LLM est configuré"""
@@ -483,6 +496,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': None,
                     'error': f'Erreur configuration LLM {llm_override}: {str(e)}',
                     'llm_type': llm_override,
                     'enable_thinking': enable_thinking,
@@ -502,6 +516,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': None,
                     'error': 'Aucun produit similaire trouvé',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -520,6 +535,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': None,
                     'error': 'Aucune catégorie trouvée',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -544,6 +560,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': self._format_categories_candidates(categories),
                     'error': llm_result_wrapper.get('error', 'Erreur LLM inconnue'),
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -564,6 +581,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': self._format_categories_candidates(categories),
                     'error': f'Erreur parsing réponse LLM: {str(e)}',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -583,6 +601,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': self._format_categories_candidates(categories),
                     'error': 'Réponse LLM invalide',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -601,6 +620,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': self._format_categories_candidates(categories),
                     'error': f'Catégorie {chosen_id} introuvable',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -617,6 +637,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'id_categorie': chosen_category['id'],
                 'nom_categorie': chosen_category['name'],
                 'score_llm': score,
+                'categorie_candidates': self._format_categories_candidates(categories),
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
                 'processing_time': time.time() - start_time,
@@ -633,6 +654,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'id_categorie': None,
                 'nom_categorie': None,
                 'score_llm': None,
+                'categorie_candidates': None,
                 'error': str(e),
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
