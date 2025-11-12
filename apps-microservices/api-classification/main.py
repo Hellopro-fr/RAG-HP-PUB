@@ -12,6 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.router.classification import router as classification_router
 import logging
 
+# --- START METRICS IMPORTS ---
+from starlette.middleware.wsgi import WSGIMiddleware
+from common_utils.metrics.prometheus import get_metrics_app
+# --- END METRICS IMPORTS ---
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +41,11 @@ app = FastAPI(
     description="API pour la classification automatique de produits",
     version="1.0.0"
 )
+
+# --- Mount the metrics app using the WSGI adapter ---
+# This adds the /metrics endpoint to your FastAPI application
+metrics_app = get_metrics_app()
+app.mount("/metrics", WSGIMiddleware(metrics_app))
 
 # Middleware pour ajouter l'ID du replica dans les headers de réponse
 @app.middleware("http")

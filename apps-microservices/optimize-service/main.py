@@ -9,6 +9,11 @@ from app.core.credentials import settings
 from app.utils.params import params
 from app.utils.response import error_response
 
+# --- START METRICS IMPORTS ---
+from starlette.middleware.wsgi import WSGIMiddleware
+from common_utils.metrics.prometheus import get_metrics_app
+# --- END METRICS IMPORTS ---
+
 load_dotenv(dotenv_path=".env")
 
 description = """
@@ -19,6 +24,11 @@ os.makedirs(f'{settings.DOCUMENT_ROOT}/logs', exist_ok=True)
 
 
 app = FastAPI()
+
+# --- Mount the metrics app using the WSGI adapter ---
+# This adds the /metrics endpoint to your FastAPI application
+metrics_app = get_metrics_app()
+app.mount("/metrics", WSGIMiddleware(metrics_app))
 
 
 # TODO 

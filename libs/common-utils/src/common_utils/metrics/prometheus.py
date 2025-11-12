@@ -44,75 +44,94 @@ def measure_processing_time(service_name: str, payload_arg_name: str = None, col
     It can optionally extract a 'collection_type' label from a payload argument.
     """
     def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            collection_value = 'unknown'
-            # 2. Logic to inspect arguments and extract the collection type
-            if payload_arg_name:
-                try:
-                    payload = None
-                    if payload_arg_name in kwargs:
-                        payload = kwargs[payload_arg_name]
-                    else:
-                        sig = inspect.signature(func)
-                        arg_names = list(sig.parameters.keys())
-                        if payload_arg_name in arg_names:
-                            payload_index = arg_names.index(payload_arg_name)
-                            if payload_index < len(args):
-                                payload = args[payload_index]
-                    
-                    # Extract the collection value
-                    if payload is not None:
-                        if isinstance(payload, list):
-                            if payload: # If the batch is not empty
-                                first_item = payload[0]
-                                if isinstance(first_item, dict):
-                                    collection_value = first_item.get(collection_field_name, 'unknown_batch_item')
-                                else:
-                                    collection_value = getattr(first_item, collection_field_name, 'unknown_batch_item')
-                            else:
-                                collection_value = 'empty_batch'
-                        elif isinstance(payload, dict):
-                            collection_value = payload.get(collection_field_name, 'unknown')
-                        else: # Assume it's an object/Pydantic model
-                            collection_value = getattr(payload, collection_field_name, 'unknown')
-                except Exception:
-                    # If anything goes wrong, we default to 'unknown' and don't fail the request
-                    collection_value = 'error_extracting_label'
+        # --- FIX: Check if the function is async at decoration time ---
+        is_async = asyncio.iscoroutinefunction(func)
 
-            start_time = time.monotonic()
-            status = 'success'
-            try:
-                # Handle both async and sync functions
-                if asyncio.iscoroutinefunction(func):
-                    # For async functions, we need an awaitable wrapper
-                    async def async_wrapper():
-                        nonlocal status, collection_value
-                        try:
-                            return await func(*args, **kwargs)
-                        except Exception:
-                            status = 'failure'
-                            raise
-                        finally:
-                            duration = time.monotonic() - start_time
-                            # 3. Use the new label when recording the metric
-                            PROCESSING_TIME_SECONDS.labels(service_name=service_name, status=status, collection_type=str(collection_value)).observe(duration)
-                            logging.debug(f"[{service_name}] Finished '{func.__name__}'. Status: {status}. Duration: {duration:.4f}s")
-                    return async_wrapper()
-                else:
-                    # For sync functions
-                    result = func(*args, **kwargs)
+        # --- FIX: Return an async wrapper for async functions ---
+        if is_async:
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                collection_value = 'unknown'
+                if payload_arg_name:
+                    try:
+                        payload = None
+                        if payload_arg_name in kwargs:
+                            payload = kwargs[payload_arg_name]
+                        else:
+                            sig = inspect.signature(func)
+                            arg_names = list(sig.parameters.keys())
+                            if payload_arg_name in arg_names:
+                                payload_index = arg_names.index(payload_arg_name)
+                                if payload_index < len(args):
+                                    payload = args[payload_index]
+                        
+                        if payload is not None:
+                            if isinstance(payload, list):
+                                collection_value = 'empty_batch' if not payload else getattr(payload[0], collection_field_name, 'unknown_batch_item')
+                            elif isinstance(payload, dict):
+                                collection_value = payload.get(collection_field_name, 'unknown')
+                            else:
+                                val = getattr(payload, collection_field_name, 'unknown')
+                                collection_value = val if val is not None else 'Default'
+
+                    except Exception:
+                        collection_value = 'error_extracting_label'
+
+                start_time = time.monotonic()
+                status = 'success'
+                try:
+                    # Await the actual async function
+                    result = await func(*args, **kwargs)
                     return result
-            except Exception:
-                status = 'failure'
-                raise
-            finally:
-                # This block runs for sync functions, or if an async function
-                # wasn't detected (which shouldn't happen with the check above).
-                if not asyncio.iscoroutinefunction(func):
+                except Exception:
+                    status = 'failure'
+                    raise
+                finally:
                     duration = time.monotonic() - start_time
-                    # 3. Use the new label when recording the metric
                     PROCESSING_TIME_SECONDS.labels(service_name=service_name, status=status, collection_type=str(collection_value)).observe(duration)
                     logging.debug(f"[{service_name}] Finished '{func.__name__}'. Status: {status}. Duration: {duration:.4f}s")
-        return wrapper
+            return async_wrapper
+        
+        # --- FIX: Return a sync wrapper for sync functions ---
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                collection_value = 'unknown'
+                if payload_arg_name:
+                    try:
+                        payload = None
+                        if payload_arg_name in kwargs:
+                            payload = kwargs[payload_arg_name]
+                        else:
+                            sig = inspect.signature(func)
+                            arg_names = list(sig.parameters.keys())
+                            if payload_arg_name in arg_names:
+                                payload_index = arg_names.index(payload_arg_name)
+                                if payload_index < len(args):
+                                    payload = args[payload_index]
+                        
+                        if payload is not None:
+                            if isinstance(payload, list):
+                                collection_value = 'empty_batch' if not payload else getattr(payload[0], collection_field_name, 'unknown_batch_item')
+                            elif isinstance(payload, dict):
+                                collection_value = payload.get(collection_field_name, 'unknown')
+                            else:
+                                val = getattr(payload, collection_field_name, 'unknown')
+                                collection_value = val if val is not None else 'Default'
+                    except Exception:
+                        collection_value = 'error_extracting_label'
+
+                start_time = time.monotonic()
+                status = 'success'
+                try:
+                    result = func(*args, **kwargs)
+                    return result
+                except Exception:
+                    status = 'failure'
+                    raise
+                finally:
+                    duration = time.monotonic() - start_time
+                    PROCESSING_TIME_SECONDS.labels(service_name=service_name, status=status, collection_type=str(collection_value)).observe(duration)
+                    logging.debug(f"[{service_name}] Finished '{func.__name__}'. Status: {status}. Duration: {duration:.4f}s")
+            return sync_wrapper
     return decorator

@@ -7,7 +7,7 @@ import asyncio
 import httpx
 import math
 import os
-from collections import defaultdict
+from collections import defaultdict, Counter
 from datetime import datetime
 
 from app.schemas.classification import (
@@ -20,6 +20,10 @@ from app.schemas.classification import (
 )
 from app.core.classifier import ProductClassifier
 from app.core.search import test_search_api_connection
+
+# --- START METRICS IMPORTS ---
+from common_utils.metrics.prometheus import measure_processing_time, PROCESSING_TIME_SECONDS
+# --- END METRICS IMPORTS ---
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +84,7 @@ async def get_configuration():
     return {"config": classifier.get_configuration()}
 
 @router.post("/classify", response_model=ClassificationResult)
+@measure_processing_time(service_name="api-classification-service", payload_arg_name="product", collection_field_name="llm")
 async def classify_single_product(product: ProductInput):
     """Classifie un seul produit"""
     try:
@@ -112,6 +117,10 @@ async def classify_single_product(product: ProductInput):
 @router.post("/classify/batch", response_model=BatchClassificationResponse)
 async def classify_batch_products(batch_input: BatchProductsInput):
     """Classifie plusieurs produits en lot"""
+    # --- MANUAL INSTRUMENTATION START ---
+    start_time_manual = time.monotonic()
+    metric_status = 'success'
+    # --- END MANUAL INSTRUMENTATION START ---
     try:
         # Déterminer le LLM à utiliser : celui spécifié dans la requête ou DeepSeek par défaut
         llm_to_use = batch_input.llm if batch_input.llm else "DeepSeek"
@@ -151,10 +160,36 @@ async def classify_batch_products(batch_input: BatchProductsInput):
         )
         
     except HTTPException:
+        metric_status = 'failure'
         raise
     except Exception as e:
+        metric_status = 'failure'
         logger.error(f"Erreur classification batch: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # --- MANUAL INSTRUMENTATION FINALIZATION ---
+        duration = time.monotonic() - start_time_manual
+        num_products = len(batch_input.produits)
+        collection_type = str(batch_input.llm or "Default")
+
+        if num_products == 0:
+             PROCESSING_TIME_SECONDS.labels(
+                service_name="api-classification-service", 
+                status=metric_status, 
+                collection_type='empty_batch'
+            ).observe(duration)
+        else:
+            metric = PROCESSING_TIME_SECONDS.labels(
+                service_name="api-classification-service",
+                status=metric_status,
+                collection_type=collection_type
+            )
+            # Observe the full duration once to increment the sum correctly
+            metric.observe(duration)
+            # Observe a zero duration for the rest of the items to increment the count correctly
+            if num_products > 1:
+                for _ in range(num_products - 1):
+                    metric.observe(0)
 
 # @router.post("/classify/batch/async")
 # async def classify_batch_products_async(
@@ -376,6 +411,10 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
     - Division automatique selon le nombre de produits
     - Agrégation transparente des résultats
     """
+    # --- MANUAL INSTRUMENTATION START ---
+    start_time_manual = time.monotonic()
+    metric_status = 'success'
+    # --- END MANUAL INSTRUMENTATION START ---
     try:
         start_time = time.time()
 
@@ -567,10 +606,36 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
         )
 
     except HTTPException:
+        metric_status = 'failure'
         raise
     except Exception as e:
+        metric_status = 'failure'
         logger.error(f"Erreur classification batch distribuée: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # --- MANUAL INSTRUMENTATION FINALIZATION ---
+        duration = time.monotonic() - start_time_manual
+        num_products = len(batch_input.produits)
+        collection_type = str(batch_input.llm or "Default")
+
+        if num_products == 0:
+             PROCESSING_TIME_SECONDS.labels(
+                service_name="api-classification-service", 
+                status=metric_status, 
+                collection_type='empty_batch'
+            ).observe(duration)
+        else:
+            metric = PROCESSING_TIME_SECONDS.labels(
+                service_name="api-classification-service",
+                status=metric_status,
+                collection_type=collection_type
+            )
+            # Observe the full duration once to increment the sum correctly
+            metric.observe(duration)
+            # Observe a zero duration for the rest of the items to increment the count correctly
+            if num_products > 1:
+                for _ in range(num_products - 1):
+                    metric.observe(0)
 
 @router.get("/metrics/distribution")
 async def get_distribution_metrics():

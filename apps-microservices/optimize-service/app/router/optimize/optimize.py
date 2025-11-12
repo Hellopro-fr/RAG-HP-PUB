@@ -11,6 +11,10 @@ import json
 import logging
 import ast
 
+# --- START METRICS IMPORTS ---
+from common_utils.metrics.prometheus import PROCESSING_TIME_SECONDS
+# --- END METRICS IMPORTS ---
+
 router = APIRouter()
 
 
@@ -24,6 +28,10 @@ from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 @router.post("/qwen/v2", response_model=BatchOptimResponse)
 async def optimizeQwen(payload: BatchOptimRequest):
+    # --- MANUAL INSTRUMENTATION START ---
+    start_time_manual = time.monotonic()
+    metric_status = 'success'
+    # --- END MANUAL INSTRUMENTATION START ---
     try:
         start_time = time.time()
         print(f"Reception de {len(payload.products)} produits")
@@ -114,6 +122,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
         return {"data": results}
 
     except Exception as e:
+        metric_status = 'failure'
         error_msg = f"Erreur lors du traitement: {type(e).__name__}: {str(e)}"
         debug_msg = f"{error_msg}\nTraceback:\n{traceback.format_exc()}"
         response_error = {
@@ -121,3 +130,27 @@ async def optimizeQwen(payload: BatchOptimRequest):
         }
         print(debug_msg)
         return response_error
+    finally:
+        # --- MANUAL INSTRUMENTATION FINALIZATION ---
+        duration = time.monotonic() - start_time_manual
+        num_products = len(payload.products)
+        collection_type = 'product_title_optimization'
+
+        if num_products == 0:
+             PROCESSING_TIME_SECONDS.labels(
+                service_name="optimize-service", 
+                status=metric_status, 
+                collection_type='empty_batch'
+            ).observe(duration)
+        else:
+            metric = PROCESSING_TIME_SECONDS.labels(
+                service_name="optimize-service",
+                status=metric_status,
+                collection_type=collection_type
+            )
+            # Observe the full duration once to increment the sum correctly
+            metric.observe(duration)
+            # Observe a zero duration for the rest of the items to increment the count correctly
+            if num_products > 1:
+                for _ in range(num_products - 1):
+                    metric.observe(0)
