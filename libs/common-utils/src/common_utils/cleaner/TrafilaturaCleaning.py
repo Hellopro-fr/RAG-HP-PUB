@@ -102,22 +102,22 @@ class TrafilaturaHp:
     
     def extract_content(self, url, content) -> str:
         if not content:
-            logging.info("Contenu de page vide pour l'URL : {url}")
+            logging.info(f"[{url}] - Contenu de page vide.")
             return ""
         soup = self._bs(content, "html5lib")
         main_element = self.extract_bs(soup)
-        logging.info(f"---------------------------------")
-        logging.info(f"URL : {url}")
+        logging.info(f"[{url}] ---------------------------------")
         final_content = ""
         if main_element:
-            logging.info(f"Extraction avec BS4 - Main - html5lib")
+            logging.info(f"[{url}] - Extraction avec BS4 - Main - html5lib.")
             final_content = md(str(main_element), heading_style="ATX", escape_html=False)
             if final_content.strip() == "":
-                logging.info(f"Extraction avec BS4 - Main - lxml")
+                logging.info(f"[{url}] - Extraction avec BS4 - Main - lxml.")
                 soup = self._bs(content, "lxml")
                 main_element = self.extract_bs(soup)
                 final_content = md(str(main_element), heading_style="ATX", escape_html=False)
         else:
+            logging.info(f"[{url}] - Pas de <main> détecté. Utilisation de la méthode Trafilatura multi-pass.")
             soup = BeautifulSoup(content, 'html5lib')
 
             # Supprimer tout ce qui est potentiellement JS
@@ -125,12 +125,13 @@ class TrafilaturaHp:
                 tag.decompose()
 
             content = str(soup)
+            logging.info(f"[{url}] - Taille contenu avant modification d'arbre: {len(content)} chars.")
             try:
                 tree = self._trafilatura.load_html(content)
                 if tree is not None:
                     anchors = tree.xpath("//*[contains(@class, 'product') or contains(@id, 'product') or contains(@class, 'produit') or contains(@id, 'produit')]//a")
                     if anchors:
-                        logging.info("Détection éléments de produits en balise a ==> modification a en h3")
+                        logging.info(f"[{url}] - Détection de {len(anchors)} éléments de produits en balise <a> ==> modification <a> en <h3>")
                         for a_tag in anchors:
                             parent = a_tag.getparent()
                             if parent is None:
@@ -146,8 +147,9 @@ class TrafilaturaHp:
 
                             parent.remove(a_tag)
                         content = tostring(tree, method='html', encoding='unicode')
+                        logging.info(f"[{url}] - Taille contenu après modification d'arbre: {len(content)} chars.")
             except Exception as e:
-                logging.warning(f"Échec de la modification de l'arbre HTML pour l'URL {url}. Utilisation du contenu original. Erreur: {e}")
+                logging.warning(f"[{url}] - Échec de la modification de l'arbre HTML. Utilisation du contenu original. Erreur: {e}")
                 pass
 
             results = {}
@@ -182,26 +184,27 @@ class TrafilaturaHp:
                     )
 
                     if not extracted:
-                        logging.info(f"MIN_EXTRACTED_SIZE={size:>5}: SKIPPED (empty)")
+                        logging.info(f"[{url}] - MIN_EXTRACTED_SIZE={size:>5}: SKIPPED (empty)")
                         continue
 
                     results[size] = extracted
                     length = len(extracted)
-                    logging.info(f"MIN_EXTRACTED_SIZE={size:>5}: {length:>6} characters")
+                    logging.info(f"[{url}] - MIN_EXTRACTED_SIZE={size:>5}: {length:>6} characters")
 
                 if results:
                     best_size = max(results.keys(), key=lambda k: len(results[k]))
-                    logging.info(f"Meilleur MIN_EXTRACTED_SIZE: {best_size}")
+                    logging.info(f"[{url}] - Meilleur MIN_EXTRACTED_SIZE: {best_size}")
                     final_content = results[best_size]
                     
                     article_content = self.extract_article(soup)
                     if article_content:
-                        logging.info(f"Extraction article")
-                        logging.info(f"URL avec article : {url}")
+                        logging.info(f"[{url}] - Extraction article détectée.")
                         final_content = article_content + "\n" + final_content
                         final_content = self.dedoublonnage(final_content)
                 else:
-                    logging.info(f"Aucune extraction valide!")
+                    logging.warning(f"[{url}] - Aucune extraction valide après tous les essais.")
+        
+        logging.info(f"[{url}] - Taille contenu final Trafilatura: {len(final_content)} chars.")
         return final_content
     
     def dedoublonnage(self, text: str, min_occurrences: int = 2) -> str:
@@ -234,15 +237,12 @@ class TrafilaturaHp:
         for img in soup.find_all('img'):
             img.decompose()
         
-        logging.info("Récupération de main")
         main_element = soup.find('main') or soup.select_one("body > :is(#main, .main)")
 
         if main_element:
             # main_element.prettify()
-            logging.info("Récupération de main et vérification header + footer")
             for selector in (':scope > header', ':scope > footer'):
                 if element_to_remove := main_element.select_one(selector):
-                    logging.info(f"Suppression {selector} dans contenu de main")
                     element_to_remove.decompose()
 
         if not main_element:
