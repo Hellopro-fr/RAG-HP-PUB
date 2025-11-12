@@ -587,6 +587,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 
             # Construction du prompt et appel LLM (asynchrone)
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
+            print(prompt)  # Pour debug
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking)
 
             # Vérifier si l'appel LLM a échoué
