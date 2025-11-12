@@ -49,9 +49,6 @@ RUN pip install --no-cache-dir \
 # Install flash-attn for optimal performance (if not already included)
 RUN pip install --no-cache-dir flash-attn==2.7.3 --no-build-isolation || echo "flash-attn may already be installed"
 
-# Downgrade tokenizers to compatible version if needed
-RUN pip install --no-cache-dir tokenizers==0.13.3 || echo "Using existing tokenizers version"
-
 # Add the DeepSeek-OCR directory to PYTHONPATH
 ENV PYTHONPATH="/app/DeepSeek-OCR-vllm:${PYTHONPATH}"
 

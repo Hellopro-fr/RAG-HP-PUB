@@ -3,7 +3,7 @@ import json
 import time
 import logging
 import asyncio
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from collections import defaultdict
 
 import openai
@@ -38,9 +38,10 @@ class ProductClassifier:
         self.openai_client = None
         self.deepseek_client = None
         self.category_cache = {}
+        self.category_summary_cache = {}  # Cache pour les résumés de descriptions
         self.search_results_limit = 30
         self.categories_limit = 10
-        
+
         self._initialize_clients()
     
     def _initialize_clients(self):
@@ -93,6 +94,19 @@ class ProductClassifier:
             'search_results_limit': self.search_results_limit,
             'categories_limit': self.categories_limit
         }
+
+    def _format_categories_candidates(self, categories: List[Dict]) -> List[Dict[str, Any]]:
+        """Formate la liste des catégories candidates pour le retour API"""
+        return [
+            {
+                'id': cat['id'],
+                'name': cat['name'],
+                'average_score': round(cat['average_score'], 4),
+                'total_score': round(cat['total_score'], 4),
+                'product_count': cat['product_count']
+            }
+            for cat in categories[:self.categories_limit]
+        ]
     
     def is_llm_configured(self) -> bool:
         """Vérifie si un LLM est configuré"""
@@ -223,14 +237,85 @@ class ProductClassifier:
             logger.error(f"[ASYNC] Erreur recherche similaires: {e}")
             return []
 
-    async def get_category_descriptions_async(self, categories: List[Dict]) -> Dict[str, str]:
+    async def _summarize_category_description_async(self, description: str) -> Dict[str, Any]:
+        """
+        Résume une description de catégorie en 2 phrases maximum via DeepSeek.
+
+        Returns:
+            Dict contenant:
+                - summary: Le résumé de la description
+                - input_tokens: Nombre de tokens d'entrée
+                - output_tokens: Nombre de tokens de sortie
+        """
+        if not description or description == "N/A" or description == "Description non disponible":
+            return {
+                "summary": description,
+                "input_tokens": 0,
+                "output_tokens": 0
+            }
+
+        # Initialiser le client DeepSeek pour la summarization
+        api_key = os.getenv('DEEPSEEK_API_KEY')
+        if not api_key:
+            logger.warning("DEEPSEEK_API_KEY non disponible pour la summarization")
+            return {
+                "summary": description[:200] + "..." if len(description) > 200 else description,
+                "input_tokens": 0,
+                "output_tokens": 0
+            }
+
+        try:
+            deepseek_client = openai.OpenAI(
+                api_key=api_key,
+                base_url="https://api.deepseek.com",
+                timeout=60
+            )
+
+            prompt = f"Résume cette description de catégorie en maximum 2 phrases concises, sans mise en forme, sans liste à puces:\n\n{description}"
+
+            response = await asyncio.to_thread(
+                deepseek_client.chat.completions.create,
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=150
+            )
+
+            summary = response.choices[0].message.content.strip()
+            input_tokens = response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
+            output_tokens = response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
+
+            return {
+                "summary": summary,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens
+            }
+
+        except Exception as e:
+            logger.error(f"Erreur lors du résumé DeepSeek: {e}")
+            # En cas d'erreur, retourner une version tronquée
+            return {
+                "summary": description[:200] + "..." if len(description) > 200 else description,
+                "input_tokens": 0,
+                "output_tokens": 0
+            }
+
+    async def get_category_descriptions_async(self, categories: List[Dict]) -> Tuple[Dict[str, str], Dict[str, int]]:
         """
         Version asynchrone de get_category_descriptions pour pipeline parallèle.
         Utilise get_category_details_async pour des appels HTTP non-bloquants.
+        Résume les descriptions via DeepSeek et retourne les tokens consommés.
+
+        Returns:
+            tuple: (descriptions_dict, tokens_dict)
+                - descriptions_dict: {cat_id: résumé}
+                - tokens_dict: {'input_tokens': X, 'output_tokens': Y}
         """
         descriptions = {}
+        total_input_tokens = 0
+        total_output_tokens = 0
 
-        # Récupérer les IDs non mis en cache
+        # Récupérer les IDs non mis en cache (ni description ni résumé)
         ids_to_fetch = [c['id'] for c in categories if c['id'] not in self.category_cache]
 
         if ids_to_fetch:
@@ -240,19 +325,75 @@ class ProductClassifier:
                     for detail in details:
                         cat_id = str(detail['id_categorie'])
                         desc = detail['description_categorie']
-                        if len(desc) > 200:
-                            desc = desc[:200] + "..."
                         self.category_cache[cat_id] = desc
             except Exception as e:
                 logger.error(f"[ASYNC] Erreur descriptions catégories: {e}")
                 for cat_id in ids_to_fetch:
                     self.category_cache[cat_id] = "Description non disponible"
 
-        # Retourner les descriptions
-        for cat in categories:
-            descriptions[cat['id']] = self.category_cache.get(cat['id'], "N/A")
+        # Résumer les descriptions qui n'ont pas encore de résumé en cache
+        ids_to_summarize = [c['id'] for c in categories if c['id'] not in self.category_summary_cache]
 
-        return descriptions
+        if ids_to_summarize:
+            # Créer des tâches pour résumer en parallèle
+            summarize_tasks = []
+            for cat_id in ids_to_summarize:
+                original_desc = self.category_cache.get(cat_id, "N/A")
+                summarize_tasks.append(self._summarize_category_description_async(original_desc))
+
+            # Exécuter les résumés en parallèle
+            summary_results = await asyncio.gather(*summarize_tasks)
+
+            # Mettre en cache et accumuler les tokens
+            for cat_id, result in zip(ids_to_summarize, summary_results):
+                self.category_summary_cache[cat_id] = result["summary"]
+                total_input_tokens += result["input_tokens"]
+                total_output_tokens += result["output_tokens"]
+
+        # Retourner les résumés
+        for cat in categories:
+            descriptions[cat['id']] = self.category_summary_cache.get(cat['id'], "N/A")
+
+        return descriptions, {
+            'input_tokens': total_input_tokens,
+            'output_tokens': total_output_tokens
+        }
+
+    def _get_examples_per_category(
+        self,
+        similar_products: List[Dict],
+        categories: List[Dict],
+        max_per_category: int = 10
+    ) -> List[Dict]:
+        """
+        Sélectionne max_per_category produits par catégorie candidate.
+        Cela permet de donner au LLM des exemples de TOUTES les catégories,
+        pas seulement de la catégorie dominante.
+
+        Args:
+            similar_products: Liste de tous les produits similaires trouvés
+            categories: Liste des catégories candidates (triées par score)
+            max_per_category: Nombre max d'exemples par catégorie (défaut: 10)
+
+        Returns:
+            Liste de produits sélectionnés, ordonnée par catégorie
+        """
+        # Grouper les produits par catégorie
+        products_by_category = defaultdict(list)
+        for product in similar_products:
+            cat_id = product.get('id_categorie')
+            if cat_id:
+                products_by_category[cat_id].append(product)
+
+        # Sélectionner les top N produits par catégorie
+        selected = []
+        for cat in categories[:self.categories_limit]:
+            cat_products = products_by_category.get(cat['id'], [])
+            # Trier par score décroissant et prendre les N meilleurs
+            top_products = sorted(cat_products, key=lambda x: x['score'], reverse=True)[:max_per_category]
+            selected.extend(top_products)
+
+        return selected
 
     def build_prompt(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> str:
         """Construit le prompt pour le LLM"""
@@ -261,10 +402,13 @@ class ProductClassifier:
             f"  Description: {descriptions.get(cat['id'], 'N/A')}"
             for cat in categories[:self.categories_limit]
         ])
-        
+
+        # Sélectionner 10 produits par catégorie au lieu des 5 premiers globaux
+        selected_examples = self._get_examples_per_category(top_k_products, categories, max_per_category=10)
+
         formatted_products = "\n".join([
             f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
-!kL            for ex in top_k_products[:5]
+            for ex in selected_examples
         ])
         
         return f"""*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
@@ -483,11 +627,14 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': None,
                     'error': f'Erreur configuration LLM {llm_override}: {str(e)}',
                     'llm_type': llm_override,
                     'enable_thinking': enable_thinking,
                     'llm_response': None,
-                    'processing_time': time.time() - start_time
+                    'processing_time': time.time() - start_time,
+                    'input_tokens': 0,
+                    'output_tokens': 0
                 }
 
         try:
@@ -502,11 +649,14 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': None,
                     'error': 'Aucun produit similaire trouvé',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': None,
-                    'processing_time': time.time() - start_time
+                    'processing_time': time.time() - start_time,
+                    'input_tokens': 0,
+                    'output_tokens': 0
                 }
 
             # Groupement par catégorie (synchrone, rapide)
@@ -520,18 +670,26 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': None,
                     'error': 'Aucune catégorie trouvée',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': None,
-                    'processing_time': time.time() - start_time
+                    'processing_time': time.time() - start_time,
+                    'input_tokens': 0,
+                    'output_tokens': 0
                 }
 
-            # ⚡ OPTIMISATION: Récupération asynchrone des descriptions (pipeline parallèle)
-            descriptions = await self.get_category_descriptions_async(categories)
+            # ⚡ OPTIMISATION: Récupération asynchrone des descriptions avec résumé DeepSeek (pipeline parallèle)
+            descriptions, summarization_tokens = await self.get_category_descriptions_async(categories)
+
+            # Initialiser les compteurs de tokens
+            total_input_tokens = summarization_tokens['input_tokens']
+            total_output_tokens = summarization_tokens['output_tokens']
 
             # Construction du prompt et appel LLM (asynchrone)
             prompt = self.build_prompt(product, categories, descriptions, similar_products)
+            #print(prompt)  # Pour debug
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking)
 
             # Vérifier si l'appel LLM a échoué
@@ -544,14 +702,26 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': self._format_categories_candidates(categories),
                     'error': llm_result_wrapper.get('error', 'Erreur LLM inconnue'),
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
-                    'processing_time': time.time() - start_time
+                    'processing_time': time.time() - start_time,
+                    'input_tokens': total_input_tokens,
+                    'output_tokens': total_output_tokens
                 }
 
             raw_llm = llm_result_wrapper['response']
+
+            # Extraire les tokens de la réponse LLM (classification)
+            llm_raw_response = llm_result_wrapper.get('raw_response', {})
+            if 'usage' in llm_raw_response:
+                total_input_tokens += llm_raw_response['usage'].get('prompt_tokens', 0)
+                total_output_tokens += llm_raw_response['usage'].get('completion_tokens', 0)
+            elif hasattr(raw_llm, 'usage'):
+                total_input_tokens += getattr(raw_llm.usage, 'prompt_tokens', 0)
+                total_output_tokens += getattr(raw_llm.usage, 'completion_tokens', 0)
 
             try:
                 llm_result = json.loads(raw_llm.choices[0].message.content)
@@ -564,11 +734,14 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': self._format_categories_candidates(categories),
                     'error': f'Erreur parsing réponse LLM: {str(e)}',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
-                    'processing_time': time.time() - start_time
+                    'processing_time': time.time() - start_time,
+                    'input_tokens': total_input_tokens,
+                    'output_tokens': total_output_tokens
                 }
 
             chosen_id = llm_result.get('id_categorie')
@@ -583,11 +756,14 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': self._format_categories_candidates(categories),
                     'error': 'Réponse LLM invalide',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
-                    'processing_time': time.time() - start_time
+                    'processing_time': time.time() - start_time,
+                    'input_tokens': total_input_tokens,
+                    'output_tokens': total_output_tokens
                 }
 
             # Trouver la catégorie choisie
@@ -601,11 +777,14 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     'id_categorie': None,
                     'nom_categorie': None,
                     'score_llm': None,
+                    'categorie_candidates': self._format_categories_candidates(categories),
                     'error': f'Catégorie {chosen_id} introuvable',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
-                    'processing_time': time.time() - start_time
+                    'processing_time': time.time() - start_time,
+                    'input_tokens': total_input_tokens,
+                    'output_tokens': total_output_tokens
                 }
             
             # Résultat final
@@ -617,10 +796,13 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'id_categorie': chosen_category['id'],
                 'nom_categorie': chosen_category['name'],
                 'score_llm': score,
+                'categorie_candidates': self._format_categories_candidates(categories),
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
                 'processing_time': time.time() - start_time,
-                'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None
+                'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                'input_tokens': total_input_tokens,
+                'output_tokens': total_output_tokens
             }
             
         except Exception as e:
@@ -633,11 +815,14 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'id_categorie': None,
                 'nom_categorie': None,
                 'score_llm': None,
+                'categorie_candidates': None,
                 'error': str(e),
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
                 'llm_response': [f'Exception générale: {str(e)}'],
-                'processing_time': time.time() - start_time
+                'processing_time': time.time() - start_time,
+                'input_tokens': 0,
+                'output_tokens': 0
             }
         finally:
             # Restaurer le LLM original si un override était utilisé

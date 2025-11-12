@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DeepSeek-OCR vLLM Server
-FastAPI wrapper for DeepSeek-OCR with vLLM backend (Fixed Async version)
+FastAPI wrapper with dynamic batching for concurrent requests
 """
 
 import os
@@ -9,10 +9,13 @@ import sys
 import asyncio
 import io
 import tempfile
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+from dataclasses import dataclass
+from queue import Queue
+import threading
+import time
 
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
@@ -44,9 +47,7 @@ from vllm.model_executor.models.registry import ModelRegistry
 # Register the custom model
 ModelRegistry.register_model("DeepseekOCRForCausalLM", DeepseekOCRForCausalLM)
 
-# Thread pool executor for blocking operations - SINGLE THREAD for vLLM
-vllm_executor = ThreadPoolExecutor(max_workers=1)
-# Separate executor for CPU operations
+# Thread pool executor for CPU operations
 cpu_executor = ThreadPoolExecutor(max_workers=NUM_WORKERS)
 
 # Initialize FastAPI app
@@ -81,6 +82,154 @@ class BatchOCRResponse(BaseModel):
     results: List[OCRResponse]
     total_pages: int
     filename: str
+
+@dataclass
+class BatchRequest:
+    """Represents a batch of images to process"""
+    request_items: List[dict]
+    future: asyncio.Future
+    request_id: str
+
+class DynamicBatchProcessor:
+    """Handles dynamic batching of requests to vLLM"""
+    
+    def __init__(self, batch_timeout: float = 0.05, max_batch_size: int = None):
+        self.batch_timeout = batch_timeout  # Wait 50ms to collect requests
+        self.max_batch_size = max_batch_size or MAX_CONCURRENCY
+        self.queue = asyncio.Queue()
+        self.processing = False
+        self.request_counter = 0
+        
+    async def add_request(self, request_items: List[dict]) -> List[str]:
+        """Add a request and wait for results"""
+        request_id = f"req_{self.request_counter}"
+        self.request_counter += 1
+        
+        # Create a future for this request
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+        
+        batch_req = BatchRequest(
+            request_items=request_items,
+            future=future,
+            request_id=request_id
+        )
+        
+        print(f"[DEBUG] Request {request_id} added to queue with {len(request_items)} items")
+        await self.queue.put(batch_req)
+        
+        # Wait for result
+        result = await future
+        return result
+    
+    async def process_loop(self):
+        """Main processing loop - collects and batches requests"""
+        print("[DEBUG] Dynamic batch processor started")
+        
+        while True:
+            try:
+                # Collect requests for a batch
+                batch_requests = []
+                total_items = 0
+                start_time = time.time()
+                
+                # Get first request (blocking)
+                first_req = await self.queue.get()
+                batch_requests.append(first_req)
+                total_items += len(first_req.request_items)
+                
+                # Try to collect more requests within timeout
+                while (time.time() - start_time) < self.batch_timeout:
+                    if total_items >= self.max_batch_size:
+                        break
+                    
+                    try:
+                        req = await asyncio.wait_for(
+                            self.queue.get(), 
+                            timeout=self.batch_timeout - (time.time() - start_time)
+                        )
+                        
+                        if total_items + len(req.request_items) <= self.max_batch_size:
+                            batch_requests.append(req)
+                            total_items += len(req.request_items)
+                        else:
+                            # Put it back if it doesn't fit
+                            await self.queue.put(req)
+                            break
+                    except asyncio.TimeoutError:
+                        break
+                
+                print(f"[DEBUG] Processing batch: {len(batch_requests)} requests, {total_items} total items")
+                
+                # Process the batch
+                await self._process_batch(batch_requests)
+                
+            except Exception as e:
+                print(f"[ERROR] Batch processor error: {e}")
+                import traceback
+                traceback.print_exc()
+    
+    async def _process_batch(self, batch_requests: List[BatchRequest]):
+        """Process a collected batch"""
+        # Flatten all request items
+        all_items = []
+        item_counts = []
+        
+        for req in batch_requests:
+            item_counts.append(len(req.request_items))
+            all_items.extend(req.request_items)
+        
+        print(f"[DEBUG] Sending {len(all_items)} items to vLLM")
+        
+        try:
+            # Run vLLM in executor
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                None,  # Use default executor
+                self._vllm_generate,
+                all_items
+            )
+            
+            # Split results back to original requests
+            start_idx = 0
+            for i, req in enumerate(batch_requests):
+                count = item_counts[i]
+                req_results = results[start_idx:start_idx + count]
+                start_idx += count
+                
+                # Set result
+                if not req.future.done():
+                    req.future.set_result(req_results)
+                    print(f"[DEBUG] Request {req.request_id} completed with {len(req_results)} results")
+            
+        except Exception as e:
+            print(f"[ERROR] vLLM processing failed: {e}")
+            # Propagate error to all futures
+            for req in batch_requests:
+                if not req.future.done():
+                    req.future.set_exception(e)
+    
+    def _vllm_generate(self, request_items: List[dict]) -> List[str]:
+        """Synchronous vLLM generation (runs in thread pool)"""
+        print(f"[DEBUG] vLLM generating {len(request_items)} items")
+        
+        outputs = llm.generate(request_items, sampling_params=sampling_params)
+        
+        results = []
+        for output in outputs:
+            result = output.outputs[0].text
+            
+            # Clean up result
+            if '<｜end▁of▁sentence｜>' in result:
+                result = result.replace('<｜end▁of▁sentence｜>', '')
+            
+            results.append(result)
+        
+        print(f"[DEBUG] vLLM generation complete: {len(results)} results")
+        return results
+
+# Global batch processor
+batch_processor = None
 
 def initialize_model():
     """Initialize the vLLM model"""
@@ -166,54 +315,9 @@ def prepare_image_request(image: Image.Image, prompt: str) -> dict:
         }
     }
 
-def process_batch_with_vllm(request_items: List[dict]) -> List[str]:
-    """Process a batch of requests with vLLM (must run in single thread)"""
-    print(f"[DEBUG] Processing batch of {len(request_items)} items with vLLM")
-    
-    # This is the blocking call - vLLM handles internal batching
-    outputs = llm.generate(request_items, sampling_params=sampling_params)
-    
-    results = []
-    for output in outputs:
-        result = output.outputs[0].text
-        
-        # Clean up result
-        if '<｜end▁of▁sentence｜>' in result:
-            result = result.replace('<｜end▁of▁sentence｜>', '')
-        
-        results.append(result)
-    
-    print(f"[DEBUG] Batch processing complete, {len(results)} results")
-    return results
-
-async def process_single_image(image: Image.Image, prompt: str = PROMPT) -> str:
-    """Process a single image with DeepSeek-OCR"""
-    print(f"[DEBUG] process_single_image called")
-    
-    # Step 1: Prepare request (CPU-bound, can be parallel)
-    loop = asyncio.get_event_loop()
-    request_item = await loop.run_in_executor(
-        cpu_executor, 
-        prepare_image_request, 
-        image, 
-        prompt
-    )
-    
-    print(f"[DEBUG] Request prepared, sending to vLLM...")
-    
-    # Step 2: Process with vLLM (must be serialized)
-    results = await loop.run_in_executor(
-        vllm_executor,
-        process_batch_with_vllm,
-        [request_item]
-    )
-    
-    print(f"[DEBUG] vLLM processing complete")
-    return results[0]
-
-async def process_multiple_images(images: List[Image.Image], prompt: str = PROMPT) -> List[str]:
-    """Process multiple images efficiently using vLLM's batching"""
-    print(f"[DEBUG] process_multiple_images called with {len(images)} images")
+async def process_images(images: List[Image.Image], prompt: str = PROMPT) -> List[str]:
+    """Process multiple images using dynamic batching"""
+    print(f"[DEBUG] process_images called with {len(images)} images")
     
     if not images:
         return []
@@ -226,27 +330,34 @@ async def process_multiple_images(images: List[Image.Image], prompt: str = PROMP
     ]
     request_items = await asyncio.gather(*prepare_tasks)
     
-    print(f"[DEBUG] All {len(request_items)} requests prepared, sending batch to vLLM...")
+    print(f"[DEBUG] All {len(request_items)} requests prepared")
     
-    # Step 2: Process entire batch with vLLM in one call
-    results = await loop.run_in_executor(
-        vllm_executor,
-        process_batch_with_vllm,
-        request_items
-    )
+    # Step 2: Send to dynamic batch processor
+    results = await batch_processor.add_request(request_items)
     
-    print(f"[DEBUG] Batch processing complete, {len(results)} results")
+    print(f"[DEBUG] Received {len(results)} results")
     return results
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize the model on startup"""
+    global batch_processor
+    
     initialize_model()
+    
+    # Start dynamic batch processor
+    batch_processor = DynamicBatchProcessor(
+        batch_timeout=0.05,  # 50ms window to collect requests
+        max_batch_size=MAX_CONCURRENCY
+    )
+    
+    # Start background processing loop
+    asyncio.create_task(batch_processor.process_loop())
+    print("[INFO] Dynamic batch processor started")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    vllm_executor.shutdown(wait=True)
     cpu_executor.shutdown(wait=True)
 
 @app.get("/")
@@ -264,7 +375,8 @@ async def health_check():
         "cuda_available": torch.cuda.is_available(),
         "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
         "max_concurrency": MAX_CONCURRENCY,
-        "num_workers": NUM_WORKERS
+        "num_workers": NUM_WORKERS,
+        "queue_size": batch_processor.queue.qsize() if batch_processor else 0
     }
 
 @app.post("/ocr/image", response_model=OCRResponse)
@@ -275,18 +387,18 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
         
         # Read image data
         image_data = await file.read()
-        print(f"[DEBUG] Read {len(image_data)} bytes of image data")
         
         # Convert to PIL Image
         image = Image.open(io.BytesIO(image_data)).convert('RGB')
-        print(f"[DEBUG] Converted to PIL Image, size: {image.size}")
+        print(f"[DEBUG] Image size: {image.size}")
         
         # Use provided prompt or default
         use_prompt = prompt if prompt else PROMPT
-        print(f"[DEBUG] Using prompt: {repr(use_prompt[:50])}...")
         
         # Process with DeepSeek-OCR
-        result = await process_single_image(image, use_prompt)
+        results = await process_images([image], use_prompt)
+        result = results[0]
+        
         print(f"[DEBUG] OCR complete, output length: {len(result)}")
         
         return OCRResponse(
@@ -314,13 +426,12 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         pdf_data = await file.read()
         print(f"[DEBUG] Read {len(pdf_data)} bytes of PDF data")
         
-        # Convert PDF to images (blocking, but fast)
+        # Convert PDF to images
         loop = asyncio.get_event_loop()
         images = await loop.run_in_executor(cpu_executor, pdf_to_images_high_quality, pdf_data, 144)
         print(f"[DEBUG] Converted PDF to {len(images)} images")
         
         if not images:
-            print(f"[DEBUG] No images extracted from PDF")
             return BatchOCRResponse(
                 success=False,
                 results=[],
@@ -330,11 +441,9 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         
         # Use provided prompt or default
         use_prompt = prompt if prompt else PROMPT
-        print(f"[DEBUG] Using prompt: {repr(use_prompt[:50])}...")
         
-        # Process all pages as a batch (vLLM handles internal batching)
-        print(f"[DEBUG] Processing {len(images)} pages as batch...")
-        results_text = await process_multiple_images(images, use_prompt)
+        # Process all pages
+        results_text = await process_images(images, use_prompt)
         
         # Convert to response format
         results = [
@@ -346,7 +455,7 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
             for i, result in enumerate(results_text)
         ]
         
-        print(f"[DEBUG] PDF processing complete: {len(results)} pages processed")
+        print(f"[DEBUG] PDF processing complete: {len(results)} pages")
         return BatchOCRResponse(
             success=True,
             results=results,
