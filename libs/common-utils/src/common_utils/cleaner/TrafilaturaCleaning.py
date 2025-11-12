@@ -125,26 +125,30 @@ class TrafilaturaHp:
                 tag.decompose()
 
             content = str(soup)
-            tree = self._trafilatura.load_html(content)
-            if tree is not None:
-                anchors = tree.xpath("//*[contains(@class, 'product') or contains(@id, 'product') or contains(@class, 'produit') or contains(@id, 'produit')]//a")
-                if anchors is not None:
-                    logging.info("Détection éléments de produits en balise a ==> modification a en h3")
-                    for a_tag in anchors:
-                        parent = a_tag.getparent()
-                        if parent is None:
-                            continue
+            try:
+                tree = self._trafilatura.load_html(content)
+                if tree is not None:
+                    anchors = tree.xpath("//*[contains(@class, 'product') or contains(@id, 'product') or contains(@class, 'produit') or contains(@id, 'produit')]//a")
+                    if anchors:
+                        logging.info("Détection éléments de produits en balise a ==> modification a en h3")
+                        for a_tag in anchors:
+                            parent = a_tag.getparent()
+                            if parent is None:
+                                continue
 
-                        h3_tag = SubElement(parent, 'h3')
+                            h3_tag = SubElement(parent, 'h3')
 
-                        h3_tag.text = a_tag.text
-                        for child in a_tag:
-                            h3_tag.append(child)
+                            h3_tag.text = a_tag.text
+                            for child in a_tag:
+                                h3_tag.append(child)
 
-                        parent.insert(parent.index(a_tag), h3_tag)
+                            parent.insert(parent.index(a_tag), h3_tag)
 
-                        parent.remove(a_tag)
+                            parent.remove(a_tag)
                         content = tostring(tree, method='html', encoding='unicode')
+            except Exception as e:
+                logging.warning(f"Échec de la modification de l'arbre HTML pour l'URL {url}. Utilisation du contenu original. Erreur: {e}")
+                pass
 
             results = {}
             for i, (output_type, ext) in enumerate(self.output_types.items()):
