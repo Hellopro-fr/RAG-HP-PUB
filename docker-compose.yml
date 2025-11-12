@@ -639,7 +639,7 @@ services:
     # depends_on:
     #   - ocr-service
     deploy:
-      replicas: 6
+      replicas: 3
     logging: *logging_defaults
 
   template-llm-service:
@@ -1025,6 +1025,19 @@ services:
       - ./apps-microservices/api-chatbot-html-service:/app:rw
     ports:
       - "3550:3000"
+    logging: *logging_defaults
+
+  redis-client-frontend:
+    profiles: ["app"]
+    build:
+      context: ./apps-microservices/redis-client-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3551:3000"
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_SECRET=${REDIS_SECRET}
     logging: *logging_defaults
 
   reverse-proxy:

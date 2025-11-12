@@ -35,6 +35,7 @@ export interface MessageSource {
     service_name: string;
     error_reason: string;
     status?: 'Re-queued' | 'Re-queued (Edited)' | 'Archived' | 'Re-queued (Legacy)';
+    requeued_at?: string;
     original_payload: Record<string, any>;
     [key: string]: any; // Allow other fields
 }
@@ -63,7 +64,14 @@ export const apiGetDashboardStats = (filters?: { date_start?: string; date_end?:
 };
 
 export const apiSearchMessages = (searchParams: SearchParams) => {
-    return api.post<SearchResponse>('/messages/search', searchParams);
+    // Map frontend camelCase to backend snake_case
+    const backendParams = {
+        filters: searchParams.filters,
+        search_term: searchParams.searchTerm,
+        page: searchParams.page,
+        page_size: searchParams.pageSize,
+    };
+    return api.post<SearchResponse>('/messages/search', backendParams);
 };
 
 export const apiGetMessageDetails = (messageId: string) => {
@@ -101,7 +109,7 @@ export const apiEditAndRequeueMessage = (messageId: string, newPayload: Record<s
 export const formatTimestamp = (ts: string) => {
     if (!ts) return 'N/A';
     try {
-        return format(new Date(ts), 'yyyy-MM-dd HH:mm:ss');
+        return format(new Date(ts), 'dd/MM/yyyy HH:mm:ss');
     } catch {
         return ts;
     }
