@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DeepSeek-OCR vLLM Server
-FastAPI wrapper for DeepSeek-OCR with vLLM backend (Async version)
+FastAPI wrapper for DeepSeek-OCR with vLLM backend
 """
 
 import os
@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
+from typing import Optional
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -43,8 +44,7 @@ from vllm.model_executor.models.registry import ModelRegistry
 # Register the custom model
 ModelRegistry.register_model("DeepseekOCRForCausalLM", DeepseekOCRForCausalLM)
 
-# Thread pool executor for blocking operations
-executor = ThreadPoolExecutor(max_workers=NUM_WORKERS)
+executor = ThreadPoolExecutor(max_workers=2)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -144,10 +144,11 @@ def pdf_to_images_high_quality(pdf_data: bytes, dpi: int = 144) -> List[Image.Im
     
     return images
 
-def _process_single_image_sync(image: Image.Image, prompt: str = PROMPT) -> str:
-    """Synchronous helper function to process a single image"""
-    print(f"[DEBUG] _process_single_image_sync called with prompt: {repr(prompt)}")
+async def process_single_image(image: Image.Image, prompt: str = PROMPT) -> str:
+    """Process a single image with DeepSeek-OCR using the specified prompt"""
+    print(f"[DEBUG] process_single_image called with prompt: {repr(prompt)}")
     print(f"[DEBUG] Prompt length: {len(prompt)} characters")
+    print(f"[DEBUG] Prompt starts with <image>: {prompt.startswith('<image>')}")
     
     # Create request format for vLLM
     request_item = {
@@ -163,37 +164,36 @@ def _process_single_image_sync(image: Image.Image, prompt: str = PROMPT) -> str:
         }
     }
     
-    print(f"[DEBUG] Sending request to vLLM...")
+    print(f"[DEBUG] Request item prompt: {repr(request_item['prompt'])}")
+    print(f"[DEBUG] Request item keys: {list(request_item.keys())}")
+    print(f"[DEBUG] Multi-modal data type: {type(request_item['multi_modal_data'])}")
     
-    # This is the blocking call
-    outputs = llm.generate([request_item], sampling_params=sampling_params)
+    # Generate with vLLM
+    print(f"[DEBUG] Sending request to vLLM...")
+    loop = asyncio.get_running_loop()
+
+    # Exécute la partie bloquante dans un thread séparé
+    outputs = await loop.run_in_executor(
+        executor,
+        lambda: llm.generate([request_item], sampling_params=sampling_params)
+    )
     
     result = outputs[0].outputs[0].text
     
+    print(f"[DEBUG] Model output (first 100 chars): {repr(result[:100])}")
     print(f"[DEBUG] Model output length: {len(result)} characters")
     
     # Clean up result
     if '<｜end▁of▁sentence｜>' in result:
         result = result.replace('<｜end▁of▁sentence｜>', '')
+        print(f"[DEBUG] Removed end-of-sentence tokens")
     
-    return result
-
-async def process_single_image(image: Image.Image, prompt: str = PROMPT) -> str:
-    """Process a single image with DeepSeek-OCR (async wrapper)"""
-    loop = asyncio.get_event_loop()
-    # Execute the blocking operation in a thread pool
-    result = await loop.run_in_executor(executor, _process_single_image_sync, image, prompt)
     return result
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize the model on startup"""
     initialize_model()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    executor.shutdown(wait=True)
 
 @app.get("/")
 async def root():
@@ -225,11 +225,16 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
         image = Image.open(io.BytesIO(image_data)).convert('RGB')
         print(f"[DEBUG] Converted to PIL Image, size: {image.size}")
         
+        # Debug logging
+        print(f"[DEBUG] Received prompt parameter: {repr(prompt)}")
+        print(f"[DEBUG] Default PROMPT from config: {repr(PROMPT)}")
+        
         # Use provided prompt or default
         use_prompt = prompt if prompt else PROMPT
         print(f"[DEBUG] Image endpoint selected prompt: {repr(use_prompt)}")
+        print(f"[DEBUG] Using custom prompt: {prompt is not None}")
         
-        # Process with DeepSeek-OCR (now async)
+        # Process with DeepSeek-OCR
         print(f"[DEBUG] Sending image to DeepSeek-OCR...")
         result = await process_single_image(image, use_prompt)
         print(f"[DEBUG] OCR complete, output length: {len(result)}")
@@ -253,14 +258,14 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
     try:
         print(f"[DEBUG] PDF endpoint called for file: {file.filename}")
         print(f"[DEBUG] Received prompt parameter: {repr(prompt)}")
+        print(f"[DEBUG] Default PROMPT from config: {repr(PROMPT)}")
         
         # Read PDF data
         pdf_data = await file.read()
         print(f"[DEBUG] Read {len(pdf_data)} bytes of PDF data")
         
-        # Convert PDF to images (blocking, but fast)
-        loop = asyncio.get_event_loop()
-        images = await loop.run_in_executor(executor, pdf_to_images_high_quality, pdf_data, 144)
+        # Convert PDF to images
+        images = pdf_to_images_high_quality(pdf_data, dpi=144)
         print(f"[DEBUG] Converted PDF to {len(images)} images")
         
         if not images:
@@ -275,28 +280,26 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         # Use provided prompt or default
         use_prompt = prompt if prompt else PROMPT
         print(f"[DEBUG] PDF endpoint selected prompt: {repr(use_prompt)}")
+        print(f"[DEBUG] Using custom prompt: {prompt is not None}")
         
-        # Process all pages concurrently using asyncio.gather
-        print(f"[DEBUG] Processing {len(images)} pages concurrently...")
-        tasks = [process_single_image(image, use_prompt) for image in images]
-        
-        # Process with progress tracking
+        # Process each page
         results = []
-        for i, task in enumerate(asyncio.as_completed(tasks)):
+        for page_num, image in enumerate(tqdm(images, desc="Processing pages")):
             try:
-                result = await task
+                print(f"[DEBUG] Processing page {page_num + 1}/{len(images)}")
+                result = await process_single_image(image, use_prompt)
                 results.append(OCRResponse(
                     success=True,
                     result=result,
-                    page_count=i + 1
+                    page_count=page_num + 1
                 ))
-                print(f"[DEBUG] Page {i + 1}/{len(images)} processed, output length: {len(result)}")
+                print(f"[DEBUG] Page {page_num + 1} processed successfully, output length: {len(result)}")
             except Exception as e:
-                print(f"[ERROR] Page {i + 1} failed: {str(e)}")
+                print(f"[ERROR] Page {page_num + 1} failed: {str(e)}")
                 results.append(OCRResponse(
                     success=False,
-                    error=f"Page {i + 1} error: {str(e)}",
-                    page_count=i + 1
+                    error=f"Page {page_num + 1} error: {str(e)}",
+                    page_count=page_num + 1
                 ))
         
         print(f"[DEBUG] PDF processing complete: {len(results)} pages processed")
@@ -318,30 +321,19 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
 
 @app.post("/ocr/batch")
 async def process_batch_endpoint(files: List[UploadFile] = File(...), prompt: Optional[str] = Form(None)):
-    """Process multiple files (images and PDFs) concurrently with optional custom prompt"""
-    tasks = []
+    """Process multiple files (images and PDFs) with optional custom prompt"""
+    results = []
     
     for file in files:
         if file.filename.lower().endswith('.pdf'):
-            tasks.append(process_pdf_endpoint(file, prompt))
+            result = await process_pdf_endpoint(file, prompt)
         else:
-            tasks.append(process_image_endpoint(file, prompt))
-    
-    # Process all files concurrently
-    results_data = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    results = []
-    for i, result in enumerate(results_data):
-        if isinstance(result, Exception):
-            results.append({
-                "filename": files[i].filename,
-                "result": OCRResponse(success=False, error=str(result))
-            })
-        else:
-            results.append({
-                "filename": files[i].filename,
-                "result": result
-            })
+            result = await process_image_endpoint(file, prompt)
+        
+        results.append({
+            "filename": file.filename,
+            "result": result
+        })
     
     return {"success": True, "results": results}
 
