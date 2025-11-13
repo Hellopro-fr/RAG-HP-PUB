@@ -188,16 +188,13 @@ class TrafilaturaHp:
                         extracted = None
 
                     if not extracted:
-                        logging.info(f"[{url}] - MIN_EXTRACTED_SIZE={size:>5}: SKIPPED (empty)")
                         continue
 
                     results[size] = extracted
                     length = len(extracted)
-                    logging.info(f"[{url}] - MIN_EXTRACTED_SIZE={size:>5}: {length:>6} characters")
 
                 if results:
                     best_size = max(results.keys(), key=lambda k: len(results[k]))
-                    logging.info(f"[{url}] - Meilleur MIN_EXTRACTED_SIZE: {best_size}")
                     final_content = results[best_size]
                     
                     article_content = self.extract_article(soup)
