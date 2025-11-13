@@ -2,6 +2,7 @@ pika
 python-dotenv
 beautifulsoup4
 bs4
+cython
 cchardet
 trafilatura[all]
 markdownify
