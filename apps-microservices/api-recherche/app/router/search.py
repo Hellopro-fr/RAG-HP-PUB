@@ -33,7 +33,7 @@ async def milvus_search_endpoint(request: SearchRequest = Body(...)):
             results = await cache_or_execute(
                 _perform_milvus_search,
                 request,
-                expire_seconds=86400  # Cache for 1 jour
+                expire_seconds=86400 * 7  # Cache for 7 days
             )
         return SearchReponse(results=results, post=request)
     except ValueError as ve:
