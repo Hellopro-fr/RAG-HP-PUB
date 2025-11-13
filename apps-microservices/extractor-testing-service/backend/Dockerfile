@@ -13,7 +13,7 @@ RUN npm install -g readability-cli
 RUN test -f /usr/local/bin/readable || (echo "'readable' CLI not found after installation!" && exit 1)
 
 # Stage 3: Final Python Application
-FROM python:3.13-slim
+FROM python:3.11-slim
 WORKDIR /app
 
 # Install build-essential which contains g++ and other build tools
