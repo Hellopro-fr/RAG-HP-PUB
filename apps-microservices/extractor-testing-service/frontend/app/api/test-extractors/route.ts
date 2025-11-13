@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     }
 
     // This URL points to the backend service within the Docker network.
-    const backendUrl = "http://extractor-testing-service:8000/test-extractors";
+    const backendUrl = "http://backend-extractor-testing-service:8034/test-extractors";
     
     const backendResponse = await fetch(backendUrl, {
       method: "POST",
