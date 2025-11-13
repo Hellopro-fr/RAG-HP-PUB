@@ -14,8 +14,10 @@ from .search import (
     get_category_details,
     call_search_api_async,
     get_category_details_async,
+    get_prompt_details_async,
     EXTERNAL_PRODUCT_API_URL,
-    EXTERNAL_CATEGORY_API_URL
+    EXTERNAL_CATEGORY_API_URL,
+    EXTERNAL_PROMPT_API_URL
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,8 @@ class ProductClassifier:
         self.deepseek_client = None
         self.category_cache = {}
         self.category_summary_cache = {}  # Cache pour les résumés de descriptions
+        self.prompt_cache = {}  # Cache pour les templates de prompts avec timestamp
+        self.prompt_cache_duration = 900  # Durée du cache en secondes (15 minutes = 900s)
         self.search_results_limit = 30
         self.categories_limit = 10
 
@@ -359,20 +363,58 @@ class ProductClassifier:
             'output_tokens': total_output_tokens
         }
 
-    def build_prompt(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> str:
-        """Construit le prompt pour le LLM"""
-        formatted_categories = "\n".join([
-            f"- ID: {cat['id']}, Nom: {cat['name']} (Score: {cat['total_score']:.2f})\n"
-            f"  Description: {descriptions.get(cat['id'], 'N/A')}"
-            for cat in categories[:self.categories_limit]
-        ])
-        
-        formatted_products = "\n".join([
-            f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
-            for ex in top_k_products[:5]
-        ])
-        
-        return f"""*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
+    async def get_prompt_template_async(self, prompt_id: int = 20) -> str:
+        """
+        Récupère le template de prompt depuis l'API externe avec mise en cache de 15 minutes.
+
+        Args:
+            prompt_id: ID du prompt à récupérer (par défaut 20)
+
+        Returns:
+            Le template de prompt avec les placeholders {titre_produit}, {description_produit}, etc.
+        """
+        current_time = time.time()
+
+        # Vérifier si le prompt est en cache et s'il n'a pas expiré (15 minutes)
+        if prompt_id in self.prompt_cache:
+            cached_data = self.prompt_cache[prompt_id]
+            cache_timestamp = cached_data.get('timestamp', 0)
+            cache_age = current_time - cache_timestamp
+
+            # Si le cache a moins de 15 minutes (900 secondes)
+            if cache_age < self.prompt_cache_duration:
+                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré depuis le cache (âge: {cache_age:.0f}s)")
+                return cached_data['content']
+            else:
+                logger.info(f"[ASYNC] Cache du prompt ID {prompt_id} expiré (âge: {cache_age:.0f}s), récupération d'une nouvelle version")
+
+        # Récupérer le prompt depuis l'API externe
+        try:
+            prompt_template = await get_prompt_details_async(prompt_id, EXTERNAL_PROMPT_API_URL)
+
+            if prompt_template:
+                # Mettre en cache avec timestamp
+                self.prompt_cache[prompt_id] = {
+                    'content': prompt_template,
+                    'timestamp': current_time
+                }
+                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré et mis en cache pour 15 minutes")
+                return prompt_template
+            else:
+                logger.error(f"[ASYNC] Impossible de récupérer le prompt ID {prompt_id}, utilisation du prompt par défaut")
+                # Retourner le prompt par défaut (actuel) en cas d'erreur
+                return self._get_default_prompt_template()
+
+        except Exception as e:
+            logger.error(f"[ASYNC] Erreur lors de la récupération du prompt ID {prompt_id}: {e}")
+            return self._get_default_prompt_template()
+
+    def _get_default_prompt_template(self) -> str:
+        """
+        Retourne le template de prompt par défaut (l'ancien prompt statique)
+        en cas d'erreur de récupération depuis l'API externe.
+        """
+        return """*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
 
 OBJECTIFS :
 
@@ -428,14 +470,14 @@ Revalider avec les conditions "IMPORTANTS"
 
 ---
 CONTENU DU PRODUIT :
-Titre: {product['nom_produit']}
-Description: {product['description']}
+Titre: {titre_produit}
+Description: {description_produit}
 ---
 LISTE DES CATEGORIES (avec leur description) :
-{formatted_categories}
+{liste_categories}
 ---
 EXEMPLES DE PRODUITS SIMILAIRES (pour contexte) :
-{formatted_products}
+{liste_produits}
 ---
 
 Format de réponse JSON **uniquement**, avec 2 champs :
@@ -448,6 +490,35 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
   "score": <0 ou 1>
 }}
 """
+
+    async def build_prompt_async(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> str:
+        """
+        Construit le prompt pour le LLM en récupérant le template depuis l'API externe.
+        Remplace les placeholders par les valeurs réelles.
+        """
+        # Récupérer le template de prompt (avec cache)
+        prompt_template = await self.get_prompt_template_async(prompt_id=20)
+
+        # Formater les catégories
+        formatted_categories = "\n".join([
+            f"- ID: {cat['id']}, Nom: {cat['name']} (Score: {cat['total_score']:.2f})\n"
+            f"  Description: {descriptions.get(cat['id'], 'N/A')}"
+            for cat in categories[:self.categories_limit]
+        ])
+
+        # Formater les produits similaires
+        formatted_products = "\n".join([
+            f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
+            for ex in top_k_products[:5]
+        ])
+
+        # Remplacer les placeholders dans le template
+        prompt_final = prompt_template.replace("{titre_produit}", product['nom_produit'])
+        prompt_final = prompt_final.replace("{description_produit}", product['description'])
+        prompt_final = prompt_final.replace("{liste_categories}", formatted_categories)
+        prompt_final = prompt_final.replace("{liste_produits}", formatted_products)
+
+        return prompt_final
 
     async def query_llm_qwen(self, prompt: str, enable_thinking: bool = False) -> Dict:
         """Appel au LLM Qwen via gRPC"""
@@ -649,7 +720,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             total_output_tokens = summarization_tokens['output_tokens']
 
             # Construction du prompt et appel LLM (asynchrone)
-            prompt = self.build_prompt(product, categories, descriptions, similar_products)
+            prompt = await self.build_prompt_async(product, categories, descriptions, similar_products)
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking)
 
             # Vérifier si l'appel LLM a échoué
