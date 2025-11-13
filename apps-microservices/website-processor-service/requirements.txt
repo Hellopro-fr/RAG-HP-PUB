@@ -2,6 +2,7 @@ pika
 python-dotenv
 beautifulsoup4
 bs4
+cchardet
 trafilatura[all]
 markdownify
 langdetect
