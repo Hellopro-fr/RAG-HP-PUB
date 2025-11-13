@@ -267,8 +267,9 @@ class SearchOrchestrator:
         self.context_builder = ContextBuilder()
         
     def _get_top_k_retrieval(self, top_k_final: int) -> int:
-        logging.info(f'ponderation: {self.request.options.ponderation} → {top_k_final} * {self.request.options.ponderation} = {top_k_final * self.request.options.ponderation}')
-        return int(top_k_final * self.request.options.ponderation if self.request.options.use_reranker else top_k_final)
+        retrieval_k = int(top_k_final * self.request.options.ponderation if self.request.options.use_reranker else top_k_final)
+        print(f'ponderation: {self.request.options.ponderation} → {top_k_final} * {self.request.options.ponderation} = {retrieval_k} (use_reranker: {self.request.options.use_reranker})')
+        return retrieval_k
 
 
     async def search_stream(self):
