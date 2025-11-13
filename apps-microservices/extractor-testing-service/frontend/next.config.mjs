@@ -9,7 +9,7 @@ const nextConfig = {
   webpack: (config) => {
     // This prevents webpack's file watcher from watching the node_modules directory.
     // It's the standard solution for the "EMFILE: too many open files" error in Next.js.
-    config.watchOptions.ignored = /node_modules/;
+    config.watchOptions = { ...config.watchOptions, ignored: /node_modules/ };
     return config;
   },
 }
