@@ -16,8 +16,8 @@ RUN test -f /usr/local/bin/readable || (echo "'readable' CLI not found after ins
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install build-essential for C++ compilation and default-jre-headless for Java runtime (for boilerpipe3).
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential default-jre-headless && rm -rf /var/lib/apt/lists/*
+# Install build-essential for C++ compilation, default-jre-headless for Java, and nodejs for the readability-js script.
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential default-jre-headless nodejs && rm -rf /var/lib/apt/lists/*
 
 # Copy binaries from builder stages
 # Correct the source executable name for go-trafilatura

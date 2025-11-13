@@ -52,8 +52,7 @@ def extract_goose3(html: str) -> str:
 # --- Tier 3 Library Functions ---
 
 def extract_newspaper4k(html: str) -> str:
-    article = NewspaperArticle(url='')
-    article.set_html(html)
+    article = NewspaperArticle(url='', html=html)
     article.parse()
     return article.text
 
@@ -111,7 +110,7 @@ def extract_go_readability(html: str) -> str:
         filepath = tmp_file.name
 
     try:
-        command = ["go-readability", "-f", filepath]
+        command = ["go-readability", filepath]
         return run_subprocess(command, html="")
     finally:
         os.remove(filepath)
