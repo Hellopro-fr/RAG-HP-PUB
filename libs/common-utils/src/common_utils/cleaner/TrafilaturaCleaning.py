@@ -157,31 +157,35 @@ class TrafilaturaHp:
                 for size in self.sizes:
                     self._config.set("DEFAULT", "MIN_EXTRACTED_SIZE", str(size))
 
-                    extracted = trafilatura.extract(
-                        content,
-                        output_format=output_type,
-                        include_tables=True,
-                        include_links=True,
-                        include_images=True,
-                        include_formatting=True,
-                        include_comments=True,
-                        # with_metadata=True,  # Important pour que trafilatura extraie l'image principale
-                        favor_recall=True,
-                        # favor_precision=True,
-                        config=self._config,
-                        deduplicate=True,
-                        url=url,
-                        prune_xpath=[
-                            "//*[contains(@class, 'd-none')]", # Exclude d-none class
-                            # "//*[contains(@class, 'hidden')]",  # Exclude hidden class
-                            # "//*[@style[contains(., 'display:none')]]"  # Exclude inline display:none
-                            "//footer",
-                            "//nav",
-                            "//script",
-                            "//noscript",
-                            "//style"
-                        ]
-                    )
+                    try:
+                        extracted = trafilatura.extract(
+                            content,
+                            output_format=output_type,
+                            include_tables=True,
+                            include_links=True,
+                            include_images=True,
+                            include_formatting=True,
+                            include_comments=True,
+                            # with_metadata=True,  # Important pour que trafilatura extraie l'image principale
+                            favor_recall=True,
+                            # favor_precision=True,
+                            config=self._config,
+                            deduplicate=True,
+                            url=url,
+                            prune_xpath=[
+                                "//*[contains(@class, 'd-none')]", # Exclude d-none class
+                                # "//*[contains(@class, 'hidden')]",  # Exclude hidden class
+                                # "//*[@style[contains(., 'display:none')]]"  # Exclude inline display:none
+                                "//footer",
+                                "//nav",
+                                "//script",
+                                "//noscript",
+                                "//style"
+                            ]
+                        )
+                    except Exception as e:
+                        logging.warning(f"[{url}] - Erreur lors de l'extraction Trafilatura avec MIN_EXTRACTED_SIZE={size}: {e}")
+                        extracted = None
 
                     if not extracted:
                         logging.info(f"[{url}] - MIN_EXTRACTED_SIZE={size:>5}: SKIPPED (empty)")
