@@ -53,6 +53,8 @@ def extract_goose3(html: str) -> str:
 
 def extract_newspaper4k(html: str) -> str:
     article = NewspaperArticle(url='', html=html)
+    # Manually set the download state to avoid the "You must `download()` an article first!" error
+    article.download_state = 2
     article.parse()
     return article.text
 
@@ -104,16 +106,9 @@ def extract_go_trafilatura(html: str) -> str:
     return run_subprocess(command, html)
 
 def extract_go_readability(html: str) -> str:
-    # This CLI also works best with a file
-    with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".html", encoding='utf-8') as tmp_file:
-        tmp_file.write(html)
-        filepath = tmp_file.name
-
-    try:
-        command = ["go-readability", filepath]
-        return run_subprocess(command, html="")
-    finally:
-        os.remove(filepath)
+    # Pipe the content directly to the command via stdin.
+    command = ["go-readability"]
+    return run_subprocess(command, html=html)
 
 # --- Main Orchestrator ---
 

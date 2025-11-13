@@ -16,7 +16,7 @@ RUN test -f /usr/local/bin/readable || (echo "'readable' CLI not found after ins
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install build-essential for C++ compilation, default-jre-headless for Java, and nodejs for the readability-js script.
+# Install build-essential for C++ compilation and default-jre-headless for Java runtime (for boilerpipe3).
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential default-jre-headless nodejs && rm -rf /var/lib/apt/lists/*
 
 # Copy binaries from builder stages
@@ -26,6 +26,9 @@ COPY --from=go-builder /go/bin/go-readability /usr/local/bin/go-readability
 # Copy the 'readable' executable and rename it to 'readability-js' for use in the Python app.
 COPY --from=node-builder /usr/local/bin/readable /usr/local/bin/readability-js
 COPY --from=node-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+
+# Set NODE_PATH so globally installed Node modules can be found by their executables.
+ENV NODE_PATH /usr/local/lib/node_modules
 
 # Install Python dependencies
 COPY apps-microservices/extractor-testing-service/backend/requirements.txt .
