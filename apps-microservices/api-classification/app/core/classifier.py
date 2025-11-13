@@ -43,6 +43,8 @@ class ProductClassifier:
         self.category_summary_cache = {}  # Cache pour les résumés de descriptions
         self.prompt_cache = {}  # Cache pour les templates de prompts avec timestamp
         self.prompt_cache_duration = 900  # Durée du cache en secondes (15 minutes = 900s)
+        self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
+        self.summarization_prompt_cache_duration = 604800  # Durée du cache en secondes (7 jours = 604800s)
         self.search_results_limit = 30
         self.categories_limit = 10
 
@@ -243,7 +245,7 @@ class ProductClassifier:
 
     async def _summarize_category_description_async(self, description: str) -> Dict[str, Any]:
         """
-        Résume une description de catégorie en 2 phrases maximum via DeepSeek.
+        Résume une description de catégorie via DeepSeek en utilisant un prompt récupéré depuis l'API externe.
 
         Returns:
             Dict contenant:
@@ -269,19 +271,25 @@ class ProductClassifier:
             }
 
         try:
+            # Récupérer le prompt de summarization depuis l'API externe (avec cache de 7 jours)
+            prompt_data = await self.get_summarization_prompt_template_async(prompt_id=89)
+            prompt_template = prompt_data['prompt']
+            temperature = prompt_data['temperature']
+
+            # Remplacer le placeholder par la description
+            prompt = prompt_template.replace("{description_categorie}", description)
+
             deepseek_client = openai.OpenAI(
                 api_key=api_key,
                 base_url="https://api.deepseek.com",
                 timeout=60
             )
 
-            prompt = f"Résume cette description de catégorie en maximum 2 phrases concises, sans mise en forme, sans liste à puces:\n\n{description}"
-
             response = await asyncio.to_thread(
                 deepseek_client.chat.completions.create,
                 model="deepseek-chat",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
+                temperature=temperature,
                 max_tokens=150
             )
 
@@ -425,6 +433,76 @@ class ProductClassifier:
                 'prompt': self._get_default_prompt_template(),
                 'temperature': 0.0
             }
+
+    async def get_summarization_prompt_template_async(self, prompt_id: int = 89) -> Dict[str, Any]:
+        """
+        Récupère le template de prompt de summarization depuis l'API externe avec mise en cache de 7 jours.
+
+        Args:
+            prompt_id: ID du prompt de summarization à récupérer (par défaut 89)
+
+        Returns:
+            Un dictionnaire contenant:
+            {
+                'prompt': 'Le template de prompt avec le placeholder {description_categorie}',
+                'temperature': 0.3
+            }
+        """
+        current_time = time.time()
+
+        # Vérifier si le prompt est en cache et s'il n'a pas expiré (7 jours)
+        if prompt_id in self.summarization_prompt_cache:
+            cached_data = self.summarization_prompt_cache[prompt_id]
+            cache_timestamp = cached_data.get('timestamp', 0)
+            cache_age = current_time - cache_timestamp
+
+            # Si le cache a moins de 7 jours (604800 secondes)
+            if cache_age < self.summarization_prompt_cache_duration:
+                logger.info(f"[ASYNC] Prompt summarization ID {prompt_id} récupéré depuis le cache (âge: {cache_age:.0f}s)")
+                return {
+                    'prompt': cached_data['content'],
+                    'temperature': cached_data['temperature']
+                }
+            else:
+                logger.info(f"[ASYNC] Cache du prompt summarization ID {prompt_id} expiré (âge: {cache_age:.0f}s), récupération d'une nouvelle version")
+
+        # Récupérer le prompt depuis l'API externe
+        try:
+            prompt_data = await get_prompt_details_async(prompt_id, EXTERNAL_PROMPT_API_URL)
+
+            if prompt_data:
+                # Mettre en cache avec timestamp
+                self.summarization_prompt_cache[prompt_id] = {
+                    'content': prompt_data['prompt'],
+                    'temperature': prompt_data['temperature'],
+                    'timestamp': current_time
+                }
+                logger.info(f"[ASYNC] Prompt summarization ID {prompt_id} récupéré et mis en cache pour 7 jours (temperature: {prompt_data['temperature']})")
+                return {
+                    'prompt': prompt_data['prompt'],
+                    'temperature': prompt_data['temperature']
+                }
+            else:
+                logger.error(f"[ASYNC] Impossible de récupérer le prompt summarization ID {prompt_id}, utilisation du prompt par défaut")
+                # Retourner le prompt par défaut en cas d'erreur
+                return {
+                    'prompt': self._get_default_summarization_prompt_template(),
+                    'temperature': 0.3
+                }
+
+        except Exception as e:
+            logger.error(f"[ASYNC] Erreur lors de la récupération du prompt summarization ID {prompt_id}: {e}")
+            return {
+                'prompt': self._get_default_summarization_prompt_template(),
+                'temperature': 0.3
+            }
+
+    def _get_default_summarization_prompt_template(self) -> str:
+        """
+        Retourne le template de prompt de summarization par défaut
+        en cas d'erreur de récupération depuis l'API externe.
+        """
+        return "Résume cette description de catégorie en maximum 2 phrases concises, sans mise en forme, sans liste à puces:\n\n{description_categorie}"
 
     def _get_default_prompt_template(self) -> str:
         """
