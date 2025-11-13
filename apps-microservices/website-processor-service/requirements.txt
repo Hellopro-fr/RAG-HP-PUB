@@ -2,9 +2,7 @@ pika
 python-dotenv
 beautifulsoup4
 bs4
-cython
-cchardet
-trafilatura[all]
+trafilatura
 markdownify
 langdetect
 sentence_splitter
