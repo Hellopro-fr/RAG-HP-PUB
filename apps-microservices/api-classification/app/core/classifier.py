@@ -363,7 +363,7 @@ class ProductClassifier:
             'output_tokens': total_output_tokens
         }
 
-    async def get_prompt_template_async(self, prompt_id: int = 20) -> str:
+    async def get_prompt_template_async(self, prompt_id: int = 20) -> Dict[str, Any]:
         """
         Récupère le template de prompt depuis l'API externe avec mise en cache de 15 minutes.
 
@@ -371,7 +371,11 @@ class ProductClassifier:
             prompt_id: ID du prompt à récupérer (par défaut 20)
 
         Returns:
-            Le template de prompt avec les placeholders {titre_produit}, {description_produit}, etc.
+            Un dictionnaire contenant:
+            {
+                'prompt': 'Le template de prompt avec les placeholders {titre_produit}, etc.',
+                'temperature': 0.4
+            }
         """
         current_time = time.time()
 
@@ -384,30 +388,43 @@ class ProductClassifier:
             # Si le cache a moins de 15 minutes (900 secondes)
             if cache_age < self.prompt_cache_duration:
                 logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré depuis le cache (âge: {cache_age:.0f}s)")
-                return cached_data['content']
+                return {
+                    'prompt': cached_data['content'],
+                    'temperature': cached_data['temperature']
+                }
             else:
                 logger.info(f"[ASYNC] Cache du prompt ID {prompt_id} expiré (âge: {cache_age:.0f}s), récupération d'une nouvelle version")
 
         # Récupérer le prompt depuis l'API externe
         try:
-            prompt_template = await get_prompt_details_async(prompt_id, EXTERNAL_PROMPT_API_URL)
+            prompt_data = await get_prompt_details_async(prompt_id, EXTERNAL_PROMPT_API_URL)
 
-            if prompt_template:
+            if prompt_data:
                 # Mettre en cache avec timestamp
                 self.prompt_cache[prompt_id] = {
-                    'content': prompt_template,
+                    'content': prompt_data['prompt'],
+                    'temperature': prompt_data['temperature'],
                     'timestamp': current_time
                 }
-                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré et mis en cache pour 15 minutes")
-                return prompt_template
+                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré et mis en cache pour 15 minutes (temperature: {prompt_data['temperature']})")
+                return {
+                    'prompt': prompt_data['prompt'],
+                    'temperature': prompt_data['temperature']
+                }
             else:
                 logger.error(f"[ASYNC] Impossible de récupérer le prompt ID {prompt_id}, utilisation du prompt par défaut")
                 # Retourner le prompt par défaut (actuel) en cas d'erreur
-                return self._get_default_prompt_template()
+                return {
+                    'prompt': self._get_default_prompt_template(),
+                    'temperature': 0.0
+                }
 
         except Exception as e:
             logger.error(f"[ASYNC] Erreur lors de la récupération du prompt ID {prompt_id}: {e}")
-            return self._get_default_prompt_template()
+            return {
+                'prompt': self._get_default_prompt_template(),
+                'temperature': 0.0
+            }
 
     def _get_default_prompt_template(self) -> str:
         """
@@ -491,13 +508,18 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 }}
 """
 
-    async def build_prompt_async(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> str:
+    async def build_prompt_async(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> Tuple[str, float]:
         """
         Construit le prompt pour le LLM en récupérant le template depuis l'API externe.
         Remplace les placeholders par les valeurs réelles.
+
+        Returns:
+            Tuple[str, float]: (prompt_final, temperature)
         """
-        # Récupérer le template de prompt (avec cache)
-        prompt_template = await self.get_prompt_template_async(prompt_id=20)
+        # Récupérer le template de prompt avec la température (avec cache)
+        prompt_data = await self.get_prompt_template_async(prompt_id=20)
+        prompt_template = prompt_data['prompt']
+        temperature = prompt_data['temperature']
 
         # Formater les catégories
         formatted_categories = "\n".join([
@@ -518,7 +540,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
         prompt_final = prompt_final.replace("{liste_categories}", formatted_categories)
         prompt_final = prompt_final.replace("{liste_produits}", formatted_products)
 
-        return prompt_final
+        return prompt_final, temperature
 
     async def query_llm_qwen(self, prompt: str, enable_thinking: bool = False) -> Dict:
         """Appel au LLM Qwen via gRPC"""
@@ -581,8 +603,15 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 }
             }
 
-    async def query_llm(self, prompt: str, enable_thinking: bool = False) -> Dict:
-        """Appel au LLM selon le choix (asynchrone pour supporter Qwen)"""
+    async def query_llm(self, prompt: str, enable_thinking: bool = False, temperature: float = 0.0) -> Dict:
+        """
+        Appel au LLM selon le choix (asynchrone pour supporter Qwen)
+
+        Args:
+            prompt: Le prompt à envoyer au LLM
+            enable_thinking: Active le mode thinking pour Qwen
+            temperature: La température à utiliser pour la génération (par défaut 0.0)
+        """
         messages = [{"role": "user", "content": prompt}]
 
         try:
@@ -596,7 +625,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     self.openai_client.chat.completions.create,
                     model="gpt-4o-2024-05-13",
                     messages=messages,
-                    temperature=0,
+                    temperature=temperature,
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
@@ -609,7 +638,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     self.deepseek_client.chat.completions.create,
                     model="deepseek-chat",
                     messages=messages,
-                    temperature=0,
+                    temperature=temperature,
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
@@ -720,8 +749,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             total_output_tokens = summarization_tokens['output_tokens']
 
             # Construction du prompt et appel LLM (asynchrone)
-            prompt = await self.build_prompt_async(product, categories, descriptions, similar_products)
-            llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking)
+            prompt, temperature = await self.build_prompt_async(product, categories, descriptions, similar_products)
+            llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking, temperature=temperature)
 
             # Vérifier si l'appel LLM a échoué
             if not llm_result_wrapper.get('success', False):

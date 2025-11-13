@@ -219,7 +219,7 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
         return None
 
 
-async def get_prompt_details_async(prompt_id: int, url: str) -> Optional[str]:
+async def get_prompt_details_async(prompt_id: int, url: str) -> Optional[Dict[str, Any]]:
     """
     Version asynchrone pour récupérer un template de prompt depuis l'API externe.
     Utilise httpx pour des appels HTTP non-bloquants.
@@ -229,7 +229,12 @@ async def get_prompt_details_async(prompt_id: int, url: str) -> Optional[str]:
         url: URL de l'API externe
 
     Returns:
-        Le contenu du prompt (template avec placeholders) ou None en cas d'erreur
+        Un dictionnaire avec le contenu du prompt et la température:
+        {
+            'prompt': 'contenu du prompt avec placeholders',
+            'temperature': 0.4
+        }
+        ou None en cas d'erreur
     """
     headers = {'Content-Type': 'application/json'}
     payload = {'id_prompt': prompt_id}
@@ -240,15 +245,17 @@ async def get_prompt_details_async(prompt_id: int, url: str) -> Optional[str]:
             response.raise_for_status()
             data = response.json()
 
-            # On s'attend à recevoir un objet avec le contenu du prompt
-            if isinstance(data, dict) and 'prompt_content' in data:
-                prompt_content = str(data.get('prompt_content', ''))
-                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré avec succès")
-                return prompt_content
-            elif isinstance(data, str):
-                # Si l'API retourne directement le contenu du prompt en string
-                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré avec succès (format string)")
-                return data
+            # On s'attend à recevoir un objet avec 'prompt' et 'temperature'
+            if isinstance(data, dict) and 'prompt' in data:
+                prompt_content = str(data.get('prompt', ''))
+                temperature = float(data.get('temperature', 0.0))  # Température par défaut: 0.0
+
+                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré avec succès (temperature: {temperature})")
+
+                return {
+                    'prompt': prompt_content,
+                    'temperature': temperature
+                }
             else:
                 logger.error(f"[ASYNC] Format de réponse inattendu pour get_prompt_details: {data}")
                 return None
