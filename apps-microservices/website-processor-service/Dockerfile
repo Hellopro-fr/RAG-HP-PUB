@@ -5,6 +5,10 @@ WORKDIR /app
 # Dit à Python de toujours chercher les modules à partir du dossier /app.
 ENV PYTHONPATH=/app
 
+# Install build-essential which contains g++ and other build tools
+# needed for compiling Python packages like faust-cchardet.
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+
 # Étape 2: Installer les dépendances
 # On copie la lib partagée
 COPY libs/common-utils /app/libs/common-utils
