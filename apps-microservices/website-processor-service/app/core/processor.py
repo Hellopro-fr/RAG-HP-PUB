@@ -19,6 +19,9 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     # Étape 0: Initialisation du message de sortie
     output_message = {}
     log = "la vérification de template"
+    url = website_data.get("url", "URL N/A")
+    initial_content_size = len(website_data.get("text", ""))
+    logging.info(f"[{url}] - Taille contenu initial: {initial_content_size} chars.")
     
     # Étape 1: Vérifier les données d'entrée
     if not isinstance(website_data, dict):
@@ -28,6 +31,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     if website_data.get("page_type","") == "header" or website_data.get("page_type","") == "footer":
         page_type = str(website_data.get("page_type",""))
         log = "l'embedding"
+        logging.info(f"[{url}] - Chemin de traitement: Header/Footer ({page_type}).")
         # Étape 2.1: Extraire le header et footer
         try:
             extractor = HeaderFooterExtractor(website_data.get("text",""))
@@ -43,10 +47,12 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
                 if not text_to_embed:
                     raise ValueError("Aucun footer extrait.")
             
+            logging.info(f"[{url}] - Taille texte extrait brut: {len(text_to_embed)} chars.")
             text_to_embed_clean = text_to_embed.strip()
         except Exception as e:
             raise ValueError(f"Erreur lors de l'extraction du {page_type.capitalize()}: {e}")
     else:  
+        logging.info(f"[{url}] - Chemin de traitement: Contenu Principal (Trafilatura).")
         # Étape 2.1: Construction du dictionnaire d'entrée pour le nettoyage
         info = {
             "url": website_data.get("url",""),
@@ -72,6 +78,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         if not data_extracted:
             raise ValueError("Le contenu extrait est vide ou invalide.")
         
+        logging.info(f"[{url}] - Taille texte extrait par Trafilatura: {len(data_extracted)} chars.")
         text_to_embed_clean = data_extracted.strip()
     
     # Étape 3: Construire le message de sortie
@@ -86,8 +93,8 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     }
 
     # Étape 4: Afficher le message de sortie pour débogage
-    logging.info(f"🔍Website-Processor: Message prêt pour {log}")
+    logging.info(f"[{url}] - Taille finale du texte nettoyé: {len(text_to_embed_clean)} chars. Prêt pour {log}.")
     
     # Étape 5: Retourner le message prêt à être publié
-    logging.info(f"📦 Website-Processor: Website traité pour {log}.")
+    logging.info(f"[{url}] - 📦 Website traité pour {log}.")
     return output_message

@@ -2,6 +2,7 @@ import pika
 import os
 import time
 import asyncio
+import logging
 
 from website_processor_service.messaging.consumer import Consumer
 from website_processor_service.messaging.publisher import Publisher
@@ -14,9 +15,11 @@ async def main():
     Point d'entrée principal asynchrone du service.
     Met en place la connexion et lance les composants.
     """
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
     rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
     
-    print("🚀 Website-Processor: Démarrage...")
+    logging.info("🚀 Website-Processor: Démarrage...")
     
     # --- Start Prometheus metrics server ---
     start_metrics_server_in_thread(port=8530)
@@ -24,7 +27,7 @@ async def main():
     loop = asyncio.get_event_loop()
     try:
         connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
-        print("✅ Website-Processor: Connecté à RabbitMQ.")
+        logging.info("✅ Website-Processor: Connecté à RabbitMQ.")
         
         async with connection:
             publisher = Publisher(connection)
@@ -36,12 +39,12 @@ async def main():
             await asyncio.Future()
 
     except pika.exceptions.AMQPConnectionError as e:
-        print(f"❌ Website-Processor: Impossible de se connecter après plusieurs tentatives. Erreur: {e}")
+        logging.error(f"❌ Website-Processor: Impossible de se connecter après plusieurs tentatives. Erreur: {e}")
         exit(1)
     except KeyboardInterrupt:
-        print("\n🛑 Website-Processor: Arrêt demandé.")
+        logging.info("\n🛑 Website-Processor: Arrêt demandé.")
     finally:
-        print("✅ Website-Processor: Service arrêté.")
+        logging.info("✅ Website-Processor: Service arrêté.")
 
 if __name__ == '__main__':
     asyncio.run(main())

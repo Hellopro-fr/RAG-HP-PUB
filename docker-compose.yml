@@ -522,7 +522,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 8
+      replicas: 4
     networks:
       - services-net
     logging: *logging_defaults
