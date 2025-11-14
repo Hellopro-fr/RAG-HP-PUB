@@ -16,7 +16,7 @@ from goose3 import Goose
 from newspaper import Article as NewspaperArticle
 import newsplease
 from boilerpipe.extract import Extractor as BoilerpipeExtractor
-import extractnet
+# import extractnet
 from bs4 import BeautifulSoup
 
 from schemas.schemas import ResultItem
@@ -72,11 +72,11 @@ def extract_boilerpipe3(html: str) -> str:
     extractor = BoilerpipeExtractor(extractor='ArticleExtractor', html=html)
     return extractor.getText()
 
-def extract_extractnet(html: str) -> str:
-    extracted_blocks = extractnet.extract(html)
-    # The result is a list of dicts, each with a 'text' key.
-    # We join the text from all blocks to get the full content.
-    return "\n".join([block['text'] for block in extracted_blocks if 'text' in block])
+# def extract_extractnet(html: str) -> str:
+#     extracted_blocks = extractnet.extract(html)
+#     # The result is a list of dicts, each with a 'text' key.
+#     # We join the text from all blocks to get the full content.
+#     return "\n".join([block['text'] for block in extracted_blocks if 'text' in block])
 
 # --- Custom HP Trafilatura Extractor ---
 def extract_trafilatura_hp(html: str) -> str:
@@ -162,7 +162,7 @@ async def run_all_extractors(html: str) -> Dict[str, ResultItem]:
         "newspaper4k": (extract_newspaper4k, html),
         "news-please": (extract_newsplease, html),
         "boilerpipe3": (extract_boilerpipe3, html),
-        "extractnet": (extract_extractnet, html),
+        # "extractnet": (extract_extractnet, html),
     }
 
     base_results = {}
