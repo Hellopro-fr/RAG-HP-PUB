@@ -18,6 +18,7 @@ import newsplease
 from boilerpipe.extract import Extractor as BoilerpipeExtractor
 
 from schemas.schemas import ResultItem
+from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,22 @@ def extract_newsplease(html: str) -> str:
 def extract_boilerpipe3(html: str) -> str:
     extractor = BoilerpipeExtractor(extractor='ArticleExtractor', html=html)
     return extractor.getText()
+
+# --- Custom HP Trafilatura Extractor ---
+def extract_trafilatura_hp(html: str) -> str:
+    """
+    Runs the custom TrafilaturaHp extractor from the common-utils library.
+    """
+    info = {
+        "url": "",
+        "content": html,
+        "fetch": False
+    }
+    # The __init__ expects a BaseTrafilatura object, but the implementation
+    # uses it like a dict, so we pass a dict for consistency with other services.
+    extractor = TrafilaturaHp(info)
+    result = extractor.extract()
+    return result.content if result else ""
 
 # --- Tier 2 (Non-Python) Library Functions ---
 
@@ -127,6 +144,8 @@ async def run_all_extractors(html: str) -> Dict[str, ResultItem]:
         "Readability.js (Mozilla)": (extract_readability_js, html),
         "go-trafilatura": (extract_go_trafilatura, html),
         "go-readability": (extract_go_readability, html),
+        # Custom
+        "Trafilatura (Custom HP)": (extract_trafilatura_hp, html),
         # Tier 3
         "newspaper4k": (extract_newspaper4k, html),
         "news-please": (extract_newsplease, html),
