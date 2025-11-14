@@ -91,8 +91,9 @@ def extract_readability_js(html: str) -> str:
         filepath = tmp_file.name
     
     try:
-        # The command is the aliased 'readability-js' executable followed by the filepath.
-        command = ["readability-js", filepath]
+        # The command is the aliased 'readability-js' executable.
+        # We add '--output json' to get a structured output.
+        command = ["readability-js", "--output", "json", filepath]
         # The tool outputs a JSON string to stdout.
         json_output = run_subprocess(command, html="") # Input is via file, not stdin
         # Parse the JSON and extract the 'textContent' field.
