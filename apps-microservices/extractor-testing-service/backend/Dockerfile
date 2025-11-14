@@ -23,12 +23,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 COPY --from=go-builder /go/bin/go-trafilatura /usr/local/bin/go-trafilatura
 COPY --from=go-builder /go/bin/go-readability /usr/local/bin/go-readability
 
-# Copy the Node.js runtime and its globally installed modules from the builder stage.
-COPY --from=node-builder /usr/local/bin/node /usr/local/bin/node
-COPY --from=node-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+# Copy the entire Node.js environment from the builder stage. This includes the
+# binary, global modules, and bin scripts/symlinks, ensuring perfect parity.
+COPY --from=node-builder /usr/local/ /usr/local/
 
-# Set NODE_PATH so globally installed Node modules can be found by their executables.
-ENV NODE_PATH /usr/local/lib/node_modules
+# Create a simpler alias for the readability-cli for use in the Python app.
+RUN ln -s /usr/local/bin/readable /usr/local/bin/readability-js
 
 # Install Python dependencies
 COPY apps-microservices/extractor-testing-service/backend/requirements.txt .
