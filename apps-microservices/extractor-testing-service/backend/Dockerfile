@@ -17,12 +17,14 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install build-essential for C++ compilation and default-jre-headless for Java runtime (for boilerpipe3).
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential default-jre-headless nodejs && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential default-jre-headless && rm -rf /var/lib/apt/lists/*
 
 # Copy binaries from builder stages
 # Correct the source executable name for go-trafilatura
 COPY --from=go-builder /go/bin/go-trafilatura /usr/local/bin/go-trafilatura
 COPY --from=go-builder /go/bin/go-readability /usr/local/bin/go-readability
+# Copy the Node.js runtime from the builder stage to ensure the runtime environment matches the build environment.
+COPY --from=node-builder /usr/local/bin/node /usr/local/bin/node
 # Copy the 'readable' executable and rename it to 'readability-js' for use in the Python app.
 COPY --from=node-builder /usr/local/bin/readable /usr/local/bin/readability-js
 COPY --from=node-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
