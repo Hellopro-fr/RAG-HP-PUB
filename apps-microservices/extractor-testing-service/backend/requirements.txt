@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 pydantic
+html5lib
 lxml
 lxml_html_clean
 beautifulsoup4
