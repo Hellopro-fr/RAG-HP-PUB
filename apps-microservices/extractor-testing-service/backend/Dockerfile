@@ -20,14 +20,16 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential default-jre-headless && rm -rf /var/lib/apt/lists/*
 
 # Copy binaries from builder stages
-# Correct the source executable name for go-trafilatura
 COPY --from=go-builder /go/bin/go-trafilatura /usr/local/bin/go-trafilatura
 COPY --from=go-builder /go/bin/go-readability /usr/local/bin/go-readability
-# Copy the Node.js runtime from the builder stage to ensure the runtime environment matches the build environment.
+
+# Copy the Node.js runtime and its globally installed modules from the builder stage.
 COPY --from=node-builder /usr/local/bin/node /usr/local/bin/node
-# Copy the 'readable' executable and rename it to 'readability-js' for use in the Python app.
-COPY --from=node-builder /usr/local/bin/readable /usr/local/bin/readability-js
 COPY --from=node-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+
+# Create a symlink to the readability-cli executable, named 'readability-js' for our app.
+# This mimics how 'npm install -g' works and is crucial for the script to find its dependencies.
+RUN ln -s /usr/local/lib/node_modules/readability-cli/cli.js /usr/local/bin/readability-js
 
 # Set NODE_PATH so globally installed Node modules can be found by their executables.
 ENV NODE_PATH /usr/local/lib/node_modules
