@@ -14,8 +14,10 @@ from .search import (
     get_category_details,
     call_search_api_async,
     get_category_details_async,
+    get_prompt_details_async,
     EXTERNAL_PRODUCT_API_URL,
-    EXTERNAL_CATEGORY_API_URL
+    EXTERNAL_CATEGORY_API_URL,
+    EXTERNAL_PROMPT_API_URL
 )
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,10 @@ class ProductClassifier:
         self.deepseek_client = None
         self.category_cache = {}
         self.category_summary_cache = {}  # Cache pour les résumés de descriptions
+        self.prompt_cache = {}  # Cache pour les templates de prompts avec timestamp
+        self.prompt_cache_duration = 900  # Durée du cache en secondes (15 minutes = 900s)
+        self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
+        self.summarization_prompt_cache_duration = 604800  # Durée du cache en secondes (7 jours = 604800s)
         self.search_results_limit = 30
         self.categories_limit = 10
 
@@ -107,7 +113,7 @@ class ProductClassifier:
             }
             for cat in categories[:self.categories_limit]
         ]
-    
+
     def is_llm_configured(self) -> bool:
         """Vérifie si un LLM est configuré"""
         if self.llm_choice == 'Qwen':
@@ -239,7 +245,7 @@ class ProductClassifier:
 
     async def _summarize_category_description_async(self, description: str) -> Dict[str, Any]:
         """
-        Résume une description de catégorie en 2 phrases maximum via DeepSeek.
+        Résume une description de catégorie via DeepSeek en utilisant un prompt récupéré depuis l'API externe.
 
         Returns:
             Dict contenant:
@@ -265,19 +271,25 @@ class ProductClassifier:
             }
 
         try:
+            # Récupérer le prompt de summarization depuis l'API externe (avec cache de 7 jours)
+            prompt_data = await self.get_summarization_prompt_template_async(prompt_id=89)
+            prompt_template = prompt_data['prompt']
+            temperature = prompt_data['temperature']
+
+            # Remplacer le placeholder par la description
+            prompt = prompt_template.replace("{description_categorie}", description)
+
             deepseek_client = openai.OpenAI(
                 api_key=api_key,
                 base_url="https://api.deepseek.com",
                 timeout=60
             )
 
-            prompt = f"Résume cette description de catégorie en maximum 2 phrases concises, sans mise en forme, sans liste à puces:\n\n{description}"
-
             response = await asyncio.to_thread(
                 deepseek_client.chat.completions.create,
                 model="deepseek-chat",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
+                temperature=temperature,
                 max_tokens=150
             )
 
@@ -359,59 +371,145 @@ class ProductClassifier:
             'output_tokens': total_output_tokens
         }
 
-    def _get_examples_per_category(
-        self,
-        similar_products: List[Dict],
-        categories: List[Dict],
-        max_per_category: int = 10
-    ) -> List[Dict]:
+    async def get_prompt_template_async(self, prompt_id: int = 20) -> Dict[str, Any]:
         """
-        Sélectionne max_per_category produits par catégorie candidate.
-        Cela permet de donner au LLM des exemples de TOUTES les catégories,
-        pas seulement de la catégorie dominante.
+        Récupère le template de prompt depuis l'API externe avec mise en cache de 15 minutes.
 
         Args:
-            similar_products: Liste de tous les produits similaires trouvés
-            categories: Liste des catégories candidates (triées par score)
-            max_per_category: Nombre max d'exemples par catégorie (défaut: 10)
+            prompt_id: ID du prompt à récupérer (par défaut 20)
 
         Returns:
-            Liste de produits sélectionnés, ordonnée par catégorie
+            Un dictionnaire contenant:
+            {
+                'prompt': 'Le template de prompt avec les placeholders {titre_produit}, etc.',
+                'temperature': 0.4
+            }
         """
-        # Grouper les produits par catégorie
-        products_by_category = defaultdict(list)
-        for product in similar_products:
-            cat_id = product.get('id_categorie')
-            if cat_id:
-                products_by_category[cat_id].append(product)
+        current_time = time.time()
 
-        # Sélectionner les top N produits par catégorie
-        selected = []
-        for cat in categories[:self.categories_limit]:
-            cat_products = products_by_category.get(cat['id'], [])
-            # Trier par score décroissant et prendre les N meilleurs
-            top_products = sorted(cat_products, key=lambda x: x['score'], reverse=True)[:max_per_category]
-            selected.extend(top_products)
+        # Vérifier si le prompt est en cache et s'il n'a pas expiré (15 minutes)
+        if prompt_id in self.prompt_cache:
+            cached_data = self.prompt_cache[prompt_id]
+            cache_timestamp = cached_data.get('timestamp', 0)
+            cache_age = current_time - cache_timestamp
 
-        return selected
+            # Si le cache a moins de 15 minutes (900 secondes)
+            if cache_age < self.prompt_cache_duration:
+                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré depuis le cache (âge: {cache_age:.0f}s)")
+                return {
+                    'prompt': cached_data['content'],
+                    'temperature': cached_data['temperature']
+                }
+            else:
+                logger.info(f"[ASYNC] Cache du prompt ID {prompt_id} expiré (âge: {cache_age:.0f}s), récupération d'une nouvelle version")
 
-    def build_prompt(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> str:
-        """Construit le prompt pour le LLM"""
-        formatted_categories = "\n".join([
-            f"- ID: {cat['id']}, Nom: {cat['name']} (Score: {cat['total_score']:.2f})\n"
-            f"  Description: {descriptions.get(cat['id'], 'N/A')}"
-            for cat in categories[:self.categories_limit]
-        ])
+        # Récupérer le prompt depuis l'API externe
+        try:
+            prompt_data = await get_prompt_details_async(prompt_id, EXTERNAL_PROMPT_API_URL)
 
-        # Sélectionner 10 produits par catégorie au lieu des 5 premiers globaux
-        selected_examples = self._get_examples_per_category(top_k_products, categories, max_per_category=10)
+            if prompt_data:
+                # Mettre en cache avec timestamp
+                self.prompt_cache[prompt_id] = {
+                    'content': prompt_data['prompt'],
+                    'temperature': prompt_data['temperature'],
+                    'timestamp': current_time
+                }
+                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré et mis en cache pour 15 minutes (temperature: {prompt_data['temperature']})")
+                return {
+                    'prompt': prompt_data['prompt'],
+                    'temperature': prompt_data['temperature']
+                }
+            else:
+                logger.error(f"[ASYNC] Impossible de récupérer le prompt ID {prompt_id}, utilisation du prompt par défaut")
+                # Retourner le prompt par défaut (actuel) en cas d'erreur
+                return {
+                    'prompt': self._get_default_prompt_template(),
+                    'temperature': 0.0
+                }
 
-        formatted_products = "\n".join([
-            f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
-            for ex in selected_examples
-        ])
-        
-        return f"""*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
+        except Exception as e:
+            logger.error(f"[ASYNC] Erreur lors de la récupération du prompt ID {prompt_id}: {e}")
+            return {
+                'prompt': self._get_default_prompt_template(),
+                'temperature': 0.0
+            }
+
+    async def get_summarization_prompt_template_async(self, prompt_id: int = 89) -> Dict[str, Any]:
+        """
+        Récupère le template de prompt de summarization depuis l'API externe avec mise en cache de 7 jours.
+
+        Args:
+            prompt_id: ID du prompt de summarization à récupérer (par défaut 89)
+
+        Returns:
+            Un dictionnaire contenant:
+            {
+                'prompt': 'Le template de prompt avec le placeholder {description_categorie}',
+                'temperature': 0.3
+            }
+        """
+        current_time = time.time()
+
+        # Vérifier si le prompt est en cache et s'il n'a pas expiré (7 jours)
+        if prompt_id in self.summarization_prompt_cache:
+            cached_data = self.summarization_prompt_cache[prompt_id]
+            cache_timestamp = cached_data.get('timestamp', 0)
+            cache_age = current_time - cache_timestamp
+
+            # Si le cache a moins de 7 jours (604800 secondes)
+            if cache_age < self.summarization_prompt_cache_duration:
+                logger.info(f"[ASYNC] Prompt summarization ID {prompt_id} récupéré depuis le cache (âge: {cache_age:.0f}s)")
+                return {
+                    'prompt': cached_data['content'],
+                    'temperature': cached_data['temperature']
+                }
+            else:
+                logger.info(f"[ASYNC] Cache du prompt summarization ID {prompt_id} expiré (âge: {cache_age:.0f}s), récupération d'une nouvelle version")
+
+        # Récupérer le prompt depuis l'API externe
+        try:
+            prompt_data = await get_prompt_details_async(prompt_id, EXTERNAL_PROMPT_API_URL)
+
+            if prompt_data:
+                # Mettre en cache avec timestamp
+                self.summarization_prompt_cache[prompt_id] = {
+                    'content': prompt_data['prompt'],
+                    'temperature': prompt_data['temperature'],
+                    'timestamp': current_time
+                }
+                logger.info(f"[ASYNC] Prompt summarization ID {prompt_id} récupéré et mis en cache pour 7 jours (temperature: {prompt_data['temperature']})")
+                return {
+                    'prompt': prompt_data['prompt'],
+                    'temperature': prompt_data['temperature']
+                }
+            else:
+                logger.error(f"[ASYNC] Impossible de récupérer le prompt summarization ID {prompt_id}, utilisation du prompt par défaut")
+                # Retourner le prompt par défaut en cas d'erreur
+                return {
+                    'prompt': self._get_default_summarization_prompt_template(),
+                    'temperature': 0.3
+                }
+
+        except Exception as e:
+            logger.error(f"[ASYNC] Erreur lors de la récupération du prompt summarization ID {prompt_id}: {e}")
+            return {
+                'prompt': self._get_default_summarization_prompt_template(),
+                'temperature': 0.3
+            }
+
+    def _get_default_summarization_prompt_template(self) -> str:
+        """
+        Retourne le template de prompt de summarization par défaut
+        en cas d'erreur de récupération depuis l'API externe.
+        """
+        return "Résume cette description de catégorie en maximum 2 phrases concises, sans mise en forme, sans liste à puces:\n\n{description_categorie}"
+
+    def _get_default_prompt_template(self) -> str:
+        """
+        Retourne le template de prompt par défaut (l'ancien prompt statique)
+        en cas d'erreur de récupération depuis l'API externe.
+        """
+        return """*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
 
 OBJECTIFS :
 
@@ -467,14 +565,14 @@ Revalider avec les conditions "IMPORTANTS"
 
 ---
 CONTENU DU PRODUIT :
-Titre: {product['nom_produit']}
-Description: {product['description']}
+Titre: {titre_produit}
+Description: {description_produit}
 ---
 LISTE DES CATEGORIES (avec leur description) :
-{formatted_categories}
+{liste_categories}
 ---
 EXEMPLES DE PRODUITS SIMILAIRES (pour contexte) :
-{formatted_products}
+{liste_produits}
 ---
 
 Format de réponse JSON **uniquement**, avec 2 champs :
@@ -487,6 +585,40 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
   "score": <0 ou 1>
 }}
 """
+
+    async def build_prompt_async(self, product: Dict, categories: List[Dict], descriptions: Dict, top_k_products: List[Dict]) -> Tuple[str, float]:
+        """
+        Construit le prompt pour le LLM en récupérant le template depuis l'API externe.
+        Remplace les placeholders par les valeurs réelles.
+
+        Returns:
+            Tuple[str, float]: (prompt_final, temperature)
+        """
+        # Récupérer le template de prompt avec la température (avec cache)
+        prompt_data = await self.get_prompt_template_async(prompt_id=20)
+        prompt_template = prompt_data['prompt']
+        temperature = prompt_data['temperature']
+
+        # Formater les catégories
+        formatted_categories = "\n".join([
+            f"- ID: {cat['id']}, Nom: {cat['name']} (Score: {cat['total_score']:.2f})\n"
+            f"  Description: {descriptions.get(cat['id'], 'N/A')}"
+            for cat in categories[:self.categories_limit]
+        ])
+
+        # Formater les produits similaires
+        formatted_products = "\n".join([
+            f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
+            for ex in top_k_products[:5]
+        ])
+
+        # Remplacer les placeholders dans le template
+        prompt_final = prompt_template.replace("{titre_produit}", product['nom_produit'])
+        prompt_final = prompt_final.replace("{description_produit}", product['description'])
+        prompt_final = prompt_final.replace("{liste_categories}", formatted_categories)
+        prompt_final = prompt_final.replace("{liste_produits}", formatted_products)
+
+        return prompt_final, temperature
 
     async def query_llm_qwen(self, prompt: str, enable_thinking: bool = False) -> Dict:
         """Appel au LLM Qwen via gRPC"""
@@ -549,8 +681,15 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 }
             }
 
-    async def query_llm(self, prompt: str, enable_thinking: bool = False) -> Dict:
-        """Appel au LLM selon le choix (asynchrone pour supporter Qwen)"""
+    async def query_llm(self, prompt: str, enable_thinking: bool = False, temperature: float = 0.0) -> Dict:
+        """
+        Appel au LLM selon le choix (asynchrone pour supporter Qwen)
+
+        Args:
+            prompt: Le prompt à envoyer au LLM
+            enable_thinking: Active le mode thinking pour Qwen
+            temperature: La température à utiliser pour la génération (par défaut 0.0)
+        """
         messages = [{"role": "user", "content": prompt}]
 
         try:
@@ -564,7 +703,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     self.openai_client.chat.completions.create,
                     model="gpt-4o-2024-05-13",
                     messages=messages,
-                    temperature=0,
+                    temperature=temperature,
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
@@ -577,7 +716,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                     self.deepseek_client.chat.completions.create,
                     model="deepseek-chat",
                     messages=messages,
-                    temperature=0,
+                    temperature=temperature,
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
@@ -688,9 +827,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             total_output_tokens = summarization_tokens['output_tokens']
 
             # Construction du prompt et appel LLM (asynchrone)
-            prompt = self.build_prompt(product, categories, descriptions, similar_products)
-            #print(prompt)  # Pour debug
-            llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking)
+            prompt, temperature = await self.build_prompt_async(product, categories, descriptions, similar_products)
+            llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking, temperature=temperature)
 
             # Vérifier si l'appel LLM a échoué
             if not llm_result_wrapper.get('success', False):
