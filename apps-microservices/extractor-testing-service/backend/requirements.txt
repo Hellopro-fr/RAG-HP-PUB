@@ -21,4 +21,3 @@ goose3
 newspaper4k
 news-please
 boilerpipe3
-extractnet
