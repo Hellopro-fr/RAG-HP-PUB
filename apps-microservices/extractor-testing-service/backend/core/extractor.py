@@ -16,6 +16,8 @@ from goose3 import Goose
 from newspaper import Article as NewspaperArticle
 import newsplease
 from boilerpipe.extract import Extractor as BoilerpipeExtractor
+import extractnet
+from bs4 import BeautifulSoup
 
 from schemas.schemas import ResultItem
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
@@ -42,13 +44,16 @@ def extract_readability_lxml(html: str) -> str:
     return doc.summary()
 
 def extract_justext(html: str) -> str:
-    paragraphs = justext.justext(html, justext.get_stoplist("English"))
+    paragraphs = justext.justext(html, justext.get_stoplists())
     return "\n".join([p.text for p in paragraphs if not p.is_boilerplate])
 
 def extract_goose3(html: str) -> str:
-    g = Goose()
+    config = {
+        'enable_image_fetching': True,
+    }
+    g = Goose(config)
     article = g.extract(raw_html=html)
-    return article.cleaned_text
+    return article.raw_html
 
 # --- Tier 3 Library Functions ---
 
@@ -57,7 +62,7 @@ def extract_newspaper4k(html: str) -> str:
     # Manually set the download state to avoid the "You must `download()` an article first!" error
     article.download_state = 2
     article.parse()
-    return article.text
+    return article.html
 
 def extract_newsplease(html: str) -> str:
     article = newsplease.NewsPlease.from_html(html, url=None)
@@ -66,6 +71,12 @@ def extract_newsplease(html: str) -> str:
 def extract_boilerpipe3(html: str) -> str:
     extractor = BoilerpipeExtractor(extractor='ArticleExtractor', html=html)
     return extractor.getText()
+
+def extract_extractnet(html: str) -> str:
+    extracted_blocks = extractnet.extract(html)
+    # The result is a list of dicts, each with a 'text' key.
+    # We join the text from all blocks to get the full content.
+    return "\n".join([block['text'] for block in extracted_blocks if 'text' in block])
 
 # --- Custom HP Trafilatura Extractor ---
 def extract_trafilatura_hp(html: str) -> str:
@@ -131,7 +142,8 @@ def extract_go_readability(html: str) -> str:
 
 async def run_all_extractors(html: str) -> Dict[str, ResultItem]:
     """
-    Runs all defined extraction functions in parallel using a thread pool.
+    Runs all defined extraction functions, then applies post-processing
+    (article extraction and deduplication) to each successful result.
     """
     loop = asyncio.get_running_loop()
     
@@ -150,9 +162,10 @@ async def run_all_extractors(html: str) -> Dict[str, ResultItem]:
         "newspaper4k": (extract_newspaper4k, html),
         "news-please": (extract_newsplease, html),
         "boilerpipe3": (extract_boilerpipe3, html),
+        "extractnet": (extract_extractnet, html),
     }
 
-    results = {}
+    base_results = {}
     with ThreadPoolExecutor() as executor:
         futures = {
             name: loop.run_in_executor(executor, run_extraction, func, *args)
@@ -162,12 +175,51 @@ async def run_all_extractors(html: str) -> Dict[str, ResultItem]:
         for name, future in futures.items():
             logger.info(f"Running extractor: {name}")
             try:
-                results[name] = await asyncio.wait_for(future, timeout=20.0)
+                base_results[name] = await asyncio.wait_for(future, timeout=20.0)
             except asyncio.TimeoutError:
                 logger.error(f"Extractor '{name}' timed out overall.")
-                results[name] = ResultItem(content="", char_count=0, error="Processing timed out after 20 seconds.")
+                base_results[name] = ResultItem(content="", char_count=0, error="Processing timed out after 20 seconds.")
             except Exception as e:
                 logger.error(f"Future for '{name}' failed with an unexpected error: {e}")
-                results[name] = ResultItem(content="", char_count=0, error=f"An unexpected error occurred: {e}")
+                base_results[name] = ResultItem(content="", char_count=0, error=f"An unexpected error occurred: {e}")
 
-    return dict(sorted(results.items()))
+    # --- Post-Processing Stage ---
+    logger.info("--- Starting Post-Processing Stage ---")
+    post_processed_results = {}
+    
+    # Instantiate the processor once to access its methods
+    post_processor = TrafilaturaHp({"url": "", "content": html, "fetch": False})
+    soup = BeautifulSoup(html, 'html5lib')
+    
+    # Extract special article content once
+    article_content = post_processor.extract_article(soup)
+    if article_content:
+        logger.info(f"Found {len(article_content)} chars of special article content for post-processing.")
+
+    for name, result_item in base_results.items():
+        if not result_item.error and result_item.content:
+            try:
+                logger.info(f"Post-processing result for: {name}")
+                # Combine article content with the extractor's main content
+                combined_content = result_item.content
+                if article_content:
+                    combined_content = article_content + "\n" + combined_content
+                
+                # Apply deduplication
+                deduplicated_content = post_processor.dedoublonnage(combined_content)
+
+                new_name = f"{name} + Post-Processing"
+                post_processed_results[new_name] = ResultItem(
+                    content=deduplicated_content,
+                    char_count=len(deduplicated_content),
+                    error=None
+                )
+            except Exception as e:
+                logger.error(f"Error during post-processing for {name}: {e}", exc_info=True)
+                # Avoid adding a failed post-processing result
+                pass
+
+    # Merge original and post-processed results
+    final_results = {**base_results, **post_processed_results}
+    
+    return dict(sorted(final_results.items()))
