@@ -15,7 +15,7 @@ bs4
 # Tier 1
 readability-lxml
 justext
-goose3[all]
+goose3
 
 # Tier 3
 newspaper4k
