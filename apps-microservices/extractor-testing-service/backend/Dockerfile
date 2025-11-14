@@ -27,9 +27,6 @@ COPY --from=go-builder /go/bin/go-readability /usr/local/bin/go-readability
 # binary, global modules, and bin scripts/symlinks, ensuring perfect parity.
 COPY --from=node-builder /usr/local/ /usr/local/
 
-# Create a simpler alias for the readability-cli for use in the Python app.
-RUN ln -s /usr/local/bin/readable /usr/local/bin/readability-js
-
 # Install Python dependencies
 COPY apps-microservices/extractor-testing-service/backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
