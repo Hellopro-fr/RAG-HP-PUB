@@ -27,10 +27,6 @@ COPY --from=go-builder /go/bin/go-readability /usr/local/bin/go-readability
 COPY --from=node-builder /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
 
-# Create a symlink to the readability-cli executable, named 'readability-js' for our app.
-# This mimics how 'npm install -g' works and is crucial for the script to find its dependencies.
-RUN ln -s /usr/local/lib/node_modules/readability-cli/cli.js /usr/local/bin/readability-js
-
 # Set NODE_PATH so globally installed Node modules can be found by their executables.
 ENV NODE_PATH /usr/local/lib/node_modules
 

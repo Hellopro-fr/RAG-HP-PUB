@@ -83,6 +83,9 @@ def run_subprocess(command: list, html: str, timeout: int = 15) -> str:
         raise Exception(f"Process '{command[0]}' timed out after {timeout} seconds.")
     except subprocess.CalledProcessError as e:
         raise Exception(f"Process '{command[0]}' failed with error: {e.stderr}")
+    except FileNotFoundError:
+        raise Exception(f"[Errno 2] No such file or directory: '{command[0]}'")
+
 
 def extract_readability_js(html: str) -> str:
     # readability-cli requires a file, so we create a temporary one.
@@ -91,8 +94,8 @@ def extract_readability_js(html: str) -> str:
         filepath = tmp_file.name
     
     try:
-        # The command is the renamed 'readability-js' executable followed by the filepath.
-        command = ["readability-js", filepath]
+        # Explicitly call the node interpreter on the script's full path.
+        command = ["node", "/usr/local/lib/node_modules/readability-cli/cli.js", filepath]
         # The tool outputs a JSON string to stdout.
         json_output = run_subprocess(command, html="") # Input is via file, not stdin
         # Parse the JSON and extract the 'textContent' field.
