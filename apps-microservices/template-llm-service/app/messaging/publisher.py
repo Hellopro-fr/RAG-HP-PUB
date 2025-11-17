@@ -16,6 +16,15 @@ class Publisher:
         Publie un message de manière asynchrone sur le canal fourni.
         """
         # La déclaration de l'exchange est idempotente et rapide, on s'assure qu'elle existe.
+        # TODO: Modification exchange_name + routing_key selon la collection
+        collection = message_dict.get("collection",None)
+        if collection == "document":
+            self.exchange_name = 'inserted_data_exchange'
+            self.routing_key = 'data.document.ready_for_insertion'
+        else:
+            self.exchange_name = 'processed_data_exchange'
+            self.routing_key = 'data.ready_for_embedding'
+
         exchange = await channel.get_exchange(self.exchange_name, ensure=True)
         
         await exchange.publish(
