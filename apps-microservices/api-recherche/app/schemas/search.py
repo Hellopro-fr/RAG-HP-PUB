@@ -33,6 +33,7 @@ class RerankerOptions(BaseModel):
     use_reranker: bool = True
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     rrf: bool = False
+    ponderation: float = 1.1 # Ponderation for reranking
 
 class SearchRequestWs(BaseModel):
     prompt: str

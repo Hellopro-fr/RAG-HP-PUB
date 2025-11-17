@@ -120,6 +120,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
     # --- MANUAL INSTRUMENTATION START ---
     start_time_manual = time.monotonic()
     metric_status = 'success'
+    llm_to_use = None
     # --- END MANUAL INSTRUMENTATION START ---
     try:
         # Déterminer le LLM à utiliser : celui spécifié dans la requête ou DeepSeek par défaut
@@ -170,7 +171,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
         # --- MANUAL INSTRUMENTATION FINALIZATION ---
         duration = time.monotonic() - start_time_manual
         num_products = len(batch_input.produits)
-        collection_type = str(batch_input.llm or "Default")
+        collection_type = str(llm_to_use or "Default")
 
         if num_products == 0:
              PROCESSING_TIME_SECONDS.labels(
@@ -414,6 +415,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
     # --- MANUAL INSTRUMENTATION START ---
     start_time_manual = time.monotonic()
     metric_status = 'success'
+    llm_to_use = None
     # --- END MANUAL INSTRUMENTATION START ---
     try:
         start_time = time.time()
@@ -616,7 +618,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
         # --- MANUAL INSTRUMENTATION FINALIZATION ---
         duration = time.monotonic() - start_time_manual
         num_products = len(batch_input.produits)
-        collection_type = str(batch_input.llm or "Default")
+        collection_type = str(llm_to_use or "Default")
 
         if num_products == 0:
              PROCESSING_TIME_SECONDS.labels(

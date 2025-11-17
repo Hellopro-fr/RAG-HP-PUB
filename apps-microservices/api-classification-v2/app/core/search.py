@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 EXTERNAL_PRODUCT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_produit.php"
 EXTERNAL_CATEGORY_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_categorie.php"
+EXTERNAL_PROMPT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_prompt.php"
 
 def get_product_details(product_ids: List[str], url: str) -> Optional[List[Dict[str, Any]]]:
     """
@@ -215,4 +216,65 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
         return None
     except Exception as e:
         logger.error(f"[ASYNC] Erreur inattendue dans get_category_details: {type(e).__name__} - {str(e)}")
+        return None
+
+
+async def get_prompt_details_async(prompt_id: int, url: str) -> Optional[Dict[str, Any]]:
+    """
+    Version asynchrone pour récupérer un template de prompt depuis l'API externe.
+    Utilise httpx pour des appels HTTP non-bloquants.
+
+    Args:
+        prompt_id: ID du prompt à récupérer (ex: 20)
+        url: URL de l'API externe
+
+    Returns:
+        Un dictionnaire avec le contenu du prompt et la température:
+        {
+            'prompt': 'contenu du prompt avec placeholders',
+            'temperature': 0.4
+        }
+        ou None en cas d'erreur
+    """
+    headers = {'Content-Type': 'application/json'}
+    payload = {'id_prompt': prompt_id}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+            # On s'attend à recevoir un objet avec 'prompt' et 'temperature'
+            if isinstance(data, dict) and 'prompt' in data:
+                prompt_content = str(data.get('prompt', ''))
+                temperature = float(data.get('temperature', 0.0))  # Température par défaut: 0.0
+
+                logger.info(f"[ASYNC] Prompt ID {prompt_id} récupéré avec succès (temperature: {temperature})")
+
+                return {
+                    'prompt': prompt_content,
+                    'temperature': temperature
+                }
+            else:
+                logger.error(f"[ASYNC] Format de réponse inattendu pour get_prompt_details: {data}")
+                return None
+
+    except httpx.TimeoutException as e:
+        logger.error(f"[ASYNC] Timeout lors de get_prompt_details (30s): {str(e)}")
+        return None
+    except httpx.ConnectError as e:
+        logger.error(f"[ASYNC] Erreur de connexion pour get_prompt_details ({url}): {str(e)}")
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[ASYNC] Erreur HTTP {e.response.status_code} pour get_prompt_details: {str(e)}")
+        return None
+    except httpx.HTTPError as e:
+        logger.error(f"[ASYNC] Erreur HTTP dans get_prompt_details: {str(e)}")
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"[ASYNC] Erreur lors du décodage JSON dans get_prompt_details: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"[ASYNC] Erreur inattendue dans get_prompt_details: {type(e).__name__} - {str(e)}")
         return None

@@ -127,7 +127,7 @@ class Consumer:
     async def start_consuming(self):
         """Démarre le consumer."""
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=10) # Traiter jusqu'à 10 messages en parallèle
+        await channel.set_qos(prefetch_count=1) # Traiter jusqu'à 10 messages en parallèle
         
         queue = await self._setup_queues(channel)
         
