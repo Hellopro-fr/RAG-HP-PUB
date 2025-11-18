@@ -9,3 +9,5 @@ tritonclient[all]
 sentence-transformers
 sentencepiece
 numpy
+prometheus-client
+waitress

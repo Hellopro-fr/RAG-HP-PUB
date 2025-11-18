@@ -4,10 +4,13 @@ import uvloop
 
 from infrastructure.grpc_server import serve
 from application.embedding_use_case import EmbeddingUseCase
+from common_utils.metrics.prometheus import start_metrics_server_in_thread
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 async def main():
+    # --- Start Prometheus metrics server ---
+    start_metrics_server_in_thread(port=8530)
     # L'initialisation est beaucoup plus simple.
     # Plus de chargement de modèle lourd, juste le tokenizer.
     use_case = EmbeddingUseCase()
