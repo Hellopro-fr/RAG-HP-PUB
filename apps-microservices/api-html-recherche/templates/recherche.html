@@ -30,8 +30,7 @@
 
     <!-- MODIFICATION : Ajout de la librairie Marked.js pour convertir le Markdown en HTML -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    
-    
+
     <style>
       /* 1. Définition de votre palette de couleurs personnalisée */
       :root {
@@ -119,6 +118,14 @@
       }
 
       /* Styles pour les éléments de formulaire personnalisés */
+      .custom-select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5F5F' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 0.5rem center;
+        background-repeat: no-repeat;
+        background-size: 1.5em 1.5em;
+        padding-right: 2.5rem;
+      }
 
       .multi-select-dropdown {
         max-height: 200px;
@@ -215,7 +222,6 @@
         white-space: pre-wrap;
       }
     </style>
-    
     <script>
       // 2. Configuration de Tailwind pour utiliser votre palette
       tailwind.config = {
@@ -245,10 +251,9 @@
         },
       };
     </script>
-    
     <link
       rel="stylesheet"
-      href="{{ url_for('static', path='css/style.css') }}"
+      href="{{ url_for('static', path='/css/style.css') }}"
     />
   </head>
 
