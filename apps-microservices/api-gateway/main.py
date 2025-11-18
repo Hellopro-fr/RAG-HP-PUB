@@ -218,6 +218,14 @@ async def custom_openapi():
 
             # Merge paths with prefix
             for path, path_data in prefixed_paths.items():
+                # Mettre à jour les serveurs pour chaque opération afin que Swagger UI utilise le bon préfixe
+                for method in ["get", "post", "put", "delete", "patch", "options", "head", "trace"]:
+                    if method in path_data:
+                        if "servers" not in path_data[method]:
+                            path_data[method]["servers"] = []
+                        # Ajouter un serveur qui pointe vers le bon préfixe de service
+                        path_data[method]["servers"] = [{"url": prefix}]
+
                 openapi["paths"][f"{prefix}{path}"] = path_data
 
             # Merge components (schemas, responses, parameters, etc.)
