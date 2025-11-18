@@ -13,8 +13,7 @@
       integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
       crossorigin="anonymous"
     ></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- <script src="{{ url_for('static', path='js/tailwind.min.js) }}"></script> -->
+    <script src="{{ url_for('static', path='js/tailwind.min.js') }}"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.js"></script>
     <!-- <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -388,12 +387,10 @@
     </header>
 
     <div class="flex-1 flex">
-      <!-- **CORRECTION 1** : Le conteneur parent gère maintenant l'espace global -->
       <div
         class="w-full max-w-screen-2xl mx-auto px-2 md:px-4 py-4 md:py-6 flex gap-4 md:gap-6 flex-1"
         id="mainContainer"
       >
-        <!-- Desktop Sidebar Filters -->
         <aside
           id="filterSidebar"
           class="hidden md:block w-80 space-y-4 flex-shrink-0 self-startimes sticky top-[90px]"
