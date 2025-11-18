@@ -175,7 +175,10 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
     Version asynchrone de get_category_details pour parallélisation.
     Utilise httpx pour des appels HTTP non-bloquants.
     """
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; ClassificationService/2.0)'
+    }
     payload = {'category_ids': category_ids}
 
     try:
@@ -191,9 +194,11 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
                         category_details.append({
                             'id_categorie': str(item.get('id_categorie', '')),
                             'nom_categorie': str(item.get('nom_categorie', '')),
-                            'description_categorie': str(item.get('description_categorie', ''))
+                            'description_categorie': str(item.get('description_categorie', '')),
+                            'fil_ariane': str(item.get('fil_ariane', '')),
+                            'top_5_produit': str(item.get('top_5_produit', ''))
                         })
-                #logger.info(f"[ASYNC] {len(category_details)} descriptions de catégories récupérées")
+                logger.info(f"[ASYNC] {len(category_details)} descriptions de catégories enrichies récupérées")
                 return category_details
             else:
                 logger.error(f"[ASYNC] Format de réponse inattendu pour get_category_details: {data}")
