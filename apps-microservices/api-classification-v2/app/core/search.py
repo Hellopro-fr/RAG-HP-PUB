@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
 EXTERNAL_PRODUCT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_produit.php"
-EXTERNAL_CATEGORY_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_categorie.php"
+EXTERNAL_CATEGORY_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_categorie_classification.php"
 EXTERNAL_PROMPT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_prompt.php"
 
 def get_product_details(product_ids: List[str], url: str) -> Optional[List[Dict[str, Any]]]:
