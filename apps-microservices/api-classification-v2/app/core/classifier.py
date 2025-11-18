@@ -1051,7 +1051,6 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 
             # ⚡ OPTIMISATION: Récupération asynchrone des descriptions enrichies avec résumé DeepSeek (pipeline parallèle)
             category_info, summarization_tokens = await self.get_category_descriptions_async(categories)
-            print(category_info)  # Pour debug
 
             # Initialiser les compteurs de tokens
             total_input_tokens = summarization_tokens['input_tokens']
@@ -1059,7 +1058,6 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 
             # Construction du prompt et appel LLM (asynchrone) avec infos enrichies (fil d'ariane + résumé)
             prompt, temperature = await self.build_prompt_async(product, categories, category_info, similar_products)
-            print(prompt)  # Pour debug
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking, temperature=temperature)
 
             # Vérifier si l'appel LLM a échoué

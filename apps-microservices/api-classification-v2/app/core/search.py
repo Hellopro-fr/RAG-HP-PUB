@@ -186,11 +186,8 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
         async with httpx.AsyncClient(timeout=30.0) as client:
             # Utiliser content au lieu de json pour envoyer le JSON déjà sérialisé
             response = await client.post(url, headers=headers, content=json.dumps(payload))
-            print(f"Réponse get_category_details_async: {response}")
             response.raise_for_status()
             data = response.json()
-            print(f"Données JSON get_category_details_async: {data}")
-
             if isinstance(data, list):
                 category_details = []
                 for item in data:
