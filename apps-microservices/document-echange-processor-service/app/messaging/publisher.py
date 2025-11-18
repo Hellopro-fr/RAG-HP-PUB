@@ -8,11 +8,11 @@ class Publisher:
         """
         self.connection = connection
         #todo à modifier si process pipeline normal
-        # self.exchange_name = 'inserted_data_exchange'
-        # self.routing_key = 'data.document.ready_for_insertion'
+        self.exchange_name = 'inserted_data_exchange'
+        self.routing_key = 'data.document.ready_for_insertion'
 
-        self.exchange_name = 'processed_data_exchange'
-        self.routing_key = 'data.ready_for_templating'
+        # self.exchange_name = 'processed_data_exchange'
+        # self.routing_key = 'data.ready_for_templating'
 
         # à modifier selon le flow de l'application
         self.exchange_name_metrics = 'processed_data_exchange'
