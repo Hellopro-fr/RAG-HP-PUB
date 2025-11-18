@@ -1051,6 +1051,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 
             # ⚡ OPTIMISATION: Récupération asynchrone des descriptions enrichies avec résumé DeepSeek (pipeline parallèle)
             category_info, summarization_tokens = await self.get_category_descriptions_async(categories)
+            print(category_info)  # Pour debug
 
             # Initialiser les compteurs de tokens
             total_input_tokens = summarization_tokens['input_tokens']
