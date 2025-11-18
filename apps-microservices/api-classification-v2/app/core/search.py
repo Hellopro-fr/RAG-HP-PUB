@@ -180,7 +180,6 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
         'User-Agent': 'Mozilla/5.0 (compatible; ClassificationService/2.0)'
     }
     payload = {'category_ids': category_ids}
-    print(f"Payload get_category_details_async: {payload}")
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
