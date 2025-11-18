@@ -11,3 +11,5 @@ sentencepiece
 numpy
 langchain-text-splitters
 transformers
+prometheus-client
+waitress

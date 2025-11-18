@@ -32,6 +32,7 @@ class Publisher:
         Publie un message de métrique de manière asynchrone sur le canal fourni.
         """
         exchange = await channel.get_exchange(self.exchange_name, ensure=True)
+        # exchange = await channel.get_exchange(self.exchange_name, ensure=True)
         
         await exchange.publish(
             aio_pika.Message(
