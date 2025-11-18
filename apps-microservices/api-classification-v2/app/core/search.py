@@ -185,8 +185,10 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, headers=headers, json=payload)
+            print(f"Réponse get_category_details_async: {response}")
             response.raise_for_status()
             data = response.json()
+            print(f"Données JSON get_category_details_async: {data}")
 
             if isinstance(data, list):
                 category_details = []
