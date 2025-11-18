@@ -218,6 +218,15 @@ async def custom_openapi():
 
             # Merge paths with prefix
             for path, path_data in prefixed_paths.items():
+                # Préfixer les operationId pour éviter les collisions dans Swagger UI
+                for method in ["get", "post", "put", "delete", "patch", "options", "head", "trace"]:
+                    if method in path_data and "operationId" in path_data[method]:
+                        original_operation_id = path_data[method]["operationId"]
+                        # Ajouter le préfixe du service à l'operationId
+                        # Ex: classify_single_product -> classification_v2_classify_single_product
+                        service_name = prefix.strip("/").replace("-service", "").replace("-", "_")
+                        path_data[method]["operationId"] = f"{service_name}_{original_operation_id}"
+
                 # Pas besoin de définir un server spécifique par path car le path complet
                 # inclut déjà le préfixe du service (/classification-v2-service/...)
                 # Swagger UI utilisera le serveur racine "/" par défaut
