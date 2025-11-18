@@ -160,33 +160,97 @@ async def custom_openapi():
         routes=app.routes,
     )
 
+    # Tracker pour détecter les collisions de schémas
+    schema_tracker = {}  # {schema_name: [service_prefix1, service_prefix2, ...]}
+
     async with httpx.AsyncClient() as client:
+        # Premier passage : détecter les collisions
+        service_schemas = {}  # {prefix: sub_openapi}
         for prefix, url in SERVICE_MAP.items():
             try:
                 r = await client.get(f"{url}/openapi.json")
                 r.raise_for_status()
                 sub_openapi = r.json()
+                service_schemas[prefix] = sub_openapi
 
-                # Merge paths with prefix
-                for path, path_data in sub_openapi.get("paths", {}).items():
-                    openapi["paths"][f"{prefix}{path}"] = path_data
-
-                # Merge components (schemas, responses, parameters, etc.)
-                if "components" in sub_openapi:
-                    if "components" not in openapi:
-                        openapi["components"] = {}
-
-                    for comp_type, comp_dict in sub_openapi["components"].items():
-                        if comp_type not in openapi["components"]:
-                            openapi["components"][comp_type] = {}
-
-                        # Merge each component entry without overwriting existing keys
-                        for key, val in comp_dict.items():
-                            if key not in openapi["components"][comp_type]:
-                                openapi["components"][comp_type][key] = val
+                # Tracker les schémas de ce service
+                if "components" in sub_openapi and "schemas" in sub_openapi["components"]:
+                    for schema_name in sub_openapi["components"]["schemas"].keys():
+                        if schema_name not in schema_tracker:
+                            schema_tracker[schema_name] = []
+                        schema_tracker[schema_name].append(prefix)
 
             except Exception as e:
                 print(f"Failed to fetch schema from {url}: {e}")
+
+        # Identifier les schémas en collision (présents dans plusieurs services)
+        conflicting_schemas = {name for name, prefixes in schema_tracker.items() if len(prefixes) > 1}
+
+        # Deuxième passage : merger avec préfixe seulement si collision
+        for prefix, sub_openapi in service_schemas.items():
+            # Créer un préfixe unique pour les schémas basé sur le service
+            # Ex: /classification-service -> Classification, /classification-v2-service -> ClassificationV2
+            schema_prefix = prefix.strip("/").replace("-service", "").replace("-", "_").title().replace("_", "")
+
+            # Fonction pour remplacer les références de schémas
+            def prefix_refs(obj, prefix_to_use, schemas_to_prefix):
+                """Préfixe récursivement les références $ref uniquement pour les schémas en collision"""
+                if isinstance(obj, dict):
+                    new_obj = {}
+                    for k, v in obj.items():
+                        if k == "$ref" and isinstance(v, str) and "#/components/schemas/" in v:
+                            schema_name = v.split("/")[-1]
+                            # Préfixer seulement si ce schéma est en collision
+                            if schema_name in schemas_to_prefix:
+                                new_obj[k] = f"#/components/schemas/{prefix_to_use}{schema_name}"
+                            else:
+                                new_obj[k] = v
+                        else:
+                            new_obj[k] = prefix_refs(v, prefix_to_use, schemas_to_prefix)
+                    return new_obj
+                elif isinstance(obj, list):
+                    return [prefix_refs(item, prefix_to_use, schemas_to_prefix) for item in obj]
+                else:
+                    return obj
+
+            # Préfixer les références dans les paths (seulement pour schémas en collision)
+            prefixed_paths = prefix_refs(sub_openapi.get("paths", {}), schema_prefix, conflicting_schemas)
+
+            # Merge paths with prefix
+            for path, path_data in prefixed_paths.items():
+                # Préfixer les operationId pour éviter les collisions dans Swagger UI
+                for method in ["get", "post", "put", "delete", "patch", "options", "head", "trace"]:
+                    if method in path_data and "operationId" in path_data[method]:
+                        original_operation_id = path_data[method]["operationId"]
+                        # Ajouter le préfixe du service à l'operationId
+                        # Ex: classify_single_product -> classification_v2_classify_single_product
+                        service_name = prefix.strip("/").replace("-service", "").replace("-", "_")
+                        path_data[method]["operationId"] = f"{service_name}_{original_operation_id}"
+
+                # Pas besoin de définir un server spécifique par path car le path complet
+                # inclut déjà le préfixe du service (/classification-v2-service/...)
+                # Swagger UI utilisera le serveur racine "/" par défaut
+                openapi["paths"][f"{prefix}{path}"] = path_data
+
+            # Merge components (schemas, responses, parameters, etc.)
+            if "components" in sub_openapi:
+                if "components" not in openapi:
+                    openapi["components"] = {}
+
+                for comp_type, comp_dict in sub_openapi["components"].items():
+                    if comp_type not in openapi["components"]:
+                        openapi["components"][comp_type] = {}
+
+                    for key, val in comp_dict.items():
+                        # Préfixer seulement si ce schéma est en collision
+                        if comp_type == "schemas" and key in conflicting_schemas:
+                            prefixed_key = f"{schema_prefix}{key}"
+                            prefixed_val = prefix_refs(val, schema_prefix, conflicting_schemas)
+                            openapi["components"][comp_type][prefixed_key] = prefixed_val
+                        else:
+                            # Pas de collision, garder le nom original
+                            if key not in openapi["components"][comp_type]:
+                                openapi["components"][comp_type][key] = val
 
     return JSONResponse(content=openapi)
 
