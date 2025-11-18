@@ -32,6 +32,7 @@ $(function () {
       siteweb: false,
     },
     selectedCategories: [],
+    selectedIdsProduits: [],
     selectedFournisseurs: [],
     selectedNomFournisseurs: [],
     // NOUVEAU: Utilisation de .val() de select2 qui retourne un tableau
@@ -90,7 +91,8 @@ $(function () {
     categorieFilter: $("#categorieDropdown"),
     fournisseurFilter: $("#fournisseurDropdown"),
     btnTranscription: $("#btn-transcription"),
-    typeRecherche: $("input[name='type-recherche']")
+    typeRecherche: $("input[name='type-recherche']"),
+    idsProduit: $(`#ids_produit`)
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -898,6 +900,9 @@ $(function () {
         state.selectedCategories = $(this).val() || [];
         console.log("Catégories sélectionnées :", state.selectedCategories);
     });
+    elements.idsProduit.on('input', function () {
+      state.selectedIdsProduits = $(this).val().match(/\d+/g) || [];
+    });
     elements.fournisseurFilter.on("change", function () {
         state.selectedFournisseurs = $(this).val() || [];
         state.selectedNomFournisseurs = $(this).find('option:selected').map(function() {
@@ -1363,6 +1368,7 @@ $(function () {
                 filtreSpecifique.source = produitsSource;
               }
               if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
+              if (state.selectedIdsProduits && state.selectedIdsProduits.length > 0) filtreSpecifique.id_produit = state.selectedIdsProduits;
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
