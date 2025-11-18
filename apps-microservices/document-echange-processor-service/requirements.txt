@@ -13,5 +13,4 @@ grpcio
 grpcio-tools
 protobuf
 googleapis-common-protos
-vllm
 reportlab

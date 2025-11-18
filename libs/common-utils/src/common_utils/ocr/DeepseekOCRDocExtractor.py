@@ -199,7 +199,16 @@ class DeepseekOCRDocExtractor:
                     texts.append(results['result']['result'])
 
 
-                res_dict[filename] = " ".join(texts)
+                if "total_pages" in results.get('result', {}):
+                    total_pages = results['result']['total_pages']
+                else:
+                    total_pages = 1
+
+
+                res_dict[filename] = {
+                  "text" : " ".join(texts),
+                  "total_pages": total_pages  
+                }
 
         return res_dict
 
