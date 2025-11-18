@@ -20,7 +20,8 @@ class ProductInput(BaseModel):
                 "description": "Perceuse électrique professionnelle 750W avec mandrin automatique",
                 "id_categorie_attendue": "cat_123",
                 "llm": "Qwen",
-                "enable_thinking": True
+                "enable_thinking": True,
+                "optimize": True
             }
         }
 
