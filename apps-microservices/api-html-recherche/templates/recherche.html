@@ -13,8 +13,7 @@
       integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
       crossorigin="anonymous"
     ></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- <script src="{{ url_for('static', path='js/tailwind.min.js) }}"></script> -->
+    <script src="{{ url_for('static', path='js/tailwind.min.js') }}"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.js"></script>
     <!-- <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -30,8 +29,7 @@
 
     <!-- MODIFICATION : Ajout de la librairie Marked.js pour convertir le Markdown en HTML -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    
-    {% raw %}
+
     <style>
       /* 1. Définition de votre palette de couleurs personnalisée */
       :root {
@@ -119,6 +117,14 @@
       }
 
       /* Styles pour les éléments de formulaire personnalisés */
+      .custom-select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5F5F' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 0.5rem center;
+        background-repeat: no-repeat;
+        background-size: 1.5em 1.5em;
+        padding-right: 2.5rem;
+      }
 
       .multi-select-dropdown {
         max-height: 200px;
@@ -215,7 +221,6 @@
         white-space: pre-wrap;
       }
     </style>
-    
     <script>
       // 2. Configuration de Tailwind pour utiliser votre palette
       tailwind.config = {
@@ -245,10 +250,9 @@
         },
       };
     </script>
-    {% endraw %}
     <link
       rel="stylesheet"
-      href="{{ url_for('static', path='css/style.css') }}"
+      href="{{ url_for('static', path='/css/style.css') }}"
     />
   </head>
 
@@ -383,12 +387,10 @@
     </header>
 
     <div class="flex-1 flex">
-      <!-- **CORRECTION 1** : Le conteneur parent gère maintenant l'espace global -->
       <div
         class="w-full max-w-screen-2xl mx-auto px-2 md:px-4 py-4 md:py-6 flex gap-4 md:gap-6 flex-1"
         id="mainContainer"
       >
-        <!-- Desktop Sidebar Filters -->
         <aside
           id="filterSidebar"
           class="hidden md:block w-80 space-y-4 flex-shrink-0 self-startimes sticky top-[90px]"
@@ -531,6 +533,14 @@
                             data-payload="recup_fournisseur_produits"
                           >
                           </select>
+                        </div>
+                      </div>
+                      <div class="space-y-2">
+                        <label class="text-sm font-medium text-custom-noir"
+                          >ID Produits</label
+                        >
+                        <div class="relative">
+                          <textarea class="w-full px-3 border border-custom-gris-blanc rounded-md text-sm" name="ids_produit" id="ids_produit" placeholder="Liste d'id produit séparé par virgule" cols="30" rows="10"></textarea>
                         </div>
                       </div>
                     </div>
