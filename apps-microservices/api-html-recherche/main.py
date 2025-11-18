@@ -118,7 +118,7 @@ async def get_page(request: Request, page: str):
     template_path = f"{page}.html"
 
     # Vérifie si le template existe
-    # if not os.path.exists(os.path.join("templates", template_path)):
-    #     return templates.TemplateResponse("404.html", {"request": request}, status_code=404)
+    if not os.path.exists(os.path.join("templates", template_path)):
+        return templates.TemplateResponse("404.html", {"request": request}, status_code=404)
 
     return templates.TemplateResponse(template_path, {"request": request, "user": user})
