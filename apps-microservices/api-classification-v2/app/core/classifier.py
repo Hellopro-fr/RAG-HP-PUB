@@ -444,7 +444,7 @@ class ProductClassifier:
 
         try:
             # Récupérer le prompt de summarization depuis l'API externe (avec cache de 7 jours)
-            prompt_data = await self.get_summarization_prompt_template_async(prompt_id=89)
+            prompt_data = await self.get_summarization_prompt_template_async(prompt_id=93)
             prompt_template = prompt_data['prompt']
             temperature = prompt_data['temperature']
 
@@ -571,12 +571,12 @@ class ProductClassifier:
             'output_tokens': total_output_tokens
         }
 
-    async def get_prompt_template_async(self, prompt_id: int = 20) -> Dict[str, Any]:
+    async def get_prompt_template_async(self, prompt_id: int = 94) -> Dict[str, Any]:
         """
         Récupère le template de prompt depuis l'API externe avec mise en cache de 15 minutes.
 
         Args:
-            prompt_id: ID du prompt à récupérer (par défaut 20)
+            prompt_id: ID du prompt à récupérer (par défaut 94)
 
         Returns:
             Un dictionnaire contenant:
@@ -634,12 +634,12 @@ class ProductClassifier:
                 'temperature': 0.0
             }
 
-    async def get_summarization_prompt_template_async(self, prompt_id: int = 89) -> Dict[str, Any]:
+    async def get_summarization_prompt_template_async(self, prompt_id: int = 93) -> Dict[str, Any]:
         """
         Récupère le template de prompt de summarization depuis l'API externe avec mise en cache de 7 jours.
 
         Args:
-            prompt_id: ID du prompt de summarization à récupérer (par défaut 89)
+            prompt_id: ID du prompt de summarization à récupérer (par défaut 93)
 
         Returns:
             Un dictionnaire contenant:
@@ -801,7 +801,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             Tuple[str, float]: (prompt_final, temperature)
         """
         # Récupérer le template de prompt avec la température (avec cache)
-        prompt_data = await self.get_prompt_template_async(prompt_id=20)
+        prompt_data = await self.get_prompt_template_async(prompt_id=94)
         prompt_template = prompt_data['prompt']
         temperature = prompt_data['temperature']
 
