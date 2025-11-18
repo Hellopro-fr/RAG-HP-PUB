@@ -1,6 +1,7 @@
 pika
 aio_pika
 pymilvus
+pydantic
 beautifulsoup4
 bs4
 markdownify

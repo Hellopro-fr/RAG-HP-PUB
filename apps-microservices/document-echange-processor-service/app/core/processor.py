@@ -110,8 +110,14 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     processed_messages_result = []
 
     for document_item in documents:
+        # Todo verifier si le document est présent dans docs
+        
         output_message = {}
         document_data = document_item.get("data",{})
+        document = document_data.get("document","inconnu")
+
+        if document not in docs:
+            continue
 
         nom_doc = os.path.basename(document_data.get("document","inconnu"))
         texts = results.get(nom_doc).get("text")
@@ -149,9 +155,10 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
                     error_details = response_details.get('error', {})
                     state_llm = 1 if not error_details else 2
 
+                    doc_url = document_data.get("document").replace(r"\/", "/")
                     metric_payload = {
                         "source_service": "document-echange-processor-service",
-                        "url": f"{document_data.get('document').replace(r'\/', '/')}({nb_pages} page(s))",
+                        "url": f"{doc_url}({nb_pages} page(s))",
                         "state_llm": state_llm,
                         "prompt_tokens": usage_details.get('prompt_tokens'),
                         "completion_tokens": usage_details.get('completion_tokens'),
