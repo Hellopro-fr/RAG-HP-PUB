@@ -1,10 +1,12 @@
 import logging
 import numpy as np
 import os
+import time
 from typing import List, Dict, Any
 from sentence_transformers.cross_encoder import CrossEncoder
 from tritonclient.grpc.aio import InferenceServerClient, InferInput, InferRequestedOutput
 from tritonclient.utils import InferenceServerException
+from common_utils.metrics.prometheus import PROCESSING_TIME_SECONDS
 
 TRITON_URL = os.getenv("TRITON_URL", "localhost:8001")
 MODEL_NAME = "bge-reranker"
@@ -43,11 +45,29 @@ class RerankingUseCase:
         if not documents:
             return []
             
+        metric_status = 'success'
         try:
             all_scores = []
             for i in range(0, len(documents), BATCH_SIZE):
                 batch_docs = documents[i:i + BATCH_SIZE]
+                
+                # --- Manual Instrumentation Start ---
+                start_time = time.monotonic()
                 batch_scores = await self._rerank_batch(query, batch_docs)
+                duration = time.monotonic() - start_time
+                count = len(batch_docs)
+                if count > 0:
+                    metric = PROCESSING_TIME_SECONDS.labels(
+                        service_name="reranking-model-service",
+                        status=metric_status,
+                        collection_type='reranking'
+                    )
+                    metric.observe(duration)
+                    if count > 1:
+                        for _ in range(count - 1):
+                            metric.observe(0)
+                # --- Manual Instrumentation End ---
+
                 all_scores.extend(batch_scores)
 
             doc_score_pairs = list(zip(documents, all_scores))
@@ -56,9 +76,11 @@ class RerankingUseCase:
             return [doc for doc, score in doc_score_pairs]
 
         except InferenceServerException as e:
+            metric_status = 'failure'
             logging.error(f"Erreur lors de l'appel à Triton pour le reranking: {e}", exc_info=True)
             return documents
         except Exception as e:
+            metric_status = 'failure'
             logging.error(f"Erreur inattendue lors du reranking: {e}", exc_info=True)
             return documents
 
@@ -66,11 +88,29 @@ class RerankingUseCase:
         if not documents:
             return []
             
+        metric_status = 'success'
         try:
             all_scores = []
             for i in range(0, len(documents), BATCH_SIZE):
                 batch_docs = documents[i:i + BATCH_SIZE]
+                
+                # --- Manual Instrumentation Start ---
+                start_time = time.monotonic()
                 batch_scores = await self._rerank_batch(query, batch_docs)
+                duration = time.monotonic() - start_time
+                count = len(batch_docs)
+                if count > 0:
+                    metric = PROCESSING_TIME_SECONDS.labels(
+                        service_name="reranking-model-service",
+                        status=metric_status,
+                        collection_type='reranking_with_scores'
+                    )
+                    metric.observe(duration)
+                    if count > 1:
+                        for _ in range(count - 1):
+                            metric.observe(0)
+                # --- Manual Instrumentation End ---
+                
                 all_scores.extend(batch_scores)
 
             doc_score_pairs = list(zip(documents, all_scores))
@@ -79,8 +119,10 @@ class RerankingUseCase:
             return [{"document": doc, "score": float(score)} for doc, score in doc_score_pairs]
 
         except InferenceServerException as e:
+            metric_status = 'failure'
             logging.error(f"Erreur lors de l'appel à Triton pour le reranking avec scores: {e}", exc_info=True)
             return [{"document": doc, "score": 0.0} for doc in documents]
         except Exception as e:
+            metric_status = 'failure'
             logging.error(f"Erreur inattendue lors du reranking avec scores: {e}", exc_info=True)
             return [{"document": doc, "score": 0.0} for doc in documents]

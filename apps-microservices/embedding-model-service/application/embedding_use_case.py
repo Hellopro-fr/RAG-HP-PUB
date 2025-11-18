@@ -8,6 +8,7 @@ from tritonclient.grpc.aio import InferenceServerClient, InferInput, InferReques
 import torch
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
+from common_utils.metrics.prometheus import measure_processing_time
 
 TRITON_URL = os.getenv("TRITON_URL", "localhost:8001")
 MODEL_NAME = "camembert-embedding"
@@ -82,6 +83,7 @@ class EmbeddingUseCase:
         sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
         return (sum_embeddings / sum_mask).numpy()
 
+    @measure_processing_time(service_name="embedding-model-service", label_arg_name="source_service")
     async def generate_embeddings(self, texts: List[str], source_service: str | None = None) -> List[List[float]]:
         if not texts:
             return []

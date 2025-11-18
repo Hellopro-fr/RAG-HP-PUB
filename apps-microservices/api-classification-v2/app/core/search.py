@@ -225,7 +225,7 @@ async def get_prompt_details_async(prompt_id: int, url: str) -> Optional[Dict[st
     Utilise httpx pour des appels HTTP non-bloquants.
 
     Args:
-        prompt_id: ID du prompt à récupérer (ex: 20)
+        prompt_id: ID du prompt à récupérer (ex: 94)
         url: URL de l'API externe
 
     Returns:

@@ -30,6 +30,20 @@ scrape_configs:
       type: 'A'
       port: 8530
 
+  - job_name: 'embedding-model-service'
+    dns_sd_configs:
+    - names:
+      - embedding-model-service
+      type: 'A'
+      port: 8530
+
+  - job_name: 'reranking-model-service'
+    dns_sd_configs:
+    - names:
+      - reranking-model-service
+      type: 'A'
+      port: 8530
+
   - job_name: 'template-llm-service'
     # This uses Docker's internal DNS to find all running container instances (replicas) of this service
     dns_sd_configs:

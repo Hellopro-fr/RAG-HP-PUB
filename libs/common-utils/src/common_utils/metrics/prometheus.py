@@ -36,15 +36,15 @@ def get_metrics_app():
     return make_wsgi_app()
 
 
-def measure_processing_time(service_name: str, payload_arg_name: str = None, collection_field_name: str = 'collection'):
+def measure_processing_time(service_name: str, payload_arg_name: str = None, collection_field_name: str = 'collection', label_arg_name: str = None):
     """
     A decorator that measures the execution time of a function (sync or async)
     and records it in the PROCESSING_TIME_SECONDS histogram.
 
-    It can optionally extract a 'collection_type' label from a payload argument.
+    It can optionally extract a 'collection_type' label from a payload argument
+    or directly from a named argument.
     """
     def decorator(func):
-        # --- FIX: Check if the function is async at decoration time ---
         is_async = asyncio.iscoroutinefunction(func)
 
         # --- FIX: Return an async wrapper for async functions ---
@@ -52,18 +52,25 @@ def measure_processing_time(service_name: str, payload_arg_name: str = None, col
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs):
                 collection_value = 'unknown'
-                if payload_arg_name:
-                    try:
+                try:
+                    sig = inspect.signature(func)
+                    arg_names = list(sig.parameters.keys())
+
+                    if label_arg_name and label_arg_name in kwargs:
+                        collection_value = kwargs[label_arg_name]
+                    elif label_arg_name and label_arg_name in arg_names:
+                        label_index = arg_names.index(label_arg_name)
+                        if label_index < len(args):
+                            collection_value = args[label_index]
+                    
+                    elif payload_arg_name:
                         payload = None
                         if payload_arg_name in kwargs:
                             payload = kwargs[payload_arg_name]
-                        else:
-                            sig = inspect.signature(func)
-                            arg_names = list(sig.parameters.keys())
-                            if payload_arg_name in arg_names:
-                                payload_index = arg_names.index(payload_arg_name)
-                                if payload_index < len(args):
-                                    payload = args[payload_index]
+                        elif payload_arg_name in arg_names:
+                            payload_index = arg_names.index(payload_arg_name)
+                            if payload_index < len(args):
+                                payload = args[payload_index]
                         
                         if payload is not None:
                             if isinstance(payload, list):
@@ -74,8 +81,8 @@ def measure_processing_time(service_name: str, payload_arg_name: str = None, col
                                 val = getattr(payload, collection_field_name, 'unknown')
                                 collection_value = val if val is not None else 'Default'
 
-                    except Exception:
-                        collection_value = 'error_extracting_label'
+                except Exception:
+                    collection_value = 'error_extracting_label'
 
                 start_time = time.monotonic()
                 status = 'success'
@@ -97,18 +104,25 @@ def measure_processing_time(service_name: str, payload_arg_name: str = None, col
             @functools.wraps(func)
             def sync_wrapper(*args, **kwargs):
                 collection_value = 'unknown'
-                if payload_arg_name:
-                    try:
+                try:
+                    sig = inspect.signature(func)
+                    arg_names = list(sig.parameters.keys())
+
+                    if label_arg_name and label_arg_name in kwargs:
+                        collection_value = kwargs[label_arg_name]
+                    elif label_arg_name and label_arg_name in arg_names:
+                        label_index = arg_names.index(label_arg_name)
+                        if label_index < len(args):
+                            collection_value = args[label_index]
+
+                    elif payload_arg_name:
                         payload = None
                         if payload_arg_name in kwargs:
                             payload = kwargs[payload_arg_name]
-                        else:
-                            sig = inspect.signature(func)
-                            arg_names = list(sig.parameters.keys())
-                            if payload_arg_name in arg_names:
-                                payload_index = arg_names.index(payload_arg_name)
-                                if payload_index < len(args):
-                                    payload = args[payload_index]
+                        elif payload_arg_name in arg_names:
+                            payload_index = arg_names.index(payload_arg_name)
+                            if payload_index < len(args):
+                                payload = args[payload_index]
                         
                         if payload is not None:
                             if isinstance(payload, list):
@@ -118,8 +132,8 @@ def measure_processing_time(service_name: str, payload_arg_name: str = None, col
                             else:
                                 val = getattr(payload, collection_field_name, 'unknown')
                                 collection_value = val if val is not None else 'Default'
-                    except Exception:
-                        collection_value = 'error_extracting_label'
+                except Exception:
+                    collection_value = 'error_extracting_label'
 
                 start_time = time.monotonic()
                 status = 'success'
