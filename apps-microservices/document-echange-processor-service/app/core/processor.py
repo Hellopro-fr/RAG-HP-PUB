@@ -110,8 +110,14 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     processed_messages_result = []
 
     for document_item in documents:
+        # Todo verifier si le document est présent dans docs
+        
         output_message = {}
         document_data = document_item.get("data",{})
+        document = document_data.get("document","inconnu")
+
+        if document not in docs:
+            continue
 
         nom_doc = os.path.basename(document_data.get("document","inconnu"))
         texts = results.get(nom_doc).get("text")
