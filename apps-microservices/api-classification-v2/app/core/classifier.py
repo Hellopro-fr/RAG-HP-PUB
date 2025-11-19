@@ -1139,7 +1139,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 
             # Trouver la catégorie choisie
             chosen_category = next((c for c in categories if str(c['id']) == str(chosen_id)), None)
-            if not chosen_category:
+            if not chosen_category and str(chosen_id) != '9000000':
                 return {
                     'id_produit': product['id_produit'],
                     'titre_produit': nom_produit_original,
