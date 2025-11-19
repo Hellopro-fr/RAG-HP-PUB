@@ -448,7 +448,6 @@ DOWNLOAD_DIR.mkdir(exist_ok=True)
 async def download_file(url, save_dir=DOWNLOAD_DIR):
     local_path = save_dir / Path(url).name
     if not local_path.exists():
-        print(f"⬇️  Téléchargement de {url} ...")
         loop = asyncio.get_event_loop()
         # Téléchargement HTTP dans un thread séparé
         resp = await loop.run_in_executor(None, requests.get, url)
@@ -518,14 +517,11 @@ async def process_line(line):
         downloaded = True
     # --- PDF ---
     if mime == "application/pdf":
-        print(f"[PDF] Extraction de {url}")
         content = await extract_text_from_pdf(url)
     else:
         # --- Conversion en PDF ---
         tmp_pdf = path.with_suffix(".converted.pdf")
-        print(f"[CONVERSION] {url} → {tmp_pdf}")
         convert_to_pdf(url, tmp_pdf)
-        print(f"[EXTRACTION] {tmp_pdf}")
         content = extract_text_from_pdf(str(tmp_pdf))
         os.remove(tmp_pdf)
 
@@ -549,11 +545,9 @@ async def process_jsonl_for_year_async(jsonl_dir, annee):
 
     lines = []
     for jsonl_file in jsonl_files:
-        print(f"📄 Lecture de {jsonl_file} ...")
         with jsonlines.open(jsonl_file, "r") as reader:
             lines.extend(list(reader))
 
-    print(f"⚡ Traitement asynchrone pour {len(lines)} lignes...")
     # Création des tâches async
     tasks = [process_line(line) for line in lines]
     processed_lines = await asyncio.gather(*tasks)
@@ -564,10 +558,10 @@ async def process_jsonl_for_year_async(jsonl_dir, annee):
         for line in processed_lines:
             if line is None:
                 continue
-            writer.write(line)
             content = line.get("content", "")
             if len(content) < 200:
                 short_content_count += 1
+        writer.write(f"Nombre total de documents < 200 caractères : {short_content_count}")
 
     print("\n🔎 Résultat final")
     print(f"Nombre total de documents < 200 caractères : {short_content_count}")
