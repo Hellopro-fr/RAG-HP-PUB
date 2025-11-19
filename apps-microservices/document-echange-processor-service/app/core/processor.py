@@ -143,7 +143,9 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             # Suppression des info inutiles via llm
             metric_payload = {}
 
-            if nb_pages < 10 and nb_pages > 1:
+            # if nb_pages < 20 and nb_pages > 1:
+            # Todo à modifier si nécessaire
+            if nb_pages >= 10 and nb_pages < 20:
                 try:
 
                     chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
