@@ -1171,14 +1171,23 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 }
 
             # Résultat final
+            # Si chosen_category est None (cas de l'ID 9000000), utiliser chosen_id directement
+            if chosen_category:
+                result_id_categorie = chosen_category['id']
+                result_nom_categorie = chosen_category['name']
+            else:
+                # Cas spécial pour ID 9000000 ou autre catégorie non trouvée mais autorisée
+                result_id_categorie = chosen_id
+                result_nom_categorie = 'Autres produits'
+
             return {
                 'id_produit': product['id_produit'],
                 'titre_produit': nom_produit_original,
                 'titre_produit_optimise': nom_produit_optimise,
                 'description_produit': product['description'],
                 'status': 'SUCCESS',
-                'id_categorie': chosen_category['id'],
-                'nom_categorie': chosen_category['name'],
+                'id_categorie': result_id_categorie,
+                'nom_categorie': result_nom_categorie,
                 'score_llm': score,
                 'categorie_candidates': self._format_categories_candidates(categories),
                 'llm_type': self.llm_choice,
