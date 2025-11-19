@@ -1193,7 +1193,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'error': str(e),
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
-                'llm_response': [f'Exception générale: {str(e)}'],
+                'llm_response': [{'error': f'Exception générale: {str(e)}'}],
                 'processing_time': time.time() - start_time,
                 'input_tokens': 0,
                 'output_tokens': 0
