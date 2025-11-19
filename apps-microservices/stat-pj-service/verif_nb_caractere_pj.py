@@ -490,7 +490,7 @@ async def process_line(line):
     if tab_data:
         text_bdd = tab_data[0].get('text','').strip()
         date_maj = tab_data[0].get('date_maj','').strip()
-        if date_maj:
+        if date_maj or text_bdd:
             line['content'] = text_bdd
             return line    
     
