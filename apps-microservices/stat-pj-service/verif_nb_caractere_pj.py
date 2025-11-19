@@ -86,7 +86,7 @@ class MilvusDocumentCrud:
 
             result = await asyncio.to_thread(self.collection.query,
                 expr=f"fichier_source in {list_fichier_source}",
-                output_fields=["id","text","date_ajout"]
+                output_fields=["id","text","date_ajout","date_maj"]
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
@@ -505,7 +505,7 @@ async def process_line(line):
         results = extractor.get_clean_result(response)
         nom_doc = os.path.basename(document_data.get("document","inconnu"))
         texts = results.get(nom_doc).get("text")
-        
+
         line["comment"] = "OCR"
         line["content"] = texts
         print(f"[IMAGE] {url} → OCR")
