@@ -119,6 +119,17 @@ class ProductClassifier:
             for cat in categories[:self.categories_limit]
         ]
 
+    def _escape_text(self, text: str) -> str:
+        """Échappe les guillemets et caractères spéciaux dans le texte pour éviter les erreurs de parsing"""
+        if not text:
+            return ""
+        # Remplacer les guillemets simples et doubles par des versions échappées
+        text = text.replace("'", "\\'")
+        text = text.replace('"', '\\"')
+        # Supprimer les séquences d'échappement multiples qui peuvent apparaître (comme \'\')
+        text = text.replace("\\'\\''", "\\'")
+        return text
+
     def is_llm_configured(self) -> bool:
         """Vérifie si un LLM est configuré"""
         if self.llm_choice == 'Qwen':
@@ -805,23 +816,23 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
         prompt_template = prompt_data['prompt']
         temperature = prompt_data['temperature']
 
-        # Formater les catégories avec fil d'ariane et description enrichie
+        # Formater les catégories avec fil d'ariane et description enrichie (avec échappement des guillemets)
         formatted_categories = "\n".join([
-            f"- ID: {cat['id']}, Nom: {cat['name']} (Average score: {cat['average_score']:.2f})\n"
-            f"  Fil d'ariane: {category_info.get(cat['id'], {}).get('fil_ariane', 'N/A')}\n"
-            f"  Description: {category_info.get(cat['id'], {}).get('summary', 'N/A')}"
+            f"- ID: {cat['id']}, Nom: {self._escape_text(cat['name'])} (Average score: {cat['average_score']:.2f})\n"
+            f"  Fil d'ariane: {self._escape_text(str(category_info.get(cat['id'], {}).get('fil_ariane', 'N/A')))}\n"
+            f"  Description: {self._escape_text(str(category_info.get(cat['id'], {}).get('summary', 'N/A')))}"
             for cat in categories[:self.categories_limit]
         ])
 
-        # Formater les produits similaires
+        # Formater les produits similaires (avec échappement des guillemets)
         formatted_products = "\n".join([
-            f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
+            f"- {self._escape_text(ex['nom_produit'])} → {self._escape_text(ex['categorie'])} (Similarité: {ex['score']:.2f})"
             for ex in top_k_products[:5]
         ])
 
-        # Remplacer les placeholders dans le template
-        prompt_final = prompt_template.replace("{titre_produit}", product['nom_produit'])
-        prompt_final = prompt_final.replace("{description_produit}", product['description'])
+        # Remplacer les placeholders dans le template (avec échappement des guillemets)
+        prompt_final = prompt_template.replace("{titre_produit}", self._escape_text(product['nom_produit']))
+        prompt_final = prompt_final.replace("{description_produit}", self._escape_text(product['description']))
         prompt_final = prompt_final.replace("{liste_categories}", formatted_categories)
         prompt_final = prompt_final.replace("{liste_produits}", formatted_products)
 
