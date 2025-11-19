@@ -114,6 +114,74 @@ router.addDefaultHandler(
         let url = request.loadedUrl;
         let enqueueLinksExcludePath: Array<string> = [
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
+            // === SPIDER TRAPS E-COMMERCE ===
+            // Facettes et filtres
+            '**/*order=*', '**/*sort=*', '**/*dir=*', '**/*limit=*',
+            '**/*resultsPerPage=*', '**/*filter=*', '**/*filters[*',
+            '**/*price=*', '**/*price_min=*', '**/*price_max=*',
+            '**/*id_category=*', '**/*categoryId=*',
+
+            // Recherche et pagination avancée
+            '**/*q=*', '**/*search=*', '**/*query=*',
+            '**/*page=*/**/*page=*', // Double pagination
+            '**/*offset=*', '**/*start=*',
+
+            // Tris et affichages multiples
+            '**/*view=*', '**/*mode=*', '**/*display=*',
+            '**/*per_page=*', '**/*items=*',
+
+            // === AUTHENTIFICATION & COMPTE ===
+            '**/connexion**', '**/login**', '**/signin**', '**/log-in**',
+            '**/register**', '**/signup**', '**/inscription**',
+            '**/account**', '**/mon-compte**', '**/my-account**',
+            '**/profile**', '**/profil**',
+            '**/password**', '**/mot-de-passe**', '**/reset-password**',
+            '**/logout**', '**/deconnexion**',
+            '**/forgot-password**', '**/oubli-mot-de-passe**',
+
+            // === PROCESSUS D'ACHAT ===
+            '**/panier**', '**/cart**', '**/basket**',
+            '**/checkout**', '**/commande**', '**/order**',
+            '**/add-to-cart**', '**/addtocart**',
+            '**/payment**', '**/paiement**',
+            '**/shipping**', '**/livraison**',
+            '**/confirmation**',
+
+            // === ACTIONS UTILISATEUR ===
+            '**/wishlist**', '**/liste-envies**', '**/favoris**',
+            '**/compare**', '**/comparateur**',
+            '**/sendtoafriend**', '**/send-to-friend**',
+            '**/avis**', '**/review**', '**/reviews**',
+            '**/comment**', '**/comments**',
+            '**/rating**', '**/noter**',
+
+             // === FONCTIONNALITÉS DYNAMIQUES ===
+            '**/*action=*', '**/*do=*', '**/*task=*',
+            '**/*ajax=*', '**/*xhr=*',
+            '**/*popup=*', '**/*modal=*',
+            '**/*print=*', '**/*impression=*',
+
+            // === CALENDRIERS & DATES (Spider traps classiques) ===
+            '**/*year=*', '**/*month=*', '**/*day=*',
+            '**/*date=*', '**/*from=*', '**/*to=*',
+            '**/calendrier/**', '**/calendar/**',
+
+            // === RÉSEAUX SOCIAUX & PARTAGE ===
+            '**/*facebook*', '**/*twitter*', '**/*linkedin*',
+            '**/*instagram*', '**/*youtube*', '**/*pinterest*',
+            '**/*tiktok*', '**/*whatsapp*',
+            '**/*share*', '**/*partager*',
+            '**/mailto:*', '**/tel:*', '**/*://t.me/*',
+
+            // === TRACKING & ANALYTICS ===
+            '**/*redirect*', '**/*track*', '**/*click*',
+            '**/*ref=*', '**/*referrer=*', '**/*source=*',
+
+            // === APIS & TECHNIQUES ===
+            '**/api/**', '**/wp-json/**', '**/rest/**',
+            '**/feed/**', '**/feeds/**', '**/rss/**',
+
+
             // `${baseUrl}/**/*[?#]*`,
             // `${baseUrl}/**/*[?#]*/**`,
         ];
@@ -238,60 +306,75 @@ router.addDefaultHandler(
                         // List parameters always to remove
                         let toAlwaysRemove = {
                             toRemove: [
-                                // Cart and wishlist actions
-                                "add-to-cart",
-                                "add_to_cart",
-                                "add-to-compare",
-                                "add_to_compare",
-                                "add-to-wishlist",
-                                "add_to_wishlist",
-                                "remove_from_wishlist",
-                                "remove_wishlist",
-                                "remove_compare",
-                                "remove_item",
-                                // End cart and wishlist actions
-                                // Tracking parameters
-                                "utm_source",
-                                "utm_medium",
-                                "utm_campaign",
-                                "utm_content",
-                                "utm_term",
-                                // End tracking parameters
-                                // Hubspot ad tracker
-                                "hsa_acc",
-                                "hsa_cam",
-                                "hsa_grp",
-                                "hsa_ad",
-                                "hsa_src",
-                                "hsa_mt",
-                                "hsa_kw",
-                                "hsa_tgt",
-                                "hsa_ver",
-                                "hsa_net",
-                                // End Hubspot ad tracker
-                                // WORDPRESS
-                                "_wpnonce",
-                                // End WORDPRESS
-                                "et_blog",
-                                "_gl",
-                                "gclid",
-                                // PRESTASHOP
-                                "pid",
-                                // End PRESTASHOP
-                                // SHOPIFY
-                                "pr_prod_strat",
-                                "pr_rec_id",
-                                "pr_rec_pid",
-                                "pr_ref_pid",
-                                "pr_seq",
-                                // End SHOPIFY
-                                // Google Analytics
-                                "srsltid",
-                                "utmcct",
-                                "utmcsr",
-                                "utmcmd",
-                                "utmccn",
-                                // End Google Analytics
+                                // === CART & WISHLIST ===
+                                "add-to-cart", "add_to_cart", "addtocart",
+                                "add-to-compare", "add_to_compare",
+                                "add-to-wishlist", "add_to_wishlist", "addtowishlist",
+                                "remove_from_wishlist", "remove_wishlist",
+                                "remove_compare", "remove_item",
+                                "quantity", "qty",
+
+                                // === TRACKING UTM (Marketing) ===
+                                "utm_source", "utm_medium", "utm_campaign",
+                                "utm_content", "utm_term", "utm_id",
+                                "utm_referrer", "utm_name",
+
+                                // === FACEBOOK & META ===
+                                "fbclid", "fb_action_ids", "fb_action_types",
+                                "fb_source", "fb_ref",
+
+                                // === GOOGLE ADS & ANALYTICS ===
+                                "gclid", "gclsrc", "dclid",
+                                "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
+                                "_ga", "_gid", "_gat",
+
+                                // === HUBSPOT ===
+                                "hsa_acc", "hsa_cam", "hsa_grp",
+                                "hsa_ad", "hsa_src", "hsa_mt",
+                                "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
+                                "hsCtaTracking", "hsCta",
+
+                                // === MAILCHIMP ===
+                                "mc_cid", "mc_eid",
+
+                                // === SOCIAL MEDIA TRACKING ===
+                                "twclid", "li_fat_id", "msclkid",
+                                "igshid", "tt_medium", "tt_content",
+
+                                // === WORDPRESS ===
+                                "_wpnonce", "preview", "preview_id",
+                                "preview_nonce", "et_blog",
+
+                                // === PRESTASHOP ===
+                                "id_product", "id_category", "pid",
+                                "controller", "id_product_attribute",
+                                "isolang", "id_lang",
+
+                                // === SHOPIFY ===
+                                "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
+                                "pr_ref_pid", "pr_seq",
+                                "variant", "selling_plan",
+
+                                // === MAGENTO ===
+                                "SID", "___store", "___from_store",
+
+                                // === SESSION & TRACKING ===
+                                "sessionid", "session_id", "PHPSESSID",
+                                "sid", "s_id",
+                                "_gl", "ref", "referrer",
+
+                                // === AFFILIATE & MARKETING ===
+                                "aff_id", "affiliate", "partner",
+                                "coupon", "discount", "promo",
+                                "voucher",
+
+                                // === AUTRES TRACKING ===
+                                "click_id", "transaction_id",
+                                "source", "medium", "campaign",
+
+                                // === FILTRES SOUVENT INUTILES ===
+                                "view", "mode", "display",
+                                "timestamp", "random", "nocache",
                             ],
                         };
                         request.url = processUrl(
