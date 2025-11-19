@@ -505,13 +505,11 @@ async def process_line(line):
         results = extractor.get_clean_result(response)
         nom_doc = os.path.basename(document_data.get("document","inconnu"))
         texts = results.get(nom_doc).get("text")
-
-
+        
         line["comment"] = "OCR"
         line["content"] = texts
-        print(f"[IMAGE] {url} → TODO OCR")
-        if downloaded:
-            os.remove(url)
+        print(f"[IMAGE] {url} → OCR")
+        
         return line
 
     downloaded = False
