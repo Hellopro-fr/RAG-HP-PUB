@@ -516,12 +516,12 @@ async def process_line(line):
 
     downloaded = False
     if url.startswith("http://") or url.startswith("https://"):
-        url = download_file(url)
+        url = await download_file(url)
         downloaded = True
     # --- PDF ---
     if mime == "application/pdf":
         print(f"[PDF] Extraction de {url}")
-        content = extract_text_from_pdf(url)
+        content = await extract_text_from_pdf(url)
     else:
         # --- Conversion en PDF ---
         tmp_pdf = path.with_suffix(".converted.pdf")
