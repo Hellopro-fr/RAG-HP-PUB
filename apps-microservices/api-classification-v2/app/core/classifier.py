@@ -119,6 +119,17 @@ class ProductClassifier:
             for cat in categories[:self.categories_limit]
         ]
 
+    def _escape_text(self, text: str) -> str:
+        """Échappe les guillemets et caractères spéciaux dans le texte pour éviter les erreurs de parsing"""
+        if not text:
+            return ""
+        # Remplacer les guillemets simples et doubles par des versions échappées
+        text = text.replace("'", "\\'")
+        text = text.replace('"', '\\"')
+        # Supprimer les séquences d'échappement multiples qui peuvent apparaître (comme \'\')
+        text = text.replace("\\'\\''", "\\'")
+        return text
+
     def is_llm_configured(self) -> bool:
         """Vérifie si un LLM est configuré"""
         if self.llm_choice == 'Qwen':
@@ -805,23 +816,23 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
         prompt_template = prompt_data['prompt']
         temperature = prompt_data['temperature']
 
-        # Formater les catégories avec fil d'ariane et description enrichie
+        # Formater les catégories avec fil d'ariane et description enrichie (avec échappement des guillemets)
         formatted_categories = "\n".join([
-            f"- ID: {cat['id']}, Nom: {cat['name']} (Average score: {cat['average_score']:.2f})\n"
-            f"  Fil d'ariane: {category_info.get(cat['id'], {}).get('fil_ariane', 'N/A')}\n"
-            f"  Description: {category_info.get(cat['id'], {}).get('summary', 'N/A')}"
+            f"- ID: {cat['id']}, Nom: {self._escape_text(cat['name'])} (Average score: {cat['average_score']:.2f})\n"
+            f"  Fil d'ariane: {self._escape_text(str(category_info.get(cat['id'], {}).get('fil_ariane', 'N/A')))}\n"
+            f"  Description: {self._escape_text(str(category_info.get(cat['id'], {}).get('summary', 'N/A')))}"
             for cat in categories[:self.categories_limit]
         ])
 
-        # Formater les produits similaires
+        # Formater les produits similaires (avec échappement des guillemets)
         formatted_products = "\n".join([
-            f"- {ex['nom_produit']} → {ex['categorie']} (Similarité: {ex['score']:.2f})"
+            f"- {self._escape_text(ex['nom_produit'])} → {self._escape_text(ex['categorie'])} (Similarité: {ex['score']:.2f})"
             for ex in top_k_products[:5]
         ])
 
-        # Remplacer les placeholders dans le template
-        prompt_final = prompt_template.replace("{titre_produit}", product['nom_produit'])
-        prompt_final = prompt_final.replace("{description_produit}", product['description'])
+        # Remplacer les placeholders dans le template (avec échappement des guillemets)
+        prompt_final = prompt_template.replace("{titre_produit}", self._escape_text(product['nom_produit']))
+        prompt_final = prompt_final.replace("{description_produit}", self._escape_text(product['description']))
         prompt_final = prompt_final.replace("{liste_categories}", formatted_categories)
         prompt_final = prompt_final.replace("{liste_produits}", formatted_products)
 
@@ -1139,7 +1150,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
 
             # Trouver la catégorie choisie
             chosen_category = next((c for c in categories if str(c['id']) == str(chosen_id)), None)
-            if not chosen_category:
+            if not chosen_category and str(chosen_id) != '9000000':
                 return {
                     'id_produit': product['id_produit'],
                     'titre_produit': nom_produit_original,
@@ -1160,14 +1171,23 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 }
 
             # Résultat final
+            # Si chosen_category est None (cas de l'ID 9000000), utiliser chosen_id directement
+            if chosen_category:
+                result_id_categorie = chosen_category['id']
+                result_nom_categorie = chosen_category['name']
+            else:
+                # Cas spécial pour ID 9000000 ou autre catégorie non trouvée mais autorisée
+                result_id_categorie = chosen_id
+                result_nom_categorie = 'Autres produits'
+
             return {
                 'id_produit': product['id_produit'],
                 'titre_produit': nom_produit_original,
                 'titre_produit_optimise': nom_produit_optimise,
                 'description_produit': product['description'],
                 'status': 'SUCCESS',
-                'id_categorie': chosen_category['id'],
-                'nom_categorie': chosen_category['name'],
+                'id_categorie': result_id_categorie,
+                'nom_categorie': result_nom_categorie,
                 'score_llm': score,
                 'categorie_candidates': self._format_categories_candidates(categories),
                 'llm_type': self.llm_choice,
@@ -1193,7 +1213,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 'error': str(e),
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
-                'llm_response': [f'Exception générale: {str(e)}'],
+                'llm_response': [{'error': f'Exception générale: {str(e)}'}],
                 'processing_time': time.time() - start_time,
                 'input_tokens': 0,
                 'output_tokens': 0
