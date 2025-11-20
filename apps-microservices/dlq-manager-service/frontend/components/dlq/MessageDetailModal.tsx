@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useEffect } from "react"
-import { X, Copy } from "lucide-react"
+import { X, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiGetMessageDetails, apiRequeueMessage, apiEditAndRequeueMessage, Message, formatTimestamp } from "@/lib/api"
 
@@ -19,6 +19,7 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
   const [isEditMode, setIsEditMode] = useState(false)
   const [editedPayload, setEditedPayload] = useState("")
   const [isRequeuing, setIsRequeuing] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -75,10 +76,41 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
   const handleCopyPayload = () => {
     if (!message) return;
     const payloadStr = JSON.stringify(message._source.original_payload, null, 2);
-    navigator.clipboard.writeText(payloadStr).then(() => {
-      alert("Payload copied to clipboard!");
+
+    const copyToClipboard = (text: string) => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for non-secure contexts
+        return new Promise<void>((resolve, reject) => {
+          try {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            if (successful) {
+              resolve();
+            } else {
+              reject(new Error("Fallback copy failed"));
+            }
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }
+    };
+
+    copyToClipboard(payloadStr).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
     }).catch(err => {
       console.error("Failed to copy: ", err);
+      alert("Failed to copy payload to clipboard.");
     });
   };
 
@@ -136,8 +168,8 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
                       onClick={handleCopyPayload}
                       className="text-bleu-primary hover:bg-bleu-light h-8 px-2"
                     >
-                      <Copy className="w-4 h-4 mr-1" />
-                      Copy
+                      {isCopied ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+                      {isCopied ? "Copied!" : "Copy"}
                     </Button>
                   </div>
                   {isEditMode ? (
