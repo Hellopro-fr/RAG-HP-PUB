@@ -1,0 +1,10 @@
+pika
+aio_pika
+pymilvus
+pydantic
+accelerate
+python-dotenv
+Pillow 
+PyMuPDF 
+jsonlines
+requests
