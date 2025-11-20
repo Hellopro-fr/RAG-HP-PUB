@@ -600,39 +600,39 @@ class ProductClassifier:
                         "top_5_produit": ""
                     }
 
-        # Résumer les descriptions qui n'ont pas encore de résumé en cache
-        ids_to_summarize = [c['id'] for c in categories if c['id'] not in self.category_summary_cache]
+        # Résumer les descriptions via Redis cache (toutes les catégories)
+        # Créer des tâches pour résumer en parallèle avec Redis cache
+        summarize_tasks = []
+        cat_ids_list = []
+        for cat in categories:
+            cat_id = cat['id']
+            cat_ids_list.append(cat_id)
 
-        if ids_to_summarize:
-            # Créer des tâches pour résumer en parallèle
-            summarize_tasks = []
-            for cat_id in ids_to_summarize:
-                # Récupérer les données complètes de la catégorie
-                category_full_data = self.category_cache.get(cat_id, {
-                    "id_categorie": cat_id,
-                    "nom_categorie": "N/A",
-                    "description_categorie": "Description non disponible",
-                    "fil_ariane": "",
-                    "top_5_produit": ""
-                })
-                summarize_tasks.append(self._summarize_category_description_async(category_full_data))
+            # Récupérer les données complètes de la catégorie
+            category_full_data = self.category_cache.get(cat_id, {
+                "id_categorie": cat_id,
+                "nom_categorie": "N/A",
+                "description_categorie": "Description non disponible",
+                "fil_ariane": "",
+                "top_5_produit": ""
+            })
+            summarize_tasks.append(self._summarize_category_description_async(category_full_data))
 
-            # Exécuter les résumés en parallèle
-            summary_results = await asyncio.gather(*summarize_tasks)
+        # Exécuter les résumés en parallèle (cache Redis géré par cache_or_execute)
+        summary_results = await asyncio.gather(*summarize_tasks)
 
-            # Mettre en cache et accumuler les tokens
-            for cat_id, result in zip(ids_to_summarize, summary_results):
-                self.category_summary_cache[cat_id] = result["summary"]
-                total_input_tokens += result["input_tokens"]
-                total_output_tokens += result["output_tokens"]
+        # Accumuler les tokens (seulement si le résumé n'était pas en cache)
+        for result in summary_results:
+            total_input_tokens += result["input_tokens"]
+            total_output_tokens += result["output_tokens"]
 
         # Retourner les infos enrichies (résumé + fil d'ariane)
-        for cat in categories:
+        for i, cat in enumerate(categories):
             cat_id = cat['id']
             cached_data = self.category_cache.get(cat_id, {})
 
             category_info[cat_id] = {
-                "summary": self.category_summary_cache.get(cat_id, "N/A"),
+                "summary": summary_results[i]["summary"],
                 "fil_ariane": cached_data.get('fil_ariane', '') if isinstance(cached_data, dict) else ''
             }
 
