@@ -821,7 +821,8 @@ class SearchOrchestrator:
                 completion = response["response"]
             elif isinstance(client, GeminiClient):
                 response = client.chat(
-                    full_user_prompt, options={"thinking_level": "high"}
+                    full_user_prompt,
+                    options={"thinking_level": self.request.llm.thinking_level},
                 )
                 completion = response["response"]
                 llm_response = response["content"]

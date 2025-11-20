@@ -32,6 +32,7 @@ class LLMOptions(BaseModel):
     temperature: float = 0.0
     template_prompt: Optional[str] = ""
     provider: str = ""
+    thinking_level: str = "high"
 
 
 class RerankerOptions(BaseModel):
