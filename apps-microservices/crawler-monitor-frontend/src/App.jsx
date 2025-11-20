@@ -44,9 +44,8 @@ const JobCard = ({ job, onClick, isSelected }) => {
   return (
     <div
       onClick={onClick}
-      className={`bg-gray-800 rounded-lg p-4 cursor-pointer hover:bg-gray-700 border-l-4 transition-all ${
-        isSelected ? 'border-blue-500 bg-gray-700 shadow-lg' : `border-${status.color}-500`
-      }`}
+      className={`bg-gray-800 rounded-lg p-4 cursor-pointer hover:bg-gray-700 border-l-4 transition-all ${isSelected ? 'border-blue-500 bg-gray-700 shadow-lg' : `border-${status.color}-500`
+        }`}
     >
       <div className="flex justify-between items-start">
         <div className="min-w-0 flex-1">
@@ -70,20 +69,20 @@ const AdvancedLogViewer = ({ content, jobId }) => {
   const [levelFilter, setLevelFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [linesPerPage] = useState(100);
-  
+
   const parsedLines = useMemo(() => {
     return content.split('\n').map((line, index) => {
       const lowerLine = line.toLowerCase();
       let level = 'info';
       if (lowerLine.includes('error')) level = 'error';
       else if (lowerLine.includes('warn')) level = 'warn';
-      
+
       const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
       const url = urlMatch ? urlMatch[1] : null;
-      
+
       const timestampMatch = line.match(/(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2})/);
       const timestamp = timestampMatch ? timestampMatch[1] : null;
-      
+
       return { line, level, url, timestamp, index };
     });
   }, [content]);
@@ -110,7 +109,7 @@ const AdvancedLogViewer = ({ content, jobId }) => {
   }, [parsedLines]);
 
   const highlightLog = (level) => {
-    switch(level) {
+    switch (level) {
       case 'error': return 'text-red-400 bg-red-900/20';
       case 'warn': return 'text-yellow-400 bg-yellow-900/20';
       default: return 'text-gray-300';
@@ -120,8 +119,8 @@ const AdvancedLogViewer = ({ content, jobId }) => {
   const highlightSearchTerm = (text) => {
     if (!searchTerm) return text;
     const parts = text.split(new RegExp(`(${searchTerm})`, 'gi'));
-    return parts.map((part, i) => 
-      part.toLowerCase() === searchTerm.toLowerCase() 
+    return parts.map((part, i) =>
+      part.toLowerCase() === searchTerm.toLowerCase()
         ? <span key={i} className="bg-yellow-500 text-black font-bold">{part}</span>
         : part
     );
@@ -129,7 +128,7 @@ const AdvancedLogViewer = ({ content, jobId }) => {
 
   const downloadLogs = (format) => {
     let data, filename, type;
-    
+
     if (format === 'txt') {
       data = filteredLines.map(l => l.line).join('\n');
       filename = `job-${jobId}-logs.txt`;
@@ -139,14 +138,14 @@ const AdvancedLogViewer = ({ content, jobId }) => {
       filename = `job-${jobId}-logs.json`;
       type = 'application/json';
     } else if (format === 'csv') {
-      data = 'Index,Level,Line,URL,Timestamp\n' + 
-        filteredLines.map(l => 
+      data = 'Index,Level,Line,URL,Timestamp\n' +
+        filteredLines.map(l =>
           `${l.index},"${l.level}","${l.line.replace(/"/g, '""')}","${l.url || ''}","${l.timestamp || ''}"`
         ).join('\n');
       filename = `job-${jobId}-logs.csv`;
       type = 'text/csv';
     }
-    
+
     const blob = new Blob([data], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -197,7 +196,7 @@ const AdvancedLogViewer = ({ content, jobId }) => {
               className="w-full bg-gray-900 border border-gray-700 rounded-md pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
-          
+
           <select
             value={levelFilter}
             onChange={e => {
@@ -266,8 +265,8 @@ const AdvancedLogViewer = ({ content, jobId }) => {
       <div className="bg-gray-900 rounded-lg font-mono text-xs max-h-[60vh] overflow-auto">
         <div className="p-4">
           {paginatedLines.map(({ line, level, url, timestamp, index }) => (
-            <div 
-              key={index} 
+            <div
+              key={index}
               className={`flex gap-4 items-start py-1 hover:bg-gray-800/50 ${highlightLog(level)} px-2 rounded`}
             >
               <span className="text-gray-600 select-none w-12 text-right flex-shrink-0">
@@ -379,7 +378,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw }) => {
             <StatCard title="Échecs" value={job.stats.requestsFailed || 0} icon={XCircle} color="red" />
             <StatCard title="Durée" value={`${((job.stats.crawlerRuntimeMillis || 0) / 1000).toFixed(2)}s`} icon={Clock} color="purple" />
           </div>
-          
+
           {job.errors && job.errors.length > 0 && (
             <>
               <ErrorVisualization errors={job.errors} warnings={job.warnings || []} />
@@ -423,19 +422,19 @@ function App() {
       const jobDate = new Date(job.start_time);
       const start = startDate ? new Date(startDate) : null;
       const end = endDate ? new Date(endDate) : null;
-      
+
       if (start && jobDate < start) return false;
       if (end) {
         const endOfDay = new Date(end);
         endOfDay.setHours(23, 59, 59, 999);
         if (jobDate > endOfDay) return false;
       }
-      
+
       const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
-      const matchesSearch = searchTerm === '' || 
-        job.id.includes(searchTerm) || 
+      const matchesSearch = searchTerm === '' ||
+        job.id.includes(searchTerm) ||
         (job.domain && job.domain.toLowerCase().includes(searchTerm.toLowerCase()));
-      
+
       return matchesStatus && matchesSearch;
     }).sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
   }, [allJobs, searchTerm, statusFilter, startDate, endDate]);
@@ -460,10 +459,10 @@ function App() {
       const response = await fetch(`${API_URL}/jobs`);
       const data = await response.json();
       setAllJobs(data);
-    } catch (error) { 
-      console.error('Error fetching jobs:', error); 
-    } finally { 
-      setLoading(false); 
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -471,29 +470,30 @@ function App() {
     if (jobCache.current[id] && selectedJob?.id === id && !showRaw) {
       return;
     }
-    
+
     setShowRaw(false);
     setLoadingDetails(true);
-    
+
     try {
       const response = await fetch(`${API_URL}/jobs/${id}/details`);
       if (!response.ok) throw new Error(`HTTP error ${response.status}`);
       const data = await response.json();
-      
+
       jobCache.current[id] = data;
       setSelectedJob(data);
     } catch (error) {
       console.error('Error fetching job details:', error);
       setSelectedJob({ id, error: error.message });
-    } finally { 
-      setLoadingDetails(false); 
+    } finally {
+      setLoadingDetails(false);
     }
   }, [selectedJob, showRaw]);
 
   useEffect(() => {
     fetchJobs();
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    // Utiliser /api pour le WebSocket car Nginx est configuré pour proxy_pass /api vers le backend (y compris WS)
+    const wsUrl = `${protocol}//${window.location.host}/api`;
     wsRef.current = new WebSocket(wsUrl);
     wsRef.current.onmessage = () => {
       fetchJobs();
@@ -502,8 +502,8 @@ function App() {
         fetchJobDetails(selectedJob.id);
       }
     };
-    return () => { 
-      if (wsRef.current) wsRef.current.close(); 
+    return () => {
+      if (wsRef.current) wsRef.current.close();
     };
   }, [fetchJobs, fetchJobDetails, selectedJob]);
 
@@ -595,7 +595,7 @@ function App() {
               )}
             </div>
           </div>
-          
+
           {totalPages > 1 && (
             <div className="flex items-center justify-between text-sm text-gray-400 pt-2 border-t border-gray-700">
               <span>{filteredJobs.length} jobs trouvés</span>
@@ -607,9 +607,25 @@ function App() {
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span>
-                  Page {currentPage} / {totalPages}
-                </span>
+
+                <div className="flex items-center gap-2">
+                  <span className="hidden sm:inline">Page</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max={totalPages}
+                    value={currentPage}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                        setCurrentPage(val);
+                      }
+                    }}
+                    className="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-center focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <span className="text-gray-500">/ {totalPages}</span>
+                </div>
+
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
@@ -651,10 +667,10 @@ function App() {
                 <RefreshCw className="w-12 h-12 animate-spin text-blue-400" />
               </div>
             ) : selectedJob ? (
-              <JobDetails 
-                job={selectedJob} 
-                onToggleRaw={() => setShowRaw(!showRaw)} 
-                showRaw={showRaw} 
+              <JobDetails
+                job={selectedJob}
+                onToggleRaw={() => setShowRaw(!showRaw)}
+                showRaw={showRaw}
               />
             ) : (
               <div className="text-center py-20 text-gray-400">
