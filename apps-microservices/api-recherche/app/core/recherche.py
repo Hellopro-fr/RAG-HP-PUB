@@ -112,9 +112,9 @@ class GeminiClient:
         if isinstance(obj, bytes):
             return obj.hex()  # Convertit b'\xe6...' en string 'e6...'
         if isinstance(obj, dict):
-            return {k: make_serializable(v) for k, v in obj.items()}
+            return {k: self.make_serializable(v) for k, v in obj.items()}
         if isinstance(obj, list):
-            return [make_serializable(v) for v in obj]
+            return [self.make_serializable(v) for v in obj]
         return obj
 
     def chat(self, message: str, options: Dict):
