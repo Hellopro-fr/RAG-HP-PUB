@@ -21,6 +21,9 @@ from .search import (
     EXTERNAL_PROMPT_API_URL
 )
 
+# Import Redis cache service
+from common_utils.redis.cache_service import cache_or_execute
+
 logger = logging.getLogger(__name__)
 
 # Import du client gRPC pour Qwen
@@ -41,7 +44,7 @@ class ProductClassifier:
         self.openai_client = None
         self.deepseek_client = None
         self.category_cache = {}
-        self.category_summary_cache = {}  # Cache pour les résumés de descriptions
+        # NOTE: category_summary_cache supprimé - utilise Redis via cache_or_execute() maintenant
         self.prompt_cache = {}  # Cache pour les templates de prompts avec timestamp
         self.prompt_cache_duration = 120  # Durée du cache en secondes (2 minutes = 120s)
         self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
@@ -280,7 +283,7 @@ class ProductClassifier:
         nom_produit: str,
         description: str,
         categorie: Optional[str] = None
-    ) -> Optional[str]:
+    ) -> Tuple[Optional[str], Dict[str, int]]:
         """
         Appelle le optimize-service pour enrichir le titre du produit avant la recherche vectorielle.
 
@@ -291,7 +294,9 @@ class ProductClassifier:
             categorie: Catégorie du produit (optionnel)
 
         Returns:
-            Titre optimisé ou None en cas d'erreur (fallback sur titre original)
+            Tuple[Optional[str], Dict[str, int]]:
+                - Titre optimisé ou None en cas d'erreur
+                - Dict avec input_tokens et output_tokens
         """
         try:
             # Construire la requête pour optimize-service
@@ -321,118 +326,156 @@ class ProductClassifier:
                         # Vérifier si l'optimisation a réussi
                         if "success" in product_result:
                             titre_optimise = product_result["success"].get("Titre")
+
+                            # Extraire les tokens depuis info
+                            info = product_result.get("info", {})
+                            tokens = {
+                                "input_tokens": info.get("prompt_tokens", 0),
+                                "output_tokens": info.get("completion_tokens", 0)
+                            }
+
                             if titre_optimise:
-                                logger.info(f"[OPTIMIZE] ✅ Titre optimisé pour {id_produit}: {titre_optimise[:50]}...")
-                                return titre_optimise
+                                logger.info(f"[OPTIMIZE] ✅ Titre optimisé pour {id_produit}: {titre_optimise[:50]}... (tokens: {tokens['input_tokens']}+{tokens['output_tokens']})")
+                                return titre_optimise, tokens
 
                         # Si erreur dans la réponse
                         if "error" in product_result:
                             logger.warning(f"[OPTIMIZE] ⚠️ Erreur du service pour {id_produit}: {product_result['error']}")
-                            return None
+                            return None, {"input_tokens": 0, "output_tokens": 0}
                 else:
                     logger.warning(f"[OPTIMIZE] ⚠️ HTTP {response.status_code} de optimize-service")
-                    return None
+                    return None, {"input_tokens": 0, "output_tokens": 0}
 
         except httpx.TimeoutException:
             logger.warning(f"[OPTIMIZE] ⏱️ Timeout lors de l'appel à optimize-service pour {id_produit}")
-            return None
+            return None, {"input_tokens": 0, "output_tokens": 0}
         except httpx.RequestError as e:
             logger.warning(f"[OPTIMIZE] ⚠️ Erreur de connexion à optimize-service: {e}")
-            return None
+            return None, {"input_tokens": 0, "output_tokens": 0}
         except Exception as e:
             logger.error(f"[OPTIMIZE] ❌ Erreur inattendue lors de l'optimisation: {e}")
-            return None
+            return None, {"input_tokens": 0, "output_tokens": 0}
 
-        return None
+        return None, {"input_tokens": 0, "output_tokens": 0}
 
     async def optimize_titles_batch_async(
         self,
         products: List[Dict[str, str]]
-    ) -> Dict[str, Optional[str]]:
+    ) -> Dict[str, Any]:
         """
-        Appelle le optimize-service pour optimiser plusieurs titres en un seul appel (Option A).
+        Appelle le optimize-service pour optimiser plusieurs titres en limitant à 4 produits par appel.
 
         Args:
             products: Liste de dicts avec keys: id_produit, nom_produit, description, categorie (opt)
 
         Returns:
-            Dict mappant id_produit -> titre_optimise (ou None si erreur)
+            Dict contenant:
+                - optimized_titles: Dict mappant id_produit -> titre_optimise (ou None si erreur)
+                - tokens: Dict avec input_tokens et output_tokens totaux
         """
         if not products:
-            return {}
-
-        try:
-            # Construire la requête batch pour optimize-service
-            request_payload = {
-                "products": [
-                    {
-                        "id_produit_scrapping": p["id_produit"],
-                        "nom_produit": p["nom_produit"],
-                        "description_produit": p.get("description", ""),
-                        "categorie_produit": p.get("categorie", "")
-                    }
-                    for p in products
-                ]
+            return {
+                "optimized_titles": {},
+                "tokens": {"input_tokens": 0, "output_tokens": 0}
             }
 
-            # Appel HTTP asynchrone vers optimize-service
-            async with httpx.AsyncClient(timeout=self.optimize_service_timeout) as client:
-                response = await client.post(
-                    f"{self.optimize_service_url}/optimize-product/qwen/v2",
-                    json=request_payload
-                )
+        # Diviser les produits en sous-batches de 4 maximum
+        BATCH_SIZE = 4
+        sub_batches = [products[i:i + BATCH_SIZE] for i in range(0, len(products), BATCH_SIZE)]
 
-                if response.status_code == 200:
-                    result = response.json()
-                    data = result.get("data", [])
+        logger.info(f"[OPTIMIZE-BATCH] Division de {len(products)} produits en {len(sub_batches)} sous-batches de max {BATCH_SIZE} produits")
 
-                    # Mapper les résultats par id_produit
-                    optimized_titles = {}
-                    for product_result in data:
-                        prod_id = product_result.get("id_produit_scrapping")
+        optimized_titles = {}
+        total_input_tokens = 0
+        total_output_tokens = 0
 
-                        if "success" in product_result:
-                            titre_optimise = product_result["success"].get("Titre")
-                            optimized_titles[prod_id] = titre_optimise
-                            logger.info(f"[OPTIMIZE-BATCH] ✅ Titre optimisé pour {prod_id}")
-                        else:
-                            optimized_titles[prod_id] = None
-                            if "error" in product_result:
-                                logger.warning(f"[OPTIMIZE-BATCH] ⚠️ Erreur pour {prod_id}: {product_result['error']}")
+        # Traiter chaque sous-batch
+        for batch_index, sub_batch in enumerate(sub_batches):
+            try:
+                # Construire la requête batch pour optimize-service
+                request_payload = {
+                    "products": [
+                        {
+                            "id_produit_scrapping": p["id_produit"],
+                            "nom_produit": p["nom_produit"],
+                            "description_produit": p.get("description", ""),
+                            "categorie_produit": p.get("categorie", "")
+                        }
+                        for p in sub_batch
+                    ]
+                }
 
-                    logger.info(f"[OPTIMIZE-BATCH] Optimisé {len(optimized_titles)}/{len(products)} titres")
-                    return optimized_titles
-                else:
-                    logger.warning(f"[OPTIMIZE-BATCH] ⚠️ HTTP {response.status_code} de optimize-service")
-                    return {p["id_produit"]: None for p in products}
+                # Appel HTTP asynchrone vers optimize-service
+                async with httpx.AsyncClient(timeout=self.optimize_service_timeout) as client:
+                    response = await client.post(
+                        f"{self.optimize_service_url}/optimize-product/qwen/v2",
+                        json=request_payload
+                    )
 
-        except httpx.TimeoutException:
-            logger.warning(f"[OPTIMIZE-BATCH] ⏱️ Timeout lors de l'appel à optimize-service")
-            return {p["id_produit"]: None for p in products}
-        except httpx.RequestError as e:
-            logger.warning(f"[OPTIMIZE-BATCH] ⚠️ Erreur de connexion à optimize-service: {e}")
-            return {p["id_produit"]: None for p in products}
-        except Exception as e:
-            logger.error(f"[OPTIMIZE-BATCH] ❌ Erreur inattendue: {e}")
-            return {p["id_produit"]: None for p in products}
+                    if response.status_code == 200:
+                        result = response.json()
+                        data = result.get("data", [])
 
-    async def _summarize_category_description_async(self, category_data: Dict[str, Any]) -> Dict[str, Any]:
+                        # Mapper les résultats par id_produit et accumuler les tokens
+                        for product_result in data:
+                            prod_id = product_result.get("id_produit_scrapping")
+
+                            if "success" in product_result:
+                                titre_optimise = product_result["success"].get("Titre")
+                                optimized_titles[prod_id] = titre_optimise
+
+                                # Extraire et accumuler les tokens depuis info
+                                info = product_result.get("info", {})
+                                total_input_tokens += info.get("prompt_tokens", 0)
+                                total_output_tokens += info.get("completion_tokens", 0)
+
+                                logger.info(f"[OPTIMIZE-BATCH] ✅ Titre optimisé pour {prod_id} (tokens: {info.get('prompt_tokens', 0)}+{info.get('completion_tokens', 0)})")
+                            else:
+                                optimized_titles[prod_id] = None
+                                if "error" in product_result:
+                                    logger.warning(f"[OPTIMIZE-BATCH] ⚠️ Erreur pour {prod_id}: {product_result['error']}")
+
+                        logger.info(f"[OPTIMIZE-BATCH] Sous-batch {batch_index + 1}/{len(sub_batches)}: {len(data)} produits optimisés")
+                    else:
+                        logger.warning(f"[OPTIMIZE-BATCH] ⚠️ HTTP {response.status_code} de optimize-service pour sous-batch {batch_index + 1}")
+                        # Marquer les produits de ce sous-batch comme non optimisés
+                        for p in sub_batch:
+                            optimized_titles[p["id_produit"]] = None
+
+            except httpx.TimeoutException:
+                logger.warning(f"[OPTIMIZE-BATCH] ⏱️ Timeout pour sous-batch {batch_index + 1}")
+                for p in sub_batch:
+                    optimized_titles[p["id_produit"]] = None
+            except httpx.RequestError as e:
+                logger.warning(f"[OPTIMIZE-BATCH] ⚠️ Erreur de connexion pour sous-batch {batch_index + 1}: {e}")
+                for p in sub_batch:
+                    optimized_titles[p["id_produit"]] = None
+            except Exception as e:
+                logger.error(f"[OPTIMIZE-BATCH] ❌ Erreur inattendue pour sous-batch {batch_index + 1}: {e}")
+                for p in sub_batch:
+                    optimized_titles[p["id_produit"]] = None
+
+        logger.info(f"[OPTIMIZE-BATCH] Terminé: {len(optimized_titles)}/{len(products)} titres traités (tokens: {total_input_tokens}+{total_output_tokens})")
+
+        return {
+            "optimized_titles": optimized_titles,
+            "tokens": {
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens
+            }
+        }
+
+    async def _generate_category_summary_with_deepseek(self, category_id: str, category_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Résume une description de catégorie enrichie via DeepSeek en utilisant un prompt récupéré depuis l'API externe.
+        Fonction interne qui génère réellement le résumé via DeepSeek (sans cache).
+        Sera wrappée par _summarize_category_description_async() avec Redis cache.
 
         Args:
-            category_data: Dictionnaire contenant:
-                - id_categorie: ID de la catégorie
-                - nom_categorie: Nom de la catégorie
-                - description_categorie: Description de la catégorie
-                - fil_ariane: Fil d'ariane (optionnel)
-                - top_5_produit: Top 5 produits (optionnel)
+            category_id: ID de la catégorie (utilisé pour la clé de cache Redis)
+            category_data: Dictionnaire contenant les données de la catégorie
 
         Returns:
-            Dict contenant:
-                - summary: Le résumé enrichi de la description
-                - input_tokens: Nombre de tokens d'entrée
-                - output_tokens: Nombre de tokens de sortie
+            Dict contenant summary, input_tokens, output_tokens
         """
         description = category_data.get("description_categorie", "")
 
@@ -498,6 +541,26 @@ class ProductClassifier:
                 "output_tokens": 0
             }
 
+    async def _summarize_category_description_async(self, category_id: str, category_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Résume une description de catégorie enrichie via DeepSeek avec cache Redis (7 jours).
+
+        Args:
+            category_id: ID de la catégorie (utilisé pour la clé de cache Redis)
+            category_data: Dictionnaire contenant les données de la catégorie
+
+        Returns:
+            Dict contenant summary, input_tokens, output_tokens
+        """
+        # Utiliser cache_or_execute avec TTL de 7 jours (comme api-recherche)
+        # category_id sera utilisé pour générer une clé courte: cache:_generate_category_summary_with_deepseek:2003717:{}
+        return await cache_or_execute(
+            self._generate_category_summary_with_deepseek,
+            category_id,  # Premier arg = clé simple et courte
+            category_data,  # Second arg = données complètes
+            expire_seconds=86400 * 7  # 7 jours TTL
+        )
+
     async def get_category_descriptions_async(self, categories: List[Dict]) -> Tuple[Dict[str, Dict], Dict[str, int]]:
         """
         Version asynchrone de get_category_descriptions pour pipeline parallèle.
@@ -541,39 +604,40 @@ class ProductClassifier:
                         "top_5_produit": ""
                     }
 
-        # Résumer les descriptions qui n'ont pas encore de résumé en cache
-        ids_to_summarize = [c['id'] for c in categories if c['id'] not in self.category_summary_cache]
+        # Résumer les descriptions via Redis cache (toutes les catégories)
+        # Créer des tâches pour résumer en parallèle avec Redis cache
+        summarize_tasks = []
+        cat_ids_list = []
+        for cat in categories:
+            cat_id = cat['id']
+            cat_ids_list.append(cat_id)
 
-        if ids_to_summarize:
-            # Créer des tâches pour résumer en parallèle
-            summarize_tasks = []
-            for cat_id in ids_to_summarize:
-                # Récupérer les données complètes de la catégorie
-                category_full_data = self.category_cache.get(cat_id, {
-                    "id_categorie": cat_id,
-                    "nom_categorie": "N/A",
-                    "description_categorie": "Description non disponible",
-                    "fil_ariane": "",
-                    "top_5_produit": ""
-                })
-                summarize_tasks.append(self._summarize_category_description_async(category_full_data))
+            # Récupérer les données complètes de la catégorie
+            category_full_data = self.category_cache.get(cat_id, {
+                "id_categorie": cat_id,
+                "nom_categorie": "N/A",
+                "description_categorie": "Description non disponible",
+                "fil_ariane": "",
+                "top_5_produit": ""
+            })
+            # Passer l'ID en premier pour clé courte Redis
+            summarize_tasks.append(self._summarize_category_description_async(cat_id, category_full_data))
 
-            # Exécuter les résumés en parallèle
-            summary_results = await asyncio.gather(*summarize_tasks)
+        # Exécuter les résumés en parallèle (cache Redis géré par cache_or_execute)
+        summary_results = await asyncio.gather(*summarize_tasks)
 
-            # Mettre en cache et accumuler les tokens
-            for cat_id, result in zip(ids_to_summarize, summary_results):
-                self.category_summary_cache[cat_id] = result["summary"]
-                total_input_tokens += result["input_tokens"]
-                total_output_tokens += result["output_tokens"]
+        # Accumuler les tokens (seulement si le résumé n'était pas en cache)
+        for result in summary_results:
+            total_input_tokens += result["input_tokens"]
+            total_output_tokens += result["output_tokens"]
 
         # Retourner les infos enrichies (résumé + fil d'ariane)
-        for cat in categories:
+        for i, cat in enumerate(categories):
             cat_id = cat['id']
             cached_data = self.category_cache.get(cat_id, {})
 
             category_info[cat_id] = {
-                "summary": self.category_summary_cache.get(cat_id, "N/A"),
+                "summary": summary_results[i]["summary"],
                 "fil_ariane": cached_data.get('fil_ariane', '') if isinstance(cached_data, dict) else ''
             }
 
@@ -720,76 +784,74 @@ class ProductClassifier:
         Retourne le template de prompt par défaut (l'ancien prompt statique)
         en cas d'erreur de récupération depuis l'API externe.
         """
-        return """*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
-
-OBJECTIFS :
-
-Déterminer si le produit "CONTENU DU PRODUIT" peut être catégorisé dans une des catégories proposées dans la "LISTE DES CATEGORIES".
-Identifier si aucune des catégories proposées ne correspond parfaitement au produit.
-RÉPONDRE : OUI ou NON
-Indiquer qu'il ne peut être catégorisé dans aucune des catégories proposées, car aucune catégorie ne correspond parfaitement.
-
-RÉPONDRE : Catégorie Absente.
-
-ÉTAPES TEST en ENTONNOIR A SUIVRE :
-
-1ère étape : Analyse du produit
-
-Lire attentivement le "CONTENU DU PRODUIT" : mots clés, termes, et spécificités.
-Identifier la nature du produit, son utilisation, ses caractéristiques détaillées (ex. marque, modèle, caractéristiques).
-Ne pas faire d'interprétations ou d'extrapolations du contenu du produit. S'en tenir strictement aux informations fournies.
-
-2ème étape : Évaluation des catégories
-
-Examiner la définition de chaque catégorie dans la "LISTE DES CATEGORIES".
-Pour chaque catégorie, vérifier si le produit peut y être classé. Si correspondance exacte ou non.
-La catégorie doit correspondre parfaitement au produit en termes de nature, utilisation et caractéristiques spécifiques.
-
-3ème étape : Décision de classification
-
-Si une catégorie correspond parfaitement, répondre OUI.
-Sinon, répondre NON.
-
-4ème étape : Attribution du score suivant les conditions énumérées
-
-Score = 1 : Choisir cette catégorie si et seulement si le produit correspond parfaitement à tous les critères spécifiés. Aucune autre catégorie dans la "LISTE DES CATEGORIES" ne correspondrait mieux.
-Score = 0 : Si la catégorie semble convenir mais il est possible qu'une autre catégorie dans la "LISTE DES CATEGORIES" soit une meilleure correspondance ou si aucune catégorie ne correspond parfaitement.
-
-"IMPORTANTS" :
-La liste des catégories dans "LISTE DES CATEGORIES" n'est pas exhaustive. Il est possible qu'il existe d'autres catégories appropriées pour ce produit.
-
-Si la catégorie est très spécifique, le score doit être 0 si le produit ne respecte pas tous ses critères.
-
-Si le produit est un accessoire ou un consommable lié à une catégorie spécifique, le score doit être directement mis à 0. (Exemple : un produit comme un 'pied de table' ne devrait pas être classé dans la catégorie 'table').
-
-La description exacte du produit doit être considérée pour éviter toute confusion avec une catégorie similaire mais non correspondante. (Exemple : "Brouette gravillonneuse" – si le produit est une "Brouette" avec le descriptif précisant que c'est fait pour le "gravillon", alors le classer dans cette catégorie avec un score = 1. Sinon, si ce n'est pas indiqué avec précision que c'est une "Brouette gravillonneuse", alors mettre score = 0.)
-
-Si la description du produit manque de précision sur un usage spécifique ou une caractéristique clé nécessaire pour une catégorie, considérer que le produit ne correspond pas à cette catégorie score = 0.
-
-En cas de doute sur l'application précise d'une catégorie, privilégier la prudence et ne pas classer le produit dans une catégorie inappropriée, score = 0.
-
-Vérifiez également que le produit n'est pas simplement un accessoire ou une partie d'un autre produit. Si c'est le cas, il doit être exclu de cette catégorie et marqué avec un score = 0.
-
-Fin étape : Validation des scores
-Revérifier que le score attribué (0 ou 1) est approprié en suivant les exemples et critères donnés.
-Revalider avec les conditions "IMPORTANTS"
-
+        return """1- Rôle :
+Tu es un classificateur de produits pour Hellopro. Ta mission est de classifier un produit dans la catégorie la plus appropriée parmi celles de la "LISTE DES CATEGORIES".
+ 
+2- Objectif :
+Déterminer si le produit correspond à une catégorie spécifique de la "LISTE DES CATEGORIES". Si aucune catégorie ne correspond parfaitement, répondre ce nom_categorie "Autres produits" et cette id_categorie : "9000000".
+ 
+3- Étapes à suivre :
+ 
+Étape 1 - Analyse du produit
+- Lire attentivement mot par mot le "TITRE DU PRODUIT" et la "DESCRIPTION DU PRODUIT".
+- Identifier la nature du produit, son utilisation et ses caractéristiques détaillées.
+- Se baser exclusivement sur les informations fournies, sans interprétation ni extrapolation.
+ 
+Étape 2 - Évaluation des catégories
+- Consulter la "LISTE DES CATEGORIES"
+- Pour chaque catégorie, analyser sa définition et son arborescence.
+- Pour chaque catégorie, vérifier si le produit peut y être classé. Si correspondance exacte ou non.
+- Le produit doit correspondre parfaitement à la catégorie choisie et à son emplacement sur le site en termes de nature, utilisation et caractéristiques spécifiques.
+- Si aucune des catégories listées ne correspond parfaitement, retourner ce nom_categorie "Autres produits" et cette id_categorie : "9000000" et mettre un score 1
+ 
+Étape 3 - Décision de classification
+Considérer "Average score" pour affiner le choix de la bonne catégorie.
+- Si une catégorie correspond parfaitement au produit, répondre OUI.
+- Sinon, répondre NON.
+ 
+Étape 4 -Attribution du score en fonction des conditions
+- Score = 1 : Si la catégorie est la correspondance la plus précise parmi celles proposées. Aucune autre catégorie dans la "LISTE DES CATEGORIES" ne correspondrait mieux.
+- Score = 0 : Si la catégorie semble convenir mais nécessite une validation humaine car tu n'es pas sûr de ta réponse (ex: produit hybride, caractéristiques manquantes mais acceptable, catégorie très proche d'une autre).
+ 
+4- Cas particulier à prendre en compte :
+Si le produit à classer nommé XX est un accessoire ou un consommable, applique l’une des deux options suivantes :
+- Prioriser la catégorie "Accessoires pour XX" si elle est présente dans la "LISTE DES CATEGORIES" et que tous les détails correspondent parfaitement.
+Exemple : Le produit "Râpe en aluminium pour une coupe-légumes" doit être classé dans la catégorie "Accessoires de matériels de préparation" dont le fil d'ariane est "CHR - Café Hôtel Restaurant > Accessoires de cuisine > Accessoires de matériels de préparation" si la catégorie est dans la "LISTE DES CATEGORIES".
+- Si la catégorie "Accessoires pour XX" n’est pas présente dans la "LISTE DES CATEGORIES" et même si la catégorie générale "XX" est présente alors il faut répondre avec ce nom_categorie "Autres produits" et cette id_categorie : "9000000" avec un score 1
+Exemple : Un produit comme un "Pied de table" ne doit pas être classé dans la catégorie "Table" mais dans la catégorie "Autres produits".
+ 
+5- Points importants :
+- La "LISTE DES CATEGORIES" n'est pas exhaustive, d’autres catégories adaptées peuvent exister.
+- La description exacte du produit doit être considérée pour éviter toute confusion avec une catégorie similaire mais non correspondante.
+Exemple : Si le titre du produit est "Brouette" et que dans le descriptif on a la mention "pour le gravillon", alors il faut classer le produit dans la catégorie "Brouette gravillonneuse" – avec un score = 1)
+- Si la description du produit manque de précision sur un usage spécifique ou une caractéristique clé nécessaire pour une catégorie, considérer que le produit ne correspond pas à cette catégorie.
+ 
+Fin étape : Validation des scores :
+Revérifier que le score attribué (0 ou 1) est approprié en fonction des critères mentionnés ci-dessus.
+Revalider avec les conditions "Points importants".
+Si nécessaire, ajuster en fonction des cas particuliers et des ambiguïtés.
+ 
+ 
 ---
 CONTENU DU PRODUIT :
-Titre: {titre_produit}
-Description: {description_produit}
+Titre : {titre_produit}
+Description : {description_produit}
 ---
-LISTE DES CATEGORIES (avec leur description) :
+ 
+---
+LISTE DES CATEGORIES (avec leur description et leur arborescence) :
 {liste_categories}
+ 
 ---
 EXEMPLES DE PRODUITS SIMILAIRES (pour contexte) :
 {liste_produits}
+ 
 ---
-
+ 
 Format de réponse JSON **uniquement**, avec 2 champs :
 Score = 1 : (si et seulement si le produit remplit à 100% toutes les caractéristiques correspondant à cette catégorie) "Categorie" avec l'ID de la catégorie sélectionnée et "Score".
 ou sinon
-Score = 0  (catégorie qui se rapproche au mieux du produit)
+Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une validation)
 "Categorie" ID catégorie choisie  et "Score".
 {{
   "id_categorie": "ID de la catégorie choisie (même si le score est 0)",
@@ -1001,14 +1063,22 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             nom_produit_optimise = None
             nom_produit_pour_recherche = nom_produit_original
 
+            # Initialiser les compteurs de tokens
+            total_input_tokens = 0
+            total_output_tokens = 0
+
             if optimize:
                 logger.info(f"[OPTIMIZE] Optimisation du titre pour {product['id_produit']}")
-                nom_produit_optimise = await self.optimize_title_async(
+                nom_produit_optimise, optimize_tokens = await self.optimize_title_async(
                     id_produit=product['id_produit'],
                     nom_produit=nom_produit_original,
                     description=product.get('description', ''),
                     categorie=None
                 )
+
+                # Additionner les tokens d'optimisation
+                total_input_tokens += optimize_tokens['input_tokens']
+                total_output_tokens += optimize_tokens['output_tokens']
 
                 if nom_produit_optimise:
                     nom_produit_pour_recherche = nom_produit_optimise
@@ -1063,9 +1133,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             # ⚡ OPTIMISATION: Récupération asynchrone des descriptions enrichies avec résumé DeepSeek (pipeline parallèle)
             category_info, summarization_tokens = await self.get_category_descriptions_async(categories)
 
-            # Initialiser les compteurs de tokens
-            total_input_tokens = summarization_tokens['input_tokens']
-            total_output_tokens = summarization_tokens['output_tokens']
+            # Additionner les tokens de summarization
+            total_input_tokens += summarization_tokens['input_tokens']
+            total_output_tokens += summarization_tokens['output_tokens']
 
             # Construction du prompt et appel LLM (asynchrone) avec infos enrichies (fil d'ariane + résumé)
             prompt, temperature = await self.build_prompt_async(product, categories, category_info, similar_products)
@@ -1240,6 +1310,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             }
 
         # 🔧 NOUVELLE ÉTAPE: Optimisation des titres en batch si demandée (Option A)
+        batch_optimize_tokens = {"input_tokens": 0, "output_tokens": 0}
+
         if optimize:
             logger.info(f"[OPTIMIZE-BATCH] Optimisation de {len(products)} titres avant classification")
             optimize_start = time.time()
@@ -1255,8 +1327,12 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 for p in products
             ]
 
-            # Appel batch à optimize-service
-            optimized_titles_map = await self.optimize_titles_batch_async(products_for_optimization)
+            # Appel batch à optimize-service (retourne maintenant optimized_titles + tokens)
+            optimization_result = await self.optimize_titles_batch_async(products_for_optimization)
+            optimized_titles_map = optimization_result["optimized_titles"]
+            batch_optimize_tokens = optimization_result["tokens"]
+
+            logger.info(f"[OPTIMIZE-BATCH] Tokens d'optimisation: {batch_optimize_tokens['input_tokens']}+{batch_optimize_tokens['output_tokens']}")
 
             # Enrichir les produits avec les titres optimisés
             for product in products:
@@ -1285,6 +1361,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
         results = await asyncio.gather(*tasks)
 
         # 🔧 Si optimize=True, corriger les résultats pour avoir le bon titre_produit et titre_produit_optimise
+        # ET additionner les tokens d'optimisation batch aux tokens de chaque résultat
         if optimize:
             for i, result in enumerate(results):
                 product = products[i]
@@ -1295,6 +1372,12 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 else:
                     # Pas d'optimisation (ne devrait pas arriver si optimize=True)
                     result['titre_produit_optimise'] = None
+
+                # Additionner les tokens d'optimisation batch (répartis proportionnellement)
+                # Note: Les tokens sont déjà comptés globalement, on les ajoute au premier résultat seulement
+                if i == 0:
+                    result['input_tokens'] = result.get('input_tokens', 0) + batch_optimize_tokens['input_tokens']
+                    result['output_tokens'] = result.get('output_tokens', 0) + batch_optimize_tokens['output_tokens']
 
         # Compter les succès et les erreurs
         success_count = 0

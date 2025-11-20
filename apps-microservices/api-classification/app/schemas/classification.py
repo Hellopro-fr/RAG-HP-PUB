@@ -10,6 +10,7 @@ class ProductInput(BaseModel):
     id_categorie_attendue: Optional[str] = Field(None, description="ID de catégorie attendue (optionnel)")
     llm: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="LLM à utiliser pour ce produit (par défaut: DeepSeek)")
     enable_thinking: Optional[bool] = Field(False, description="Activer le mode thinking pour Qwen (par défaut: False)")
+    optimize: Optional[bool] = Field(False, description="Optimiser le titre avant classification (par défaut: False)")
 
     class Config:
         json_schema_extra = {
@@ -18,8 +19,7 @@ class ProductInput(BaseModel):
                 "nom_produit": "Perceuse électrique Bosch",
                 "description": "Perceuse électrique professionnelle 750W avec mandrin automatique",
                 "id_categorie_attendue": "cat_123",
-                "llm": "Qwen",
-                "enable_thinking": True
+                "optimize": True
             }
         }
 
@@ -45,16 +45,15 @@ class BatchProductsInput(BaseModel):
                         "description": "Marteau-piqueur pneumatique 25kg",
                         "id_categorie_attendue": None
                     }
-                ],
-                "llm": "Qwen",
-                "enable_thinking": True
+                ]
             }
         }
 
 class ClassificationResult(BaseModel):
     """Résultat de classification pour un produit"""
     id_produit: str = Field(..., description="ID du produit")
-    titre_produit: str = Field(..., description="Titre/nom du produit")
+    titre_produit: str = Field(..., description="Titre/nom du produit original")
+    titre_produit_optimise: Optional[str] = Field(None, description="Titre optimisé (si optimize=True)")
     description_produit: str = Field(..., description="Description du produit")
     status: Literal["SUCCESS", "ERROR"] = Field(..., description="Statut de la classification")
     id_categorie: Optional[str] = Field(None, description="ID de la catégorie assignée")

@@ -14,11 +14,13 @@ class ChatProvider(str, Enum):
 
 class ChatRequest(BaseModel):
     prompt: str
-    model: str = "deepseek-chat"
-    provider: ChatProvider = ChatProvider.DEEPSEEK
+    model: str = ""
+    # provider: ChatProvider = ChatProvider.DEEPSEEK
+    provider: str = ChatProvider.DEEPSEEK
     temperature: float = 0.7
     max_tokens: int = 1024
     enable_thinking: bool = False
+    thinking_level: Optional[str] = None
     options: Optional[Dict[str, Any]] = {
         "top_p": float(0.8),
         "top_k": int(20),

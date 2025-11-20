@@ -356,6 +356,7 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - SERVICE_NAME=api-classification-service
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     depends_on:
       - llm-service
       - embedding-model-service
@@ -401,6 +402,7 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - SERVICE_NAME=api-classification-v2-service
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     depends_on:
       - llm-service
       - embedding-model-service
