@@ -20,7 +20,9 @@ $(function () {
     useReranker: true,
     rerankerModel: "BAAI/bge-reranker-v2-m3",
     // selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
-    selectedModel: "qwen/qwen3-coder", // Mis à jour avec la nouvelle valeur par défaut
+    selectedModel: "gemini-3-pro-preview", // Mis à jour avec la nouvelle valeur par défaut
+    selectedThinking: "high",
+    selectedProvider: "gemini",
     isFilterOpen: true,
     isLlmEnabled: false,
     isSidebarOpen: false,
@@ -217,9 +219,9 @@ $(function () {
 
   function generate_error_message(message) {
     if (!message) {
-        message = "Une erreur a été rencontrée. Veuillez réessayer s'il vous plaît !";
+      message = "Une erreur a été rencontrée. Veuillez réessayer s'il vous plaît !";
     }
-    
+
     return `
         <div class="flex items-center gap-4 text-xs">
             <i data-lucide="circle-x" class="h-4 w-4"></i>
@@ -230,9 +232,9 @@ $(function () {
 
   function generate_succes_message(message) {
     if (!message) {
-        message = "Action effectué avec succès";
+      message = "Action effectué avec succès";
     }
-    
+
     return `
         <div class="flex items-center gap-4 text-xs">
             <i data-lucide="circle-check" class="h-4 w-4"></i>
@@ -611,48 +613,48 @@ $(function () {
   function initializeSelect2() {
     // Parcourt tous les éléments qui doivent être initialisés avec Select2
     $(".init-select2-filtre").each(function (i, item) {
-        const $item = $(item);
-        const isAjax = $item.data("ajax") === true || $item.data("ajax") === "true";
-        const url = $item.data("url");
+      const $item = $(item);
+      const isAjax = $item.data("ajax") === true || $item.data("ajax") === "true";
+      const url = $item.data("url");
 
-        // Cas 1: Le Select2 doit charger ses données via AJAX
-        if (isAjax && url) {
-            // On crée une copie de la configuration globale
-            var config = Object.assign({}, CONFIG_SELECT2);
-            // On crée une copie des options globales
-            var options = Object.assign({}, OPTIONS_SELECT2);
+      // Cas 1: Le Select2 doit charger ses données via AJAX
+      if (isAjax && url) {
+        // On crée une copie de la configuration globale
+        var config = Object.assign({}, CONFIG_SELECT2);
+        // On crée une copie des options globales
+        var options = Object.assign({}, OPTIONS_SELECT2);
 
-            // --- DEBUT DES CORRECTIONS ---
+        // --- DEBUT DES CORRECTIONS ---
 
-            // 1. LA CORRECTION CLÉ : On assigne la fonction `data_select2` à notre objet config.
-            //    `init_filter_select2` pourra maintenant l'appeler via `config.data(...)`.
-            config.data = data_select2;
+        // 1. LA CORRECTION CLÉ : On assigne la fonction `data_select2` à notre objet config.
+        //    `init_filter_select2` pourra maintenant l'appeler via `config.data(...)`.
+        config.data = data_select2;
 
-            // 2. On récupère le payload (ex: "recup_categorie") depuis l'attribut data.
-            const payloadData = $item.data("payload");
-            
-            // 3. On formate le payload en objet, car la fonction `data_select2` attend un objet.
-            //    La requête AJAX enverra alors { action: "recup_categorie", term: "..." }
-            config.payload = payloadData ? { action: payloadData } : {};
+        // 2. On récupère le payload (ex: "recup_categorie") depuis l'attribut data.
+        const payloadData = $item.data("payload");
 
-            // --- FIN DES CORRECTIONS ---
+        // 3. On formate le payload en objet, car la fonction `data_select2` attend un objet.
+        //    La requête AJAX enverra alors { action: "recup_categorie", term: "..." }
+        config.payload = payloadData ? { action: payloadData } : {};
 
-            // Personnalisation de la configuration et des options pour AJAX
-            // config.templateResult = templateResult_with_optgroup_sans_selectall_select2;
-            config.pagination = $item.data("pagination") === true;
-            
-            options.allowClear = true; // Permet de vider la sélection
-            options.placeholder = "Rechercher...";
-            options.minimumInputLength = 2;
+        // --- FIN DES CORRECTIONS ---
 
-            // On appelle init_filter_select2, qui n'a pas été modifiée, avec une configuration complète.
-            init_filter_select2($item, url, config, options);
+        // Personnalisation de la configuration et des options pour AJAX
+        // config.templateResult = templateResult_with_optgroup_sans_selectall_select2;
+        config.pagination = $item.data("pagination") === true;
 
-        } else {
-            // Cas 2: Le Select2 a des options statiques dans le HTML (logique inchangée)
-            var options = Object.assign({}, OPTIONS_SELECT2);
-            $item.select2(options);
-        }
+        options.allowClear = true; // Permet de vider la sélection
+        options.placeholder = "Rechercher...";
+        options.minimumInputLength = 2;
+
+        // On appelle init_filter_select2, qui n'a pas été modifiée, avec une configuration complète.
+        init_filter_select2($item, url, config, options);
+
+      } else {
+        // Cas 2: Le Select2 a des options statiques dans le HTML (logique inchangée)
+        var options = Object.assign({}, OPTIONS_SELECT2);
+        $item.select2(options);
+      }
     });
   }
 
@@ -661,9 +663,9 @@ $(function () {
 
     // Pour la date de fin, on veut inclure toute la journée.
     const timeSuffix = (position === 'end') ? 'T23:59:59' : 'T00:00:00';
-    
+
     const date = new Date(dateString + timeSuffix);
-    
+
     // getTime() retourne des millisecondes, on divise par 1000 pour les secondes.
     return Math.floor(date.getTime() / 1000);
   }
@@ -675,40 +677,40 @@ $(function () {
       // let est_date_condition_general = $(item).hasClass("date-general");
     });
     function toggleDateFields() {
-        const selectedOperation = $("#operation").val();
+      const selectedOperation = $("#operation").val();
 
-        if (selectedOperation === 'entre') {
-            if (!$("#date-general-container").hasClass("hidden")) {
-              $("#date-general-container").addClass('hidden');
-              $("#date-general").val("");
-            }
-            if ($("#date-range-container").hasClass("hidden")) {
-              $("#date-range-container").removeClass('hidden');
-            }
-        } else {
-            if ($("#date-general-container").hasClass("hidden")) {
-              $("#date-general-container").removeClass('hidden');
-            }
-            if (!$("#date-range-container").hasClass("hidden")) {
-              $("#date-range-container").addClass('hidden');
-              $("#date-debut").val("");
-              $("#date-fin").val("");
-            }
+      if (selectedOperation === 'entre') {
+        if (!$("#date-general-container").hasClass("hidden")) {
+          $("#date-general-container").addClass('hidden');
+          $("#date-general").val("");
         }
+        if ($("#date-range-container").hasClass("hidden")) {
+          $("#date-range-container").removeClass('hidden');
+        }
+      } else {
+        if ($("#date-general-container").hasClass("hidden")) {
+          $("#date-general-container").removeClass('hidden');
+        }
+        if (!$("#date-range-container").hasClass("hidden")) {
+          $("#date-range-container").addClass('hidden');
+          $("#date-debut").val("");
+          $("#date-fin").val("");
+        }
+      }
     }
 
-    $(document).on('change', "#date-debut", function() {
-        // La date de fin ne peut pas être antérieure à la date de début choisie
-        if (this.value) {
-            $("#date-fin").prop('min', this.value);
-        }
+    $(document).on('change', "#date-debut", function () {
+      // La date de fin ne peut pas être antérieure à la date de début choisie
+      if (this.value) {
+        $("#date-fin").prop('min', this.value);
+      }
     });
 
-    $(document).on('change', "#date-fin", function() {
-        // La date de début ne peut pas être postérieure à la date de fin choisie
-        if (this.value) {
-            $("#date-debut").prop('max', this.value);
-        }
+    $(document).on('change', "#date-fin", function () {
+      // La date de début ne peut pas être postérieure à la date de fin choisie
+      if (this.value) {
+        $("#date-debut").prop('max', this.value);
+      }
     });
 
     $(document).on('change', "#operation", toggleDateFields);
@@ -740,9 +742,9 @@ $(function () {
       };
     } else if (percentage > 30) {
       config = {
-        bgColor: "bg-amber-50",   
-        textColor: "text-amber-600", 
-        icon: "bar-chart-horizontal",            
+        bgColor: "bg-amber-50",
+        textColor: "text-amber-600",
+        icon: "bar-chart-horizontal",
         label: "Pertinence moyenne",
       };
     } else {
@@ -889,6 +891,14 @@ $(function () {
     });
     elements.llmModel.on("change", function () {
       state.selectedModel = $(this).val();
+      if (typeof $(this).find('option:selected').data("thinking") !== "undefined") {
+        state.selectedThinking = $(this).find('option:selected').data("thinking");
+        state.selectedModel = state.selectedModel.replace(`-${state.selectedThinking}`, "");
+        state.selectedProvider = "gemini";
+      } else {
+        state.selectedThinking = "";
+        state.selectedProvider = "";
+      }
     });
     elements.etatFilter.on("change", function () {
       state.selectedEtat = $(this).val() || [];
@@ -897,20 +907,19 @@ $(function () {
       state.selectedAffichage = $(this).val() || [];
     });
     elements.categorieFilter.on("change", function () {
-        state.selectedCategories = $(this).val() || [];
-        console.log("Catégories sélectionnées :", state.selectedCategories);
+      state.selectedCategories = $(this).val() || [];
     });
     elements.idsProduit.on('input', function () {
       state.selectedIdsProduits = $(this).val().match(/\d+/g) || [];
     });
     elements.fournisseurFilter.on("change", function () {
-        state.selectedFournisseurs = $(this).val() || [];
-        state.selectedNomFournisseurs = $(this).find('option:selected').map(function() {
-            return $(this).text();
-        }).get();
+      state.selectedFournisseurs = $(this).val() || [];
+      state.selectedNomFournisseurs = $(this).find('option:selected').map(function () {
+        return $(this).text();
+      }).get();
     });
 
-    elements.typeRecherche.on("change", function(e) {
+    elements.typeRecherche.on("change", function (e) {
       e.preventDefault();
       state.typeRecherche = $(this).val();
       updateSearchButtons()
@@ -1010,11 +1019,11 @@ $(function () {
 
   function toggleLLM() {
     state.isLlmEnabled = !state.isLlmEnabled;
-    if(state.isLlmEnabled && !state.isSidebarOpen) {
+    if (state.isLlmEnabled && !state.isSidebarOpen) {
       state.isSidebarOpen = true;
-    } else if(!state.isLlmEnabled && state.isSidebarOpen) {
+    } else if (!state.isLlmEnabled && state.isSidebarOpen) {
       state.isSidebarOpen = false;
-    } else if(state.isLlmEnabled && state.isSidebarOpen) {
+    } else if (state.isLlmEnabled && state.isSidebarOpen) {
       state.isSidebarOpen = true;
     }
     updateUI();
@@ -1078,14 +1087,14 @@ $(function () {
         state.isSearching ? "Recherche..." : "Rechercher"
       );
     } else {
-        const hasQuery = true;
-        const isDisabled = state.isSearching || !hasQuery;
-        elements.searchBtn
-          .add(elements.searchBtnDesktop)
-          .prop("disabled", isDisabled);
-        elements.searchBtnText.text(
-          state.isSearching ? "Recherche..." : "Rechercher"
-        );
+      const hasQuery = true;
+      const isDisabled = state.isSearching || !hasQuery;
+      elements.searchBtn
+        .add(elements.searchBtnDesktop)
+        .prop("disabled", isDisabled);
+      elements.searchBtnText.text(
+        state.isSearching ? "Recherche..." : "Rechercher"
+      );
     }
   }
 
@@ -1131,7 +1140,7 @@ $(function () {
         .removeClass("bg-orange-200 text-orange-800 hover:bg-orange-300")
         .addClass("border-custom-gris-blanc hover:bg-custom-clair-2");
     }
-    if(state.isFilterOpen) {
+    if (state.isFilterOpen) {
       elements.filterSidebar.show()
       elements.filterToggle.addClass('bg-custom-clair-2 hover:bg-gray-400').removeClass('hover:bg-custom-clair-2');
     } else {
@@ -1185,7 +1194,7 @@ $(function () {
       $("#estimatedTokens").text(Math.floor(state.llmResponse.length / 4));
     } else {
       elements.llmResponseContainer.hide();
-      if(!state.isSearching) {
+      if (!state.isSearching) {
         elements.llmEmptyState.show();
       }
     }
@@ -1202,7 +1211,7 @@ $(function () {
     }
   }
 
-    function handleSearchResultsPayload(payload) {
+  function handleSearchResultsPayload(payload) {
     // Met à jour les résultats de recherche dans l'état, en les adaptant
     state.searchResults = payload.results.map(adaptSearchResult);
     console.log("Mise à jour de l'état avec les résultats :", state.searchResults);
@@ -1233,7 +1242,7 @@ $(function () {
     // Le score de confiance est le rerank_score s'il existe, sinon le score vectoriel.
     const score = result.rerank_score !== undefined ? result.rerank_score : result.score;
 
-    
+
     let title = meta.id_produit || 'Titre non disponible';
     let categorie = meta.categorie || meta.id_categorie || 'N/A';
     switch (result.source) {
@@ -1246,7 +1255,7 @@ $(function () {
       case "echanges":
         title = meta.conversation_id || title;
       case "siteweb_2":
-      // case "siteweb":
+        // case "siteweb":
         title = meta.url || title;
         result.source = "siteweb"
       default:
@@ -1269,9 +1278,9 @@ $(function () {
 
     let url = meta.url;
 
-    if(result.source === 'devis') {
+    if (result.source === 'devis') {
       url = `https://bo.hellopro.fr/admin/gest_com/v2/fiche_lead.php?id_lead=${meta.lead_id}`
-    } else if(result.source === 'echanges') {
+    } else if (result.source === 'echanges') {
       url = `https://bo.hellopro.fr/admin/service_client_lead/?page=liste_messages&id_lead=${meta.id_demande}&id_categorie=${meta.id_categorie}`;
     }
 
@@ -1297,14 +1306,14 @@ $(function () {
     if (
       state.typeRecherche == 1
       && (
-        !state.searchQuery.trim() 
-        || state.isSearching 
+        !state.searchQuery.trim()
+        || state.isSearching
       )
     ) return;
 
-    if(state.isLlmEnabled) {
-      if(elements.templatePrompt.val().trim() === "") {
-        if(!state.isFilterOpen) {
+    if (state.isLlmEnabled) {
+      if (elements.templatePrompt.val().trim() === "") {
+        if (!state.isFilterOpen) {
           state.isFilterOpen = true
           updateUI()
         }
@@ -1385,8 +1394,8 @@ $(function () {
 
               const date_value = $("#date-general").val();
               const date_debut = $("#date-debut").val();
-              const date_fin   = $("#date-fin").val();
-              const operation  = $("#operation").val();
+              const date_fin = $("#date-fin").val();
+              const operation = $("#operation").val();
 
               let filter_date = {}
               let avec_filtre_date = false;
@@ -1396,7 +1405,7 @@ $(function () {
               } else if (date_debut != "" && date_fin != "") {
                 avec_filtre_date = true;
                 filter_date.start = dateToTimestamp(date_debut)
-                filter_date.end   = dateToTimestamp(date_fin)
+                filter_date.end = dateToTimestamp(date_fin)
               }
 
               if (avec_filtre_date) {
@@ -1440,7 +1449,7 @@ $(function () {
       if (sourcesAvecFiltres.length === 0) {
         sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
       }
-      
+
       // 2. Construire le filtre global (filtre principal)
       const filtreGlobal = {};
       if (state.selectedEtat && state.selectedEtat.length > 0) filtreGlobal.etat = state.selectedEtat;
@@ -1474,6 +1483,8 @@ $(function () {
           chat_model: state.selectedModel,
           temperature: state.temperature,
           template_prompt: $("#llmPrompt").val() || state.templatePrompt,
+          provider: state.selectedProvider,
+          thinking_level: state.selectedThinking,
         },
         options: {
           use_reranker: state.useReranker,
@@ -1563,7 +1574,7 @@ $(function () {
 
           // La recherche est terminée
           state.isSearching = false;
-          elements.llmAnalyzeState.hide();  
+          elements.llmAnalyzeState.hide();
           updateUI(); // Met à jour l'interface une dernière fois
           socket.close(); // Ferme la connexion
           break;
@@ -1710,7 +1721,7 @@ $(function () {
     lucide.createIcons();
   }
 
-$(document).on('click', '#copier-texte', function() {
+  $(document).on('click', '#copier-texte', function () {
     const separator = '-------------------------------------\n';
     let formattedText = '';
 
@@ -1718,11 +1729,11 @@ $(document).on('click', '#copier-texte', function() {
     formattedText = state.copiedContent;
     console.log("Texte qui sera copié :\n" + formattedText);
     copyTextToClipboard(formattedText);
-});
+  });
 
-/**
- * transcription audio via google speech to text
- */
+  /**
+   * transcription audio via google speech to text
+   */
   let transcriptionAudioContext;
   let transcriptionMediaStream;
   let transcriptionScriptProcessor;
@@ -1947,43 +1958,43 @@ $(document).on('click', '#copier-texte', function() {
     }
     draw();
   };
-/**
- * fin transcription
- */
+  /**
+   * fin transcription
+   */
 
 
-/**
- * Fonction pour copier du texte dans le presse-papiers.
- * Tente d'utiliser l'API moderne (navigator.clipboard) et se rabat
- * sur l'ancienne méthode (document.execCommand) si nécessaire.
- * @param {string} text Le texte à copier.
- */
-function copyTextToClipboard(text) {
+  /**
+   * Fonction pour copier du texte dans le presse-papiers.
+   * Tente d'utiliser l'API moderne (navigator.clipboard) et se rabat
+   * sur l'ancienne méthode (document.execCommand) si nécessaire.
+   * @param {string} text Le texte à copier.
+   */
+  function copyTextToClipboard(text) {
     // Utilise l'API moderne si elle est disponible (contexte sécurisé HTTPS ou localhost)
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function() {
-            console.log('Texte copié avec succès (méthode moderne) !');
-            show_toast(generate_succes_message("Copié dans le presse papier"), "success")
-        }).catch(function(err) {
-            console.error('Échec de la copie (méthode moderne) : ', err);
-            // Si la méthode moderne échoue, on essaie l'ancienne
-            fallbackCopyTextToClipboard(text);
-        });
-    } else {
-        // Si l'API moderne n'est pas disponible, utilise la méthode de repli
-        console.log("API Clipboard non disponible, utilisation de la méthode de repli.");
+      navigator.clipboard.writeText(text).then(function () {
+        console.log('Texte copié avec succès (méthode moderne) !');
+        show_toast(generate_succes_message("Copié dans le presse papier"), "success")
+      }).catch(function (err) {
+        console.error('Échec de la copie (méthode moderne) : ', err);
+        // Si la méthode moderne échoue, on essaie l'ancienne
         fallbackCopyTextToClipboard(text);
+      });
+    } else {
+      // Si l'API moderne n'est pas disponible, utilise la méthode de repli
+      console.log("API Clipboard non disponible, utilisation de la méthode de repli.");
+      fallbackCopyTextToClipboard(text);
     }
-}
+  }
 
-/**
- * Fonction de repli (fallback) utilisant la méthode dépréciée document.execCommand.
- * @param {string} text Le texte à copier.
- */
-function fallbackCopyTextToClipboard(text) {
+  /**
+   * Fonction de repli (fallback) utilisant la méthode dépréciée document.execCommand.
+   * @param {string} text Le texte à copier.
+   */
+  function fallbackCopyTextToClipboard(text) {
     var textArea = document.createElement("textarea");
     textArea.value = text;
-    
+
     // Rendre l'élément invisible et éviter de faire défiler la page
     textArea.style.position = "fixed";
     textArea.style.top = 0;
@@ -1995,23 +2006,23 @@ function fallbackCopyTextToClipboard(text) {
     textArea.select();
 
     try {
-        var successful = document.execCommand('copy');
-        if (successful) {
-            console.log('Texte copié avec succès (méthode de repli).');
-            show_toast(generate_succes_message("Copié dans le presse papier"), "success")
-            // Affichez un message de succès à l'utilisateur ici
-        } else {
-            console.error('Échec de la copie (méthode de repli).');
-            show_toast(generate_error_message("Erreur de copie dans le presse papier"), "error")
-            // Affichez un message d'erreur à l'utilisateur ici
-        }
-    } catch (err) {
-        console.error('Erreur lors de la copie (méthode de repli): ', err);
+      var successful = document.execCommand('copy');
+      if (successful) {
+        console.log('Texte copié avec succès (méthode de repli).');
+        show_toast(generate_succes_message("Copié dans le presse papier"), "success")
+        // Affichez un message de succès à l'utilisateur ici
+      } else {
+        console.error('Échec de la copie (méthode de repli).');
         show_toast(generate_error_message("Erreur de copie dans le presse papier"), "error")
+        // Affichez un message d'erreur à l'utilisateur ici
+      }
+    } catch (err) {
+      console.error('Erreur lors de la copie (méthode de repli): ', err);
+      show_toast(generate_error_message("Erreur de copie dans le presse papier"), "error")
     }
 
     document.body.removeChild(textArea);
-}
+  }
 
   // Initialisation de l'application
   initializeFormState();

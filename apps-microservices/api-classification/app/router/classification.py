@@ -59,7 +59,8 @@ distribution_metrics = {
 async def get_cached_categories():
     """Récupère toutes les catégories avec résumés en cache Redis"""
     try:
-        cache_keys = await scan_keys_by_prefix("cache:_generate_category_summary")
+        # Scanner les nouvelles clés courtes (format: cache:cat_summary:<hash>)
+        cache_keys = await scan_keys_by_prefix("cache:cat_summary")
 
         cached_categories = []
         for key in cache_keys:

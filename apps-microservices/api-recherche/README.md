@@ -12,7 +12,7 @@ Ce projet est une API développée avec [FastAPI](https://fastapi.tiangolo.com/)
 
 ├── requirements.txt # Liste des dépendances Python
 
-├── run.sh # Script pour lancer l'application
+├── run.sh # Script pour lancer l'applications
 
 
 

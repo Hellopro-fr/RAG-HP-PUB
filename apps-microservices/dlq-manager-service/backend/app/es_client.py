@@ -51,7 +51,7 @@ class ElasticsearchClient:
                 }
             }
         }
-        response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
+        response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body, track_total_hits=True)
         aggs = response['aggregations']
         pending_count = response['hits']['total']['value']
         
@@ -67,9 +67,15 @@ class ElasticsearchClient:
         query = {"bool": {"must": [], "must_not": []}}
         
         if search_term:
+            # Check for advanced syntax characters
+            if any(char in search_term for char in [':', '*', '?']):
+                query_str = search_term
+            else:
+                query_str = f"*{search_term}*"
+
             query["bool"]["must"].append({
                 "query_string": {
-                    "query": f"*{search_term}*",
+                    "query": query_str,
                     "fields": ["error_reason", "original_payload.*", "service_name"],
                     "lenient": True
                 }
@@ -137,7 +143,8 @@ class ElasticsearchClient:
                 "size": page_size,
                 "sort": [{"@timestamp": "desc"}],
                 "_source": {"excludes": ["original_payload"]}
-            }
+            },
+            track_total_hits=True
         )
         hits = [hit for hit in response['hits']['hits']]
         total = response['hits']['total']['value']

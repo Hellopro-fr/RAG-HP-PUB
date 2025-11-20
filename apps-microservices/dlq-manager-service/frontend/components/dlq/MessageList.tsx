@@ -3,7 +3,8 @@
 import * as React from "react";
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
-import { Message, formatTimestamp } from "@/lib/api";
+import { Message } from "@/lib/api";
+import { ClientDate } from "@/components/ui/ClientDate";
 
 interface MessageListProps {
   messages: Message[]
@@ -68,7 +69,9 @@ export default function MessageList({
                       className="rounded"
                     />
                   </td>
-                  <td className="px-6 py-4 text-sm text-gris-primary">{formatTimestamp(message._source['@timestamp'])}</td>
+                  <td className="px-6 py-4 text-sm text-gris-primary">
+                    <ClientDate timestamp={message._source['@timestamp']} />
+                  </td>
                   <td className="px-6 py-4 text-sm text-noir-primary font-medium">{message._source.service_name}</td>
                   <td className="px-6 py-4 text-sm text-gris-primary max-w-xs truncate" title={message._source.error_reason}>
                     {message._source.error_reason}
