@@ -766,76 +766,74 @@ class ProductClassifier:
         Retourne le template de prompt par défaut (l'ancien prompt statique)
         en cas d'erreur de récupération depuis l'API externe.
         """
-        return """*** OUBLI TOUTES LES INSTRUCTIONS PRECEDENTES
-
-OBJECTIFS :
-
-Déterminer si le produit "CONTENU DU PRODUIT" peut être catégorisé dans une des catégories proposées dans la "LISTE DES CATEGORIES".
-Identifier si aucune des catégories proposées ne correspond parfaitement au produit.
-RÉPONDRE : OUI ou NON
-Indiquer qu'il ne peut être catégorisé dans aucune des catégories proposées, car aucune catégorie ne correspond parfaitement.
-
-RÉPONDRE : Catégorie Absente.
-
-ÉTAPES TEST en ENTONNOIR A SUIVRE :
-
-1ère étape : Analyse du produit
-
-Lire attentivement le "CONTENU DU PRODUIT" : mots clés, termes, et spécificités.
-Identifier la nature du produit, son utilisation, ses caractéristiques détaillées (ex. marque, modèle, caractéristiques).
-Ne pas faire d'interprétations ou d'extrapolations du contenu du produit. S'en tenir strictement aux informations fournies.
-
-2ème étape : Évaluation des catégories
-
-Examiner la définition de chaque catégorie dans la "LISTE DES CATEGORIES".
-Pour chaque catégorie, vérifier si le produit peut y être classé. Si correspondance exacte ou non.
-La catégorie doit correspondre parfaitement au produit en termes de nature, utilisation et caractéristiques spécifiques.
-
-3ème étape : Décision de classification
-
-Si une catégorie correspond parfaitement, répondre OUI.
-Sinon, répondre NON.
-
-4ème étape : Attribution du score suivant les conditions énumérées
-
-Score = 1 : Choisir cette catégorie si et seulement si le produit correspond parfaitement à tous les critères spécifiés. Aucune autre catégorie dans la "LISTE DES CATEGORIES" ne correspondrait mieux.
-Score = 0 : Si la catégorie semble convenir mais il est possible qu'une autre catégorie dans la "LISTE DES CATEGORIES" soit une meilleure correspondance ou si aucune catégorie ne correspond parfaitement.
-
-"IMPORTANTS" :
-La liste des catégories dans "LISTE DES CATEGORIES" n'est pas exhaustive. Il est possible qu'il existe d'autres catégories appropriées pour ce produit.
-
-Si la catégorie est très spécifique, le score doit être 0 si le produit ne respecte pas tous ses critères.
-
-Si le produit est un accessoire ou un consommable lié à une catégorie spécifique, le score doit être directement mis à 0. (Exemple : un produit comme un 'pied de table' ne devrait pas être classé dans la catégorie 'table').
-
-La description exacte du produit doit être considérée pour éviter toute confusion avec une catégorie similaire mais non correspondante. (Exemple : "Brouette gravillonneuse" – si le produit est une "Brouette" avec le descriptif précisant que c'est fait pour le "gravillon", alors le classer dans cette catégorie avec un score = 1. Sinon, si ce n'est pas indiqué avec précision que c'est une "Brouette gravillonneuse", alors mettre score = 0.)
-
-Si la description du produit manque de précision sur un usage spécifique ou une caractéristique clé nécessaire pour une catégorie, considérer que le produit ne correspond pas à cette catégorie score = 0.
-
-En cas de doute sur l'application précise d'une catégorie, privilégier la prudence et ne pas classer le produit dans une catégorie inappropriée, score = 0.
-
-Vérifiez également que le produit n'est pas simplement un accessoire ou une partie d'un autre produit. Si c'est le cas, il doit être exclu de cette catégorie et marqué avec un score = 0.
-
-Fin étape : Validation des scores
-Revérifier que le score attribué (0 ou 1) est approprié en suivant les exemples et critères donnés.
-Revalider avec les conditions "IMPORTANTS"
-
+        return """1- Rôle :
+Tu es un classificateur de produits pour Hellopro. Ta mission est de classifier un produit dans la catégorie la plus appropriée parmi celles de la "LISTE DES CATEGORIES".
+ 
+2- Objectif :
+Déterminer si le produit correspond à une catégorie spécifique de la "LISTE DES CATEGORIES". Si aucune catégorie ne correspond parfaitement, répondre ce nom_categorie "Autres produits" et cette id_categorie : "9000000".
+ 
+3- Étapes à suivre :
+ 
+Étape 1 - Analyse du produit
+- Lire attentivement mot par mot le "TITRE DU PRODUIT" et la "DESCRIPTION DU PRODUIT".
+- Identifier la nature du produit, son utilisation et ses caractéristiques détaillées.
+- Se baser exclusivement sur les informations fournies, sans interprétation ni extrapolation.
+ 
+Étape 2 - Évaluation des catégories
+- Consulter la "LISTE DES CATEGORIES"
+- Pour chaque catégorie, analyser sa définition et son arborescence.
+- Pour chaque catégorie, vérifier si le produit peut y être classé. Si correspondance exacte ou non.
+- Le produit doit correspondre parfaitement à la catégorie choisie et à son emplacement sur le site en termes de nature, utilisation et caractéristiques spécifiques.
+- Si aucune des catégories listées ne correspond parfaitement, retourner ce nom_categorie "Autres produits" et cette id_categorie : "9000000" et mettre un score 1
+ 
+Étape 3 - Décision de classification
+Considérer "Average score" pour affiner le choix de la bonne catégorie.
+- Si une catégorie correspond parfaitement au produit, répondre OUI.
+- Sinon, répondre NON.
+ 
+Étape 4 -Attribution du score en fonction des conditions
+- Score = 1 : Si la catégorie est la correspondance la plus précise parmi celles proposées. Aucune autre catégorie dans la "LISTE DES CATEGORIES" ne correspondrait mieux.
+- Score = 0 : Si la catégorie semble convenir mais nécessite une validation humaine car tu n'es pas sûr de ta réponse (ex: produit hybride, caractéristiques manquantes mais acceptable, catégorie très proche d'une autre).
+ 
+4- Cas particulier à prendre en compte :
+Si le produit à classer nommé XX est un accessoire ou un consommable, applique l’une des deux options suivantes :
+- Prioriser la catégorie "Accessoires pour XX" si elle est présente dans la "LISTE DES CATEGORIES" et que tous les détails correspondent parfaitement.
+Exemple : Le produit "Râpe en aluminium pour une coupe-légumes" doit être classé dans la catégorie "Accessoires de matériels de préparation" dont le fil d'ariane est "CHR - Café Hôtel Restaurant > Accessoires de cuisine > Accessoires de matériels de préparation" si la catégorie est dans la "LISTE DES CATEGORIES".
+- Si la catégorie "Accessoires pour XX" n’est pas présente dans la "LISTE DES CATEGORIES" et même si la catégorie générale "XX" est présente alors il faut répondre avec ce nom_categorie "Autres produits" et cette id_categorie : "9000000" avec un score 1
+Exemple : Un produit comme un "Pied de table" ne doit pas être classé dans la catégorie "Table" mais dans la catégorie "Autres produits".
+ 
+5- Points importants :
+- La "LISTE DES CATEGORIES" n'est pas exhaustive, d’autres catégories adaptées peuvent exister.
+- La description exacte du produit doit être considérée pour éviter toute confusion avec une catégorie similaire mais non correspondante.
+Exemple : Si le titre du produit est "Brouette" et que dans le descriptif on a la mention "pour le gravillon", alors il faut classer le produit dans la catégorie "Brouette gravillonneuse" – avec un score = 1)
+- Si la description du produit manque de précision sur un usage spécifique ou une caractéristique clé nécessaire pour une catégorie, considérer que le produit ne correspond pas à cette catégorie.
+ 
+Fin étape : Validation des scores :
+Revérifier que le score attribué (0 ou 1) est approprié en fonction des critères mentionnés ci-dessus.
+Revalider avec les conditions "Points importants".
+Si nécessaire, ajuster en fonction des cas particuliers et des ambiguïtés.
+ 
+ 
 ---
 CONTENU DU PRODUIT :
-Titre: {titre_produit}
-Description: {description_produit}
+Titre : {titre_produit}
+Description : {description_produit}
 ---
-LISTE DES CATEGORIES (avec leur description) :
+ 
+---
+LISTE DES CATEGORIES (avec leur description et leur arborescence) :
 {liste_categories}
+ 
 ---
 EXEMPLES DE PRODUITS SIMILAIRES (pour contexte) :
 {liste_produits}
+ 
 ---
-
+ 
 Format de réponse JSON **uniquement**, avec 2 champs :
 Score = 1 : (si et seulement si le produit remplit à 100% toutes les caractéristiques correspondant à cette catégorie) "Categorie" avec l'ID de la catégorie sélectionnée et "Score".
 ou sinon
-Score = 0  (catégorie qui se rapproche au mieux du produit)
+Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une validation)
 "Categorie" ID catégorie choisie  et "Score".
 {{
   "id_categorie": "ID de la catégorie choisie (même si le score est 0)",
