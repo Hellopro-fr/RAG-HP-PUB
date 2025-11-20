@@ -132,7 +132,7 @@ BASE_URL_OCR = os.environ.get("URL_OCR", "http://34.34.166.5:8501")
 class DeepseekOCRDocExtractor:
     """Client asynchrone pour l'API OCR externe utilisant Deepseek"""
     
-    def __init__(self, base_url: str = BASE_URL_OCR, timeout: int = 300, download_timeout: int = 120):
+    def __init__(self, base_url: str = BASE_URL_OCR, timeout: int = 3000, download_timeout: int = 1200):
         """
         Initialise le client OCR
         
@@ -266,11 +266,11 @@ class DeepseekOCRDocExtractor:
                 return response.json()
             
         except httpx.TimeoutException:
-            raise httpx.HTTPError(
+            print(
                 f"Timeout après {self.timeout}s lors de l'appel à l'API OCR"
             )
         except httpx.HTTPError as e:
-            raise httpx.HTTPError(
+            print(
                 f"Erreur lors du traitement: {str(e)}"
             )
         finally:
