@@ -111,6 +111,9 @@ router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
         const proxyUrl = proxyInfo?.url || null;
 
+        // Block resources to save bandwidth and CPU
+        await page.route('**/*.{png,jpg,jpeg,gif,webp,svg,css,woff,woff2,ttf,eot,mp4,mp3}', route => route.abort());
+
         let url = request.loadedUrl;
         let enqueueLinksExcludePath: Array<string> = [
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
@@ -120,6 +123,7 @@ router.addDefaultHandler(
             '**/*resultsPerPage=*', '**/*filter=*', '**/*filters[*',
             '**/*price=*', '**/*price_min=*', '**/*price_max=*',
             '**/*id_category=*', '**/*categoryId=*',
+            '**/*productListView=*', // Added to prevent duplicates from list view changes
 
             // Recherche et pagination avancée
             '**/*q=*', '**/*search=*', '**/*query=*',
@@ -151,15 +155,15 @@ router.addDefaultHandler(
             '**/wishlist**', '**/liste-envies**', '**/favoris**',
             '**/compare**', '**/comparateur**',
             '**/sendtoafriend**', '**/send-to-friend**',
-            '**/avis**', '**/review**', '**/reviews**',
-            '**/comment**', '**/comments**',
-            '**/rating**', '**/noter**',
+            // '**/avis**', '**/review**', '**/reviews**',
+            // '**/comment**', '**/comments**',
+            // '**/rating**', '**/noter**',
 
-             // === FONCTIONNALITÉS DYNAMIQUES ===
-            '**/*action=*', '**/*do=*', '**/*task=*',
-            '**/*ajax=*', '**/*xhr=*',
-            '**/*popup=*', '**/*modal=*',
-            '**/*print=*', '**/*impression=*',
+            // === FONCTIONNALITÉS DYNAMIQUES ===
+            // '**/*action=*', '**/*do=*', '**/*task=*',
+            // '**/*ajax=*', '**/*xhr=*',
+            // '**/*popup=*', '**/*modal=*',
+            // '**/*print=*', '**/*impression=*',
 
             // === CALENDRIERS & DATES (Spider traps classiques) ===
             '**/*year=*', '**/*month=*', '**/*day=*',
@@ -231,7 +235,7 @@ router.addDefaultHandler(
                 content = await processPage(page, request.loadedUrl, log);
                 domainFR.homepage = url;
                 const checkPageIfFrench = await domainFR.checkPageIfFrench(content, false);
-                
+
                 if (checkPageIfFrench["ok"]) {
                     // Store the successful method
                     frenchDetectionMethod = manageFrenchDetectionMethod(domain as string, checkPageIfFrench["method"]);
@@ -375,6 +379,7 @@ router.addDefaultHandler(
                                 // === FILTRES SOUVENT INUTILES ===
                                 "view", "mode", "display",
                                 "timestamp", "random", "nocache",
+                                "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
                             ],
                         };
                         request.url = processUrl(
