@@ -67,9 +67,15 @@ class ElasticsearchClient:
         query = {"bool": {"must": [], "must_not": []}}
         
         if search_term:
+            # Check for advanced syntax characters
+            if any(char in search_term for char in [':', '*', '?']):
+                query_str = search_term
+            else:
+                query_str = f"*{search_term}*"
+
             query["bool"]["must"].append({
                 "query_string": {
-                    "query": f"*{search_term}*",
+                    "query": query_str,
                     "fields": ["error_reason", "original_payload.*", "service_name"],
                     "lenient": True
                 }

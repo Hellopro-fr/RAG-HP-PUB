@@ -4,7 +4,8 @@ import * as React from "react";
 import { useState, useEffect } from "react"
 import { X, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { apiGetMessageDetails, apiRequeueMessage, apiEditAndRequeueMessage, Message, formatTimestamp } from "@/lib/api"
+import { apiGetMessageDetails, apiRequeueMessage, apiEditAndRequeueMessage, Message } from "@/lib/api"
+import { ClientDate } from "@/components/ui/ClientDate"
 
 interface MessageDetailModalProps {
   messageId: string
@@ -149,7 +150,9 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
                     </div>
                     <div>
                       <p className="text-xs text-gris-primary font-medium mb-1">Timestamp</p>
-                      <p className="text-sm text-noir-primary">{formatTimestamp(message._source['@timestamp'])}</p>
+                      <p className="text-sm text-noir-primary">
+                        <ClientDate timestamp={message._source['@timestamp']} />
+                      </p>
                     </div>
                     <div className="col-span-2">
                       <p className="text-xs text-gris-primary font-medium mb-1">Error Reason</p>
