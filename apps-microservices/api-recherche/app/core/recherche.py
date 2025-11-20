@@ -120,7 +120,7 @@ class GeminiClient:
     def chat(self, message: str, options: Dict):
         logger.info("options: %s", options)
         logger.info(f"model : {self.MODEL}")
-        response = client.models.generate_content(
+        response = self.client.models.generate_content(
             model=self.MODEL,
             contents=message,
             config=types.GenerateContentConfig(
