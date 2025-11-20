@@ -23,8 +23,46 @@ from .search import (
 
 # Import Redis cache service
 from common_utils.redis.cache_service import cache_or_execute
+import hashlib
 
 logger = logging.getLogger(__name__)
+
+# Helper pour générer des clés de cache courtes
+async def _cache_with_short_key(
+    func: callable,
+    key_prefix: str,
+    key_data: str,
+    expire_seconds: int,
+    *func_args,
+    **func_kwargs
+):
+    """
+    Wrapper autour de cache_or_execute qui génère des clés courtes via hash.
+
+    Args:
+        func: Fonction à exécuter si cache miss
+        key_prefix: Préfixe court pour la clé (ex: "cat_summary")
+        key_data: Données à hasher pour générer une clé unique (ex: category_id)
+        expire_seconds: TTL du cache en secondes
+        *func_args: Arguments à passer à la fonction
+        **func_kwargs: Arguments nommés à passer à la fonction
+
+    Returns:
+        Résultat de la fonction (depuis cache ou exécution)
+    """
+    # Générer une clé courte: préfixe + hash court des données
+    data_hash = hashlib.md5(str(key_data).encode()).hexdigest()[:12]
+    short_key = f"{key_prefix}:{data_hash}"
+
+    # Utiliser cache_or_execute avec une clé simple
+    # On crée un wrapper qui n'utilise que des arguments simples
+    async def _wrapper():
+        return await func(*func_args, **func_kwargs)
+
+    # Remplacer le nom de la fonction pour générer une clé prévisible
+    _wrapper.__name__ = short_key
+
+    return await cache_or_execute(_wrapper, expire_seconds=expire_seconds)
 
 # Import du client gRPC pour Qwen
 try:
@@ -552,14 +590,15 @@ class ProductClassifier:
         Returns:
             Dict contenant summary, input_tokens, output_tokens
         """
-        # Utiliser cache_or_execute avec une clé personnalisée courte
-        # Résultat: cache:category_summary:2003717
-        return await cache_or_execute(
-            self._generate_category_summary_with_deepseek,
-            category_id,
-            category_data,
-            expire_seconds=86400 * 7,  # 7 jours TTL
-            cache_key=f"category_summary:{category_id}"  # Clé courte personnalisée
+        # Utiliser le wrapper avec clé courte pour éviter les clés Redis trop longues
+        # Format de clé: cache:cat_summary:<hash_court>
+        return await _cache_with_short_key(
+            self._generate_category_summary_with_deepseek,  # func (positionnel)
+            "cat_summary",  # key_prefix (positionnel)
+            category_id,  # key_data (positionnel) - Hash basé sur l'ID de catégorie
+            86400 * 7,  # expire_seconds (positionnel) - 7 jours TTL
+            category_id,  # *func_args - Arguments pour _generate_category_summary_with_deepseek
+            category_data
         )
 
     async def get_category_descriptions_async(self, categories: List[Dict]) -> Tuple[Dict[str, Dict], Dict[str, int]]:
