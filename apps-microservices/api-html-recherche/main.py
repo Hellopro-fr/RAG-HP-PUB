@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -83,16 +84,16 @@ async def login_action(request: Request, username: str = Form(...), password: st
         is_anthony = True
 
         expiration = datetime.now() + timedelta(hours=24)
-
         payload = {
             "aud": JWT_AUDIENCE,
             "exp": expiration,
             "iat": datetime.now()
         }
-
         token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
+        response = JSONResponse(content={"message": "ok"})
         response.status_code = 200
+        
         res = {
             "token": token,
             "email": "aandrianirina@hellopro.fr",
