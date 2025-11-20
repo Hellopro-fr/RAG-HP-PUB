@@ -280,7 +280,7 @@ class ProductClassifier:
         nom_produit: str,
         description: str,
         categorie: Optional[str] = None
-    ) -> Optional[str]:
+    ) -> Tuple[Optional[str], Dict[str, int]]:
         """
         Appelle le optimize-service pour enrichir le titre du produit avant la recherche vectorielle.
 
@@ -291,7 +291,9 @@ class ProductClassifier:
             categorie: Catégorie du produit (optionnel)
 
         Returns:
-            Titre optimisé ou None en cas d'erreur (fallback sur titre original)
+            Tuple[Optional[str], Dict[str, int]]:
+                - Titre optimisé ou None en cas d'erreur
+                - Dict avec input_tokens et output_tokens
         """
         try:
             # Construire la requête pour optimize-service
@@ -321,100 +323,144 @@ class ProductClassifier:
                         # Vérifier si l'optimisation a réussi
                         if "success" in product_result:
                             titre_optimise = product_result["success"].get("Titre")
+
+                            # Extraire les tokens depuis info
+                            info = product_result.get("info", {})
+                            tokens = {
+                                "input_tokens": info.get("prompt_tokens", 0),
+                                "output_tokens": info.get("completion_tokens", 0)
+                            }
+
                             if titre_optimise:
-                                logger.info(f"[OPTIMIZE] ✅ Titre optimisé pour {id_produit}: {titre_optimise[:50]}...")
-                                return titre_optimise
+                                logger.info(f"[OPTIMIZE] ✅ Titre optimisé pour {id_produit}: {titre_optimise[:50]}... (tokens: {tokens['input_tokens']}+{tokens['output_tokens']})")
+                                return titre_optimise, tokens
 
                         # Si erreur dans la réponse
                         if "error" in product_result:
                             logger.warning(f"[OPTIMIZE] ⚠️ Erreur du service pour {id_produit}: {product_result['error']}")
-                            return None
+                            return None, {"input_tokens": 0, "output_tokens": 0}
                 else:
                     logger.warning(f"[OPTIMIZE] ⚠️ HTTP {response.status_code} de optimize-service")
-                    return None
+                    return None, {"input_tokens": 0, "output_tokens": 0}
 
         except httpx.TimeoutException:
             logger.warning(f"[OPTIMIZE] ⏱️ Timeout lors de l'appel à optimize-service pour {id_produit}")
-            return None
+            return None, {"input_tokens": 0, "output_tokens": 0}
         except httpx.RequestError as e:
             logger.warning(f"[OPTIMIZE] ⚠️ Erreur de connexion à optimize-service: {e}")
-            return None
+            return None, {"input_tokens": 0, "output_tokens": 0}
         except Exception as e:
             logger.error(f"[OPTIMIZE] ❌ Erreur inattendue lors de l'optimisation: {e}")
-            return None
+            return None, {"input_tokens": 0, "output_tokens": 0}
 
-        return None
+        return None, {"input_tokens": 0, "output_tokens": 0}
 
     async def optimize_titles_batch_async(
         self,
         products: List[Dict[str, str]]
-    ) -> Dict[str, Optional[str]]:
+    ) -> Dict[str, Any]:
         """
-        Appelle le optimize-service pour optimiser plusieurs titres en un seul appel (Option A).
+        Appelle le optimize-service pour optimiser plusieurs titres en limitant à 4 produits par appel.
 
         Args:
             products: Liste de dicts avec keys: id_produit, nom_produit, description, categorie (opt)
 
         Returns:
-            Dict mappant id_produit -> titre_optimise (ou None si erreur)
+            Dict contenant:
+                - optimized_titles: Dict mappant id_produit -> titre_optimise (ou None si erreur)
+                - tokens: Dict avec input_tokens et output_tokens totaux
         """
         if not products:
-            return {}
-
-        try:
-            # Construire la requête batch pour optimize-service
-            request_payload = {
-                "products": [
-                    {
-                        "id_produit_scrapping": p["id_produit"],
-                        "nom_produit": p["nom_produit"],
-                        "description_produit": p.get("description", ""),
-                        "categorie_produit": p.get("categorie", "")
-                    }
-                    for p in products
-                ]
+            return {
+                "optimized_titles": {},
+                "tokens": {"input_tokens": 0, "output_tokens": 0}
             }
 
-            # Appel HTTP asynchrone vers optimize-service
-            async with httpx.AsyncClient(timeout=self.optimize_service_timeout) as client:
-                response = await client.post(
-                    f"{self.optimize_service_url}/optimize-product/qwen/v2",
-                    json=request_payload
-                )
+        # Diviser les produits en sous-batches de 4 maximum
+        BATCH_SIZE = 4
+        sub_batches = [products[i:i + BATCH_SIZE] for i in range(0, len(products), BATCH_SIZE)]
 
-                if response.status_code == 200:
-                    result = response.json()
-                    data = result.get("data", [])
+        logger.info(f"[OPTIMIZE-BATCH] Division de {len(products)} produits en {len(sub_batches)} sous-batches de max {BATCH_SIZE} produits")
 
-                    # Mapper les résultats par id_produit
-                    optimized_titles = {}
-                    for product_result in data:
-                        prod_id = product_result.get("id_produit_scrapping")
+        optimized_titles = {}
+        total_input_tokens = 0
+        total_output_tokens = 0
 
-                        if "success" in product_result:
-                            titre_optimise = product_result["success"].get("Titre")
-                            optimized_titles[prod_id] = titre_optimise
-                            logger.info(f"[OPTIMIZE-BATCH] ✅ Titre optimisé pour {prod_id}")
-                        else:
-                            optimized_titles[prod_id] = None
-                            if "error" in product_result:
-                                logger.warning(f"[OPTIMIZE-BATCH] ⚠️ Erreur pour {prod_id}: {product_result['error']}")
+        # Traiter chaque sous-batch
+        for batch_index, sub_batch in enumerate(sub_batches):
+            try:
+                # Construire la requête batch pour optimize-service
+                request_payload = {
+                    "products": [
+                        {
+                            "id_produit_scrapping": p["id_produit"],
+                            "nom_produit": p["nom_produit"],
+                            "description_produit": p.get("description", ""),
+                            "categorie_produit": p.get("categorie", "")
+                        }
+                        for p in sub_batch
+                    ]
+                }
 
-                    logger.info(f"[OPTIMIZE-BATCH] Optimisé {len(optimized_titles)}/{len(products)} titres")
-                    return optimized_titles
-                else:
-                    logger.warning(f"[OPTIMIZE-BATCH] ⚠️ HTTP {response.status_code} de optimize-service")
-                    return {p["id_produit"]: None for p in products}
+                # Appel HTTP asynchrone vers optimize-service
+                async with httpx.AsyncClient(timeout=self.optimize_service_timeout) as client:
+                    response = await client.post(
+                        f"{self.optimize_service_url}/optimize-product/qwen/v2",
+                        json=request_payload
+                    )
 
-        except httpx.TimeoutException:
-            logger.warning(f"[OPTIMIZE-BATCH] ⏱️ Timeout lors de l'appel à optimize-service")
-            return {p["id_produit"]: None for p in products}
-        except httpx.RequestError as e:
-            logger.warning(f"[OPTIMIZE-BATCH] ⚠️ Erreur de connexion à optimize-service: {e}")
-            return {p["id_produit"]: None for p in products}
-        except Exception as e:
-            logger.error(f"[OPTIMIZE-BATCH] ❌ Erreur inattendue: {e}")
-            return {p["id_produit"]: None for p in products}
+                    if response.status_code == 200:
+                        result = response.json()
+                        data = result.get("data", [])
+
+                        # Mapper les résultats par id_produit et accumuler les tokens
+                        for product_result in data:
+                            prod_id = product_result.get("id_produit_scrapping")
+
+                            if "success" in product_result:
+                                titre_optimise = product_result["success"].get("Titre")
+                                optimized_titles[prod_id] = titre_optimise
+
+                                # Extraire et accumuler les tokens depuis info
+                                info = product_result.get("info", {})
+                                total_input_tokens += info.get("prompt_tokens", 0)
+                                total_output_tokens += info.get("completion_tokens", 0)
+
+                                logger.info(f"[OPTIMIZE-BATCH] ✅ Titre optimisé pour {prod_id} (tokens: {info.get('prompt_tokens', 0)}+{info.get('completion_tokens', 0)})")
+                            else:
+                                optimized_titles[prod_id] = None
+                                if "error" in product_result:
+                                    logger.warning(f"[OPTIMIZE-BATCH] ⚠️ Erreur pour {prod_id}: {product_result['error']}")
+
+                        logger.info(f"[OPTIMIZE-BATCH] Sous-batch {batch_index + 1}/{len(sub_batches)}: {len(data)} produits optimisés")
+                    else:
+                        logger.warning(f"[OPTIMIZE-BATCH] ⚠️ HTTP {response.status_code} de optimize-service pour sous-batch {batch_index + 1}")
+                        # Marquer les produits de ce sous-batch comme non optimisés
+                        for p in sub_batch:
+                            optimized_titles[p["id_produit"]] = None
+
+            except httpx.TimeoutException:
+                logger.warning(f"[OPTIMIZE-BATCH] ⏱️ Timeout pour sous-batch {batch_index + 1}")
+                for p in sub_batch:
+                    optimized_titles[p["id_produit"]] = None
+            except httpx.RequestError as e:
+                logger.warning(f"[OPTIMIZE-BATCH] ⚠️ Erreur de connexion pour sous-batch {batch_index + 1}: {e}")
+                for p in sub_batch:
+                    optimized_titles[p["id_produit"]] = None
+            except Exception as e:
+                logger.error(f"[OPTIMIZE-BATCH] ❌ Erreur inattendue pour sous-batch {batch_index + 1}: {e}")
+                for p in sub_batch:
+                    optimized_titles[p["id_produit"]] = None
+
+        logger.info(f"[OPTIMIZE-BATCH] Terminé: {len(optimized_titles)}/{len(products)} titres traités (tokens: {total_input_tokens}+{total_output_tokens})")
+
+        return {
+            "optimized_titles": optimized_titles,
+            "tokens": {
+                "input_tokens": total_input_tokens,
+                "output_tokens": total_output_tokens
+            }
+        }
 
     async def _summarize_category_description_async(self, category_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1001,14 +1047,22 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             nom_produit_optimise = None
             nom_produit_pour_recherche = nom_produit_original
 
+            # Initialiser les compteurs de tokens
+            total_input_tokens = 0
+            total_output_tokens = 0
+
             if optimize:
                 logger.info(f"[OPTIMIZE] Optimisation du titre pour {product['id_produit']}")
-                nom_produit_optimise = await self.optimize_title_async(
+                nom_produit_optimise, optimize_tokens = await self.optimize_title_async(
                     id_produit=product['id_produit'],
                     nom_produit=nom_produit_original,
                     description=product.get('description', ''),
                     categorie=None
                 )
+
+                # Additionner les tokens d'optimisation
+                total_input_tokens += optimize_tokens['input_tokens']
+                total_output_tokens += optimize_tokens['output_tokens']
 
                 if nom_produit_optimise:
                     nom_produit_pour_recherche = nom_produit_optimise
@@ -1063,9 +1117,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             # ⚡ OPTIMISATION: Récupération asynchrone des descriptions enrichies avec résumé DeepSeek (pipeline parallèle)
             category_info, summarization_tokens = await self.get_category_descriptions_async(categories)
 
-            # Initialiser les compteurs de tokens
-            total_input_tokens = summarization_tokens['input_tokens']
-            total_output_tokens = summarization_tokens['output_tokens']
+            # Additionner les tokens de summarization
+            total_input_tokens += summarization_tokens['input_tokens']
+            total_output_tokens += summarization_tokens['output_tokens']
 
             # Construction du prompt et appel LLM (asynchrone) avec infos enrichies (fil d'ariane + résumé)
             prompt, temperature = await self.build_prompt_async(product, categories, category_info, similar_products)
@@ -1240,6 +1294,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
             }
 
         # 🔧 NOUVELLE ÉTAPE: Optimisation des titres en batch si demandée (Option A)
+        batch_optimize_tokens = {"input_tokens": 0, "output_tokens": 0}
+
         if optimize:
             logger.info(f"[OPTIMIZE-BATCH] Optimisation de {len(products)} titres avant classification")
             optimize_start = time.time()
@@ -1255,8 +1311,12 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 for p in products
             ]
 
-            # Appel batch à optimize-service
-            optimized_titles_map = await self.optimize_titles_batch_async(products_for_optimization)
+            # Appel batch à optimize-service (retourne maintenant optimized_titles + tokens)
+            optimization_result = await self.optimize_titles_batch_async(products_for_optimization)
+            optimized_titles_map = optimization_result["optimized_titles"]
+            batch_optimize_tokens = optimization_result["tokens"]
+
+            logger.info(f"[OPTIMIZE-BATCH] Tokens d'optimisation: {batch_optimize_tokens['input_tokens']}+{batch_optimize_tokens['output_tokens']}")
 
             # Enrichir les produits avec les titres optimisés
             for product in products:
@@ -1285,6 +1345,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
         results = await asyncio.gather(*tasks)
 
         # 🔧 Si optimize=True, corriger les résultats pour avoir le bon titre_produit et titre_produit_optimise
+        # ET additionner les tokens d'optimisation batch aux tokens de chaque résultat
         if optimize:
             for i, result in enumerate(results):
                 product = products[i]
@@ -1295,6 +1356,12 @@ Score = 0  (catégorie qui se rapproche au mieux du produit)
                 else:
                     # Pas d'optimisation (ne devrait pas arriver si optimize=True)
                     result['titre_produit_optimise'] = None
+
+                # Additionner les tokens d'optimisation batch (répartis proportionnellement)
+                # Note: Les tokens sont déjà comptés globalement, on les ajoute au premier résultat seulement
+                if i == 0:
+                    result['input_tokens'] = result.get('input_tokens', 0) + batch_optimize_tokens['input_tokens']
+                    result['output_tokens'] = result.get('output_tokens', 0) + batch_optimize_tokens['output_tokens']
 
         # Compter les succès et les erreurs
         success_count = 0
