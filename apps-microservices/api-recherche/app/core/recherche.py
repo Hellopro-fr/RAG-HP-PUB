@@ -19,6 +19,9 @@ from app.schemas.search import (
 )
 from app.core.credentials import settings, model_settings
 
+from google import genai
+from google.genai import types
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
