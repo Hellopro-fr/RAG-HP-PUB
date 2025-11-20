@@ -833,7 +833,9 @@ class SearchOrchestrator:
                 )
                 llm_response = completion.choices[0].message.content
 
-            completion = completion.model_dump()
+            if hasattr(completion, "model_dump"):
+                completion = completion.model_dump()
+
         except Exception as e:
             logger.error(f"Error during LLM execution: {e}")
             return LLMPipeline(
