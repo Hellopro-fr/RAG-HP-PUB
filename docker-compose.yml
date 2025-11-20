@@ -1,4 +1,3 @@
-# It is only a test for push
 services:
   model-builder:
     build:
