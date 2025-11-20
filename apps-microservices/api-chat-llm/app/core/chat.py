@@ -6,6 +6,9 @@ from typing import Dict, List, Any, Optional
 from unittest import result
 from google.protobuf.json_format import MessageToDict
 
+from google import genai
+from google.genai import types
+
 # Import des clients gRPC de notre architecture
 from common_utils.grpc_clients import (
     llm_client,
@@ -320,21 +323,42 @@ async def get_deepseek_chat_completion_response(request: ChatRequest):
     }
 
 
-# Chat completion via Gemini by openrouter
-def llm_prompt_gemini(request: ChatRequest) -> str:
-    # Appel chat completion avec openrouter de model genini flash 1.5
-    openrouter_client = OpenRouter()
-    openrouter_client.set_temperature(request.temperature)
-    completion = openrouter_client.chat(request.prompt, stream=False)
-    response = completion["content"]
+def make_serializable(obj):
+    """Parcourt récursivement l'objet pour convertir les bytes en hex string."""
+    if isinstance(obj, bytes):
+        return obj.hex()  # Convertit b'\xe6...' en string 'e6...'
+    if isinstance(obj, dict):
+        return {k: make_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [make_serializable(v) for v in obj]
+    return obj
 
-    completion_dict = (
-        completion.model_dump()
-        if hasattr(completion, "model_dump")
-        else completion.dict()
+
+def llm_prompt_gemini(request: ChatRequest) -> str:
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    prompt = request.prompt
+
+    response = client.models.generate_content(
+        model=request.model if request.model else settings.GEMINI_MODEL_NAME,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(
+                thinking_level=(
+                    request.thinking_level if request.thinking_level else "high"
+                )
+            )
+        ),
     )
 
-    return {"message": response, "api_response": completion_dict}
+    logging.info("Gemini response received. \nResponse: %s", response)
+
+    # Récupération du dump
+    api_response_dict = response.model_dump()
+
+    # NETTOYAGE : Conversion des bytes (thought_signature) en string
+    safe_api_response = make_serializable(api_response_dict)
+
+    return {"message": response.text, "api_response": safe_api_response}
 
 
 async def get_gemini_chat_completion_response(request: ChatRequest):
