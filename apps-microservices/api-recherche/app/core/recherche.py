@@ -134,8 +134,12 @@ class GeminiClient:
             ),
         )
 
-        if isinstance(response, types.GenerateContentResponse):
+        if hasattr(response, "model_dump"):
             api_response_dict = response.model_dump()
+        elif hasattr(response, "dict") and callable(response.dict):
+            api_response_dict = response.dict()
+        elif hasattr(response, "to_dict"):
+            api_response_dict = response.to_dict()
         else:
             api_response_dict = response
         return {
