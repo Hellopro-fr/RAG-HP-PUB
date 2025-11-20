@@ -133,7 +133,11 @@ class GeminiClient:
                 )
             ),
         )
-        api_response_dict = response.model_dump()
+
+        if isinstance(response, types.GenerateContentResponse):
+            api_response_dict = response.model_dump()
+        else:
+            api_response_dict = response
         return {
             "content": response.text,
             "response": self.make_serializable(api_response_dict),
