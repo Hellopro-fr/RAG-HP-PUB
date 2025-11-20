@@ -21,6 +21,9 @@ from .search import (
     EXTERNAL_PROMPT_API_URL
 )
 
+# Import Redis cache service
+from common_utils.redis.cache_service import cache_or_execute
+
 logger = logging.getLogger(__name__)
 
 # Import du client gRPC pour Qwen
@@ -41,7 +44,7 @@ class ProductClassifier:
         self.openai_client = None
         self.deepseek_client = None
         self.category_cache = {}
-        self.category_summary_cache = {}  # Cache pour les résumés de descriptions
+        # NOTE: category_summary_cache supprimé - utilise Redis via cache_or_execute() maintenant
         self.prompt_cache = {}  # Cache pour les templates de prompts avec timestamp
         self.prompt_cache_duration = 120  # Durée du cache en secondes (2 minutes = 120s)
         self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
@@ -462,23 +465,16 @@ class ProductClassifier:
             }
         }
 
-    async def _summarize_category_description_async(self, category_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_category_summary_with_deepseek(self, category_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Résume une description de catégorie enrichie via DeepSeek en utilisant un prompt récupéré depuis l'API externe.
+        Fonction interne qui génère réellement le résumé via DeepSeek (sans cache).
+        Sera wrappée par _summarize_category_description_async() avec Redis cache.
 
         Args:
-            category_data: Dictionnaire contenant:
-                - id_categorie: ID de la catégorie
-                - nom_categorie: Nom de la catégorie
-                - description_categorie: Description de la catégorie
-                - fil_ariane: Fil d'ariane (optionnel)
-                - top_5_produit: Top 5 produits (optionnel)
+            category_data: Dictionnaire contenant les données de la catégorie
 
         Returns:
-            Dict contenant:
-                - summary: Le résumé enrichi de la description
-                - input_tokens: Nombre de tokens d'entrée
-                - output_tokens: Nombre de tokens de sortie
+            Dict contenant summary, input_tokens, output_tokens
         """
         description = category_data.get("description_categorie", "")
 
@@ -543,6 +539,23 @@ class ProductClassifier:
                 "input_tokens": 0,
                 "output_tokens": 0
             }
+
+    async def _summarize_category_description_async(self, category_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Résume une description de catégorie enrichie via DeepSeek avec cache Redis (7 jours).
+
+        Args:
+            category_data: Dictionnaire contenant les données de la catégorie
+
+        Returns:
+            Dict contenant summary, input_tokens, output_tokens
+        """
+        # Utiliser cache_or_execute avec TTL de 7 jours (comme api-recherche)
+        return await cache_or_execute(
+            self._generate_category_summary_with_deepseek,
+            category_data,
+            expire_seconds=86400 * 7  # 7 jours TTL
+        )
 
     async def get_category_descriptions_async(self, categories: List[Dict]) -> Tuple[Dict[str, Dict], Dict[str, int]]:
         """
