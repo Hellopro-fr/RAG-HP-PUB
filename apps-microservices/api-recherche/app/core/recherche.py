@@ -133,9 +133,10 @@ class GeminiClient:
                 )
             ),
         )
+        api_response_dict = response.model_dump()
         return {
             "content": response.text,
-            "response": self.make_serializable(response.model_dump()),
+            "response": self.make_serializable(api_response_dict),
         }
 
 
