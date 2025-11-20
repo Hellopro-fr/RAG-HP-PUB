@@ -35,16 +35,12 @@ class LLMClientFactory:
         return OpenAI(api_key=api_key)
 
     @staticmethod
-    def get_client(model_name: str, temperature: float) -> Any:
+    def get_client(model_name: str, temperature: float, provider: str = "") -> Any:
         """
         Returns the appropriate LLM client based on the model name.
         """
         model_type = next(
-            (
-                key
-                for key, values in model_settings.items()
-                if model_name in values
-            ),
+            (key for key, values in model_settings.items() if model_name in values),
             "openai",
         )
 
@@ -56,6 +52,16 @@ class LLMClientFactory:
             else:
                 return LLMClientFactory.get_openai_client(settings.OPENAI_API_KEY)
         else:  # OpenRouter
+            if provider == "gemini":
+                return GeminiClient(
+                    config={
+                        "model": (
+                            model_name
+                            if model_name != "" and model_name != None
+                            else None
+                        )
+                    }
+                )
             return OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=settings.OPENROUTER_API_KEY,
@@ -92,6 +98,40 @@ class DeepSeek:
         self.TEMPERATURE = float(temperature)
 
 
+class GeminiClient:
+    def __init__(self, config=None):
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        self.MODEL = config.get("model", settings.GEMINI_MODEL_NAME)
+        # self.TEMPERATURE = config.get("temperature", 0.4)
+
+    def make_serializable(self, obj):
+        """Parcourt récursivement l'objet pour convertir les bytes en hex string."""
+        if isinstance(obj, bytes):
+            return obj.hex()  # Convertit b'\xe6...' en string 'e6...'
+        if isinstance(obj, dict):
+            return {k: make_serializable(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [make_serializable(v) for v in obj]
+        return obj
+
+    def chat(self, message: str, options: Dict):
+        response = client.models.generate_content(
+            model=self.MODEL,
+            contents=message,
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=(
+                        options.thinking_level if options.thinking_level else "high"
+                    )
+                )
+            ),
+        )
+        return {
+            "content": response.text,
+            "response": make_serializable(response.model_dump()),
+        }
+
+
 class FilterBuilder:
     """Builds filter expressions for database queries."""
 
@@ -103,7 +143,7 @@ class FilterBuilder:
         DataType.FLOAT.value,
         DataType.DOUBLE.value,
     }
-    
+
     PAGE_TYPE_SITEWEB = {
         "home",
         "listing_produit",
@@ -122,7 +162,7 @@ class FilterBuilder:
         "faq",
         "plan_du_site",
         "politique_confidentialite",
-        "autre"
+        "autre",
     }
 
     async def build(self, filtre: dict, source: str = "") -> list:
@@ -169,9 +209,7 @@ class FilterBuilder:
         if isinstance(val, dict) and "operator" in val and "values" in val:
             return self._build_operator_clause(key, val)
         elif isinstance(val, list):
-            numeric_vals = [
-                self._cast_numeric(v, dtype) for v in val
-            ]
+            numeric_vals = [self._cast_numeric(v, dtype) for v in val]
             return f"{key} in {numeric_vals}"
         else:
             numeric_val = self._cast_numeric(val, dtype)
@@ -184,11 +222,15 @@ class FilterBuilder:
             if key == "id_categorie" and source == "devis":
                 numeric_vals = [int(v) for v in val]
                 return f"{key} in {numeric_vals}"
-            
+
             quoted_vals = [repr(str(v)) for v in val]
-            if key == 'page_type':
-                quoted_vals = [repr(str(v).lower().replace("-", "_")) for v in val if v in self.PAGE_TYPE_SITEWEB]
-                
+            if key == "page_type":
+                quoted_vals = [
+                    repr(str(v).lower().replace("-", "_"))
+                    for v in val
+                    if v in self.PAGE_TYPE_SITEWEB
+                ]
+
             return f"{key} in [{', '.join(quoted_vals)}]"
         else:
             return f"{key} == {repr(str(val))}"
@@ -222,14 +264,14 @@ class ContextBuilder:
         for res in matches:
             source = res.get("source", "N/A")
             metadata = res.get("metadata", {}).get("entity", {})
-            
+
             title_extractors = {
                 "produits_3": lambda m: m.get("nom_produit", "N/A"),
                 "siteweb_2": lambda m: m.get("url", "N/A"),
                 "devis": lambda m: m.get("lead_id", "N/A"),
                 "echanges": lambda m: m.get("conversation_id", "N/A"),
             }
-            
+
             fournisseur_extractors = {
                 "produits_3": lambda m: m.get("fournisseur", "N/A"),
                 "siteweb_2": lambda m: m.get("fournisseur", "N/A"),
@@ -265,10 +307,13 @@ class SearchOrchestrator:
         self.request = request
         self.filter_builder = FilterBuilder()
         self.context_builder = ContextBuilder()
-        
-    def _get_top_k_retrieval(self, top_k_final: int) -> int:
-        return int(top_k_final * self.request.options.ponderation if self.request.options.use_reranker else top_k_final)
 
+    def _get_top_k_retrieval(self, top_k_final: int) -> int:
+        return int(
+            top_k_final * self.request.options.ponderation
+            if self.request.options.use_reranker
+            else top_k_final
+        )
 
     async def search_stream(self):
         """Orchestrates the streaming search flow."""
@@ -277,21 +322,36 @@ class SearchOrchestrator:
             yield {"type": "status", "payload": "Starting search stream..."}
 
             query_vector, embed_duration = await self._get_embedding()
-            yield {"type": "embedding_complete", "payload": {"duration": round(embed_duration, 2)}}
+            yield {
+                "type": "embedding_complete",
+                "payload": {"duration": round(embed_duration, 2)},
+            }
 
             initial_matches, search_duration = await self._perform_search(query_vector)
-            yield {"type": "initial_results", "payload": {"results": initial_matches[:self.request.top_k], "duration": round(search_duration, 2)}}
+            yield {
+                "type": "initial_results",
+                "payload": {
+                    "results": initial_matches[: self.request.top_k],
+                    "duration": round(search_duration, 2),
+                },
+            }
 
             final_results, rerank_duration = await self._rerank_results(initial_matches)
             if rerank_duration > 0:
-                yield {"type": "rerank_complete", "payload": {"results": final_results[:self.request.top_k], "duration": round(rerank_duration, 2)}}
+                yield {
+                    "type": "rerank_complete",
+                    "payload": {
+                        "results": final_results[: self.request.top_k],
+                        "duration": round(rerank_duration, 2),
+                    },
+                }
 
             llm_duration = 0
             if self.request.action == 2 and final_results:
                 start_llm_time = time.perf_counter()
                 context_texts = self.context_builder.build(final_results)
                 llm_pipeline = await self._run_llm_pipeline(context_texts)
-                
+
                 yield {
                     "type": "llm_chunk" if not llm_pipeline.error else "error",
                     "payload": llm_pipeline.llm_response,
@@ -313,7 +373,9 @@ class SearchOrchestrator:
             yield {"type": "end_of_stream", "payload": final_summary}
 
         except Exception as e:
-            logger.error(f"A major error occurred in the search stream: {e}", exc_info=True)
+            logger.error(
+                f"A major error occurred in the search stream: {e}", exc_info=True
+            )
             yield {"type": "error", "payload": f"Server error: {e}"}
         finally:
             logger.info("Search stream finished.")
@@ -322,13 +384,19 @@ class SearchOrchestrator:
         """Orchestrates a complete non-streaming search."""
         start_total_time = time.perf_counter()
         embed_duration, search_duration, rerank_duration, llm_duration = 0, 0, 0, 0
-        llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={}, llm_duration=0)
+        llm_req = LLMPipeline(
+            llm_response="",
+            context="",
+            full_user_prompt="",
+            response={},
+            llm_duration=0,
+        )
         final_filter_expr_str = ""
         all_results = {}
 
         try:
             query_vector, embed_duration = await self._get_embedding()
-            
+
             start_search = time.perf_counter()
             top_k_final = int(self.request.top_k)
             # top_k_retrieval = top_k_final * 1.5 if self.request.options.use_reranker else top_k_final
@@ -337,8 +405,10 @@ class SearchOrchestrator:
             for item in self.request.source:
                 source_name = item.source
                 filtre = item.filtre
-                
-                final_filter_expr = await self._build_filter_expression(filtre, source_name)
+
+                final_filter_expr = await self._build_filter_expression(
+                    filtre, source_name
+                )
                 final_filter_expr_str = final_filter_expr
 
                 source_results = await database_client.search_vector(
@@ -346,19 +416,31 @@ class SearchOrchestrator:
                     vector=query_vector,
                     k=top_k_retrieval,
                     filter_expr=final_filter_expr,
-                    output_fields=self.request.fields if self.request.fields and self.request.action == 1 else None
+                    output_fields=(
+                        self.request.fields
+                        if self.request.fields and self.request.action == 1
+                        else None
+                    ),
                 )
-                all_results[source_name] = [MessageToDict(res) for res in source_results]
-            
+                all_results[source_name] = [
+                    MessageToDict(res) for res in source_results
+                ]
+
             search_duration = time.perf_counter() - start_search
 
             if self.request.options.use_reranker and all_results:
                 start_rerank_time = time.perf_counter()
                 reranked_results_by_source = {}
                 for source, matches in all_results.items():
-                    docs_to_rerank = [match["metadata"]["entity"]["text"] for match in matches]
-                    ranked_texts = await reranking_client.rerank_documents_with_scores(self.request.prompt, docs_to_rerank)
-                    result_map = {res["metadata"]["entity"]["text"]: res for res in matches}
+                    docs_to_rerank = [
+                        match["metadata"]["entity"]["text"] for match in matches
+                    ]
+                    ranked_texts = await reranking_client.rerank_documents_with_scores(
+                        self.request.prompt, docs_to_rerank
+                    )
+                    result_map = {
+                        res["metadata"]["entity"]["text"]: res for res in matches
+                    }
                     # reranked_results_by_source[source] = [result_map[text['document']] for text in ranked_texts if text in result_map][:top_k_final]
                     res_by_source = []
                     for item in ranked_texts:
@@ -366,32 +448,49 @@ class SearchOrchestrator:
                         document = item.get("document", "")
                         if document not in result_map:
                             continue
-                        
+
                         result_map[document]["reranking"] = round(score, 8)
-                        
-                        if 'text' not in self.request.fields and self.request.fields != []:
-                            result_map[document].get('metadata', {}).get('entity', {}).pop('text', None)
-                            
+
+                        if (
+                            "text" not in self.request.fields
+                            and self.request.fields != []
+                        ):
+                            result_map[document].get("metadata", {}).get(
+                                "entity", {}
+                            ).pop("text", None)
+
                         res_by_source.append(result_map[document])
                     reranked_results_by_source[source] = res_by_source[:top_k_final]
-                        
 
                 all_results = reranked_results_by_source
                 rerank_duration = time.perf_counter() - start_rerank_time
             else:
                 for source, matches in all_results.items():
-                    sorted_matches = sorted(matches, key=lambda x: x.get("score", 0.0), reverse=True)
+                    sorted_matches = sorted(
+                        matches, key=lambda x: x.get("score", 0.0), reverse=True
+                    )
                     all_results[source] = sorted_matches[:top_k_final]
 
             context_texts = []
             for matches in all_results.values():
                 context_texts.extend(self.context_builder.build(matches))
-            
+
             llm_req = await self._run_llm_pipeline(context_texts)
 
         except Exception as e:
-            logger.error(f"A major error occurred in the non-streaming search: {e}", exc_info=True)
-            return self._build_error_response(str(e), embed_duration, search_duration, rerank_duration, llm_duration, start_total_time, llm_req)
+            logger.error(
+                f"A major error occurred in the non-streaming search: {e}",
+                exc_info=True,
+            )
+            return self._build_error_response(
+                str(e),
+                embed_duration,
+                search_duration,
+                rerank_duration,
+                llm_duration,
+                start_total_time,
+                llm_req,
+            )
 
         total_duration = time.perf_counter() - start_total_time
         return {
@@ -420,14 +519,20 @@ class SearchOrchestrator:
             yield {"type": "status", "payload": "Starting classic search stream..."}
 
             final_results, search_duration = await self._perform_classic_search()
-            yield {"type": "initial_results", "payload": {"results": final_results, "duration": round(search_duration, 2)}}
+            yield {
+                "type": "initial_results",
+                "payload": {
+                    "results": final_results,
+                    "duration": round(search_duration, 2),
+                },
+            }
 
             llm_duration = 0
             if self.request.action == 2 and final_results:
                 start_llm_time = time.perf_counter()
                 context_texts = self.context_builder.build(final_results)
                 llm_pipeline = await self._run_llm_pipeline(context_texts)
-                
+
                 yield {
                     "type": "llm_chunk" if not llm_pipeline.error else "error",
                     "payload": llm_pipeline.llm_response,
@@ -449,7 +554,10 @@ class SearchOrchestrator:
             yield {"type": "end_of_stream", "payload": final_summary}
 
         except Exception as e:
-            logger.error(f"A major error occurred in the classic search stream: {e}", exc_info=True)
+            logger.error(
+                f"A major error occurred in the classic search stream: {e}",
+                exc_info=True,
+            )
             yield {"type": "error", "payload": f"Server error: {e}"}
         finally:
             logger.info("Classic search stream finished.")
@@ -457,7 +565,13 @@ class SearchOrchestrator:
     async def search_classique(self) -> dict:
         start_total_time = time.perf_counter()
         search_duration, llm_duration = 0, 0
-        llm_req = LLMPipeline(llm_response="", context="", full_user_prompt="", response={}, llm_duration=0)
+        llm_req = LLMPipeline(
+            llm_response="",
+            context="",
+            full_user_prompt="",
+            response={},
+            llm_duration=0,
+        )
         final_filter_expr_str = ""
         all_results = {}
 
@@ -468,26 +582,38 @@ class SearchOrchestrator:
             for item in self.request.source:
                 source_name = item.source
                 filtre = item.filtre
-                
-                final_filter_expr = await self._build_filter_expression(filtre, source_name)
+
+                final_filter_expr = await self._build_filter_expression(
+                    filtre, source_name
+                )
                 final_filter_expr_str = final_filter_expr
 
                 source_results = await database_client.classic_search_vector(
-                    collection=source_name, filter_expr=final_filter_expr, k=top_k_final, output_fields=self.request.fields if self.request.fields else None
+                    collection=source_name,
+                    filter_expr=final_filter_expr,
+                    k=top_k_final,
+                    output_fields=self.request.fields if self.request.fields else None,
                 )
-                all_results[source_name] = [MessageToDict(res) for res in source_results]
-            
+                all_results[source_name] = [
+                    MessageToDict(res) for res in source_results
+                ]
+
             search_duration = time.perf_counter() - start_search
 
             context_texts = []
             for matches in all_results.values():
                 context_texts.extend(self.context_builder.build(matches))
-            
+
             llm_req = await self._run_llm_pipeline(context_texts)
 
         except Exception as e:
-            logger.error(f"A major error occurred in the classic non-streaming search: {e}", exc_info=True)
-            return self._build_error_response(str(e), 0, search_duration, 0, llm_duration, start_total_time, llm_req)
+            logger.error(
+                f"A major error occurred in the classic non-streaming search: {e}",
+                exc_info=True,
+            )
+            return self._build_error_response(
+                str(e), 0, search_duration, 0, llm_duration, start_total_time, llm_req
+            )
 
         total_duration = time.perf_counter() - start_total_time
         return {
@@ -522,13 +648,19 @@ class SearchOrchestrator:
         top_k_final = int(self.request.top_k)
         # top_k_retrieval = top_k_final * 1.5 if self.request.options.use_reranker else top_k_final
         top_k_retrieval = self._get_top_k_retrieval(top_k_final)
-        
+
         start_search_time = time.perf_counter()
         search_tasks = []
         for item in self.request.source:
-            search_tasks.append(self._create_search_task(item.source, item.filtre, query_vector, top_k_retrieval))
+            search_tasks.append(
+                self._create_search_task(
+                    item.source, item.filtre, query_vector, top_k_retrieval
+                )
+            )
 
-        list_of_results_groups = await asyncio.gather(*search_tasks, return_exceptions=True)
+        list_of_results_groups = await asyncio.gather(
+            *search_tasks, return_exceptions=True
+        )
         search_duration = time.perf_counter() - start_search_time
 
         all_source_results = []
@@ -537,9 +669,14 @@ class SearchOrchestrator:
                 logger.error(f"A search task failed: {source_results}")
                 continue
             if source_results:
-                all_source_results.extend([MessageToDict(res) for res in source_results])
-        
-        return sorted(all_source_results, key=lambda x: x["score"], reverse=True), search_duration
+                all_source_results.extend(
+                    [MessageToDict(res) for res in source_results]
+                )
+
+        return (
+            sorted(all_source_results, key=lambda x: x["score"], reverse=True),
+            search_duration,
+        )
 
     async def _perform_classic_search(self) -> Tuple[list, float]:
         top_k_final = int(self.request.top_k)
@@ -549,7 +686,7 @@ class SearchOrchestrator:
         for item in self.request.source:
             source_name = item.source
             filtre = item.filtre
-            
+
             final_filter_expr = await self._build_filter_expression(filtre, source_name)
 
             source_results = await database_client.classic_search_vector(
@@ -557,7 +694,9 @@ class SearchOrchestrator:
             )
 
             if source_results:
-                all_source_results.extend([MessageToDict(res) for res in source_results])
+                all_source_results.extend(
+                    [MessageToDict(res) for res in source_results]
+                )
 
         search_duration = time.perf_counter() - start_search_time
         return all_source_results, search_duration
@@ -573,14 +712,18 @@ class SearchOrchestrator:
 
     async def _build_filter_expression(self, filtre: dict, source_name: str) -> str:
         filters = []
-        filter_expr_global = await self.filter_builder.build(self.request.filtre, source_name)
+        filter_expr_global = await self.filter_builder.build(
+            self.request.filtre, source_name
+        )
         if filter_expr_global:
             filters.append(" and ".join(filter_expr_global))
 
-        filter_expr_source = await self.filter_builder.build(filtre, source_name) if filtre else ""
+        filter_expr_source = (
+            await self.filter_builder.build(filtre, source_name) if filtre else ""
+        )
         if filter_expr_source:
             filters.append(" and ".join(filter_expr_source))
-        
+
         return " and ".join(filters) if filters else ""
 
     async def _rerank_results(self, initial_matches: list) -> Tuple[list, float]:
@@ -595,45 +738,61 @@ class SearchOrchestrator:
             if doc_text and doc_text not in result_map:
                 docs_to_rerank.append(doc_text)
                 result_map[doc_text] = res
-        
+
         if not docs_to_rerank:
             return initial_matches, 0
 
-        ranked_texts = await reranking_client.rerank_documents_with_scores(self.request.prompt, docs_to_rerank)
+        ranked_texts = await reranking_client.rerank_documents_with_scores(
+            self.request.prompt, docs_to_rerank
+        )
         # final_results = [result_map[text] for text in ranked_texts if text in result_map]
         final_results = []
         for item in ranked_texts:
             score = float(item.get("score", 0.0))
             if item.get("document", "") not in result_map:
                 continue
-            
+
             result_map[item.get("document")]["reranking"] = round(score, 8)
             final_results.append(result_map[item.get("document")])
 
         rerank_duration = time.perf_counter() - start_rerank_time
-        
+
         return final_results, rerank_duration
 
     async def _run_llm_pipeline(self, context_texts: list) -> LLMPipeline:
         if not context_texts or self.request.action != 2:
-            return LLMPipeline(llm_response="", context="", full_user_prompt="", response={}, llm_duration=0)
+            return LLMPipeline(
+                llm_response="",
+                context="",
+                full_user_prompt="",
+                response={},
+                llm_duration=0,
+            )
 
-        context ="""
+        context = """
             -----
 
 
-            """.join(context_texts)
+            """.join(
+            context_texts
+        )
         try:
             full_user_prompt = self.request.llm.template_prompt.format(
                 chunks=context, recherche=self.request.prompt
             )
         except (KeyError, ValueError) as e:
-            error_message = f"Prompt formatting error: key '{e}' is missing or format is invalid."
+            error_message = (
+                f"Prompt formatting error: key '{e}' is missing or format is invalid."
+            )
             logger.error(error_message)
             return LLMPipeline(llm_response=error_message, context=context, error=True)
 
-        client = LLMClientFactory.get_client(self.request.llm.chat_model, self.request.llm.temperature)
-        
+        # ajout vérification model name pour les valeur thinking
+
+        client = LLMClientFactory.get_client(
+            self.request.llm.chat_model, self.request.llm.temperature
+        )
+
         start_llm_time = time.perf_counter()
         llm_response, completion = "", {}
 
@@ -642,6 +801,10 @@ class SearchOrchestrator:
                 response = client.chat(full_user_prompt)
                 llm_response = response["content"]
                 completion = response["response"]
+            elif isinstance(client, GeminiClient):
+                response = client.chat(full_user_prompt, options={})
+                completion = response["response"]
+                llm_response = response["content"]
             else:
                 completion = client.chat.completions.create(
                     model=self.request.llm.chat_model,
@@ -649,11 +812,17 @@ class SearchOrchestrator:
                     temperature=float(self.request.llm.temperature),
                 )
                 llm_response = completion.choices[0].message.content
-            
+
             completion = completion.model_dump()
         except Exception as e:
             logger.error(f"Error during LLM execution: {e}")
-            return LLMPipeline(llm_response=str(e), context=context, full_user_prompt=full_user_prompt, error=True, llm_duration=0)
+            return LLMPipeline(
+                llm_response=str(e),
+                context=context,
+                full_user_prompt=full_user_prompt,
+                error=True,
+                llm_duration=0,
+            )
 
         llm_duration = time.perf_counter() - start_llm_time
         return LLMPipeline(
@@ -663,8 +832,17 @@ class SearchOrchestrator:
             context=context,
             response=completion,
         )
-    
-    def _build_error_response(self, error_message, embed_duration, search_duration, rerank_duration, llm_duration, start_total_time, llm_req):
+
+    def _build_error_response(
+        self,
+        error_message,
+        embed_duration,
+        search_duration,
+        rerank_duration,
+        llm_duration,
+        start_total_time,
+        llm_req,
+    ):
         return {
             "database": "milvus",
             "user_query": self.request.prompt,
