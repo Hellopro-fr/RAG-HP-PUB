@@ -126,7 +126,9 @@ class GeminiClient:
             config=types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(
                     thinking_level=(
-                        options.thinking_level if options.thinking_level else "high"
+                        options.get("thinking_level")
+                        if options.get("thinking_level")
+                        else "high"
                     )
                 )
             ),
@@ -809,7 +811,9 @@ class SearchOrchestrator:
                 llm_response = response["content"]
                 completion = response["response"]
             elif isinstance(client, GeminiClient):
-                response = client.chat(full_user_prompt, options={})
+                response = client.chat(
+                    full_user_prompt, options={"thinking_level": "high"}
+                )
                 completion = response["response"]
                 llm_response = response["content"]
             else:
