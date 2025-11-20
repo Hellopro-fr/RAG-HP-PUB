@@ -115,6 +115,8 @@ class GeminiClient:
         return obj
 
     def chat(self, message: str, options: Dict):
+        logger.info("options: %s", options)
+        logger.info(f"model : {self.MODEL}")
         response = client.models.generate_content(
             model=self.MODEL,
             contents=message,
@@ -790,7 +792,9 @@ class SearchOrchestrator:
         # ajout vérification model name pour les valeur thinking
 
         client = LLMClientFactory.get_client(
-            self.request.llm.chat_model, self.request.llm.temperature
+            self.request.llm.chat_model,
+            self.request.llm.temperature,
+            self.request.llm.provider,
         )
 
         start_llm_time = time.perf_counter()

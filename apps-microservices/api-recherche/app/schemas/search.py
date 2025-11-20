@@ -2,6 +2,7 @@ from os import error
 from pydantic import BaseModel, Field
 from typing import Annotated, List, Optional, Dict, Any
 
+
 # Ce schéma est identique à celui du notebook, comme demandé.
 class SearchRequest(BaseModel):
     prompt: str
@@ -20,32 +21,42 @@ class SearchRequest(BaseModel):
     use_reranker: Optional[bool] = True
     reranker_model: Optional[str] = "BAAI/bge-reranker-v2-m3"
 
+
 class SourcesFiltre(BaseModel):
     source: str
     filtre: Dict[str, Any] = {}
-    
+
+
 class LLMOptions(BaseModel):
     chat_model: str = "gpt-4.1-2025-04-14"
     temperature: float = 0.0
     template_prompt: Optional[str] = ""
+    provider: str = ""
+
 
 class RerankerOptions(BaseModel):
     use_reranker: bool = True
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     rrf: bool = False
-    ponderation: float = 1.1 # Ponderation for reranking
+    ponderation: float = 1.1  # Ponderation for reranking
+
 
 class SearchRequestWs(BaseModel):
     prompt: str
-    source: Optional[List[SourcesFiltre]] = [SourcesFiltre(source="produits_3", filtre={})]
+    source: Optional[List[SourcesFiltre]] = [
+        SourcesFiltre(source="produits_3", filtre={})
+    ]
     action: Optional[int] = 1
     top_k: Optional[int] = 10
     filtre: Optional[Dict[str, Any]] = {}
     fields: Optional[List[str]] = []
-    llm: Optional[LLMOptions] = LLMOptions(chat_model="gpt-4.1-2025-04-14", temperature=0.0)
+    llm: Optional[LLMOptions] = LLMOptions(
+        chat_model="gpt-4.1-2025-04-14", temperature=0.0
+    )
     options: Optional[RerankerOptions] = RerankerOptions()
     type: int = 1
     cache: bool = True
+
 
 # Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
 class SearchResponse(BaseModel):
@@ -66,6 +77,7 @@ class SearchResponse(BaseModel):
     import_duration: float
     llm_reponse: Optional[dict] = {}
 
+
 class LLMPipeline(BaseModel):
     llm_response: str = ""
     llm_duration: float = ""
@@ -73,9 +85,16 @@ class LLMPipeline(BaseModel):
     context: str = ""
     response: dict = {}
     error: Optional[bool] = False
-    
+
+
 class SearchReponse(BaseModel):
-    results: Annotated[SearchResponse, Field(title="Contient l'objet du résultat depuis les recherches")]
+    results: Annotated[
+        SearchResponse,
+        Field(title="Contient l'objet du résultat depuis les recherches"),
+    ]
     # TODO:
     # à supprimer les données en entrées pour vérification
-    post:  Annotated[SearchRequestWs, Field(title="Contient l'objet de la requête depuis les recherches")]
+    post: Annotated[
+        SearchRequestWs,
+        Field(title="Contient l'objet de la requête depuis les recherches"),
+    ]
