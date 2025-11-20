@@ -21,6 +21,9 @@ from .search import (
     EXTERNAL_PROMPT_API_URL
 )
 
+# Import Redis cache service
+from common_utils.redis.cache_service import cache_or_execute
+
 logger = logging.getLogger(__name__)
 
 # Import du client gRPC pour Qwen
@@ -41,7 +44,7 @@ class ProductClassifier:
         self.openai_client = None
         self.deepseek_client = None
         self.category_cache = {}
-        self.category_summary_cache = {}  # Cache pour les résumés de descriptions
+        # NOTE: category_summary_cache supprimé - utilise Redis via cache_or_execute() maintenant
         self.prompt_cache = {}  # Cache pour les templates de prompts avec timestamp
         self.prompt_cache_duration = 900  # Durée du cache en secondes (15 minutes = 900s)
         self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
@@ -462,23 +465,17 @@ class ProductClassifier:
             }
         }
 
-    async def _summarize_category_description_async(self, category_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_category_summary_with_deepseek(self, category_id: str, category_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Résume une description de catégorie enrichie via DeepSeek en utilisant un prompt récupéré depuis l'API externe.
+        Fonction interne qui génère réellement le résumé via DeepSeek (sans cache).
+        Sera wrappée par _summarize_category_description_async() avec Redis cache.
 
         Args:
-            category_data: Dictionnaire contenant:
-                - id_categorie: ID de la catégorie
-                - nom_categorie: Nom de la catégorie
-                - description_categorie: Description de la catégorie
-                - fil_ariane: Fil d'ariane (optionnel)
-                - top_5_produit: Top 5 produits (optionnel)
+            category_id: ID de la catégorie (utilisé pour la clé de cache Redis)
+            category_data: Dictionnaire contenant les données de la catégorie
 
         Returns:
-            Dict contenant:
-                - summary: Le résumé enrichi de la description
-                - input_tokens: Nombre de tokens d'entrée
-                - output_tokens: Nombre de tokens de sortie
+            Dict contenant summary, input_tokens, output_tokens
         """
         description = category_data.get("description_categorie", "")
 
@@ -544,6 +541,27 @@ class ProductClassifier:
                 "output_tokens": 0
             }
 
+    async def _summarize_category_description_async(self, category_id: str, category_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Résume une description de catégorie enrichie via DeepSeek avec cache Redis (7 jours).
+
+        Args:
+            category_id: ID de la catégorie (utilisé pour la clé de cache Redis)
+            category_data: Dictionnaire contenant les données de la catégorie
+
+        Returns:
+            Dict contenant summary, input_tokens, output_tokens
+        """
+        # Utiliser cache_or_execute avec une clé personnalisée courte
+        # Résultat: cache:category_summary:2003717
+        return await cache_or_execute(
+            self._generate_category_summary_with_deepseek,
+            category_id,
+            category_data,
+            expire_seconds=86400 * 7,  # 7 jours TTL
+            cache_key=f"category_summary:{category_id}"  # Clé courte personnalisée
+        )
+
     async def get_category_descriptions_async(self, categories: List[Dict]) -> Tuple[Dict[str, Dict], Dict[str, int]]:
         """
         Version asynchrone de get_category_descriptions pour pipeline parallèle.
@@ -587,39 +605,40 @@ class ProductClassifier:
                         "top_5_produit": ""
                     }
 
-        # Résumer les descriptions qui n'ont pas encore de résumé en cache
-        ids_to_summarize = [c['id'] for c in categories if c['id'] not in self.category_summary_cache]
+        # Résumer les descriptions via Redis cache (toutes les catégories)
+        # Créer des tâches pour résumer en parallèle avec Redis cache
+        summarize_tasks = []
+        cat_ids_list = []
+        for cat in categories:
+            cat_id = cat['id']
+            cat_ids_list.append(cat_id)
 
-        if ids_to_summarize:
-            # Créer des tâches pour résumer en parallèle
-            summarize_tasks = []
-            for cat_id in ids_to_summarize:
-                # Récupérer les données complètes de la catégorie
-                category_full_data = self.category_cache.get(cat_id, {
-                    "id_categorie": cat_id,
-                    "nom_categorie": "N/A",
-                    "description_categorie": "Description non disponible",
-                    "fil_ariane": "",
-                    "top_5_produit": ""
-                })
-                summarize_tasks.append(self._summarize_category_description_async(category_full_data))
+            # Récupérer les données complètes de la catégorie
+            category_full_data = self.category_cache.get(cat_id, {
+                "id_categorie": cat_id,
+                "nom_categorie": "N/A",
+                "description_categorie": "Description non disponible",
+                "fil_ariane": "",
+                "top_5_produit": ""
+            })
+            # Passer l'ID en premier pour clé courte Redis
+            summarize_tasks.append(self._summarize_category_description_async(cat_id, category_full_data))
 
-            # Exécuter les résumés en parallèle
-            summary_results = await asyncio.gather(*summarize_tasks)
+        # Exécuter les résumés en parallèle (cache Redis géré par cache_or_execute)
+        summary_results = await asyncio.gather(*summarize_tasks)
 
-            # Mettre en cache et accumuler les tokens
-            for cat_id, result in zip(ids_to_summarize, summary_results):
-                self.category_summary_cache[cat_id] = result["summary"]
-                total_input_tokens += result["input_tokens"]
-                total_output_tokens += result["output_tokens"]
+        # Accumuler les tokens (seulement si le résumé n'était pas en cache)
+        for result in summary_results:
+            total_input_tokens += result["input_tokens"]
+            total_output_tokens += result["output_tokens"]
 
         # Retourner les infos enrichies (résumé + fil d'ariane)
-        for cat in categories:
+        for i, cat in enumerate(categories):
             cat_id = cat['id']
             cached_data = self.category_cache.get(cat_id, {})
 
             category_info[cat_id] = {
-                "summary": self.category_summary_cache.get(cat_id, "N/A"),
+                "summary": summary_results[i]["summary"],
                 "fil_ariane": cached_data.get('fil_ariane', '') if isinstance(cached_data, dict) else ''
             }
 

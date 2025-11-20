@@ -7,6 +7,7 @@ import uvicorn
 import sys
 import os
 import socket
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.router.classification import router as classification_router
@@ -16,6 +17,10 @@ import logging
 from starlette.middleware.wsgi import WSGIMiddleware
 from common_utils.metrics.prometheus import get_metrics_app
 # --- END METRICS IMPORTS ---
+
+# --- START REDIS IMPORTS ---
+from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
+# --- END REDIS IMPORTS ---
 
 # Configuration du logging
 logging.basicConfig(
@@ -36,10 +41,25 @@ try:
 except ImportError as e:
     logging.error(f"❌ Erreur import common_utils: {e}")
 
+# Lifespan context pour gérer l'initialisation et la fermeture de Redis
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Gère le cycle de vie de l'application (startup/shutdown)"""
+    # Startup
+    logging.info("--- DÉMARRAGE API CLASSIFICATION V1 ---")
+    await init_redis_pool()  # Initialiser la connexion Redis
+    logging.info("✅ Redis pool initialisé")
+    yield
+    # Shutdown
+    logging.info("--- ARRÊT API CLASSIFICATION V1 ---")
+    await close_redis_pool()  # Fermer proprement la connexion Redis
+    logging.info("✅ Redis pool fermé")
+
 app = FastAPI(
     title="API Classification Produits",
     description="API pour la classification automatique de produits",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan  # Associer le lifespan context
 )
 
 # --- Mount the metrics app using the WSGI adapter ---
