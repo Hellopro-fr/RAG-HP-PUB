@@ -1,1076 +1,841 @@
 <!DOCTYPE html>
 <html lang="fr">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="noindex">
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
-    <title>Recherche RAG</title>
-    <!-- À NE PAS UTILISER pour ce script -->
-    <!-- VERSION COMPLÈTE CORRECTE -->
-    <script
-      src="https://code.jquery.com/jquery-3.7.1.min.js"
-      integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
-      crossorigin="anonymous"
-    ></script>
-    <script src="{{ url_for('static', path='js/tailwind.min.js') }}"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.js"></script>
-    <!-- <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}">
+  <title>Recherche RAG</title>
+  <!-- À NE PAS UTILISER pour ce script -->
+  <!-- VERSION COMPLÈTE CORRECTE -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"
+    integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+  <script src="{{ url_for('static', path='js/tailwind.min.js') }}"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.js"></script>
+  <!-- <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 	<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script> -->
 
-    <link
-      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
-      rel="stylesheet"
-    />
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
-    <!-- MODIFICATION : Ajout de la librairie Marked.js pour convertir le Markdown en HTML -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- MODIFICATION : Ajout de la librairie Marked.js pour convertir le Markdown en HTML -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-    <style>
-      /* 1. Définition de votre palette de couleurs personnalisée */
-      :root {
-        --color-orange: #fb5607;
-        --color-orange-secondary: #f46c0e;
-        --color-orange-light: #fff5f0;
-        --color-orange-heavy: #e24c04;
-        --color-bleu: #3353ff;
-        --color-bleu-light: #f5f6ff;
-        --color-bleu-heavy: #0026f5;
-        --color-bleu-noir: #041325;
-        --color-noir: #1d1d1b;
-        --color-noir-heavy: #000000;
-        --color-gris: #5f5f5f;
-        --color-gris-blanc: #d7dbe0;
-        --color-clair-1: #e9e9e9;
-        --color-clair-2: #eaecf1;
-        --color-clair-3: #f0f2f5;
-        --color-clair-4: #f4f4f4;
-        --color-white: #fff;
-        --color-vert: #02c39a;
-        --color-vert-light: #dcfff7;
-        /* Utilisé pour la pertinence */
-        --color-rouge: #ea1f38;
-        --color-rouge-light: #fef1f3;
-        /* Utilisé pour la pertinence */
-        --color-bleu-light-2: #adbaff;
-        --color-orange-light-2: #fec8af;
-      }
+  <style>
+    /* 1. Définition de votre palette de couleurs personnalisée */
+    :root {
+      --color-orange: #fb5607;
+      --color-orange-secondary: #f46c0e;
+      --color-orange-light: #fff5f0;
+      --color-orange-heavy: #e24c04;
+      --color-bleu: #3353ff;
+      --color-bleu-light: #f5f6ff;
+      --color-bleu-heavy: #0026f5;
+      --color-bleu-noir: #041325;
+      --color-noir: #1d1d1b;
+      --color-noir-heavy: #000000;
+      --color-gris: #5f5f5f;
+      --color-gris-blanc: #d7dbe0;
+      --color-clair-1: #e9e9e9;
+      --color-clair-2: #eaecf1;
+      --color-clair-3: #f0f2f5;
+      --color-clair-4: #f4f4f4;
+      --color-white: #fff;
+      --color-vert: #02c39a;
+      --color-vert-light: #dcfff7;
+      /* Utilisé pour la pertinence */
+      --color-rouge: #ea1f38;
+      --color-rouge-light: #fef1f3;
+      /* Utilisé pour la pertinence */
+      --color-bleu-light-2: #adbaff;
+      --color-orange-light-2: #fec8af;
+    }
 
-      /* Animations et styles personnalisés */
-      .animate-spin {
-        animation: spin 1s linear infinite;
-      }
+    /* Animations et styles personnalisés */
+    .animate-spin {
+      animation: spin 1s linear infinite;
+    }
 
-      @keyframes spin {
-        from {
-          transform: rotate(0deg);
-        }
-
-        to {
-          transform: rotate(360deg);
-        }
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
       }
 
-      .slide-in-from-right {
-        animation: slideInFromRight 0.3s ease-out;
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .slide-in-from-right {
+      animation: slideInFromRight 0.3s ease-out;
+    }
+
+    @keyframes slideInFromRight {
+      from {
+        transform: translateX(100%);
       }
 
-      @keyframes slideInFromRight {
-        from {
-          transform: translateX(100%);
-        }
-
-        to {
-          transform: translateX(0);
-        }
+      to {
+        transform: translateX(0);
       }
+    }
 
-      .slide-in-from-top {
-        animation: slideInFromTop 0.2s ease-out;
-      }
+    .slide-in-from-top {
+      animation: slideInFromTop 0.2s ease-out;
+    }
 
-      @keyframes slideInFromTop {
-        from {
-          transform: translateY(-10px);
-          opacity: 0;
-        }
-
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
+    @keyframes slideInFromTop {
+      from {
+        transform: translateY(-10px);
+        opacity: 0;
       }
 
-      .text-custom-rouge {
-        color:var(--color-rouge);
+      to {
+        transform: translateY(0);
+        opacity: 1;
       }
+    }
 
-      .line-clamp-3 {
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
+    .text-custom-rouge {
+      color: var(--color-rouge);
+    }
 
-      /* Styles pour les éléments de formulaire personnalisés */
-      .custom-select {
-        appearance: none;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5F5F' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
-        background-position: right 0.5rem center;
-        background-repeat: no-repeat;
-        background-size: 1.5em 1.5em;
-        padding-right: 2.5rem;
-      }
+    .line-clamp-3 {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
 
-      .multi-select-dropdown {
-        max-height: 200px;
-        overflow-y: auto;
-      }
+    /* Styles pour les éléments de formulaire personnalisés */
+    .custom-select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%235F5F5F' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+      background-position: right 0.5rem center;
+      background-repeat: no-repeat;
+      background-size: 1.5em 1.5em;
+      padding-right: 2.5rem;
+    }
 
-      .checkbox-custom {
-        appearance: none;
-        width: 1rem;
-        height: 1rem;
-        border: 1px solid var(--color-gris-blanc);
-        border-radius: 0.25rem;
-        background-color: white;
-        cursor: pointer;
-        position: relative;
-      }
+    .multi-select-dropdown {
+      max-height: 200px;
+      overflow-y: auto;
+    }
 
-      .checkbox-custom:checked {
-        background-color: var(--color-bleu);
-        border-color: var(--color-bleu);
-      }
+    .checkbox-custom {
+      appearance: none;
+      width: 1rem;
+      height: 1rem;
+      border: 1px solid var(--color-gris-blanc);
+      border-radius: 0.25rem;
+      background-color: white;
+      cursor: pointer;
+      position: relative;
+    }
 
-      .checkbox-custom:checked::after {
-        content: "✓";
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        color: white;
-        font-size: 0.75rem;
-        font-weight: bold;
-      }
+    .checkbox-custom:checked {
+      background-color: var(--color-bleu);
+      border-color: var(--color-bleu);
+    }
 
-      .slider {
-        -webkit-appearance: none;
-        appearance: none;
-        height: 4px;
-        background: var(--color-clair-2);
-        border-radius: 2px;
-        outline: none;
-      }
+    .checkbox-custom:checked::after {
+      content: "✓";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
 
-      .slider::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 16px;
-        height: 16px;
-        background: var(--color-bleu);
-        border-radius: 50%;
-        cursor: pointer;
-      }
+    .slider {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      background: var(--color-clair-2);
+      border-radius: 2px;
+      outline: none;
+    }
 
-      .slider::-moz-range-thumb {
-        width: 16px;
-        height: 16px;
-        background: var(--color-bleu);
-        border-radius: 50%;
-        cursor: pointer;
-        border: none;
-      }
-      /* Style pour le contenu Markdown rendu */
-      #llmResponseText ul {
-        list-style-type: disc;
-        padding-left: 20px;
-      }
-      #llmResponseText ol {
-        list-style-type: decimal;
-        padding-left: 20px;
-      }
-      #llmResponseText h1,
-      #llmResponseText h2,
-      #llmResponseText h3 {
-        font-weight: 600;
-        margin-top: 8px;
-        margin-bottom: 4px;
-      }
-      #llmResponseText h1 {
-        font-size: 1.1em;
-      }
-      #llmResponseText h2 {
-        font-size: 1.05em;
-      }
-      #llmResponseText strong {
-        font-weight: 600;
-      }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--color-bleu);
+      border-radius: 50%;
+      cursor: pointer;
+    }
 
-      .llm-error {
-        background-color: var(--color-rouge-light);
-        border: 1px solid var(--color-rouge);
-        color: var(--color-rouge);
-        padding: 12px;
-        border-radius: 8px;
-        font-family: monospace;
-        white-space: pre-wrap;
-      }
-    </style>
-    <script>
-      // 2. Configuration de Tailwind pour utiliser votre palette
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              "custom-orange": "var(--color-orange)",
-              "custom-orange-light": "#f59e0b",
-              "custom-orange-heavy": "var(--color-orange-heavy)",
-              "custom-bleu": "var(--color-bleu)",
-              "custom-bleu-light": "var(--color-bleu-light)",
-              "custom-bleu-heavy": "var(--color-bleu-heavy)",
-              "custom-bleu-light-2": "var(--color-bleu-light-2)",
-              "custom-noir": "var(--color-noir)",
-              "custom-gris": "var(--color-gris)",
-              "custom-gris-blanc": "var(--color-gris-blanc)",
-              "custom-clair-1": "var(--color-clair-1)",
-              "custom-clair-2": "var(--color-clair-2)",
-              "custom-clair-3": "var(--color-clair-3)",
-              "custom-vert-light": "var(--color-vert-light)",
-              "custom-rouge-light": "var(--color-rouge-light)",
-            },
-            fontFamily: {
-              sans: ["Inter", "sans-serif"],
-            },
+    .slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: var(--color-bleu);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+    }
+
+    /* Style pour le contenu Markdown rendu */
+    #llmResponseText ul {
+      list-style-type: disc;
+      padding-left: 20px;
+    }
+
+    #llmResponseText ol {
+      list-style-type: decimal;
+      padding-left: 20px;
+    }
+
+    #llmResponseText h1,
+    #llmResponseText h2,
+    #llmResponseText h3 {
+      font-weight: 600;
+      margin-top: 8px;
+      margin-bottom: 4px;
+    }
+
+    #llmResponseText h1 {
+      font-size: 1.1em;
+    }
+
+    #llmResponseText h2 {
+      font-size: 1.05em;
+    }
+
+    #llmResponseText strong {
+      font-weight: 600;
+    }
+
+    .llm-error {
+      background-color: var(--color-rouge-light);
+      border: 1px solid var(--color-rouge);
+      color: var(--color-rouge);
+      padding: 12px;
+      border-radius: 8px;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+  </style>
+  <script>
+    // 2. Configuration de Tailwind pour utiliser votre palette
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            "custom-orange": "var(--color-orange)",
+            "custom-orange-light": "#f59e0b",
+            "custom-orange-heavy": "var(--color-orange-heavy)",
+            "custom-bleu": "var(--color-bleu)",
+            "custom-bleu-light": "var(--color-bleu-light)",
+            "custom-bleu-heavy": "var(--color-bleu-heavy)",
+            "custom-bleu-light-2": "var(--color-bleu-light-2)",
+            "custom-noir": "var(--color-noir)",
+            "custom-gris": "var(--color-gris)",
+            "custom-gris-blanc": "var(--color-gris-blanc)",
+            "custom-clair-1": "var(--color-clair-1)",
+            "custom-clair-2": "var(--color-clair-2)",
+            "custom-clair-3": "var(--color-clair-3)",
+            "custom-vert-light": "var(--color-vert-light)",
+            "custom-rouge-light": "var(--color-rouge-light)",
+          },
+          fontFamily: {
+            sans: ["Inter", "sans-serif"],
           },
         },
-      };
-    </script>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', path='/css/style.css') }}"
-    />
-  </head>
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}" />
+</head>
 
-  <body class="min-h-screen bg-custom-clair-3 flex flex-col font-sans">
-    <!-- Header -->
-    <header
-      class="border-b border-custom-clair-2 bg-white/80 backdrop-blur-sm sticky top-0 z-50"
-    >
-      <div class="container mx-auto px-4 py-4">
-        <div class="flex items-center gap-2 md:gap-4">
-          <div class="flex items-center gap-2">
-            <i
-              data-lucide="sparkles"
-              class="h-5 w-5 md:h-6 md:w-6 text-custom-orange"
-            ></i>
-            <h1
-              class="text-lg md:text-xl font-semibold text-custom-noir hidden sm:block"
-            >
-              Recherche RAG
-            </h1>
-            <h1 class="text-lg font-semibold text-custom-noir sm:hidden">
-              RAG
-            </h1>
+<body class="min-h-screen bg-custom-clair-3 flex flex-col font-sans">
+  <!-- Header -->
+  <header class="border-b border-custom-clair-2 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+    <div class="container mx-auto px-4 py-4">
+      <div class="flex items-center gap-2 md:gap-4">
+        <div class="flex items-center gap-2">
+          <i data-lucide="sparkles" class="h-5 w-5 md:h-6 md:w-6 text-custom-orange"></i>
+          <h1 class="text-lg md:text-xl font-semibold text-custom-noir hidden sm:block">
+            Recherche RAG
+          </h1>
+          <h1 class="text-lg font-semibold text-custom-noir sm:hidden">
+            RAG
+          </h1>
+        </div>
+
+        <div class="flex-1 max-w-2xl">
+          <div class="relative">
+            <i data-lucide="search"
+              class="absolute left-3 top-1/2 transform -translate-y-1/2 text-custom-gris h-4 w-4"></i>
+            <input type="text" id="searchInput" placeholder="Rechercher..."
+              class="w-full pl-10 pr-4 h-10 md:h-12 text-sm md:text-base border border-custom-gris-blanc rounded-lg focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none" />
           </div>
+        </div>
 
-          <div class="flex-1 max-w-2xl">
-            <div class="relative">
-              <i
-                data-lucide="search"
-                class="absolute left-3 top-1/2 transform -translate-y-1/2 text-custom-gris h-4 w-4"
-              ></i>
-              <input
-                type="text"
-                id="searchInput"
-                placeholder="Rechercher..."
-                class="w-full pl-10 pr-4 h-10 md:h-12 text-sm md:text-base border border-custom-gris-blanc rounded-lg focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none"
-              />
+        <div class="flex items-center gap-1 md:gap-2">
+          <!-- Mobile search button -->
+          <button id="searchBtn"
+            class="md:hidden px-3 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <i data-lucide="search" class="h-4 w-4"></i>
+          </button>
+
+          <!-- LLM Toggle -->
+          <button id="llmToggle"
+            class="hidden lg:flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors">
+            <i data-lucide="sparkles" class="h-4 w-4"></i>
+            <span id="llmToggleText">LLM</span>
+          </button>
+
+          <!-- Desktop search button -->
+          <button id="searchBtnDesktop"
+            class="hidden md:flex items-center gap-2 px-4 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            <i data-lucide="search" class="h-4 w-4"></i>
+            <span id="searchBtnText">Rechercher</span>
+          </button>
+
+          <!-- Mobile filter button -->
+          <button id="mobileFilterBtn"
+            class="md:hidden px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2">
+            <i data-lucide="menu" class="h-4 w-4"></i>
+          </button>
+
+          <!-- Speech to text transcription -->
+          <button id="btn-transcription"
+            class="hidden md:flex items-center gap-2 ml-6 px-3 py-2 border border-custom-gris-blanc rounded-lg bg-custom-clair-2 hover:bg-gray-400 transition-colors"
+            data-action="start">
+            <!-- This content will be dynamically changed by JS -->
+          </button>
+
+          <!-- Desktop filter toggle -->
+          <button id="filterToggle"
+            class="hidden md:flex items-center gap-2 ml-6 px-3 py-2 border border-custom-gris-blanc rounded-lg bg-custom-clair-2 hover:bg-gray-400 transition-colors"
+            title="Afficher/Masquer les filtres">
+            <i data-lucide="filter" class="h-4 w-4"></i>
+            <!-- <span class="hidden lg:inline">Filtres</span> -->
+          </button>
+
+          <!-- Results toggle -->
+          <button id="resultsToggle"
+            class="flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors"
+            title="Afficher/Masquer les résultats">
+            <span id="resultsToggleIcon"><i data-lucide="panel-right-open" class="h-4 w-4"></i></span>
+            <!-- <span class="hidden sm:inline">Résultats</span> -->
+          </button>
+        </div>
+
+        <div class="relative dropdown mr-auto">
+          <button id="avatarDropdown" class="flex items-center space-x-2 focus:outline-none">
+            <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+              <i data-lucide="user" class="w-5 h-5 text-indigo-600"></i>
             </div>
-          </div>
+            <!-- <span class="hidden md:inline text-gray-700">Jean Dupont</span> -->
+            <!-- <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500"></i> -->
+          </button>
 
-          <div class="flex items-center gap-1 md:gap-2">
-            <!-- Mobile search button -->
-            <button
-              id="searchBtn"
-              class="md:hidden px-3 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <i data-lucide="search" class="h-4 w-4"></i>
-            </button>
-
-            <!-- LLM Toggle -->
-            <button
-              id="llmToggle"
-              class="hidden lg:flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors"
-            >
-              <i data-lucide="sparkles" class="h-4 w-4"></i>
-              <span id="llmToggleText">LLM</span>
-            </button>
-
-            <!-- Desktop search button -->
-            <button
-              id="searchBtnDesktop"
-              class="hidden md:flex items-center gap-2 px-4 py-2 bg-custom-bleu text-white rounded-lg hover:bg-custom-bleu-heavy disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <i data-lucide="search" class="h-4 w-4"></i>
-              <span id="searchBtnText">Rechercher</span>
-            </button>
-
-            <!-- Mobile filter button -->
-            <button
-              id="mobileFilterBtn"
-              class="md:hidden px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2"
-            >
-              <i data-lucide="menu" class="h-4 w-4"></i>
-            </button>
-
-            <!-- Speech to text transcription -->
-            <button
-              id="btn-transcription"
-              class="hidden md:flex items-center gap-2 ml-6 px-3 py-2 border border-custom-gris-blanc rounded-lg bg-custom-clair-2 hover:bg-gray-400 transition-colors"
-              data-action="start"
-            >
-              <!-- This content will be dynamically changed by JS -->
-            </button>
-
-            <!-- Desktop filter toggle -->
-            <button
-              id="filterToggle"
-              class="hidden md:flex items-center gap-2 ml-6 px-3 py-2 border border-custom-gris-blanc rounded-lg bg-custom-clair-2 hover:bg-gray-400 transition-colors"
-              title="Afficher/Masquer les filtres"
-              >
-              <i data-lucide="filter" class="h-4 w-4"></i>
-              <!-- <span class="hidden lg:inline">Filtres</span> -->
-            </button>
-
-            <!-- Results toggle -->
-            <button
-              id="resultsToggle"
-              class="flex items-center gap-2 px-3 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2 transition-colors"
-              title="Afficher/Masquer les résultats"
-            >
-              <span id="resultsToggleIcon"
-                ><i data-lucide="panel-right-open" class="h-4 w-4"></i
-              ></span>
-              <!-- <span class="hidden sm:inline">Résultats</span> -->
-            </button>
-          </div>
-
-          <div class="relative dropdown mr-auto">
-              <button id="avatarDropdown" class="flex items-center space-x-2 focus:outline-none">
-                  <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                      <i data-lucide="user" class="w-5 h-5 text-indigo-600"></i>
-                  </div>
-                  <!-- <span class="hidden md:inline text-gray-700">Jean Dupont</span> -->
-                  <!-- <i data-lucide="chevron-down" class="w-4 h-4 text-gray-500"></i> -->
-              </button>
-              
-              <div id="dropdownMenu" class="hidden absolute right-0 mt-2 bg-white rounded-md shadow-lg py-1 z-10">
-                  <span class="block px-4 py-2 text-sm text-gray-700 font-semibold flex items-center">
-                      <i data-lucide="user" class="w-4 h-4 mr-2"></i> {{ user.display_name }}
-                  </span>
-                  <span class="block px-4 py-2 text-sm text-gray-700 flex items-center">
-                      <i data-lucide="mail" class="w-4 h-4 mr-2"></i> {{ user.email }}
-                  </span>
-                  <div class="border-t border-gray-100 my-1"></div>
-                  <a href="/logout" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center">
-                      <i data-lucide="log-out" class="w-4 h-4 mr-2"></i> Déconnexion
-                  </a>
-              </div>
+          <div id="dropdownMenu" class="hidden absolute right-0 mt-2 bg-white rounded-md shadow-lg py-1 z-10">
+            <span class="block px-4 py-2 text-sm text-gray-700 font-semibold flex items-center">
+              <i data-lucide="user" class="w-4 h-4 mr-2"></i> {{ user.display_name }}
+            </span>
+            <span class="block px-4 py-2 text-sm text-gray-700 flex items-center">
+              <i data-lucide="mail" class="w-4 h-4 mr-2"></i> {{ user.email }}
+            </span>
+            <div class="border-t border-gray-100 my-1"></div>
+            <a href="/logout" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center">
+              <i data-lucide="log-out" class="w-4 h-4 mr-2"></i> Déconnexion
+            </a>
           </div>
         </div>
       </div>
-    </header>
+    </div>
+  </header>
 
-    <div class="flex-1 flex">
-      <div
-        class="w-full max-w-screen-2xl mx-auto px-2 md:px-4 py-4 md:py-6 flex gap-4 md:gap-6 flex-1"
-        id="mainContainer"
-      >
-        <aside
-          id="filterSidebar"
-          class="hidden md:block w-80 space-y-4 flex-shrink-0 self-startimes sticky top-[90px]"
-        >
-          <div
-            class="bg-white rounded-lg border border-custom-clair-2 shadow-sm"
-          >
-            <div class="p-4 border-b border-custom-clair-2">
-              <h3
-                class="text-base font-semibold flex items-center gap-2 text-custom-noir"
-              >
-                <i data-lucide="settings" class="h-4 w-4"></i>
-                Paramètres de recherche
-              </h3>
+  <div class="flex-1 flex">
+    <div class="w-full max-w-screen-2xl mx-auto px-2 md:px-4 py-4 md:py-6 flex gap-4 md:gap-6 flex-1"
+      id="mainContainer">
+      <aside id="filterSidebar" class="hidden md:block w-80 space-y-4 flex-shrink-0 self-startimes sticky top-[90px]">
+        <div class="bg-white rounded-lg border border-custom-clair-2 shadow-sm">
+          <div class="p-4 border-b border-custom-clair-2">
+            <h3 class="text-base font-semibold flex items-center gap-2 text-custom-noir">
+              <i data-lucide="settings" class="h-4 w-4"></i>
+              Paramètres de recherche
+            </h3>
+          </div>
+          <div class="p-4 space-y-4">
+            <!-- Sélection type de recherche -->
+            <fieldset class="space-y-4">
+              <label class="text-sm font-medium text-custom-noir">Type de recherche</label>
+              <div class="flex gap-6">
+                <div class="inline-flex items-center">
+                  <label class="relative flex items-center cursor-pointer" for="type-vectorielle">
+                    <input name="type-recherche" type="radio"
+                      class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
+                      id="type-vectorielle" value="1" checked />
+                    <span
+                      class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
+                  </label>
+                  <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-vectorielle">
+                    Vectorielle
+                  </label>
+                </div>
+
+                <div class="inline-flex items-center">
+                  <label class="relative flex items-center cursor-pointer" for="type-classique">
+                    <input name="type-recherche" type="radio"
+                      class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
+                      id="type-classique" value="2" />
+                    <span
+                      class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
+                  </label>
+                  <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-classique">
+                    Classique
+                  </label>
+                </div>
+              </div>
+            </fieldset>
+            <!-- Top K Results -->
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-custom-noir">Nombre de résultats (top_k)</label>
+              <div class="px-2">
+                <input type="range" id="topKSlider" min="1" max="200" value="30" class="slider w-full" />
+                <div class="flex justify-between text-xs text-custom-gris mt-1">
+                  <span>1</span>
+                  <span id="topKValue" class="font-medium">30</span>
+                  <span>200</span>
+                </div>
+              </div>
             </div>
-            <div class="p-4 space-y-4">
-              <!-- Sélection type de recherche -->
-              <fieldset class="space-y-4">
-                <label class="text-sm font-medium text-custom-noir"
-                  >Type de recherche</label
-                >
-                <div class="flex gap-6">
-                  <div class="inline-flex items-center">
-                    <label class="relative flex items-center cursor-pointer" for="type-vectorielle">
-                      <input
-                        name="type-recherche"
-                        type="radio"
-                        class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
-                        id="type-vectorielle"
-                        value="1"
-                        checked
-                      />
-                      <span class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
-                    </label>
-                    <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-vectorielle">
-                      Vectorielle
-                    </label>
-                  </div>
-                
-                  <div class="inline-flex items-center">
-                    <label class="relative flex items-center cursor-pointer" for="type-classique">
-                      <input
-                        name="type-recherche"
-                        type="radio"
-                        class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
-                        id="type-classique"
-                        value="2"
-                      />
-                      <span class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
-                    </label>
-                    <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-classique">
-                      Classique
-                    </label>
-                  </div>
-                </div>
-              </fieldset>
-              <!-- Top K Results -->
-              <div class="space-y-2">
-                <label class="text-sm font-medium text-custom-noir"
-                  >Nombre de résultats (top_k)</label
-                >
-                <div class="px-2">
-                  <input
-                    type="range"
-                    id="topKSlider"
-                    min="1"
-                    max="200"
-                    value="30"
-                    class="slider w-full"
-                  />
-                  <div
-                    class="flex justify-between text-xs text-custom-gris mt-1"
-                  >
-                    <span>1</span>
-                    <span id="topKValue" class="font-medium">30</span>
-                    <span>200</span>
-                  </div>
-                </div>
-              </div>
 
-              <hr class="border-custom-clair-2" />
+            <hr class="border-custom-clair-2" />
 
-              <!-- Data Sources -->
-              <div class="space-y-3">
-                <button
-                  id="sourcesToggle"
-                  class="flex items-center justify-between w-full p-2 hover:bg-custom-clair-3 rounded-md transition-colors"
-                >
-                  <span class="font-medium text-sm text-custom-noir"
-                    >Sources de données</span
-                  >
-                  <i
-                    data-lucide="chevron-down"
-                    class="h-4 w-4 transition-transform"
-                    id="sourcesChevron"
-                  ></i>
-                </button>
-                <div id="sourcesContent" class="space-y-3">
-                  <!-- Produits -->
-                  <div class="space-y-2 pl-2">
-                    <div
-                      class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        id="produits"
-                        class="checkbox-custom"
-                      />
-                      <label
-                        for="produits"
-                        class="text-sm font-medium cursor-pointer flex-1 text-custom-noir"
-                        >Produits</label
-                      >
+            <!-- Data Sources -->
+            <div class="space-y-3">
+              <button id="sourcesToggle"
+                class="flex items-center justify-between w-full p-2 hover:bg-custom-clair-3 rounded-md transition-colors">
+                <span class="font-medium text-sm text-custom-noir">Sources de données</span>
+                <i data-lucide="chevron-down" class="h-4 w-4 transition-transform" id="sourcesChevron"></i>
+              </button>
+              <div id="sourcesContent" class="space-y-3">
+                <!-- Produits -->
+                <div class="space-y-2 pl-2">
+                  <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                    <input type="checkbox" id="produits" class="checkbox-custom" />
+                    <label for="produits"
+                      class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Produits</label>
+                  </div>
+                  <div id="produitsSubfilters" class="pl-6 space-y-2 hidden">
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Source</label>
+                      <select id="produitsSource"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple="">
+                        <option disabled>Choisir...</option>
+                        <option value="SITEWEB">Scrapping</option>
+                        <option value="BO">Front</option>
+                      </select>
                     </div>
-                    <div id="produitsSubfilters" class="pl-6 space-y-2 hidden">
-                      <div class="space-y-1">
-                        <label class="text-xs text-custom-gris">Source</label>
-                        <select
-                          id="produitsSource"
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-custom-noir">Fournisseur Produits</label>
+                      <div class="relative">
+                        <select id="fournisseurDropdown"
                           class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                           multiple=""
-                        >
-                          <option disabled>Choisir...</option>
-                          <option value="SITEWEB">Scrapping</option>
-                          <option value="BO">Front</option>
+                          multiple data-ajax="true"
+                          data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                          data-pagination="true" data-payload="recup_fournisseur_produits">
                         </select>
                       </div>
-                      <div class="space-y-2">
-                        <label class="text-sm font-medium text-custom-noir"
-                          >Fournisseur Produits</label
-                        >
-                        <div class="relative">
-                          <select
-                            id="fournisseurDropdown"
-                            class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                            multiple
-                            data-ajax="true"
-                            data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                            data-pagination="true"
-                            data-payload="recup_fournisseur_produits"
-                          >
-                          </select>
-                        </div>
-                      </div>
-                      <div class="space-y-2">
-                        <label class="text-sm font-medium text-custom-noir"
-                          >ID Produits</label
-                        >
-                        <div class="relative">
-                          <textarea class="w-full text-sm border border-custom-gris-blanc rounded-lg focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none p-2" name="ids_produit" id="ids_produit" placeholder="Liste d'id produit séparé par virgule" cols="30" rows="5"></textarea>
-                        </div>
+                    </div>
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-custom-noir">ID Produits</label>
+                      <div class="relative">
+                        <textarea
+                          class="w-full text-sm border border-custom-gris-blanc rounded-lg focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none p-2"
+                          name="ids_produit" id="ids_produit" placeholder="Liste d'id produit séparé par virgule"
+                          cols="30" rows="5"></textarea>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <!-- Devis -->
-                  <div class="space-y-2 pl-2">
-                    <div
-                      class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        id="devis"
-                        class="checkbox-custom"
-                      />
-                      <label
-                        for="devis"
-                        class="text-sm font-medium cursor-pointer flex-1 text-custom-noir"
-                        >Demande de devis</label
-                      >
-                    </div>
-                    <div id="devisSubfilters" class="pl-6 space-y-3 hidden">
-                      <div class="space-y-1">
-                        <label class="text-xs text-custom-gris">Naf5</label>
-                        <select
-                          id="devisNaf"
-                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                          multiple
-                          data-ajax="true"
-                          data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                          data-pagination="true"
-                          data-payload="recup_naf"
-                        ></select>
-                      </div>
-                      <div class="space-y-1">
-                          <label class="text-xs text-custom-gris">Naf2</label>
-                          <select 
-                              id="devisNaf2" 
-                              class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                              multiple data-ajax="true"
-                              data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                              data-pagination="true" 
-                              data-payload="recup_naf_2"
-                          ></select>
-                      </div>
-                      <div class="space-y-1">
-                        <label class="text-xs text-custom-gris">Effectif</label>
-                        <select
-                          id="devisEffectif"
-                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                          multiple
-                          data-ajax="true"
-                          data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                          data-pagination="true"
-                          data-payload="recup_effectif"
-                        ></select>
-                      </div>
-                      <div class="space-y-1">
-                          <label class="text-xs text-custom-gris">Date de demande</label>
-                          <div class="mb-4">
-                            <label for="operation" class="block text-gray-700 font-bold mb-2">Opération :</label>
-                            <select id="operation" name="operation"
-                                class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm">
-                                <option value=">">Supérieur à</option>
-                                <option value=">=">Supérieur ou égal à</option>
-                                <option value="<">Inférieur à</option>
-                                <option value="<=">Inférieur ou égal à</option>
-                                <option value="entre">Entre</option>
-                            </select>
-                        </div>
-                        <div id="date-general-container" class="mb-4">
-                            <label for="date-general" class="block text-gray-700 font-bold mb-2">Date :</label>
-                            <input type="date" id="date-general" name="date-general"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        </div>
-
-                        <!-- Conteneur pour la plage de dates (initialement masqué) -->
-                        <div id="date-range-container" class="hidden">
-                            <div class="mb-4">
-                                <label for="date-debut" class="block text-gray-700 font-bold mb-2">Date de début :</label>
-                                <input type="date" id="date-debut" name="date-debut"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                            <div class="mb-4">
-                                <label for="date-fin" class="block text-gray-700 font-bold mb-2">Date de fin :</label>
-                                <input type="date" id="date-fin" name="date-fin"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            </div>
-                        </div>
-                      </div>
-                    </div>
+                <!-- Devis -->
+                <div class="space-y-2 pl-2">
+                  <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                    <input type="checkbox" id="devis" class="checkbox-custom" />
+                    <label for="devis" class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Demande de
+                      devis</label>
                   </div>
-
-                  <!-- MCF & HelloPro -->
-                  <div class="space-y-2 pl-2">
-                    <div
-                      class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        id="echanges"
-                        class="checkbox-custom"
-                      />
-                      <label
-                        for="echanges"
-                        class="text-sm font-medium cursor-pointer flex-1 text-custom-noir"
-                        >MCF & Hellopromail</label
-                      >
+                  <div id="devisSubfilters" class="pl-6 space-y-3 hidden">
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Naf5</label>
+                      <select id="devisNaf"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple data-ajax="true"
+                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                        data-pagination="true" data-payload="recup_naf"></select>
                     </div>
-                    <div id="echangesSubfilters" class="pl-6 space-y-3 hidden">
-                      <div class="space-y-2">
-                        <label class="text-sm font-medium text-custom-noir"
-                          >Fournisseur MCF</label
-                        >
-                        <div class="relative">
-                          <select
-                            id="fournisseurMcf"
-                            class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                            multiple
-                            data-ajax="true"
-                            data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                            data-pagination="true"
-                            data-payload="recup_fournisseur"
-                          >
-                          </select>
-                        </div>
-                      </div>
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Naf2</label>
+                      <select id="devisNaf2"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple data-ajax="true"
+                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                        data-pagination="true" data-payload="recup_naf_2"></select>
                     </div>
-                  </div>
-
-                  <!-- Site Web -->
-                  <div class="space-y-2 pl-2">
-                    <div
-                      class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        id="siteweb"
-                        class="checkbox-custom"
-                      />
-                      <label
-                        for="siteweb"
-                        class="text-sm font-medium cursor-pointer flex-1 text-custom-noir"
-                        >Site Web</label
-                      >
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Effectif</label>
+                      <select id="devisEffectif"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple data-ajax="true"
+                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                        data-pagination="true" data-payload="recup_effectif"></select>
                     </div>
-                    <div id="sitewebSubfilters" class="pl-6 hidden">
-                      <div class="space-y-1">
-                        <label class="text-xs text-custom-gris"
-                          >Modèle de page</label
-                        >
-                        <select
-                          id="sitewebModele"
-                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                          multiple
-                        >
-                          <option value="article">Article</option>
-                          <!-- <option value="blog">Blog</option> -->
-                          <option value="contact">Contact</option>
-                          <option value="compte_client">Compte client</option>
-                          <option value="cgv_mentions_legales_cgu">Mentions légales</option>
-                          <option value="demande_devis">Demande de devis</option>
-                          <!-- <option value="ecommerce">E-commerce</option> -->
-                          <option value="faq">Faq</option>
-                          <option value="fiche_realisation">Fiche réalisation</option>
-                          <option value="footer">Footer</option>
-                          <option value="header">Header</option>
-                          <!-- <option value="header_footer">Header & Footer</option> -->
-                          <option value="home">Home</option>
-                          <!-- <option value="landing">Landing Page</option> -->
-                          <option value="listing_produit">Listing Produit</option>
-                          <!-- <option value="Page_local">Page locale</option> -->
-                          <option value="page_local">Page locale</option>
-                          <option value="politique_confidentialite">Politique de confidentialité</option>
-                          <option value="plan_du_site">Plan du site</option>
-                          <option value="fiche_produit">Page Produit</option>
-                          <!-- <option value="Presentation-societe">Présentation société</option> -->
-                          <option value="presentation_societe">Présentation société</option>
-                          <option value="recrutement">Recrutement</option>
-                          <option value="references_clients">Réferences clients</option>
-                          <option value="Savoir_faire">Savoir faire</option>
-                          <option value="autre">Autre</option>
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Date de demande</label>
+                      <div class="mb-4">
+                        <label for="operation" class="block text-gray-700 font-bold mb-2">Opération :</label>
+                        <select id="operation" name="operation"
+                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm">
+                          <option value=">">Supérieur à</option>
+                          <option value=">=">Supérieur ou égal à</option>
+                          <option value="<">Inférieur à</option>
+                          <option value="<=">Inférieur ou égal à</option>
+                          <option value="entre">Entre</option>
                         </select>
                       </div>
-                      <div class="space-y-1">
-                        <label class="text-xs text-custom-gris"
-                        >Fournisseur Siteweb</label
-                        >
-                        <select
-                        id="fournisseurSiteweb"
-                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                        multiple
-                        data-ajax="true"
-                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                        data-pagination="true"
-                        data-payload="recup_fournisseur_siteweb"
-                        >
-                      </select>
-                      <label class="text-xs text-custom-gris"
-                        >Domaine Siteweb</label
-                      >
-                      <select
-                        id="fournisseurDomaine"
-                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                        multiple
-                        data-ajax="true"
-                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                        data-pagination="true"
-                        data-payload="recup_domaine"
-                      >
-                      </select>
+                      <div id="date-general-container" class="mb-4">
+                        <label for="date-general" class="block text-gray-700 font-bold mb-2">Date :</label>
+                        <input type="date" id="date-general" name="date-general"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                       </div>
+
+                      <!-- Conteneur pour la plage de dates (initialement masqué) -->
+                      <div id="date-range-container" class="hidden">
+                        <div class="mb-4">
+                          <label for="date-debut" class="block text-gray-700 font-bold mb-2">Date de début :</label>
+                          <input type="date" id="date-debut" name="date-debut"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="mb-4">
+                          <label for="date-fin" class="block text-gray-700 font-bold mb-2">Date de fin :</label>
+                          <input type="date" id="date-fin" name="date-fin"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- MCF & HelloPro -->
+                <div class="space-y-2 pl-2">
+                  <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                    <input type="checkbox" id="echanges" class="checkbox-custom" />
+                    <label for="echanges" class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">MCF &
+                      Hellopromail</label>
+                  </div>
+                  <div id="echangesSubfilters" class="pl-6 space-y-3 hidden">
+                    <div class="space-y-2">
+                      <label class="text-sm font-medium text-custom-noir">Fournisseur MCF</label>
+                      <div class="relative">
+                        <select id="fournisseurMcf"
+                          class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                          multiple data-ajax="true"
+                          data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                          data-pagination="true" data-payload="recup_fournisseur">
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Site Web -->
+                <div class="space-y-2 pl-2">
+                  <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                    <input type="checkbox" id="siteweb" class="checkbox-custom" />
+                    <label for="siteweb" class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Site
+                      Web</label>
+                  </div>
+                  <div id="sitewebSubfilters" class="pl-6 hidden">
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Modèle de page</label>
+                      <select id="sitewebModele"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple>
+                        <option value="article">Article</option>
+                        <!-- <option value="blog">Blog</option> -->
+                        <option value="contact">Contact</option>
+                        <option value="compte_client">Compte client</option>
+                        <option value="cgv_mentions_legales_cgu">Mentions légales</option>
+                        <option value="demande_devis">Demande de devis</option>
+                        <!-- <option value="ecommerce">E-commerce</option> -->
+                        <option value="faq">Faq</option>
+                        <option value="fiche_realisation">Fiche réalisation</option>
+                        <option value="footer">Footer</option>
+                        <option value="header">Header</option>
+                        <!-- <option value="header_footer">Header & Footer</option> -->
+                        <option value="home">Home</option>
+                        <!-- <option value="landing">Landing Page</option> -->
+                        <option value="listing_produit">Listing Produit</option>
+                        <!-- <option value="Page_local">Page locale</option> -->
+                        <option value="page_local">Page locale</option>
+                        <option value="politique_confidentialite">Politique de confidentialité</option>
+                        <option value="plan_du_site">Plan du site</option>
+                        <option value="fiche_produit">Page Produit</option>
+                        <!-- <option value="Presentation-societe">Présentation société</option> -->
+                        <option value="presentation_societe">Présentation société</option>
+                        <option value="recrutement">Recrutement</option>
+                        <option value="references_clients">Réferences clients</option>
+                        <option value="Savoir_faire">Savoir faire</option>
+                        <option value="autre">Autre</option>
+                      </select>
+                    </div>
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Fournisseur Siteweb</label>
+                      <select id="fournisseurSiteweb"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple data-ajax="true"
+                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                        data-pagination="true" data-payload="recup_fournisseur_siteweb">
+                      </select>
+                      <label class="text-xs text-custom-gris">Domaine Siteweb</label>
+                      <select id="fournisseurDomaine"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple data-ajax="true"
+                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                        data-pagination="true" data-payload="recup_domaine">
+                      </select>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
 
-              <hr class="border-custom-clair-2" />
+            <hr class="border-custom-clair-2" />
 
-              <!-- Advanced Filters -->
-              <div class="space-y-3">
-                <button
-                  id="advancedToggle"
-                  class="flex items-center justify-between w-full p-2 hover:bg-custom-clair-3 rounded-md transition-colors"
-                >
-                  <span class="font-medium text-sm text-custom-noir"
-                    >Filtres avancés</span
-                  >
-                  <i
-                    data-lucide="chevron-down"
-                    class="h-4 w-4 transition-transform"
-                    id="advancedChevron"
-                  ></i>
-                </button>
-                <div id="advancedContent" class="space-y-3 hidden">
-                  
-                  <!-- Catégorie -->
-                  <div class="space-y-2">
-                    <label class="text-sm font-medium text-custom-noir"
-                      >Catégorie</label
-                    >
-                    <div class="relative">
-                      <select
-                        id="categorieDropdown"
-                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                        multiple
-                        data-ajax="true"
-                        data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
-                        data-pagination="true"
-                        data-payload="recup_categorie"
-                      >
-                      </select>
-                    </div>
-                  </div>
+            <!-- Advanced Filters -->
+            <div class="space-y-3">
+              <button id="advancedToggle"
+                class="flex items-center justify-between w-full p-2 hover:bg-custom-clair-3 rounded-md transition-colors">
+                <span class="font-medium text-sm text-custom-noir">Filtres avancés</span>
+                <i data-lucide="chevron-down" class="h-4 w-4 transition-transform" id="advancedChevron"></i>
+              </button>
+              <div id="advancedContent" class="space-y-3 hidden">
 
-                  <!-- État -->
-                  <div class="space-y-2">
-                    <label
-                      class="text-sm font-medium flex items-center gap-2 text-custom-noir"
-                    >
-                      État
-                    </label>
-                    <select
-                      id="etatFilter"
+                <!-- Catégorie -->
+                <div class="space-y-2">
+                  <label class="text-sm font-medium text-custom-noir">Catégorie</label>
+                  <div class="relative">
+                    <select id="categorieDropdown"
                       class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                      multiple=""
-                    >
-                      <option value="Client">Client</option>
-                      <option value="Pause">Pause</option>
-                      <option value="Prospect">Prospect</option>
+                      multiple data-ajax="true"
+                      data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
+                      data-pagination="true" data-payload="recup_categorie">
                     </select>
                   </div>
-
-                  <!-- Affichage -->
-                  <div class="space-y-2">
-                    <label
-                      class="text-sm font-medium flex items-center gap-2 text-custom-noir"
-                    >
-                      Affichage
-                    </label>
-                    <select
-                      id="affichageFilter"
-                      class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                      multiple
-                    >
-                      <option value="Complet">Complet</option>
-                      <option value="Restreint">Restreint</option>
-                      <option value="Non visible">Non visible</option>
-                      <option value="D&eacute;couverte">Découverte</option>
-                    </select>
-                  </div>
-
                 </div>
+
+                <!-- État -->
+                <div class="space-y-2">
+                  <label class="text-sm font-medium flex items-center gap-2 text-custom-noir">
+                    État
+                  </label>
+                  <select id="etatFilter"
+                    class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                    multiple="">
+                    <option value="Client">Client</option>
+                    <option value="Pause">Pause</option>
+                    <option value="Prospect">Prospect</option>
+                  </select>
+                </div>
+
+                <!-- Affichage -->
+                <div class="space-y-2">
+                  <label class="text-sm font-medium flex items-center gap-2 text-custom-noir">
+                    Affichage
+                  </label>
+                  <select id="affichageFilter"
+                    class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                    multiple>
+                    <option value="Complet">Complet</option>
+                    <option value="Restreint">Restreint</option>
+                    <option value="Non visible">Non visible</option>
+                    <option value="D&eacute;couverte">Découverte</option>
+                  </select>
+                </div>
+
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- LLM Configuration -->
-          <div
-            id="llmConfig"
-            class="bg-white rounded-lg border border-custom-orange-light shadow-sm hidden"
-          >
-            <div
-              class="p-4 border-b border-custom-clair-2 flex items-center justify-between"
-            >
-              <h3
-                class="text-base font-semibold flex items-center gap-2 text-custom-orange-light"
-              >
-                <i data-lucide="sparkles" class="h-4 w-4"></i>
-                Configuration LLM
-              </h3>
-              <button
-                id="closeLlm"
-                class="h-6 w-6 p-0 hover:bg-custom-clair-2 rounded flex items-center justify-center"
-              >
-                <i data-lucide="x" class="h-3 w-3"></i>
-              </button>
+        <!-- LLM Configuration -->
+        <div id="llmConfig" class="bg-white rounded-lg border border-custom-orange-light shadow-sm hidden">
+          <div class="p-4 border-b border-custom-clair-2 flex items-center justify-between">
+            <h3 class="text-base font-semibold flex items-center gap-2 text-custom-orange-light">
+              <i data-lucide="sparkles" class="h-4 w-4"></i>
+              Configuration LLM
+            </h3>
+            <button id="closeLlm" class="h-6 w-6 p-0 hover:bg-custom-clair-2 rounded flex items-center justify-center">
+              <i data-lucide="x" class="h-3 w-3"></i>
+            </button>
+          </div>
+          <div class="p-4 space-y-4">
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-custom-noir">Prompt personnalisé <span
+                  class="text-custom-orange-light">*</span></label>
+              <div class="flex flex-col">
+                <textarea id="llmPrompt" placeholder="Entrez votre prompt pour le LLM..."
+                  class="w-full min-h-[160px] px-3 py-2 text-sm border border-custom-gris-blanc rounded-md focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none"></textarea>
+                <span id="errorPromptNull" class="text-sm text-red-600 font-bold mt-1 hidden">Ce champ est
+                  obligatoire</span>
+              </div>
             </div>
-            <div class="p-4 space-y-4">
-              <div class="space-y-2">
-                <label class="text-sm font-medium text-custom-noir"
-                  >Prompt personnalisé <span class="text-custom-orange-light">*</span></label
-                >
-                <div class="flex flex-col">
-                  <textarea
-                    id="llmPrompt"
-                    placeholder="Entrez votre prompt pour le LLM..."
-                    class="w-full min-h-[160px] px-3 py-2 text-sm border border-custom-gris-blanc rounded-md focus:ring-2 focus:ring-custom-bleu focus:border-custom-bleu outline-none"
-                  ></textarea>
-                  <span id="errorPromptNull" class="text-sm text-red-600 font-bold mt-1 hidden">Ce champ est obligatoire</span>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-custom-noir">Température</label>
+              <div class="px-2">
+                <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="0.4"
+                  class="slider w-full" />
+                <div class="flex justify-between text-xs text-custom-gris mt-1">
+                  <span>0.0</span>
+                  <span id="temperatureValue" class="font-medium">0.4</span>
+                  <span>1.0</span>
                 </div>
               </div>
-              <div class="space-y-2">
-                <label class="text-sm font-medium text-custom-noir"
-                  >Température</label
-                >
-                <div class="px-2">
-                  <input
-                    type="range"
-                    id="temperatureSlider"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value="0.4"
-                    class="slider w-full"
-                  />
-                  <div
-                    class="flex justify-between text-xs text-custom-gris mt-1"
-                  >
-                    <span>0.0</span>
-                    <span id="temperatureValue" class="font-medium">0.4</span>
-                    <span>1.0</span>
-                  </div>
-                </div>
-              </div>
-              <div class="space-y-2">
-                <label class="text-sm font-medium text-custom-noir"
-                  >Modèle LLM</label
-                >
-                <select
-                  id="llmModel"
-                  class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
-                >
-                  <!-- <option value="google/gemini-flash-1.5" selected="">
+            </div>
+            <div class="space-y-2">
+              <label class="text-sm font-medium text-custom-noir">Modèle LLM</label>
+              <select id="llmModel"
+                class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm">
+                <!-- <option value="google/gemini-flash-1.5" selected="">
                     Gemini flash 1.5
                   </option> -->
-                  <!-- <option value="qwen/qwen3-coder:free">
+                <!-- <option value="qwen/qwen3-coder:free">
                     Qwen3 Coder:free
                   </option> -->
-                  <option value="qwen/qwen3-coder">Qwen3 Coder</option>
-                  <option value="gpt-4.1-2025-04-14">gpt-4.1-2025-04-14</option>
-                  <!-- <option value="gpt-5-2025-08-07">gpt-5-2025-08-07</option> -->
-                  <option value="gpt-4o-2024-08-06">gpt-4o-2024-08-06</option>
-                  <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
-                  <option value="deepseek">Deepseek chat</option>
-                </select>
-              </div>
+                <option value="gemini-3-pro-preview-high" data-thinking="high">Gemini 3 Pro (High thinking)
+                </option>
+                <option value="gemini-3-pro-preview-low" data-thinking="low">Gemini 3 Pro (Low thinking)
+                </option>
+                <option value="qwen/qwen3-coder">Qwen3 Coder</option>
+                <option value="gpt-4.1-2025-04-14">gpt-4.1-2025-04-14</option>
+                <!-- <option value="gpt-5-2025-08-07">gpt-5-2025-08-07</option> -->
+                <option value="gpt-4o-2024-08-06">gpt-4o-2024-08-06</option>
+                <option value="gpt-4o-2024-11-20">gpt-4o-2024-11-20</option>
+                <option value="deepseek">Deepseek chat</option>
+              </select>
             </div>
           </div>
-        </aside>
+        </div>
+      </aside>
 
-        <!-- Main Content -->
-        <!-- **CORRECTION 2** : <main> est maintenant un conteneur flexible simple -->
-        <main class="flex-1 min-w-0">
-          <!-- **CORRECTION 3** : Ce div interne contrôle la largeur du contenu pour une meilleure lisibilité -->
-          <div class="max-w-4xl mx-auto space-y-4">
-            <!-- Search Metrics -->
-            <div
-              id="searchMetrics"
-              class="bg-white rounded-lg border border-custom-clair-2 p-3 hidden"
-            >
-              <div id="searchingState" class="flex items-center gap-2">
-                <div
-                  class="animate-spin rounded-full h-4 w-4 border-2 border-custom-bleu border-t-transparent"
-                ></div>
-                <span class="text-sm text-custom-gris"
-                  >Recherche en cours...</span
-                >
-              </div>
-              <div id="metricsContent" class="space-y-2 hidden">
-                <div class="flex item-center gap-2 justify-between">
-                  <div class="flex items-center gap-2">
-                    <i data-lucide="target" class="h-4 w-4 text-custom-bleu"></i>
-                    <span class="text-sm font-medium text-custom-noir"
-                      ><span id="totalResults">0</span> résultats</span
-                    >
-                  </div>
-                  <div class="flex gap-1">
-                    <button
-                      class="md:flex items-center gap-2 px-2 py-1 text-xs border border-custom-gris-blanc rounded bg-white hover:bg-custom-clair-2"
-                      id="copier-texte"
-                    >
-                      <i data-lucide="clipboard" class="h-4 w-4"></i>
-                      Copier
-                    </button>
-                  </div>
+      <!-- Main Content -->
+      <!-- **CORRECTION 2** : <main> est maintenant un conteneur flexible simple -->
+      <main class="flex-1 min-w-0">
+        <!-- **CORRECTION 3** : Ce div interne contrôle la largeur du contenu pour une meilleure lisibilité -->
+        <div class="max-w-4xl mx-auto space-y-4">
+          <!-- Search Metrics -->
+          <div id="searchMetrics" class="bg-white rounded-lg border border-custom-clair-2 p-3 hidden">
+            <div id="searchingState" class="flex items-center gap-2">
+              <div class="animate-spin rounded-full h-4 w-4 border-2 border-custom-bleu border-t-transparent"></div>
+              <span class="text-sm text-custom-gris">Recherche en cours...</span>
+            </div>
+            <div id="metricsContent" class="space-y-2 hidden">
+              <div class="flex item-center gap-2 justify-between">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="target" class="h-4 w-4 text-custom-bleu"></i>
+                  <span class="text-sm font-medium text-custom-noir"><span id="totalResults">0</span> résultats</span>
                 </div>
-                <div class="flex items-center gap-4 text-xs text-custom-gris">
-                  <div class="flex items-center gap-1">
-                    <i data-lucide="clock" class="h-3 w-3"></i>
-                    <span id="searchTime">0</span>s
-                  </div>
+                <div class="flex gap-1">
+                  <button
+                    class="md:flex items-center gap-2 px-2 py-1 text-xs border border-custom-gris-blanc rounded bg-white hover:bg-custom-clair-2"
+                    id="copier-texte">
+                    <i data-lucide="clipboard" class="h-4 w-4"></i>
+                    Copier
+                  </button>
+                </div>
+              </div>
+              <div class="flex items-center gap-4 text-xs text-custom-gris">
+                <div class="flex items-center gap-1">
+                  <i data-lucide="clock" class="h-3 w-3"></i>
+                  <span id="searchTime">0</span>s
                 </div>
               </div>
             </div>
+          </div>
 
-            <!-- Search Results -->
-            <div id="searchResultsContainer" class="space-y-3 hidden">
-              <div id="searchResultsList" class="space-y-3"></div>
-            </div>
+          <!-- Search Results -->
+          <div id="searchResultsContainer" class="space-y-3 hidden">
+            <div id="searchResultsList" class="space-y-3"></div>
+          </div>
 
-            <!-- Empty State -->
-            <div
-              id="emptyState"
-              class="bg-white rounded-lg border border-dashed border-custom-gris-blanc"
-            >
-              <div
-                class="flex flex-col items-center justify-center py-16 text-center"
-              >
-                <i
-                  data-lucide="sparkles"
-                  class="h-16 w-16 text-custom-bleu-light-2 mb-6"
-                ></i>
-                <h3 class="text-xl font-semibold mb-3 text-custom-noir">
-                  Recherche RAG
-                </h3>
-                <p class="text-custom-gris mb-6 max-w-lg leading-relaxed">
-                  Utilisez la barre de recherche pour explorer nos données avec
-                  l'intelligence artificielle.
-                </p>
-              </div>
-            </div>
-
-            <!-- No Results State -->
-            <div
-              id="noResults"
-              class="bg-white rounded-lg border border-dashed border-custom-gris-blanc hidden"
-            >
-              <div
-                class="flex flex-col items-center justify-center py-12 text-center"
-              >
-                <i
-                  data-lucide="search"
-                  class="h-12 w-12 text-custom-clair-1 mb-4"
-                ></i>
-                <h3 class="text-lg font-medium mb-2 text-custom-noir">
-                  Aucun résultat trouvé
-                </h3>
-                <p class="text-custom-gris mb-4 max-w-md">
-                  Essayez de modifier votre recherche ou d'ajuster les filtres
-                  pour obtenir des résultats.
-                </p>
-                <button
-                  id="clearSearch"
-                  class="px-4 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2"
-                >
-                  Effacer la recherche
-                </button>
-              </div>
+          <!-- Empty State -->
+          <div id="emptyState" class="bg-white rounded-lg border border-dashed border-custom-gris-blanc">
+            <div class="flex flex-col items-center justify-center py-16 text-center">
+              <i data-lucide="sparkles" class="h-16 w-16 text-custom-bleu-light-2 mb-6"></i>
+              <h3 class="text-xl font-semibold mb-3 text-custom-noir">
+                Recherche RAG
+              </h3>
+              <p class="text-custom-gris mb-6 max-w-lg leading-relaxed">
+                Utilisez la barre de recherche pour explorer nos données avec
+                l'intelligence artificielle.
+              </p>
             </div>
           </div>
-        </main>
-      </div>
 
-      <!-- Results Sidebar -->
-      <aside
-        id="resultsSidebar"
-        class="fixed md:relative inset-y-0 right-0 z-40 md:z-auto w-full sm:w-96 md:w-96 border-l border-custom-clair-2 bg-white/95 md:bg-white flex-shrink-0 backdrop-blur-sm md:backdrop-blur-none flex flex-col slide-in-from-right transform translate-x-full transition-transform duration-300 hidden"
-        style="width: 35rem"
-      >
-        <div class="sticky top-0 md:top-auto h-screen flex flex-col">
-          <div
-            class="flex items-center justify-between p-4 border-b border-custom-clair-2 bg-white/50 flex-shrink-0"
-          >
-            <h2 class="font-semibold flex items-center gap-2 text-custom-noir">
-              <i data-lucide="file-text" class="h-4 w-4"></i>
-              <span>Analyse IA</span>
-            </h2>
-            <div class="flex items-center gap-2">
-              <span
-                id="resultsBadge"
-                class="px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full hidden"
-                >0</span
-              >
-              <button
-                id="closeResults"
-                class="h-6 w-6 p-0 hover:bg-custom-clair-2 rounded flex items-center justify-center flex items-center justify-center"
-                title="Masquer les résultats"
-              >
-                <i data-lucide="x" class="h-3 w-3"></i>
+          <!-- No Results State -->
+          <div id="noResults" class="bg-white rounded-lg border border-dashed border-custom-gris-blanc hidden">
+            <div class="flex flex-col items-center justify-center py-12 text-center">
+              <i data-lucide="search" class="h-12 w-12 text-custom-clair-1 mb-4"></i>
+              <h3 class="text-lg font-medium mb-2 text-custom-noir">
+                Aucun résultat trouvé
+              </h3>
+              <p class="text-custom-gris mb-4 max-w-md">
+                Essayez de modifier votre recherche ou d'ajuster les filtres
+                pour obtenir des résultats.
+              </p>
+              <button id="clearSearch"
+                class="px-4 py-2 border border-custom-gris-blanc rounded-lg hover:bg-custom-clair-2">
+                Effacer la recherche
               </button>
             </div>
           </div>
-          <div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4">
-            <div id="llmAnalyzeState" class="flex items-center gap-2 hidden">
-              <div class="flex flex-col gap-2 items-center justify-center p-[4em]">
-                <div
-                  class="animate-spin rounded-full h-8 w-8 border-2 border-custom-bleu border-t-transparent"
-                ></div>
-                <span class="text-sm text-custom-gris"
-                  >Analyse en cours</span
-                >
-              </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Results Sidebar -->
+    <aside id="resultsSidebar"
+      class="fixed md:relative inset-y-0 right-0 z-40 md:z-auto w-full sm:w-96 md:w-96 border-l border-custom-clair-2 bg-white/95 md:bg-white flex-shrink-0 backdrop-blur-sm md:backdrop-blur-none flex flex-col slide-in-from-right transform translate-x-full transition-transform duration-300 hidden"
+      style="width: 35rem">
+      <div class="sticky top-0 md:top-auto h-screen flex flex-col">
+        <div class="flex items-center justify-between p-4 border-b border-custom-clair-2 bg-white/50 flex-shrink-0">
+          <h2 class="font-semibold flex items-center gap-2 text-custom-noir">
+            <i data-lucide="file-text" class="h-4 w-4"></i>
+            <span>Analyse IA</span>
+          </h2>
+          <div class="flex items-center gap-2">
+            <span id="resultsBadge"
+              class="px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full hidden">0</span>
+            <button id="closeResults"
+              class="h-6 w-6 p-0 hover:bg-custom-clair-2 rounded flex items-center justify-center flex items-center justify-center"
+              title="Masquer les résultats">
+              <i data-lucide="x" class="h-3 w-3"></i>
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4">
+          <div id="llmAnalyzeState" class="flex items-center gap-2 hidden">
+            <div class="flex flex-col gap-2 items-center justify-center p-[4em]">
+              <div class="animate-spin rounded-full h-8 w-8 border-2 border-custom-bleu border-t-transparent"></div>
+              <span class="text-sm text-custom-gris">Analyse en cours</span>
             </div>
-            <div
-              id="llmEmptyState"
-              class="flex flex-col items-center justify-center py-16 text-center hidden"
-            >
-              <div
-                style="
+          </div>
+          <div id="llmEmptyState" class="flex flex-col items-center justify-center py-16 text-center hidden">
+            <div style="
                   display: flex;
                   flex-direction: column;
                   align-items: center;
@@ -1078,87 +843,55 @@
                   padding-top: 4rem;
                   padding-bottom: 4rem;
                   text-align: center;
-                "
-              >
-                <i
-                  data-lucide="sparkles"
-                  class="h-12 w-12 text-custom-bleu-light-2 mb-4"
-                ></i>
-                <h3 class="text-sm font-medium mb-2 text-custom-gris">
-                  Aucune analyse IA
-                </h3>
-                <p class="text-xs text-custom-gris max-w-xs leading-relaxed">
-                  Activez l'IA et lancez une recherche pour obtenir une analyse
-                  approfondie.
-                </p>
-              </div>
+                ">
+              <i data-lucide="sparkles" class="h-12 w-12 text-custom-bleu-light-2 mb-4"></i>
+              <h3 class="text-sm font-medium mb-2 text-custom-gris">
+                Aucune analyse IA
+              </h3>
+              <p class="text-xs text-custom-gris max-w-xs leading-relaxed">
+                Activez l'IA et lancez une recherche pour obtenir une analyse
+                approfondie.
+              </p>
             </div>
-            <div id="llmResponseContainer">
-              <button
-                id="insightsToggle"
-                class="flex items-center justify-between w-full p-3 bg-custom-bleu-light rounded-lg border border-custom-bleu-light-2 hover:border-custom-bleu transition-colors"
-              >
-                <div class="flex items-center gap-2">
-                  <i
-                    data-lucide="sparkles"
-                    class="h-4 w-4 text-custom-bleu"
-                  ></i>
-                  <span class="font-medium text-sm text-custom-noir"
-                    >Analyse IA</span
-                  >
-                  <span
-                    id="modelBadge"
-                    class="px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full"
-                    >GPT-4</span
-                  >
-                </div>
-                <i
-                  data-lucide="chevron-right"
-                  class="h-4 w-4 transition-transform"
-                  id="insightsChevron"
-                ></i>
-              </button>
-              <div id="insightsContent" class="mt-2 hidden">
-                <div
-                  class="bg-white rounded-lg border border-custom-bleu-light-2"
-                >
-                  <div class="p-4">
-                    <!-- MODIFICATION : Conteneur pour le chargement et la réponse -->
-                    <div id="llmLoadingState" class="hidden">
-                      <div
-                        class="flex items-center gap-2 text-sm text-custom-gris p-4"
-                      >
-                        <div
-                          class="animate-spin rounded-full h-4 w-4 border-2 border-custom-bleu border-t-transparent"
-                        ></div>
-                        <span>Génération de l'analyse IA en cours...</span>
+          </div>
+          <div id="llmResponseContainer">
+            <button id="insightsToggle"
+              class="flex items-center justify-between w-full p-3 bg-custom-bleu-light rounded-lg border border-custom-bleu-light-2 hover:border-custom-bleu transition-colors">
+              <div class="flex items-center gap-2">
+                <i data-lucide="sparkles" class="h-4 w-4 text-custom-bleu"></i>
+                <span class="font-medium text-sm text-custom-noir">Analyse IA</span>
+                <span id="modelBadge"
+                  class="px-2 py-1 bg-custom-clair-2 text-custom-gris text-xs rounded-full">GPT-4</span>
+              </div>
+              <i data-lucide="chevron-right" class="h-4 w-4 transition-transform" id="insightsChevron"></i>
+            </button>
+            <div id="insightsContent" class="mt-2 hidden">
+              <div class="bg-white rounded-lg border border-custom-bleu-light-2">
+                <div class="p-4">
+                  <!-- MODIFICATION : Conteneur pour le chargement et la réponse -->
+                  <div id="llmLoadingState" class="hidden">
+                    <div class="flex items-center gap-2 text-sm text-custom-gris p-4">
+                      <div class="animate-spin rounded-full h-4 w-4 border-2 border-custom-bleu border-t-transparent">
                       </div>
+                      <span>Génération de l'analyse IA en cours...</span>
                     </div>
-                    <div
-                      class="bg-white/50 rounded-lg p-3 border border-custom-clair-2 mb-3"
-                    >
-                      <!-- MODIFICATION : La balise <pre> est devenue une <div> pour interpréter le HTML -->
-                      <div
-                        id="llmResponseText"
-                        class="text-xs leading-relaxed font-sans max-h-64 overflow-y-auto"
-                      ></div>
+                  </div>
+                  <div class="bg-white/50 rounded-lg p-3 border border-custom-clair-2 mb-3">
+                    <!-- MODIFICATION : La balise <pre> est devenue une <div> pour interpréter le HTML -->
+                    <div id="llmResponseText" class="text-xs leading-relaxed font-sans max-h-64 overflow-y-auto"></div>
+                  </div>
+                  <div class="flex items-center justify-between text-xs text-custom-gris">
+                    <div class="space-y-1">
+                      <div>
+                        Température: <span id="usedTemperature">0.4</span>
+                      </div>
+                      <div>Tokens: ~<span id="estimatedTokens">0</span></div>
                     </div>
-                    <div
-                      class="flex items-center justify-between text-xs text-custom-gris"
-                    >
-                      <div class="space-y-1">
-                        <div>
-                          Température: <span id="usedTemperature">0.4</span>
-                        </div>
-                        <div>Tokens: ~<span id="estimatedTokens">0</span></div>
-                      </div>
-                      <div class="flex gap-1">
-                        <button
-                          class="px-2 py-1 text-xs border border-custom-gris-blanc rounded bg-white hover:bg-custom-clair-2 hidden"
-                        >
-                          Copier
-                        </button>
-                      </div>
+                    <div class="flex gap-1">
+                      <button
+                        class="px-2 py-1 text-xs border border-custom-gris-blanc rounded bg-white hover:bg-custom-clair-2 hidden">
+                        Copier
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1166,34 +899,36 @@
             </div>
           </div>
         </div>
-      </aside>
-    </div>
+      </div>
+    </aside>
+  </div>
 
-    <script src="{{ url_for('static', path='/js/script.js') }}"></script>
-    <script>
-      // Initialize Lucide icons
-      lucide.createIcons();
+  <script src="{{ url_for('static', path='/js/script.js') }}"></script>
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
 
-      document.addEventListener('DOMContentLoaded', function() {
-          const dropdownButton = document.getElementById('avatarDropdown');
-          const dropdownMenu = document.getElementById('dropdownMenu');
+    document.addEventListener('DOMContentLoaded', function () {
+      const dropdownButton = document.getElementById('avatarDropdown');
+      const dropdownMenu = document.getElementById('dropdownMenu');
 
-          // Toggle dropdown on click
-          dropdownButton.addEventListener('click', function(e) {
-              e.stopPropagation();
-              dropdownMenu.classList.toggle('hidden');
-          });
-
-          // Close dropdown when clicking outside
-          document.addEventListener('click', function() {
-              dropdownMenu.classList.add('hidden');
-          });
-
-          // Prevent dropdown from closing when clicking inside
-          dropdownMenu.addEventListener('click', function(e) {
-              e.stopPropagation();
-          });
+      // Toggle dropdown on click
+      dropdownButton.addEventListener('click', function (e) {
+        e.stopPropagation();
+        dropdownMenu.classList.toggle('hidden');
       });
-    </script>
-  </body>
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', function () {
+        dropdownMenu.classList.add('hidden');
+      });
+
+      // Prevent dropdown from closing when clicking inside
+      dropdownMenu.addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+    });
+  </script>
+</body>
+
 </html>
