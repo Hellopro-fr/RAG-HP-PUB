@@ -201,9 +201,12 @@ export const startCrawler = async (
                     operatingSystems: ["windows", "macos", "linux"], // OS to emulate
                 },
             },
+            retireInstanceAfterRequestCount: 10, // Force browser restart to prevent memory leaks
         },
 
-        // maxConcurrency: 10,
+        maxConcurrency: 15, // Reduced from default to prevent global overload (10 replicas * 15 = 150 concurrent)
+        navigationTimeoutSecs: 60, // Increased to tolerate slow sites
+        requestHandlerTimeoutSecs: 120, // Increased to allow for retries and slow processing
 
         // Session management configuration
         useSessionPool: true, // Enable session pooling
@@ -490,9 +493,8 @@ export const getUrlsCrawled = (
             const date = new Date();
             const dateString = date.toISOString();
 
-            const fileHistorised = `${folderName}/${
-                dateString.split("T")[0]
-            }-${name}.json`;
+            const fileHistorised = `${folderName}/${dateString.split("T")[0]
+                }-${name}.json`;
             fs.copyFileSync(fileUrls, fileHistorised);
 
             // update the the file named "{domaine}.json" as []
