@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useState, useEffect } from "react"
-import { X } from "lucide-react"
+import { X, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { apiGetMessageDetails, apiRequeueMessage, apiEditAndRequeueMessage, Message, formatTimestamp } from "@/lib/api"
 
@@ -18,6 +18,8 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
   const [error, setError] = useState('');
   const [isEditMode, setIsEditMode] = useState(false)
   const [editedPayload, setEditedPayload] = useState("")
+  const [isRequeuing, setIsRequeuing] = useState(false)
+  const [isCopied, setIsCopied] = useState(false)
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -39,9 +41,10 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
   }, [messageId]);
 
   const handleRequeue = async () => {
-    if (!message) return;
+    if (!message || isRequeuing) return;
     if (!window.confirm("Are you sure you want to re-queue this message?")) return;
     try {
+      setIsRequeuing(true);
         await apiRequeueMessage(message._id);
         alert('Message re-queued successfully.');
         onActionSuccess();
@@ -49,14 +52,16 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
     } catch (err) {
         alert('Failed to re-queue message.');
         console.error(err);
+      setIsRequeuing(false);
     }
   };
 
   const handleEditAndRequeue = async () => {
-    if (!message) return;
+    if (!message || isRequeuing) return;
     try {
         const payload = JSON.parse(editedPayload);
         if (!window.confirm("Are you sure you want to re-queue with the MODIFIED payload?")) return;
+      setIsRequeuing(true);
         await apiEditAndRequeueMessage(message._id, payload);
         alert('Message edited and re-queued successfully.');
         onActionSuccess();
@@ -64,7 +69,49 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
     } catch (err) {
         alert('Invalid JSON or failed to re-queue.');
         console.error(err);
+      setIsRequeuing(false);
     }
+  };
+
+  const handleCopyPayload = () => {
+    if (!message) return;
+    const payloadStr = JSON.stringify(message._source.original_payload, null, 2);
+
+    const copyToClipboard = (text: string) => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      } else {
+        // Fallback for non-secure contexts
+        return new Promise<void>((resolve, reject) => {
+          try {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            if (successful) {
+              resolve();
+            } else {
+              reject(new Error("Fallback copy failed"));
+            }
+          } catch (err) {
+            reject(err);
+          }
+        });
+      }
+    };
+
+    copyToClipboard(payloadStr).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    }).catch(err => {
+      console.error("Failed to copy: ", err);
+      alert("Failed to copy payload to clipboard.");
+    });
   };
 
   return (
@@ -113,7 +160,18 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
 
                 {/* Payload Section */}
                 <div>
-                  <h3 className="text-sm font-semibold text-noir-primary mb-4">Payload</h3>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-sm font-semibold text-noir-primary">Payload</h3>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopyPayload}
+                      className="text-bleu-primary hover:bg-bleu-light h-8 px-2"
+                    >
+                      {isCopied ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+                      {isCopied ? "Copied!" : "Copy"}
+                    </Button>
+                  </div>
                   {isEditMode ? (
                     <textarea
                       value={editedPayload}
@@ -148,8 +206,9 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
                     style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
                     onClick={handleEditAndRequeue}
                     className="hover:opacity-90"
+                    disabled={isRequeuing}
                   >
-                    Save & Re-queue
+                    {isRequeuing ? "Processing..." : "Save & Re-queue"}
                   </Button>
                 </>
               ) : (
@@ -164,8 +223,13 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
                   >
                     Edit Payload
                   </Button>
-                  <Button onClick={handleRequeue} style={{ backgroundColor: "var(--vert-primary)", color: "white" }} className="hover:opacity-90">
-                    Re-queue Original
+                    <Button
+                      onClick={handleRequeue}
+                      style={{ backgroundColor: "var(--vert-primary)", color: "white" }}
+                      className="hover:opacity-90"
+                      disabled={isRequeuing}
+                    >
+                      {isRequeuing ? "Processing..." : "Re-queue Original"}
                   </Button>
                 </>
               )}

@@ -19,6 +19,9 @@ from app.schemas.search import (
 )
 from app.core.credentials import settings, model_settings
 
+from google import genai
+from google.genai import types
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -109,28 +112,39 @@ class GeminiClient:
         if isinstance(obj, bytes):
             return obj.hex()  # Convertit b'\xe6...' en string 'e6...'
         if isinstance(obj, dict):
-            return {k: make_serializable(v) for k, v in obj.items()}
+            return {k: self.make_serializable(v) for k, v in obj.items()}
         if isinstance(obj, list):
-            return [make_serializable(v) for v in obj]
+            return [self.make_serializable(v) for v in obj]
         return obj
 
     def chat(self, message: str, options: Dict):
         logger.info("options: %s", options)
         logger.info(f"model : {self.MODEL}")
-        response = client.models.generate_content(
+        response = self.client.models.generate_content(
             model=self.MODEL,
             contents=message,
             config=types.GenerateContentConfig(
                 thinking_config=types.ThinkingConfig(
                     thinking_level=(
-                        options.thinking_level if options.thinking_level else "high"
+                        options.get("thinking_level")
+                        if options.get("thinking_level")
+                        else "high"
                     )
                 )
             ),
         )
+
+        if hasattr(response, "model_dump"):
+            api_response_dict = response.model_dump()
+        elif hasattr(response, "dict") and callable(response.dict):
+            api_response_dict = response.dict()
+        elif hasattr(response, "to_dict"):
+            api_response_dict = response.to_dict()
+        else:
+            api_response_dict = response
         return {
             "content": response.text,
-            "response": make_serializable(response.model_dump()),
+            "response": self.make_serializable(api_response_dict),
         }
 
 
@@ -806,7 +820,10 @@ class SearchOrchestrator:
                 llm_response = response["content"]
                 completion = response["response"]
             elif isinstance(client, GeminiClient):
-                response = client.chat(full_user_prompt, options={})
+                response = client.chat(
+                    full_user_prompt,
+                    options={"thinking_level": self.request.llm.thinking_level},
+                )
                 completion = response["response"]
                 llm_response = response["content"]
             else:
@@ -817,7 +834,9 @@ class SearchOrchestrator:
                 )
                 llm_response = completion.choices[0].message.content
 
-            completion = completion.model_dump()
+            if hasattr(completion, "model_dump"):
+                completion = completion.model_dump()
+
         except Exception as e:
             logger.error(f"Error during LLM execution: {e}")
             return LLMPipeline(
