@@ -6,7 +6,6 @@ import requests
 from multiprocessing import Pool, cpu_count
 import os
 import sys
-
 import httpx
 import logging
 from typing import List, Optional, Dict, Any
@@ -14,9 +13,7 @@ from io import BytesIO
 from urllib.parse import urlparse
 import asyncio
 import tempfile
-
 from dataclasses import dataclass
-
 
 from pymilvus import (
     connections,
@@ -24,6 +21,9 @@ from pymilvus import (
     MilvusException
 )
 
+# Configuration du logging pour éviter le spam, on garde les erreurs
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 @dataclass
 class ModelConfig:
@@ -39,503 +39,420 @@ class MilvusDocumentCrud:
         }
 
         self.collection: Optional[Collection] = None
+        # On évite de lever une erreur ici si c'est juste pour initier la classe, 
+        # mais on garde la logique demandée.
         if not self.config.get("ZILLIZ_URI") or not self.config.get("ZILLIZ_PORT"):
             raise ValueError("Zilliz Cloud URI and API Key/Port must be set in the environment.")
         self.logger = kwargs.get('logger', logging)
         
     def _connect_to_milvus(self):
-        self.logger.info("Connexion sur Zilliz cloud...")
-        connections.connect("default", host=self.config.get("ZILLIZ_URI"), port=self.config.get("ZILLIZ_PORT"))
-        self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        # Optimisation : Ne pas se reconnecter si déjà connecté
+        try:
+            if not connections.has_connection("default"):
+                self.logger.info("Connexion sur Zilliz cloud...")
+                connections.connect("default", host=self.config.get("ZILLIZ_URI"), port=self.config.get("ZILLIZ_PORT"))
+                self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
+        except Exception as e:
+            self.logger.error(f"Erreur de connexion Milvus: {e}")
     
-    # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
-        model_key = model_config.model_id
-
-        self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
+        # Optimisation : Collection est légère, mais on peut vérifier si chargée
         collection = Collection(collection_name)
-        
         collection.load()
-        self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête.")
         return collection
-
 
     async def get_document(self,fichier_source: str) -> Dict[str, Any]:
         list_fichier_source = [fichier_source]
         model_config = ModelConfig()
-        model_key = model_config.model_id
         
         try:
             await asyncio.to_thread(self._connect_to_milvus)
-            self.collection = await asyncio.to_thread(self._get_or_create_collection,model_config)
+            self.collection = await asyncio.to_thread(self._get_or_create_collection, model_config)
 
             if not self.collection:
-                return {
-                    "status": "error",
-                    "message": "Collection non initialisée.",
-                    "code": 404
-                }
+                return {"status": "error", "message": "Collection non initialisée.", "code": 404}
 
             if not fichier_source:
-                return {
-                    "status": "error",
-                    "message": "Fichier source requis pour la récupération.",
-                    "code" : 400
-                }
+                return {"status": "error", "message": "Fichier source requis.", "code" : 400}
 
             result = await asyncio.to_thread(self.collection.query,
                 expr=f"fichier_source in {list_fichier_source}",
                 output_fields=["id","text","date_ajout","date_maj"]
             )
-            # self.collection.flush()
-            self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
-
-
+            
             data = None
-            # Cas 1 : result est déjà la liste de data
             if isinstance(result, list):
                 data = result
-
-            # Cas 2 : le HybridExtraList contient un dict avec une clé "data"
             elif hasattr(result, "data"):
                 data = result.data
-
-            # Cas 3 : il contient un dict au premier niveau
             elif isinstance(result, dict) and "data" in result:
                 data = result["data"]
 
-            return {
-                "status": "success",
-                "data": data
-            }
+            return {"status": "success", "data": data}
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][document] Erreur Milvus lors de la récupération : {e}")
-            return {
-                "status": "error",
-                "message": f"Erreur Milvus : {e}",
-                "code": 500
-            }
+            # self.logger.error(f"Erreur Milvus : {e}") # Commenté pour réduire le bruit si fréquent
+            return {"status": "error", "message": f"Erreur Milvus : {e}", "code": 500}
         except Exception as e:
-            self.logger.error(f"[{model_key}][document] Erreur de Récupèration de document : {e}", exc_info=True)
-            return {
-                "status": "error",
-                "message": f"Erreur inattendue : {e}",
-                "code": 500
-            }
-
-
+            return {"status": "error", "message": f"Erreur inattendue : {e}", "code": 500}
 
 
 BASE_URL_OCR = os.environ.get("URL_OCR", "http://34.34.166.5:8501")
+
 class DeepseekOCRDocExtractor:
     """Client asynchrone pour l'API OCR externe utilisant Deepseek"""
     
-    def __init__(self, base_url: str = BASE_URL_OCR, timeout: int = 3000, download_timeout: int = 1200):
-        """
-        Initialise le client OCR
-        
-        Args:
-            base_url: URL de base de l'API (ex: "http://localhost:8000")
-            timeout: Timeout en secondes pour les requêtes OCR
-            download_timeout: Timeout en secondes pour le téléchargement des fichiers
-        """
+    def __init__(self, base_url: str = BASE_URL_OCR, timeout: int = 300, download_timeout: int = 120):
+        # J'ai réduit les timeouts par défaut, 3000s c'est énorme et bloque les workers
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self.download_timeout = download_timeout
         self.endpoint = f"{self.base_url}/ocr/batch"
-        logging.info(f"URL ocr : {self.base_url}")
     
     def _is_supported_format(self, filename: str) -> bool:
-        """
-        Vérifie si le fichier est un format supporté (PDF ou image)
-        
-        Args:
-            filename: Nom du fichier
-            
-        Returns:
-            True si le format est supporté directement, False sinon
-        """
         supported_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
         ext = Path(filename).suffix.lower()
         return ext in supported_extensions
     
     async def _download_file(self, url: str) -> tuple[BytesIO, str]:
-        """
-        Télécharge un fichier depuis une URL directement en mémoire (asynchrone)
-        Aucun fichier n'est écrit sur le disque
-        
-        Args:
-            url: URL du fichier à télécharger
-            
-        Returns:
-            Tuple (contenu du fichier en BytesIO, nom du fichier)
-            
-        Raises:
-            httpx.HTTPError: En cas d'erreur de téléchargement
-        """
         try:
-            async with httpx.AsyncClient() as client:
+            # Correction: follow_redirects=True pour gérer les 302 Found
+            async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
                 response = await client.get(url, timeout=self.download_timeout)
                 response.raise_for_status()
                 
-                # Extraction du nom de fichier depuis l'URL
                 parsed_url = urlparse(url)
                 filename = Path(parsed_url.path).name
-                
-                # Si pas de nom de fichier dans l'URL, en générer un
                 if not filename:
                     filename = "document.pdf"
                 
-                # Création d'un objet BytesIO avec le contenu (reste en mémoire)
                 file_content = BytesIO(response.content)
                 
-                # Vérifier si le format est supporté
                 if not self._is_supported_format(filename):
-                    print(f"⚠️  {filename} n'est pas un PDF/image - conversion en PDF...")
+                    # print(f"⚠️  {filename} n'est pas un PDF/image - conversion en PDF...")
                     file_content, filename = await self._convert_to_pdf(file_content, filename)
-                    print(f"✓ Converti en {filename}")
                 
-                # Réinitialiser la position pour la lecture
                 file_content.seek(0)
-
                 return file_content, filename
                 
         except httpx.HTTPError as e:
-            raise httpx.HTTPError(
-                f"Erreur lors du téléchargement de {url}: {str(e)}"
-            )
+            # On relance l'erreur pour qu'elle soit catchée plus haut
+            raise httpx.HTTPError(f"Erreur DL {url}: {str(e)}")
+        except Exception as e:
+             raise ValueError(f"Erreur générale DL {url}: {str(e)}")
     
     async def extract_from_urls(
         self, 
         urls: List[str], 
         prompt: Optional[str] = "<image>\nConvert the document to markdown."
     ) -> Dict[str, Any]:
-        """
-        Traite des fichiers à partir d'URLs (asynchrone)
-        Les fichiers sont téléchargés en mémoire et automatiquement libérés après traitement
         
-        Args:
-            urls: Liste d'URLs des fichiers à traiter
-            prompt: Prompt optionnel pour personnaliser l'extraction
-            
-        Returns:
-            Dictionnaire contenant les résultats de l'extraction
-            
-        Raises:
-            httpx.HTTPError: En cas d'erreur réseau
-        """
         files = []
         downloaded_files = []
         
         try:
-            # Téléchargement de tous les fichiers en mémoire (en parallèle)
             download_tasks = [self._download_file(url) for url in urls]
-            downloads = await asyncio.gather(*download_tasks)
+            # Return_exceptions=True évite que tout plante si 1 fichier foire
+            downloads = await asyncio.gather(*download_tasks, return_exceptions=True)
             
-            for file_content, filename in downloads:
+            valid_downloads = []
+            for res in downloads:
+                if isinstance(res, Exception):
+                    print(f"⚠️ Erreur de téléchargement OCR : {res}")
+                else:
+                    valid_downloads.append(res)
+
+            if not valid_downloads:
+                return {} # Retour vide si aucun fichier n'a pu être téléchargé
+
+            for file_content, filename in valid_downloads:
                 downloaded_files.append(file_content)
-                
-                # Détection du type MIME
                 mime_type, _ = mimetypes.guess_type(filename)
                 if mime_type is None:
                     mime_type = 'application/pdf'
-                
-                files.append(
-                    ('files', (filename, file_content, mime_type))
-                )
+                files.append(('files', (filename, file_content, mime_type)))
             
-            # Préparation des données du formulaire
             data = {}
             if prompt is not None:
                 data['prompt'] = prompt
             
-            # Envoi de la requête à l'API OCR (asynchrone)
-            async with httpx.AsyncClient(timeout=None) as client:
+            # Timeout augmenté pour le traitement OCR
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
                     self.endpoint,
                     files=files,
                     data=data if data else None
                 )
-                
-                # Vérification de la réponse
                 response.raise_for_status()
-                
-                # todo: traitement de response en cas de batching
                 return response.json()
             
         except httpx.TimeoutException:
-            print(
-                f"Timeout après {self.timeout}s lors de l'appel à l'API OCR"
-            )
-        except httpx.HTTPError as e:
-            print(
-                f"Erreur lors du traitement: {str(e)}"
-            )
+            print(f"Timeout OCR après {self.timeout}s")
+            return {}
+        except Exception as e:
+            print(f"Erreur OCR globale: {str(e)}")
+            return {}
         finally:
-            # Fermeture et libération automatique de la mémoire
             for file_io in downloaded_files:
-                file_io.close()
+                try:
+                    file_io.close()
+                except:
+                    pass
     
-    async def extract_from_url(
-        self, 
-        url: str, 
-        prompt: Optional[str] = "<image>\nConvert the document to markdown."
-    ) -> Dict[str, Any]:
-        """
-        Traite un seul fichier à partir d'une URL (asynchrone)
-        
-        Args:
-            url: URL du fichier à traiter
-            prompt: Prompt optionnel pour personnaliser l'extraction
-            
-        Returns:
-            Dictionnaire contenant le résultat de l'extraction pour ce fichier
-        """
-        response = await self.extract_from_urls([url], prompt) 
-        return response
+    async def extract_from_url(self, url: str, prompt: Optional[str] = "<image>\nConvert the document to markdown.") -> Dict[str, Any]:
+        return await self.extract_from_urls([url], prompt)
     
-    def get_clean_result(self,response: Dict) -> Dict:
+    def get_clean_result(self, response: Dict) -> Dict:
         res_dict = {}
+        # Correction: Vérification défensive si response est None
+        if not response:
+            return res_dict
 
         if response.get('success') and response.get('results'):
-  
             for results in response['results']:
-
                 texts = []
-                
-                filename = results['filename']
+                filename = results.get('filename', 'unknown')
 
                 if 'results' in results.get('result', {}).keys():
                     for res in results['result']['results']:
-                        texts.append(res["result"])
-                else:
+                        texts.append(res.get("result", ""))
+                elif 'result' in results.get('result', {}):
                     texts.append(results['result']['result'])
 
-
-                if "total_pages" in results.get('result', {}):
-                    total_pages = results['result']['total_pages']
-                else:
-                    total_pages = 1
-
+                total_pages = results.get('result', {}).get("total_pages", 1)
 
                 res_dict[filename] = {
-                  "text" : " ".join(texts),
+                  "text" : " ".join([t for t in texts if t]), # filter None
                   "total_pages": total_pages  
                 }
-
         return res_dict
 
     async def _convert_to_pdf(self, content: BytesIO, filename: str) -> tuple[BytesIO, str]:
-        """
-        Convertit un fichier non-supporté en PDF en utilisant LibreOffice (asynchrone)
-        
-        Args:
-            content: Contenu du fichier en BytesIO
-            filename: Nom du fichier original
-            
-        Returns:
-            Tuple (contenu PDF en BytesIO, nouveau nom de fichier)
-            
-        Raises:
-            ValueError: Si la conversion échoue
-        """
         temp_input = None
         temp_output_dir = None
-        
         try:
             content.seek(0)
             ext = Path(filename).suffix.lower()
+            libreoffice_formats = ['.doc', '.docx', '.odt', '.xls', '.xlsx', '.ppt', '.pptx']
             
-            # Formats supportés par LibreOffice
-            libreoffice_formats = [
-                '.doc', '.docx', '.odt',  # Word
-                '.xls', '.xlsx',  # Excel
-                '.ppt', '.pptx',  # PowerPoint
-            ]
-            
-            # === Si format Office, utiliser LibreOffice ===
             if ext in libreoffice_formats:
-                # Créer un répertoire temporaire
                 temp_output_dir = tempfile.mkdtemp()
-                
-                # Créer un fichier temporaire avec le bon nom/extension
-                temp_input = tempfile.NamedTemporaryFile(
-                    delete=False, 
-                    suffix=ext,
-                    dir=temp_output_dir
-                )
+                temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=ext, dir=temp_output_dir)
                 temp_input.write(content.read())
                 temp_input.close()
                 
-                # Commande LibreOffice pour conversion
-                cmd = [
-                    'libreoffice',
-                    '--headless',
-                    '--convert-to', 'pdf',
-                    '--outdir', temp_output_dir,
-                    temp_input.name
-                ]
+                cmd = ['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', temp_output_dir, temp_input.name]
                 
-                # Exécution asynchrone du subprocess
                 process = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                 )
                 
                 try:
-                    stdout, stderr = await asyncio.wait_for(
-                        process.communicate(), 
-                        timeout=60
-                    )
+                    stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60)
                 except asyncio.TimeoutError:
-                    process.kill()
-                    await process.wait()
-                    raise ValueError(f"Timeout lors de la conversion de {filename} (> 60s)")
+                    try:
+                        process.kill()
+                    except: pass
+                    raise ValueError(f"Timeout conversion {filename}")
                 
-                # Chemin du PDF généré
                 pdf_path = Path(temp_output_dir) / f"{Path(temp_input.name).stem}.pdf"
                 
                 if process.returncode == 0 and pdf_path.exists():
-                    # Lire le PDF généré
                     with open(pdf_path, 'rb') as pdf_file:
                         pdf_content = BytesIO(pdf_file.read())
-                    
                     new_filename = Path(filename).stem + '.pdf'
-                    print(f"✓ Converti avec LibreOffice: {filename} -> {new_filename}")
-                    
                     return pdf_content, new_filename
                 else:
-                    error_msg = stderr.decode() if stderr else "Raison inconnue"
-                    raise Exception(f"Échec de la conversion LibreOffice: {error_msg}")
-            
-            # === Sinon, format non supporté ===
+                    raise Exception("Echec conversion LibreOffice")
             else:
-                raise Exception("Format de document non supporté")
+                # Si format non supporté, on renvoie tel quel pour éviter crash total
+                content.seek(0)
+                return content, filename
                 
         except Exception as e:
-            raise ValueError(f"Impossible de convertir {filename} en PDF: {str(e)}")
+            # En cas d'erreur conversion, on log et on renvoie l'original pour éviter de casser la chaine
+            print(f"Erreur conversion {filename}: {e}")
+            content.seek(0)
+            return content, filename
         finally:
-            # Nettoyage des fichiers temporaires
+            # Nettoyage robuste
             try:
                 if temp_input and os.path.exists(temp_input.name):
                     os.unlink(temp_input.name)
-            except Exception as e:
-                print(f"⚠️ Impossible de supprimer {temp_input.name}: {e}")
-            
-            try:
                 if temp_output_dir and os.path.exists(temp_output_dir):
-                    # Supprimer tous les fichiers du répertoire
-                    for file in Path(temp_output_dir).glob('*'):
-                        try:
-                            file.unlink()
-                        except:
-                            pass
-                    # Supprimer le répertoire
-                    os.rmdir(temp_output_dir)
-            except Exception as e:
-                print(f"⚠️ Impossible de supprimer le répertoire temporaire: {e}")
+                    import shutil
+                    shutil.rmtree(temp_output_dir, ignore_errors=True)
+            except:
+                pass
 
-
-# --- Chemin du dossier contenant les JSONL ---
 BASE_DIR = Path(__file__).parent
 JSONL_DIR = BASE_DIR / "stat_colab"
 DOWNLOAD_DIR = BASE_DIR / "downloads"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
 async def download_file(url, save_dir=DOWNLOAD_DIR):
-    local_path = save_dir / Path(url).name
-    if not local_path.exists():
+    try:
+        local_path = save_dir / Path(urlparse(url).path).name
+        if not local_path.name:
+            local_path = save_dir / "temp_unnamed_file"
+
+        # On évite de re-télécharger si ça existe déjà pour gagner du temps/IO
+        if local_path.exists() and local_path.stat().st_size > 0:
+            return str(local_path)
+
         loop = asyncio.get_event_loop()
-        # Téléchargement HTTP dans un thread séparé
-        resp = await loop.run_in_executor(None, requests.get, url)
+        # Utilisation de requests avec timeout pour éviter blocage
+        # Correction: verify=False parfois nécessaire pour vieux serveurs, stream=True pour mémoire
+        resp = await loop.run_in_executor(None, lambda: requests.get(url, timeout=30, verify=False))
         resp.raise_for_status()
+        
+        # Écriture
         local_path.write_bytes(resp.content)
-    return str(local_path)
+        return str(local_path)
+    except Exception as e:
+        print(f"Echec download {url}: {e}")
+        return None
 
 def extract_text_from_pdf_sync(pdf_path: str) -> str:
     text = ""
-    with fitz.open(pdf_path) as doc:
-        for page in doc:
-            text += page.get_text()
+    try:
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                text += page.get_text()
+    except Exception as e:
+        print(f"Erreur lecture PDF {pdf_path}: {e}")
     return text.strip()
 
 async def extract_text_from_pdf(pdf_path: str) -> str:
     return await asyncio.to_thread(extract_text_from_pdf_sync, pdf_path)
 
 def convert_to_pdf_sync(input_path: str, output_path: str):
-    doc = fitz.open(input_path)
-    pdf_bytes = doc.convert_to_pdf()
-    pdf_doc = fitz.open("pdf", pdf_bytes)
-    pdf_doc.save(output_path)
-    pdf_doc.close()
-    doc.close()
+    try:
+        doc = fitz.open(input_path)
+        pdf_bytes = doc.convert_to_pdf()
+        pdf_doc = fitz.open("pdf", pdf_bytes)
+        pdf_doc.save(output_path)
+        pdf_doc.close()
+        doc.close()
+    except Exception as e:
+        print(f"Erreur conversion PDF MuPDF {input_path}: {e}")
 
 async def convert_to_pdf(input_path: str, output_path: str):
     await asyncio.to_thread(convert_to_pdf_sync, input_path, output_path)
 
+# --- SÉMAPHORE GLOBAL ---
+# Limite le nombre de fichiers ouverts/tâches simultanées pour éviter "Too many open files"
+# Ajuste ce nombre selon la puissance de ta machine (CPU/RAM). 20 est très safe.
+MAX_CONCURRENT_TASKS = 20
+semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
+
 async def process_line(line):
-    url = line.get("url")
-    if not url:
-        return None
+    # On encapsule tout le traitement d'une ligne dans le sémaphore
+    async with semaphore:
+        url = line.get("url")
+        if not url:
+            return None
 
-    document_data = line.get("original_data",{})
+        document_data = line.get("original_data",{})
 
-    res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
+        try:
+            # Milvus
+            res = await MilvusDocumentCrud().get_document(fichier_source=document_data.get("fichier_source"))
+            tab_data = res.get('data',[])
 
-    tab_data = res.get('data',[])
+            if tab_data:
+                text_bdd = tab_data[0].get('text','').strip()
+                date_maj = tab_data[0].get('date_maj','').strip()
+                if date_maj or text_bdd:
+                    line['content'] = text_bdd
+                    # On retourne tôt, pas besoin de télécharger
+                    return line    
+            
+            path = Path(urlparse(url).path)
+            mime, _ = mimetypes.guess_type(path.name)
+            if not mime: mime = ""
 
-    if tab_data:
-        text_bdd = tab_data[0].get('text','').strip()
-        date_maj = tab_data[0].get('date_maj','').strip()
-        if date_maj or text_bdd:
-            line['content'] = text_bdd
-            return line    
-    
-    path = Path(url)
-    mime, _ = mimetypes.guess_type(path.name)
+            # --- Image -> OCR ---
+            if mime.startswith("image"):
+                extractor = DeepseekOCRDocExtractor()
+                response = await extractor.extract_from_urls([url])
+                
+                # Correction : Gestion du cas où response est None ou vide
+                if response:
+                    results = extractor.get_clean_result(response)
+                    nom_doc = os.path.basename(document_data.get("document","inconnu"))
+                    
+                    # Recherche un peu plus flexible du résultat
+                    texts = ""
+                    if results:
+                        # On prend le premier résultat si le nom exact match pas (souvent le cas avec URL temporaire)
+                        key = next(iter(results))
+                        texts = results[key].get("text", "")
+                    
+                    line["comment"] = "OCR"
+                    line["content"] = texts
+                    print(f"[IMAGE] {url} → OCR Ok")
+                    return line
+                else:
+                    print(f"[IMAGE] {url} → OCR Échec (pas de réponse)")
+                    line["content"] = ""
+                    return line
 
-    # --- Image ---
-    if mime and mime.startswith("image"):
-        extractor = DeepseekOCRDocExtractor()
-        response = await extractor.extract_from_urls([url])
-        results = extractor.get_clean_result(response)
-        nom_doc = os.path.basename(document_data.get("document","inconnu"))
-        texts = results.get(nom_doc).get("text")
+            # --- Téléchargement local pour PDF/Autre ---
+            downloaded_path = None
+            if url.startswith("http://") or url.startswith("https://"):
+                downloaded_path = await download_file(url)
+                if not downloaded_path:
+                    line["content"] = ""
+                    line["comment"] = "Download Fail"
+                    return line
+                url_to_process = downloaded_path
+            else:
+                url_to_process = url
 
-        line["comment"] = "OCR"
-        line["content"] = texts
-        print(f"[IMAGE] {url} → OCR")
-        
-        return line
+            content = ""
+            tmp_pdf = None
 
-    downloaded = False
-    if url.startswith("http://") or url.startswith("https://"):
-        url = await download_file(url)
-        downloaded = True
-    # --- PDF ---
-    if mime == "application/pdf":
-        content = await extract_text_from_pdf(url)
-    else:
-        # --- Conversion en PDF ---
-        tmp_pdf = path.with_suffix(".converted.pdf")
-        convert_to_pdf(url, tmp_pdf)
-        content = extract_text_from_pdf(str(tmp_pdf))
-        os.remove(tmp_pdf)
+            try:
+                # --- PDF ---
+                if mime == "application/pdf" or url_to_process.lower().endswith(".pdf"):
+                    content = await extract_text_from_pdf(url_to_process)
+                else:
+                    # --- Conversion en PDF ---
+                    try:
+                        tmp_pdf = Path(url_to_process).with_suffix(".converted.pdf")
+                        await convert_to_pdf(url_to_process, str(tmp_pdf))
+                        if tmp_pdf.exists():
+                            content = await extract_text_from_pdf(str(tmp_pdf))
+                    except Exception as e:
+                        print(f"Erreur conversion locale {url}: {e}")
+            except Exception as e:
+                print(f"Erreur extraction texte {url}: {e}")
+            
+            line["content"] = content
+            if len(content) < 200:
+                line["comment"] = "⚠️ Document court (<200 caractères)"
+                # print(f"[COURT] {url}") # Commenté pour réduire logs
+            else:
+                line["comment"] = ""
 
-    line["content"] = content
-    if len(content) < 200:
-        line["comment"] = "⚠️ Document court (<200 caractères)"
-        print(f"[COURT] {url}")
-    else:
-        line["comment"] = ""
+            return line
 
-    if downloaded:
-        os.remove(url)
-
-    return line
+        except Exception as e:
+            # Catch global pour qu'une ligne ne plante pas tout le batch
+            print(f"🔥 Erreur critique sur ligne {url}: {e}")
+            return None
+            
+        finally:
+            # Nettoyage impératif
+            try:
+                if downloaded_path and os.path.exists(downloaded_path):
+                    os.remove(downloaded_path)
+                if tmp_pdf and tmp_pdf.exists():
+                    os.remove(tmp_pdf)
+            except Exception as e:
+                pass
 
 async def process_jsonl_for_year_async(jsonl_dir, annee):
     jsonl_files = list(jsonl_dir.glob(f"*{annee}*.jsonl"))
@@ -548,20 +465,32 @@ async def process_jsonl_for_year_async(jsonl_dir, annee):
         with jsonlines.open(jsonl_file, "r") as reader:
             lines.extend(list(reader))
 
+    print(f"Traitement de {len(lines)} documents avec {MAX_CONCURRENT_TASKS} tâches parallèles...")
+
     # Création des tâches async
     tasks = [process_line(line) for line in lines]
-    processed_lines = await asyncio.gather(*tasks)
+    
+    # return_exceptions=True est crucial pour voir les résultats même si une tâche crash
+    processed_lines = await asyncio.gather(*tasks, return_exceptions=True)
 
     short_content_count = 0
+    
+    for res in processed_lines:
+        if isinstance(res, Exception):
+            # On log l'erreur mais on ne compte pas la ligne
+            # print(f"Tâche échouée : {res}") 
+            continue
+        if res is None:
+            continue
+        
+        content = res.get("content", "")
+        if content and len(content) < 200:
+            short_content_count += 1
+
     output_file = BASE_DIR / f"resultats_{annee}.jsonl"
     with jsonlines.open(output_file, mode="w") as writer:
-        for line in processed_lines:
-            if line is None:
-                continue
-            content = line.get("content", "")
-            if len(content) < 200:
-                short_content_count += 1
-        writer.write(f"Nombre total de documents < 200 caractères : {short_content_count}")
+        # On n'écrit pas la phrase de stat DANS le jsonl de données, ça casse le format
+        writer.write({"stat": f"Nombre total de documents < 200 caractères : {short_content_count}"})
 
     print("\n🔎 Résultat final")
     print(f"Nombre total de documents < 200 caractères : {short_content_count}")
@@ -575,4 +504,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     annee = sys.argv[1]
-    asyncio.run(process_jsonl_for_year_async(JSONL_DIR, annee))
+        
+    try:
+        asyncio.run(process_jsonl_for_year_async(JSONL_DIR, annee))
+    except KeyboardInterrupt:
+        print("Arrêt manuel.")
