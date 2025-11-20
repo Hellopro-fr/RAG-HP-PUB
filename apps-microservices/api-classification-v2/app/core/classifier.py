@@ -465,12 +465,13 @@ class ProductClassifier:
             }
         }
 
-    async def _generate_category_summary_with_deepseek(self, category_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _generate_category_summary_with_deepseek(self, category_id: str, category_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Fonction interne qui génère réellement le résumé via DeepSeek (sans cache).
         Sera wrappée par _summarize_category_description_async() avec Redis cache.
 
         Args:
+            category_id: ID de la catégorie (utilisé pour la clé de cache Redis)
             category_data: Dictionnaire contenant les données de la catégorie
 
         Returns:
@@ -540,20 +541,23 @@ class ProductClassifier:
                 "output_tokens": 0
             }
 
-    async def _summarize_category_description_async(self, category_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _summarize_category_description_async(self, category_id: str, category_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Résume une description de catégorie enrichie via DeepSeek avec cache Redis (7 jours).
 
         Args:
+            category_id: ID de la catégorie (utilisé pour la clé de cache Redis)
             category_data: Dictionnaire contenant les données de la catégorie
 
         Returns:
             Dict contenant summary, input_tokens, output_tokens
         """
         # Utiliser cache_or_execute avec TTL de 7 jours (comme api-recherche)
+        # category_id sera utilisé pour générer une clé courte: cache:_generate_category_summary_with_deepseek:2003717:{}
         return await cache_or_execute(
             self._generate_category_summary_with_deepseek,
-            category_data,
+            category_id,  # Premier arg = clé simple et courte
+            category_data,  # Second arg = données complètes
             expire_seconds=86400 * 7  # 7 jours TTL
         )
 
@@ -616,7 +620,8 @@ class ProductClassifier:
                 "fil_ariane": "",
                 "top_5_produit": ""
             })
-            summarize_tasks.append(self._summarize_category_description_async(category_full_data))
+            # Passer l'ID en premier pour clé courte Redis
+            summarize_tasks.append(self._summarize_category_description_async(cat_id, category_full_data))
 
         # Exécuter les résumés en parallèle (cache Redis géré par cache_or_execute)
         summary_results = await asyncio.gather(*summarize_tasks)
