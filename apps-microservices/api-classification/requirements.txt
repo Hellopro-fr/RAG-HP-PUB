@@ -2,6 +2,7 @@ fastapi[all]
 uvicorn
 pydantic
 requests
+httpx
 openai
 python-dotenv
 tqdm

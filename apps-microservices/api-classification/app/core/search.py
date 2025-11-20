@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
 EXTERNAL_PRODUCT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_produit.php"
-EXTERNAL_CATEGORY_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_categorie.php"
+EXTERNAL_CATEGORY_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_categorie_classification.php"
 EXTERNAL_PROMPT_API_URL = "https://www.hellopro.fr/partenaires_externes/info_produit/get_info_prompt.php"
 
 def get_product_details(product_ids: List[str], url: str) -> Optional[List[Dict[str, Any]]]:
@@ -175,15 +175,18 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
     Version asynchrone de get_category_details pour parallélisation.
     Utilise httpx pour des appels HTTP non-bloquants.
     """
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; ClassificationService/2.0)'
+    }
     payload = {'category_ids': category_ids}
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, headers=headers, json=payload)
+            # Utiliser content au lieu de json pour envoyer le JSON déjà sérialisé
+            response = await client.post(url, headers=headers, content=json.dumps(payload))
             response.raise_for_status()
             data = response.json()
-
             if isinstance(data, list):
                 category_details = []
                 for item in data:
@@ -191,9 +194,11 @@ async def get_category_details_async(category_ids: List[str], url: str) -> Optio
                         category_details.append({
                             'id_categorie': str(item.get('id_categorie', '')),
                             'nom_categorie': str(item.get('nom_categorie', '')),
-                            'description_categorie': str(item.get('description_categorie', ''))
+                            'description_categorie': str(item.get('description_categorie', '')),
+                            'fil_ariane': str(item.get('fil_ariane', '')),
+                            'top_5_produit': str(item.get('top_5_produit', ''))
                         })
-                #logger.info(f"[ASYNC] {len(category_details)} descriptions de catégories récupérées")
+                logger.info(f"[ASYNC] {len(category_details)} descriptions de catégories enrichies récupérées")
                 return category_details
             else:
                 logger.error(f"[ASYNC] Format de réponse inattendu pour get_category_details: {data}")

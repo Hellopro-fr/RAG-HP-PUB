@@ -21,6 +21,10 @@ from app.schemas.classification import (
 from app.core.classifier import ProductClassifier
 from app.core.search import test_search_api_connection
 
+# --- START REDIS IMPORTS ---
+from common_utils.redis.cache_service import scan_keys_by_prefix, get_json
+# --- END REDIS IMPORTS ---
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -47,37 +51,28 @@ distribution_metrics = {
     "batch_history": []  # Garder les 100 dernières requêtes
 }
 
-@router.get("/status", response_model=ApiStatus)
-async def get_status():
-    """Récupère le statut de l'API de classification"""
+@router.get("/cache/categories", tags=["Cache"])
+async def get_cached_categories():
+    """Récupère toutes les catégories avec résumés en cache Redis"""
     try:
-        search_available = test_search_api_connection()
-        llm_configured = classifier.is_llm_configured()
-        
-        return ApiStatus(
-            status="healthy" if (search_available and llm_configured) else "degraded",
-            llm_configured=llm_configured,
-            search_api_available=search_available,
-            current_config=classifier.get_configuration()
-        )
+        cache_keys = await scan_keys_by_prefix("cache:_generate_category_summary")
+
+        cached_categories = []
+        for key in cache_keys:
+            data = await get_json(key)
+            if data:
+                cached_categories.append({
+                    "cache_key": key,
+                    "data": data
+                })
+
+        return {
+            "total_cached": len(cached_categories),
+            "categories": cached_categories
+        }
     except Exception as e:
-        logger.error(f"Erreur status: {e}")
+        logger.error(f"Erreur récupération cache catégories: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/configure")
-async def configure_classifier(config: ConfigurationRequest):
-    """Configure le classificateur"""
-    try:
-        classifier.update_configuration(config.dict())
-        return {"message": "Configuration mise à jour", "config": classifier.get_configuration()}
-    except Exception as e:
-        logger.error(f"Erreur configuration: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.get("/config")
-async def get_configuration():
-    """Récupère la configuration actuelle"""
-    return {"config": classifier.get_configuration()}
 
 @router.post("/classify", response_model=ClassificationResult)
 async def classify_single_product(product: ProductInput):
@@ -310,60 +305,6 @@ async def classify_batch_products(batch_input: BatchProductsInput):
     
 #     return {"tasks": tasks_summary, "total_tasks": len(tasks_summary)}
 
-@router.get("/test")
-async def test_classification():
-    """Endpoint de test pour valider le fonctionnement"""
-    test_product = {
-        'id_produit': 'test_001',
-        'nom_produit': 'Perceuse électrique',
-        'description': 'Perceuse électrique professionnelle 750W avec mandrin automatique',
-        'id_categorie_attendue': None
-    }
-
-    try:
-        if not classifier.is_llm_configured():
-            return {"error": "LLM non configuré", "test_product": test_product}
-
-        result = await classifier.classify_single(test_product)
-        return {"test_result": result, "test_product": test_product}
-
-    except Exception as e:
-        logger.error(f"Erreur test: {e}")
-        return {"error": str(e), "test_product": test_product}
-
-@router.get("/test/qwen")
-async def test_qwen_classification():
-    """Endpoint de test spécifique pour Qwen via gRPC"""
-    test_product = {
-        'id_produit': 'test_qwen_001',
-        'nom_produit': 'Marteau pneumatique',
-        'description': 'Marteau pneumatique industriel 25kg pour travaux de démolition',
-        'id_categorie_attendue': None
-    }
-
-    try:
-        # Forcer l'utilisation de Qwen pour ce test
-        original_choice = classifier.llm_choice
-        classifier.llm_choice = 'Qwen'
-
-        if not classifier.is_llm_configured():
-            return {"error": "Qwen gRPC non configuré", "test_product": test_product}
-
-        result = await classifier.classify_single(test_product)
-
-        # Restaurer le choix original
-        classifier.llm_choice = original_choice
-
-        return {"test_result": result, "test_product": test_product, "llm_used": "Qwen"}
-
-    except Exception as e:
-        logger.error(f"Erreur test Qwen: {e}")
-        return {"error": str(e), "test_product": test_product, "llm_used": "Qwen"}
-    finally:
-        # Toujours restaurer le choix original
-        classifier.llm_choice = original_choice
-
-
 @router.post("/classify/batch/distributed", response_model=BatchClassificationResponse)
 async def classify_batch_distributed(batch_input: BatchProductsInput):
     """
@@ -576,82 +517,3 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
         logger.error(f"Erreur classification batch distribuée: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/metrics/distribution")
-async def get_distribution_metrics():
-    """
-    Récupère les métriques de distribution des batches sur les replicas.
-
-    Affiche:
-    - Statistiques globales (requêtes, produits, succès/erreurs, temps)
-    - Statistiques par replica (charge, performance, dernière utilisation)
-    - Historique des 100 dernières requêtes batch
-    """
-    # Convertir defaultdict en dict normal pour le JSON
-    replica_stats_dict = {
-        replica_id: stats
-        for replica_id, stats in distribution_metrics["replica_stats"].items()
-    }
-
-    # Calculer des statistiques agrégées
-    avg_processing_time = (
-        distribution_metrics["total_processing_time"] / distribution_metrics["total_requests"]
-        if distribution_metrics["total_requests"] > 0
-        else 0
-    )
-
-    avg_products_per_request = (
-        distribution_metrics["total_products_processed"] / distribution_metrics["total_requests"]
-        if distribution_metrics["total_requests"] > 0
-        else 0
-    )
-
-    success_rate = (
-        (distribution_metrics["total_success"] / distribution_metrics["total_products_processed"]) * 100
-        if distribution_metrics["total_products_processed"] > 0
-        else 0
-    )
-
-    return {
-        "global_stats": {
-            "total_requests": distribution_metrics["total_requests"],
-            "total_products_processed": distribution_metrics["total_products_processed"],
-            "total_success": distribution_metrics["total_success"],
-            "total_errors": distribution_metrics["total_errors"],
-            "total_processing_time": round(distribution_metrics["total_processing_time"], 2),
-            "avg_processing_time_per_request": round(avg_processing_time, 2),
-            "avg_products_per_request": round(avg_products_per_request, 2),
-            "success_rate_percent": round(success_rate, 2),
-            "total_throughput_products_per_sec": round(
-                distribution_metrics["total_products_processed"] / distribution_metrics["total_processing_time"]
-                if distribution_metrics["total_processing_time"] > 0
-                else 0,
-                2
-            )
-        },
-        "replica_stats": replica_stats_dict,
-        "recent_batches": distribution_metrics["batch_history"][-20:],  # 20 dernières
-        "total_batches_in_history": len(distribution_metrics["batch_history"])
-    }
-
-@router.post("/metrics/distribution/reset")
-async def reset_distribution_metrics():
-    """Réinitialise les métriques de distribution"""
-    global distribution_metrics
-    distribution_metrics = {
-        "total_requests": 0,
-        "total_products_processed": 0,
-        "total_success": 0,
-        "total_errors": 0,
-        "total_processing_time": 0.0,
-        "replica_stats": defaultdict(lambda: {
-            "requests": 0,
-            "products": 0,
-            "success": 0,
-            "errors": 0,
-            "total_time": 0.0,
-            "avg_time": 0.0,
-            "last_used": None
-        }),
-        "batch_history": []
-    }
-    return {"message": "Métriques réinitialisées", "timestamp": datetime.now().isoformat()}

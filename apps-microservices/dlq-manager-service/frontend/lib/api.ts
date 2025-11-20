@@ -109,7 +109,7 @@ export const apiEditAndRequeueMessage = (messageId: string, newPayload: Record<s
 export const formatTimestamp = (ts: string) => {
     if (!ts) return 'N/A';
     try {
-        return format(new Date(ts), 'dd/MM/yyyy HH:mm:ss');
+        return new Date(ts).toLocaleString();
     } catch {
         return ts;
     }
