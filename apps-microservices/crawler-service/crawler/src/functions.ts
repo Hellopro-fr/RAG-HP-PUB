@@ -192,7 +192,7 @@ export const startCrawler = async (
 
         // Browser fingerprinting configuration to avoid detection
         browserPoolOptions: {
-            useFingerprints: true, // Enable browser fingerprinting
+            // useFingerprints: true, // Enable browser fingerprinting (Invalid property in BrowserPoolOptions)
             fingerprintOptions: {
                 fingerprintGeneratorOptions: {
                     browsers: ["firefox", "chrome", "safari"], // Browser types to rotate
@@ -201,7 +201,7 @@ export const startCrawler = async (
                     operatingSystems: ["windows", "macos", "linux"], // OS to emulate
                 },
             },
-            retireInstanceAfterRequestCount: 10, // Force browser restart to prevent memory leaks
+            retireBrowserAfterPageCount: 10, // Force browser restart to prevent memory leaks
         },
 
         maxConcurrency: 15, // Reduced from default to prevent global overload (10 replicas * 15 = 150 concurrent)
