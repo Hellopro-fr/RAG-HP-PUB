@@ -101,22 +101,30 @@ async def delete_cached_category(category_id: str):
     import hashlib
     try:
         data_hash = hashlib.md5(category_id.encode()).hexdigest()[:12]
-        cache_key = f"cache:cat_summary:{data_hash}"
+        cache_key_prefix = f"cache:cat_summary:{data_hash}"
 
-        deleted = await delete_key(cache_key)
+        # Chercher toutes les clés qui commencent par ce préfixe (inclut :[]:{}
+        cache_keys = await scan_keys_by_prefix(cache_key_prefix)
 
-        if deleted:
+        deleted_count = 0
+        deleted_keys = []
+        for key in cache_keys:
+            if await delete_key(key):
+                deleted_count += 1
+                deleted_keys.append(key)
+
+        if deleted_count > 0:
             return {
                 "success": True,
                 "category_id": category_id,
-                "cache_key": cache_key,
+                "deleted_keys": deleted_keys,
                 "message": f"Résumé de la catégorie {category_id} supprimé du cache"
             }
         else:
             return {
                 "success": False,
                 "category_id": category_id,
-                "cache_key": cache_key,
+                "cache_key_prefix": cache_key_prefix,
                 "message": f"Aucun cache trouvé pour la catégorie {category_id}"
             }
     except Exception as e:
