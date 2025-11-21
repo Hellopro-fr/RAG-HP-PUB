@@ -110,6 +110,15 @@ echo "[PHASE 4/4] Scaling application services..."
 # The `--no-deps` flag is used to only scale the specified service.
 docker compose --profile crawling up -d --no-deps --scale crawler-service=$REPLICAS
 echo ""
+
+# --- PHASE 5: Reload Nginx to discover new replicas ---
+echo "[PHASE 5/5] Reloading Nginx in reverse-proxy..."
+# Nginx needs to be reloaded to re-resolve the 'crawler-service' hostname
+# and pick up the new IP addresses of the scaled replicas.
+docker compose --profile crawling exec reverse-proxy nginx -s reload
+echo "Nginx reloaded."
+echo ""
+
 echo "----------------------------------------------------"
 echo "Scaling command complete. System is now running with $REPLICAS replicas."
 echo "----------------------------------------------------"
