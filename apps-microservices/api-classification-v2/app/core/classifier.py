@@ -516,10 +516,17 @@ class ProductClassifier:
             Dict contenant summary, input_tokens, output_tokens
         """
         description = category_data.get("description_categorie", "")
+        fil_ariane = category_data.get("fil_ariane", "")
+        top_5_produit = category_data.get("top_5_produit", "")
 
-        if not description or description == "N/A" or description == "Description non disponible":
+        # Vérifier si on a assez de données pour générer un résumé
+        has_description = description and description != "N/A" and description != "Description non disponible"
+        has_fil_ariane = fil_ariane and fil_ariane.strip()
+        has_top_5 = top_5_produit and top_5_produit.strip()
+
+        if not has_description and not has_fil_ariane and not has_top_5:
             return {
-                "summary": description or "Description non disponible",
+                "summary": "Description non disponible",
                 "input_tokens": 0,
                 "output_tokens": 0
             }
