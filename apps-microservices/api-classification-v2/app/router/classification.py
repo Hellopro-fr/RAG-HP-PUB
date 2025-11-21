@@ -22,7 +22,7 @@ from app.core.classifier import ProductClassifier
 from app.core.search import test_search_api_connection
 
 # --- START REDIS IMPORTS ---
-from common_utils.redis.cache_service import scan_keys_by_prefix, get_json
+from common_utils.redis.cache_service import scan_keys_by_prefix, get_json, delete_key
 # --- END REDIS IMPORTS ---
 
 logger = logging.getLogger(__name__)
@@ -73,6 +73,54 @@ async def get_cached_categories():
         }
     except Exception as e:
         logger.error(f"Erreur récupération cache catégories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/cache/categories", tags=["Cache"])
+async def delete_cached_categories():
+    """Supprime tous les résumés de catégories en cache Redis"""
+    try:
+        cache_keys = await scan_keys_by_prefix("cache:cat_summary")
+
+        deleted_count = 0
+        for key in cache_keys:
+            if await delete_key(key):
+                deleted_count += 1
+
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "message": f"{deleted_count} résumés de catégories supprimés du cache"
+        }
+    except Exception as e:
+        logger.error(f"Erreur suppression cache catégories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/cache/categories/{category_id}", tags=["Cache"])
+async def delete_cached_category(category_id: str):
+    """Supprime le résumé d'une catégorie spécifique en cache Redis"""
+    import hashlib
+    try:
+        data_hash = hashlib.md5(category_id.encode()).hexdigest()[:12]
+        cache_key = f"cache:cat_summary:{data_hash}"
+
+        deleted = await delete_key(cache_key)
+
+        if deleted:
+            return {
+                "success": True,
+                "category_id": category_id,
+                "cache_key": cache_key,
+                "message": f"Résumé de la catégorie {category_id} supprimé du cache"
+            }
+        else:
+            return {
+                "success": False,
+                "category_id": category_id,
+                "cache_key": cache_key,
+                "message": f"Aucun cache trouvé pour la catégorie {category_id}"
+            }
+    except Exception as e:
+        logger.error(f"Erreur suppression cache catégorie {category_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/classify", response_model=ClassificationResult)
