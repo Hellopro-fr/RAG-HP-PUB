@@ -29,8 +29,24 @@ export let stats: StatisticState;
  * @param page - Playwright Page object
  * @param url - Current page URL for logging
  * @param log - Logger instance
+ * @param maxScrolls - Maximum number of scrolls to perform (default: 100)
+ * @param timeoutSecs - Maximum time in seconds to spend scrolling (default: 30)
  */
-const waitAndScroll = async (page: Page, url: string, log: Log) => {
+/**
+ * Simulates infinite scroll behavior on a page until no new content loads
+ * @param page - Playwright Page object
+ * @param url - Current page URL for logging
+ * @param log - Logger instance
+ * @param maxScrolls - Maximum number of scrolls to perform (default: 100)
+ * @param timeoutSecs - Maximum time in seconds to spend scrolling (default: 30)
+ */
+export const waitAndScroll = async (
+    page: Page,
+    url: string,
+    log: Log,
+    maxScrolls: number = 100,
+    timeoutSecs: number = 30
+) => {
     try {
         // Wait for initial network requests to complete
         await page.waitForLoadState("networkidle");
@@ -38,8 +54,21 @@ const waitAndScroll = async (page: Page, url: string, log: Log) => {
         // Track page height to detect when scrolling reaches the bottom
         let previousHeight = await page.evaluate("document.body.scrollHeight");
         let newHeight;
+        let scrolls = 0;
+        const startTime = Date.now();
 
         do {
+            // Check limits
+            if (scrolls >= maxScrolls) {
+                log.warning(`Max scrolls (${maxScrolls}) reached for ${url}`);
+                break;
+            }
+
+            if ((Date.now() - startTime) / 1000 > timeoutSecs) {
+                log.warning(`Scroll timeout (${timeoutSecs}s) reached for ${url}`);
+                break;
+            }
+
             // Scroll to bottom of current page
             await page.evaluate(
                 "window.scrollTo(0, document.body.scrollHeight)"
@@ -58,6 +87,7 @@ const waitAndScroll = async (page: Page, url: string, log: Log) => {
             }
 
             previousHeight = newHeight;
+            scrolls++;
         } while (true);
     } catch (error) {
         // Log any errors that occur during scrolling
@@ -70,18 +100,32 @@ const waitAndScroll = async (page: Page, url: string, log: Log) => {
  * @param page - Playwright Page object
  * @param url - Current page URL
  * @param log - Logger instance
+ * @param maxScrolls - Maximum number of scrolls to perform (default: 100)
+ * @param timeoutSecs - Maximum time in seconds to spend scrolling (default: 30)
  * @returns Promise<string> - Complete page HTML content
  */
-export const processPage = async (page: Page, url: string, log: Log) => {
+export const processPage = async (
+    page: Page,
+    url: string,
+    log: Log,
+    maxScrolls: number = 100,
+    timeoutSecs: number = 30
+) => {
     try {
-        // First scroll through all content
-        await waitAndScroll(page, url, log);
+        // First scroll through all content with safety limits
+        await waitAndScroll(page, url, log, maxScrolls, timeoutSecs);
         let content = await page.content();
 
         // Return the complete page HTML after scrolling
         return content;
     } catch (error) {
-        throw new Error(`Error processPage : ${error}`);
+        log.error(`Error processPage for ${url}: ${error}`);
+        // Return current content even if scrolling failed, to avoid crashing the whole crawl
+        try {
+            return await page.content();
+        } catch (innerError) {
+            throw new Error(`Critical error processPage : ${error}`);
+        }
     }
 };
 
