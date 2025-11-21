@@ -557,7 +557,7 @@ class ProductClassifier:
                 model="deepseek-chat",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
-                max_tokens=150
+                max_tokens=500
             )
 
             summary = response.choices[0].message.content.strip()
