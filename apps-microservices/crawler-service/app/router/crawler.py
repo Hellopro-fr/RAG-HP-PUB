@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX
 from common_utils.redis import cache_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -220,3 +220,30 @@ async def download_crawl_results(
         crawl_id = job_info.get('crawl_id', 'unknown')
         logger.error(f"Error generating results for crawl '{crawl_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate results archive.")
+
+@router.post("/archive/{crawl_id}", response_model=ArchiveResponse)
+async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
+    """
+    Archives a finished crawl job to Google Cloud Storage.
+    The job must be in 'finished' state.
+    After successful upload, local files are cleaned up (except logs).
+    """
+    try:
+        gcs_url = await crawler_manager.archive_crawl(job_info)
+        return ArchiveResponse(
+            message="Crawl archived successfully.",
+            gcs_url=gcs_url
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Error archiving crawl '{crawl_id}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred during archiving.")
+
+@router.get("/archive/{crawl_id}")
+async def get_archived_crawl(crawl_id: str):
+    """
+    Placeholder for retrieving an archived crawl from GCS.
+    Currently returns 501 Not Implemented.
+    """
+    return await crawler_manager.retrieve_archived_crawl(crawl_id)

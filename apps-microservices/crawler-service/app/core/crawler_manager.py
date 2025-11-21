@@ -10,6 +10,7 @@ from typing import Dict, Optional, Any, List
 
 import aiofiles
 import httpx
+from google.cloud import storage
 from fastapi import HTTPException, status
 
 from app.core.config import settings
@@ -531,5 +532,78 @@ class CrawlerManager:
 
         self.local_processes.clear()
         logger.info("Graceful shutdown complete for this replica.")
+
+    async def archive_crawl(self, job_info: dict) -> str:
+        """
+        Archives a finished crawl job to Google Cloud Storage.
+        Only 'finished' jobs can be archived.
+        """
+        crawl_id = job_info['crawl_id']
+        job_status = job_info.get('status')
+        
+        if job_status != "finished":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail=f"Cannot archive crawl '{crawl_id}' because it is not in 'finished' state (current status: {job_status})."
+            )
+
+        job_storage_path = job_info["storage_path"]
+        bucket_name = settings.GCS_BUCKET_NAME
+        
+        logger.info(f"Starting archiving for crawl '{crawl_id}' to GCS bucket '{bucket_name}'.")
+
+        # 1. Create a tar.gz archive of the directory
+        archive_path = shutil.make_archive(
+            base_name=os.path.join(tempfile.gettempdir(), crawl_id),
+            format='gztar',
+            root_dir=job_storage_path
+        )
+        
+        try:
+            # 2. Upload to GCS
+            # Note: This is a blocking call, so we run it in a thread executor to avoid blocking the event loop
+            def upload_to_gcs():
+                client = storage.Client()
+                bucket = client.bucket(bucket_name)
+                blob = bucket.blob(f"{crawl_id}.tar.gz")
+                blob.upload_from_filename(archive_path)
+                return blob.public_url
+
+            loop = asyncio.get_event_loop()
+            public_url = await loop.run_in_executor(None, upload_to_gcs)
+            
+            logger.info(f"Successfully uploaded archive for '{crawl_id}' to GCS.")
+
+            # 3. Cleanup local files (preserve logs and markers)
+            files_to_keep = {'crawler.log', '_callback_payload.json', '_completion_marker.json'}
+            
+            for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                for name in files:
+                    if name not in files_to_keep:
+                        os.remove(os.path.join(root, name))
+                for name in dirs:
+                    # We can remove empty directories
+                    try:
+                        os.rmdir(os.path.join(root, name))
+                    except OSError:
+                        pass # Directory not empty or other error
+
+            logger.info(f"Cleaned up local storage for '{crawl_id}'. Preserved logs and markers.")
+            return f"gs://{bucket_name}/{crawl_id}.tar.gz"
+
+        except Exception as e:
+            logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Archiving failed: {str(e)}")
+        finally:
+            # Clean up the temporary archive file
+            if os.path.exists(archive_path):
+                os.remove(archive_path)
+
+    async def retrieve_archived_crawl(self, crawl_id: str):
+        """
+        Placeholder for retrieving an archived crawl from GCS.
+        """
+        # TODO: Implement retrieval logic (download from GCS, extract, etc.)
+        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Retrieval of archived crawls is not yet implemented.")
 
 crawler_manager = CrawlerManager()
