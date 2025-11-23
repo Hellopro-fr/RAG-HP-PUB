@@ -47,12 +47,17 @@ def extract_justext(html: str) -> str:
     paragraphs = justext.justext(html, justext.get_stoplist("French"))
     return "\n".join([p.text for p in paragraphs if not p.is_boilerplate])
 
-def extract_goose3(html: str) -> str:
+
+def extract_goose3(html: str, url: str = None) -> str:
     config = {
         'enable_image_fetching': True,
     }
     g = Goose(config)
-    article = g.extract(raw_html=html)
+    # Pass URL to Goose3 if available for better extraction context
+    if url:
+        article = g.extract(url=url, raw_html=html)
+    else:
+        article = g.extract(raw_html=html)
     return article.raw_html
 
 # --- Tier 3 Library Functions ---
@@ -140,18 +145,23 @@ def extract_go_readability(html: str) -> str:
 
 # --- Main Orchestrator ---
 
-async def run_all_extractors(html: str) -> Dict[str, ResultItem]:
+
+async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem]:
     """
     Runs all defined extraction functions, then applies post-processing
     (article extraction and deduplication) to each successful result.
+    
+    Args:
+        html: The HTML content to extract from
+        url: Optional URL for extractors that can utilize it (e.g., Goose3)
     """
     loop = asyncio.get_running_loop()
     
     extractors = {
         # Tier 1
-        "readability-lxml": (extract_readability_lxml, html),
-        "jusText": (extract_justext, html),
-        "Goose3": (extract_goose3, html),
+        # "readability-lxml": (extract_readability_lxml, html),
+        # "jusText": (extract_justext, html),
+        "Goose3": (extract_goose3, html, url),
         # Tier 2
         "Readability.js (Mozilla)": (extract_readability_js, html),
         "go-trafilatura": (extract_go_trafilatura, html),
