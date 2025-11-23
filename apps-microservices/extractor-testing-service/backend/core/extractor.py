@@ -73,8 +73,49 @@ def extract_newsplease(html: str) -> str:
     article = newsplease.NewsPlease.from_html(html, url=None)
     return article.maintext if article and article.maintext else ""
 
-def extract_boilerpipe3(html: str) -> str:
+
+def extract_boilerpipe3_default(html: str) -> str:
+    extractor = BoilerpipeExtractor(extractor='DefaultExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_article(html: str) -> str:
     extractor = BoilerpipeExtractor(extractor='ArticleExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_article_sentences(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='ArticleSentencesExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_keep_everything(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='KeepEverythingExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_keep_everything_with_min_k_words(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='KeepEverythingWithMinKWordsExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_largest_content(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='LargestContentExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_num_words_rules(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='NumWordsRulesExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_canola(html: str) -> str:
+    extractor = BoilerpipeExtractor(extractor='CanolaExtractor', html=html)
     return extractor.getText()
 
 # def extract_extractnet(html: str) -> str:
@@ -169,9 +210,16 @@ async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem
         # Custom
         "Trafilatura (Custom HP)": (extract_trafilatura_hp, html),
         # Tier 3
-        "newspaper4k": (extract_newspaper4k, html),
-        "news-please": (extract_newsplease, html),
-        "boilerpipe3": (extract_boilerpipe3, html),
+        # "newspaper4k": (extract_newspaper4k, html),
+        # "news-please": (extract_newsplease, html),
+        "boilerpipe3-default": (extract_boilerpipe3_default, html),
+        "boilerpipe3-article": (extract_boilerpipe3_article, html),
+        "boilerpipe3-article-sentences": (extract_boilerpipe3_article_sentences, html),
+        "boilerpipe3-keep-everything": (extract_boilerpipe3_keep_everything, html),
+        "boilerpipe3-keep-everything-with-min-k-words": (extract_boilerpipe3_keep_everything_with_min_k_words, html),
+        "boilerpipe3-largest-content": (extract_boilerpipe3_largest_content, html),
+        "boilerpipe3-num-words-rules": (extract_boilerpipe3_num_words_rules, html),
+        "boilerpipe3-canola": (extract_boilerpipe3_canola, html),
         # "extractnet": (extract_extractnet, html),
     }
 
