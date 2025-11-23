@@ -18,7 +18,7 @@ class Settings:
     RECONCILIATION_INTERVAL_SECONDS: int = int(os.getenv("RECONCILIATION_INTERVAL_SECONDS", "300"))
 
     # GCS Configuration
-    GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME", "hp-rag-crawling-data-gcp-gcs")
+    GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME")
 
     # Base directory for storing all crawl data (logs, datasets, etc.)
     CRAWLER_STORAGE_PATH: str = os.getenv("CRAWLER_STORAGE_PATH", "/app/storage")
