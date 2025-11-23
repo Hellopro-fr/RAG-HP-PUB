@@ -41,10 +41,10 @@ def run_extraction(func, *args) -> ResultItem:
 
 def extract_readability_lxml(html: str) -> str:
     doc = ReadabilityDocument(html)
-    return doc.content()
+    return doc.summary()
 
 def extract_justext(html: str) -> str:
-    paragraphs = justext.justext(html, justext.get_stoplists())
+    paragraphs = justext.justext(html, justext.get_stoplist("French"))
     return "\n".join([p.text for p in paragraphs if not p.is_boilerplate])
 
 def extract_goose3(html: str) -> str:
