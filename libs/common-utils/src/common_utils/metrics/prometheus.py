@@ -74,7 +74,16 @@ def measure_processing_time(service_name: str, payload_arg_name: str = None, col
                         
                         if payload is not None:
                             if isinstance(payload, list):
-                                collection_value = 'empty_batch' if not payload else getattr(payload[0], collection_field_name, 'unknown_batch_item')
+                                if not payload:
+                                    collection_value = 'empty_batch'
+                                else:
+                                    item = payload[0]
+                                    if isinstance(item, dict):
+                                        collection_value = item.get(
+                                            collection_field_name, 'unknown_batch_item')
+                                    else:
+                                        collection_value = getattr(
+                                            item, collection_field_name, 'unknown_batch_item')
                             elif isinstance(payload, dict):
                                 collection_value = payload.get(collection_field_name, 'unknown')
                             else:
@@ -126,7 +135,16 @@ def measure_processing_time(service_name: str, payload_arg_name: str = None, col
                         
                         if payload is not None:
                             if isinstance(payload, list):
-                                collection_value = 'empty_batch' if not payload else getattr(payload[0], collection_field_name, 'unknown_batch_item')
+                                if not payload:
+                                    collection_value = 'empty_batch'
+                                else:
+                                    item = payload[0]
+                                    if isinstance(item, dict):
+                                        collection_value = item.get(
+                                            collection_field_name, 'unknown_batch_item')
+                                    else:
+                                        collection_value = getattr(
+                                            item, collection_field_name, 'unknown_batch_item')
                             elif isinstance(payload, dict):
                                 collection_value = payload.get(collection_field_name, 'unknown')
                             else:
