@@ -41,7 +41,7 @@ def run_extraction(func, *args) -> ResultItem:
 
 def extract_readability_lxml(html: str) -> str:
     doc = ReadabilityDocument(html)
-    return doc.summary()
+    return doc.content()
 
 def extract_justext(html: str) -> str:
     paragraphs = justext.justext(html, justext.get_stoplists())
