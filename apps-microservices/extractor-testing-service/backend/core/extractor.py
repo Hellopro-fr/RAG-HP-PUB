@@ -267,6 +267,11 @@ async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem
         base_results["go-trafilatura"].content = md(
             base_results["go-trafilatura"].content, heading_style="ATX", escape_html=False)
 
+    # For `Goose3`, convert HTML to Markdown using markdownify and put it back in the result
+    if "Goose3" in base_results:
+        base_results["Goose3"].content = md(
+            base_results["Goose3"].content, heading_style="ATX", escape_html=False)
+
 
     # Instantiate the processor once to access its methods
     post_processor = TrafilaturaHp({"url": "", "content": html, "fetch": False})
