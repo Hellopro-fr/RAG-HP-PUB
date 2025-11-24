@@ -1,8 +1,17 @@
 # Stage 1: Build Go CLIs
 FROM golang:1.24-alpine AS go-builder
 WORKDIR /src
+
+# Install system dependencies
 RUN apk add --no-cache git
-RUN go install github.com/markusmobius/go-trafilatura/cmd/go-trafilatura@latest
+
+# Build custom go-trafilatura script
+COPY apps-microservices/extractor-testing-service/backend/go-extractor /src/go-extractor
+WORKDIR /src/go-extractor
+RUN go mod download
+RUN go build -o go-trafilatura-hp main.go
+
+# Build go-readability CLI
 RUN go install github.com/go-shiori/go-readability/cmd/go-readability@latest
 
 # Stage 2: Build Node.js CLI
@@ -20,7 +29,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential default-jre-headless && rm -rf /var/lib/apt/lists/*
 
 # Copy binaries from builder stages
-COPY --from=go-builder /go/bin/go-trafilatura /usr/local/bin/go-trafilatura
+COPY --from=go-builder /src/go-extractor/go-trafilatura-hp /usr/local/bin/go-trafilatura-hp
 COPY --from=go-builder /go/bin/go-readability /usr/local/bin/go-readability
 
 # Copy the entire Node.js environment from the builder stage. This includes the

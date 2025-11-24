@@ -175,9 +175,25 @@ def extract_readability_js(html: str) -> str:
     finally:
         os.remove(filepath)
 
-def extract_go_trafilatura(html: str) -> str:
-    command = ["go-trafilatura"]
-    return run_subprocess(command, html)
+
+def extract_go_trafilatura(html: str, url: str = None) -> str:
+    # Prepare input for Go script
+    input_data = {
+        "url": url or "",
+        "html": html
+    }
+
+    command = ["go-trafilatura-hp"]
+    result = run_subprocess(command, json.dumps(input_data))
+
+    # Parse JSON output
+    try:
+        output = json.loads(result)
+        if output.get("error"):
+            raise Exception(output["error"])
+        return output.get("html", "")
+    except json.JSONDecodeError as e:
+        raise Exception(f"Failed to parse Go script output: {e}")
 
 def extract_go_readability(html: str) -> str:
     # Pipe the content directly to the command via stdin.
@@ -205,7 +221,7 @@ async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem
         "Goose3": (extract_goose3, html, url),
         # Tier 2
         "Readability.js (Mozilla)": (extract_readability_js, html),
-        "go-trafilatura": (extract_go_trafilatura, html),
+        "go-trafilatura": (extract_go_trafilatura, html, url),
         "go-readability": (extract_go_readability, html),
         # Custom
         "Trafilatura (Custom HP)": (extract_trafilatura_hp, html),
