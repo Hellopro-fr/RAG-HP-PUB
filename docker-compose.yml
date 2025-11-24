@@ -1002,6 +1002,8 @@ services:
     volumes:
       # Mount a volume to persist crawl data outside the container
       - crawler_data:/app/storage
+      # Mount a shared volume for archiving to host
+      - ./crawler_archives:/app/archives
     env_file:
       - .env
     environment:
