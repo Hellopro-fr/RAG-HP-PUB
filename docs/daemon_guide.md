@@ -9,6 +9,13 @@ This guide explains how to run the `upload_daemon.sh` script to automatically up
     ```
 2.  **Permissions**: Your account must have write access to the bucket `gs://hp-rag-crawling-data-gcp-gcs`.
 
+## Setup (Important)
+Since Docker creates volume mount points as `root`, you must change the ownership of the archives directory to your user so the script and tests can write to it.
+
+```bash
+sudo chown -R $USER:$USER apps-microservices/crawler-service/crawler_archives/
+```
+
 ## Running the Daemon
 
 ### Option 1: Simple Loop (Terminal)
