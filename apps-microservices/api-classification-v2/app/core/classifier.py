@@ -598,10 +598,10 @@ class ProductClassifier:
             Dict contenant summary, input_tokens, output_tokens
         """
         # Utiliser le wrapper avec clé courte pour éviter les clés Redis trop longues
-        # Format de clé: cache:cat_summary:<hash_court>
+        # Format de clé: cache:v2:cat_summary:<hash_court>
         return await _cache_with_short_key(
             self._generate_category_summary_with_deepseek,  # func (positionnel)
-            "cat_summary",  # key_prefix (positionnel)
+            "v2:cat_summary",  # key_prefix (positionnel)
             category_id,  # key_data (positionnel) - Hash basé sur l'ID de catégorie
             86400 * 7,  # expire_seconds (positionnel) - 7 jours TTL
             category_id,  # *func_args - Arguments pour _generate_category_summary_with_deepseek

@@ -55,8 +55,8 @@ distribution_metrics = {
 async def get_cached_categories():
     """Récupère toutes les catégories avec résumés en cache Redis"""
     try:
-        # Scanner les nouvelles clés courtes (format: cache:cat_summary:<hash>)
-        cache_keys = await scan_keys_by_prefix("cache:cat_summary")
+        # Scanner les nouvelles clés courtes (format: cache:v2:cat_summary:<hash>)
+        cache_keys = await scan_keys_by_prefix("cache:v2:cat_summary")
 
         cached_categories = []
         for key in cache_keys:
@@ -79,7 +79,7 @@ async def get_cached_categories():
 async def delete_cached_categories():
     """Supprime tous les résumés de catégories en cache Redis"""
     try:
-        cache_keys = await scan_keys_by_prefix("cache:cat_summary")
+        cache_keys = await scan_keys_by_prefix("cache:v2:cat_summary")
 
         deleted_count = 0
         for key in cache_keys:
@@ -101,7 +101,7 @@ async def delete_cached_category(category_id: str):
     import hashlib
     try:
         data_hash = hashlib.md5(category_id.encode()).hexdigest()[:12]
-        cache_key_prefix = f"cache:cat_summary:{data_hash}"
+        cache_key_prefix = f"cache:v2:cat_summary:{data_hash}"
 
         # Chercher toutes les clés qui commencent par ce préfixe (inclut :[]:{}
         cache_keys = await scan_keys_by_prefix(cache_key_prefix)
