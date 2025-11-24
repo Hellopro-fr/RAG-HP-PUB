@@ -12,7 +12,7 @@ from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
-BATCH_SIZE = 2
+BATCH_SIZE = 10
 BATCH_TIMEOUT_SECONDS = 2.0
 
 class Consumer:
@@ -89,10 +89,6 @@ class Consumer:
                 async with self.connection.channel() as channel:
                     for i, result in enumerate(processed_results):
                         original_message = batch[i]
-                        
-                        # Toujours publier la métrique
-                        # if 'metric_payload' in result:
-                        #     await self.publisher.publish_metric_message(result['metric_payload'], channel)
 
                         if result['status'] == 'success':
                             await self.publisher.publish_message(result['processed_message'], channel)

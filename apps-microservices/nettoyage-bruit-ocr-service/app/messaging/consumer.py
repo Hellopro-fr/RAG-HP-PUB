@@ -91,8 +91,8 @@ class Consumer:
                         original_message = batch[i]
                         
                         # Toujours publier la métrique
-                        # if 'metric_payload' in result:
-                        #     await self.publisher.publish_metric_message(result['metric_payload'], channel)
+                        if 'metric_payload' in result:
+                            await self.publisher.publish_metric_message(result['metric_payload'], channel)
 
                         if result['status'] == 'success':
                             await self.publisher.publish_message(result['processed_message'], channel)
