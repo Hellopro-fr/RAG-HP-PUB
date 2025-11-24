@@ -54,6 +54,10 @@ class StopResponse(BaseModel):
     message: str
     crawl_id: str
 
+class ArchiveResponse(BaseModel):
+    message: str
+    gcs_url: str
+
 class CrawlStatus(BaseModel):
     crawl_id: str
     status: str = Field(..., description="Current status: running, stopping, finished, failed", example="running")
