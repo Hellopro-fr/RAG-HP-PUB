@@ -32,6 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 COPY --from=go-builder /src/go-extractor/go-trafilatura-hp /usr/local/bin/go-trafilatura-hp
 COPY --from=go-builder /go/bin/go-readability /usr/local/bin/go-readability
 
+# Ensure binaries are executable
+RUN chmod +x /usr/local/bin/go-trafilatura-hp /usr/local/bin/go-readability
+
 # Copy the entire Node.js environment from the builder stage. This includes the
 # binary, global modules, and bin scripts/symlinks, ensuring perfect parity.
 COPY --from=node-builder /usr/local/ /usr/local/
