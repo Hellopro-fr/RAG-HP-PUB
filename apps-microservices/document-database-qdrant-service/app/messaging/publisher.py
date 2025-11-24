@@ -27,3 +27,4 @@ class Publisher:
             routing_key=routing_key
         )
         print(f"   📤 Message traité et publié avec la clé '{routing_key}'.")
+        print(f"   📤 Message OCR'{message_dict}'.")

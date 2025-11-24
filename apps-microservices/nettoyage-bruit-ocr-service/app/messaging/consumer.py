@@ -155,5 +155,5 @@ class Consumer:
         asyncio.create_task(self.batch_processor())
         
         # Commencer à consommer les messages et à les mettre dans le buffer
-        print("👂 Document-processor-service: En attente de messages...")
+        print("👂 Nettoyage-bruit-ocr-service: En attente de messages...")
         await queue.consume(self._on_message)

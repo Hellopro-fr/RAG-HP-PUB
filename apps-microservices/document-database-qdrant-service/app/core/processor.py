@@ -46,6 +46,7 @@ async def insertion_data(document_data: dict) -> dict:
 
             tab_data = res.get('data',[])
             if tab_data:
+                print("Document-database-service: Mise à jout data")
                 text_bdd = tab_data[0].get('text','').strip()
                 id_bdd         = tab_data[0].get('id')
                 date_ajout_bdd = tab_data[0].get('date_ajout')
@@ -75,6 +76,9 @@ async def insertion_data(document_data: dict) -> dict:
 
         pj_crud = MilvusPjCrud()
         res = await pj_crud.get_pj(fichier_source=fichier_source)
+
+        print("Document-database-service: Ajout data")
+
 
         status = res.get("status")
         data   = res.get("data", [])

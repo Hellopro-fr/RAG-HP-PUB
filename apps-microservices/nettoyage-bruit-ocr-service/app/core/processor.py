@@ -65,6 +65,9 @@ def make_chat_request(prompt_template, content,temperature=0.7):
 
 
 async def nettoyer_bruits_ocr(documents: List[Dict], bdd: str = "milvus") -> List[Dict]:    
+    print(f"🔍Nettoyage-Bruit-OCR-Service: appel fn nettoyage")
+
+
     processed_messages_result = []
 
     for document_item in documents:
