@@ -37,14 +37,14 @@ async def optimizeQwen(payload: BatchOptimRequest):
         print(f"Reception de {len(payload.products)} produits")
 
         instancetraitement = TraitementDonnees()
-        results = []
-        
+
         products_data = [product.dict() for product in payload.products]
 
-        for product in products_data:
+        # Fonction async pour traiter un produit
+        async def process_product(product):
             try:
                 prompt = instancetraitement.generate_prompt(product)
-        
+
                 chat_request = ChatRequest(prompt=prompt)
 
                 response = await llm_client.get_llm_chat_response(chat_request)
@@ -69,40 +69,40 @@ async def optimizeQwen(payload: BatchOptimRequest):
                     parsed_response = json.loads(llm_content)
                     if not parsed_response:
                         print("LLM n'a pas retourné de résultat")
-                        results.append({
+                        return {
                             "id_produit_scrapping": product["id_produit_scrapping"],
                             "error": "LLM n'a pas retourné de résultat",
                             "info": llm_usage_info
-                        })
+                        }
                     else:
                         print("tentative de parsing reussie")
                         print(parsed_response)
-                        results.append({
+                        return {
                             "id_produit_scrapping": product["id_produit_scrapping"],
                             "success": parsed_response,
                             "info": llm_usage_info
-                        })
+                        }
 
                 except json.JSONDecodeError:
                     try:
                         parsed_response = ast.literal_eval(llm_content)
-                        results.append({
+                        return {
                             "id_produit_scrapping": product["id_produit_scrapping"],
                             "success": parsed_response,
                             "info": llm_usage_info
-                        })
+                        }
                     except Exception:
                         print("tentative de parsing échouée")
                         print(llm_content)
-                        results.append({
+                        return {
                             "id_produit_scrapping": product["id_produit_scrapping"],
                             "error": f"Tentative de parsing échouée: {llm_content}",
                             "info": llm_usage_info
-                        })
+                        }
 
             except Exception as e:
                 print(f"Erreur lors du traitement du produit {product['id_produit_scrapping']}: {str(e)}")
-                results.append({
+                return {
                     "id_produit_scrapping": product["id_produit_scrapping"],
                     "error": f"Erreur lors du traitement: {type(e).__name__}: {str(e)}",
                     "info": {
@@ -111,7 +111,10 @@ async def optimizeQwen(payload: BatchOptimRequest):
                         "total_tokens": None,
                         "model": None
                     }
-                })
+                }
+
+        # Traitement parallèle de tous les produits
+        results = await asyncio.gather(*[process_product(product) for product in products_data])
 
         end_time = time.time()
         processing_time = end_time - start_time
