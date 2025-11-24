@@ -164,6 +164,20 @@ class CrawlerManager:
             logger.warning(f"Callback payload file not found for '{crawl_id}'. Sending minimal callback.")
             params = {"id_domaine": crawl_id}
 
+        # --- START: Add Disk-Based File Count ---
+        try:
+            domain = job_info.get("domain")
+            if domain:
+                dataset_path = os.path.join(job_info["storage_path"], 'storage', 'datasets', domain)
+                stored_files_count = _count_files_in_dir(dataset_path)
+                params["stored_files_count"] = stored_files_count
+                # Optional: Override 'success' if you want the main success field to reflect disk count
+                # params["success"] = stored_files_count 
+                logger.info(f"Added stored_files_count ({stored_files_count}) to success webhook for '{crawl_id}'.")
+        except Exception as e:
+            logger.error(f"Failed to count stored files for '{crawl_id}': {e}")
+        # --- END: Add Disk-Based File Count ---
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(str(callback_url), params=params, timeout=30.0)
