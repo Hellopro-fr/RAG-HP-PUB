@@ -94,7 +94,7 @@ def extract_boilerpipe3_article_sentences(html: str) -> str:
 def extract_boilerpipe3_keep_everything(html: str) -> str:
     extractor = BoilerpipeExtractor(
         extractor='KeepEverythingExtractor', html=html)
-    return extractor.getText()
+    return extractor.getHTML()
 
 
 def extract_boilerpipe3_keep_everything_with_min_k_words(html: str) -> str:
@@ -271,6 +271,11 @@ async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem
     if "Goose3" in base_results:
         base_results["Goose3"].content = md(
             base_results["Goose3"].content, heading_style="ATX", escape_html=False)
+
+    # For `boilerpipe3-keep-everything`, convert HTML to Markdown using markdownify and put it back in the result
+    if "boilerpipe3-keep-everything" in base_results:
+        base_results["boilerpipe3-keep-everything"].content = md(
+            base_results["boilerpipe3-keep-everything"].content, heading_style="ATX", escape_html=False)
 
 
     # Instantiate the processor once to access its methods
