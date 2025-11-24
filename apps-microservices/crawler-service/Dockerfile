@@ -41,6 +41,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY apps-microservices/crawler-service/app ./app
 COPY apps-microservices/crawler-service/main.py .
 
+# TODO: To delete
+COPY apps-microservices/crawler-service/test_gcs_archive_safe.py .
+
 # Copy the compiled crawler, its dependencies, and its config from the builder stage
 COPY --from=builder /app/crawler/dist ./crawler/dist
 COPY --from=builder /app/crawler/node_modules ./crawler/node_modules
