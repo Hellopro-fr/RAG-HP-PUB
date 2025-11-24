@@ -187,8 +187,8 @@ async def classify_batch_products(batch_input: BatchProductsInput):
         if len(batch_input.produits) == 0:
             raise HTTPException(status_code=400, detail="Liste de produits vide")
 
-        if len(batch_input.produits) > 200:  # Limite de sécurité
-            raise HTTPException(status_code=400, detail="Trop de produits (max 200)")
+        if len(batch_input.produits) > 500:  # Limite de sécurité
+            raise HTTPException(status_code=400, detail="Trop de produits (max 500)")
 
         # Conversion des modèles Pydantic en dicts
         products_dict = []
