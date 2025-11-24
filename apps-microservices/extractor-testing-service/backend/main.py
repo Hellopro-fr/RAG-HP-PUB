@@ -22,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.post("/test-extractors", response_model=ResponseModel)
 async def test_extractors_endpoint(request: RequestModel):
     """
@@ -30,25 +31,32 @@ async def test_extractors_endpoint(request: RequestModel):
     """
     logger.info("Received request for extraction comparison.")
     html_content = ""
+    url = None
 
     if request.raw_html:
         html_content = request.raw_html
     elif request.json_data and request.json_data.data and request.json_data.data.text:
         html_content = request.json_data.data.text
-    
+        # Extract URL if present in Full JSON Data
+        if request.json_data.data.url:
+            url = request.json_data.data.url
+            logger.info(f"Extracted URL from JSON data: {url}")
+
     if not html_content:
         logger.error("Request received with no HTML content.")
-        raise HTTPException(status_code=400, detail="No HTML content provided in 'raw_html' or 'json_data.data.text'.")
+        raise HTTPException(
+            status_code=400, detail="No HTML content provided in 'raw_html' or 'json_data.data.text'.")
 
     logger.info(f"Processing HTML content of length {len(html_content)}.")
 
     try:
         # 1. Preprocess the HTML
         preprocessed_html = preprocess_html(html_content)
-        logger.info(f"HTML preprocessed. New length: {len(preprocessed_html)}.")
+        logger.info(
+            f"HTML preprocessed. New length: {len(preprocessed_html)}.")
 
-        # 2. Run all extractors
-        results = await run_all_extractors(preprocessed_html)
+        # 2. Run all extractors with optional URL
+        results = await run_all_extractors(preprocessed_html, url=url)
         logger.info("All extractors finished processing.")
 
         return results
@@ -56,6 +64,7 @@ async def test_extractors_endpoint(request: RequestModel):
     except Exception as e:
         logger.exception("An unexpected error occurred during processing.")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/health")
 def health_check():

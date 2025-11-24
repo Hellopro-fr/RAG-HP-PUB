@@ -44,15 +44,20 @@ def extract_readability_lxml(html: str) -> str:
     return doc.summary()
 
 def extract_justext(html: str) -> str:
-    paragraphs = justext.justext(html, justext.get_stoplists())
+    paragraphs = justext.justext(html, justext.get_stoplist("French"))
     return "\n".join([p.text for p in paragraphs if not p.is_boilerplate])
 
-def extract_goose3(html: str) -> str:
+
+def extract_goose3(html: str, url: str = None) -> str:
     config = {
         'enable_image_fetching': True,
     }
     g = Goose(config)
-    article = g.extract(raw_html=html)
+    # Pass URL to Goose3 if available for better extraction context
+    if url:
+        article = g.extract(url=url, raw_html=html)
+    else:
+        article = g.extract(raw_html=html)
     return article.raw_html
 
 # --- Tier 3 Library Functions ---
@@ -68,8 +73,49 @@ def extract_newsplease(html: str) -> str:
     article = newsplease.NewsPlease.from_html(html, url=None)
     return article.maintext if article and article.maintext else ""
 
-def extract_boilerpipe3(html: str) -> str:
+
+def extract_boilerpipe3_default(html: str) -> str:
+    extractor = BoilerpipeExtractor(extractor='DefaultExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_article(html: str) -> str:
     extractor = BoilerpipeExtractor(extractor='ArticleExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_article_sentences(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='ArticleSentencesExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_keep_everything(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='KeepEverythingExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_keep_everything_with_min_k_words(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='KeepEverythingWithMinKWordsExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_largest_content(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='LargestContentExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_num_words_rules(html: str) -> str:
+    extractor = BoilerpipeExtractor(
+        extractor='NumWordsRulesExtractor', html=html)
+    return extractor.getText()
+
+
+def extract_boilerpipe3_canola(html: str) -> str:
+    extractor = BoilerpipeExtractor(extractor='CanolaExtractor', html=html)
     return extractor.getText()
 
 # def extract_extractnet(html: str) -> str:
@@ -140,18 +186,23 @@ def extract_go_readability(html: str) -> str:
 
 # --- Main Orchestrator ---
 
-async def run_all_extractors(html: str) -> Dict[str, ResultItem]:
+
+async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem]:
     """
     Runs all defined extraction functions, then applies post-processing
     (article extraction and deduplication) to each successful result.
+    
+    Args:
+        html: The HTML content to extract from
+        url: Optional URL for extractors that can utilize it (e.g., Goose3)
     """
     loop = asyncio.get_running_loop()
     
     extractors = {
         # Tier 1
-        "readability-lxml": (extract_readability_lxml, html),
-        "jusText": (extract_justext, html),
-        "Goose3": (extract_goose3, html),
+        # "readability-lxml": (extract_readability_lxml, html),
+        # "jusText": (extract_justext, html),
+        "Goose3": (extract_goose3, html, url),
         # Tier 2
         "Readability.js (Mozilla)": (extract_readability_js, html),
         "go-trafilatura": (extract_go_trafilatura, html),
@@ -159,9 +210,16 @@ async def run_all_extractors(html: str) -> Dict[str, ResultItem]:
         # Custom
         "Trafilatura (Custom HP)": (extract_trafilatura_hp, html),
         # Tier 3
-        "newspaper4k": (extract_newspaper4k, html),
-        "news-please": (extract_newsplease, html),
-        "boilerpipe3": (extract_boilerpipe3, html),
+        # "newspaper4k": (extract_newspaper4k, html),
+        # "news-please": (extract_newsplease, html),
+        "boilerpipe3-default": (extract_boilerpipe3_default, html),
+        "boilerpipe3-article": (extract_boilerpipe3_article, html),
+        "boilerpipe3-article-sentences": (extract_boilerpipe3_article_sentences, html),
+        "boilerpipe3-keep-everything": (extract_boilerpipe3_keep_everything, html),
+        "boilerpipe3-keep-everything-with-min-k-words": (extract_boilerpipe3_keep_everything_with_min_k_words, html),
+        "boilerpipe3-largest-content": (extract_boilerpipe3_largest_content, html),
+        "boilerpipe3-num-words-rules": (extract_boilerpipe3_num_words_rules, html),
+        "boilerpipe3-canola": (extract_boilerpipe3_canola, html),
         # "extractnet": (extract_extractnet, html),
     }
 

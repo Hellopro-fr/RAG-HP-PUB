@@ -32,6 +32,17 @@ wss.on('connection', ws => {
 
 function parseLogFile(content) {
   try {
+    // Optimisation: Ne garder que le dernier run
+    const startMarker = '[stdout] Changed working directory to:';
+    const lastStartIndex = content.lastIndexOf(startMarker);
+
+    if (lastStartIndex !== -1) {
+      console.log(`Found multiple runs, keeping only the last one (starting at index ${lastStartIndex})`);
+      content = content.substring(lastStartIndex);
+    } else {
+      console.log('Single run detected or marker not found');
+    }
+
     // 1. Extraire les stats JSON
     const statsMatch = content.match(/{\s*"CrawlingStats"[\s\S]*?}\s*}/);
     let stats = null;
@@ -64,19 +75,19 @@ function parseLogFile(content) {
 
     console.log(`Parsed log: ${stats ? 'stats found' : 'no stats'}, ${errors.length} errors, ${warnings.length} warnings`);
 
-    return { 
-      stats, 
-      errors, 
-      warnings, 
+    return {
+      stats,
+      errors,
+      warnings,
       rawContent: content,
       hasStats: !!stats // Indicateur pour le frontend
     };
   } catch (error) {
     console.error('Error parsing log:', error);
-    return { 
-      stats: null, 
-      errors: [`Error parsing log: ${error.message}`], 
-      warnings: [], 
+    return {
+      stats: null,
+      errors: [`Error parsing log: ${error.message}`],
+      warnings: [],
       rawContent: content,
       hasStats: false
     };
@@ -101,10 +112,10 @@ app.get('/api/jobs', async (req, res) => {
     const jobs = jobsData
       .map(str => str ? JSON.parse(str) : null)
       .filter(Boolean)
-      .map(job => ({ 
-        ...job, 
-        id: job.crawl_id, 
-        lastModified: job.start_time 
+      .map(job => ({
+        ...job,
+        id: job.crawl_id,
+        lastModified: job.start_time
       }));
 
     jobs.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
@@ -122,7 +133,7 @@ app.get('/api/jobs/:id/details', async (req, res) => {
   const redisClient = createClient({ url: REDIS_URL });
   try {
     await redisClient.connect();
-    
+
     // 1. Récupérer les infos de base du job depuis Redis
     const jobDataString = await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`);
     if (!jobDataString) {
@@ -139,28 +150,28 @@ app.get('/api/jobs/:id/details', async (req, res) => {
     // 3. Lire et analyser le fichier de log
     const content = await readFile(logPath, 'utf-8');
     console.log(`Log file read successfully, size: ${content.length} bytes`);
-    
+
     const parsedData = parseLogFile(content);
 
     // 4. Fusionner les données de Redis et du log
-    const fullDetails = { 
-      ...jobData, 
-      id: jobData.crawl_id, 
-      ...parsedData 
+    const fullDetails = {
+      ...jobData,
+      id: jobData.crawl_id,
+      ...parsedData
     };
-    
+
     res.json(fullDetails);
 
   } catch (error) {
     console.error(`Error fetching details for job ${id}:`, error);
     if (error.code === 'ENOENT') {
-      res.status(404).json({ 
+      res.status(404).json({
         error: 'Log file not found',
         id: id,
         hasStats: false
       });
     } else {
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to fetch job details',
         message: error.message
       });
