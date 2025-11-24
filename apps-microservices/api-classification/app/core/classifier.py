@@ -418,7 +418,7 @@ class ProductClassifier:
             }
 
         # Diviser les produits en sous-batches de 4 maximum
-        BATCH_SIZE = 4
+        BATCH_SIZE = 150
         sub_batches = [products[i:i + BATCH_SIZE] for i in range(0, len(products), BATCH_SIZE)]
 
         logger.info(f"[OPTIMIZE-BATCH] Division de {len(products)} produits en {len(sub_batches)} sous-batches de max {BATCH_SIZE} produits")

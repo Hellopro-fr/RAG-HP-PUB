@@ -55,8 +55,8 @@ distribution_metrics = {
 async def get_cached_categories():
     """Récupère toutes les catégories avec résumés en cache Redis"""
     try:
-        # Scanner les nouvelles clés courtes (format: cache:cat_summary:<hash>)
-        cache_keys = await scan_keys_by_prefix("cache:cat_summary")
+        # Scanner les nouvelles clés courtes (format: cache:v2:cat_summary:<hash>)
+        cache_keys = await scan_keys_by_prefix("cache:v2:cat_summary")
 
         cached_categories = []
         for key in cache_keys:
@@ -79,7 +79,7 @@ async def get_cached_categories():
 async def delete_cached_categories():
     """Supprime tous les résumés de catégories en cache Redis"""
     try:
-        cache_keys = await scan_keys_by_prefix("cache:cat_summary")
+        cache_keys = await scan_keys_by_prefix("cache:v2:cat_summary")
 
         deleted_count = 0
         for key in cache_keys:
@@ -101,7 +101,7 @@ async def delete_cached_category(category_id: str):
     import hashlib
     try:
         data_hash = hashlib.md5(category_id.encode()).hexdigest()[:12]
-        cache_key_prefix = f"cache:cat_summary:{data_hash}"
+        cache_key_prefix = f"cache:v2:cat_summary:{data_hash}"
 
         # Chercher toutes les clés qui commencent par ce préfixe (inclut :[]:{}
         cache_keys = await scan_keys_by_prefix(cache_key_prefix)
@@ -129,6 +129,45 @@ async def delete_cached_category(category_id: str):
             }
     except Exception as e:
         logger.error(f"Erreur suppression cache catégorie {category_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/test/category-summary/{category_id}", tags=["Cache"])
+async def test_category_summary(category_id: str):
+    """Génère et teste le résumé d'une catégorie sans utiliser le cache"""
+    from app.core.search import get_category_details_async, EXTERNAL_CATEGORY_API_URL
+    try:
+        # Récupérer les données de la catégorie depuis l'API externe
+        details = await get_category_details_async([category_id], EXTERNAL_CATEGORY_API_URL)
+
+        if not details:
+            raise HTTPException(status_code=404, detail=f"Catégorie {category_id} non trouvée")
+
+        category_data = details[0]
+        enriched_data = {
+            "id_categorie": str(category_data.get('id_categorie', category_id)),
+            "nom_categorie": category_data.get('nom_categorie', 'N/A'),
+            "description_categorie": category_data.get('description_categorie', ''),
+            "fil_ariane": category_data.get('fil_ariane', ''),
+            "top_5_produit": category_data.get('top_5_produit', '')
+        }
+
+        # Générer le résumé sans cache (appel direct à la fonction interne)
+        result = await classifier._generate_category_summary_with_deepseek(category_id, enriched_data)
+
+        return {
+            "category_id": enriched_data["id_categorie"],
+            "nom_categorie": enriched_data["nom_categorie"],
+            "description_categorie": enriched_data["description_categorie"],
+            "fil_ariane": enriched_data["fil_ariane"],
+            "top_5_produit": enriched_data["top_5_produit"],
+            "summary": result["summary"],
+            "input_tokens": result["input_tokens"],
+            "output_tokens": result["output_tokens"]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur test résumé catégorie {category_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/classify", response_model=ClassificationResult)
@@ -177,8 +216,8 @@ async def classify_batch_products(batch_input: BatchProductsInput):
         if len(batch_input.produits) == 0:
             raise HTTPException(status_code=400, detail="Liste de produits vide")
 
-        if len(batch_input.produits) > 200:  # Limite de sécurité
-            raise HTTPException(status_code=400, detail="Trop de produits (max 200)")
+        if len(batch_input.produits) > 500:  # Limite de sécurité
+            raise HTTPException(status_code=400, detail="Trop de produits (max 500)")
 
         # Conversion des modèles Pydantic en dicts
         products_dict = []
