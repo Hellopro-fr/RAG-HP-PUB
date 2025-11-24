@@ -21,12 +21,7 @@ class TestArchiveMockE2E(unittest.TestCase):
         # Cleanup
         if os.path.exists(self.test_file):
             os.remove(self.test_file)
-        if os.path.exists(ARCHIVES_DIR):
-            # Only remove if empty to be safe
-            try:
-                os.rmdir(ARCHIVES_DIR)
-            except OSError:
-                pass
+        # We do NOT remove the directory as it is a bind mount and should persist
 
     def test_daemon_logic(self):
         """
@@ -64,8 +59,9 @@ class TestArchiveMockE2E(unittest.TestCase):
             script_content = f.read()
             
         # Replace infinite loop with single pass
-        script_content = script_content.replace("while true; do", "if true; then")
-        script_content = script_content.replace("done", "fi")
+        script_content = script_content.replace(
+            "while true; do", "for i in 1; do")
+        # We do NOT replace 'done' because the inner loop also uses 'done'
         # Remove sleep
         script_content = script_content.replace("sleep $CHECK_INTERVAL", "# sleep removed")
 
@@ -78,9 +74,10 @@ class TestArchiveMockE2E(unittest.TestCase):
 
         try:
             # Run the modified script
-            # We need to pass the environment variable for the bucket
+            # We need to pass the environment variable for the bucket AND the archives dir
             env = os.environ.copy()
             env["GCS_BUCKET_NAME"] = "mock-bucket"
+            env["ARCHIVES_DIR"] = ARCHIVES_DIR
 
             result = subprocess.run(
                 ["bash", tmp_script_path],

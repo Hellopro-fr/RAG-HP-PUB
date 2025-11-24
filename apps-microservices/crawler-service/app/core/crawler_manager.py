@@ -571,6 +571,14 @@ class CrawlerManager:
         logger.info(
             f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
 
+        # DEBUG: Check if directory exists and is writable
+        if os.path.exists(archives_dir):
+            logger.info(f"Archives directory '{archives_dir}' exists.")
+            logger.info(f"Permissions: {oct(os.stat(archives_dir).st_mode)}")
+        else:
+            logger.error(
+                f"Archives directory '{archives_dir}' DOES NOT EXIST even after makedirs!")
+
         try:
             # 1. Create a tar.gz archive directly in the shared volume
             # We use make_archive which adds the extension, so we pass the base name without extension
