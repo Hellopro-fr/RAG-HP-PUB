@@ -6,6 +6,7 @@ import os
 import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
+from markdownify import markdownify as md
 
 # Tier 1 Imports
 from readability import Document as ReadabilityDocument
@@ -21,6 +22,14 @@ from bs4 import BeautifulSoup
 
 from schemas.schemas import ResultItem
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
+
+logger = logging.getLogger(__name__)
+
+# --- Helper Function to run extractors ---
+
+# Tier 3 Imports
+# import extractnet
+
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +270,12 @@ async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem
     logger.info("--- Starting Post-Processing Stage ---")
     post_processed_results = {}
     
+    # For `go-trafilatura`, convert HTML to Markdown using markdownify and put it back in the result
+    if "go-trafilatura" in base_results:
+        base_results["go-trafilatura"].content = md(
+            base_results["go-trafilatura"].content, heading_style="ATX", escape_html=False)
+
+
     # Instantiate the processor once to access its methods
     post_processor = TrafilaturaHp({"url": "", "content": html, "fetch": False})
     soup = BeautifulSoup(html, 'html5lib')
@@ -281,6 +296,27 @@ async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem
                 
                 # Apply deduplication
                 deduplicated_content = post_processor.dedoublonnage(combined_content)
+
+                new_name = f"{name} + Post-Processing"
+                post_processed_results[new_name] = ResultItem(
+                    content=deduplicated_content,
+                    article_content=post_processor.extract_article(soup)
+                    if article_content:
+                    logger.info(
+                        f"Found {len(article_content)} chars of special article content for post-processing.")
+
+                    for name, result_item in base_results.items():
+                    if not result_item.error and result_item.content:
+                    try:
+                    logger.info(f"Post-processing result for: {name}")
+                    # Combine article content with the extractor's main content
+                    combined_content=result_item.content
+                    if article_content:
+                    combined_content=article_content + "\n" + combined_content
+
+                    # Apply deduplication
+                    deduplicated_content=post_processor.dedoublonnage(
+                        combined_content)
 
                 new_name = f"{name} + Post-Processing"
                 post_processed_results[new_name] = ResultItem(
