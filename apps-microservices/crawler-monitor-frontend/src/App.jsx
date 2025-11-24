@@ -247,9 +247,25 @@ const AdvancedLogViewer = ({ content, jobId }) => {
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span>
-                Page {currentPage} / {totalPages}
-              </span>
+
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline">Page</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={totalPages}
+                  value={currentPage}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    if (!isNaN(val) && val >= 1 && val <= totalPages) {
+                      setCurrentPage(val);
+                    }
+                  }}
+                  className="w-12 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-center text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+                <span className="text-xs text-gray-400">/ {totalPages}</span>
+              </div>
+
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}

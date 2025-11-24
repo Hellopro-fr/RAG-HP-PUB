@@ -4,3 +4,4 @@ python-dotenv
 aiofiles
 httpx
 redis
+google-cloud-storage

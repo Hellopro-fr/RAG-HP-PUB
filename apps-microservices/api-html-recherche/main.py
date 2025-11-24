@@ -80,7 +80,7 @@ async def login_page(request: Request):
 async def login_action(request: Request, username: str = Form(...), password: str = Form(...)):
 
     is_anthony = False
-    if username == "aandrianirina" and password == "lhcWj>{JJP@4":
+    if username == "aandrianirina" and password == "lhcWj>{JJP@4_1":
         is_anthony = True
 
         expiration = datetime.now() + timedelta(hours=24)
