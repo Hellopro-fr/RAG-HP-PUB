@@ -6,13 +6,13 @@ import asyncio
 import aiormq
 import traceback
 
-from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
-from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
+from nettoyage_bruit_ocr_service.messaging.publisher import Publisher  # Importe notre publisher local
+from nettoyage_bruit_ocr_service.core.processor import nettoyer_bruits_ocr # Importe la logique métier
 from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
-BATCH_SIZE = 2
+BATCH_SIZE = 20
 BATCH_TIMEOUT_SECONDS = 2.0
 
 class Consumer:
@@ -21,9 +21,9 @@ class Consumer:
         self.publisher = publisher
         
         self.message_buffer = asyncio.Queue()
-        self.exchange_name = 'data_exchange_document'
-        self.routing_key = 'new_data.document'
-        self.queue_name = 'document_processing_queue'
+        self.exchange_name = 'processed_data_exchange'
+        self.routing_key = 'data.ready_for_ocr_cleaning'
+        self.queue_name = 'nettoyage_bruit_ocr_queue'
         self.retry_exchange = 'retry_exchange'
         self.retry_queue_name = f'{self.queue_name}_retry'
         self.dead_letter_exchange = 'dead_letter_exchange'
@@ -84,7 +84,7 @@ class Consumer:
             messages_to_process = [json.loads(msg.body) for msg in batch]
             
             try:
-                processed_results = await process_document_data_for_templating(messages_to_process)
+                processed_results = await nettoyer_bruits_ocr(messages_to_process)
                 
                 async with self.connection.channel() as channel:
                     for i, result in enumerate(processed_results):
@@ -108,7 +108,7 @@ class Consumer:
                                 
                                 dlq_headers = DLQProperties.create_dlq_headers(
                                     Exception(result['error_message']), 
-                                    'document-echange-processor-service', 
+                                    'nettoyage-bruit-ocr-service', 
                                     MAX_RETRIES, 
                                     original_message
                                 )

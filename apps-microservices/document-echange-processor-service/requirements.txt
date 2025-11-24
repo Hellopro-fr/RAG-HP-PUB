@@ -1,6 +1,5 @@
 pika
 aio_pika
-pymilvus
 pydantic
 beautifulsoup4
 bs4
@@ -8,12 +7,5 @@ markdownify
 html5lib
 accelerate
 python-dotenv
-Pillow 
-reportlab
-grpcio
-grpcio-tools
-protobuf
-googleapis-common-protos
-reportlab
 presidio_analyzer
 presidio_anonymizer

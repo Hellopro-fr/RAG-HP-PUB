@@ -1,0 +1,8 @@
+aio_pika
+pydantic
+pika
+python-dotenv
+grpcio
+grpcio-tools
+protobuf
+googleapis-common-protos
