@@ -32,6 +32,17 @@ wss.on('connection', ws => {
 
 function parseLogFile(content) {
   try {
+    // Optimisation: Ne garder que le dernier run
+    const startMarker = '[stdout] Changed working directory to:';
+    const lastStartIndex = content.lastIndexOf(startMarker);
+
+    if (lastStartIndex !== -1) {
+      console.log(`Found multiple runs, keeping only the last one (starting at index ${lastStartIndex})`);
+      content = content.substring(lastStartIndex);
+    } else {
+      console.log('Single run detected or marker not found');
+    }
+
     // 1. Extraire les stats JSON
     const statsMatch = content.match(/{\s*"CrawlingStats"[\s\S]*?}\s*}/);
     let stats = null;
