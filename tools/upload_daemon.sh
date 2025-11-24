@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Configuration
-ARCHIVES_DIR="./crawler_archives"
+# Path relative to this script (tools/) -> root -> apps-microservices/crawler-service/crawler_archives
+ARCHIVES_DIR="$(dirname "$0")/../apps-microservices/crawler-service/crawler_archives"
 # Load .env from parent directory
 ENV_FILE="$(dirname "$0")/../.env"
 if [ -f "$ENV_FILE" ]; then
