@@ -8,7 +8,7 @@ RUN apk add --no-cache git
 # Build custom go-trafilatura script
 COPY apps-microservices/extractor-testing-service/backend/go-extractor /src/go-extractor
 WORKDIR /src/go-extractor
-RUN go mod download
+RUN go mod tidy
 RUN go build -o go-trafilatura-hp main.go
 
 # Build go-readability CLI
