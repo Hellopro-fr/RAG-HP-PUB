@@ -9,7 +9,6 @@ import asyncio
 import tempfile
 import os
 
-from reportlab.lib.pagesizes import A4
 
 BASE_URL_OCR = os.environ.get("URL_OCR", "http://34.34.166.5:8501")
 
