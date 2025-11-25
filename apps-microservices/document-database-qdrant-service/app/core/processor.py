@@ -43,7 +43,7 @@ async def insertion_data(document_data: dict) -> dict:
 
         print(f"Document-database-service: page type {page_type}")
 
-        if page_type == "autre":
+        if page_type == "autre" and False:
             res = await base_vectorielle.get_document(fichier_source=fichier_source)
 
             tab_data = res.get('data',[])
