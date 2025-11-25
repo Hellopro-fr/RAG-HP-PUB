@@ -13,11 +13,17 @@ async def insertion_data(document_data: dict) -> dict:
     """
     print(f"Doc data : {document_data}")
 
-    # todo rollbacker si pipeline normal
-    document = document_data.get("data",{})
-    page_type = document.get("page_type","")
+    documents = document_data.get("data",[])
+
+    if isinstance(documents, list):
+        page_type = documents[0].get("page_type","")
+    else:
+        document = document_data.get("data",{})
+        page_type = document.get("page_type","")
+        documents = [document]
+
+
     nb_pages = document_data.get("nb_pages","")
-    documents = [document]
     collection = document_data.get("collection", CollectionName.DOCUMENT)
     bdd = "milvus" 
 
