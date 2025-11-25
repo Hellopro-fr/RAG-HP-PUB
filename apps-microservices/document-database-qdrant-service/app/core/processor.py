@@ -64,13 +64,17 @@ async def insertion_data(document_data: dict) -> dict:
                         docs.append(item)
 
                     res_update = await func(docs)
+
+                    print("Res update: ", res_update)
                     return res_update
             else:
                 documents_bis = []
                 for document in documents:
                     document["fichier_source"] = f"{doc.get('fichier_source','')} | {doc.get('page_type','')} | {nb_pages}"
                     documents_bis.append({**{k.replace("-", "_"): v for k, v in document.items() if k in ["id_demande","id_fournisseur","text","fichier_source"]}})
-                await MilvusDocumentCrud().insert_document(documents_bis)
+                res_insert = await MilvusDocumentCrud().insert_document(documents_bis)
+                print("Res insert: ", res_insert)
+
             return
         
 
