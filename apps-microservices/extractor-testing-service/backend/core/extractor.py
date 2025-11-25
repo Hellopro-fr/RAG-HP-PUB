@@ -253,6 +253,14 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
                 base_results[name] = ResultItem(
                     content="", char_count=0, error=f"An unexpected error occurred: {e}")
 
+    # --- Add Original Input HTML for comparison ---
+    base_results["Original Input (HTML)"] = ResultItem(
+        content=html,
+        char_count=len(html),
+        error=None
+    )
+    logger.info("Added original preprocessed HTML for comparison")
+
     # --- Create HTML and Markdown versions for specific extractors ---
     logger.info("--- Creating HTML and Markdown versions ---")
 
