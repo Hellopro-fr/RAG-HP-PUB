@@ -857,6 +857,9 @@ class SearchOrchestrator:
         if getattr(exception, "status_code", None) == 503:
             return True
 
+        if getattr(exception, "code", None) == 503:
+            return True
+
         msg = str(exception).lower()
         return (
             "503" in msg
@@ -867,7 +870,7 @@ class SearchOrchestrator:
     @retry(
         retry=retry_if_exception(is_503_error),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        stop=stop_after_attempt(3),
+        stop=stop_after_attempt(6),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
