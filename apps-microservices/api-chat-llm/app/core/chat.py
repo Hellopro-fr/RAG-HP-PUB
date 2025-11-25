@@ -365,16 +365,17 @@ def llm_prompt_gemini(request: ChatRequest) -> str:
             )
             break
         except APIError as e:
-            logging.info(f"e : {e}")
             if e.code == 503 and attempt < request.max_retries - 1:
                 print(
                     f"Erreur 503 {attempt + 1}/{request.max_retries} after {delay} seconds..."
                 )
                 time.sleep(delay)
                 delay *= 2  # Exponential backoff
+                response = e
                 continue
         except Exception as e:
             print(f"Erreur exception: {e}")
+            response = e
 
     # logging.info("Gemini response received. \nResponse: %s", response)
 
