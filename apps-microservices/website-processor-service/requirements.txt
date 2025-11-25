@@ -15,3 +15,5 @@ aio-pika
 psutil
 prometheus-client
 waitress
+boilerpy3
+jpype1

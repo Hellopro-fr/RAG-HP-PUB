@@ -60,25 +60,59 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             "fetch": False
         }
 
-        # Étape 2.2: Extraire le contenu nettoyé avec Trafilatura, avec une logique de retry
+        # Étape 2.2: Extraire le contenu nettoyé avec Trafilatura, avec une logique de retry et fallback
         trafilatura = TrafilaturaHp(info)
         
         data_extracted = ""
         max_retries = 3
+
+        # 1. Trafilatura Python
         for attempt in range(max_retries):
             extracted_content = trafilatura.extract(info).content
-
             if extracted_content and extracted_content.strip():
                 data_extracted = extracted_content
+                logging.info(
+                    f"[{url}] - Extraction réussie avec Trafilatura Python (tentative {attempt + 1})")
                 break
-            
             if attempt < max_retries - 1:
                 time.sleep(1)
 
+        # 2. Fallback: Go-Trafilatura
         if not data_extracted:
-            raise ValueError("Le contenu extrait est vide ou invalide.")
+            logging.info(
+                f"[{url}] - Échec Trafilatura Python. Tentative avec Go-Trafilatura.")
+            for attempt in range(max_retries):
+                extracted_content = trafilatura.extract_go_trafilatura(
+                    info.get("content", ""), url)
+                if extracted_content and extracted_content.strip():
+                    data_extracted = extracted_content
+                    logging.info(
+                        f"[{url}] - Extraction réussie avec Go-Trafilatura (tentative {attempt + 1})")
+                    break
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+
+        # 3. Fallback: Boilerpy3
+        if not data_extracted:
+            logging.info(
+                f"[{url}] - Échec Go-Trafilatura. Tentative avec Boilerpy3.")
+            for attempt in range(max_retries):
+                extracted_content = trafilatura.extract_boilerpy3(
+                    info.get("content", ""))
+                if extracted_content and extracted_content.strip():
+                    data_extracted = extracted_content
+                    logging.info(
+                        f"[{url}] - Extraction réussie avec Boilerpy3 (tentative {attempt + 1})")
+                    break
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+
+        if not data_extracted:
+            raise ValueError(
+                "Le contenu extrait est vide ou invalide après tous les essais (Trafilatura, Go, Boilerpy3).")
         
-        logging.info(f"[{url}] - Taille texte extrait par Trafilatura: {len(data_extracted)} chars.")
+        logging.info(
+            f"[{url}] - Taille texte extrait: {len(data_extracted)} chars.")
         text_to_embed_clean = data_extracted.strip()
     
     # Étape 3: Construire le message de sortie
