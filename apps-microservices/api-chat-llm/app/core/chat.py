@@ -16,7 +16,12 @@ from common_utils.grpc_clients import (
 
 
 # Import des schémas Pydantic (à adapter si les chemins ont changé)
-from app.schemas.chat import chatResponse, BatchChatRequest,BatchResult , BatchRequestInput
+from app.schemas.chat import (
+    chatResponse,
+    BatchChatRequest,
+    BatchResult,
+    BatchRequestInput,
+)
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 from app.core.credentials import settings
 from openai import OpenAI, AsyncOpenAI
@@ -59,21 +64,22 @@ class DeepSeek:
 
     def set_temperature(self, temperature):
         self.TEMPERATURE = float(temperature)
-        
+
     async def stream(self, message):
         response_stream = await self.async_client.chat.completions.create(
             model=self.MODEL,
             messages=[
-                {"role": "system", "content": "You are a helpful and intelligent assistant."},
+                {
+                    "role": "system",
+                    "content": "You are a helpful and intelligent assistant.",
+                },
                 {"role": "user", "content": message},
             ],
             temperature=self.TEMPERATURE,
-            stream=True
+            stream=True,
         )
         async for chunk in response_stream:
             yield chunk
-
-
 
 
 class LLMProvider:
@@ -90,11 +96,11 @@ class LLMProvider:
             self.API_KEY = config.get("api_key", settings.OPENROUTER_API_KEY)
             self.BASE_URL = ChatBaseURL.OPENROUTER
 
-        self.MODEL = config.get("model","deepseek-chat")
+        self.MODEL = config.get("model", "deepseek-chat")
         self.TEMPERATURE = config.get("temperature", 0.4)
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
         self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
-        
+
     def chat(self, message, stream=False):
         response = self.client.chat.completions.create(
             model=self.MODEL,
@@ -114,25 +120,29 @@ class LLMProvider:
 
     def set_temperature(self, temperature):
         self.TEMPERATURE = float(temperature)
-        
+
     async def stream(self, message):
         response_stream = await self.async_client.chat.completions.create(
             model=self.MODEL,
             messages=[
-                {"role": "system", "content": "You are a helpful and intelligent assistant."},
+                {
+                    "role": "system",
+                    "content": "You are a helpful and intelligent assistant.",
+                },
                 {"role": "user", "content": message},
             ],
             temperature=self.TEMPERATURE,
-            stream=True
+            stream=True,
         )
         async for chunk in response_stream:
             yield chunk
+
 
 class ChatGPT:
     def __init__(self, config=None):
         config = config or {}
         self.API_KEY = config.get("api_key", settings.OPENAI_API_KEY)
-        self.MODEL = config.get("model","gpt-4o-2024-11-20")
+        self.MODEL = config.get("model", "gpt-4o-2024-11-20")
         self.TEMPERATURE = config.get("temperature", 0.4)
         self.client = OpenAI(api_key=self.API_KEY)
         self.async_client = AsyncOpenAI(api_key=self.API_KEY)
@@ -152,7 +162,7 @@ class ChatGPT:
 
     def set_temperature(self, temperature):
         self.TEMPERATURE = float(temperature)
-        
+
     async def stream(self, message):
         response_stream = await self.async_client.chat.completions.create(
             model=self.MODEL,
@@ -160,11 +170,12 @@ class ChatGPT:
                 {"role": "user", "content": message},
             ],
             temperature=self.TEMPERATURE,
-            stream=True
+            stream=True,
         )
         async for chunk in response_stream:
             yield chunk
-            
+
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -261,9 +272,7 @@ class OpenRouter:
         response = self.client.chat.completions.create(
             extra_body={},
             model=self.MODEL,
-            messages=[
-                {"role": "user", "content": [{"type": "text", "text": message}]}
-            ],
+            messages=[{"role": "user", "content": [{"type": "text", "text": message}]}],
             temperature=self.TEMPERATURE,
             stream=stream,
         )
@@ -273,19 +282,18 @@ class OpenRouter:
 
     def set_temperature(self, temperature):
         self.TEMPERATURE = float(temperature)
-        
+
     async def stream(self, message):
         response_stream = await self.async_client.chat.completions.create(
             extra_body={},
             model=self.MODEL,
-            messages=[
-                {"role": "user", "content": [{"type": "text", "text": message}]}
-            ],
+            messages=[{"role": "user", "content": [{"type": "text", "text": message}]}],
             temperature=self.TEMPERATURE,
-            stream=True
+            stream=True,
         )
         async for chunk in response_stream:
             yield chunk
+
 
 # Chat completion via Deepseek
 def llm_prompt_deepseek(request: ChatRequest) -> str:
@@ -338,19 +346,35 @@ def llm_prompt_gemini(request: ChatRequest) -> str:
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     prompt = request.prompt
 
-    response = client.models.generate_content(
-        model=request.model if request.model else settings.GEMINI_MODEL_NAME,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(
-                thinking_level=(
-                    request.thinking_level if request.thinking_level else "high"
-                )
+    delay = 1
+    for attempt in range(request.max_retries):
+        if attempt == request.max_retries - 1:
+            break
+        try:
+            response = client.models.generate_content(
+                model=request.model if request.model else settings.GEMINI_MODEL_NAME,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level=(
+                            request.thinking_level if request.thinking_level else "high"
+                        )
+                    )
+                ),
             )
-        ),
-    )
+            break
+        except APIError as e:
+            if e.status_code == 503 and attempt < request.max_retries - 1:
+                print(
+                    f"Erreur 503 {attempt + 1}/{request.max_retries} after {delay} seconds..."
+                )
+                time.sleep(delay)
+                delay *= 2  # Exponential backoff
+                continue
+        except Exception as e:
+            print(f"Erreur exception: {e}")
 
-    logging.info("Gemini response received. \nResponse: %s", response)
+    # logging.info("Gemini response received. \nResponse: %s", response)
 
     # Récupération du dump
     api_response_dict = response.model_dump()
@@ -379,28 +403,37 @@ async def get_gemini_chat_completion_response(request: ChatRequest):
         "time_elapsed": time_elapsed,
     }
 
+
 # Chat completion via Deepseek
-async def llm_prompt_batch_deepseek(requestInput: BatchRequestInput, max_tokens: int = 1024 , enable_thinking: bool = False , temperature: float = 0.7) -> BatchResult:
+async def llm_prompt_batch_deepseek(
+    requestInput: BatchRequestInput,
+    max_tokens: int = 1024,
+    enable_thinking: bool = False,
+    temperature: float = 0.7,
+) -> BatchResult:
 
     start_time = time.perf_counter()
-   
 
     # appel chat en asyncio
-    
-    response = await asyncio.to_thread(llm_prompt_deepseek, ChatRequest(
-        prompt=requestInput.prompt,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        enable_thinking=enable_thinking
-    ))
+
+    response = await asyncio.to_thread(
+        llm_prompt_deepseek,
+        ChatRequest(
+            prompt=requestInput.prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            enable_thinking=enable_thinking,
+        ),
+    )
 
     time_elapsed = time.perf_counter() - start_time
 
     return BatchResult(
-        id_request=requestInput.id_request, 
-        llm_response=response.get("api_response", {}), 
-        time_elapsed=time_elapsed
+        id_request=requestInput.id_request,
+        llm_response=response.get("api_response", {}),
+        time_elapsed=time_elapsed,
     )
+
 
 async def get_batch_deepseek_chat_completion_response(BatchRequest: BatchChatRequest):
 
@@ -408,7 +441,12 @@ async def get_batch_deepseek_chat_completion_response(BatchRequest: BatchChatReq
 
     # Créer une tâche asynchrone pour chaque produit
     tasks = [
-        llm_prompt_batch_deepseek(requestInput, max_tokens=BatchRequest.max_tokens, enable_thinking=BatchRequest.enable_thinking , temperature=BatchRequest.temperature)
+        llm_prompt_batch_deepseek(
+            requestInput,
+            max_tokens=BatchRequest.max_tokens,
+            enable_thinking=BatchRequest.enable_thinking,
+            temperature=BatchRequest.temperature,
+        )
         for requestInput in BatchRequest.list_request
     ]
 
@@ -421,7 +459,11 @@ async def get_batch_deepseek_chat_completion_response(BatchRequest: BatchChatReq
         if isinstance(res, Exception):
             logger.error(f"Une tâche a échoué dans le batch: {res}")
             # Vous pouvez décider quoi faire ici, par exemple retourner un objet d'erreur
-            processed_results.append(BatchResult(id_request="unknown_error", llm_response={"error": str(res)}))
+            processed_results.append(
+                BatchResult(
+                    id_request="unknown_error", llm_response={"error": str(res)}
+                )
+            )
         else:
             processed_results.append(res)
 

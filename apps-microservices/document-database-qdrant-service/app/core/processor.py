@@ -41,6 +41,8 @@ async def insertion_data(document_data: dict) -> dict:
     if len(documents) > 0:
         fichier_source = documents[0].get("fichier_source", "fichier source inconnu")
 
+        print(f"Document-database-service: page type {page_type}")
+
         if page_type == "autre":
             res = await base_vectorielle.get_document(fichier_source=fichier_source)
 
@@ -62,22 +64,22 @@ async def insertion_data(document_data: dict) -> dict:
                     item['fichier_source'] = f"{doc.get('fichier_source','')} | {doc.get('page_type','')} | {nb_pages}"
                     docs.append(item)
 
-                res_update = await func(docs)
+                res = await func(docs)
 
-                print("Res update: ", res_update)
-                return res_update
+                print("Res update: ", res)
+                
             else:
                 print("Document-database-service: Insertion data")
 
                 documents_bis = []
                 for document in documents:
                     document["embedding"] = [0.0]*1024
-                    document["fichier_source"] = f"{doc.get('fichier_source','')} | {doc.get('page_type','')} | {nb_pages}"
+                    document["fichier_source"] = f"{document.get('fichier_source','')} | {document.get('page_type','')} | {nb_pages}"
                     documents_bis.append({**{k.replace("-", "_"): v for k, v in document.items() if k in ["id_demande","id_fournisseur","text","fichier_source","embedding"]}})
-                res_insert = await MilvusDocumentCrud().insert_document(documents_bis)
-                print("Res insert: ", res_insert)
+                res = await MilvusDocumentCrud().insert_document(documents_bis)
+                print("Res insert: ", res)
 
-            return
+            return res
         
 
         pj_crud = MilvusPjCrud()
