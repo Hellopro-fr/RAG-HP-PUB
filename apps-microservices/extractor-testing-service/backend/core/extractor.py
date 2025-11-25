@@ -8,9 +8,6 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
 from markdownify import markdownify as md
 
-# Tier 1 Imports
-from goose3 import Goose
-
 # Tier 3 Imports
 from boilerpipe.extract import Extractor as BoilerpipeExtractor
 from boilerpy3 import extractors as BoilerpyExtractor
@@ -51,21 +48,6 @@ def run_extraction(func, *args) -> ResultItem:
     except Exception as e:
         logger.error(f"Error in {func.__name__}: {e}", exc_info=True)
         return ResultItem(content="", char_count=0, error=str(e))
-
-# --- Tier 1 Library Functions ---
-
-
-def extract_goose3(html: str, url: str = None) -> str:
-    config = {
-        'enable_image_fetching': True,
-    }
-    g = Goose(config)
-    # Pass URL to Goose3 if available for better extraction context
-    if url:
-        article = g.extract(url=url, raw_html=html)
-    else:
-        article = g.extract(raw_html=html)
-    return article.raw_html
 
 # --- Tier 3 Library Functions ---
 
@@ -223,10 +205,6 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
     loop = asyncio.get_running_loop()
 
     extractors = {
-        # Tier 1
-        # "readability-lxml": (extract_readability_lxml, html),
-        # "jusText": (extract_justext, html),
-        "Goose3": (extract_goose3, html, url),
         # Tier 2
         "go-trafilatura": (extract_go_trafilatura, html, url),
         # Custom - Three strategy variants
@@ -273,7 +251,7 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
 
     # Extractors that should have both HTML and Markdown versions
     html_markdown_extractors = [
-        "Goose3", "go-trafilatura", "boilerpipe3-keep-everything", "boilerpy3"]
+        "go-trafilatura", "boilerpipe3-keep-everything", "boilerpy3"]
 
     for extractor_name in html_markdown_extractors:
         if extractor_name in base_results and not base_results[extractor_name].error:

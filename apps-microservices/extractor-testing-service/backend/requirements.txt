@@ -12,9 +12,6 @@ sentence_splitter
 python-multipart
 bs4
 
-# Tier 1
-goose3
-
 # Tier 3
 boilerpipe3
 boilerpy3
