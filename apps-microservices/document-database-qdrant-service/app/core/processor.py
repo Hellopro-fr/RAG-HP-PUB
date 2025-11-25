@@ -13,7 +13,6 @@ async def insertion_data(document_data: dict) -> dict:
     """
     print(f"Doc data : {document_data}")
 
-    # todo rollbacker si pipeline normal
     documents = document_data.get("data",[])
 
     if isinstance(documents, list):
