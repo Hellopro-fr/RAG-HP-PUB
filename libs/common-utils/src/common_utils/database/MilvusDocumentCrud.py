@@ -187,10 +187,11 @@ class MilvusDocumentCrud:
             result = await asyncio.to_thread(self.collection.upsert,sanitized_batch)
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
+            self.logger.info(f"✓ Résultat : {result}.")
             
             return {
                 "status": "success",
-                "data": result.dict() 
+                "data": result
             }
 
         except MilvusException as e:
