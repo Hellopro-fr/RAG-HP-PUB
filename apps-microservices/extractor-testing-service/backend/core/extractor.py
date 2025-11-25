@@ -253,6 +253,29 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
                 base_results[name] = ResultItem(
                     content="", char_count=0, error=f"An unexpected error occurred: {e}")
 
+    # --- Create HTML and Markdown versions for specific extractors ---
+    logger.info("--- Creating HTML and Markdown versions ---")
+
+    # Extractors that should have both HTML and Markdown versions
+    html_markdown_extractors = [
+        "Goose3", "go-trafilatura", "boilerpipe3-keep-everything"]
+
+    for extractor_name in html_markdown_extractors:
+        if extractor_name in base_results and not base_results[extractor_name].error:
+            # Create a copy for HTML version (preserve original HTML output)
+            base_results[f"{extractor_name} (HTML)"] = ResultItem(
+                content=base_results[extractor_name].content,
+                char_count=base_results[extractor_name].char_count,
+                error=None,
+                metadata=base_results[extractor_name].metadata
+            )
+
+            # Rename original to Markdown (will be converted below)
+            base_results[f"{extractor_name} (Markdown)"] = base_results.pop(
+                extractor_name)
+            logger.info(
+                f"Created HTML and Markdown versions for: {extractor_name}")
+
     # --- Post-Processing Stage ---
     logger.info("--- Starting Post-Processing Stage ---")
     post_processed_results = {}
@@ -269,6 +292,12 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
             f"Found {len(article_content)} chars of special article content for post-processing.")
 
     for name, result_item in base_results.items():
+        # Skip HTML-only versions from post-processing
+        # They should remain as pure HTML output
+        if "(HTML)" in name:
+            logger.info(f"Skipping post-processing for HTML version: {name}")
+            continue
+
         if not result_item.error and result_item.content:
             try:
                 logger.info(f"Post-processing result for: {name}")
