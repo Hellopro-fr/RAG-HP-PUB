@@ -56,6 +56,7 @@ async def insertion_data(document_data: dict) -> dict:
                     item['id'] = id_bdd
                     item['date_ajout'] = date_ajout_bdd
                     item['id_demande'] = doc.get('id_demande',"")
+                    item['embedding'] = [0.0]*1024
                     item['id_fournisseur'] = doc.get('id_fournisseur',"")
                     item['text'] = doc.get('text',"")
                     item['fichier_source'] = f"{doc.get('fichier_source','')} | {doc.get('page_type','')} | {nb_pages}"
@@ -70,8 +71,9 @@ async def insertion_data(document_data: dict) -> dict:
 
                 documents_bis = []
                 for document in documents:
+                    document["embedding"] = [0.0]*1024
                     document["fichier_source"] = f"{doc.get('fichier_source','')} | {doc.get('page_type','')} | {nb_pages}"
-                    documents_bis.append({**{k.replace("-", "_"): v for k, v in document.items() if k in ["id_demande","id_fournisseur","text","fichier_source"]}})
+                    documents_bis.append({**{k.replace("-", "_"): v for k, v in document.items() if k in ["id_demande","id_fournisseur","text","fichier_source","embedding"]}})
                 res_insert = await MilvusDocumentCrud().insert_document(documents_bis)
                 print("Res insert: ", res_insert)
 
