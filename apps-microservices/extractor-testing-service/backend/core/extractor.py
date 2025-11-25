@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # --- Helper Function to run extractors ---
 
 
-def run_extraction(func, *args, return_metadata=False) -> ResultItem:
+def run_extraction(func, *args) -> ResultItem:
     try:
         result = func(*args)
 
@@ -46,7 +46,8 @@ def run_extraction(func, *args, return_metadata=False) -> ResultItem:
 
         result_item = ResultItem(
             content=content, char_count=len(content), error=None)
-        if return_metadata and metadata:
+        # Always include metadata if present (Trafilatura variants return it)
+        if metadata:
             result_item.metadata = metadata
 
         return result_item
@@ -264,13 +265,10 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
 
     base_results = {}
     with ThreadPoolExecutor() as executor:
-        futures = {}
-        for name, (func, *args) in extractors.items():
-            # Determine if this extractor returns metadata
-            is_trafilatura_variant = name.startswith("Trafilatura HP")
-            futures[name] = loop.run_in_executor(
-                executor, run_extraction, func, *args, is_trafilatura_variant and extract_metadata
-            )
+        futures = {
+            name: loop.run_in_executor(executor, run_extraction, func, *args)
+            for name, (func, *args) in extractors.items()
+        }
 
         for name, future in futures.items():
             logger.info(f"Running extractor: {name}")
