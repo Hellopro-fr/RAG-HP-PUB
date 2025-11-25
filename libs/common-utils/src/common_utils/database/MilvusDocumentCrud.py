@@ -190,7 +190,7 @@ class MilvusDocumentCrud:
             
             return {
                 "status": "success",
-                "data": result 
+                "data": result.dict() 
             }
 
         except MilvusException as e:
