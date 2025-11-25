@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
-import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
+import { AlertCircle, ChevronDown, ChevronUp, Copy, Check } from "lucide-react"
 
 interface LibraryResult {
   content: string
@@ -75,15 +75,48 @@ function LibraryCard({ libraryName, result }: LibraryCardProps) {
   const hasError = result.error !== null
   const hasMetadata = result.metadata && Object.keys(result.metadata).length > 0
   const [showMetadata, setShowMetadata] = useState(true)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(result.content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000) // Reset after 2 seconds
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }
 
   return (
     <Card className={`p-4 transition-colors ${hasError ? "bg-destructive/5 border-destructive/20" : ""}`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-semibold text-lg">{libraryName}</h3>
-        {hasError && (
-          <span className="text-xs font-semibold text-destructive bg-destructive/10 px-2 py-1 rounded">ERROR</span>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Copy button */}
+          <button
+            onClick={handleCopy}
+            disabled={hasError}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Copy content"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3 w-3" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3 w-3" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+          {/* Error badge */}
+          {hasError && (
+            <span className="text-xs font-semibold text-destructive bg-destructive/10 px-2 py-1 rounded">ERROR</span>
+          )}
+        </div>
       </div>
 
       {/* Metadata Section */}
