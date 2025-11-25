@@ -13,6 +13,7 @@ from goose3 import Goose
 
 # Tier 3 Imports
 from boilerpipe.extract import Extractor as BoilerpipeExtractor
+from boilerpy3 import extractors as BoilerpyExtractor
 # import extractnet
 from bs4 import BeautifulSoup
 
@@ -73,6 +74,11 @@ def extract_boilerpipe3_keep_everything(html: str) -> str:
     extractor = BoilerpipeExtractor(
         extractor='KeepEverythingExtractor', html=html)
     return extractor.getHTML()
+
+
+def extract_boilerpy3(html: str) -> str:
+    extractor = BoilerpyExtractor.KeepEverythingExtractor()
+    return extractor.get_marked_html(html)
 
 # def extract_extractnet(html: str) -> str:
 #     extracted_blocks = extractnet.extract(html)
@@ -229,6 +235,7 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
         "Trafilatura HP (Balanced)": (extract_trafilatura_hp, html, "balanced", extract_metadata),
         # Tier 3
         "boilerpipe3-keep-everything": (extract_boilerpipe3_keep_everything, html),
+        "boilerpy3": (extract_boilerpy3, html),
         # "extractnet": (extract_extractnet, html),
     }
 
@@ -266,7 +273,7 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
 
     # Extractors that should have both HTML and Markdown versions
     html_markdown_extractors = [
-        "Goose3", "go-trafilatura", "boilerpipe3-keep-everything"]
+        "Goose3", "go-trafilatura", "boilerpipe3-keep-everything", "boilerpy3"]
 
     for extractor_name in html_markdown_extractors:
         if extractor_name in base_results and not base_results[extractor_name].error:
