@@ -55,7 +55,17 @@ class LLMClientFactory:
             "openai",
         )
 
-        if model_type == "openai":
+        if provider == "gemini":
+            return GeminiClient(
+                config={
+                    "model": (
+                        model_name
+                        if model_name != "" and model_name != None
+                        else settings.GEMINI_MODEL_NAME
+                    )
+                }
+            )
+        elif model_type == "openai":
             if model_name == "deepseek":
                 deepseek = DeepSeek(config={"api_key": settings.DEEPSEEK_API_KEY})
                 deepseek.set_temperature(temperature)
@@ -63,16 +73,6 @@ class LLMClientFactory:
             else:
                 return LLMClientFactory.get_openai_client(settings.OPENAI_API_KEY)
         else:  # OpenRouter
-            if provider == "gemini":
-                return GeminiClient(
-                    config={
-                        "model": (
-                            model_name
-                            if model_name != "" and model_name != None
-                            else None
-                        )
-                    }
-                )
             return OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=settings.OPENROUTER_API_KEY,
@@ -857,6 +857,9 @@ class SearchOrchestrator:
         if getattr(exception, "status_code", None) == 503:
             return True
 
+        if getattr(exception, "code", None) == 503:
+            return True
+
         msg = str(exception).lower()
         return (
             "503" in msg
@@ -867,7 +870,7 @@ class SearchOrchestrator:
     @retry(
         retry=retry_if_exception(is_503_error),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        stop=stop_after_attempt(3),
+        stop=stop_after_attempt(6),
         before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )

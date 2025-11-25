@@ -9,13 +9,9 @@ from typing import Dict
 from markdownify import markdownify as md
 
 # Tier 1 Imports
-from readability import Document as ReadabilityDocument
-import justext
 from goose3 import Goose
 
 # Tier 3 Imports
-from newspaper import Article as NewspaperArticle
-import newsplease
 from boilerpipe.extract import Extractor as BoilerpipeExtractor
 # import extractnet
 from bs4 import BeautifulSoup
@@ -28,7 +24,7 @@ logger = logging.getLogger(__name__)
 # --- Helper Function to run extractors ---
 
 
-def run_extraction(func, *args, return_metadata=False) -> ResultItem:
+def run_extraction(func, *args) -> ResultItem:
     try:
         result = func(*args)
 
@@ -46,7 +42,8 @@ def run_extraction(func, *args, return_metadata=False) -> ResultItem:
 
         result_item = ResultItem(
             content=content, char_count=len(content), error=None)
-        if return_metadata and metadata:
+        # Always include metadata if present (Trafilatura variants return it)
+        if metadata:
             result_item.metadata = metadata
 
         return result_item
@@ -184,25 +181,6 @@ def run_subprocess(command: list, html: str, timeout: int = 15) -> str:
             f"Process '{command[0]}' failed with error: {e.stderr}")
 
 
-def extract_readability_js(html: str) -> str:
-    # readability-cli requires a file, so we create a temporary one.
-    with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".html", encoding='utf-8') as tmp_file:
-        tmp_file.write(html)
-        filepath = tmp_file.name
-
-    try:
-        # The command is the 'readable' executable with the '-j' flag for JSON output.
-        command = ["readable", "-j", filepath]
-        # The tool outputs a JSON string to stdout.
-        # Input is via file, not stdin
-        json_output = run_subprocess(command, html="")
-        # Parse the JSON and extract the 'textContent' field.
-        result_obj = json.loads(json_output)
-        return result_obj.get("textContent", "")
-    finally:
-        os.remove(filepath)
-
-
 def extract_go_trafilatura(html: str, url: str = None) -> str:
     # Prepare input for Go script
     input_data = {
@@ -221,12 +199,6 @@ def extract_go_trafilatura(html: str, url: str = None) -> str:
         return output.get("html", "")
     except json.JSONDecodeError as e:
         raise Exception(f"Failed to parse Go script output: {e}")
-
-
-def extract_go_readability(html: str) -> str:
-    # Pipe the content directly to the command via stdin.
-    command = ["go-readability"]
-    return run_subprocess(command, html=html)
 
 # --- Main Orchestrator ---
 
@@ -250,9 +222,7 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
         # "jusText": (extract_justext, html),
         "Goose3": (extract_goose3, html, url),
         # Tier 2
-        "Readability.js (Mozilla)": (extract_readability_js, html),
         "go-trafilatura": (extract_go_trafilatura, html, url),
-        "go-readability": (extract_go_readability, html),
         # Custom - Three strategy variants
         "Trafilatura HP (Precision)": (extract_trafilatura_hp, html, "precision", extract_metadata),
         "Trafilatura HP (Recall)": (extract_trafilatura_hp, html, "recall", extract_metadata),
@@ -264,13 +234,10 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
 
     base_results = {}
     with ThreadPoolExecutor() as executor:
-        futures = {}
-        for name, (func, *args) in extractors.items():
-            # Determine if this extractor returns metadata
-            is_trafilatura_variant = name.startswith("Trafilatura HP")
-            futures[name] = loop.run_in_executor(
-                executor, run_extraction, func, *args, is_trafilatura_variant and extract_metadata
-            )
+        futures = {
+            name: loop.run_in_executor(executor, run_extraction, func, *args)
+            for name, (func, *args) in extractors.items()
+        }
 
         for name, future in futures.items():
             logger.info(f"Running extractor: {name}")
@@ -290,21 +257,6 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
     logger.info("--- Starting Post-Processing Stage ---")
     post_processed_results = {}
 
-    # For `go-trafilatura`, convert HTML to Markdown using markdownify and put it back in the result
-    if "go-trafilatura" in base_results:
-        base_results["go-trafilatura"].content = md(
-            base_results["go-trafilatura"].content, heading_style="ATX", escape_html=False)
-
-    # For `Goose3`, convert HTML to Markdown using markdownify and put it back in the result
-    if "Goose3" in base_results:
-        base_results["Goose3"].content = md(
-            base_results["Goose3"].content, heading_style="ATX", escape_html=False)
-
-    # For `boilerpipe3-keep-everything`, convert HTML to Markdown using markdownify and put it back in the result
-    if "boilerpipe3-keep-everything" in base_results:
-        base_results["boilerpipe3-keep-everything"].content = md(
-            base_results["boilerpipe3-keep-everything"].content, heading_style="ATX", escape_html=False)
-
     # Instantiate the processor once to access its methods
     post_processor = TrafilaturaHp(
         {"url": "", "content": html, "fetch": False})
@@ -320,6 +272,11 @@ async def run_all_extractors(html: str, url: str = None, strategy: str = "balanc
         if not result_item.error and result_item.content:
             try:
                 logger.info(f"Post-processing result for: {name}")
+
+                # Convert HTML to Markdown using markdownify and put it back in the result
+                result_item.content = md(
+                    result_item.content, heading_style="ATX", escape_html=False)
+
                 # Combine article content with the extractor's main content
                 combined_content = result_item.content
                 if article_content:
