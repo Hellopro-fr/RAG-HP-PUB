@@ -348,6 +348,7 @@ def llm_prompt_gemini(request: ChatRequest) -> str:
     prompt = request.prompt
 
     delay = 1
+    response = {}
     for attempt in range(request.max_retries):
         if attempt == request.max_retries - 1:
             break
