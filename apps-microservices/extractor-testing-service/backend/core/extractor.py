@@ -9,13 +9,9 @@ from typing import Dict
 from markdownify import markdownify as md
 
 # Tier 1 Imports
-from readability import Document as ReadabilityDocument
-import justext
 from goose3 import Goose
 
 # Tier 3 Imports
-from newspaper import Article as NewspaperArticle
-import newsplease
 from boilerpipe.extract import Extractor as BoilerpipeExtractor
 # import extractnet
 from bs4 import BeautifulSoup
