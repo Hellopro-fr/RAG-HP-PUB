@@ -10,7 +10,6 @@ from typing import Dict, Optional, Any, List
 
 import aiofiles
 import httpx
-from google.cloud import storage
 from fastapi import HTTPException, status
 
 from app.core.config import settings
@@ -549,7 +548,7 @@ class CrawlerManager:
 
     async def archive_crawl(self, job_info: dict) -> str:
         """
-        Archives a finished crawl job to Google Cloud Storage.
+        Archives a finished crawl job to a shared volume for host-side upload.
         Only 'finished' jobs can be archived.
         """
         crawl_id = job_info['crawl_id']
@@ -562,33 +561,40 @@ class CrawlerManager:
             )
 
         job_storage_path = job_info["storage_path"]
-        bucket_name = settings.GCS_BUCKET_NAME
         
-        logger.info(f"Starting archiving for crawl '{crawl_id}' to GCS bucket '{bucket_name}'.")
+        # Ensure the shared archives directory exists
+        archives_dir = "/app/archives"
+        os.makedirs(archives_dir, exist_ok=True)
 
-        # 1. Create a tar.gz archive of the directory
-        archive_path = shutil.make_archive(
-            base_name=os.path.join(tempfile.gettempdir(), crawl_id),
-            format='gztar',
-            root_dir=job_storage_path
-        )
-        
+        target_archive_path = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
+
+        logger.info(
+            f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
+
+        # DEBUG: Check if directory exists and is writable
+        if os.path.exists(archives_dir):
+            logger.info(f"Archives directory '{archives_dir}' exists.")
+            logger.info(f"Permissions: {oct(os.stat(archives_dir).st_mode)}")
+        else:
+            logger.error(
+                f"Archives directory '{archives_dir}' DOES NOT EXIST even after makedirs!")
+
         try:
-            # 2. Upload to GCS
-            # Note: This is a blocking call, so we run it in a thread executor to avoid blocking the event loop
-            def upload_to_gcs():
-                client = storage.Client()
-                bucket = client.bucket(bucket_name)
-                blob = bucket.blob(f"{crawl_id}.tar.gz")
-                blob.upload_from_filename(archive_path)
-                return blob.public_url
+            # 1. Create a tar.gz archive directly in the shared volume
+            # We use make_archive which adds the extension, so we pass the base name without extension
+            base_name = os.path.join(archives_dir, crawl_id)
 
+            # Run blocking I/O in executor
             loop = asyncio.get_event_loop()
-            public_url = await loop.run_in_executor(None, upload_to_gcs)
+            final_path = await loop.run_in_executor(
+                None,
+                lambda: shutil.make_archive(
+                    base_name, 'gztar', root_dir=job_storage_path)
+            )
             
-            logger.info(f"Successfully uploaded archive for '{crawl_id}' to GCS.")
+            logger.info(f"Successfully created archive at '{final_path}'.")
 
-            # 3. Cleanup local files (preserve logs and markers)
+            # 2. Cleanup local files (preserve logs and markers)
             files_to_keep = {'crawler.log', '_callback_payload.json', '_completion_marker.json'}
             
             for root, dirs, files in os.walk(job_storage_path, topdown=False):
@@ -603,15 +609,14 @@ class CrawlerManager:
                         pass # Directory not empty or other error
 
             logger.info(f"Cleaned up local storage for '{crawl_id}'. Preserved logs and markers.")
-            return f"gs://{bucket_name}/{crawl_id}.tar.gz"
+
+            # Return the path relative to the host (conceptual) or just a success message
+            return f"Ready for upload: {final_path}"
 
         except Exception as e:
             logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Archiving failed: {str(e)}")
-        finally:
-            # Clean up the temporary archive file
-            if os.path.exists(archive_path):
-                os.remove(archive_path)
+            raise HTTPException(
+                status_code=500, detail=f"Archiving failed: {str(e)}")
 
     async def retrieve_archived_crawl(self, crawl_id: str):
         """

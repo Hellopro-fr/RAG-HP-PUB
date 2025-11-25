@@ -644,6 +644,27 @@ services:
       replicas: 3
     logging: *logging_defaults
 
+  nettoyage-bruit-ocr-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/nettoyage-bruit-ocr-service/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
+    restart: unless-stopped
+    volumes:
+      - ./apps-microservices/nettoyage-bruit-ocr-service/app:/app/nettoyage_bruit_ocr_service:rw
+    env_file:
+      - .env
+    deploy:
+      replicas: 1
+    environment:
+      - LLM_SERVICE_URL=llm-service:50051
+    depends_on:
+      - llm-service
+      - deepseek-metrics-collector-service
+    networks:
+      - services-net
+    logging: *logging_defaults
+  
   template-llm-service:
     build:
       context: .
@@ -1002,6 +1023,8 @@ services:
     volumes:
       # Mount a volume to persist crawl data outside the container
       - crawler_data:/app/storage
+      # Mount a shared volume for archiving to host
+      - ./apps-microservices/crawler-service/crawler_archives:/app/archives
     env_file:
       - .env
     environment:

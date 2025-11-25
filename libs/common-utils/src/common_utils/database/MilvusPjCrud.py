@@ -25,7 +25,7 @@ class ModelConfig:
     collection_name: str = "pjechanges"
     dimension: int = 1024
 
-class MilvuspjCrud:
+class MilvusPjCrud:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
