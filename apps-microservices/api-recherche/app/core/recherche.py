@@ -22,6 +22,14 @@ from app.core.credentials import settings, model_settings
 from google import genai
 from google.genai import types
 
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception,
+    before_sleep_log,
+)
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -841,6 +849,60 @@ class SearchOrchestrator:
 
         return final_results, rerank_duration
 
+    def is_503_error(self, exception):
+        """
+        Checks if an exception is related to a 503 Service Unavailable.
+        Adjust this based on the specific libraries (OpenAI, Google, etc.) you are using.
+        """
+        if getattr(exception, "status_code", None) == 503:
+            return True
+
+        msg = str(exception).lower()
+        return (
+            "503" in msg
+            or "service unavailable" in msg
+            or "server is overloaded" in msg
+        )
+
+    @retry(
+        retry=retry_if_exception(is_503_error),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        stop=stop_after_attempt(3),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    async def _execute_llm_api_call(self, client, full_user_prompt):
+        """
+        Performs the actual network request.
+        Raises exceptions so Tenacity can catch them.
+        """
+        llm_response = ""
+        completion = {}
+
+        if isinstance(client, DeepSeek):
+            response = client.chat(full_user_prompt)
+            llm_response = response["content"]
+            completion = response["response"]
+        elif isinstance(client, GeminiClient):
+            response = client.chat(
+                full_user_prompt,
+                options={"thinking_level": self.request.llm.thinking_level},
+            )
+            completion = response["response"]
+            llm_response = response["content"]
+        else:
+            completion = client.chat.completions.create(
+                model=self.request.llm.chat_model,
+                messages=[{"role": "user", "content": full_user_prompt}],
+                temperature=float(self.request.llm.temperature),
+            )
+            llm_response = completion.choices[0].message.content
+
+        if hasattr(completion, "model_dump"):
+            completion = completion.model_dump()
+
+        return llm_response, completion
+
     async def _run_llm_pipeline(self, context_texts: list) -> LLMPipeline:
         if not context_texts or self.request.action != 2:
             return LLMPipeline(
@@ -881,27 +943,30 @@ class SearchOrchestrator:
         llm_response, completion = "", {}
 
         try:
-            if isinstance(client, DeepSeek):
-                response = client.chat(full_user_prompt)
-                llm_response = response["content"]
-                completion = response["response"]
-            elif isinstance(client, GeminiClient):
-                response = client.chat(
-                    full_user_prompt,
-                    options={"thinking_level": self.request.llm.thinking_level},
-                )
-                completion = response["response"]
-                llm_response = response["content"]
-            else:
-                completion = client.chat.completions.create(
-                    model=self.request.llm.chat_model,
-                    messages=[{"role": "user", "content": full_user_prompt}],
-                    temperature=float(self.request.llm.temperature),
-                )
-                llm_response = completion.choices[0].message.content
+            # if isinstance(client, DeepSeek):
+            #     response = client.chat(full_user_prompt)
+            #     llm_response = response["content"]
+            #     completion = response["response"]
+            # elif isinstance(client, GeminiClient):
+            #     response = client.chat(
+            #         full_user_prompt,
+            #         options={"thinking_level": self.request.llm.thinking_level},
+            #     )
+            #     completion = response["response"]
+            #     llm_response = response["content"]
+            # else:
+            #     completion = client.chat.completions.create(
+            #         model=self.request.llm.chat_model,
+            #         messages=[{"role": "user", "content": full_user_prompt}],
+            #         temperature=float(self.request.llm.temperature),
+            #     )
+            #     llm_response = completion.choices[0].message.content
 
-            if hasattr(completion, "model_dump"):
-                completion = completion.model_dump()
+            # if hasattr(completion, "model_dump"):
+            #     completion = completion.model_dump()
+            llm_response, completion = await self._execute_llm_api_call(
+                client, full_user_prompt
+            )
 
         except Exception as e:
             logger.error(f"Error during LLM execution: {e}")

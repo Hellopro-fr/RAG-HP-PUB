@@ -1,12 +1,14 @@
 "use client"
 
+import { useState } from "react"
 import { Card } from "@/components/ui/card"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
 
 interface LibraryResult {
   content: string
   char_count: number
   error: string | null
+  metadata?: Record<string, any>
 }
 
 interface OutputSectionProps {
@@ -71,6 +73,8 @@ interface LibraryCardProps {
 
 function LibraryCard({ libraryName, result }: LibraryCardProps) {
   const hasError = result.error !== null
+  const hasMetadata = result.metadata && Object.keys(result.metadata).length > 0
+  const [showMetadata, setShowMetadata] = useState(true)
 
   return (
     <Card className={`p-4 transition-colors ${hasError ? "bg-destructive/5 border-destructive/20" : ""}`}>
@@ -82,7 +86,34 @@ function LibraryCard({ libraryName, result }: LibraryCardProps) {
         )}
       </div>
 
-      {/* Metadata */}
+      {/* Metadata Section */}
+      {!hasError && hasMetadata && (
+        <div className="mb-3 border border-border rounded-md">
+          <button
+            onClick={() => setShowMetadata(!showMetadata)}
+            className="w-full flex items-center justify-between p-2 hover:bg-muted/50 transition-colors"
+          >
+            <span className="text-sm font-semibold">Metadata</span>
+            {showMetadata ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {showMetadata && (
+            <div className="p-3 bg-muted/30 border-t border-border">
+              <dl className="grid grid-cols-1 gap-2 text-xs">
+                {Object.entries(result.metadata!).map(([key, value]) => (
+                  <div key={key} className="flex gap-2">
+                    <dt className="font-semibold min-w-[100px] capitalize">{key}:</dt>
+                    <dd className="text-muted-foreground">
+                      {Array.isArray(value) ? value.join(", ") : String(value)}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Content Metadata */}
       {!hasError && (
         <p className="text-xs text-muted-foreground mb-3">
           Character count: <span className="font-semibold">{result.char_count}</span>

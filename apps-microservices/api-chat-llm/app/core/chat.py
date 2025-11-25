@@ -27,6 +27,7 @@ from app.core.credentials import settings
 from openai import OpenAI, AsyncOpenAI
 
 from common_utils.grpc_clients.schemas.chat import ChatBaseURL, ChatProvider
+from google.genai.errors import APIError
 
 
 logging.basicConfig(
@@ -347,6 +348,7 @@ def llm_prompt_gemini(request: ChatRequest) -> str:
     prompt = request.prompt
 
     delay = 1
+    response = {}
     for attempt in range(request.max_retries):
         if attempt == request.max_retries - 1:
             break
@@ -364,20 +366,25 @@ def llm_prompt_gemini(request: ChatRequest) -> str:
             )
             break
         except APIError as e:
-            if e.status_code == 503 and attempt < request.max_retries - 1:
+            if e.code == 503 and attempt < request.max_retries - 1:
                 print(
                     f"Erreur 503 {attempt + 1}/{request.max_retries} after {delay} seconds..."
                 )
                 time.sleep(delay)
                 delay *= 2  # Exponential backoff
+                response = e
                 continue
         except Exception as e:
             print(f"Erreur exception: {e}")
+            response = e
 
     # logging.info("Gemini response received. \nResponse: %s", response)
 
     # Récupération du dump
-    api_response_dict = response.model_dump()
+    if isinstance(response, dict):
+        api_response_dict = response
+    else:
+        api_response_dict = response.model_dump()
 
     # NETTOYAGE : Conversion des bytes (thought_signature) en string
     safe_api_response = make_serializable(api_response_dict)

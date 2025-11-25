@@ -9,13 +9,17 @@ export default function Page() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleCompare = async (inputType: "raw_html" | "json_data", content: string) => {
+  const handleCompare = async (inputType: "raw_html" | "json_data", content: string, strategy: string, extractMetadata: boolean) => {
     setLoading(true)
     setError(null)
     setResults(null)
 
     try {
-      const body = inputType === "raw_html" ? { raw_html: content } : { json_data: JSON.parse(content) }
+      const body = {
+        ...(inputType === "raw_html" ? { raw_html: content } : { json_data: JSON.parse(content) }),
+        strategy,
+        extract_metadata: extractMetadata,
+      }
 
       const response = await fetch("/api/test-extractors", {
         method: "POST",

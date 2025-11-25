@@ -29,4 +29,4 @@ class ChatRequest(BaseModel):
         "top_k": int(20),
         # "repetition_penalty": float(1.0),
     }
-    max_retries: int = 3
+    max_retries: int = 6

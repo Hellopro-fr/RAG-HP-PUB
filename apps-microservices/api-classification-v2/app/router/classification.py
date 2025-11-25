@@ -476,8 +476,13 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                 # Cela force une nouvelle connexion TCP et donc une nouvelle résolution DNS round-robin
                 limits = httpx.Limits(max_keepalive_connections=0, max_connections=1)
                 async with httpx.AsyncClient(timeout=300.0, limits=limits) as client:
-                    # logger.info(f"  → Envoi du sous-batch {batch_index + 1}/{len(sub_batches)} ({len(sub_batch)} produits) à {url}")
+                    logger.info(f"  → Envoi du sous-batch {batch_index + 1}/{len(sub_batches)} ({len(sub_batch)} produits) à {url}")
                     response = await client.post(url, json=payload, headers={"Connection": "close"})
+
+                    # Log détaillé en cas d'erreur HTTP
+                    if response.status_code >= 400:
+                        logger.error(f"  ❌ HTTP {response.status_code} pour sous-batch {batch_index + 1}: {response.text[:500]}")
+
                     response.raise_for_status()
                     result = response.json()
 
@@ -500,8 +505,9 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                     # logger.info(f"  ✅ Sous-batch {batch_index + 1} terminé sur {replica_used} en {sub_batch_time:.2f}s : {result.get('success_count', 0)} succès, {result.get('error_count', 0)} erreurs")
                     return result
 
-            except httpx.HTTPError as e:
-                logger.error(f"  ❌ Erreur HTTP pour sous-batch {batch_index + 1}: {e}")
+            except httpx.TimeoutException as e:
+                error_details = f"Timeout (300s) - URL: {url}"
+                logger.error(f"  ⏱️ Timeout pour sous-batch {batch_index + 1}: {error_details}")
                 # Retourner des résultats d'erreur pour tous les produits du sous-batch
                 error_results = []
                 for product in sub_batch:
@@ -513,7 +519,75 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                         'id_categorie': None,
                         'nom_categorie': None,
                         'score_llm': None,
-                        'error': f'Erreur HTTP: {str(e)}',
+                        'error': f'Timeout: {error_details}',
+                        'llm_type': llm_to_use,
+                        'enable_thinking': enable_thinking,
+                        'llm_response': None,
+                        'processing_time': 0.0
+                    })
+                return {
+                    'total_produits': len(sub_batch),
+                    'success_count': 0,
+                    'error_count': len(sub_batch),
+                    'resultats': error_results,
+                    'llm_type': llm_to_use,
+                    'processing_time_total': 0.0
+                }
+            except httpx.ConnectError as e:
+                error_details = f"Erreur de connexion - URL: {url} - {str(e)}"
+                logger.error(f"  🔌 Erreur de connexion pour sous-batch {batch_index + 1}: {error_details}")
+                # Retourner des résultats d'erreur pour tous les produits du sous-batch
+                error_results = []
+                for product in sub_batch:
+                    error_results.append({
+                        'id_produit': product.id_produit,
+                        'titre_produit': product.nom_produit,
+                        'description_produit': product.description,
+                        'status': 'ERROR',
+                        'id_categorie': None,
+                        'nom_categorie': None,
+                        'score_llm': None,
+                        'error': f'Connexion échouée: {error_details}',
+                        'llm_type': llm_to_use,
+                        'enable_thinking': enable_thinking,
+                        'llm_response': None,
+                        'processing_time': 0.0
+                    })
+                return {
+                    'total_produits': len(sub_batch),
+                    'success_count': 0,
+                    'error_count': len(sub_batch),
+                    'resultats': error_results,
+                    'llm_type': llm_to_use,
+                    'processing_time_total': 0.0
+                }
+            except httpx.HTTPError as e:
+                # Construire un message d'erreur détaillé
+                error_details = f"{type(e).__name__}: {str(e)}"
+
+                # Capturer les détails de la réponse HTTP si disponible
+                if hasattr(e, 'response') and e.response is not None:
+                    status_code = e.response.status_code
+                    try:
+                        response_text = e.response.text[:200]  # Limiter à 200 caractères
+                    except:
+                        response_text = "N/A"
+                    error_details = f"HTTP {status_code} - {response_text}"
+
+                logger.error(f"  ❌ Erreur HTTP pour sous-batch {batch_index + 1}: {error_details}")
+
+                # Retourner des résultats d'erreur pour tous les produits du sous-batch
+                error_results = []
+                for product in sub_batch:
+                    error_results.append({
+                        'id_produit': product.id_produit,
+                        'titre_produit': product.nom_produit,
+                        'description_produit': product.description,
+                        'status': 'ERROR',
+                        'id_categorie': None,
+                        'nom_categorie': None,
+                        'score_llm': None,
+                        'error': f'Erreur HTTP: {error_details}',
                         'llm_type': llm_to_use,
                         'enable_thinking': enable_thinking,
                         'llm_response': None,
