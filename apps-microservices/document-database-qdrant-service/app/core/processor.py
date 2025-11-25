@@ -46,28 +46,28 @@ async def insertion_data(document_data: dict) -> dict:
 
             tab_data = res.get('data',[])
             if tab_data:
-                print("Document-database-service: Mise à jout data")
-                text_bdd = tab_data[0].get('text','').strip()
+                print("Document-database-service: Mise à jour data")
                 id_bdd         = tab_data[0].get('id')
                 date_ajout_bdd = tab_data[0].get('date_ajout')
-                if not text_bdd:
-                    # todo mise à jour de l'existant
-                    docs = []
-                    for doc in documents:
-                        item = {}
-                        item['id'] = id_bdd
-                        item['date_ajout'] = date_ajout_bdd
-                        item['id_demande'] = doc.get('id_demande',"")
-                        item['id_fournisseur'] = doc.get('id_fournisseur',"")
-                        item['text'] = doc.get('text',"")
-                        item['fichier_source'] = f"{doc.get('fichier_source','')} | {doc.get('page_type','')} | {nb_pages}"
-                        docs.append(item)
+                # todo mise à jour de l'existant
+                docs = []
+                for doc in documents:
+                    item = {}
+                    item['id'] = id_bdd
+                    item['date_ajout'] = date_ajout_bdd
+                    item['id_demande'] = doc.get('id_demande',"")
+                    item['id_fournisseur'] = doc.get('id_fournisseur',"")
+                    item['text'] = doc.get('text',"")
+                    item['fichier_source'] = f"{doc.get('fichier_source','')} | {doc.get('page_type','')} | {nb_pages}"
+                    docs.append(item)
 
-                    res_update = await func(docs)
+                res_update = await func(docs)
 
-                    print("Res update: ", res_update)
-                    return res_update
+                print("Res update: ", res_update)
+                return res_update
             else:
+                print("Document-database-service: Insertion data")
+
                 documents_bis = []
                 for document in documents:
                     document["fichier_source"] = f"{doc.get('fichier_source','')} | {doc.get('page_type','')} | {nb_pages}"
