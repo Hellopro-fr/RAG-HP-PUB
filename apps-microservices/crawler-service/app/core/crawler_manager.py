@@ -319,9 +319,27 @@ class CrawlerManager:
 
     async def get_status(self, job_info: dict) -> CrawlStatus:
         crawl_id = job_info['crawl_id']
+        storage_path = job_info["storage_path"]
+
+        # --- START: CHECK FOR STATUS SNAPSHOT ---
+        # If the job is not running and a status snapshot exists, use it instead of recalculating
+        # This is crucial for archived jobs where dataset files have been deleted
+        snapshot_path = os.path.join(storage_path, '_status_snapshot.json')
+        if job_info["status"] != "running" and os.path.exists(snapshot_path):
+            try:
+                async with aiofiles.open(snapshot_path, 'r') as f:
+                    content = await f.read()
+                    snapshot_data = json.loads(content)
+                logger.info(
+                    f"Loaded status from snapshot for archived crawl '{crawl_id}'.")
+                return CrawlStatus(**snapshot_data)
+            except Exception as e:
+                logger.error(
+                    f"Failed to load status snapshot for '{crawl_id}': {e}", exc_info=True)
+                # Fall through to recalculate from disk
+        # --- END: CHECK FOR STATUS SNAPSHOT ---
 
         # --- START: ENHANCED STATS CALCULATION ---
-        storage_path = job_info["storage_path"]
         domain = job_info["domain"]
         crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
 
@@ -562,6 +580,26 @@ class CrawlerManager:
 
         job_storage_path = job_info["storage_path"]
         
+        # --- START: CREATE STATUS SNAPSHOT ---
+        # Before archiving, save the current status to prevent data loss when Redis is restarted
+        # This is critical because the dataset files will be deleted after archiving
+        try:
+            current_status = await self.get_status(job_info)
+            snapshot_path = os.path.join(
+                job_storage_path, '_status_snapshot.json')
+            snapshot_data = current_status.model_dump(mode='json')
+
+            async with aiofiles.open(snapshot_path, 'w') as f:
+                await f.write(json.dumps(snapshot_data, indent=2, default=str))
+
+            logger.info(
+                f"Created status snapshot for crawl '{crawl_id}' before archiving.")
+        except Exception as e:
+            logger.error(
+                f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
+            # Don't fail the archiving process, but log the error
+        # --- END: CREATE STATUS SNAPSHOT ---
+
         # Ensure the shared archives directory exists
         archives_dir = "/app/archives"
         os.makedirs(archives_dir, exist_ok=True)
@@ -594,8 +632,9 @@ class CrawlerManager:
             
             logger.info(f"Successfully created archive at '{final_path}'.")
 
-            # 2. Cleanup local files (preserve logs and markers)
-            files_to_keep = {'crawler.log', '_callback_payload.json', '_completion_marker.json'}
+            # 2. Cleanup local files (preserve logs, markers, and status snapshot)
+            files_to_keep = {'crawler.log', '_callback_payload.json',
+                             '_completion_marker.json', '_status_snapshot.json'}
             
             for root, dirs, files in os.walk(job_storage_path, topdown=False):
                 for name in files:
@@ -608,7 +647,8 @@ class CrawlerManager:
                     except OSError:
                         pass # Directory not empty or other error
 
-            logger.info(f"Cleaned up local storage for '{crawl_id}'. Preserved logs and markers.")
+            logger.info(
+                f"Cleaned up local storage for '{crawl_id}'. Preserved logs, markers, and status snapshot.")
 
             # Return the path relative to the host (conceptual) or just a success message
             return f"Ready for upload: {final_path}"
