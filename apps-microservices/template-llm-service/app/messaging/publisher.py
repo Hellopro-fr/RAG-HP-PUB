@@ -23,7 +23,7 @@ class Publisher:
         if collection == "document":
             page_type = message_dict.get("data",{}).get("page_type","")
             if page_type == "autre":
-                exchange_name = 'inserted_data_exchange'
+                exchange_name = 'document_embedded_data_exchange'
                 routing_key   = 'data.document.ready_for_insertion'
             else:
                 exchange_name = 'processed_data_exchange'
