@@ -11,10 +11,11 @@ async def insertion_data(document_data: dict) -> dict:
     
     Retourne: Un dictionnaire prêt à être publié.
     """
+    print(f"Doc data : {document_data}")
 
     # todo rollbacker si pipeline normal
     document = document_data.get("data",{})
-    page_type = document_data.get("data",{}).get("page_type","")
+    page_type = document.get("page_type","")
     nb_pages = document_data.get("nb_pages","")
     documents = [document]
     collection = document_data.get("collection", CollectionName.DOCUMENT)
