@@ -27,6 +27,7 @@ from app.core.credentials import settings
 from openai import OpenAI, AsyncOpenAI
 
 from common_utils.grpc_clients.schemas.chat import ChatBaseURL, ChatProvider
+from google.genai.errors import APIError
 
 
 logging.basicConfig(
