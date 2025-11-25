@@ -340,7 +340,13 @@ class SearchOrchestrator:
             query_vector, embed_duration = await self._get_embedding()
             yield {
                 "type": "embedding_complete",
-                "payload": {"duration": round(embed_duration, 2)},
+                "payload": {
+                    "duration": (
+                        round(embed_duration, 2)
+                        if isinstance(embed_duration, float)
+                        else embed_duration
+                    )
+                },
             }
 
             initial_matches, search_duration = await self._perform_search(query_vector)
@@ -348,7 +354,11 @@ class SearchOrchestrator:
                 "type": "initial_results",
                 "payload": {
                     "results": initial_matches[: self.request.top_k],
-                    "duration": round(search_duration, 2),
+                    "duration": (
+                        round(search_duration, 2)
+                        if isinstance(search_duration, float)
+                        else search_duration
+                    ),
                 },
             }
 
@@ -358,7 +368,11 @@ class SearchOrchestrator:
                     "type": "rerank_complete",
                     "payload": {
                         "results": final_results[: self.request.top_k],
-                        "duration": round(rerank_duration, 2),
+                        "duration": (
+                            round(rerank_duration, 2)
+                            if isinstance(rerank_duration, float)
+                            else rerank_duration
+                        ),
                     },
                 }
 
@@ -378,11 +392,31 @@ class SearchOrchestrator:
             total_duration = time.perf_counter() - start_total_time
             final_summary = {
                 "timings": {
-                    "embedding": round(embed_duration, 2),
-                    "vector_search": round(search_duration, 2),
-                    "rerank": round(rerank_duration, 2),
-                    "llm_execution": round(llm_duration, 2),
-                    "total_process": round(total_duration, 2),
+                    "embedding": (
+                        round(embed_duration, 2)
+                        if isinstance(embed_duration, float)
+                        else embed_duration
+                    ),
+                    "vector_search": (
+                        round(search_duration, 2)
+                        if isinstance(search_duration, float)
+                        else search_duration
+                    ),
+                    "rerank": (
+                        round(rerank_duration, 2)
+                        if isinstance(rerank_duration, float)
+                        else rerank_duration
+                    ),
+                    "llm_execution": (
+                        round(llm_duration, 2)
+                        if isinstance(llm_duration, float)
+                        else llm_duration
+                    ),
+                    "total_process": (
+                        round(total_duration, 2)
+                        if isinstance(total_duration, float)
+                        else total_duration
+                    ),
                 },
                 "result_count": len(final_results),
             }
@@ -516,15 +550,35 @@ class SearchOrchestrator:
             "matches": all_results,
             "context": llm_req.context,
             "response": llm_req.llm_response,
-            "embedding": round(embed_duration, 2),
+            "embedding": (
+                round(embed_duration, 2)
+                if isinstance(embed_duration, float)
+                else embed_duration
+            ),
             "fournisseur_non_vide": None,
             "full_user_prompt": llm_req.full_user_prompt,
             "chat_model": self.request.llm.chat_model,
             "temperature": self.request.llm.temperature,
-            "vector_search": round(search_duration, 2),
-            "rerank_duration": round(rerank_duration, 2),
-            "llm_execution": round(llm_req.llm_duration, 2),
-            "total_process": round(total_duration, 2),
+            "vector_search": (
+                round(search_duration, 2)
+                if isinstance(search_duration, float)
+                else search_duration
+            ),
+            "rerank_duration": (
+                round(rerank_duration, 2)
+                if isinstance(rerank_duration, float)
+                else rerank_duration
+            ),
+            "llm_execution": (
+                round(llm_req.llm_duration, 2)
+                if isinstance(llm_req.llm_duration, float)
+                else llm_req.llm_duration
+            ),
+            "total_process": (
+                round(total_duration, 2)
+                if isinstance(total_duration, float)
+                else total_duration
+            ),
             "import_duration": 0,
             "llm_reponse": llm_req.response,
         }
@@ -644,10 +698,22 @@ class SearchOrchestrator:
             "full_user_prompt": llm_req.full_user_prompt,
             "chat_model": self.request.llm.chat_model,
             "temperature": self.request.llm.temperature,
-            "vector_search": round(search_duration, 2),
+            "vector_search": (
+                round(search_duration, 2)
+                if isinstance(search_duration, float)
+                else search_duration
+            ),
             "rerank_duration": 0,
-            "llm_execution": round(llm_req.llm_duration, 2),
-            "total_process": round(total_duration, 2),
+            "llm_execution": (
+                round(llm_req.llm_duration, 2)
+                if isinstance(llm_req.llm_duration, float)
+                else llm_req.llm_duration
+            ),
+            "total_process": (
+                round(total_duration, 2)
+                if isinstance(total_duration, float)
+                else total_duration
+            ),
             "import_duration": 0,
             "llm_reponse": llm_req.response,
         }
@@ -873,15 +939,35 @@ class SearchOrchestrator:
             "matches": {},
             "context": "",
             "response": f"Server error: {error_message}",
-            "embedding": round(embed_duration, 2),
+            "embedding": (
+                round(embed_duration, 2)
+                if isinstance(embed_duration, float)
+                else embed_duration
+            ),
             "fournisseur_non_vide": None,
             "full_user_prompt": "",
             "chat_model": self.request.llm.chat_model,
             "temperature": self.request.llm.temperature,
-            "vector_search": round(search_duration, 2),
-            "rerank_duration": round(rerank_duration, 2),
-            "llm_execution": round(llm_duration, 2),
-            "total_process": round(time.perf_counter() - start_total_time, 2),
+            "vector_search": (
+                round(search_duration, 2)
+                if isinstance(search_duration, float)
+                else search_duration
+            ),
+            "rerank_duration": (
+                round(rerank_duration, 2)
+                if isinstance(rerank_duration, float)
+                else rerank_duration
+            ),
+            "llm_execution": (
+                round(llm_duration, 2)
+                if isinstance(llm_duration, float)
+                else llm_duration
+            ),
+            "total_process": (
+                round(time.perf_counter() - start_total_time, 2)
+                if isinstance(time.perf_counter() - start_total_time, float)
+                else time.perf_counter() - start_total_time
+            ),
             "import_duration": 0,
             "llm_reponse": llm_req.response,
         }
