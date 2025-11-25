@@ -381,7 +381,10 @@ def llm_prompt_gemini(request: ChatRequest) -> str:
     # logging.info("Gemini response received. \nResponse: %s", response)
 
     # Récupération du dump
-    api_response_dict = response.model_dump()
+    if isinstance(response, dict):
+        api_response_dict = response
+    else:
+        api_response_dict = response.model_dump()
 
     # NETTOYAGE : Conversion des bytes (thought_signature) en string
     safe_api_response = make_serializable(api_response_dict)
