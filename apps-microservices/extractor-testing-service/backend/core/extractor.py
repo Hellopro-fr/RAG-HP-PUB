@@ -6,6 +6,7 @@ import os
 import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
+from markdownify import markdownify as md
 
 # Tier 1 Imports
 from readability import Document as ReadabilityDocument
@@ -93,7 +94,7 @@ def extract_boilerpipe3_article_sentences(html: str) -> str:
 def extract_boilerpipe3_keep_everything(html: str) -> str:
     extractor = BoilerpipeExtractor(
         extractor='KeepEverythingExtractor', html=html)
-    return extractor.getText()
+    return extractor.getHTML()
 
 
 def extract_boilerpipe3_keep_everything_with_min_k_words(html: str) -> str:
@@ -175,9 +176,25 @@ def extract_readability_js(html: str) -> str:
     finally:
         os.remove(filepath)
 
-def extract_go_trafilatura(html: str) -> str:
-    command = ["go-trafilatura"]
-    return run_subprocess(command, html)
+
+def extract_go_trafilatura(html: str, url: str = None) -> str:
+    # Prepare input for Go script
+    input_data = {
+        "url": url or "",
+        "html": html
+    }
+
+    command = ["go-trafilatura-hp"]
+    result = run_subprocess(command, json.dumps(input_data))
+
+    # Parse JSON output
+    try:
+        output = json.loads(result)
+        if output.get("error"):
+            raise Exception(output["error"])
+        return output.get("html", "")
+    except json.JSONDecodeError as e:
+        raise Exception(f"Failed to parse Go script output: {e}")
 
 def extract_go_readability(html: str) -> str:
     # Pipe the content directly to the command via stdin.
@@ -205,21 +222,21 @@ async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem
         "Goose3": (extract_goose3, html, url),
         # Tier 2
         "Readability.js (Mozilla)": (extract_readability_js, html),
-        "go-trafilatura": (extract_go_trafilatura, html),
+        "go-trafilatura": (extract_go_trafilatura, html, url),
         "go-readability": (extract_go_readability, html),
         # Custom
         "Trafilatura (Custom HP)": (extract_trafilatura_hp, html),
         # Tier 3
         # "newspaper4k": (extract_newspaper4k, html),
         # "news-please": (extract_newsplease, html),
-        "boilerpipe3-default": (extract_boilerpipe3_default, html),
-        "boilerpipe3-article": (extract_boilerpipe3_article, html),
-        "boilerpipe3-article-sentences": (extract_boilerpipe3_article_sentences, html),
+        # "boilerpipe3-default": (extract_boilerpipe3_default, html),
+        # "boilerpipe3-article": (extract_boilerpipe3_article, html),
+        # "boilerpipe3-article-sentences": (extract_boilerpipe3_article_sentences, html),
         "boilerpipe3-keep-everything": (extract_boilerpipe3_keep_everything, html),
-        "boilerpipe3-keep-everything-with-min-k-words": (extract_boilerpipe3_keep_everything_with_min_k_words, html),
-        "boilerpipe3-largest-content": (extract_boilerpipe3_largest_content, html),
-        "boilerpipe3-num-words-rules": (extract_boilerpipe3_num_words_rules, html),
-        "boilerpipe3-canola": (extract_boilerpipe3_canola, html),
+        # "boilerpipe3-keep-everything-with-min-k-words": (extract_boilerpipe3_keep_everything_with_min_k_words, html),
+        # "boilerpipe3-largest-content": (extract_boilerpipe3_largest_content, html),
+        # "boilerpipe3-num-words-rules": (extract_boilerpipe3_num_words_rules, html),
+        # "boilerpipe3-canola": (extract_boilerpipe3_canola, html),
         # "extractnet": (extract_extractnet, html),
     }
 
@@ -245,6 +262,22 @@ async def run_all_extractors(html: str, url: str = None) -> Dict[str, ResultItem
     logger.info("--- Starting Post-Processing Stage ---")
     post_processed_results = {}
     
+    # For `go-trafilatura`, convert HTML to Markdown using markdownify and put it back in the result
+    if "go-trafilatura" in base_results:
+        base_results["go-trafilatura"].content = md(
+            base_results["go-trafilatura"].content, heading_style="ATX", escape_html=False)
+
+    # For `Goose3`, convert HTML to Markdown using markdownify and put it back in the result
+    if "Goose3" in base_results:
+        base_results["Goose3"].content = md(
+            base_results["Goose3"].content, heading_style="ATX", escape_html=False)
+
+    # For `boilerpipe3-keep-everything`, convert HTML to Markdown using markdownify and put it back in the result
+    if "boilerpipe3-keep-everything" in base_results:
+        base_results["boilerpipe3-keep-everything"].content = md(
+            base_results["boilerpipe3-keep-everything"].content, heading_style="ATX", escape_html=False)
+
+
     # Instantiate the processor once to access its methods
     post_processor = TrafilaturaHp({"url": "", "content": html, "fetch": False})
     soup = BeautifulSoup(html, 'html5lib')

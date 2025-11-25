@@ -3,9 +3,9 @@ import subprocess
 import unittest
 
 # Path to the script we want to test
-SCRIPT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools/upload_daemon.sh'))
+SCRIPT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../tools/upload_daemon.sh'))
 ARCHIVES_DIR = os.path.abspath(os.path.join(os.path.dirname(
-    __file__), '../apps-microservices/crawler-service/crawler_archives'))
+    __file__), './crawler_archives'))
 
 class TestArchiveMockE2E(unittest.TestCase):
     def setUp(self):
