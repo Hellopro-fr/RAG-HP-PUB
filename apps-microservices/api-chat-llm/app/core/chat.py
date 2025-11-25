@@ -366,7 +366,7 @@ def llm_prompt_gemini(request: ChatRequest) -> str:
             break
         except APIError as e:
             logging.info(f"e : {e}")
-            if e.status_code == 503 and attempt < request.max_retries - 1:
+            if e.code == 503 and attempt < request.max_retries - 1:
                 print(
                     f"Erreur 503 {attempt + 1}/{request.max_retries} after {delay} seconds..."
                 )
