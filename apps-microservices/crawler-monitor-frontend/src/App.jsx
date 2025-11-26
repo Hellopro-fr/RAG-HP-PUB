@@ -348,7 +348,152 @@ const ErrorVisualization = ({ errors, warnings }) => {
   );
 };
 
+const RequestUrlEditor = ({ jobId, onClose }) => {
+  const [files, setFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
+
+  useEffect(() => {
+    fetchFiles();
+  }, [jobId]);
+
+  const fetchFiles = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/jobs/${jobId}/request-urls`);
+      if (!res.ok) throw new Error('Failed to fetch files');
+      const data = await res.json();
+      setFiles(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFile = async (file) => {
+    setLoading(true);
+    setSelectedFile(file);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await fetch(`${API_URL}/jobs/${jobId}/request-urls/${file.domain}/${file.name}`);
+      if (!res.ok) throw new Error('Failed to load file');
+      const data = await res.json();
+      setContent(JSON.stringify(data, null, 2));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveFile = async () => {
+    if (!selectedFile) return;
+    setSaving(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      // Validate JSON
+      const jsonContent = JSON.parse(content);
+
+      const res = await fetch(`${API_URL}/jobs/${jobId}/request-urls/${selectedFile.domain}/${selectedFile.name}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonContent)
+      });
+
+      if (!res.ok) throw new Error('Failed to save file');
+      setSuccessMsg('Fichier sauvegardé avec succès !');
+    } catch (err) {
+      setError(`Erreur: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
+        <div className="flex justify-between items-center p-4 border-b border-gray-700">
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <Code className="w-5 h-5" /> Éditeur Request URLs
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <XCircle className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar list */}
+          <div className="w-1/3 border-r border-gray-700 flex flex-col">
+            <div className="p-3 bg-gray-900 border-b border-gray-700">
+              <h4 className="text-sm font-semibold text-gray-400">Fichiers disponibles</h4>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {loading && !selectedFile && <div className="text-center p-4"><RefreshCw className="animate-spin mx-auto" /></div>}
+              {files.length === 0 && !loading && <div className="text-center p-4 text-gray-500">Aucun fichier trouvé</div>}
+              {files.map(file => (
+                <button
+                  key={file.path}
+                  onClick={() => loadFile(file)}
+                  className={`w-full text-left px-3 py-2 rounded text-sm truncate ${selectedFile?.path === file.path ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
+                    }`}
+                >
+                  {file.name}
+                  <span className="block text-xs opacity-70">{file.domain}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Editor area */}
+          <div className="flex-1 flex flex-col bg-gray-900">
+            {selectedFile ? (
+              <>
+                <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+                  <span className="text-sm font-mono text-gray-300">{selectedFile.path}</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveFile}
+                      disabled={saving}
+                      className="flex items-center gap-2 px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-sm text-white disabled:opacity-50"
+                    >
+                      {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      Sauvegarder
+                    </button>
+                  </div>
+                </div>
+
+                {error && <div className="p-2 bg-red-900/50 text-red-200 text-sm border-b border-red-700">{error}</div>}
+                {successMsg && <div className="p-2 bg-green-900/50 text-green-200 text-sm border-b border-green-700">{successMsg}</div>}
+
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  className="flex-1 w-full bg-gray-900 text-gray-300 font-mono text-sm p-4 focus:outline-none resize-none"
+                  spellCheck="false"
+                />
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-500">
+                Sélectionnez un fichier pour l'éditer
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const JobDetails = ({ job, onToggleRaw, showRaw }) => {
+  const [showUrlEditor, setShowUrlEditor] = useState(false);
+
   if (!job) return null;
   if (job.error) {
     return (
@@ -364,14 +509,26 @@ const JobDetails = ({ job, onToggleRaw, showRaw }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-white">Job #{job.id}</h2>
-        <button
-          onClick={onToggleRaw}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
-        >
-          <Code className="w-4 h-4" />
-          {showRaw ? 'Vue Avancée' : 'Logs Bruts'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowUrlEditor(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-white"
+          >
+            <Code className="w-4 h-4" />
+            Éditer URLs
+          </button>
+          <button
+            onClick={onToggleRaw}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
+          >
+            <Code className="w-4 h-4" />
+            {showRaw ? 'Vue Avancée' : 'Logs Bruts'}
+          </button>
+        </div>
       </div>
+
+      {showUrlEditor && <RequestUrlEditor jobId={job.id} onClose={() => setShowUrlEditor(false)} />}
+
       {showRaw ? (
         <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />
       ) : !job.hasStats && !job.stats ? (
