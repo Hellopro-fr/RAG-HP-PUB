@@ -84,9 +84,10 @@ try {
     console.log('Connected to Redis for Heartbeat');
 
     const hostname = os.hostname();
+    const numCpus = os.cpus().length;
     setInterval(async () => {
         try {
-            const cpuLoad = os.loadavg()[0];
+            const cpuLoad = os.loadavg()[0] / numCpus; // Normalize by core count
             const memoryUsage = process.memoryUsage();
             const heartbeat = {
                 type: 'heartbeat',
