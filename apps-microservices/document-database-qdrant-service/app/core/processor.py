@@ -11,8 +11,6 @@ async def insertion_data(document_data: dict) -> dict:
     
     Retourne: Un dictionnaire prêt à être publié.
     """
-    print(f"Doc data : {document_data}")
-
     documents = document_data.get("data",[])
 
     if isinstance(documents, list):
@@ -48,14 +46,11 @@ async def insertion_data(document_data: dict) -> dict:
     if len(documents) > 0:
         fichier_source = documents[0].get("fichier_source", "fichier source inconnu")
 
-        print(f"Document-database-service: page type {page_type}")
-
         if page_type == "autre":
             res = await base_vectorielle.get_document(fichier_source=fichier_source)
 
             tab_data = res.get('data',[])
             if tab_data:
-                print("Document-database-service: Mise à jour data")
                 id_bdd         = tab_data[0].get('id')
                 date_ajout_bdd = tab_data[0].get('date_ajout')
                 # todo mise à jour de l'existant
@@ -76,8 +71,6 @@ async def insertion_data(document_data: dict) -> dict:
                 print("Res update: ", res)
                 
             else:
-                print("Document-database-service: Insertion data")
-
                 documents_bis = []
                 for document in documents:
                     document["embedding"] = [0.0]*1024
@@ -93,8 +86,6 @@ async def insertion_data(document_data: dict) -> dict:
         res = await pj_crud.get_pj(fichier_source=fichier_source)
 
         print("Document-database-service: Ajout data")
-
-
         status = res.get("status")
         data   = res.get("data", [])
         code   = res.get("code", None)

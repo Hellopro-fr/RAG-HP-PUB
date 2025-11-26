@@ -191,7 +191,7 @@ class MilvusDocumentCrud:
             
             return {
                 "status": "success",
-                "data": result.primary_keys
+                "data": "updated"
             }
 
         except MilvusException as e:
