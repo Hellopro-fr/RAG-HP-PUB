@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Code,
   Search, Calendar, Filter, Server, Download, ChevronLeft, ChevronRight,
-  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut
+  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -403,6 +403,16 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
     }
   };
 
+  const formatJson = () => {
+    try {
+      const parsed = JSON.parse(content);
+      setContent(JSON.stringify(parsed, null, 2));
+      setError(null);
+    } catch (e) {
+      setError('JSON Invalide: ' + e.message);
+    }
+  };
+
   const saveFile = async () => {
     if (!selectedFile) return;
     setSaving(true);
@@ -410,7 +420,12 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
     setSuccessMsg(null);
     try {
       // Validate JSON
-      const jsonContent = JSON.parse(content);
+      let jsonContent;
+      try {
+        jsonContent = JSON.parse(content);
+      } catch (e) {
+        throw new Error('JSON Invalide: ' + e.message);
+      }
 
       await authFetch(`${API_URL}/jobs/${jobId}/request-urls/${selectedFile.domain}/${selectedFile.name}`, {
         method: 'POST',
@@ -418,7 +433,6 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
         body: JSON.stringify(jsonContent)
       });
 
-      if (!res.ok) throw new Error('Failed to save file');
       setSuccessMsg('Fichier sauvegardé avec succès !');
     } catch (err) {
       setError(`Erreur: ${err.message}`);
@@ -469,6 +483,14 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
                 <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
                   <span className="text-sm font-mono text-gray-300">{selectedFile.path}</span>
                   <div className="flex gap-2">
+                    <button
+                      onClick={formatJson}
+                      className="flex items-center gap-2 px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm text-white"
+                      title="Formater le JSON"
+                    >
+                      <AlignLeft className="w-4 h-4" />
+                      Formater
+                    </button>
                     <button
                       onClick={saveFile}
                       disabled={saving}
