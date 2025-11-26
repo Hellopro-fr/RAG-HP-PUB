@@ -35,7 +35,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
         if nb_pages >= 20 or len(texts.strip()) < 200 :
             processed_messages_result.append({
                     "status": "error",
-                    "error_message": f"Doc à ne pas traiter : nb_pages = {nb_pages} | len = {len(texts)}",
+                    "error_message": f"Doc à ne pas traiter : nb_pages = {nb_pages} | len = {len(texts.strip())}",
                     "processed_message": {
                         "text": texts,
                         "len": len(texts),
