@@ -28,9 +28,14 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
         document_data = document_item.get("data",{})
 
         nom_doc = os.path.basename(document_data.get("document","inconnu"))
-        texts = results.get(nom_doc).get("text","")
-        nb_pages = results.get(nom_doc).get("total_pages")
-        text_to_embed_clean = texts
+
+        if nom_doc in results:
+            texts = results.get(nom_doc).get("text","")
+            nb_pages = results.get(nom_doc).get("total_pages")
+            text_to_embed_clean = texts
+        else:
+            texts = ""
+            nb_pages = 0
 
         if nb_pages >= 20 or len(texts.strip()) < 200 :
             processed_messages_result.append({
