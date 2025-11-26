@@ -33,7 +33,7 @@ Nettoyer le texte en supprimant **uniquement et exactement** les 5 catégories d
 Si des informations ont été supprimées  → retourne uniquement:
 json
 {{ "contenu": "texte nettoyé ici" }}
-Si aucune information à supprimer n'est détectée  → retourne:
+Si aucune information à supprimer n'est détectée ou le contenu fourni est en anglais  → retourne:
 json
 {{ "contenu": "ok" }}
 """
