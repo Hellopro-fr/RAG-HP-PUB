@@ -99,6 +99,8 @@ class Consumer:
                     for i, result in enumerate(processed_results):
                         original_message = batch[i]
 
+                        retry_count = self._get_retry_count(original_message)
+
                         if result['status'] == 'success':
                             await self.publisher.publish_message(result['processed_message'], channel)
                             await original_message.ack()
@@ -123,7 +125,7 @@ class Consumer:
                             )
                             await original_message.ack()
                         else: # status == 'error'
-                            retry_count = self._get_retry_count(original_message)
+                            # retry_count = self._get_retry_count(original_message)
                             if retry_count < MAX_RETRIES:
                                 print(f"   -> NACK du message (tag: {original_message.delivery_tag}) pour nouvelle tentative.")
                                 await original_message.nack(requeue=False)
