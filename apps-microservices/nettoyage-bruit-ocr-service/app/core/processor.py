@@ -167,7 +167,7 @@ async def nettoyer_bruits_ocr(documents: List[Dict]) -> List[Dict]:
     print(f"   -> Nettoyage des bruits OCR en batch terminée pour {len(processed_results)} messages.")
     for res in processed_results:
         msg = res.get('processed_message') or res.get('original_message')
-        url = msg['data'].get('url', 'N/A')
+        url = msg['data'].get('fichier_source', 'N/A')
         
         if res['status'] == 'success':
             page_type = msg['data'].get('page_type', 'N/A')
