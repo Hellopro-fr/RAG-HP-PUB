@@ -36,7 +36,7 @@ json
 Si le contenu fourni n'est pas en français (en anglais, en allemand , en espagnol, etc)  → retourne:
 json
 {{ "contenu": "" }}
-Si aucune information à supprimer n'est détectée ou le contenu fourni est en anglais  → retourne:
+Si aucune information à supprimer n'est détectée  → retourne:
 json
 {{ "contenu": "ok" }}
 """
@@ -115,8 +115,8 @@ async def _process_single_message(document_item: dict) -> dict:
             parsed_json = json.loads(json_string)
             contenu = parsed_json.get("contenu")
             if not contenu:
-                raise ValueError(f"Le champ 'contenu' est manquant ou vide dans la réponse JSON: {raw_text}")
-            elif contenu != "ok":
+                cleaned_text = ""
+            if contenu != "ok":
                 cleaned_text = contenu
         else:
             # raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM")
