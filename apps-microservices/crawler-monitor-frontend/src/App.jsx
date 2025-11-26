@@ -876,19 +876,12 @@ const App = () => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'job_update') {
-          setJobs(prev => {
-            const index = prev.findIndex(j => j.id === data.job.id);
-            if (index >= 0) {
-              const newJobs = [...prev];
-              newJobs[index] = { ...newJobs[index], ...data.job };
-              return newJobs;
-            }
-            return [data.job, ...prev];
-          });
+          // Auto-refresh job list
+          fetchJobs();
 
           // Update selected job if needed
           if (selectedJob?.id === data.job.id) {
-            // We might want to refresh details here, but for now just let it be
+            fetchJobDetails(data.job.id);
           }
         } else if (data.type === 'replica_heartbeat') {
           setReplicas(prev => ({
