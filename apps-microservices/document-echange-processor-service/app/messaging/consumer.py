@@ -86,6 +86,8 @@ class Consumer:
             try:
                 processed_results = await process_document_data_for_templating(messages_to_process)
                 
+                print(f"Result : {processed_results}")
+
                 async with self.connection.channel() as channel:
                     for i, result in enumerate(processed_results):
                         original_message = batch[i]
