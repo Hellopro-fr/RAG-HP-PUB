@@ -44,20 +44,17 @@ class RerankerOptions(BaseModel):
 
 class SearchRequestWs(BaseModel):
     prompt: str
-    # Utilisation de default_factory pour éviter les objets mutables partagés
-    source: Optional[List[SourcesFiltre]] = Field(
-        default_factory=lambda: [SourcesFiltre(source="produits_3", filtre={})]
-    )
+    source: Optional[List[SourcesFiltre]] = [
+        SourcesFiltre(source="produits_3", filtre={})
+    ]
     action: Optional[int] = 1
     top_k: Optional[int] = 10
-    filtre: Optional[Dict[str, Any]] = Field(default_factory=dict)
-    fields: Optional[List[str]] = Field(default_factory=list)
-    llm: Optional[LLMOptions] = Field(
-        default_factory=lambda: LLMOptions(
-            chat_model="gpt-4.1-2025-04-14", temperature=0.0
-        )
+    filtre: Optional[Dict[str, Any]] = {}
+    fields: Optional[List[str]] = []
+    llm: Optional[LLMOptions] = LLMOptions(
+        chat_model="gpt-4.1-2025-04-14", temperature=0.0
     )
-    options: Optional[RerankerOptions] = Field(default_factory=RerankerOptions)
+    options: Optional[RerankerOptions] = RerankerOptions()
     type: int = 1
     cache: bool = True
 
