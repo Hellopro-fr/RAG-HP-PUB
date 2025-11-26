@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Code,
   Search, Calendar, Filter, Server, Download, ChevronLeft, ChevronRight,
-  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft
+  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft, Cpu
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -668,6 +668,113 @@ const LoginPage = ({ onLogin }) => {
   );
 };
 
+const ReplicaMonitor = ({ replicas }) => {
+  const formatBytes = (bytes) => {
+    if (!bytes) return '0 MB';
+    const mb = bytes / 1024 / 1024;
+    return `${mb.toFixed(0)} MB`;
+  };
+
+  const formatCpu = (load) => {
+    if (!load) return '0%';
+    return `${(load * 100).toFixed(1)}%`;
+  };
+
+  const getStatusColor = (timestamp) => {
+    const age = Date.now() - timestamp;
+    if (age < 5000) return 'green';
+    if (age < 15000) return 'yellow';
+    return 'red';
+  };
+
+  const activeReplicas = Object.values(replicas).filter(r => Date.now() - r.timestamp < 30000);
+
+  return (
+    <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+          <Server className="w-6 h-6 text-blue-400" />
+          Crawler Replicas
+          <span className="text-sm font-normal text-gray-400 ml-2">
+            ({activeReplicas.length} active)
+          </span>
+        </h2>
+      </div>
+
+      {activeReplicas.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <Server className="w-16 h-16 mx-auto mb-4 opacity-30" />
+          <p>Aucun replica actif</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {activeReplicas.map((replica) => {
+            const statusColor = getStatusColor(replica.timestamp);
+            const cpuPercent = Math.min((replica.cpu || 0) * 100, 100);
+            const ramPercent = Math.min((replica.ram / (4 * 1024 * 1024 * 1024)) * 100, 100);
+
+            return (
+              <div
+                key={replica.replicaId}
+                className="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-all"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${statusColor === 'green' ? 'bg-green-500 animate-pulse' :
+                      statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'
+                      }`} />
+                    <span className="text-white font-semibold text-sm truncate">
+                      {replica.replicaId.substring(0, 12)}
+                    </span>
+                  </div>
+                  <Cpu className="w-4 h-4 text-blue-400" />
+                </div>
+
+                {/* Job Info */}
+                {replica.domain && (
+                  <div className="mb-3 p-2 bg-gray-800 rounded text-xs">
+                    <div className="text-gray-400">Job:</div>
+                    <div className="text-white font-mono truncate">{replica.domain}</div>
+                  </div>
+                )}
+
+                {/* CPU Bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>CPU</span>
+                    <span className="font-semibold text-white">{formatCpu(replica.cpu)}</span>
+                  </div>
+                  <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-500"
+                      style={{ width: `${cpuPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* RAM Bar */}
+                <div>
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>RAM</span>
+                    <span className="font-semibold text-white">{formatBytes(replica.ram)}</span>
+                  </div>
+                  <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-purple-500 to-pink-400 transition-all duration-500"
+                      style={{ width: `${ramPercent}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [allJobs, setAllJobs] = useState([]);
@@ -683,6 +790,7 @@ const App = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [replicas, setReplicas] = useState({});
 
   const filteredJobs = useMemo(() => {
     return allJobs.filter(job => {
@@ -781,6 +889,11 @@ const App = () => {
           if (selectedJob?.id === data.job.id) {
             // We might want to refresh details here, but for now just let it be
           }
+        } else if (data.type === 'replica_heartbeat') {
+          setReplicas(prev => ({
+            ...prev,
+            [data.data.replicaId]: data.data
+          }));
         }
       } catch (e) {
         console.error('WebSocket message error:', e);
@@ -865,6 +978,9 @@ const App = () => {
           <StatCard title="Échecs" value={globalStats.failed} icon={XCircle} color="red" />
           <StatCard title="En cours" value={globalStats.running} icon={Zap} color="blue" />
         </div>
+
+        {/* Replica Monitor */}
+        <ReplicaMonitor replicas={replicas} />
 
         <div className="bg-gray-800 p-3 rounded-lg space-y-3">
           <div className="flex flex-wrap items-center gap-3">
