@@ -131,7 +131,7 @@ async def _process_single_message(document_item: dict) -> dict:
             }
         return {
             "status": "error",
-            "original_message": document_data,
+            "original_message": document_item,
             "error_message": error_str,
             "metric_payload": metric_payload
         }
