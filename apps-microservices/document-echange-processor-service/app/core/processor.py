@@ -32,10 +32,17 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
         nb_pages = results.get(nom_doc).get("total_pages")
         text_to_embed_clean = texts
 
-        if nb_pages >= 20 or len(texts.strip()) < 200:
-            continue
-
-        if texts:  
+        if nb_pages >= 20 or len(texts.strip()) < 200 :
+            processed_messages_result.append({
+                    "status": "error",
+                    "processed_message": {
+                        "text": texts,
+                        "len": len(texts),
+                        "nb_pages": nb_pages
+                    }
+                })
+            
+        elif texts:  
             cleaner      = CleanHTML(texts)
             cleaned_text = cleaner.clean()
 
@@ -43,20 +50,20 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             text_to_embed_clean = anonymize.normalize_text(anonymized_text)
 
 
-        output_message = {
-            "data": {
-                "text": text_to_embed_clean,
-                **{k.replace("-", "_"): v for k, v in document_data.items() if k not in ["document"]}
-            },
-            "collection": CollectionName.DOCUMENT,
-            "database": bdd,
-            "nb_pages": nb_pages
-        }
+            output_message = {
+                "data": {
+                    "text": text_to_embed_clean,
+                    **{k.replace("-", "_"): v for k, v in document_data.items() if k not in ["document"]}
+                },
+                "collection": CollectionName.DOCUMENT,
+                "database": bdd,
+                "nb_pages": nb_pages
+            }
 
-        processed_messages_result.append({
-                "status": "success",
-                "processed_message": output_message
-            })
+            processed_messages_result.append({
+                    "status": "success",
+                    "processed_message": output_message
+                })
 
     print(f"🔍Document-Echange-Processor: Message prêt")
     return processed_messages_result
