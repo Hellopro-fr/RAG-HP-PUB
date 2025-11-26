@@ -782,6 +782,7 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef(null);
   const jobCache = useRef({});
 
