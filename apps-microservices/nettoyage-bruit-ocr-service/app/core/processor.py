@@ -86,7 +86,7 @@ async def _process_single_message(document_item: dict) -> dict:
         error_details = response_details.get('error', {})
         state_llm = 1 if not error_details else 2
 
-        doc_url = document_data.get("document").replace(r"\/", "/")
+        doc_url = document_data.get("fichier_source").replace(r"\/", "/")
         metric_payload = {
             "source_service": "nettoyage-bruit-ocr-service",
             "url": f"{doc_url}({nb_pages} page(s))",
