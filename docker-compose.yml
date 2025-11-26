@@ -655,7 +655,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 4
+      replicas: 16
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:
@@ -838,6 +838,8 @@ services:
       - .env
     deploy:
       replicas: 4
+    networks:
+      - services-net
     logging: *logging_defaults
 
   webhook-service:
@@ -929,7 +931,7 @@ services:
     env_file:
       - .env
     environment:
-      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq,insertion_document_queue_dlq,devis_processing_queue_dlq,echange_processing_queue_dlq,product_processing_queue_dlq,insertion_devis_queue_dlq,insertion_echanges_queue_dlq,insertion_produits_queue_dlq
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq,insertion_document_queue_dlq,devis_processing_queue_dlq,echange_processing_queue_dlq,product_processing_queue_dlq,insertion_devis_queue_dlq,insertion_echanges_queue_dlq,insertion_produits_queue_dlq,nettoyage_bruit_ocr_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
       - ES_USERNAME=${DLQ_ARCHIVER_ES_USER}
       - ES_PASSWORD=${DLQ_ARCHIVER_ES_PASSWORD}
@@ -949,7 +951,7 @@ services:
     env_file:
       - .env
     environment:
-      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq,insertion_document_queue_dlq,devis_processing_queue_dlq,echange_processing_queue_dlq,product_processing_queue_dlq,insertion_devis_queue_dlq,insertion_echanges_queue_dlq,insertion_produits_queue_dlq
+      - DLQ_QUEUES=embedding_queue_dlq,insertion_siteweb_queue_dlq,llm_templating_queue_dlq,website_processing_queue_dlq,document_processing_queue_dlq,deepseek_metrics_queue_dlq,insertion_document_queue_dlq,devis_processing_queue_dlq,echange_processing_queue_dlq,product_processing_queue_dlq,insertion_devis_queue_dlq,insertion_echanges_queue_dlq,insertion_produits_queue_dlq,nettoyage_bruit_ocr_queue_dlq
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
       - ES_USERNAME=${DLQ_ARCHIVER_ES_USER}
       - ES_PASSWORD=${DLQ_ARCHIVER_ES_PASSWORD}
