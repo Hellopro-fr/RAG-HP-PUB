@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Code,
   Search, Calendar, Filter, Server, Download, ChevronLeft, ChevronRight,
-  AlertCircle, Info, Zap, ExternalLink, TrendingUp
+  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -348,7 +348,7 @@ const ErrorVisualization = ({ errors, warnings }) => {
   );
 };
 
-const RequestUrlEditor = ({ jobId, onClose }) => {
+const RequestUrlEditor = ({ jobId, onClose, token }) => {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [content, setContent] = useState('');
@@ -357,6 +357,19 @@ const RequestUrlEditor = ({ jobId, onClose }) => {
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
+  const authFetch = async (url, options = {}) => {
+    const headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`,
+    };
+    const res = await fetch(url, { ...options, headers });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('Unauthorized');
+      throw new Error('Request failed');
+    }
+    return res;
+  };
+
   useEffect(() => {
     fetchFiles();
   }, [jobId]);
@@ -364,8 +377,7 @@ const RequestUrlEditor = ({ jobId, onClose }) => {
   const fetchFiles = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/jobs/${jobId}/request-urls`);
-      if (!res.ok) throw new Error('Failed to fetch files');
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-urls`);
       const data = await res.json();
       setFiles(data);
     } catch (err) {
@@ -381,8 +393,7 @@ const RequestUrlEditor = ({ jobId, onClose }) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      const res = await fetch(`${API_URL}/jobs/${jobId}/request-urls/${file.domain}/${file.name}`);
-      if (!res.ok) throw new Error('Failed to load file');
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-urls/${file.domain}/${file.name}`);
       const data = await res.json();
       setContent(JSON.stringify(data, null, 2));
     } catch (err) {
@@ -401,7 +412,7 @@ const RequestUrlEditor = ({ jobId, onClose }) => {
       // Validate JSON
       const jsonContent = JSON.parse(content);
 
-      const res = await fetch(`${API_URL}/jobs/${jobId}/request-urls/${selectedFile.domain}/${selectedFile.name}`, {
+      await authFetch(`${API_URL}/jobs/${jobId}/request-urls/${selectedFile.domain}/${selectedFile.name}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(jsonContent)
@@ -491,7 +502,7 @@ const RequestUrlEditor = ({ jobId, onClose }) => {
   );
 };
 
-const JobDetails = ({ job, onToggleRaw, showRaw }) => {
+const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
   const [showUrlEditor, setShowUrlEditor] = useState(false);
 
   if (!job) return null;
@@ -527,7 +538,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw }) => {
         </div>
       </div>
 
-      {showUrlEditor && <RequestUrlEditor jobId={job.id} onClose={() => setShowUrlEditor(false)} />}
+      {showUrlEditor && <RequestUrlEditor jobId={job.id} onClose={() => setShowUrlEditor(false)} token={token} />}
 
       {showRaw ? (
         <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />
@@ -575,7 +586,68 @@ const JobDetails = ({ job, onToggleRaw, showRaw }) => {
   );
 };
 
-function App() {
+const LoginPage = ({ onLogin }) => {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onLogin(data.token);
+      } else {
+        setError(data.error || 'Login failed');
+      }
+    } catch (err) {
+      setError('Connection error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      <div className="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+        <h1 className="text-2xl font-bold text-white mb-6 text-center flex items-center justify-center gap-2">
+          <Activity className="w-8 h-8 text-blue-500" />
+          Crawler Monitor
+        </h1>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-gray-400 text-sm font-bold mb-2">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-gray-700 text-white border border-gray-600 rounded p-3 focus:outline-none focus:border-blue-500"
+              placeholder="Enter admin password"
+            />
+          </div>
+          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const App = () => {
+  const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [allJobs, setAllJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -626,10 +698,87 @@ function App() {
     return { finished, failed, running, total: filteredJobs.length };
   }, [filteredJobs]);
 
+  const handleLogin = (newToken) => {
+    localStorage.setItem('authToken', newToken);
+    setToken(newToken);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    setToken(null);
+  };
+
+  const authFetch = async (url, options = {}) => {
+    const headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`,
+    };
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+      handleLogout();
+      throw new Error('Unauthorized');
+    }
+    return res;
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchJobs();
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/api?token=${token}`;
+
+    console.log('Connecting to WebSocket:', wsUrl);
+    wsRef.current = new WebSocket(wsUrl);
+
+    wsRef.current.onopen = () => {
+      console.log('Connected to WebSocket');
+      setIsConnected(true);
+    };
+
+    wsRef.current.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'job_update') {
+          setJobs(prev => {
+            const index = prev.findIndex(j => j.id === data.job.id);
+            if (index >= 0) {
+              const newJobs = [...prev];
+              newJobs[index] = { ...newJobs[index], ...data.job };
+              return newJobs;
+            }
+            return [data.job, ...prev];
+          });
+
+          // Update selected job if needed
+          if (selectedJob?.id === data.job.id) {
+            // We might want to refresh details here, but for now just let it be
+          }
+        }
+      } catch (e) {
+        console.error('WebSocket message error:', e);
+      }
+    };
+
+    wsRef.current.onclose = () => {
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
+    };
+
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, [token]);
+
   const fetchJobs = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/jobs`);
+      const response = await authFetch(`${API_URL}/jobs`);
       const data = await response.json();
       setAllJobs(data);
     } catch (error) {
@@ -637,7 +786,11 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
+
+  if (!token) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   const fetchJobDetails = useCallback(async (id) => {
     if (jobCache.current[id] && selectedJob?.id === id && !showRaw) {
@@ -648,7 +801,7 @@ function App() {
     setLoadingDetails(true);
 
     try {
-      const response = await fetch(`${API_URL}/jobs/${id}/details`);
+      const response = await authFetch(`${API_URL}/jobs/${id}/details`);
       if (!response.ok) throw new Error(`HTTP error ${response.status}`);
       const data = await response.json();
 
@@ -662,23 +815,7 @@ function App() {
     }
   }, [selectedJob, showRaw]);
 
-  useEffect(() => {
-    fetchJobs();
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Utiliser /api pour le WebSocket car Nginx est configuré pour proxy_pass /api vers le backend (y compris WS)
-    const wsUrl = `${protocol}//${window.location.host}/api`;
-    wsRef.current = new WebSocket(wsUrl);
-    wsRef.current.onmessage = () => {
-      fetchJobs();
-      if (selectedJob) {
-        jobCache.current = {};
-        fetchJobDetails(selectedJob.id);
-      }
-    };
-    return () => {
-      if (wsRef.current) wsRef.current.close();
-    };
-  }, [fetchJobs, fetchJobDetails, selectedJob]);
+
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300 font-sans">
@@ -688,9 +825,14 @@ function App() {
             <Activity className="w-8 h-8 text-blue-400" />
             <h1 className="text-xl font-bold text-white">Crawler Dashboard Pro</h1>
           </div>
-          <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors">
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex gap-2">
+            <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={handleLogout} className="p-2 rounded-md hover:bg-red-700 transition-colors text-red-400 hover:text-white" title="Déconnexion">
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -844,6 +986,7 @@ function App() {
                 job={selectedJob}
                 onToggleRaw={() => setShowRaw(!showRaw)}
                 showRaw={showRaw}
+                token={token}
               />
             ) : (
               <div className="text-center py-20 text-gray-400">
