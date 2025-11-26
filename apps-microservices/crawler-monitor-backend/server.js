@@ -4,8 +4,9 @@ import cors from 'cors';
 import { createClient } from 'redis';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { readFile } from 'fs/promises';
+import { readFile, readdir, writeFile, stat } from 'fs/promises';
 import { join } from 'path';
+import { existsSync } from 'fs';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
@@ -23,6 +24,7 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 app.use(cors());
+app.use(express.json({ limit: '50mb' })); // Support large JSON payloads for request_urls
 
 const clients = new Set();
 wss.on('connection', ws => {
@@ -178,6 +180,107 @@ app.get('/api/jobs/:id/details', async (req, res) => {
     }
   } finally {
     if (redisClient.isOpen) await redisClient.quit();
+  }
+});
+
+// Helper to find the request_urls directory
+async function findRequestUrlsDir(jobId) {
+  // Check possible paths
+  const paths = [
+    join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'request_urls'),
+    join(CRAWLER_STORAGE_PATH, jobId, 'request_urls')
+  ];
+
+  for (const p of paths) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+app.get('/api/jobs/:id/request-urls', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestUrlsDir(id);
+    if (!baseDir) {
+      return res.json([]); // No directory found, return empty list
+    }
+
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    const files = [];
+
+    // Iterate over domain directories
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const domainDir = join(baseDir, entry.name);
+        const domainFiles = await readdir(domainDir);
+        for (const file of domainFiles) {
+          if (file.endsWith('.json')) {
+            files.push({
+              name: file,
+              domain: entry.name,
+              path: join(entry.name, file) // Relative path for API usage
+            });
+          }
+        }
+      }
+    }
+
+    res.json(files);
+  } catch (error) {
+    console.error(`Error listing request urls for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to list request urls' });
+  }
+});
+
+app.get('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
+  const { id, domain, filename } = req.params;
+  try {
+    const baseDir = await findRequestUrlsDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request URLs directory not found' });
+    }
+
+    const filePath = join(baseDir, domain, filename);
+
+    // Security check: prevent directory traversal
+    if (!filePath.startsWith(baseDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const content = await readFile(filePath, 'utf-8');
+    res.json(JSON.parse(content));
+  } catch (error) {
+    console.error(`Error reading request url file ${filename}:`, error);
+    res.status(500).json({ error: 'Failed to read file' });
+  }
+});
+
+app.post('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
+  const { id, domain, filename } = req.params;
+  const content = req.body;
+
+  try {
+    const baseDir = await findRequestUrlsDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request URLs directory not found' });
+    }
+
+    const filePath = join(baseDir, domain, filename);
+
+    // Security check
+    if (!filePath.startsWith(baseDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    await writeFile(filePath, JSON.stringify(content, null, 2), 'utf-8');
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`Error saving request url file ${filename}:`, error);
+    res.status(500).json({ error: 'Failed to save file' });
   }
 });
 
