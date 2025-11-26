@@ -85,16 +85,29 @@ try {
 
     const hostname = os.hostname();
     const numCpus = os.cpus().length;
+    let lastCpuUsage = process.cpuUsage();
+    let lastTime = Date.now();
+
     setInterval(async () => {
         try {
-            const cpuLoad = os.loadavg()[0] / numCpus; // Normalize by core count
+            // Calculate CPU usage percentage for THIS process
+            const currentCpuUsage = process.cpuUsage(lastCpuUsage);
+            const currentTime = Date.now();
+            const elapsedTime = (currentTime - lastTime) * 1000; // Convert to microseconds
+
+            // CPU usage is in microseconds, convert to percentage
+            const cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
+
+            lastCpuUsage = process.cpuUsage();
+            lastTime = currentTime;
+
             const memoryUsage = process.memoryUsage();
             const heartbeat = {
                 type: 'heartbeat',
                 replicaId: hostname,
                 jobId: id,
                 domain: domain,
-                cpu: cpuLoad,
+                cpu: Math.min(cpuPercent, 1), // Cap at 100%
                 ram: memoryUsage.rss,
                 timestamp: Date.now(),
                 status: 'running'
