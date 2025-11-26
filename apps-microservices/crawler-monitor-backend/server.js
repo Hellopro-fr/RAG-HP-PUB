@@ -363,6 +363,15 @@ async function setupRedisListener() {
         console.error('Failed to parse update message:', e);
       }
     });
+
+    await subscriber.subscribe('crawler:heartbeat', (message) => {
+      try {
+        const heartbeat = JSON.parse(message);
+        broadcast({ type: 'replica_heartbeat', data: heartbeat });
+      } catch (e) {
+        console.error('Failed to parse heartbeat:', e);
+      }
+    });
   } catch (err) {
     console.error('Failed to connect to Redis. Retrying in 5s.', err);
     setTimeout(setupRedisListener, 5000);
