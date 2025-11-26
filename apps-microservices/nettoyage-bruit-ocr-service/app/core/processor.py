@@ -14,11 +14,16 @@ from common_utils.grpc_clients.schemas.chat import ChatRequest
 MAX_OUTPUT_TOKEN = 64000
 
 PROMPT_NETTOYAGE = """
-Tu es un expert en analyse de documents B2B (devis, catalogues, fiches techniques, plaquettes commerciales,savoir-faire, autre type).
-**Tâche**:
-Si le texte est en français, nettoye-le en supprimant **uniquement et exactement** les 5 catégories d'informations listées ci-dessous. Ne modifie, n'ajoute ni ne supprime aucune autre information.
+Tu es un expert en analyse de documents B2B multilingues (devis, catalogues, fiches techniques, plaquettes commerciales,savoir-faire, autre type) et à l'aise en détection des langues utilisées dans un contenu spécifique.
 **Texte à analyser** : 
 {content}
+
+**Tâche**:
+Si le texte fourni est en français , nettoie-le en supprimant **uniquement et exactement** les 5 catégories d'informations listées ci-dessous. Ne modifie, n'ajoute ni ne supprime aucune autre information.
+Par contre , si le texte fourni n'est pas en français , retourne uniquement:
+json
+{{ "contenu": "" }}
+
 **Informations à supprimer** :
 1. **Mentions légales administratives** : RCS, SIRET, SIREN, TVA intracommunautaire, capital social, forme juridique, adresse du siège social
 2. **Clauses contractuelles** : CGV, CGA, CGU, conditions de paiement, conditions de livraison, réserve de propriété, clauses d'acceptation
@@ -33,9 +38,6 @@ Si le texte est en français, nettoye-le en supprimant **uniquement et exactemen
 Si des informations ont été supprimées  → retourne uniquement:
 json
 {{ "contenu": "texte nettoyé ici" }}
-Si le contenu fourni n'est pas en français (en anglais, en allemand , en espagnol, etc)  → retourne:
-json
-{{ "contenu": "" }}
 Si aucune information à supprimer n'est détectée  → retourne:
 json
 {{ "contenu": "ok" }}
