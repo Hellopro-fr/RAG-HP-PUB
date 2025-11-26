@@ -130,6 +130,9 @@ class MilvusPjCrud:
 
                 if "document" in data:
                     del data["document"]
+                    
+                if "annnee" in data:
+                    del data["annnee"]
 
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility

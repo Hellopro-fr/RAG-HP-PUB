@@ -86,7 +86,7 @@ async def _process_single_message(document_item: dict) -> dict:
         error_details = response_details.get('error', {})
         state_llm = 1 if not error_details else 2
 
-        doc_url = document_data.get("document").replace(r"\/", "/")
+        doc_url = document_data.get("fichier_source").replace(r"\/", "/")
         metric_payload = {
             "source_service": "nettoyage-bruit-ocr-service",
             "url": f"{doc_url}({nb_pages} page(s))",
@@ -116,7 +116,13 @@ async def _process_single_message(document_item: dict) -> dict:
             elif contenu != "ok":
                 cleaned_text = contenu
         else:
-            raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM: {raw_text}")
+            # raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM")
+            return {
+                "status": "error",
+                "original_message": document_item,
+                "error_message": "Aucun bloc JSON trouvé dans la sortie du LLM",
+                "metric_payload": metric_payload
+            }
 
     except Exception as e:
         logging.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")

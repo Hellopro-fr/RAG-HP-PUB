@@ -11,7 +11,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     anonymize = AnonymizeText()
 
     for document in documents:
-        document_data = document.get("original_data",{}).get("data",{})
+        document_data = document.get("data",{}).get("original_data",{})
         # document_data = document.get("data",{})
         docs.append(document_data.get("document"))
 
@@ -24,7 +24,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     for document_item in documents:
         
         output_message = {}
-        document_data = document_item.get("original_data",{}).get("data",{})
+        document_data = document_item.get("data",{}).get("original_data",{})
         # document_data = document_item.get("data",{})
 
         nom_doc = os.path.basename(document_data.get("document","inconnu"))
