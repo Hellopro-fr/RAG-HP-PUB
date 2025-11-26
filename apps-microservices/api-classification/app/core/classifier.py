@@ -515,6 +515,14 @@ class ProductClassifier:
         Returns:
             Dict contenant summary, input_tokens, output_tokens
         """
+        # Gestion spécifique pour la catégorie "Autres produits" (ID 9000000)
+        if str(category_id) == "9000000":
+            return {
+                "summary": "Catégorie générique regroupant tous les produits qui ne correspondent à aucune catégorie spécifique de la \"LISTE DES CATEGORIES\". Inclut les produits hybrides, les accessoires sans catégorie dédiée et les produits dont la description ne permet pas une classification précise. Position dans l'arborescence B2B : catégorie générique.",
+                "input_tokens": 0,
+                "output_tokens": 0
+            }
+
         description = category_data.get("description_categorie", "")
         fil_ariane = category_data.get("fil_ariane", "")
         top_5_produit = category_data.get("top_5_produit", "")
