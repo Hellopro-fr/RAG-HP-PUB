@@ -1,3 +1,18 @@
+# Stage 1: Build Go CLIs
+FROM golang:1.24-alpine AS go-builder
+WORKDIR /src
+
+# Install system dependencies
+RUN apk add --no-cache git
+
+# Build custom go-trafilatura script
+# Key Change: Pointing to the new location in libs
+COPY libs/common-utils/src/common_utils/cleaner/go-trafilatura /src/go-extractor
+WORKDIR /src/go-extractor
+RUN go mod tidy
+RUN go build -o go-trafilatura-hp main.go
+
+# Stage 2: Final Python Application
 FROM python:3.13-slim
 WORKDIR /app
 
@@ -7,7 +22,14 @@ ENV PYTHONPATH=/app
 
 # Install build-essential which contains g++ and other build tools
 # needed for compiling Python packages like faust-cchardet.
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+# Also install default-jre-headless for boilerpy3
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential default-jre-headless && rm -rf /var/lib/apt/lists/*
+
+# Copy binaries from builder stages
+COPY --from=go-builder /src/go-extractor/go-trafilatura-hp /usr/local/bin/go-trafilatura-hp
+
+# Ensure binaries are executable
+RUN chmod +x /usr/local/bin/go-trafilatura-hp
 
 # Étape 2: Installer les dépendances
 # On copie la lib partagée
