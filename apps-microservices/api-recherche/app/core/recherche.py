@@ -22,6 +22,14 @@ from app.core.credentials import settings, model_settings
 from google import genai
 from google.genai import types
 
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception,
+    before_sleep_log,
+)
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
@@ -47,7 +55,17 @@ class LLMClientFactory:
             "openai",
         )
 
-        if model_type == "openai":
+        if provider == "gemini":
+            return GeminiClient(
+                config={
+                    "model": (
+                        model_name
+                        if model_name != "" and model_name is not None
+                        else settings.GEMINI_MODEL_NAME
+                    )
+                }
+            )
+        elif model_type == "openai":
             if model_name == "deepseek":
                 deepseek = DeepSeek(config={"api_key": settings.DEEPSEEK_API_KEY})
                 deepseek.set_temperature(temperature)
@@ -55,16 +73,6 @@ class LLMClientFactory:
             else:
                 return LLMClientFactory.get_openai_client(settings.OPENAI_API_KEY)
         else:  # OpenRouter
-            if provider == "gemini":
-                return GeminiClient(
-                    config={
-                        "model": (
-                            model_name
-                            if model_name != "" and model_name != None
-                            else None
-                        )
-                    }
-                )
             return OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=settings.OPENROUTER_API_KEY,
@@ -340,7 +348,13 @@ class SearchOrchestrator:
             query_vector, embed_duration = await self._get_embedding()
             yield {
                 "type": "embedding_complete",
-                "payload": {"duration": round(embed_duration, 2)},
+                "payload": {
+                    "duration": (
+                        round(embed_duration, 2)
+                        if isinstance(embed_duration, float)
+                        else embed_duration
+                    )
+                },
             }
 
             initial_matches, search_duration = await self._perform_search(query_vector)
@@ -348,7 +362,11 @@ class SearchOrchestrator:
                 "type": "initial_results",
                 "payload": {
                     "results": initial_matches[: self.request.top_k],
-                    "duration": round(search_duration, 2),
+                    "duration": (
+                        round(search_duration, 2)
+                        if isinstance(search_duration, float)
+                        else search_duration
+                    ),
                 },
             }
 
@@ -358,7 +376,11 @@ class SearchOrchestrator:
                     "type": "rerank_complete",
                     "payload": {
                         "results": final_results[: self.request.top_k],
-                        "duration": round(rerank_duration, 2),
+                        "duration": (
+                            round(rerank_duration, 2)
+                            if isinstance(rerank_duration, float)
+                            else rerank_duration
+                        ),
                     },
                 }
 
@@ -378,11 +400,31 @@ class SearchOrchestrator:
             total_duration = time.perf_counter() - start_total_time
             final_summary = {
                 "timings": {
-                    "embedding": round(embed_duration, 2),
-                    "vector_search": round(search_duration, 2),
-                    "rerank": round(rerank_duration, 2),
-                    "llm_execution": round(llm_duration, 2),
-                    "total_process": round(total_duration, 2),
+                    "embedding": (
+                        round(embed_duration, 2)
+                        if isinstance(embed_duration, float)
+                        else embed_duration
+                    ),
+                    "vector_search": (
+                        round(search_duration, 2)
+                        if isinstance(search_duration, float)
+                        else search_duration
+                    ),
+                    "rerank": (
+                        round(rerank_duration, 2)
+                        if isinstance(rerank_duration, float)
+                        else rerank_duration
+                    ),
+                    "llm_execution": (
+                        round(llm_duration, 2)
+                        if isinstance(llm_duration, float)
+                        else llm_duration
+                    ),
+                    "total_process": (
+                        round(total_duration, 2)
+                        if isinstance(total_duration, float)
+                        else total_duration
+                    ),
                 },
                 "result_count": len(final_results),
             }
@@ -516,15 +558,35 @@ class SearchOrchestrator:
             "matches": all_results,
             "context": llm_req.context,
             "response": llm_req.llm_response,
-            "embedding": round(embed_duration, 2),
+            "embedding": (
+                round(embed_duration, 2)
+                if isinstance(embed_duration, float)
+                else embed_duration
+            ),
             "fournisseur_non_vide": None,
             "full_user_prompt": llm_req.full_user_prompt,
             "chat_model": self.request.llm.chat_model,
             "temperature": self.request.llm.temperature,
-            "vector_search": round(search_duration, 2),
-            "rerank_duration": round(rerank_duration, 2),
-            "llm_execution": round(llm_req.llm_duration, 2),
-            "total_process": round(total_duration, 2),
+            "vector_search": (
+                round(search_duration, 2)
+                if isinstance(search_duration, float)
+                else search_duration
+            ),
+            "rerank_duration": (
+                round(rerank_duration, 2)
+                if isinstance(rerank_duration, float)
+                else rerank_duration
+            ),
+            "llm_execution": (
+                round(llm_req.llm_duration, 2)
+                if isinstance(llm_req.llm_duration, float)
+                else llm_req.llm_duration
+            ),
+            "total_process": (
+                round(total_duration, 2)
+                if isinstance(total_duration, float)
+                else total_duration
+            ),
             "import_duration": 0,
             "llm_reponse": llm_req.response,
         }
@@ -644,10 +706,22 @@ class SearchOrchestrator:
             "full_user_prompt": llm_req.full_user_prompt,
             "chat_model": self.request.llm.chat_model,
             "temperature": self.request.llm.temperature,
-            "vector_search": round(search_duration, 2),
+            "vector_search": (
+                round(search_duration, 2)
+                if isinstance(search_duration, float)
+                else search_duration
+            ),
             "rerank_duration": 0,
-            "llm_execution": round(llm_req.llm_duration, 2),
-            "total_process": round(total_duration, 2),
+            "llm_execution": (
+                round(llm_req.llm_duration, 2)
+                if isinstance(llm_req.llm_duration, float)
+                else llm_req.llm_duration
+            ),
+            "total_process": (
+                round(total_duration, 2)
+                if isinstance(total_duration, float)
+                else total_duration
+            ),
             "import_duration": 0,
             "llm_reponse": llm_req.response,
         }
@@ -775,6 +849,69 @@ class SearchOrchestrator:
 
         return final_results, rerank_duration
 
+    def is_503_error(self, exception):
+        """
+        Checks if an exception is related to a 503 Service Unavailable.
+        Adjust this based on the specific libraries (OpenAI, Google, etc.) you are using.
+        """
+        if getattr(exception, "status_code", None) == 503:
+            return True
+
+        if getattr(exception, "code", None) == 503:
+            return True
+
+        msg = str(exception).lower()
+        return (
+            "503" in msg
+            or "service unavailable" in msg
+            or "server is overloaded" in msg
+        )
+
+    @retry(
+        retry=retry_if_exception(is_503_error),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        stop=stop_after_attempt(6),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    async def _execute_llm_api_call(self, client, full_user_prompt):
+        """
+        Performs the actual network request.
+        Wraps the synchronous blocking calls in asyncio.to_thread to prevent
+        blocking the event loop, allowing previous yields to be flushed.
+        """
+
+        def _sync_request():
+            llm_response = ""
+            completion = {}
+
+            if isinstance(client, DeepSeek):
+                response = client.chat(full_user_prompt)
+                llm_response = response["content"]
+                completion = response["response"]
+            elif isinstance(client, GeminiClient):
+                response = client.chat(
+                    full_user_prompt,
+                    options={"thinking_level": self.request.llm.thinking_level},
+                )
+                completion = response["response"]
+                llm_response = response["content"]
+            else:
+                completion = client.chat.completions.create(
+                    model=self.request.llm.chat_model,
+                    messages=[{"role": "user", "content": full_user_prompt}],
+                    temperature=float(self.request.llm.temperature),
+                )
+                llm_response = completion.choices[0].message.content
+
+            if hasattr(completion, "model_dump"):
+                completion = completion.model_dump()
+
+            return llm_response, completion
+
+        # Execute the synchronous function in a separate thread
+        return await asyncio.to_thread(_sync_request)
+
     async def _run_llm_pipeline(self, context_texts: list) -> LLMPipeline:
         if not context_texts or self.request.action != 2:
             return LLMPipeline(
@@ -815,27 +952,30 @@ class SearchOrchestrator:
         llm_response, completion = "", {}
 
         try:
-            if isinstance(client, DeepSeek):
-                response = client.chat(full_user_prompt)
-                llm_response = response["content"]
-                completion = response["response"]
-            elif isinstance(client, GeminiClient):
-                response = client.chat(
-                    full_user_prompt,
-                    options={"thinking_level": self.request.llm.thinking_level},
-                )
-                completion = response["response"]
-                llm_response = response["content"]
-            else:
-                completion = client.chat.completions.create(
-                    model=self.request.llm.chat_model,
-                    messages=[{"role": "user", "content": full_user_prompt}],
-                    temperature=float(self.request.llm.temperature),
-                )
-                llm_response = completion.choices[0].message.content
+            # if isinstance(client, DeepSeek):
+            #     response = client.chat(full_user_prompt)
+            #     llm_response = response["content"]
+            #     completion = response["response"]
+            # elif isinstance(client, GeminiClient):
+            #     response = client.chat(
+            #         full_user_prompt,
+            #         options={"thinking_level": self.request.llm.thinking_level},
+            #     )
+            #     completion = response["response"]
+            #     llm_response = response["content"]
+            # else:
+            #     completion = client.chat.completions.create(
+            #         model=self.request.llm.chat_model,
+            #         messages=[{"role": "user", "content": full_user_prompt}],
+            #         temperature=float(self.request.llm.temperature),
+            #     )
+            #     llm_response = completion.choices[0].message.content
 
-            if hasattr(completion, "model_dump"):
-                completion = completion.model_dump()
+            # if hasattr(completion, "model_dump"):
+            #     completion = completion.model_dump()
+            llm_response, completion = await self._execute_llm_api_call(
+                client, full_user_prompt
+            )
 
         except Exception as e:
             logger.error(f"Error during LLM execution: {e}")
@@ -873,15 +1013,35 @@ class SearchOrchestrator:
             "matches": {},
             "context": "",
             "response": f"Server error: {error_message}",
-            "embedding": round(embed_duration, 2),
+            "embedding": (
+                round(embed_duration, 2)
+                if isinstance(embed_duration, float)
+                else embed_duration
+            ),
             "fournisseur_non_vide": None,
             "full_user_prompt": "",
             "chat_model": self.request.llm.chat_model,
             "temperature": self.request.llm.temperature,
-            "vector_search": round(search_duration, 2),
-            "rerank_duration": round(rerank_duration, 2),
-            "llm_execution": round(llm_duration, 2),
-            "total_process": round(time.perf_counter() - start_total_time, 2),
+            "vector_search": (
+                round(search_duration, 2)
+                if isinstance(search_duration, float)
+                else search_duration
+            ),
+            "rerank_duration": (
+                round(rerank_duration, 2)
+                if isinstance(rerank_duration, float)
+                else rerank_duration
+            ),
+            "llm_execution": (
+                round(llm_duration, 2)
+                if isinstance(llm_duration, float)
+                else llm_duration
+            ),
+            "total_process": (
+                round(time.perf_counter() - start_total_time, 2)
+                if isinstance(time.perf_counter() - start_total_time, float)
+                else time.perf_counter() - start_total_time
+            ),
             "import_duration": 0,
             "llm_reponse": llm_req.response,
         }

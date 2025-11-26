@@ -9,7 +9,6 @@ import asyncio
 import tempfile
 import os
 
-from reportlab.lib.pagesizes import A4
 
 BASE_URL_OCR = os.environ.get("URL_OCR", "http://34.34.166.5:8501")
 
@@ -228,6 +227,7 @@ class DeepseekOCRDocExtractor:
         """
         temp_input = None
         temp_output_dir = None
+        process = None
         
         try:
             content.seek(0)
@@ -252,7 +252,11 @@ class DeepseekOCRDocExtractor:
                     dir=temp_output_dir
                 )
                 temp_input.write(content.read())
+                temp_input.flush()  # Forcer l'écriture sur le disque
                 temp_input.close()
+                
+                # S'assurer que le fichier est lisible
+                os.chmod(temp_input.name, 0o644)
                 
                 # Commande LibreOffice pour conversion
                 cmd = [
@@ -270,6 +274,7 @@ class DeepseekOCRDocExtractor:
                     stderr=asyncio.subprocess.PIPE
                 )
                 
+                stdout = stderr = None
                 try:
                     stdout, stderr = await asyncio.wait_for(
                         process.communicate(), 
@@ -293,8 +298,8 @@ class DeepseekOCRDocExtractor:
                     
                     return pdf_content, new_filename
                 else:
-                    error_msg = stderr.decode() if stderr else "Raison inconnue"
-                    raise Exception(f"Échec de la conversion LibreOffice: {error_msg}")
+                    error_msg = stderr.decode('utf-8', errors='replace') if stderr else "Raison inconnue"
+                    raise Exception(f"Échec de la conversion LibreOffice (code {process.returncode}): {error_msg}")
             
             # === Sinon, format non supporté ===
             else:
@@ -303,6 +308,14 @@ class DeepseekOCRDocExtractor:
         except Exception as e:
             raise ValueError(f"Impossible de convertir {filename} en PDF: {str(e)}")
         finally:
+            # Nettoyer le processus si encore actif
+            if process and process.returncode is None:
+                try:
+                    process.kill()
+                    await process.wait()
+                except:
+                    pass
+            
             # Nettoyage des fichiers temporaires
             try:
                 if temp_input and os.path.exists(temp_input.name):

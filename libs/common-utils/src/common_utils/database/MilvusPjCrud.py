@@ -25,7 +25,7 @@ class ModelConfig:
     collection_name: str = "pjechanges"
     dimension: int = 1024
 
-class MilvuspjCrud:
+class MilvusPjCrud:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
@@ -127,6 +127,9 @@ class MilvuspjCrud:
             for data in datas:
                 data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
                 data["date_maj"] = None  
+
+                if "document" in data:
+                    del data["document"]
 
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility

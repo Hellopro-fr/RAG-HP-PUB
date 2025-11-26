@@ -1,6 +1,5 @@
 aio_pika
 pydantic
-pytest
 pika
 python-dotenv
 pymilvus

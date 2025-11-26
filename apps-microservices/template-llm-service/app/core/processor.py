@@ -87,7 +87,7 @@ En sortie, tu dois produire un objet JSON :
 Si la page correspond à un des types listés → retourne uniquement :
 json
 {{ "page_type": "valeur" }}
-Si la page ne correspond à aucun type → retourne :
+Si la page ne correspond à aucun type ou la page n'est pas en français → retourne :
 json
 {{ "page_type": "autre", "commentaire_si_autre": "explication en 15 mots max" }}
 Critère clé : ne te base pas uniquement sur les balises Markdown.

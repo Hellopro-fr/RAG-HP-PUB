@@ -1,6 +1,6 @@
 from os import error
 from pydantic import BaseModel, Field
-from typing import Annotated, List, Optional, Dict, Any
+from typing import Annotated, List, Optional, Dict, Any, Union
 
 
 # Ce schéma est identique à celui du notebook, comme demandé.
@@ -39,7 +39,7 @@ class RerankerOptions(BaseModel):
     use_reranker: bool = True
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     rrf: bool = False
-    ponderation: float = 1.1  # Ponderation for reranking
+    ponderation: float = 1.1
 
 
 class SearchRequestWs(BaseModel):
@@ -59,7 +59,7 @@ class SearchRequestWs(BaseModel):
     cache: bool = True
 
 
-# Schéma de réponse détaillé pour correspondre à la sortie des fonctions de recherche
+# Schéma de réponse détaillé
 class SearchResponse(BaseModel):
     database: str
     user_query: str
@@ -67,21 +67,22 @@ class SearchResponse(BaseModel):
     matches: Dict[str, List[Any]]
     context: Optional[str] = ""
     response: Optional[str] = ""
-    embedding: float
+    embedding: Union[float, str]
     fournisseur_non_vide: Optional[bool] = None
     full_user_prompt: Optional[str] = ""
     chat_model: Optional[str] = None
-    temperature: float = ""
-    vector_search: float
-    total_process: float
-    llm_execution: float
-    import_duration: float
+    temperature: float = 0.0
+
+    vector_search: Union[float, str]
+    total_process: Union[float, str]
+    llm_execution: Union[float, str]
+    import_duration: Union[float, str]
     llm_reponse: Optional[dict] = {}
 
 
 class LLMPipeline(BaseModel):
     llm_response: str = ""
-    llm_duration: float = ""
+    llm_duration: Union[float, str] = 0
     full_user_prompt: str = ""
     context: str = ""
     response: dict = {}

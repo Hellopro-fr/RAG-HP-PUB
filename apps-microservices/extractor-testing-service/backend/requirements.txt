@@ -12,12 +12,6 @@ sentence_splitter
 python-multipart
 bs4
 
-# Tier 1
-readability-lxml
-justext
-goose3
-
 # Tier 3
-newspaper4k
-news-please
 boilerpipe3
+boilerpy3

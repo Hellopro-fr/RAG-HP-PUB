@@ -15,17 +15,31 @@ class Publisher:
         """
         Publie un message de manière asynchrone sur le canal fourni.
         """
+        collection = message_dict.get("collection","")
+        
+        exchange_name = 'processed_data_exchange'
+        routing_key   = 'data.ready_for_embedding'
+
+        if collection == "document":
+            page_type = message_dict.get("data",{}).get("page_type","")
+            if page_type == "autre":
+                exchange_name = 'document_embedded_data_exchange'
+                routing_key   = 'data.document.ready_for_insertion'
+            else:
+                exchange_name = 'processed_data_exchange'
+                routing_key   = 'data.ready_for_ocr_cleaning'
+
         # La déclaration de l'exchange est idempotente et rapide, on s'assure qu'elle existe.
-        exchange = await channel.get_exchange(self.exchange_name, ensure=True)
+        exchange = await channel.get_exchange(exchange_name, ensure=True)
         
         await exchange.publish(
             aio_pika.Message(
                 body=json.dumps(message_dict).encode('utf-8'),
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT
             ),
-            routing_key=self.routing_key
+            routing_key=routing_key
         )
-        print(f"   📤 Message classifié publié avec la clé '{self.routing_key}'.")
+        print(f"   📤 Message classifié publié avec la clé '{routing_key}'.")
 
     async def publish_metric_message(self, metric_dict: dict, channel: aio_pika.abc.AbstractChannel):
         """
