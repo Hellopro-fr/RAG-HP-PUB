@@ -27,6 +27,14 @@ from app.core.credentials import settings
 from openai import OpenAI, AsyncOpenAI
 
 from common_utils.grpc_clients.schemas.chat import ChatBaseURL, ChatProvider
+from google.genai.errors import APIError
+from tenacity import (
+    Retrying,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception,
+)
+from google.genai import types, errors
 
 
 logging.basicConfig(
@@ -342,44 +350,135 @@ def make_serializable(obj):
     return obj
 
 
-def llm_prompt_gemini(request: ChatRequest) -> str:
+def is_retryable_error(exception):
+    """
+    Checks if the exception is a Google GenAI 503 or 429 error.
+    """
+    code = getattr(exception, "status_code", None)
+
+    if code is None:
+        code = getattr(exception, "code", None)
+
+    return code in [503, 429]
+
+
+# def llm_prompt_gemini(request: ChatRequest) -> str:
+#     client = genai.Client(api_key=settings.GEMINI_API_KEY)
+#     prompt = request.prompt
+
+#     delay = 1
+#     response = {}
+#     for attempt in range(request.max_retries):
+#         if attempt == request.max_retries - 1:
+#             break
+#         try:
+#             response = client.models.generate_content(
+#                 model=request.model if request.model else settings.GEMINI_MODEL_NAME,
+#                 contents=prompt,
+#                 config=types.GenerateContentConfig(
+#                     thinking_config=types.ThinkingConfig(
+#                         thinking_level=(
+#                             request.thinking_level if request.thinking_level else "high"
+#                         )
+#                     )
+#                 ),
+#             )
+#             break
+#         except APIError as e:
+#             if e.code == 503 and attempt < request.max_retries - 1:
+#                 print(
+#                     f"Erreur 503 {attempt + 1}/{request.max_retries} after {delay} seconds..."
+#                 )
+#                 time.sleep(delay)
+#                 delay *= 2  # Exponential backoff
+#                 response = e
+#                 continue
+#         except Exception as e:
+#             print(f"Erreur exception: {e}")
+#             response = e
+
+#     # logging.info("Gemini response received. \nResponse: %s", response)
+
+#     # Récupération du dump
+#     if isinstance(response, dict):
+#         api_response_dict = response
+#     else:
+#         api_response_dict = response.model_dump()
+
+#     # NETTOYAGE : Conversion des bytes (thought_signature) en string
+#     safe_api_response = make_serializable(api_response_dict)
+
+#     return {"message": response.text, "api_response": safe_api_response}
+
+
+def llm_prompt_gemini(request: ChatRequest) -> dict:
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     prompt = request.prompt
 
-    delay = 1
-    for attempt in range(request.max_retries):
-        if attempt == request.max_retries - 1:
-            break
-        try:
-            response = client.models.generate_content(
-                model=request.model if request.model else settings.GEMINI_MODEL_NAME,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(
-                        thinking_level=(
-                            request.thinking_level if request.thinking_level else "high"
-                        )
+    req_thinking = request.thinking_level
+    if not req_thinking or req_thinking.lower() == "string":
+        thinking_val = "high"
+    else:
+        thinking_val = req_thinking.lower()
+
+    response = None
+
+    try:
+        # Configure Tenacity context manager
+        retryer = Retrying(
+            stop=stop_after_attempt(request.max_retries),
+            wait=wait_exponential(multiplier=1, min=1, max=60),
+            retry=retry_if_exception(is_retryable_error),
+            reraise=True,
+        )
+
+        i = 1
+        for attempt in retryer:
+            with attempt:
+                # Log only on retries
+                if attempt.retry_state.attempt_number > 1:
+                    logging.info(
+                        f"Retrying Gemini API... Attempt {attempt.retry_state.attempt_number}"
                     )
-                ),
-            )
-            break
-        except APIError as e:
-            if e.status_code == 503 and attempt < request.max_retries - 1:
-                print(
-                    f"Erreur 503 {attempt + 1}/{request.max_retries} after {delay} seconds..."
+
+                logging.info(
+                    "Gemini API attempt: %s", attempt.retry_state.attempt_number
                 )
-                time.sleep(delay)
-                delay *= 2  # Exponential backoff
-                continue
-        except Exception as e:
-            print(f"Erreur exception: {e}")
+                response = client.models.generate_content(
+                    model=(
+                        request.model if request.model else settings.GEMINI_MODEL_NAME
+                    ),
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(
+                            thinking_level=thinking_val,
+                            include_thoughts=True,
+                        )
+                    ),
+                )
 
-    # logging.info("Gemini response received. \nResponse: %s", response)
+    except errors.ClientError as e:
+        logging.error(
+            f"Gemini ClientError: {e.message} (Code: {e.code}) type : {type(e)}"
+        )
+        return {
+            "message": f"{e.message}",
+            "api_response": {
+                "code": e.code,
+                "message": e.message,
+                "status": getattr(e, "status", "UNKNOWN"),
+            },
+        }
+    except Exception as e:
+        logging.error(f"Unexpected error in llm_prompt_gemini: {e}")
+        return {
+            "message": "Internal Server Error during generation",
+            "api_response": {},
+            "error": str(e),
+        }
 
-    # Récupération du dump
+    # --- Success Processing ---
     api_response_dict = response.model_dump()
-
-    # NETTOYAGE : Conversion des bytes (thought_signature) en string
     safe_api_response = make_serializable(api_response_dict)
 
     return {"message": response.text, "api_response": safe_api_response}

@@ -4,12 +4,19 @@ import cors from 'cors';
 import { createClient } from 'redis';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { readFile, readdir, writeFile, stat } from 'fs/promises';
+import { join, normalize } from 'path';
+import { existsSync } from 'fs';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+
+import jwt from 'jsonwebtoken';
 
 const PORT = process.env.PORT || 3001;
 const REDIS_URL = process.env.REDIS_URL;
 const CRAWLER_STORAGE_PATH = process.env.CRAWLER_STORAGE_PATH || '/app/storage';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin'; // Default password
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'; // Change in production
 
 const CRAWL_UPDATES_CHANNEL = 'crawl_updates';
 const CRAWL_JOB_PREFIX = 'crawl_job:';
@@ -22,12 +29,69 @@ if (!REDIS_URL) {
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
+
+// Security Middleware
+app.use(helmet());
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
+
 app.use(cors());
+app.use(express.json({ limit: '50mb' })); // Support large JSON payloads for request_urls
+
+// Authentication Middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
+
+// Login Endpoint
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+  if (password === ADMIN_PASSWORD) {
+    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token });
+  } else {
+    res.status(401).json({ error: 'Invalid password' });
+  }
+});
+
+// Protect API routes
+app.use('/api/jobs', authenticateToken);
 
 const clients = new Set();
-wss.on('connection', ws => {
-  clients.add(ws);
-  ws.on('close', () => clients.delete(ws));
+wss.on('connection', (ws, req) => {
+  // Parse token from query string
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const token = url.searchParams.get('token');
+
+  if (!token) {
+    ws.close(1008, 'Authentication required');
+    return;
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      ws.close(1008, 'Invalid token');
+      return;
+    }
+
+    // Authentication successful
+    clients.add(ws);
+    ws.on('close', () => clients.delete(ws));
+  });
 });
 
 function parseLogFile(content) {
@@ -181,6 +245,107 @@ app.get('/api/jobs/:id/details', async (req, res) => {
   }
 });
 
+// Helper to find the request_urls directory
+async function findRequestUrlsDir(jobId) {
+  // Check possible paths
+  const paths = [
+    join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'request_urls'),
+    join(CRAWLER_STORAGE_PATH, jobId, 'request_urls')
+  ];
+
+  for (const p of paths) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+app.get('/api/jobs/:id/request-urls', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestUrlsDir(id);
+    if (!baseDir) {
+      return res.json([]); // No directory found, return empty list
+    }
+
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    const files = [];
+
+    // Iterate over domain directories
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const domainDir = join(baseDir, entry.name);
+        const domainFiles = await readdir(domainDir);
+        for (const file of domainFiles) {
+          if (file.endsWith('.json')) {
+            files.push({
+              name: file,
+              domain: entry.name,
+              path: join(entry.name, file) // Relative path for API usage
+            });
+          }
+        }
+      }
+    }
+
+    res.json(files);
+  } catch (error) {
+    console.error(`Error listing request urls for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to list request urls' });
+  }
+});
+
+app.get('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
+  const { id, domain, filename } = req.params;
+  try {
+    const baseDir = await findRequestUrlsDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request URLs directory not found' });
+    }
+
+    const filePath = normalize(join(baseDir, domain, filename));
+
+    // Security check: prevent directory traversal
+    if (!filePath.startsWith(baseDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const content = await readFile(filePath, 'utf-8');
+    res.json(JSON.parse(content));
+  } catch (error) {
+    console.error(`Error reading request url file ${filename}:`, error);
+    res.status(500).json({ error: 'Failed to read file' });
+  }
+});
+
+app.post('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
+  const { id, domain, filename } = req.params;
+  const content = req.body;
+
+  try {
+    const baseDir = await findRequestUrlsDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request URLs directory not found' });
+    }
+
+    const filePath = normalize(join(baseDir, domain, filename));
+
+    // Security check
+    if (!filePath.startsWith(baseDir)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    await writeFile(filePath, JSON.stringify(content, null, 2), 'utf-8');
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`Error saving request url file ${filename}:`, error);
+    res.status(500).json({ error: 'Failed to save file' });
+  }
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 async function setupRedisListener() {
@@ -196,6 +361,15 @@ async function setupRedisListener() {
         broadcast({ type: 'file_changed', path: updateData.crawl_id });
       } catch (e) {
         console.error('Failed to parse update message:', e);
+      }
+    });
+
+    await subscriber.subscribe('crawler:heartbeat', (message) => {
+      try {
+        const heartbeat = JSON.parse(message);
+        broadcast({ type: 'replica_heartbeat', data: heartbeat });
+      } catch (e) {
+        console.error('Failed to parse heartbeat:', e);
       }
     });
   } catch (err) {

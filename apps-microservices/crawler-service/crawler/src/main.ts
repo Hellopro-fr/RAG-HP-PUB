@@ -1,6 +1,8 @@
 import { RequestQueue, RobotsFile } from "crawlee";
 import axios from "axios";
 import fs from "fs/promises"; // Added for file system operations
+import { createClient } from 'redis';
+import os from 'os';
 import { router } from "./routes.js";
 import {
     getPathAfterDomain,
@@ -71,6 +73,40 @@ attachFSLogger(nameLogs); // Logs will now be created inside the job's storagePa
 
 console.info("Crawler starting with arguments:");
 console.info(JSON.stringify(args, null, 2));
+
+// --- Heartbeat Mechanism ---
+const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+const redisClient = createClient({ url: redisUrl });
+redisClient.on('error', (err) => console.error('Redis Heartbeat Error:', err));
+
+try {
+    await redisClient.connect();
+    console.log('Connected to Redis for Heartbeat');
+
+    const hostname = os.hostname();
+    setInterval(async () => {
+        try {
+            const cpuLoad = os.loadavg()[0];
+            const memoryUsage = process.memoryUsage();
+            const heartbeat = {
+                type: 'heartbeat',
+                replicaId: hostname,
+                jobId: id,
+                domain: domain,
+                cpu: cpuLoad,
+                ram: memoryUsage.rss,
+                timestamp: Date.now(),
+                status: 'running'
+            };
+            await redisClient.publish('crawler:heartbeat', JSON.stringify(heartbeat));
+        } catch (e) {
+            console.error('Failed to send heartbeat:', e);
+        }
+    }, 2000);
+} catch (err) {
+    console.error('Failed to connect to Redis for Heartbeat:', err);
+}
+// ---------------------------
 
 // --- Main crawler logic (largely the same, but paths are now relative to the new CWD) ---
 

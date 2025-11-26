@@ -55,8 +55,20 @@ async def test_extractors_endpoint(request: RequestModel):
         logger.info(
             f"HTML preprocessed. New length: {len(preprocessed_html)}.")
 
-        # 2. Run all extractors with optional URL
-        results = await run_all_extractors(preprocessed_html, url=url)
+        # 2. Extract strategy and metadata settings from request
+        strategy = request.strategy.value  # Convert enum to string
+        extract_metadata = request.extract_metadata
+
+        logger.info(
+            f"Extraction strategy: {strategy}, Extract metadata: {extract_metadata}")
+
+        # 3. Run all extractors with optional URL, strategy, and metadata settings
+        results = await run_all_extractors(
+            preprocessed_html,
+            url=url,
+            strategy=strategy,
+            extract_metadata=extract_metadata
+        )
         logger.info("All extractors finished processing.")
 
         return results

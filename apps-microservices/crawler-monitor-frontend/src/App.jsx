@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Code,
   Search, Calendar, Filter, Server, Download, ChevronLeft, ChevronRight,
-  AlertCircle, Info, Zap, ExternalLink, TrendingUp
+  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft, Cpu
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -348,7 +348,185 @@ const ErrorVisualization = ({ errors, warnings }) => {
   );
 };
 
-const JobDetails = ({ job, onToggleRaw, showRaw }) => {
+const RequestUrlEditor = ({ jobId, onClose, token }) => {
+  const [files, setFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
+
+  const authFetch = async (url, options = {}) => {
+    const headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`,
+    };
+    const res = await fetch(url, { ...options, headers });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('Unauthorized');
+      throw new Error('Request failed');
+    }
+    return res;
+  };
+
+  useEffect(() => {
+    fetchFiles();
+  }, [jobId]);
+
+  const fetchFiles = async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-urls`);
+      const data = await res.json();
+      setFiles(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFile = async (file) => {
+    setLoading(true);
+    setSelectedFile(file);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-urls/${file.domain}/${file.name}`);
+      const data = await res.json();
+      setContent(JSON.stringify(data, null, 2));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatJson = () => {
+    try {
+      const parsed = JSON.parse(content);
+      setContent(JSON.stringify(parsed, null, 2));
+      setError(null);
+    } catch (e) {
+      setError('JSON Invalide: ' + e.message);
+    }
+  };
+
+  const saveFile = async () => {
+    if (!selectedFile) return;
+    setSaving(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      // Validate JSON
+      let jsonContent;
+      try {
+        jsonContent = JSON.parse(content);
+      } catch (e) {
+        throw new Error('JSON Invalide: ' + e.message);
+      }
+
+      await authFetch(`${API_URL}/jobs/${jobId}/request-urls/${selectedFile.domain}/${selectedFile.name}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonContent)
+      });
+
+      setSuccessMsg('Fichier sauvegardé avec succès !');
+    } catch (err) {
+      setError(`Erreur: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
+        <div className="flex justify-between items-center p-4 border-b border-gray-700">
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <Code className="w-5 h-5" /> Éditeur Request URLs
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <XCircle className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar list */}
+          <div className="w-1/3 border-r border-gray-700 flex flex-col">
+            <div className="p-3 bg-gray-900 border-b border-gray-700">
+              <h4 className="text-sm font-semibold text-gray-400">Fichiers disponibles</h4>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {loading && !selectedFile && <div className="text-center p-4"><RefreshCw className="animate-spin mx-auto" /></div>}
+              {files.length === 0 && !loading && <div className="text-center p-4 text-gray-500">Aucun fichier trouvé</div>}
+              {files.map(file => (
+                <button
+                  key={file.path}
+                  onClick={() => loadFile(file)}
+                  className={`w-full text-left px-3 py-2 rounded text-sm truncate ${selectedFile?.path === file.path ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
+                    }`}
+                >
+                  {file.name}
+                  <span className="block text-xs opacity-70">{file.domain}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Editor area */}
+          <div className="flex-1 flex flex-col bg-gray-900">
+            {selectedFile ? (
+              <>
+                <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+                  <span className="text-sm font-mono text-gray-300">{selectedFile.path}</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={formatJson}
+                      className="flex items-center gap-2 px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm text-white"
+                      title="Formater le JSON"
+                    >
+                      <AlignLeft className="w-4 h-4" />
+                      Formater
+                    </button>
+                    <button
+                      onClick={saveFile}
+                      disabled={saving}
+                      className="flex items-center gap-2 px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-sm text-white disabled:opacity-50"
+                    >
+                      {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      Sauvegarder
+                    </button>
+                  </div>
+                </div>
+
+                {error && <div className="p-2 bg-red-900/50 text-red-200 text-sm border-b border-red-700">{error}</div>}
+                {successMsg && <div className="p-2 bg-green-900/50 text-green-200 text-sm border-b border-green-700">{successMsg}</div>}
+
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  className="flex-1 w-full bg-gray-900 text-gray-300 font-mono text-sm p-4 focus:outline-none resize-none"
+                  spellCheck="false"
+                />
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-gray-500">
+                Sélectionnez un fichier pour l'éditer
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
+  const [showUrlEditor, setShowUrlEditor] = useState(false);
+
   if (!job) return null;
   if (job.error) {
     return (
@@ -364,14 +542,26 @@ const JobDetails = ({ job, onToggleRaw, showRaw }) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-white">Job #{job.id}</h2>
-        <button
-          onClick={onToggleRaw}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
-        >
-          <Code className="w-4 h-4" />
-          {showRaw ? 'Vue Avancée' : 'Logs Bruts'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowUrlEditor(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-white"
+          >
+            <Code className="w-4 h-4" />
+            Éditer URLs
+          </button>
+          <button
+            onClick={onToggleRaw}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
+          >
+            <Code className="w-4 h-4" />
+            {showRaw ? 'Vue Avancée' : 'Logs Bruts'}
+          </button>
+        </div>
       </div>
+
+      {showUrlEditor && <RequestUrlEditor jobId={job.id} onClose={() => setShowUrlEditor(false)} token={token} />}
+
       {showRaw ? (
         <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />
       ) : !job.hasStats && !job.stats ? (
@@ -418,7 +608,175 @@ const JobDetails = ({ job, onToggleRaw, showRaw }) => {
   );
 };
 
-function App() {
+const LoginPage = ({ onLogin }) => {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onLogin(data.token);
+      } else {
+        setError(data.error || 'Login failed');
+      }
+    } catch (err) {
+      setError('Connection error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      <div className="bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+        <h1 className="text-2xl font-bold text-white mb-6 text-center flex items-center justify-center gap-2">
+          <Activity className="w-8 h-8 text-blue-500" />
+          Crawler Monitor
+        </h1>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-gray-400 text-sm font-bold mb-2">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-gray-700 text-white border border-gray-600 rounded p-3 focus:outline-none focus:border-blue-500"
+              placeholder="Enter admin password"
+            />
+          </div>
+          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const ReplicaMonitor = ({ replicas }) => {
+  const formatBytes = (bytes) => {
+    if (!bytes) return '0 MB';
+    const mb = bytes / 1024 / 1024;
+    return `${mb.toFixed(0)} MB`;
+  };
+
+  const formatCpu = (load) => {
+    if (!load) return '0%';
+    return `${(load * 100).toFixed(1)}%`;
+  };
+
+  const getStatusColor = (timestamp) => {
+    const age = Date.now() - timestamp;
+    if (age < 5000) return 'green';
+    if (age < 15000) return 'yellow';
+    return 'red';
+  };
+
+  const activeReplicas = Object.values(replicas).filter(r => Date.now() - r.timestamp < 30000);
+
+  return (
+    <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+          <Server className="w-6 h-6 text-blue-400" />
+          Crawler Replicas
+          <span className="text-sm font-normal text-gray-400 ml-2">
+            ({activeReplicas.length} active)
+          </span>
+        </h2>
+      </div>
+
+      {activeReplicas.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <Server className="w-16 h-16 mx-auto mb-4 opacity-30" />
+          <p>Aucun replica actif</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {activeReplicas.map((replica) => {
+            const statusColor = getStatusColor(replica.timestamp);
+            const cpuPercent = Math.min((replica.cpu || 0) * 100, 100);
+            const ramPercent = Math.min((replica.ram / (4 * 1024 * 1024 * 1024)) * 100, 100);
+
+            return (
+              <div
+                key={replica.replicaId}
+                className="bg-gray-900 rounded-lg p-4 border border-gray-700 hover:border-gray-600 transition-all"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${statusColor === 'green' ? 'bg-green-500 animate-pulse' :
+                      statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'
+                      }`} />
+                    <span className="text-white font-semibold text-sm truncate">
+                      {replica.replicaId.substring(0, 12)}
+                    </span>
+                  </div>
+                  <Cpu className="w-4 h-4 text-blue-400" />
+                </div>
+
+                {/* Job Info */}
+                {replica.domain && (
+                  <div className="mb-3 p-2 bg-gray-800 rounded text-xs">
+                    <div className="text-gray-400">Job:</div>
+                    <div className="text-white font-mono truncate">{replica.domain}</div>
+                  </div>
+                )}
+
+                {/* CPU Bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>CPU</span>
+                    <span className="font-semibold text-white">{formatCpu(replica.cpu)}</span>
+                  </div>
+                  <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-500"
+                      style={{ width: `${cpuPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* RAM Bar */}
+                <div>
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>RAM</span>
+                    <span className="font-semibold text-white">{formatBytes(replica.ram)}</span>
+                  </div>
+                  <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-purple-500 to-pink-400 transition-all duration-500"
+                      style={{ width: `${ramPercent}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const App = () => {
+  const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [allJobs, setAllJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -432,6 +790,7 @@ function App() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [replicas, setReplicas] = useState({});
 
   const filteredJobs = useMemo(() => {
     return allJobs.filter(job => {
@@ -469,10 +828,92 @@ function App() {
     return { finished, failed, running, total: filteredJobs.length };
   }, [filteredJobs]);
 
+  const handleLogin = (newToken) => {
+    localStorage.setItem('authToken', newToken);
+    setToken(newToken);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    setToken(null);
+  };
+
+  const authFetch = async (url, options = {}) => {
+    const headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`,
+    };
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+      handleLogout();
+      throw new Error('Unauthorized');
+    }
+    return res;
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchJobs();
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/api?token=${token}`;
+
+    console.log('Connecting to WebSocket:', wsUrl);
+    wsRef.current = new WebSocket(wsUrl);
+
+    wsRef.current.onopen = () => {
+      console.log('Connected to WebSocket');
+      setIsConnected(true);
+    };
+
+    wsRef.current.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'job_update') {
+          setJobs(prev => {
+            const index = prev.findIndex(j => j.id === data.job.id);
+            if (index >= 0) {
+              const newJobs = [...prev];
+              newJobs[index] = { ...newJobs[index], ...data.job };
+              return newJobs;
+            }
+            return [data.job, ...prev];
+          });
+
+          // Update selected job if needed
+          if (selectedJob?.id === data.job.id) {
+            // We might want to refresh details here, but for now just let it be
+          }
+        } else if (data.type === 'replica_heartbeat') {
+          setReplicas(prev => ({
+            ...prev,
+            [data.data.replicaId]: data.data
+          }));
+        }
+      } catch (e) {
+        console.error('WebSocket message error:', e);
+      }
+    };
+
+    wsRef.current.onclose = () => {
+      console.log('WebSocket disconnected');
+      setIsConnected(false);
+    };
+
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, [token]);
+
   const fetchJobs = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/jobs`);
+      const response = await authFetch(`${API_URL}/jobs`);
       const data = await response.json();
       setAllJobs(data);
     } catch (error) {
@@ -480,7 +921,11 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
+
+  if (!token) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   const fetchJobDetails = useCallback(async (id) => {
     if (jobCache.current[id] && selectedJob?.id === id && !showRaw) {
@@ -491,7 +936,7 @@ function App() {
     setLoadingDetails(true);
 
     try {
-      const response = await fetch(`${API_URL}/jobs/${id}/details`);
+      const response = await authFetch(`${API_URL}/jobs/${id}/details`);
       if (!response.ok) throw new Error(`HTTP error ${response.status}`);
       const data = await response.json();
 
@@ -505,23 +950,7 @@ function App() {
     }
   }, [selectedJob, showRaw]);
 
-  useEffect(() => {
-    fetchJobs();
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Utiliser /api pour le WebSocket car Nginx est configuré pour proxy_pass /api vers le backend (y compris WS)
-    const wsUrl = `${protocol}//${window.location.host}/api`;
-    wsRef.current = new WebSocket(wsUrl);
-    wsRef.current.onmessage = () => {
-      fetchJobs();
-      if (selectedJob) {
-        jobCache.current = {};
-        fetchJobDetails(selectedJob.id);
-      }
-    };
-    return () => {
-      if (wsRef.current) wsRef.current.close();
-    };
-  }, [fetchJobs, fetchJobDetails, selectedJob]);
+
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-300 font-sans">
@@ -531,9 +960,14 @@ function App() {
             <Activity className="w-8 h-8 text-blue-400" />
             <h1 className="text-xl font-bold text-white">Crawler Dashboard Pro</h1>
           </div>
-          <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors">
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex gap-2">
+            <button onClick={fetchJobs} className="p-2 rounded-md hover:bg-gray-700 transition-colors" title="Rafraîchir">
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={handleLogout} className="p-2 rounded-md hover:bg-red-700 transition-colors text-red-400 hover:text-white" title="Déconnexion">
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -544,6 +978,9 @@ function App() {
           <StatCard title="Échecs" value={globalStats.failed} icon={XCircle} color="red" />
           <StatCard title="En cours" value={globalStats.running} icon={Zap} color="blue" />
         </div>
+
+        {/* Replica Monitor */}
+        <ReplicaMonitor replicas={replicas} />
 
         <div className="bg-gray-800 p-3 rounded-lg space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -687,6 +1124,7 @@ function App() {
                 job={selectedJob}
                 onToggleRaw={() => setShowRaw(!showRaw)}
                 showRaw={showRaw}
+                token={token}
               />
             ) : (
               <div className="text-center py-20 text-gray-400">

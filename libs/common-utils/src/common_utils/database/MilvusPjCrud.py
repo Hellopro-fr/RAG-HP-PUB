@@ -128,6 +128,12 @@ class MilvusPjCrud:
                 data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
                 data["date_maj"] = None  
 
+                if "document" in data:
+                    del data["document"]
+                    
+                if "annnee" in data:
+                    del data["annnee"]
+
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
                 data = Utils.sanitize_record(data)
