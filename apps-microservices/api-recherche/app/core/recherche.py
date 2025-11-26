@@ -60,7 +60,7 @@ class LLMClientFactory:
                 config={
                     "model": (
                         model_name
-                        if model_name != "" and model_name != None
+                        if model_name != "" and model_name is not None
                         else settings.GEMINI_MODEL_NAME
                     )
                 }
@@ -877,34 +877,40 @@ class SearchOrchestrator:
     async def _execute_llm_api_call(self, client, full_user_prompt):
         """
         Performs the actual network request.
-        Raises exceptions so Tenacity can catch them.
+        Wraps the synchronous blocking calls in asyncio.to_thread to prevent
+        blocking the event loop, allowing previous yields to be flushed.
         """
-        llm_response = ""
-        completion = {}
 
-        if isinstance(client, DeepSeek):
-            response = client.chat(full_user_prompt)
-            llm_response = response["content"]
-            completion = response["response"]
-        elif isinstance(client, GeminiClient):
-            response = client.chat(
-                full_user_prompt,
-                options={"thinking_level": self.request.llm.thinking_level},
-            )
-            completion = response["response"]
-            llm_response = response["content"]
-        else:
-            completion = client.chat.completions.create(
-                model=self.request.llm.chat_model,
-                messages=[{"role": "user", "content": full_user_prompt}],
-                temperature=float(self.request.llm.temperature),
-            )
-            llm_response = completion.choices[0].message.content
+        def _sync_request():
+            llm_response = ""
+            completion = {}
 
-        if hasattr(completion, "model_dump"):
-            completion = completion.model_dump()
+            if isinstance(client, DeepSeek):
+                response = client.chat(full_user_prompt)
+                llm_response = response["content"]
+                completion = response["response"]
+            elif isinstance(client, GeminiClient):
+                response = client.chat(
+                    full_user_prompt,
+                    options={"thinking_level": self.request.llm.thinking_level},
+                )
+                completion = response["response"]
+                llm_response = response["content"]
+            else:
+                completion = client.chat.completions.create(
+                    model=self.request.llm.chat_model,
+                    messages=[{"role": "user", "content": full_user_prompt}],
+                    temperature=float(self.request.llm.temperature),
+                )
+                llm_response = completion.choices[0].message.content
 
-        return llm_response, completion
+            if hasattr(completion, "model_dump"):
+                completion = completion.model_dump()
+
+            return llm_response, completion
+
+        # Execute the synchronous function in a separate thread
+        return await asyncio.to_thread(_sync_request)
 
     async def _run_llm_pipeline(self, context_texts: list) -> LLMPipeline:
         if not context_texts or self.request.action != 2:
