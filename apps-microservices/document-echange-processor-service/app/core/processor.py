@@ -11,6 +11,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     anonymize = AnonymizeText()
 
     for document in documents:
+        # document_data = document.get("original_data",{}).get("data",{})
         document_data = document.get("data",{})
         docs.append(document_data.get("document"))
 
@@ -23,10 +24,11 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     for document_item in documents:
         
         output_message = {}
+        # document_data = document_item.get("original_data",{}).get("data",{})
         document_data = document_item.get("data",{})
 
         nom_doc = os.path.basename(document_data.get("document","inconnu"))
-        texts = results.get(nom_doc).get("text")
+        texts = results.get(nom_doc).get("text","")
         nb_pages = results.get(nom_doc).get("total_pages")
         text_to_embed_clean = ""
 
@@ -44,7 +46,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
         output_message = {
             "data": {
                 "text": text_to_embed_clean,
-                **{k.replace("-", "_"): v for k, v in document_data.items()}
+                **{k.replace("-", "_"): v for k, v in document_data.items() if k not in ["document"]}
             },
             "collection": CollectionName.DOCUMENT,
             "database": bdd,
