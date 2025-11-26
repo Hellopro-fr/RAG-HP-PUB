@@ -16,7 +16,7 @@ MAX_OUTPUT_TOKEN = 64000
 PROMPT_NETTOYAGE = """
 Tu es un expert en analyse de documents B2B (devis, catalogues, fiches techniques, plaquettes commerciales,savoir-faire, autre type).
 **Tâche**:
-Nettoyer le texte en supprimant **uniquement et exactement** les 5 catégories d'informations listées ci-dessous. Ne modifie, n'ajoute ni ne supprime aucune autre information.
+Si le texte est en français, nettoye-le en supprimant **uniquement et exactement** les 5 catégories d'informations listées ci-dessous. Ne modifie, n'ajoute ni ne supprime aucune autre information.
 **Texte à analyser** : 
 {content}
 **Informations à supprimer** :
@@ -33,6 +33,9 @@ Nettoyer le texte en supprimant **uniquement et exactement** les 5 catégories d
 Si des informations ont été supprimées  → retourne uniquement:
 json
 {{ "contenu": "texte nettoyé ici" }}
+Si le contenu fourni n'est pas en français (en anglais, en allemand , en espagnol, etc)  → retourne:
+json
+{{ "contenu": "" }}
 Si aucune information à supprimer n'est détectée ou le contenu fourni est en anglais  → retourne:
 json
 {{ "contenu": "ok" }}
