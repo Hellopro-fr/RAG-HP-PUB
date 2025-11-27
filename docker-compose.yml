@@ -655,7 +655,7 @@ services:
     env_file:
       - .env
     deploy:
-      replicas: 40
+      replicas: 80
     environment:
       - LLM_SERVICE_URL=llm-service:50051
     depends_on:

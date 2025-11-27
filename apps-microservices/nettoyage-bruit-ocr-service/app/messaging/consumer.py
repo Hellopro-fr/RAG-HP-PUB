@@ -12,7 +12,7 @@ from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
-BATCH_SIZE = 2
+BATCH_SIZE = 1
 BATCH_TIMEOUT_SECONDS = 2.0
 
 class Consumer:
