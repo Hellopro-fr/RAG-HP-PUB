@@ -4,11 +4,16 @@ import json
 import asyncio
 import logging
 from typing import List, Dict
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import threading
+
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
+_thread_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="llm_worker")
 
 MAX_OUTPUT_TOKEN = 64000
 
@@ -69,7 +74,21 @@ def make_chat_request(prompt_template, content,temperature=0.7):
     
     return chat_request
 
+
+def _run_async_in_thread(coro):
+    """
+    Exécute une coroutine async dans un thread séparé avec son propre event loop.
+    """
+    # Créer un nouveau event loop pour ce thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
 async def _process_single_message(document_item: dict) -> dict:
+    """Votre fonction ASYNC existante - AUCUN CHANGEMENT."""
     output_message = {}
 
     nb_pages = document_item.get("nb_pages","")
@@ -80,11 +99,10 @@ async def _process_single_message(document_item: dict) -> dict:
     metric_payload = {}
 
     try:
-
         chat_request = make_chat_request(PROMPT_NETTOYAGE,text_to_embed_clean)
+        # 🔥 Cette ligne reste async - pas de changement !
         raw_response_dict = await llm_client.get_llm_chat_response(chat_request)
 
-        # Construction du payload de métriques
         response_details = raw_response_dict.get('response', {})
         usage_details = response_details.get('usage', {})
         error_details = response_details.get('error', {})
@@ -106,10 +124,7 @@ async def _process_single_message(document_item: dict) -> dict:
         if state_llm == 2:
             raise ValueError(f"Erreur du LLM: {raw_response_dict}")
 
-        # Parsing de la réponse
         raw_text = raw_response_dict.get('full_message', '')
-
-        # Parsing de la réponse
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if match:
             json_string = match.group(0)
@@ -119,24 +134,15 @@ async def _process_single_message(document_item: dict) -> dict:
                 cleaned_text = ""
             if contenu != "ok":
                 cleaned_text = contenu
-        # else:
-        #     # raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM")
-        #     return {
-        #         "status": "error",
-        #         "original_message": document_item,
-        #         "error_message": "Aucun bloc JSON trouvé dans la sortie du LLM",
-        #         "metric_payload": metric_payload
-        #     }
 
     except Exception as e:
         logging.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
         error_str = f"Erreur lors du nettoyage LLM. Erreur: {e}"
-        # S'assurer qu'on a un payload de métrique même en cas d'erreur
         if not metric_payload:
             metric_payload = {
                 "source_service": "nettoyage-bruit-ocr-service",
                 "url": document_data.get('document'),
-                "state_llm": 2, # Erreur
+                "state_llm": 2,
                 "error_message": error_str
             }
         return {
@@ -156,26 +162,38 @@ async def _process_single_message(document_item: dict) -> dict:
         "nb_pages": nb_pages
     }
 
-
     return {
-            "status": "success",
-            "processed_message": output_message,
-            "metric_payload": metric_payload,
-            "error_message": "" if not cleaned_text else "le text ocrisé nettoyé est vide"
-        }
+        "status": "success",
+        "processed_message": output_message,
+        "metric_payload": metric_payload,
+        "error_message": "" if not cleaned_text else "le text ocrisé nettoyé est vide"
+    }
 
-# @measure_processing_time(service_name="nettoyage-bruit-ocr-service", payload_arg_name="messages")
+
 async def nettoyer_bruits_ocr(documents: List[Dict]) -> List[Dict]:    
+    """
+    Exécute le traitement de chaque message dans un thread séparé.
+    Cela libère l'event loop principal pour RabbitMQ.
+    """
     if not documents:
         return []
 
-    # --- Étape 1: Créer une tâche asyncio pour chaque message ---
-    tasks = [_process_single_message(msg) for msg in documents]
+    loop = asyncio.get_event_loop()
     
-    # --- Étape 2: Exécuter toutes les tâches en parallèle ---
+    # 🔥 Chaque message sera traité dans son propre thread avec son propre event loop
+    tasks = [
+        loop.run_in_executor(
+            _thread_pool,
+            _run_async_in_thread,
+            _process_single_message(msg)
+        )
+        for msg in documents
+    ]
+    
+    # 🔥 L'event loop principal reste libre pendant que les threads travaillent
     processed_results = await asyncio.gather(*tasks)
         
-    # --- Étape 3: Journalisation des résultats ---
+    # Journalisation
     print(f"   -> Nettoyage des bruits OCR en batch terminée pour {len(processed_results)} messages.")
     for res in processed_results:
         msg = res.get('processed_message') or res.get('original_message')
@@ -193,4 +211,3 @@ async def nettoyer_bruits_ocr(documents: List[Dict]) -> List[Dict]:
             print(f"      • [FAILURE] URL: {url} => Erreur: {res.get('error_message', 'Inconnue')}")
             
     return processed_results
-    
