@@ -84,17 +84,52 @@ try {
     console.log('Connected to Redis for Heartbeat');
 
     const hostname = os.hostname();
+    const numCpus = os.cpus().length;
+    let lastCpuUsage = process.cpuUsage();
+    let lastTime = Date.now();
+
+    // Helper to get top 3 RAM processes
+    const getTopProcesses = async (): Promise<Array<{ name: string, ram: number }>> => {
+        try {
+            const { execSync } = await import('child_process');
+            // Get top 3 processes by RSS (Linux/Mac compatible)
+            const output = execSync('ps aux --sort=-rss | head -n 4 | tail -n 3', { encoding: 'utf-8' });
+            const lines = output.trim().split('\n');
+            return lines.map(line => {
+                const parts = line.trim().split(/\s+/);
+                const ramKB = parseInt(parts[5]) || 0;
+                const command = parts.slice(10).join(' ').substring(0, 30);
+                return { name: command, ram: ramKB * 1024 }; // Convert to bytes
+            });
+        } catch (e) {
+            return [];
+        }
+    };
+
     setInterval(async () => {
         try {
-            const cpuLoad = os.loadavg()[0];
+            // Calculate CPU usage percentage for THIS process
+            const currentCpuUsage = process.cpuUsage(lastCpuUsage);
+            const currentTime = Date.now();
+            const elapsedTime = (currentTime - lastTime) * 1000; // Convert to microseconds
+
+            // CPU usage is in microseconds, convert to percentage
+            const cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
+
+            lastCpuUsage = process.cpuUsage();
+            lastTime = currentTime;
+
             const memoryUsage = process.memoryUsage();
+            const topProcesses = await getTopProcesses();
+
             const heartbeat = {
                 type: 'heartbeat',
                 replicaId: hostname,
                 jobId: id,
                 domain: domain,
-                cpu: cpuLoad,
+                cpu: Math.min(cpuPercent, 1), // Cap at 100%
                 ram: memoryUsage.rss,
+                topProcesses: topProcesses,
                 timestamp: Date.now(),
                 status: 'running'
             };
