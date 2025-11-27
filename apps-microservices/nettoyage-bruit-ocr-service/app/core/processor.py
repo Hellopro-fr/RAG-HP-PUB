@@ -119,14 +119,14 @@ async def _process_single_message(document_item: dict) -> dict:
                 cleaned_text = ""
             if contenu != "ok":
                 cleaned_text = contenu
-        else:
-            # raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM")
-            return {
-                "status": "error",
-                "original_message": document_item,
-                "error_message": "Aucun bloc JSON trouvé dans la sortie du LLM",
-                "metric_payload": metric_payload
-            }
+        # else:
+        #     # raise ValueError(f"Aucun bloc JSON trouvé dans la sortie du LLM")
+        #     return {
+        #         "status": "error",
+        #         "original_message": document_item,
+        #         "error_message": "Aucun bloc JSON trouvé dans la sortie du LLM",
+        #         "metric_payload": metric_payload
+        #     }
 
     except Exception as e:
         logging.warning(f"Erreur lors du nettoyage LLM : {type(e).__name__} - {e}")
