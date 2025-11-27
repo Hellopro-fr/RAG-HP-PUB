@@ -8,7 +8,6 @@ from typing import List, Dict
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
-# from common_utils.metrics.prometheus import measure_processing_time
 
 
 MAX_OUTPUT_TOKEN = 64000
@@ -19,8 +18,8 @@ Tu es un expert en analyse de documents B2B multilingues (devis, catalogues, fic
 {content}
 
 **Tâche**:
-Si le texte fourni est en français , nettoie-le en supprimant **uniquement et exactement** les 5 catégories d'informations listées ci-dessous. Ne modifie, n'ajoute ni ne supprime aucune autre information.
-Par contre , si le texte fourni n'est pas en français , retourne uniquement:
+Si la plupart du contenu fourni est en français , nettoie-le en supprimant **uniquement et exactement** les 5 catégories d'informations listées ci-dessous. Ne modifie, n'ajoute ni ne supprime aucune autre information.
+Par contre , si la plupart du contenu fourni n'est pas en français , retourne uniquement:
 json
 {{ "contenu": "" }}
 
