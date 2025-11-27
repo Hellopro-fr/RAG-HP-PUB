@@ -94,7 +94,12 @@ class Consumer:
                         if 'metric_payload' in result:
                             await self.publisher.publish_metric_message(result['metric_payload'], channel)
 
-                        if result['status'] == 'success':
+                        text = "ok"
+                        if "data" in result['processed_message']:
+                            text = result['processed_message'].get("data",{}).get("text","")
+                            print(f"Suivi text : {text[:10]}...")
+
+                        if result['status'] == 'success' and text:
                             await self.publisher.publish_message(result['processed_message'], channel)
                             await original_message.ack()
                         else: # status == 'error'
