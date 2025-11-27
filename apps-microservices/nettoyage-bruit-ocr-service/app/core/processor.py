@@ -156,10 +156,12 @@ async def _process_single_message(document_item: dict) -> dict:
         "nb_pages": nb_pages
     }
 
+
     return {
             "status": "success",
             "processed_message": output_message,
-            "metric_payload": metric_payload
+            "metric_payload": metric_payload,
+            "error_message": "" if not cleaned_text else "le text ocrisé nettoyé est vide"
         }
 
 # @measure_processing_time(service_name="nettoyage-bruit-ocr-service", payload_arg_name="messages")
