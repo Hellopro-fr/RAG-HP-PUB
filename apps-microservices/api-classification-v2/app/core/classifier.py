@@ -934,7 +934,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
         """
         try:
             # Récupérer le prompt ID 102 depuis l'API externe
-            prompt_data = await self.get_prompt_details_async(prompt_id=102)
+            prompt_data = await self.get_prompt_template_async(prompt_id=102)
             prompt_template = prompt_data['prompt']
             temperature = prompt_data['temperature']
 
