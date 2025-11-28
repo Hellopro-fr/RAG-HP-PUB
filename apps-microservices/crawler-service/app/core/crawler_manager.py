@@ -24,6 +24,7 @@ CRAWL_JOB_PREFIX = "crawl_job:"
 CRAWL_RUNNING_COUNT_KEY = "crawl_jobs:running_count"
 
 CRAWL_UPDATES_CHANNEL = "crawl_updates"
+STALE_JOB_THRESHOLD_SECONDS = 180  # 3 minutes without heartbeat = dead
 
 def _count_files_in_dir(path: str) -> int:
     """Safely counts files in a directory."""
@@ -664,5 +665,113 @@ class CrawlerManager:
         """
         # TODO: Implement retrieval logic (download from GCS, extract, etc.)
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Retrieval of archived crawls is not yet implemented.")
+
+    async def reconcile_jobs(self):
+        """
+        Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
+        marks them as failed, and corrects the global running jobs counter.
+        """
+        logger.info("Starting job reconciliation...")
+
+        all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
+        true_running_count = 0
+        stale_jobs_count = 0
+
+        if not all_job_keys:
+            logger.info("No jobs found in Redis during reconciliation.")
+            await cache_service.redis_client.set(CRAWL_RUNNING_COUNT_KEY, 0)
+            return
+
+        # Use a pipeline to fetch all jobs at once for performance
+        pipe = cache_service.redis_client.pipeline()
+        for key in all_job_keys:
+            pipe.get(key)
+
+        all_jobs_raw = await pipe.execute()
+
+        for i, job_raw in enumerate(all_jobs_raw):
+            if not job_raw:
+                continue
+
+            try:
+                job_data = json.loads(job_raw)
+                crawl_id = job_data.get("crawl_id")
+                status = job_data.get("status")
+
+                if status == "running":
+                    # Check for staleness
+                    last_heartbeat_str = job_data.get("last_heartbeat")
+                    start_time_str = job_data.get("start_time")
+
+                    last_activity_time = None
+                    if last_heartbeat_str:
+                        last_activity_time = datetime.fromisoformat(
+                            str(last_heartbeat_str))
+                    elif start_time_str:
+                        # If no heartbeat yet, use start time
+                        last_activity_time = datetime.fromisoformat(
+                            str(start_time_str))
+
+                    is_stale = False
+                    if last_activity_time:
+                        time_since_activity = (
+                            datetime.utcnow() - last_activity_time).total_seconds()
+                        if time_since_activity > STALE_JOB_THRESHOLD_SECONDS:
+                            is_stale = True
+                            logger.warning(
+                                f"Job '{crawl_id}' is stale! Last activity: {time_since_activity:.0f}s ago. Marking as failed.")
+                    else:
+                        # No timestamps at all? Should not happen for valid running jobs.
+                        # Assume stale if it's been "running" with no time data.
+                        is_stale = True
+                        logger.warning(
+                            f"Job '{crawl_id}' has no time data. Marking as stale/failed.")
+
+                    if is_stale:
+                        # Mark as failed
+                        job_data["status"] = "failed"
+                        job_data["shutdown_reason"] = "Stale job detected (missing heartbeat)"
+                        if "last_heartbeat" in job_data:
+                            del job_data["last_heartbeat"]
+
+                        # Update Redis
+                        # We do this individually to ensure safety, though pipeline could be used for speed if needed
+                        await cache_service.set_json(all_job_keys[i], job_data)
+                        await self._publish_update(crawl_id, "failed")
+
+                        # Send failure webhook
+                        if job_data.get("failure_callback_url"):
+                            asyncio.create_task(self._send_failure_webhook(
+                                str(job_data["failure_callback_url"]),
+                                crawl_id,
+                                job_data.get("domain", "unknown"),
+                                -1
+                            ))
+
+                        stale_jobs_count += 1
+                    else:
+                        # Truly running
+                        true_running_count += 1
+
+            except (json.JSONDecodeError, TypeError, ValueError) as e:
+                logger.error(
+                    f"Error processing job data during reconciliation: {e}")
+                continue
+
+        # Correct the global counter
+        counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
+        counter_value = int(
+            counter_value_raw) if counter_value_raw and counter_value_raw.isdigit() else 0
+
+        if true_running_count != counter_value:
+            logger.warning(
+                f"Running jobs counter drifted. "
+                f"Counter value: {counter_value}, Actual running jobs: {true_running_count}. "
+                f"Resetting counter."
+            )
+            await cache_service.redis_client.set(CRAWL_RUNNING_COUNT_KEY, true_running_count)
+        else:
+            logger.info(
+                f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
 
 crawler_manager = CrawlerManager()
