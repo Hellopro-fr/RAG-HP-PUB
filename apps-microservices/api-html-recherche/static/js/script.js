@@ -32,6 +32,7 @@ $(function () {
       devis: false,
       mcf: false,
       siteweb: false,
+      pj: false,
     },
     selectedCategories: [],
     selectedIdsProduits: [],
@@ -927,7 +928,7 @@ $(function () {
 
 
     // Mise à jour pour correspondre aux noms de sources de `index3.html`
-    ["produits", "devis", "siteweb", "echanges"].forEach((source) => {
+    ["produits", "devis", "siteweb", "echanges","pj"].forEach((source) => {
       $(`#${source}`).on("change", function () {
         state.selectedSources[source] = $(this).is(":checked");
         updateSubfilters(source);
@@ -1258,6 +1259,9 @@ $(function () {
         // case "siteweb":
         title = meta.url || title;
         result.source = "siteweb"
+      case "pjechanges":
+        title = meta.id_demande || title;
+        result.source = "PJ"
       default:
         break;
     }
@@ -1282,6 +1286,12 @@ $(function () {
       url = `https://bo.hellopro.fr/admin/gest_com/v2/fiche_lead.php?id_lead=${meta.lead_id}`
     } else if (result.source === 'echanges') {
       url = `https://bo.hellopro.fr/admin/service_client_lead/?page=liste_messages&id_lead=${meta.id_demande}&id_categorie=${meta.id_categorie}`;
+    } else if (result.source === 'PJ') {
+      url = `https://bo.hellopro.fr/${meta.fichier_source}`;
+      
+      if(/mon_compte/.test(meta.fichier_source)) {
+        url = `https://mc.hellopro.fr/${meta.fichier_source}`;
+      }
     }
 
     return {
@@ -1339,9 +1349,10 @@ $(function () {
       socket.close();
     }
 
-    // const wsUrl = "ws://34.90.162.9:8510/ws/search"; // L'URL est maintenant ici VM1
+    // let wsUrl = "ws://34.34.166.5:8511/ws/search"; // L'URL est maintenant ici VM1
     // let wsUrl = "ws://34.34.166.5:8500/search-service/ws/search"; // L'URL est maintenant ici
     // if (GetURLParameter("domain") == 1) {
+    
     let wsUrl = "wss://api.hellopro.eu/search-service/ws/search";
     // }
     console.log(`Connexion à ${wsUrl}...`);
@@ -1431,6 +1442,13 @@ $(function () {
                 filtreSpecifique.id_fournisseur = fournisseurSiteweb;
               }
               sourceName = 'siteweb_2';
+              break;
+            case 'pj':
+              const pjModele = $('#pjModele').val() || [];
+              if (pjModele.length > 0) {
+                filtreSpecifique.page_type = pjModele;
+              }
+              sourceName = 'pjechanges';
               break;
             case 'echanges':
               const fournisseurMcf = $("#fournisseurMcf").val() || [];
