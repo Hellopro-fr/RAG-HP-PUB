@@ -23,50 +23,16 @@ async def reconcile_running_jobs_count():
     """
     Periodically checks the actual number of 'running' jobs in Redis and corrects
     the dedicated counter if it has drifted. This provides self-healing.
+    Also cleans up stale jobs that have stopped sending heartbeats.
     """
     while True:
         try:
-            logger.info("Starting periodic reconciliation of running jobs counter...")
             if not cache_service.redis_client:
                 logger.warning("Reconciliation skipped: Redis client not available.")
                 await asyncio.sleep(settings.RECONCILIATION_INTERVAL_SECONDS)
                 continue
 
-            all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
-            
-            true_running_count = 0
-            if all_job_keys:
-                # Use a pipeline to fetch all jobs at once for performance
-                pipe = cache_service.redis_client.pipeline()
-                for key in all_job_keys:
-                    pipe.get(key)
-                
-                all_jobs_raw = await pipe.execute()
-                
-                for job_raw in all_jobs_raw:
-                    if job_raw:
-                        try:
-                            job_data = json.loads(job_raw)
-                            if job_data.get("status") == "running":
-                                true_running_count += 1
-                        except (json.JSONDecodeError, TypeError):
-                            # Ignore malformed or non-string data
-                            continue
-
-            # Get the value from the dedicated counter
-            counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
-            counter_value = int(counter_value_raw) if counter_value_raw and counter_value_raw.isdigit() else 0
-            
-            if true_running_count != counter_value:
-                logger.warning(
-                    f"Running jobs counter drifted. "
-                    f"Counter value: {counter_value}, Actual running jobs: {true_running_count}. "
-                    f"Resetting counter."
-                )
-                # Forcibly set the counter to the correct value
-                await cache_service.redis_client.set(CRAWL_RUNNING_COUNT_KEY, true_running_count)
-            else:
-                logger.info(f"Running jobs counter is consistent. Value: {true_running_count}")
+            await crawler_manager.reconcile_jobs()
 
         except Exception as e:
             logger.error(f"Error during running jobs reconciliation: {e}", exc_info=True)
@@ -112,6 +78,14 @@ async def startup_event():
     global reconciliation_task
     logger.info("Crawler Service starting up.")
     await init_redis_pool()
+
+    # Run an immediate reconciliation to clean up any stale jobs from previous runs
+    try:
+        logger.info("Running initial job reconciliation...")
+        await crawler_manager.reconcile_jobs()
+    except Exception as e:
+        logger.error(f"Initial reconciliation failed: {e}", exc_info=True)
+
     # Start the background reconciliation task
     reconciliation_task = asyncio.create_task(reconcile_running_jobs_count())
     logger.info(f"Started background task for reconciling running jobs every {settings.RECONCILIATION_INTERVAL_SECONDS} seconds.")

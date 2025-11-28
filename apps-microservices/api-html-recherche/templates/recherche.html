@@ -611,6 +611,28 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Pièces jointes -->
+                <div class="space-y-2 pl-2">
+                  <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                    <input type="checkbox" id="pj" class="checkbox-custom" />
+                    <label for="pj" class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Pièces jointes</label>
+                  </div>
+                  <div id="pjSubfilters" class="pl-6 hidden">
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Type du document</label>
+                      <select id="pjModele"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple>
+                        <option value="devis">Devis</option>
+                        <option value="fiche_technique">Fiche technique</option>
+                        <option value="catalogue">Catalogue produit</option>
+                        <option value="plaquette_prix">Plaquette de prix</option>
+                        <option value="savoir-faire">Savoir faire</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

@@ -12,7 +12,7 @@ from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
-BATCH_SIZE = 5
+BATCH_SIZE = 1
 BATCH_TIMEOUT_SECONDS = 2.0
 
 class Consumer:
@@ -94,7 +94,13 @@ class Consumer:
                         if 'metric_payload' in result:
                             await self.publisher.publish_metric_message(result['metric_payload'], channel)
 
-                        if result['status'] == 'success':
+                        text = "ok"
+                        if "processed_message" in result:
+                            if "data" in result['processed_message']:
+                                text = result['processed_message'].get("data",{}).get("text","")
+                                print(f"Suivi text : {text[:10]}...")
+
+                        if result['status'] == 'success' and text:
                             await self.publisher.publish_message(result['processed_message'], channel)
                             await original_message.ack()
                         else: # status == 'error'

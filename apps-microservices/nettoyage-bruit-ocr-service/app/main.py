@@ -24,7 +24,12 @@ async def main():
     
     # while True:
     try:
-        connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
+        connection = await aio_pika.connect_robust(
+            rabbitmq_url, 
+            loop=loop,
+            heartbeat=3600,  # 🔥 1 heure au lieu de 60 secondes par défaut
+            connection_timeout=7200
+    )
         print("✅ Nettoyage-bruit-ocr-service: Connecté à RabbitMQ.")
         
         async with connection:
