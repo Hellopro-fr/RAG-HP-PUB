@@ -324,6 +324,18 @@ class ContextBuilder:
         return context_texts
 
 
+def is_503_error(exception):
+    """
+    Checks if an exception is related to a 503 Service Unavailable.
+    Adjust this based on the specific libraries (OpenAI, Google, etc.) you are using.
+    """
+    if getattr(exception, "status_code", None) == 503:
+        return True
+
+    if getattr(exception, "code", None) == 503:
+        return True
+
+
 class SearchOrchestrator:
     """Orchestrates the search process."""
 
@@ -848,17 +860,6 @@ class SearchOrchestrator:
         rerank_duration = time.perf_counter() - start_rerank_time
 
         return final_results, rerank_duration
-
-    def is_503_error(self, exception):
-        """
-        Checks if an exception is related to a 503 Service Unavailable.
-        Adjust this based on the specific libraries (OpenAI, Google, etc.) you are using.
-        """
-        if getattr(exception, "status_code", None) == 503:
-            return True
-
-        if getattr(exception, "code", None) == 503:
-            return True
 
         msg = str(exception).lower()
         return (
