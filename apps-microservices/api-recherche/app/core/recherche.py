@@ -220,6 +220,8 @@ class FilterBuilder:
             else:
                 clauses.append(self._build_string_clause(key, val, source))
 
+        logger.info("Clauses: %s", clauses)
+
         return [c for c in clauses if c]
 
     def _build_array_clause(self, key: str, val: Any) -> str:
