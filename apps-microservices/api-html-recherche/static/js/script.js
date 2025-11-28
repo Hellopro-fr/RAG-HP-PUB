@@ -1253,15 +1253,19 @@ $(function () {
         break;
       case "devis":
         title = meta.lead_id || title;
+        break;
       case "echanges":
         title = meta.conversation_id || title;
+        break;
       case "siteweb_2":
         // case "siteweb":
         title = meta.url || title;
         result.source = "siteweb"
+        break;
       case "pjechanges":
         title = meta.id_demande || title;
         result.source = "PJ"
+        break;
       default:
         break;
     }
