@@ -965,8 +965,14 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 
             # Parser la réponse JSON
             try:
-                llm_result = json.loads(raw_llm.choices[0].message.content)
+                response_content = raw_llm.choices[0].message.content
+                logger.info(f"[KEYWORDS] 🔍 Réponse brute LLM: {response_content[:200]}...")  # Log des 200 premiers caractères
+
+                llm_result = json.loads(response_content)
+                logger.info(f"[KEYWORDS] 🔍 JSON parsé: {llm_result}")
+
                 keywords = llm_result.get('keywords', [])
+                logger.info(f"[KEYWORDS] 🔍 Keywords extraits: {keywords} (type: {type(keywords)})")
 
                 # Valider qu'on a bien une liste
                 if not isinstance(keywords, list):
