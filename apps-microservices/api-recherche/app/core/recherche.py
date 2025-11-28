@@ -255,7 +255,7 @@ class FilterBuilder:
                 return f"{key} in {numeric_vals}"
 
             quoted_vals = [repr(str(v)) for v in val]
-            if key == "page_type":
+            if key == "page_type" and "siteweb" in source.lower():
                 quoted_vals = [
                     repr(str(v).lower().replace("-", "_"))
                     for v in val
