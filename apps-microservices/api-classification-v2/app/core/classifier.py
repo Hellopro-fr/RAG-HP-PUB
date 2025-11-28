@@ -971,7 +971,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 llm_result = json.loads(response_content)
                 logger.info(f"[KEYWORDS] 🔍 JSON parsé: {llm_result}")
 
-                keywords = llm_result.get('keywords', [])
+                # Supporter les deux formats: "keywords" (pluriel) et "keyword" (singulier)
+                keywords = llm_result.get('keywords', llm_result.get('keyword', []))
                 logger.info(f"[KEYWORDS] 🔍 Keywords extraits: {keywords} (type: {type(keywords)})")
 
                 # Valider qu'on a bien une liste
