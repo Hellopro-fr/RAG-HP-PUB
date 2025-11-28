@@ -198,6 +198,9 @@ class FilterBuilder:
             )
             return []
 
+        logger.info(f"filtres : {filtre}")
+        logger.info(f"source : {source}")
+
         for key, val in filtre.items():
             dtype = field_types.get(key)
             if isinstance(dtype, DataType):
@@ -211,6 +214,8 @@ class FilterBuilder:
                 continue
 
             if not dtype:
+                logger.info(f"dtype non trouvé '{key}'.")
+                logger.info(f"field_types : {field_types}")
                 continue
 
             if dtype == DataType.ARRAY:
