@@ -198,9 +198,6 @@ class FilterBuilder:
             )
             return []
 
-        logger.info(f"filtres : {filtre}")
-        logger.info(f"source : {source}")
-
         for key, val in filtre.items():
             dtype = field_types.get(key)
             if isinstance(dtype, DataType):
@@ -214,8 +211,6 @@ class FilterBuilder:
                 continue
 
             if not dtype:
-                logger.info(f"dtype non trouvé '{key}'.")
-                logger.info(f"field_types : {field_types}")
                 continue
 
             if dtype == DataType.ARRAY:
@@ -224,8 +219,6 @@ class FilterBuilder:
                 clauses.append(self._build_numeric_clause(key, val, dtype))
             else:
                 clauses.append(self._build_string_clause(key, val, source))
-
-        logger.info("Clauses: %s", clauses)
 
         return [c for c in clauses if c]
 
