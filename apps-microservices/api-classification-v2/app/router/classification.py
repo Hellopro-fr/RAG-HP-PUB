@@ -75,6 +75,47 @@ async def get_cached_categories():
         logger.error(f"Erreur récupération cache catégories: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/cache/categories/{category_id}", tags=["Cache"])
+async def get_cached_category_by_id(category_id: str):
+    """Récupère le résumé d'une catégorie spécifique en cache Redis par son ID"""
+    import hashlib
+    try:
+        # Générer le hash court de la catégorie (même logique que dans classifier.py)
+        data_hash = hashlib.md5(category_id.encode()).hexdigest()[:12]
+        cache_key_prefix = f"cache:v2:cat_summary:{data_hash}"
+
+        # Chercher toutes les clés qui commencent par ce préfixe
+        cache_keys = await scan_keys_by_prefix(cache_key_prefix)
+
+        if not cache_keys:
+            return {
+                "success": False,
+                "category_id": category_id,
+                "cache_key_prefix": cache_key_prefix,
+                "message": f"Aucun cache trouvé pour la catégorie {category_id}",
+                "data": None
+            }
+
+        # Récupérer les données de la première clé trouvée
+        cached_data = []
+        for key in cache_keys:
+            data = await get_json(key)
+            if data:
+                cached_data.append({
+                    "cache_key": key,
+                    "data": data
+                })
+
+        return {
+            "success": True,
+            "category_id": category_id,
+            "total_keys": len(cached_data),
+            "cached_data": cached_data
+        }
+    except Exception as e:
+        logger.error(f"Erreur récupération cache catégorie {category_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.delete("/cache/categories", tags=["Cache"])
 async def delete_cached_categories():
     """Supprime tous les résumés de catégories en cache Redis"""
