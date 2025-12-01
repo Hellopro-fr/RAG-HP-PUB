@@ -87,7 +87,7 @@ class ProductClassifier:
         self.prompt_cache_duration = 120  # Durée du cache en secondes (2 minutes = 120s)
         self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
         self.summarization_prompt_cache_duration = 1200  # Durée du cache en secondes (20 minutes = 1200s)
-        self.search_results_limit = 30
+        self.search_results_limit = 50
         self.categories_limit = 30
 
         # Configuration pour optimize-service
