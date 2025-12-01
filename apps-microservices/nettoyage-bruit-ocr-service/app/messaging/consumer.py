@@ -84,9 +84,10 @@ class Consumer:
             messages_to_process = [json.loads(msg.body) for msg in batch]
             
             try:
-                processed_results = await nettoyer_bruits_ocr(messages_to_process)
                 
                 async with self.connection.channel() as channel:
+                    processed_results = await nettoyer_bruits_ocr(messages_to_process)
+                    
                     for i, result in enumerate(processed_results):
                         original_message = batch[i]
                         
@@ -129,17 +130,45 @@ class Consumer:
                             )
                             await original_message.ack()
 
+            except aiormq.exceptions.ChannelInvalidStateError as e:
+                print(f"⚠️  Canal fermé pendant le traitement. Tentative de NACK avec nouveau canal...")
+                # Ouvrir un NOUVEAU canal pour faire les NACK
+                try:
+                    async with self.connection.channel() as fresh_channel:
+                        for msg in batch:
+                            try:
+                                # Les messages ont des références au vieux canal, on doit les NACK via le nouveau
+                                await fresh_channel.basic_nack(
+                                    delivery_tag=msg.delivery_tag,
+                                    requeue=False
+                                )
+                            except Exception as nack_error:
+                                print(f"   -> Impossible de NACK le message {msg.delivery_tag}: {nack_error}")
+                except Exception as channel_error:
+                    print(f"   -> Impossible d'ouvrir un nouveau canal pour NACK: {channel_error}")
+                    print("   -> Les messages seront re-délivrés après reconnexion.")
+                    
             except Exception as e:
                 print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
                 traceback.print_exc()
                 
-                for msg in batch:
-                    try:
-                        await msg.nack(requeue=False)
-                    except aiormq.exceptions.ChannelInvalidStateError:
-                        # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
-                        print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
-                        break # Sortir de la boucle de nack
+                # Tenter de NACK avec un nouveau canal
+                try:
+                    async with self.connection.channel() as fresh_channel:
+                        for msg in batch:
+                            try:
+                                await fresh_channel.basic_nack(
+                                    delivery_tag=msg.delivery_tag,
+                                    requeue=False
+                                )
+                            except Exception as nack_error:
+                                print(f"   -> Impossible de NACK msg {msg.delivery_tag}: {nack_error}")
+                                # break
+                except Exception as channel_error:
+                    print(f"   -> Impossible d'ouvrir un canal pour NACK: {channel_error}")
+                    print("   -> Les messages seront re-délivrés après reconnexion.")
+                    # break
+                    
             finally:
                 end_time = time.monotonic()
                 duration = end_time - start_time
