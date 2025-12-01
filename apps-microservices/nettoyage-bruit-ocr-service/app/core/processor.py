@@ -13,7 +13,7 @@ from common_utils.autres.CollectionName import CollectionName
 from common_utils.grpc_clients import llm_client
 from common_utils.grpc_clients.schemas.chat import ChatRequest
 
-_thread_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="llm_worker")
+_thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="llm_worker")
 
 MAX_OUTPUT_TOKEN = 64000
 
