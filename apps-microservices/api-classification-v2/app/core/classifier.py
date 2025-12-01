@@ -1242,6 +1242,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': None,
+                    'generated_keywords': [],
                     'error': f'Erreur configuration LLM {llm_override}: {str(e)}',
                     'llm_type': llm_override,
                     'enable_thinking': enable_thinking,
@@ -1260,6 +1261,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
             # Initialiser les compteurs de tokens
             total_input_tokens = 0
             total_output_tokens = 0
+
+            # Initialiser la liste des keywords générés (pour retour API)
+            generated_keywords = []
 
             if optimize:
                 logger.info(f"[OPTIMIZE] Optimisation du titre pour {product['id_produit']}")
@@ -1293,6 +1297,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': None,
+                    'generated_keywords': generated_keywords,
                     'error': 'Aucun produit similaire trouvé',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1315,6 +1320,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': None,
+                    'generated_keywords': generated_keywords,
                     'error': 'Aucune catégorie trouvée',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1334,6 +1340,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     nom_produit=nom_produit_original,
                     description=product.get('description', '')
                 )
+
+                # Stocker les keywords pour le retour API
+                generated_keywords = keywords
 
                 # Additionner les tokens de génération de keywords
                 total_input_tokens += keywords_tokens['input_tokens']
@@ -1435,6 +1444,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': self._format_categories_candidates(categories),
+                    'generated_keywords': generated_keywords,
                     'error': f'Erreur parsing réponse LLM: {str(e)}',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1458,6 +1468,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': self._format_categories_candidates(categories),
+                    'generated_keywords': generated_keywords,
                     'error': 'Réponse LLM invalide',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1480,6 +1491,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': self._format_categories_candidates(categories),
+                    'generated_keywords': generated_keywords,
                     'error': f'Catégorie {chosen_id} introuvable',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1509,6 +1521,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 'nom_categorie': result_nom_categorie,
                 'score_llm': score,
                 'categorie_candidates': self._format_categories_candidates(categories),
+                'generated_keywords': generated_keywords,
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
                 'processing_time': time.time() - start_time,
@@ -1529,6 +1542,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 'nom_categorie': None,
                 'score_llm': None,
                 'categorie_candidates': None,
+                'generated_keywords': [],
                 'error': str(e),
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
