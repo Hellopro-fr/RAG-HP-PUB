@@ -65,6 +65,7 @@ class ClassificationResult(BaseModel):
     nom_categorie: Optional[str] = Field(None, description="Nom de la catégorie assignée")
     score_llm: Optional[int] = Field(None, description="Score de confiance (0 ou 1)")
     categorie_candidates: Optional[List[Dict[str, Any]]] = Field(None, description="Liste des catégories candidates envoyées au LLM")
+    generated_keywords: Optional[List[str]] = Field(None, description="Mots-clés générés pour élargissement des catégories candidates")
     processing_time: float = Field(..., description="Temps de traitement en secondes")
     input_tokens: Optional[int] = Field(None, description="Tokens d'entrée consommés (prompt)")
     output_tokens: Optional[int] = Field(None, description="Tokens de sortie générés (réponse)")
