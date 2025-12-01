@@ -1396,7 +1396,13 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
             total_output_tokens += summarization_tokens['output_tokens']
 
             # Construction du prompt et appel LLM (asynchrone) avec infos enrichies (fil d'ariane + résumé)
-            prompt, temperature = await self.build_prompt_async(product, categories, category_info, similar_products)
+            # Utiliser le titre optimisé si disponible pour le prompt de classification
+            product_for_prompt = product.copy()
+            if nom_produit_optimise:
+                product_for_prompt['nom_produit'] = nom_produit_optimise
+                logger.info(f"[PROMPT] Utilisation du titre optimisé pour la classification: {nom_produit_optimise[:50]}...")
+
+            prompt, temperature = await self.build_prompt_async(product_for_prompt, categories, category_info, similar_products)
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking, temperature=temperature)
 
             # Vérifier si l'appel LLM a échoué
