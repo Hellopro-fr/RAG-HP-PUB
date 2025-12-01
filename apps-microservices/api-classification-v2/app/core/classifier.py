@@ -88,7 +88,7 @@ class ProductClassifier:
         self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
         self.summarization_prompt_cache_duration = 1200  # Durée du cache en secondes (20 minutes = 1200s)
         self.search_results_limit = 30
-        self.categories_limit = 10
+        self.categories_limit = 30
 
         # Configuration pour optimize-service
         self.optimize_service_url = os.getenv('OPTIMIZE_SERVICE_URL', 'http://optimize-service:8563')
