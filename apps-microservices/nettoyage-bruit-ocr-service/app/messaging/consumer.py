@@ -262,17 +262,17 @@ class Consumer:
         """Démarre le consumer avec prefetch=1 et la tâche keep-alive."""
         print("🚀 Démarrage du consumer...")
         
-        # 🔥 Créer et stocker le canal de consommation
+        # Créer et stocker le canal de consommation
         self.consumer_channel = await self.connection.channel()
         
-        # 🔥 CRITIQUE : Prefetch de 1 seul message
+        # CRITIQUE : Prefetch de 1 seul message
         await self.consumer_channel.set_qos(prefetch_count=1)
         print(f"✅ QoS configuré: prefetch_count=1")
         
         # Setup des queues
         queue = await self._setup_queues(self.consumer_channel)
         
-        # 🔥 Démarrer la tâche keep-alive AVANT de commencer à consommer
+        # Démarrer la tâche keep-alive AVANT de commencer à consommer
         self._keep_alive_task = asyncio.create_task(self._keep_channel_alive())
         print("✅ Tâche keep-alive démarrée")
         
@@ -280,9 +280,9 @@ class Consumer:
         asyncio.create_task(self.batch_processor())
         print("✅ Processeur de batch démarré")
         
-        # 🔥 Logs de diagnostic
-        print(f"🔍 Heartbeat connexion: {self.connection.connection.heartbeat}s")
-        print(f"🔍 Canal consumer: {self.consumer_channel}")
+        # 🔥 Logs corrigés pour aio_pika
+        print(f"🔍 Canal consumer: {type(self.consumer_channel).__name__}")
+        print(f"🔍 Connexion: {type(self.connection).__name__}")
         print(f"🔍 Queue: {queue.name}")
         
         # Commencer à consommer
