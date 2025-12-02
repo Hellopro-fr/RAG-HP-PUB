@@ -12,8 +12,8 @@ from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
-BATCH_SIZE = 10
-BATCH_TIMEOUT_SECONDS = 2.0
+BATCH_SIZE = 1
+BATCH_TIMEOUT_SECONDS = 0.5
 
 class Consumer:
     def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
@@ -130,7 +130,9 @@ class Consumer:
 
             except Exception as e:
                 print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
-                print(f"Max_retries: {MAX_RETRIES}")
+                retry_count = self._get_retry_count(batch[0])
+                print(f"Max_retries: {retry_count}")
+
                 traceback.print_exc()
                 
                 for msg in batch:
