@@ -126,34 +126,46 @@ class Consumer:
         return queue
 
     async def batch_processor(self):
-        """
-        Tâche de fond qui traite les messages.
-        Avec BATCH_SIZE=1, traite 1 message à la fois.
-        """
+        """Tâche de fond qui traite les messages."""
         print("⚙️  Processeur de batch démarré. En attente de messages...")
         
         while True:
             batch = []
+            batch_bodies = []
+            
             try:
-                # 1. Attendre le premier message
+                # 🔥 Recevoir et ACK IMMÉDIATEMENT
                 first_message = await self.message_buffer.get()
+                batch_bodies.append(first_message.body)
+                
+                try:
+                    await first_message.ack()
+                    print(f"✅ Message ACK immédiatement (tag: {first_message.delivery_tag})")
+                except Exception as e:
+                    print(f"⚠️  Impossible d'ACK: {e}")
+                    continue  # Skip ce message
+                
                 batch.append(first_message)
-                print(f"📨 Message reçu (delivery_tag: {first_message.delivery_tag})")
 
-                # 2. Essayer de remplir le batch (avec BATCH_SIZE=1, cette boucle ne s'exécute pas)
                 while len(batch) < BATCH_SIZE:
                     try:
                         message = await asyncio.wait_for(
                             self.message_buffer.get(), 
                             timeout=BATCH_TIMEOUT_SECONDS
                         )
+                        batch_bodies.append(message.body)
+                        
+                        try:
+                            await message.ack()
+                            print(f"✅ Message ACK immédiatement (tag: {message.delivery_tag})")
+                        except Exception:
+                            continue
+                        
                         batch.append(message)
-                        print(f"📨 Message additionnel reçu (delivery_tag: {message.delivery_tag})")
                     except asyncio.TimeoutError:
                         break
                         
             except asyncio.CancelledError:
-                print("   -> Tâche de traitement de batch annulée.")
                 break
 
             if not batch:
@@ -161,107 +173,75 @@ class Consumer:
 
             start_time = time.monotonic()
             batch_size = len(batch)
-            print(f"⚙️  Traitement d'un batch de {batch_size} message(s)...")
-            messages_to_process = [json.loads(msg.body) for msg in batch]
+            print(f"⚙️  Traitement de {batch_size} message(s) (DÉJÀ ACK)...")
+            messages_to_process = [json.loads(body) for body in batch_bodies]
             
             try:
-                # 🔥 Traitement dans les threads - l'event loop reste libre pour le keep-alive
-                print(f"🧵 Démarrage du traitement LLM (threads actifs avant: {asyncio.all_tasks().__len__()})")
+                # Traitement - même si ça crash, c'est déjà ACK
                 processed_results = await nettoyer_bruits_ocr(messages_to_process)
-                print(f"✅ Traitement LLM terminé")
                 
-                # 🔥 Ouvrir un NOUVEAU canal pour les publications et ACK
-                # Ne pas réutiliser self.consumer_channel
-                async with self.connection.channel() as processing_channel:
-                    print(f"📡 Canal de traitement ouvert")
-                    
+                # Publier les résultats
+                async with self.connection.channel() as channel:
                     for i, result in enumerate(processed_results):
-                        original_message = batch[i]
-                        
-                        try:
-                            # Publier la métrique
-                            if 'metric_payload' in result:
-                                await self.publisher.publish_metric_message(
-                                    result['metric_payload'], 
-                                    processing_channel
-                                )
-                                print(f"   📊 Métrique publiée pour message {original_message.delivery_tag}")
+                        if 'metric_payload' in result:
+                            await self.publisher.publish_metric_message(
+                                result['metric_payload'], 
+                                channel
+                            )
 
+                        text = "ok"
+                        if "processed_message" in result:
+                            if "data" in result['processed_message']:
+                                text = result['processed_message'].get("data",{}).get("text","")
+                                print(f"Suivi text : {text[:10]}...")
 
-                            text = "ok"
-                            if "processed_message" in result:
-                                if "data" in result['processed_message']:
-                                    text = result['processed_message'].get("data",{}).get("text","")
-                                    print(f"Suivi text : {text[:10]}...")
-
-                            if result['status'] == 'success' and text:
-                                # Publier le message traité
-                                await self.publisher.publish_message(
-                                    result['processed_message'], 
-                                    processing_channel
-                                )
-                                print(f"   ✅ Message publié pour {original_message.delivery_tag}")
-                                
-                                # ACK le message original
-                                await original_message.ack()
-                                print(f"   ✅ ACK envoyé pour {original_message.delivery_tag}")
-                                
-                            else:  # status == 'error'
-                                print(f"   ❌ Échec pour message {original_message.delivery_tag}: {result.get('error_message', 'Erreur inconnue')}")
-                                
-                                # Envoyer à la DLQ
-                                dlx = await processing_channel.get_exchange(
-                                    self.dead_letter_exchange, 
-                                    ensure=True
-                                )
-                                
-                                dlq_headers = DLQProperties.create_dlq_headers(
-                                    Exception(result['error_message']), 
-                                    'nettoyage-bruit-ocr-service', 
-                                    MAX_RETRIES, 
-                                    original_message
-                                )
-                                
-                                await dlx.publish(
-                                    aio_pika.Message(
-                                        body=original_message.body,
-                                        headers=dlq_headers,
-                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                                    ),
-                                    routing_key=self.routing_key
-                                )
-                                print(f"   📮 Message envoyé à la DLQ")
-                                
-                                # ACK quand même (car envoyé à DLQ)
-                                await original_message.ack()
-                                print(f"   ✅ ACK envoyé après DLQ pour {original_message.delivery_tag}")
-                        
-                        except aiormq.exceptions.ChannelInvalidStateError as e:
-                            print(f"⚠️  Canal fermé pour message {i} (tag: {original_message.delivery_tag}): {e}")
-                            print("   -> Message sera re-délivré automatiquement")
-                            break  # Sortir de la boucle for
-
-            except (aiormq.exceptions.ChannelInvalidStateError,
-                    aiormq.exceptions.ConnectionClosed) as e:
-                print(f"⚠️  Connexion/Canal perdu pendant le traitement: {e}")
-                print("   -> Les messages non-ACK seront re-délivrés automatiquement par RabbitMQ")
-                
+                        if result['status'] == 'success' and text:
+                            await self.publisher.publish_message(
+                                result['processed_message'], 
+                                channel
+                            )
+                        else:
+                            # Envoyer à DLQ
+                            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                            dlq_headers = DLQProperties.create_dlq_headers(
+                                        Exception(result['error_message']), 
+                                        'nettoyage-bruit-ocr-service', 
+                                        MAX_RETRIES, 
+                                        batch_bodies[0]
+                                    )
+                                    
+                            await dlx.publish(
+                                aio_pika.Message(
+                                    body=batch_bodies[0],
+                                    headers=dlq_headers,
+                                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                ),
+                                routing_key=self.routing_key
+                            )
+            
             except Exception as e:
-                print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}")
+                print(f"❌ ERREUR (messages déjà ACK, potentiellement perdus): {e}")
                 traceback.print_exc()
                 
-                # Tentative de NACK des messages non traités
-                for msg in batch:
-                    try:
-                        await msg.nack(requeue=False)
-                        print(f"   ⚠️  NACK envoyé pour {msg.delivery_tag}")
-                    except Exception as nack_error:
-                        print(f"   ❌ Impossible de NACK {msg.delivery_tag}: {nack_error}")
-                        
+                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                dlq_headers = DLQProperties.create_dlq_headers(
+                                        Exception(f'Message envoyé à DLQ après erreur: {e}'), 
+                                        'nettoyage-bruit-ocr-service', 
+                                        MAX_RETRIES, 
+                                        batch_bodies[0]
+                                    )
+                await dlx.publish(
+                    aio_pika.Message(
+                        body=batch_bodies[0],
+                        headers=dlq_headers,
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                    ),
+                    routing_key=self.routing_key
+                )
+                    
             finally:
-                end_time = time.monotonic()
-                duration = end_time - start_time
-                print(f"🏁 Batch de {batch_size} message(s) terminé en {duration:.2f}s ({duration/60:.2f} min)")
+                duration = time.monotonic() - start_time
+                print(f"🏁 Batch terminé en {duration:.2f}s ({duration/60:.2f} min)")
     
     async def _on_message(self, message: aio_pika.abc.AbstractIncomingMessage):
         """
