@@ -130,6 +130,7 @@ class Consumer:
 
             except Exception as e:
                 print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
+                print(f"Max_retries: {MAX_RETRIES}")
                 traceback.print_exc()
                 
                 for msg in batch:
