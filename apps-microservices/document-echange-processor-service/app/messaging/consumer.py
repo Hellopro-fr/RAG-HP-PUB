@@ -102,7 +102,7 @@ class Consumer:
                         if result['status'] == 'success':
                             await self.publisher.publish_message(result['processed_message'], channel)
                             await original_message.ack()
-                        elif result['status'] == 'error' or retry_count == MAX_RETRIES:
+                        elif result['status'] == 'error' or retry_count >= MAX_RETRIES:
                             print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
                             dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
                             
