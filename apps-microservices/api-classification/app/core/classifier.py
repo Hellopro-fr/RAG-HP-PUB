@@ -87,8 +87,8 @@ class ProductClassifier:
         self.prompt_cache_duration = 900  # Durée du cache en secondes (15 minutes = 900s)
         self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
         self.summarization_prompt_cache_duration = 604800  # Durée du cache en secondes (7 jours = 604800s)
-        self.search_results_limit = 30
-        self.categories_limit = 10
+        self.search_results_limit = 50
+        self.categories_limit = 30
 
         # Configuration pour optimize-service
         self.optimize_service_url = os.getenv('OPTIMIZE_SERVICE_URL', 'http://optimize-service:8563')
@@ -914,6 +914,142 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 }}
 """
 
+    async def generate_alternative_keywords_async(
+        self,
+        nom_produit: str,
+        description: str
+    ) -> Tuple[List[str], Dict[str, int]]:
+        """
+        Génère 3 mots-clés alternatifs pour élargir la recherche de catégories candidates.
+
+        Args:
+            nom_produit: Titre du produit
+            description: Description du produit
+
+        Returns:
+            Tuple[List[str], Dict[str, int]]:
+                - Liste de 3 mots-clés alternatifs
+                - Dict avec input_tokens et output_tokens
+        """
+        try:
+            # Récupérer le prompt ID 102 depuis l'API externe
+            prompt_data = await self.get_prompt_template_async(prompt_id=102)
+            prompt_template = prompt_data['prompt']
+            temperature = prompt_data['temperature']
+
+            # Remplacer les placeholders
+            prompt = prompt_template.replace("{titre_produit}", self._escape_text(nom_produit))
+            prompt = prompt.replace("{description_produit}", self._escape_text(description))
+
+            logger.info(f"[KEYWORDS] 🔍 Génération de keywords pour: {nom_produit[:50]}...")
+
+            # Appeler le LLM configuré (enable_thinking=False car on veut juste des keywords)
+            llm_result_wrapper = await self.query_llm(prompt, enable_thinking=False, temperature=temperature)
+
+            # Vérifier si l'appel LLM a échoué
+            if not llm_result_wrapper.get('success', False):
+                logger.warning(f"[KEYWORDS] ⚠️ Échec appel LLM: {llm_result_wrapper.get('error', 'Erreur inconnue')}")
+                return [], {"input_tokens": 0, "output_tokens": 0}
+
+            raw_llm = llm_result_wrapper['response']
+
+            # Extraire les tokens de la réponse LLM
+            input_tokens = 0
+            output_tokens = 0
+            llm_raw_response = llm_result_wrapper.get('raw_response', {})
+            if 'usage' in llm_raw_response:
+                input_tokens = llm_raw_response['usage'].get('prompt_tokens', 0)
+                output_tokens = llm_raw_response['usage'].get('completion_tokens', 0)
+            elif hasattr(raw_llm, 'usage'):
+                input_tokens = getattr(raw_llm.usage, 'prompt_tokens', 0)
+                output_tokens = getattr(raw_llm.usage, 'completion_tokens', 0)
+
+            # Parser la réponse JSON
+            try:
+                llm_result = json.loads(raw_llm.choices[0].message.content)
+                logger.info(f"[KEYWORDS] 🔍 JSON parsé: {llm_result}")
+            except (AttributeError, KeyError, json.JSONDecodeError) as e:
+                logger.error(f"[KEYWORDS] ❌ Erreur parsing JSON: {e}")
+                return [], {"input_tokens": input_tokens, "output_tokens": output_tokens}
+
+            # Supporter les deux formats: "keywords" (pluriel) et "keyword" (singulier)
+            keywords = llm_result.get('keywords', llm_result.get('keyword', []))
+
+            logger.info(f"[KEYWORDS] 🔍 Keywords extraits: {keywords} (type: {type(keywords)})")
+
+            # Vérifier que keywords est bien une liste
+            if not isinstance(keywords, list):
+                logger.warning(f"[KEYWORDS] ⚠️ Format invalide (attendu list, reçu {type(keywords)}): {keywords}")
+                return [], {"input_tokens": input_tokens, "output_tokens": output_tokens}
+
+            # Filtrer les keywords vides et limiter à 3
+            keywords = [k.strip() for k in keywords if k and isinstance(k, str) and k.strip()][:3]
+
+            if not keywords:
+                logger.warning(f"[KEYWORDS] ⚠️ Aucun mot-clé valide retourné")
+                return [], {"input_tokens": input_tokens, "output_tokens": output_tokens}
+
+            logger.info(f"[KEYWORDS] ✅ {len(keywords)} keywords générés: {keywords} (tokens: {input_tokens}+{output_tokens})")
+            return keywords, {"input_tokens": input_tokens, "output_tokens": output_tokens}
+
+        except Exception as e:
+            logger.error(f"[KEYWORDS] ❌ Erreur inattendue: {e}")
+            return [], {"input_tokens": 0, "output_tokens": 0}
+
+    async def search_with_multiple_queries_async(
+        self,
+        queries: List[str],
+        n_results: int = 30
+    ) -> List[Dict]:
+        """
+        Effectue plusieurs recherches RAG en parallèle et fusionne les résultats.
+
+        Args:
+            queries: Liste de requêtes de recherche (keywords)
+            n_results: Nombre de résultats par recherche
+
+        Returns:
+            Liste fusionnée et dédupliquée de produits similaires, triée par score décroissant
+        """
+        if not queries:
+            return []
+
+        logger.info(f"[EXPAND] 🔍 Lancement de {len(queries)} recherches parallèles: {queries}")
+
+        # Lancer toutes les recherches en parallèle
+        search_tasks = [
+            self.search_similar_products_async(query, n_results=n_results)
+            for query in queries
+        ]
+
+        results_lists = await asyncio.gather(*search_tasks)
+
+        # Fusionner les résultats avec déduplication (garder le meilleur score pour chaque produit)
+        products_map = {}
+        total_products_found = 0
+
+        for i, results in enumerate(results_lists):
+            logger.info(f"[EXPAND]   → Recherche '{queries[i]}': {len(results)} produits trouvés")
+            total_products_found += len(results)
+
+            for product in results:
+                prod_id = product['id_produit']
+
+                # Si le produit existe déjà, garder celui avec le meilleur score
+                if prod_id in products_map:
+                    if product['score'] > products_map[prod_id]['score']:
+                        products_map[prod_id] = product
+                else:
+                    products_map[prod_id] = product
+
+        # Convertir en liste et trier par score décroissant
+        merged_results = list(products_map.values())
+        merged_results.sort(key=lambda x: x['score'], reverse=True)
+
+        logger.info(f"[EXPAND] ✅ Fusion: {total_products_found} produits trouvés → {len(merged_results)} uniques après dédupe")
+
+        return merged_results
+
     async def build_prompt_async(self, product: Dict, categories: List[Dict], category_info: Dict, top_k_products: List[Dict]) -> Tuple[str, float]:
         """
         Construit le prompt pour le LLM en récupérant le template depuis l'API externe.
@@ -1103,6 +1239,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': None,
+                    'generated_keywords': [],
                     'error': f'Erreur configuration LLM {llm_override}: {str(e)}',
                     'llm_type': llm_override,
                     'enable_thinking': enable_thinking,
@@ -1154,6 +1291,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': None,
+                    'generated_keywords': [],
                     'error': 'Aucun produit similaire trouvé',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1176,6 +1314,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': None,
+                    'generated_keywords': [],
                     'error': 'Aucune catégorie trouvée',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1185,6 +1324,75 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'output_tokens': 0
                 }
 
+            # Initialiser la liste des keywords générés (pour retour API)
+            generated_keywords = []
+
+            # 🆕 ÉLARGISSEMENT DES CATÉGORIES CANDIDATES (mode test: toujours actif)
+            # TODO: Activer condition après tests: if len(categories) <= 3:
+            if True:  # Mode test: toujours actif
+                logger.info(f"[EXPAND] Produit {product['id_produit']}: {len(categories)} catégories initiales → activation élargissement (mode test)")
+
+                # Générer 3 mots-clés alternatifs
+                keywords, keywords_tokens = await self.generate_alternative_keywords_async(
+                    nom_produit=nom_produit_original,
+                    description=product.get('description', '')
+                )
+
+                # Stocker les keywords pour le retour API
+                generated_keywords = keywords
+
+                # Additionner les tokens de génération de keywords
+                total_input_tokens += keywords_tokens['input_tokens']
+                total_output_tokens += keywords_tokens['output_tokens']
+
+                if keywords:
+                    logger.info(f"[EXPAND] 🔑 Keywords générés: {keywords}")
+
+                    # Effectuer les recherches RAG pour chaque mot-clé
+                    expanded_products = await self.search_with_multiple_queries_async(
+                        queries=keywords,
+                        n_results=30
+                    )
+
+                    if expanded_products:
+                        logger.info(f"[EXPAND] 🔍 {len(expanded_products)} produits trouvés via expansion")
+
+                        # Fusionner les résultats initiaux avec les résultats élargis
+                        all_products_map = {}
+
+                        # Ajouter d'abord les produits initiaux
+                        for product_item in similar_products:
+                            prod_id = product_item['id_produit']
+                            all_products_map[prod_id] = product_item
+
+                        # Ajouter les produits élargis (en gardant le meilleur score si déjà présent)
+                        for product_item in expanded_products:
+                            prod_id = product_item['id_produit']
+                            if prod_id in all_products_map:
+                                if product_item['score'] > all_products_map[prod_id]['score']:
+                                    all_products_map[prod_id] = product_item
+                            else:
+                                all_products_map[prod_id] = product_item
+
+                        merged_products = list(all_products_map.values())
+                        merged_products.sort(key=lambda x: x['score'], reverse=True)
+
+                        logger.info(f"[EXPAND] 📊 Fusion: {len(similar_products)} initiaux + {len(expanded_products)} élargis = {len(merged_products)} uniques")
+
+                        # Re-grouper par catégorie avec les résultats fusionnés
+                        categories_expanded = self.group_by_category(merged_products)
+
+                        if categories_expanded:
+                            logger.info(f"[EXPAND] ✅ Catégories après élargissement: {len(categories_expanded)} (avant: {len(categories)})")
+                            categories = categories_expanded
+                            similar_products = merged_products
+                        else:
+                            logger.warning(f"[EXPAND] ⚠️ Aucune catégorie après élargissement, conservation des catégories initiales")
+                    else:
+                        logger.warning(f"[EXPAND] ⚠️ Aucun produit trouvé via expansion keywords")
+                else:
+                    logger.warning(f"[EXPAND] ⚠️ Aucun keyword généré, skip élargissement")
+
             # ⚡ OPTIMISATION: Récupération asynchrone des descriptions enrichies avec résumé DeepSeek (pipeline parallèle)
             category_info, summarization_tokens = await self.get_category_descriptions_async(categories)
 
@@ -1193,7 +1401,13 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
             total_output_tokens += summarization_tokens['output_tokens']
 
             # Construction du prompt et appel LLM (asynchrone) avec infos enrichies (fil d'ariane + résumé)
-            prompt, temperature = await self.build_prompt_async(product, categories, category_info, similar_products)
+            # Utiliser le titre optimisé si disponible pour le prompt de classification
+            product_for_prompt = product.copy()
+            if nom_produit_optimise:
+                product_for_prompt['nom_produit'] = nom_produit_optimise
+                logger.info(f"[PROMPT] Utilisation du titre optimisé pour la classification: {nom_produit_optimise[:50]}...")
+
+            prompt, temperature = await self.build_prompt_async(product_for_prompt, categories, category_info, similar_products)
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking, temperature=temperature)
 
             # Vérifier si l'appel LLM a échoué
@@ -1208,6 +1422,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': self._format_categories_candidates(categories),
+                    'generated_keywords': generated_keywords,
                     'error': llm_result_wrapper.get('error', 'Erreur LLM inconnue'),
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1241,6 +1456,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': self._format_categories_candidates(categories),
+                    'generated_keywords': generated_keywords,
                     'error': f'Erreur parsing réponse LLM: {str(e)}',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1264,6 +1480,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': self._format_categories_candidates(categories),
+                    'generated_keywords': generated_keywords,
                     'error': 'Réponse LLM invalide',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1286,6 +1503,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'nom_categorie': None,
                     'score_llm': None,
                     'categorie_candidates': self._format_categories_candidates(categories),
+                    'generated_keywords': generated_keywords,
                     'error': f'Catégorie {chosen_id} introuvable',
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
@@ -1315,6 +1533,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 'nom_categorie': result_nom_categorie,
                 'score_llm': score,
                 'categorie_candidates': self._format_categories_candidates(categories),
+                'generated_keywords': generated_keywords,
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
                 'processing_time': time.time() - start_time,
@@ -1335,6 +1554,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 'nom_categorie': None,
                 'score_llm': None,
                 'categorie_candidates': None,
+                'generated_keywords': [],
                 'error': str(e),
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
