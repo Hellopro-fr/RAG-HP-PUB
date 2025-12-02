@@ -29,24 +29,78 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
+        # 🔥 Canal de consommation stocké
+        self.consumer_channel = None
+        self._keep_alive_task = None
+        
         print("✅ Consumer initialisé.")
 
+    async def _keep_channel_alive(self):
+        """
+        Tâche de fond qui garde le canal de consommation actif
+        en envoyant des opérations légères régulièrement.
+        """
+        print("💓 Tâche keep-alive du canal démarrée")
+        
+        while True:
+            try:
+                await asyncio.sleep(30)  # Toutes les 30 secondes
+                
+                if self.consumer_channel and not self.consumer_channel.is_closed:
+                    # 🔥 Opération légère pour maintenir le canal actif
+                    # Déclarer une exchange qui existe déjà ne coûte rien
+                    await self.consumer_channel.get_exchange(
+                        self.exchange_name, 
+                        ensure=False  # Ne pas créer si n'existe pas
+                    )
+                    print("💓 Heartbeat canal envoyé")
+                else:
+                    print("⚠️  Canal consumer fermé ou inexistant")
+                    
+            except asyncio.CancelledError:
+                print("💓 Tâche keep-alive arrêtée")
+                break
+            except Exception as e:
+                print(f"⚠️  Erreur keep-alive: {e}")
+                # Continuer malgré l'erreur
+
     async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
-        dlx = await channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
+        dlx = await channel.declare_exchange(
+            self.dead_letter_exchange, 
+            aio_pika.ExchangeType.TOPIC, 
+            durable=True
+        )
         dlq = await channel.declare_queue(self.dead_letter_queue_name, durable=True)
         await dlq.bind(dlx, self.routing_key)
 
-        retry_exchange = await channel.declare_exchange(self.retry_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
+        retry_exchange = await channel.declare_exchange(
+            self.retry_exchange, 
+            aio_pika.ExchangeType.TOPIC, 
+            durable=True
+        )
         retry_queue = await channel.declare_queue(
-            self.retry_queue_name, durable=True,
-            arguments={'x-message-ttl': RETRY_TTL_MS, 'x-dead-letter-exchange': self.exchange_name, 'x-dead-letter-routing-key': self.routing_key}
+            self.retry_queue_name, 
+            durable=True,
+            arguments={
+                'x-message-ttl': RETRY_TTL_MS, 
+                'x-dead-letter-exchange': self.exchange_name, 
+                'x-dead-letter-routing-key': self.routing_key
+            }
         )
         await retry_queue.bind(retry_exchange, self.routing_key)
 
-        exchange = await channel.declare_exchange(self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True)
+        exchange = await channel.declare_exchange(
+            self.exchange_name, 
+            aio_pika.ExchangeType.TOPIC, 
+            durable=True
+        )
         queue = await channel.declare_queue(
-            self.queue_name, durable=True,
-            arguments={'x-dead-letter-exchange': self.retry_exchange, 'x-dead-letter-routing-key': self.routing_key}
+            self.queue_name, 
+            durable=True,
+            arguments={
+                'x-dead-letter-exchange': self.retry_exchange, 
+                'x-dead-letter-routing-key': self.routing_key
+            }
         )
         await queue.bind(exchange, self.routing_key)
         return queue
@@ -58,19 +112,19 @@ class Consumer:
         while True:
             batch = []
             try:
-                # 1. Attendre indéfiniment le premier message pour démarrer un batch
                 first_message = await self.message_buffer.get()
                 batch.append(first_message)
 
-                # 2. Une fois le premier message reçu, essayer de remplir le reste du batch
-                #    en respectant le BATCH_TIMEOUT et le BATCH_SIZE.
                 while len(batch) < BATCH_SIZE:
                     try:
-                        message = await asyncio.wait_for(self.message_buffer.get(), timeout=BATCH_TIMEOUT_SECONDS)
+                        message = await asyncio.wait_for(
+                            self.message_buffer.get(), 
+                            timeout=BATCH_TIMEOUT_SECONDS
+                        )
                         batch.append(message)
                     except asyncio.TimeoutError:
-                        # Le timeout a été atteint, on sort pour traiter le batch partiel
                         break
+                        
             except asyncio.CancelledError:
                 print("   -> Tâche de traitement de batch annulée.")
                 break
@@ -84,78 +138,98 @@ class Consumer:
             messages_to_process = [json.loads(msg.body) for msg in batch]
             
             try:
+                # 🔥 Traitement dans les threads - l'event loop reste libre
                 processed_results = await nettoyer_bruits_ocr(messages_to_process)
                 
-                async with self.connection.channel() as channel:
+                # 🔥 Ouvrir un NOUVEAU canal dédié pour les ACK/publications
+                # Ne pas réutiliser le canal consumer
+                async with self.connection.channel() as processing_channel:
                     for i, result in enumerate(processed_results):
                         original_message = batch[i]
                         
-                        # Toujours publier la métrique
-                        if 'metric_payload' in result:
-                            await self.publisher.publish_metric_message(result['metric_payload'], channel)
+                        try:
+                            if 'metric_payload' in result:
+                                await self.publisher.publish_metric_message(
+                                    result['metric_payload'], 
+                                    processing_channel
+                                )
 
-                        text = "ok"
-                        if "processed_message" in result:
-                            if "data" in result['processed_message']:
-                                text = result['processed_message'].get("data",{}).get("text","")
-                                print(f"Suivi text : {text[:10]}...")
+                            text = "ok"
+                            if "processed_message" in result:
+                                if "data" in result['processed_message']:
+                                    text = result['processed_message'].get("data",{}).get("text","")
+                                    print(f"Suivi text : {text[:10]}...")
 
-                        if result['status'] == 'success' and text:
-                            await self.publisher.publish_message(result['processed_message'], channel)
-                            await original_message.ack()
-                        else: # status == 'error'
-                            # retry_count = self._get_retry_count(original_message)
-                            # if retry_count < MAX_RETRIES:
-                            #     print(f"   -> NACK du message (tag: {original_message.delivery_tag}) pour nouvelle tentative.")
-                            #     await original_message.nack(requeue=False)
-                            # else:
-                            print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
-                            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-                            
-                            dlq_headers = DLQProperties.create_dlq_headers(
-                                Exception(result['error_message']), 
-                                'nettoyage-bruit-ocr-service', 
-                                MAX_RETRIES, 
-                                original_message
-                            )
-                            
-                            await dlx.publish(
-                                aio_pika.Message(
-                                    body=original_message.body,
-                                    headers=dlq_headers,
-                                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                                ),
-                                routing_key=self.routing_key
-                            )
-                            await original_message.ack()
+                            if result['status'] == 'success' and text:
+                                await self.publisher.publish_message(
+                                    result['processed_message'], 
+                                    processing_channel
+                                )
+                                # 🔥 ACK via le message original (qui connaît son canal)
+                                await original_message.ack()
+                            else:
+                                print(f"   -> Échec pour message (tag: {original_message.delivery_tag})")
+                                dlx = await processing_channel.get_exchange(
+                                    self.dead_letter_exchange, 
+                                    ensure=True
+                                )
+                                
+                                dlq_headers = DLQProperties.create_dlq_headers(
+                                    Exception(result['error_message']), 
+                                    'nettoyage-bruit-ocr-service', 
+                                    MAX_RETRIES, 
+                                    original_message
+                                )
+                                
+                                await dlx.publish(
+                                    aio_pika.Message(
+                                        body=original_message.body,
+                                        headers=dlq_headers,
+                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                    ),
+                                    routing_key=self.routing_key
+                                )
+                                await original_message.ack()
+                        
+                        except aiormq.exceptions.ChannelInvalidStateError:
+                            print(f"⚠️  Canal fermé pour message {i}. Messages restants seront re-délivrés.")
+                            break
 
+            except (aiormq.exceptions.ChannelInvalidStateError,
+                    aiormq.exceptions.ConnectionClosed) as e:
+                print(f"⚠️  Connexion perdue: {e}")
+                print("   -> Messages non-ACK seront re-délivrés automatiquement.")
+                
             except Exception as e:
-                print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
+                print(f"❌ ERREUR sur le batch: {e}")
                 traceback.print_exc()
                 
+                # Tentative de NACK
                 for msg in batch:
                     try:
                         await msg.nack(requeue=False)
-                    except aiormq.exceptions.ChannelInvalidStateError:
-                        # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
-                        print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
-                        break # Sortir de la boucle de nack
+                    except Exception:
+                        pass
+                        
             finally:
                 end_time = time.monotonic()
                 duration = end_time - start_time
-                print(f"🏁 Traitement du batch de {batch_size} message(s) terminé en {duration:.4f} secondes.")
+                print(f"🏁 Batch de {batch_size} message(s) terminé en {duration:.4f}s")
     
     async def _on_message(self, message: aio_pika.abc.AbstractIncomingMessage):
         """Callback léger qui met les messages dans un buffer asynchrone."""
         await self.message_buffer.put(message)
 
-
     async def start_consuming(self):
         """Démarre le consumer et la tâche de traitement de batch."""
-        channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=BATCH_SIZE)
+        # 🔥 Créer et stocker le canal consumer
+        self.consumer_channel = await self.connection.channel()
+        await self.consumer_channel.set_qos(prefetch_count=BATCH_SIZE)
         
-        queue = await self._setup_queues(channel)
+        queue = await self._setup_queues(self.consumer_channel)
+        
+        # 🔥 Démarrer la tâche keep-alive
+        self._keep_alive_task = asyncio.create_task(self._keep_channel_alive())
         
         # Démarrer la tâche de fond qui traitera les batches
         asyncio.create_task(self.batch_processor())
@@ -163,3 +237,19 @@ class Consumer:
         # Commencer à consommer les messages et à les mettre dans le buffer
         print("👂 Nettoyage-bruit-ocr-service: En attente de messages...")
         await queue.consume(self._on_message)
+    
+    async def stop(self):
+        """Arrêt propre du consumer."""
+        print("🛑 Arrêt du consumer...")
+        
+        if self._keep_alive_task:
+            self._keep_alive_task.cancel()
+            try:
+                await self._keep_alive_task
+            except asyncio.CancelledError:
+                pass
+        
+        if self.consumer_channel and not self.consumer_channel.is_closed:
+            await self.consumer_channel.close()
+        
+        print("✅ Consumer arrêté proprement")
