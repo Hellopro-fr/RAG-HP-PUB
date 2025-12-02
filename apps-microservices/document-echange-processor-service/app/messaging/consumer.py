@@ -130,18 +130,39 @@ class Consumer:
 
             except Exception as e:
                 print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
-                retry_count = self._get_retry_count(batch[0])
-                print(f"Max_retries: {retry_count}")
-
                 traceback.print_exc()
-                
-                for msg in batch:
-                    try:
-                        await msg.nack(requeue=False)
-                    except aiormq.exceptions.ChannelInvalidStateError:
-                        # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
-                        print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
-                        break # Sortir de la boucle de nack
+
+                original_message = batch[0]
+                retry_count = self._get_retry_count(original_message)
+                if retry_count >= MAX_RETRIES:
+
+                    print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
+                    dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                    
+                    dlq_headers = DLQProperties.create_dlq_headers(
+                        Exception(f"erreur catastrophique : {e}"), 
+                        'document-echange-processor-service', 
+                        MAX_RETRIES, 
+                        original_message
+                    )
+                    
+                    await dlx.publish(
+                        aio_pika.Message(
+                            body=original_message.body,
+                            headers=dlq_headers,
+                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                        ),
+                        routing_key=self.routing_key
+                    )
+                    await original_message.ack()
+                else:
+                    for msg in batch:
+                        try:
+                            await msg.nack(requeue=False)
+                        except aiormq.exceptions.ChannelInvalidStateError:
+                            # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
+                            print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
+                            break # Sortir de la boucle de nack
             finally:
                 end_time = time.monotonic()
                 duration = end_time - start_time
