@@ -37,28 +37,40 @@ class Consumer:
 
     async def _keep_channel_alive(self):
         """
-        Tâche de fond qui maintient le canal actif pendant les longs traitements.
-        Envoie une opération légère toutes les 30 secondes.
+        Tâche de fond qui maintient le canal actif.
+        Vérifie périodiquement l'état du canal.
         """
         print("💓 Tâche keep-alive du canal démarrée")
+        
+        heartbeat_count = 0
         
         while True:
             try:
                 await asyncio.sleep(30)  # Toutes les 30 secondes
+                heartbeat_count += 1
                 
-                if self.consumer_channel and not self.consumer_channel.is_closed:
-                    # 🔥 Opération légère : vérifier l'existence d'une exchange
-                    try:
-                        await self.consumer_channel.get_exchange(
-                            self.exchange_name, 
-                            ensure=False  # Ne pas créer, juste vérifier
-                        )
-                        print("💓 Heartbeat canal envoyé (canal actif)")
-                    except Exception as e:
-                        print(f"⚠️  Erreur lors du heartbeat: {e}")
-                else:
-                    print("⚠️  Canal consumer fermé ou inexistant")
+                if self.consumer_channel is None:
+                    print(f"⚠️  [{heartbeat_count}] Canal consumer inexistant")
+                    continue
                     
+                if self.consumer_channel.is_closed:
+                    print(f"❌ [{heartbeat_count}] Canal consumer FERMÉ !")
+                    continue
+                
+                # 🔥 Essayer plusieurs opérations pour maintenir le canal actif
+                try:
+                    # Opération 1 : Vérifier l'exchange
+                    await self.consumer_channel.get_exchange(
+                        self.exchange_name, 
+                        ensure=False
+                    )
+                    print(f"💓 [{heartbeat_count}] Heartbeat OK (canal actif)")
+                    
+                except aiormq.exceptions.ChannelInvalidStateError:
+                    print(f"❌ [{heartbeat_count}] Canal en état invalide !")
+                except Exception as e:
+                    print(f"⚠️  [{heartbeat_count}] Erreur heartbeat: {type(e).__name__} - {e}")
+                        
             except asyncio.CancelledError:
                 print("💓 Tâche keep-alive arrêtée")
                 break
