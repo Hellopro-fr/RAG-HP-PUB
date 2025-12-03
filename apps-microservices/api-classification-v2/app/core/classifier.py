@@ -84,9 +84,9 @@ class ProductClassifier:
         self.category_cache = {}
         # NOTE: category_summary_cache supprimé - utilise Redis via cache_or_execute() maintenant
         self.prompt_cache = {}  # Cache pour les templates de prompts avec timestamp
-        self.prompt_cache_duration = 120  # Durée du cache en secondes (2 minutes = 120s)
+        self.prompt_cache_duration = 5  # Durée du cache en secondes (2 minutes = 120s)
         self.summarization_prompt_cache = {}  # Cache pour le prompt de summarization
-        self.summarization_prompt_cache_duration = 1200  # Durée du cache en secondes (20 minutes = 1200s)
+        self.summarization_prompt_cache_duration = 5  # Durée du cache en secondes (20 minutes = 1200s)
         self.search_results_limit = 50
         self.categories_limit = 30
 
