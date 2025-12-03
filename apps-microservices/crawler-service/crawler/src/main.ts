@@ -182,7 +182,7 @@ if (dropData) {
     isHistorised = true;
 }
 
-export let allUrlsCrawled = getUrlsCrawled(domain, isHistorised, dropData ? 'true' : undefined);
+export let allUrlsCrawled = new Set(getUrlsCrawled(domain, isHistorised, dropData ? 'true' : undefined));
 
 if (skipquestionmark || skipdiez) {
     console.log("Filtering URLs in the queue...");

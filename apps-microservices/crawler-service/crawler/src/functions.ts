@@ -248,8 +248,9 @@ export const startCrawler = async (
             retireBrowserAfterPageCount: 10, // Force browser restart to prevent memory leaks
         },
 
-        maxConcurrency: 15, // Reduced from default to prevent global overload (10 replicas * 15 = 150 concurrent)
-        navigationTimeoutSecs: 60, // Increased to tolerate slow sites
+        minConcurrency: 1, // Ensure at least one browser is running
+        maxConcurrency: 2, // CRITICAL: Reduced to 2 to prevent OOM on CPU-saturated machines (was 15)
+        navigationTimeoutSecs: 90, // Increased to 90s to tolerate slow sites (was 60s)
         requestHandlerTimeoutSecs: 120, // Increased to allow for retries and slow processing
 
         // Session management configuration
@@ -344,8 +345,11 @@ export const startCrawler = async (
                 }
 
                 if (!breakLimit) {
-                    const data = await getScrapingData(domain);
-                    const count = data.total;
+                    // OPTIMIZATION: Use getInfo() to check count without loading data
+                    // This avoids loading the entire dataset into memory on every request
+                    const dataset = await Dataset.open(domain);
+                    const info = await dataset.getInfo();
+                    const count = info ? info.itemCount : 0;
                     const limitUrls = 5000;
 
                     if (count >= limitUrls) {
