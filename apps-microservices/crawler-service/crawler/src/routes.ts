@@ -117,13 +117,13 @@ router.addDefaultHandler(
         let url = request.loadedUrl;
         let enqueueLinksExcludePath: Array<string> = [
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
-            // === SPIDER TRAPS E-COMMERCE ===
+            // === SPIDER TRAPS E-COMMERCE (STRICT EXCLUDES) ===
             // Facettes et filtres
             '**/*order=*', '**/*sort=*', '**/*dir=*', '**/*limit=*',
             '**/*resultsPerPage=*', '**/*filter=*', '**/*filters[*',
             '**/*price=*', '**/*price_min=*', '**/*price_max=*',
             '**/*id_category=*', '**/*categoryId=*',
-            '**/*productListView=*', // Added to prevent duplicates from list view changes
+            '**/*productListView=*',
 
             // Recherche et pagination avancée
             '**/*q=*', '**/*search=*', '**/*query=*',
@@ -134,7 +134,7 @@ router.addDefaultHandler(
             '**/*view=*', '**/*mode=*', '**/*display=*',
             '**/*per_page=*', '**/*items=*',
 
-            // === AUTHENTIFICATION & COMPTE ===
+            // === AUTHENTIFICATION & COMPTE (CRITICAL FOR OOM) ===
             '**/connexion**', '**/login**', '**/signin**', '**/log-in**',
             '**/register**', '**/signup**', '**/inscription**',
             '**/account**', '**/mon-compte**', '**/my-account**',
@@ -142,35 +142,29 @@ router.addDefaultHandler(
             '**/password**', '**/mot-de-passe**', '**/reset-password**',
             '**/logout**', '**/deconnexion**',
             '**/forgot-password**', '**/oubli-mot-de-passe**',
+            '**/customer/account/**', '**/customer/**',
 
-            // === PROCESSUS D'ACHAT ===
+            // === PROCESSUS D'ACHAT (CRITICAL FOR OOM) ===
             '**/panier**', '**/cart**', '**/basket**',
             '**/checkout**', '**/commande**', '**/order**',
             '**/add-to-cart**', '**/addtocart**',
             '**/payment**', '**/paiement**',
             '**/shipping**', '**/livraison**',
             '**/confirmation**',
+            '**/quotation/**', '**/devis/**',
 
             // === ACTIONS UTILISATEUR ===
             '**/wishlist**', '**/liste-envies**', '**/favoris**',
             '**/compare**', '**/comparateur**',
             '**/sendtoafriend**', '**/send-to-friend**',
-            // '**/avis**', '**/review**', '**/reviews**',
-            // '**/comment**', '**/comments**',
-            // '**/rating**', '**/noter**',
+            '**/catalog/product/view/**', // Technical duplicates
 
-            // === FONCTIONNALITÉS DYNAMIQUES ===
-            // '**/*action=*', '**/*do=*', '**/*task=*',
-            // '**/*ajax=*', '**/*xhr=*',
-            // '**/*popup=*', '**/*modal=*',
-            // '**/*print=*', '**/*impression=*',
-
-            // === CALENDRIERS & DATES (Spider traps classiques) ===
+            // === CALENDRIERS & DATES ===
             '**/*year=*', '**/*month=*', '**/*day=*',
             '**/*date=*', '**/*from=*', '**/*to=*',
             '**/calendrier/**', '**/calendar/**',
 
-            // === RÉSEAUX SOCIAUX & PARTAGE ===
+            // === RÉSEAUX SOCIAUX & PARTAGE (SCOPE LEAK PREVENTION) ===
             '**/*facebook*', '**/*twitter*', '**/*linkedin*',
             '**/*instagram*', '**/*youtube*', '**/*pinterest*',
             '**/*tiktok*', '**/*whatsapp*',
@@ -185,9 +179,9 @@ router.addDefaultHandler(
             '**/api/**', '**/wp-json/**', '**/rest/**',
             '**/feed/**', '**/feeds/**', '**/rss/**',
 
-
-            // `${baseUrl}/**/*[?#]*`,
-            // `${baseUrl}/**/*[?#]*/**`,
+            // === SPECIFIC SITE EXCLUDES (sellerie-equishop) ===
+            '**/PBCPPlayer.asp**', // Heavy video player
+            '**/popup/**',
         ];
 
         // Not useful anymore as we analyze the URL to check which parameters to keep or to remove
@@ -201,18 +195,14 @@ router.addDefaultHandler(
         // }
         log.info(`Processing ${url} ( ${request.url} ) ... (HTTP Status: ${response?.status()})`);
 
-        let isDoublon = false;
-
-        //verify if url is already crawled
-        allUrlsCrawled.forEach((item: string) => {
-            if (item === url) {
-                isDoublon = true;
-            }
-        });
+        // Verify if url is already crawled using Set (O(1))
+        const isDoublon = allUrlsCrawled.has(url);
 
         if (!isDoublon) {
-            allUrlsCrawled.push(url);
-            updateUrlsCrawled(domain, allUrlsCrawled);
+            allUrlsCrawled.add(url);
+            // OPTIMIZATION: Removed synchronous disk write on every request (updateUrlsCrawled)
+            // This was causing massive CPU/IO overhead with 250k URLs.
+            // Persistence is now handled by the Dataset and RequestQueue.
 
             // Accept Cookies
             await page.context().addCookies([
@@ -304,6 +294,21 @@ router.addDefaultHandler(
                             console.log(
                                 `Bloqué par robots.txt : ${request.url}`
                             );
+                            return null;
+                        }
+
+                        // HARD SECURITY: Explicitly block social media and external platforms
+                        // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
+                        const socialDomains = [
+                            "facebook.com", "twitter.com", "x.com", "linkedin.com",
+                            "instagram.com", "youtube.com", "pinterest.com",
+                            "tiktok.com", "whatsapp.com", "t.me", "telegram.org",
+                            "snapchat.com", "reddit.com", "discord.com",
+                            "dailymotion.com", "vimeo.com", "twitch.tv"
+                        ];
+
+                        if (socialDomains.some(domain => request.url.includes(domain))) {
+                            console.log(`Blocked social media URL: ${request.url}`);
                             return null;
                         }
 

@@ -12,8 +12,8 @@ from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
-BATCH_SIZE = 10
-BATCH_TIMEOUT_SECONDS = 2.0
+BATCH_SIZE = 1
+BATCH_TIMEOUT_SECONDS = 0.5
 
 class Consumer:
     def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
@@ -102,7 +102,7 @@ class Consumer:
                         if result['status'] == 'success':
                             await self.publisher.publish_message(result['processed_message'], channel)
                             await original_message.ack()
-                        elif result['status'] == 'error' or retry_count == MAX_RETRIES:
+                        elif result['status'] == 'error' or retry_count >= MAX_RETRIES:
                             print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
                             dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
                             
@@ -131,14 +131,39 @@ class Consumer:
             except Exception as e:
                 print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
                 traceback.print_exc()
-                
-                for msg in batch:
-                    try:
-                        await msg.nack(requeue=False)
-                    except aiormq.exceptions.ChannelInvalidStateError:
-                        # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
-                        print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
-                        break # Sortir de la boucle de nack
+
+                original_message = batch[0]
+                retry_count = self._get_retry_count(original_message)
+                if retry_count >= MAX_RETRIES:
+
+                    async with self.connection.channel() as dlq_channel:
+                        print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
+                        dlx = await dlq_channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                        
+                        dlq_headers = DLQProperties.create_dlq_headers(
+                            Exception(f"erreur catastrophique : {e}"), 
+                            'document-echange-processor-service', 
+                            MAX_RETRIES, 
+                            original_message
+                        )
+                        
+                        await dlx.publish(
+                            aio_pika.Message(
+                                body=original_message.body,
+                                headers=dlq_headers,
+                                delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                            ),
+                            routing_key=self.routing_key
+                        )
+                        await original_message.ack()
+                else:
+                    for msg in batch:
+                        try:
+                            await msg.nack(requeue=False)
+                        except aiormq.exceptions.ChannelInvalidStateError:
+                            # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
+                            print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
+                            break # Sortir de la boucle de nack
             finally:
                 end_time = time.monotonic()
                 duration = end_time - start_time
