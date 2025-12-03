@@ -95,7 +95,7 @@ class ProductClassifier:
         self.optimize_service_timeout = int(os.getenv('OPTIMIZE_SERVICE_TIMEOUT', '30'))
 
         self._initialize_clients()
-    
+
     def _initialize_clients(self):
         """Initialise les clients LLM"""
         if self.llm_choice == 'OpenAI':
@@ -126,19 +126,19 @@ class ProductClassifier:
             if not llm_service_url:
                 logger.warning("LLM_SERVICE_URL non définie, utilisation de la valeur par défaut: llm-service:50051")
             logger.info(f"Client gRPC Qwen configuré (URL: {llm_service_url or 'llm-service:50051'})")
-    
+
     def update_configuration(self, config: Dict[str, Any]):
         """Met à jour la configuration du classificateur"""
         if 'llm_choice' in config and config['llm_choice'] != self.llm_choice:
             self.llm_choice = config['llm_choice']
             self._initialize_clients()
-        
+
         if 'search_results_limit' in config:
             self.search_results_limit = config['search_results_limit']
-        
+
         if 'categories_limit' in config:
             self.categories_limit = config['categories_limit']
-    
+
     def get_configuration(self) -> Dict[str, Any]:
         """Retourne la configuration actuelle"""
         return {
@@ -176,17 +176,17 @@ class ProductClassifier:
         if self.llm_choice == 'Qwen':
             return QWEN_AVAILABLE
         return (self.openai_client is not None) or (self.deepseek_client is not None)
-    
+
     def search_similar_products(self, title: str, n_results: int = None) -> List[Dict]:
         """Recherche des produits similaires"""
         if n_results is None:
             n_results = self.search_results_limit
-            
+
         try:
             raw_results = call_search_api(title, num_results=n_results, use_reranker=True)
             if not raw_results:
                 return []
-            
+
             # Construire les résultats
             results = []
             for item in raw_results:
@@ -194,7 +194,7 @@ class ProductClassifier:
                 prod_id = metadata.get('id_produit')
                 if not prod_id:
                     continue
-                    
+
                 result = {
                     'id_produit': prod_id,
                     'nom_produit': metadata.get('nom_produit', 'N/A'),
@@ -203,9 +203,9 @@ class ProductClassifier:
                     'score': item.get('rerank_score', item.get('score', 0.0))
                 }
                 results.append(result)
-            
+
             return sorted(results, key=lambda x: x['score'], reverse=True)
-            
+
         except Exception as e:
             logger.error(f"Erreur recherche similaires: {e}")
             return []
@@ -213,19 +213,19 @@ class ProductClassifier:
     def group_by_category(self, products: List[Dict]) -> List[Dict]:
         """Groupe les produits par catégorie et calcule les scores"""
         category_groups = defaultdict(list)
-        
+
         for product in products:
             cat_id = product['id_categorie']
             cat_name = product['categorie']
             if cat_id and cat_name:
                 category_groups[cat_id].append(product)
-        
+
         categories = []
         for cat_id, prods in category_groups.items():
             cat_name = prods[0]['categorie']
             avg_score = sum(p['score'] for p in prods) / len(prods)
             total_score = sum(p['score'] for p in prods)
-            
+
             categories.append({
                 'id': cat_id,
                 'name': cat_name,
@@ -233,16 +233,16 @@ class ProductClassifier:
                 'total_score': total_score,
                 'product_count': len(prods)
             })
-        
+
         return sorted(categories, key=lambda x: x['total_score'], reverse=True)
 
     def get_category_descriptions(self, categories: List[Dict]) -> Dict[str, str]:
         """Récupère les descriptions de catégories (méthode synchrone legacy, non utilisée)"""
         descriptions = {}
-        
+
         # Récupérer les IDs non mis en cache
         ids_to_fetch = [c['id'] for c in categories if c['id'] not in self.category_cache]
-        
+
         if ids_to_fetch:
             try:
                 details = get_category_details(ids_to_fetch, EXTERNAL_CATEGORY_API_URL)
@@ -267,7 +267,7 @@ class ProductClassifier:
                         "fil_ariane": "",
                         "top_5_produit": ""
                     }
-        
+
         # Retourner les descriptions (extraire uniquement la description pour compatibilité)
         for cat in categories:
             cached_data = self.category_cache.get(cat['id'], {})
@@ -276,7 +276,7 @@ class ProductClassifier:
             else:
                 # Ancien format (string)
                 descriptions[cat['id']] = cached_data
-        
+
         return descriptions
 
     async def search_similar_products_async(self, title: str, n_results: int = None) -> List[Dict]:
@@ -841,68 +841,68 @@ class ProductClassifier:
         """
         return """1- Rôle :
 Tu es un classificateur de produits pour Hellopro. Ta mission est de classifier un produit dans la catégorie la plus appropriée parmi celles de la "LISTE DES CATEGORIES".
- 
+
 2- Objectif :
 Déterminer si le produit correspond à une catégorie spécifique de la "LISTE DES CATEGORIES". Si aucune catégorie ne correspond parfaitement, répondre ce nom_categorie "Autres produits" et cette id_categorie : "9000000".
- 
+
 3- Étapes à suivre :
- 
+
 Étape 1 - Analyse du produit
 - Lire attentivement mot par mot le "TITRE DU PRODUIT" et la "DESCRIPTION DU PRODUIT".
 - Identifier la nature du produit, son utilisation et ses caractéristiques détaillées.
 - Se baser exclusivement sur les informations fournies, sans interprétation ni extrapolation.
- 
+
 Étape 2 - Évaluation des catégories
 - Consulter la "LISTE DES CATEGORIES"
 - Pour chaque catégorie, analyser sa définition et son arborescence.
 - Pour chaque catégorie, vérifier si le produit peut y être classé. Si correspondance exacte ou non.
 - Le produit doit correspondre parfaitement à la catégorie choisie et à son emplacement sur le site en termes de nature, utilisation et caractéristiques spécifiques.
 - Si aucune des catégories listées ne correspond parfaitement, retourner ce nom_categorie "Autres produits" et cette id_categorie : "9000000" et mettre un score 1
- 
+
 Étape 3 - Décision de classification
 Considérer "Average score" pour affiner le choix de la bonne catégorie.
 - Si une catégorie correspond parfaitement au produit, répondre OUI.
 - Sinon, répondre NON.
- 
+
 Étape 4 -Attribution du score en fonction des conditions
 - Score = 1 : Si la catégorie est la correspondance la plus précise parmi celles proposées. Aucune autre catégorie dans la "LISTE DES CATEGORIES" ne correspondrait mieux.
 - Score = 0 : Si la catégorie semble convenir mais nécessite une validation humaine car tu n'es pas sûr de ta réponse (ex: produit hybride, caractéristiques manquantes mais acceptable, catégorie très proche d'une autre).
- 
+
 4- Cas particulier à prendre en compte :
 Si le produit à classer nommé XX est un accessoire ou un consommable, applique l’une des deux options suivantes :
 - Prioriser la catégorie "Accessoires pour XX" si elle est présente dans la "LISTE DES CATEGORIES" et que tous les détails correspondent parfaitement.
 Exemple : Le produit "Râpe en aluminium pour une coupe-légumes" doit être classé dans la catégorie "Accessoires de matériels de préparation" dont le fil d'ariane est "CHR - Café Hôtel Restaurant > Accessoires de cuisine > Accessoires de matériels de préparation" si la catégorie est dans la "LISTE DES CATEGORIES".
 - Si la catégorie "Accessoires pour XX" n’est pas présente dans la "LISTE DES CATEGORIES" et même si la catégorie générale "XX" est présente alors il faut répondre avec ce nom_categorie "Autres produits" et cette id_categorie : "9000000" avec un score 1
 Exemple : Un produit comme un "Pied de table" ne doit pas être classé dans la catégorie "Table" mais dans la catégorie "Autres produits".
- 
+
 5- Points importants :
 - La "LISTE DES CATEGORIES" n'est pas exhaustive, d’autres catégories adaptées peuvent exister.
 - La description exacte du produit doit être considérée pour éviter toute confusion avec une catégorie similaire mais non correspondante.
 Exemple : Si le titre du produit est "Brouette" et que dans le descriptif on a la mention "pour le gravillon", alors il faut classer le produit dans la catégorie "Brouette gravillonneuse" – avec un score = 1)
 - Si la description du produit manque de précision sur un usage spécifique ou une caractéristique clé nécessaire pour une catégorie, considérer que le produit ne correspond pas à cette catégorie.
- 
+
 Fin étape : Validation des scores :
 Revérifier que le score attribué (0 ou 1) est approprié en fonction des critères mentionnés ci-dessus.
 Revalider avec les conditions "Points importants".
 Si nécessaire, ajuster en fonction des cas particuliers et des ambiguïtés.
- 
- 
+
+
 ---
 CONTENU DU PRODUIT :
 Titre : {titre_produit}
 Description : {description_produit}
 ---
- 
+
 ---
 LISTE DES CATEGORIES (avec leur description et leur arborescence) :
 {liste_categories}
- 
+
 ---
 EXEMPLES DE PRODUITS SIMILAIRES (pour contexte) :
 {liste_produits}
- 
+
 ---
- 
+
 Format de réponse JSON **uniquement**, avec 2 champs :
 Score = 1 : (si et seulement si le produit remplit à 100% toutes les caractéristiques correspondant à cette catégorie) "Categorie" avec l'ID de la catégorie sélectionnée et "Score".
 ou sinon
@@ -1071,7 +1071,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 
         # Formater les catégories avec fil d'ariane et description enrichie (avec échappement des guillemets)
         formatted_categories = "\n".join([
-            f"- ID: {cat['id']}, Nom: {self._escape_text(cat['name'])} (Average score: {cat['average_score']:.2f})\n"
+            f"- ID: {cat['id']}, Nom: {self._escape_text(cat['name'])} (Average score: {cat['average_score']:.2f} , Product  Count: {cat['product_count']} )\n"
             f"  Fil d'ariane: {self._escape_text(str(category_info.get(cat['id'], {}).get('fil_ariane', 'N/A')))}\n"
             f"  Description: {self._escape_text(str(category_info.get(cat['id'], {}).get('summary', 'N/A')))}"
             for cat in categories[:self.categories_limit]
@@ -1512,7 +1512,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'input_tokens': total_input_tokens,
                     'output_tokens': total_output_tokens
                 }
-            
+
             # Résultat final
             # Si chosen_category est None (cas de l'ID 9000000), utiliser chosen_id directement
             if chosen_category:
@@ -1541,7 +1541,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 'input_tokens': total_input_tokens,
                 'output_tokens': total_output_tokens
             }
-            
+
         except Exception as e:
             logger.error(f"Erreur classification produit {product['id_produit']}: {e}")
             return {
