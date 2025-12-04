@@ -497,7 +497,7 @@ const excludePatterns = [
   '**/wishlist**', '**/liste-envies**', '**/favoris**',
   '**/compare**', '**/comparateur**',
   '**/sendtoafriend**', '**/send-to-friend**',
-  '**/catalog/product/view/**',
+  // '**/catalog/product/view/**', // REMOVED: False positive for some Magento sites
   // === CALENDAR ===
   '**/*year=*', '**/*month=*', '**/*day=*',
   '**/*date=*', '**/*from=*', '**/*to=*',
