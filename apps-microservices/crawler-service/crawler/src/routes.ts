@@ -120,7 +120,23 @@ router.addDefaultHandler(
         const proxyUrl = proxyInfo?.url || null;
 
         // Block resources to save bandwidth and CPU
-        await page.route('**/*.{png,jpg,jpeg,gif,webp,svg,css,woff,woff2,ttf,eot,mp4,mp3}', route => route.abort());
+        await page.route('**/*', (route) => {
+            const request = route.request();
+            const resourceType = request.resourceType();
+            const url = request.url();
+
+            // Block heavy media and fonts
+            if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+                return route.abort();
+            }
+
+            // Block download scripts and binary files
+            if (url.includes('download.php') || url.includes('imp=1') || url.match(/\.(pdf|zip|rar|doc|docx|xls|xlsx)$/i)) {
+                return route.abort();
+            }
+
+            return route.continue();
+        });
 
         let url = request.loadedUrl;
 
@@ -205,6 +221,12 @@ router.addDefaultHandler(
             // === SPECIFIC SITE EXCLUDES (sellerie-equishop) ===
             '**/PBCPPlayer.asp**', // Heavy video player
             '**/popup/**',
+
+            // === SPECIFIC SITE EXCLUDES (promodis.fr) ===
+            '**/download.php**',   // BLOQUER les downloads
+            '**/*imp=1*',          // BLOQUER les versions print
+            '**/dhtml/download.php*',
+            '**/*.pdf', '**/*.zip', '**/*.rar', '**/*.doc', '**/*.docx', '**/*.xls', '**/*.xlsx'
         ];
 
         // Not useful anymore as we analyze the URL to check which parameters to keep or to remove
