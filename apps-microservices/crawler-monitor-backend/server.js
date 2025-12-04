@@ -383,6 +383,41 @@ async function findRequestQueuesDir(jobId) {
 }
 
 // Improved glob matcher to avoid false positives like "cartouche" matching "**/cart**"
+const matchesPattern = (url, pattern) => {
+  // Handle extension pattern specifically
+  if (pattern.includes('@(')) {
+    const extRegex = new RegExp(`\\.(${ignoredExtensions})([?#].*)?$`, 'i');
+    return extRegex.test(url);
+  }
+
+  // Remove leading/trailing globstars to get the "core" pattern
+  // e.g. "**/cart**" -> "cart"
+  // e.g. "**/*facebook*" -> "*facebook*"
+  let clean = pattern.replace(/^\*\*\//, '').replace(/\*\*$/, '').replace(/^\*\*/, '');
+
+  // If it's a query param pattern (contains =), simple include is usually enough
+  // e.g. "order="
+  if (clean.includes('=')) {
+    return url.toLowerCase().includes(clean.replace(/\*/g, '').toLowerCase());
+  }
+
+  // Check if it has internal wildcards (e.g. *facebook*)
+  if (clean.includes('*')) {
+    // It's a glob-like pattern. Escape special chars, then replace * with .*
+    const escaped = clean.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const regexStr = escaped.replace(/\*/g, '.*');
+    return new RegExp(regexStr, 'i').test(url);
+  } else {
+    // It's a segment pattern (e.g. cart, login)
+    // Match whole segment to avoid "cartouche" matching "cart"
+    // Delimiters: start/end, /, ?, #, &, =, . (for extensions like .html)
+    const escaped = clean.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const segmentRegex = new RegExp(`(^|[/?#&=.])${escaped}([/?#&=.]|$)`, 'i');
+    return segmentRegex.test(url);
+  }
+};
+
+// Improved glob matcher to avoid false positives like "cartouche" matching "**/cart**"
 matchesPattern = (url, pattern) => {
   // Remove leading/trailing globstars to get the "core" pattern
   // e.g. "**/cart**" -> "cart"
