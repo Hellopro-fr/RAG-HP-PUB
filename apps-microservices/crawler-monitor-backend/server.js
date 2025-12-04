@@ -368,6 +368,64 @@ app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   }
 });
 
+app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestQueuesDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request queues directory not found' });
+    }
+
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    let deletedCount = 0;
+    let scannedCount = 0;
+
+    // Iterate over domain directories
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const domainDir = join(baseDir, entry.name);
+        const targetDomain = entry.name; // The folder name is the domain
+        const domainFiles = await readdir(domainDir);
+
+        for (const file of domainFiles) {
+          if (file.endsWith('.json')) {
+            scannedCount++;
+            try {
+              const filePath = join(domainDir, file);
+              const content = await readFile(filePath, 'utf-8');
+              const data = JSON.parse(content);
+
+              if (data.url) {
+                try {
+                  const urlObj = new URL(data.url);
+                  // Security Check Logic from routes.ts:
+                  // Check if hostname ends with the target domain (handles subdomains too)
+                  if (!urlObj.hostname.includes(targetDomain)) {
+                    console.log(`[Repair] Deleting invalid URL: ${data.url} (Target: ${targetDomain})`);
+                    // Import unlink at the top if not present, but we can use fs/promises
+                    const { unlink } = await import('fs/promises');
+                    await unlink(filePath);
+                    deletedCount++;
+                  }
+                } catch (e) {
+                  console.warn(`[Repair] Invalid URL format in file ${file}: ${data.url}`);
+                }
+              }
+            } catch (err) {
+              console.error(`[Repair] Error processing file ${file}:`, err);
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, scanned: scannedCount, deleted: deletedCount });
+  } catch (error) {
+    console.error(`Error repairing request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to repair request queues' });
+  }
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 async function setupRedisListener() {

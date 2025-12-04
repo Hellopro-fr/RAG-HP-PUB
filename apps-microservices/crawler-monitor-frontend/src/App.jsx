@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Code,
   Search, Calendar, Filter, Server, Download, ChevronLeft, ChevronRight,
-  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft, Cpu
+  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft, Cpu, Trash2
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -354,6 +354,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -444,6 +445,28 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     }
   };
 
+  const repairQueue = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir nettoyer la queue ? Cela supprimera toutes les URLs qui ne correspondent pas au domaine cible.')) {
+      return;
+    }
+
+    setRepairing(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/repair`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      setSuccessMsg(`Nettoyage terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
+      fetchFiles(); // Refresh list
+    } catch (err) {
+      setError(`Erreur lors du nettoyage : ${err.message}`);
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   const filteredFiles = files.filter(file =>
     (file.url && file.url.toLowerCase().includes(searchTerm.toLowerCase())) ||
     (file.name && file.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -451,14 +474,25 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
+      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col transition-all">
         <div className="flex justify-between items-center p-4 border-b border-gray-700">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
             <Code className="w-5 h-5" /> Éditeur Request Queue
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <XCircle className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={repairQueue}
+              disabled={repairing || loading}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm text-white disabled:opacity-50 transition-colors"
+              title="Supprimer les URLs hors domaine"
+            >
+              {repairing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Nettoyer / Réparer
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-white">
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
