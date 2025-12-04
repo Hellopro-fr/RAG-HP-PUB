@@ -105,6 +105,14 @@ const ignoredExtensions = [
     "xml",
 ].join("|");
 
+const socialDomains = [
+    "facebook.com", "twitter.com", "x.com", "linkedin.com",
+    "instagram.com", "youtube.com", "pinterest.com",
+    "tiktok.com", "whatsapp.com", "t.me", "telegram.org",
+    "snapchat.com", "reddit.com", "discord.com",
+    "dailymotion.com", "vimeo.com", "twitch.tv"
+];
+
 const domainFR = new DomainFR("");
 
 router.addDefaultHandler(
@@ -115,6 +123,21 @@ router.addDefaultHandler(
         await page.route('**/*.{png,jpg,jpeg,gif,webp,svg,css,woff,woff2,ttf,eot,mp4,mp3}', route => route.abort());
 
         let url = request.loadedUrl;
+
+        // CRITICAL SECURITY: Check if the loaded URL is still on the target domain
+        // This handles cases where a valid internal link redirects to an external site (e.g. Facebook)
+        // If we don't check this, the crawler might start crawling the external site.
+        const urlObj = new URL(url);
+        const targetDomain = domain; // Imported from main.js
+
+        // Check if hostname ends with the target domain (handles subdomains too)
+        // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
+        // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
+        if (!urlObj.hostname.includes(targetDomain)) {
+            log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            return;
+        }
+
         let enqueueLinksExcludePath: Array<string> = [
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
             // === SPIDER TRAPS E-COMMERCE (STRICT EXCLUDES) ===
@@ -297,18 +320,16 @@ router.addDefaultHandler(
                             return null;
                         }
 
-                        // HARD SECURITY: Explicitly block social media and external platforms
+                        // HARD SECURITY: Explicitly block ANY URL that is not on the target domain
                         // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
-                        const socialDomains = [
-                            "facebook.com", "twitter.com", "x.com", "linkedin.com",
-                            "instagram.com", "youtube.com", "pinterest.com",
-                            "tiktok.com", "whatsapp.com", "t.me", "telegram.org",
-                            "snapchat.com", "reddit.com", "discord.com",
-                            "dailymotion.com", "vimeo.com", "twitch.tv"
-                        ];
-
-                        if (socialDomains.some(domain => request.url.includes(domain))) {
-                            console.log(`Blocked social media URL: ${request.url}`);
+                        try {
+                            const reqUrlObj = new URL(request.url);
+                            if (!reqUrlObj.hostname.includes(domain)) {
+                                console.log(`Blocked external URL: ${request.url}`);
+                                return null;
+                            }
+                        } catch (e) {
+                            console.error(`Invalid URL in transformRequestFunction: ${request.url}`);
                             return null;
                         }
 
