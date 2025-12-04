@@ -1,4 +1,8 @@
 import 'dotenv/config';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
+
 import express from 'express';
 import cors from 'cors';
 import { createClient } from 'redis';
@@ -26,8 +30,124 @@ if (!REDIS_URL) {
   process.exit(1);
 }
 
-const app = express();
-const server = createServer(app);
+app.get('/api/jobs/:id/request-queues', async (req, res) => {
+  const { id } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 50;
+  const search = (req.query.search || '').toLowerCase();
+
+  try {
+    const baseDir = await findRequestQueuesDir(id);
+    if (!baseDir) {
+      return res.json({ items: [], total: 0, page, limit });
+    }
+
+    let matchingFiles = [];
+
+    if (search) {
+      // Use grep to search content
+      // -r: recursive
+      // -l: print only filenames
+      // -i: case insensitive
+      // --include=*.json: only json files
+      try {
+        // Escape search term to prevent command injection (basic)
+        const safeSearch = search.replace(/"/g, '\\"');
+        const { stdout } = await execAsync(`grep -r -l -i "${safeSearch}" "${baseDir}" --include=*.json`);
+
+        if (stdout) {
+          const absolutePaths = stdout.trim().split('\n');
+          // Convert to file objects
+          for (const fullPath of absolutePaths) {
+            const relativePath = fullPath.replace(baseDir + '/', '');
+            const parts = relativePath.split('/');
+            if (parts.length >= 2) {
+              matchingFiles.push({
+                name: parts[parts.length - 1],
+                domain: parts[parts.length - 2], // Assuming structure domain/file.json
+                fullPath: fullPath,
+                relativePath: relativePath
+              });
+            }
+          }
+        }
+      } catch (e) {
+        // grep returns exit code 1 if no matches found, which throws error in execAsync
+        if (e.code !== 1) {
+          console.error('Grep error:', e);
+        }
+        // If code 1, matchingFiles remains empty, which is correct
+      }
+    } else {
+      // No search, list all files (optimized)
+      // We still need to list them to paginate. 
+      // Listing 100k files with readdir is fast enough (ms), reading content is slow.
+      const entries = await readdir(baseDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const domainDir = join(baseDir, entry.name);
+          const domainFiles = await readdir(domainDir);
+
+          for (const file of domainFiles) {
+            if (file.endsWith('.json')) {
+              matchingFiles.push({
+                name: file,
+                domain: entry.name,
+                fullPath: join(domainDir, file),
+                relativePath: join(entry.name, file)
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const total = matchingFiles.length;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedFiles = matchingFiles.slice(startIndex, endIndex);
+
+    // Read content ONLY for the current page
+    const items = await Promise.all(paginatedFiles.map(async (f) => {
+      try {
+        const content = await readFile(f.fullPath, 'utf-8');
+        const data = JSON.parse(content);
+        return {
+          name: f.name,
+          domain: f.domain,
+          path: f.relativePath,
+          url: data.url,
+          method: data.method,
+          retryCount: data.retryCount,
+          errorMessages: data.errorMessages
+        };
+      } catch (err) {
+        console.error(`Error reading queue file ${f.name}:`, err);
+        return {
+          name: f.name,
+          domain: f.domain,
+          path: f.relativePath,
+          url: 'Error reading file',
+          method: 'UNKNOWN'
+        };
+      }
+    }));
+
+    res.json({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    });
+
+  } catch (error) {
+    console.error(`Error listing request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to list request queues' });
+  }
+});
+
+// ... rest of the file ...
 const wss = new WebSocketServer({ server });
 
 // Security Middleware
@@ -259,6 +379,35 @@ async function findRequestQueuesDir(jobId) {
   return null;
 }
 
+// Improved glob matcher to avoid false positives like "cartouche" matching "**/cart**"
+matchesPattern = (url, pattern) => {
+  // Remove leading/trailing globstars to get the "core" pattern
+  // e.g. "**/cart**" -> "cart"
+  // e.g. "**/*facebook*" -> "*facebook*"
+  let clean = pattern.replace(/^\*\*\//, '').replace(/\*\*$/, '').replace(/^\*\*/, '');
+
+  // If it's a query param pattern (contains =), simple include is usually enough
+  // e.g. "order="
+  if (clean.includes('=')) {
+    return url.toLowerCase().includes(clean.replace(/\*/g, '').toLowerCase());
+  }
+
+  // Check if it has internal wildcards (e.g. *facebook*)
+  if (clean.includes('*')) {
+    // It's a glob-like pattern. Escape special chars, then replace * with .*
+    const escaped = clean.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const regexStr = escaped.replace(/\*/g, '.*');
+    return new RegExp(regexStr, 'i').test(url);
+  } else {
+    // It's a segment pattern (e.g. cart, login)
+    // Match whole segment to avoid "cartouche" matching "cart"
+    // Delimiters: start/end, /, ?, #, &, =, . (for extensions like .html)
+    const escaped = clean.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const segmentRegex = new RegExp(`(^|[/?#&=.])${escaped}([/?#&=.]|$)`, 'i');
+    return segmentRegex.test(url);
+  }
+};
+
 app.get('/api/jobs/:id/request-queues', async (req, res) => {
   const { id } = req.params;
   const page = parseInt(req.query.page) || 1;
@@ -271,41 +420,70 @@ app.get('/api/jobs/:id/request-queues', async (req, res) => {
       return res.json({ items: [], total: 0, page, limit });
     }
 
-    const entries = await readdir(baseDir, { withFileTypes: true });
-    let allFiles = [];
+    let matchingFiles = [];
 
-    // 1. Collect all file paths first (without reading content)
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const domainDir = join(baseDir, entry.name);
-        const domainFiles = await readdir(domainDir);
+    if (search) {
+      // Use grep to search content
+      // -r: recursive
+      // -l: print only filenames
+      // -i: case insensitive
+      // --include=*.json: only json files
+      try {
+        // Escape search term to prevent command injection (basic)
+        const safeSearch = search.replace(/"/g, '\\"');
+        const { stdout } = await execAsync(`grep -r -l -i "${safeSearch}" "${baseDir}" --include=*.json`);
 
-        for (const file of domainFiles) {
-          if (file.endsWith('.json')) {
-            allFiles.push({
-              name: file,
-              domain: entry.name,
-              fullPath: join(domainDir, file),
-              relativePath: join(entry.name, file)
-            });
+        if (stdout) {
+          const absolutePaths = stdout.trim().split('\n');
+          // Convert to file objects
+          for (const fullPath of absolutePaths) {
+            const relativePath = fullPath.replace(baseDir + '/', '');
+            const parts = relativePath.split('/');
+            if (parts.length >= 2) {
+              matchingFiles.push({
+                name: parts[parts.length - 1],
+                domain: parts[parts.length - 2], // Assuming structure domain/file.json
+                fullPath: fullPath,
+                relativePath: relativePath
+              });
+            }
+          }
+        }
+      } catch (e) {
+        // grep returns exit code 1 if no matches found, which throws error in execAsync
+        if (e.code !== 1) {
+          console.error('Grep error:', e);
+        }
+        // If code 1, matchingFiles remains empty, which is correct
+      }
+    } else {
+      // No search, list all files (optimized)
+      const entries = await readdir(baseDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const domainDir = join(baseDir, entry.name);
+          const domainFiles = await readdir(domainDir);
+
+          for (const file of domainFiles) {
+            if (file.endsWith('.json')) {
+              matchingFiles.push({
+                name: file,
+                domain: entry.name,
+                fullPath: join(domainDir, file),
+                relativePath: join(entry.name, file)
+              });
+            }
           }
         }
       }
     }
 
-    // 2. Filter by search term (on path/filename)
-    // Note: We can't search inside file content efficiently without indexing, 
-    // so we search on the domain/filename for now.
-    if (search) {
-      allFiles = allFiles.filter(f => f.relativePath.toLowerCase().includes(search));
-    }
-
-    const total = allFiles.length;
+    const total = matchingFiles.length;
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const paginatedFiles = allFiles.slice(startIndex, endIndex);
+    const paginatedFiles = matchingFiles.slice(startIndex, endIndex);
 
-    // 3. Read content ONLY for the current page
+    // Read content ONLY for the current page
     const items = await Promise.all(paginatedFiles.map(async (f) => {
       try {
         const content = await readFile(f.fullPath, 'utf-8');
@@ -517,31 +695,7 @@ const excludePatterns = [
   '**/PBCPPlayer.asp**', '**/popup/**'
 ];
 
-// Simple glob matcher
-const matchesPattern = (url, pattern) => {
-  // Handle extension pattern specifically
-  if (pattern.includes('@(')) {
-    const extRegex = new RegExp(`\\.(${ignoredExtensions})([?#].*)?$`, 'i');
-    return extRegex.test(url);
-  }
 
-  // Convert simple globs to regex
-  // ** -> .*
-  // * -> [^/]* (but in URLs often we just want "contains", so let's be generous)
-
-  // Most patterns here are **/*something* or **/something**
-  // which basically means "contains substring"
-
-  const cleanPattern = pattern.replace(/\*\*\/\*/g, '').replace(/\*\*/g, '').replace(/\*/g, '');
-
-  // If pattern was just **/*str*, it becomes str.
-  // We check if URL includes str.
-  if (pattern.includes(cleanPattern)) {
-    return url.toLowerCase().includes(cleanPattern.toLowerCase());
-  }
-
-  return false;
-};
 
 app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
   const { id } = req.params;
