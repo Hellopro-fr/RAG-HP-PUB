@@ -321,7 +321,12 @@ const excludePatterns = [
   // === API ===
   '**/api/**', '**/wp-json/**', '**/rest/**',
   '**/feed/**', '**/feeds/**', '**/rss/**',
-  '**/PBCPPlayer.asp**', '**/popup/**'
+  '**/PBCPPlayer.asp**', '**/popup/**',
+  // === SPECIFIC SITE EXCLUDES (promodis.fr) ===
+  '**/download.php*', '**/dhtml/download.php*',
+  '**/*imp=1*',
+  // === SHOPIFY TRAPS ===
+  '**/collections/all*', '**/collections/vendors*', '**/collections/types*'
 ];
 
 // Unified matchesPattern function
@@ -381,7 +386,8 @@ app.get('/api/jobs/:id/request-queues', async (req, res) => {
       try {
         // Sanitize search term to prevent command injection
         const safeSearch = sanitizeSearchTerm(search);
-        const { stdout } = await execAsync(`grep -r -l -i "${safeSearch}" "${baseDir}" --include=*.json`);
+        // BusyBox grep doesn't support --include, so we use find + xargs
+        const { stdout } = await execAsync(`find "${baseDir}" -type f -name "*.json" -exec grep -l -i "${safeSearch}" {} +`);
 
         if (stdout) {
           const absolutePaths = stdout.trim().split('\n');
