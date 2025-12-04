@@ -245,12 +245,12 @@ app.get('/api/jobs/:id/details', async (req, res) => {
   }
 });
 
-// Helper to find the request_urls directory
-async function findRequestUrlsDir(jobId) {
+// Helper to find the request_queues directory
+async function findRequestQueuesDir(jobId) {
   // Check possible paths
   const paths = [
-    join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'request_urls'),
-    join(CRAWLER_STORAGE_PATH, jobId, 'request_urls')
+    join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'request_queues'),
+    join(CRAWLER_STORAGE_PATH, jobId, 'request_queues')
   ];
 
   for (const p of paths) {
@@ -259,10 +259,10 @@ async function findRequestUrlsDir(jobId) {
   return null;
 }
 
-app.get('/api/jobs/:id/request-urls', async (req, res) => {
+app.get('/api/jobs/:id/request-queues', async (req, res) => {
   const { id } = req.params;
   try {
-    const baseDir = await findRequestUrlsDir(id);
+    const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
       return res.json([]); // No directory found, return empty list
     }
@@ -275,13 +275,35 @@ app.get('/api/jobs/:id/request-urls', async (req, res) => {
       if (entry.isDirectory()) {
         const domainDir = join(baseDir, entry.name);
         const domainFiles = await readdir(domainDir);
+
+        // Read each file to get metadata
         for (const file of domainFiles) {
           if (file.endsWith('.json')) {
-            files.push({
-              name: file,
-              domain: entry.name,
-              path: join(entry.name, file) // Relative path for API usage
-            });
+            try {
+              const filePath = join(domainDir, file);
+              const content = await readFile(filePath, 'utf-8');
+              const data = JSON.parse(content);
+
+              files.push({
+                name: file,
+                domain: entry.name,
+                path: join(entry.name, file),
+                url: data.url,
+                method: data.method,
+                retryCount: data.retryCount,
+                errorMessages: data.errorMessages
+              });
+            } catch (err) {
+              console.error(`Error reading queue file ${file}:`, err);
+              // Add basic info if read fails
+              files.push({
+                name: file,
+                domain: entry.name,
+                path: join(entry.name, file),
+                url: 'Error reading file',
+                method: 'UNKNOWN'
+              });
+            }
           }
         }
       }
@@ -289,17 +311,17 @@ app.get('/api/jobs/:id/request-urls', async (req, res) => {
 
     res.json(files);
   } catch (error) {
-    console.error(`Error listing request urls for job ${id}:`, error);
-    res.status(500).json({ error: 'Failed to list request urls' });
+    console.error(`Error listing request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to list request queues' });
   }
 });
 
-app.get('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
+app.get('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   const { id, domain, filename } = req.params;
   try {
-    const baseDir = await findRequestUrlsDir(id);
+    const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.status(404).json({ error: 'Request URLs directory not found' });
+      return res.status(404).json({ error: 'Request queues directory not found' });
     }
 
     const filePath = normalize(join(baseDir, domain, filename));
@@ -316,19 +338,19 @@ app.get('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
     const content = await readFile(filePath, 'utf-8');
     res.json(JSON.parse(content));
   } catch (error) {
-    console.error(`Error reading request url file ${filename}:`, error);
+    console.error(`Error reading request queue file ${filename}:`, error);
     res.status(500).json({ error: 'Failed to read file' });
   }
 });
 
-app.post('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   const { id, domain, filename } = req.params;
   const content = req.body;
 
   try {
-    const baseDir = await findRequestUrlsDir(id);
+    const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.status(404).json({ error: 'Request URLs directory not found' });
+      return res.status(404).json({ error: 'Request queues directory not found' });
     }
 
     const filePath = normalize(join(baseDir, domain, filename));
@@ -341,7 +363,7 @@ app.post('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
     await writeFile(filePath, JSON.stringify(content, null, 2), 'utf-8');
     res.json({ success: true });
   } catch (error) {
-    console.error(`Error saving request url file ${filename}:`, error);
+    console.error(`Error saving request queue file ${filename}:`, error);
     res.status(500).json({ error: 'Failed to save file' });
   }
 });
