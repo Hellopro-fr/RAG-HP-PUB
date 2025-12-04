@@ -437,21 +437,165 @@ app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
                     deletedCount++;
                   }
                 } catch (e) {
-                  console.warn(`[Repair] Invalid URL format in file ${file}: ${data.url}`);
+                  // Invalid URL, ignore or delete? Let's ignore for now
                 }
               }
             } catch (err) {
-              console.error(`[Repair] Error processing file ${file}:`, err);
+              console.error(`Error processing file ${file} for repair:`, err);
             }
           }
         }
       }
     }
 
-    res.json({ success: true, scanned: scannedCount, deleted: deletedCount });
+    res.json({ scanned: scannedCount, deleted: deletedCount });
   } catch (error) {
     console.error(`Error repairing request queues for job ${id}:`, error);
     res.status(500).json({ error: 'Failed to repair request queues' });
+  }
+});
+
+// --- Pattern Cleaning Feature ---
+
+const ignoredExtensions = [
+  "7z", "7zip", "bz2", "rar", "tar", "tar.gz", "xz", "zip",
+  "mng", "pct", "bmp", "gif", "jpg", "jpeg", "png", "pst", "psp", "tif", "tiff", "ai", "drw", "dxf", "eps", "ps", "svg", "cdr", "ico", "webp",
+  "mp3", "wma", "ogg", "wav", "ra", "aac", "mid", "au", "aiff",
+  "3gp", "asf", "asx", "avi", "mov", "mp4", "mpg", "qt", "rm", "swf", "wmv", "m4a", "m4v", "flv", "webm",
+  "xls", "xlsx", "ppt", "pptx", "pps", "doc", "docx", "odt", "ods", "odg", "odp",
+  "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml"
+].join("|");
+
+const excludePatterns = [
+  `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
+  // === SPIDER TRAPS E-COMMERCE ===
+  '**/*order=*', '**/*sort=*', '**/*dir=*', '**/*limit=*',
+  '**/*resultsPerPage=*', '**/*filter=*', '**/*filters[*',
+  '**/*price=*', '**/*price_min=*', '**/*price_max=*',
+  '**/*id_category=*', '**/*categoryId=*', '**/*productListView=*',
+  '**/*q=*', '**/*search=*', '**/*query=*',
+  '**/*page=*/**/*page=*', '**/*offset=*', '**/*start=*',
+  '**/*view=*', '**/*mode=*', '**/*display=*', '**/*per_page=*', '**/*items=*',
+  // === AUTH & ACCOUNT ===
+  '**/connexion**', '**/login**', '**/signin**', '**/log-in**',
+  '**/register**', '**/signup**', '**/inscription**',
+  '**/account**', '**/mon-compte**', '**/my-account**',
+  '**/profile**', '**/profil**',
+  '**/password**', '**/mot-de-passe**', '**/reset-password**',
+  '**/logout**', '**/deconnexion**',
+  '**/forgot-password**', '**/oubli-mot-de-passe**',
+  '**/customer/account/**', '**/customer/**',
+  // === SHOPPING ===
+  '**/panier**', '**/cart**', '**/basket**',
+  '**/checkout**', '**/commande**', '**/order**',
+  '**/add-to-cart**', '**/addtocart**',
+  '**/payment**', '**/paiement**',
+  '**/shipping**', '**/livraison**',
+  '**/confirmation**',
+  '**/quotation/**', '**/devis/**',
+  // === USER ACTIONS ===
+  '**/wishlist**', '**/liste-envies**', '**/favoris**',
+  '**/compare**', '**/comparateur**',
+  '**/sendtoafriend**', '**/send-to-friend**',
+  '**/catalog/product/view/**',
+  // === CALENDAR ===
+  '**/*year=*', '**/*month=*', '**/*day=*',
+  '**/*date=*', '**/*from=*', '**/*to=*',
+  '**/calendrier/**', '**/calendar/**',
+  // === SOCIAL ===
+  '**/*facebook*', '**/*twitter*', '**/*linkedin*',
+  '**/*instagram*', '**/*youtube*', '**/*pinterest*',
+  '**/*tiktok*', '**/*whatsapp*',
+  '**/*share*', '**/*partager*',
+  '**/mailto:*', '**/tel:*', '**/*://t.me/*',
+  // === TRACKING ===
+  '**/*redirect*', '**/*track*', '**/*click*',
+  '**/*ref=*', '**/*referrer=*', '**/*source=*',
+  // === API ===
+  '**/api/**', '**/wp-json/**', '**/rest/**',
+  '**/feed/**', '**/feeds/**', '**/rss/**',
+  '**/PBCPPlayer.asp**', '**/popup/**'
+];
+
+// Simple glob matcher
+const matchesPattern = (url, pattern) => {
+  // Handle extension pattern specifically
+  if (pattern.includes('@(')) {
+    const extRegex = new RegExp(`\\.(${ignoredExtensions})([?#].*)?$`, 'i');
+    return extRegex.test(url);
+  }
+
+  // Convert simple globs to regex
+  // ** -> .*
+  // * -> [^/]* (but in URLs often we just want "contains", so let's be generous)
+
+  // Most patterns here are **/*something* or **/something**
+  // which basically means "contains substring"
+
+  const cleanPattern = pattern.replace(/\*\*\/\*/g, '').replace(/\*\*/g, '').replace(/\*/g, '');
+
+  // If pattern was just **/*str*, it becomes str.
+  // We check if URL includes str.
+  if (pattern.includes(cleanPattern)) {
+    return url.toLowerCase().includes(cleanPattern.toLowerCase());
+  }
+
+  return false;
+};
+
+app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestQueuesDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request queues directory not found' });
+    }
+
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    let deletedCount = 0;
+    let scannedCount = 0;
+    const { unlink } = await import('fs/promises');
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const domainDir = join(baseDir, entry.name);
+        const domainFiles = await readdir(domainDir);
+
+        for (const file of domainFiles) {
+          if (file.endsWith('.json')) {
+            scannedCount++;
+            try {
+              const filePath = join(domainDir, file);
+              const content = await readFile(filePath, 'utf-8');
+              const data = JSON.parse(content);
+
+              if (data.url) {
+                let matched = false;
+                for (const pattern of excludePatterns) {
+                  if (matchesPattern(data.url, pattern)) {
+                    matched = true;
+                    console.log(`[Clean] Deleting pattern match: ${data.url} (Pattern: ${pattern})`);
+                    break;
+                  }
+                }
+
+                if (matched) {
+                  await unlink(filePath);
+                  deletedCount++;
+                }
+              }
+            } catch (err) {
+              console.error(`Error processing file ${file} for cleaning:`, err);
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ scanned: scannedCount, deleted: deletedCount });
+  } catch (error) {
+    console.error(`Error cleaning request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to clean request queues' });
   }
 });
 
