@@ -105,14 +105,6 @@ const ignoredExtensions = [
     "xml",
 ].join("|");
 
-const socialDomains = [
-    "facebook.com", "twitter.com", "x.com", "linkedin.com",
-    "instagram.com", "youtube.com", "pinterest.com",
-    "tiktok.com", "whatsapp.com", "t.me", "telegram.org",
-    "snapchat.com", "reddit.com", "discord.com",
-    "dailymotion.com", "vimeo.com", "twitch.tv"
-];
-
 const domainFR = new DomainFR("");
 
 router.addDefaultHandler(
@@ -196,7 +188,7 @@ router.addDefaultHandler(
             '**/wishlist**', '**/liste-envies**', '**/favoris**',
             '**/compare**', '**/comparateur**',
             '**/sendtoafriend**', '**/send-to-friend**',
-            '**/catalog/product/view/**', // Technical duplicates
+            // '**/catalog/product/view/**', // REMOVED: False positive for some Magento sites
 
             // === CALENDRIERS & DATES ===
             '**/*year=*', '**/*month=*', '**/*day=*',
