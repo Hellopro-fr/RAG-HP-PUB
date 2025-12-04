@@ -30,6 +30,9 @@ if (!REDIS_URL) {
   process.exit(1);
 }
 
+const app = express();
+const server = createServer(app);
+
 app.get('/api/jobs/:id/request-queues', async (req, res) => {
   const { id } = req.params;
   const page = parseInt(req.query.page) || 1;
