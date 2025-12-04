@@ -261,55 +261,84 @@ async function findRequestQueuesDir(jobId) {
 
 app.get('/api/jobs/:id/request-queues', async (req, res) => {
   const { id } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 50;
+  const search = (req.query.search || '').toLowerCase();
+
   try {
     const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.json([]); // No directory found, return empty list
+      return res.json({ items: [], total: 0, page, limit });
     }
 
     const entries = await readdir(baseDir, { withFileTypes: true });
-    const files = [];
+    let allFiles = [];
 
-    // Iterate over domain directories
+    // 1. Collect all file paths first (without reading content)
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const domainDir = join(baseDir, entry.name);
         const domainFiles = await readdir(domainDir);
 
-        // Read each file to get metadata
         for (const file of domainFiles) {
           if (file.endsWith('.json')) {
-            try {
-              const filePath = join(domainDir, file);
-              const content = await readFile(filePath, 'utf-8');
-              const data = JSON.parse(content);
-
-              files.push({
-                name: file,
-                domain: entry.name,
-                path: join(entry.name, file),
-                url: data.url,
-                method: data.method,
-                retryCount: data.retryCount,
-                errorMessages: data.errorMessages
-              });
-            } catch (err) {
-              console.error(`Error reading queue file ${file}:`, err);
-              // Add basic info if read fails
-              files.push({
-                name: file,
-                domain: entry.name,
-                path: join(entry.name, file),
-                url: 'Error reading file',
-                method: 'UNKNOWN'
-              });
-            }
+            allFiles.push({
+              name: file,
+              domain: entry.name,
+              fullPath: join(domainDir, file),
+              relativePath: join(entry.name, file)
+            });
           }
         }
       }
     }
 
-    res.json(files);
+    // 2. Filter by search term (on path/filename)
+    // Note: We can't search inside file content efficiently without indexing, 
+    // so we search on the domain/filename for now.
+    if (search) {
+      allFiles = allFiles.filter(f => f.relativePath.toLowerCase().includes(search));
+    }
+
+    const total = allFiles.length;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedFiles = allFiles.slice(startIndex, endIndex);
+
+    // 3. Read content ONLY for the current page
+    const items = await Promise.all(paginatedFiles.map(async (f) => {
+      try {
+        const content = await readFile(f.fullPath, 'utf-8');
+        const data = JSON.parse(content);
+        return {
+          name: f.name,
+          domain: f.domain,
+          path: f.relativePath,
+          url: data.url,
+          method: data.method,
+          retryCount: data.retryCount,
+          errorMessages: data.errorMessages
+        };
+      } catch (err) {
+        console.error(`Error reading queue file ${f.name}:`, err);
+        return {
+          name: f.name,
+          domain: f.domain,
+          path: f.relativePath,
+          url: 'Error reading file',
+          method: 'UNKNOWN'
+        };
+      }
+    }));
+
+    res.json({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    });
+
   } catch (error) {
     console.error(`Error listing request queues for job ${id}:`, error);
     res.status(500).json({ error: 'Failed to list request queues' });

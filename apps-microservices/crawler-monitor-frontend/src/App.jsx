@@ -359,6 +359,12 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [successMsg, setSuccessMsg] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [limit] = useState(50);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+
   const authFetch = async (url, options = {}) => {
     const headers = {
       ...options.headers,
@@ -374,14 +380,31 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
 
   useEffect(() => {
     fetchFiles();
-  }, [jobId]);
+  }, [jobId, page, searchTerm]); // Refetch on page or search change
 
   const fetchFiles = async () => {
     setLoading(true);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues`);
+      const query = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        search: searchTerm
+      });
+
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues?${query}`);
       const data = await res.json();
-      setFiles(data);
+
+      // Handle paginated response
+      if (data.items) {
+        setFiles(data.items);
+        setTotalPages(data.totalPages);
+        setTotalItems(data.total);
+      } else {
+        // Fallback for old API structure (array)
+        setFiles(Array.isArray(data) ? data : []);
+        setTotalPages(1);
+        setTotalItems(Array.isArray(data) ? data.length : 0);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -467,10 +490,11 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     }
   };
 
-  const filteredFiles = files.filter(file =>
-    (file.url && file.url.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (file.name && file.name.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Search is now handled server-side via fetchFiles
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setPage(1); // Reset to first page on search
+  };
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -499,19 +523,23 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
           {/* Sidebar list */}
           <div className="w-1/3 border-r border-gray-700 flex flex-col">
             <div className="p-3 bg-gray-900 border-b border-gray-700 space-y-2">
-              <h4 className="text-sm font-semibold text-gray-400">Requêtes ({filteredFiles.length})</h4>
+              <div className="flex justify-between items-center">
+                <h4 className="text-sm font-semibold text-gray-400">Requêtes ({totalItems})</h4>
+                <span className="text-xs text-gray-500">Page {page}/{totalPages}</span>
+              </div>
               <input
                 type="text"
                 placeholder="Rechercher URL..."
                 className="w-full bg-gray-800 text-white text-xs p-2 rounded border border-gray-700 focus:border-blue-500 outline-none"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
               />
             </div>
+
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {loading && !selectedFile && <div className="text-center p-4"><RefreshCw className="animate-spin mx-auto" /></div>}
               {files.length === 0 && !loading && <div className="text-center p-4 text-gray-500">Aucune requête trouvée</div>}
-              {filteredFiles.map(file => (
+              {files.map(file => (
                 <button
                   key={file.path}
                   onClick={() => loadFile(file)}
@@ -530,6 +558,27 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                   </div>
                 </button>
               ))}
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="p-2 bg-gray-900 border-t border-gray-700 flex justify-between items-center">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+                className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent text-white"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <span className="text-xs text-gray-400">
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages || loading}
+                className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent text-white"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
             </div>
           </div>
 
