@@ -226,7 +226,23 @@ router.addDefaultHandler(
             '**/download.php**',   // BLOQUER les downloads
             '**/*imp=1*',          // BLOQUER les versions print
             '**/dhtml/download.php*',
-            '**/*.pdf', '**/*.zip', '**/*.rar', '**/*.doc', '**/*.docx', '**/*.xls', '**/*.xlsx'
+            '**/*.pdf', '**/*.zip', '**/*.rar', '**/*.doc', '**/*.docx', '**/*.xls', '**/*.xlsx',
+
+            // === SPECIFIC SITE EXCLUDES (SHOPIFY SPIDER TRAPS) ===
+            // Filters combinations (infinite loops)
+            '**/collections/*/*+*', // Block multiple tags (e.g. /collections/all/red+blue)
+            '**/collections/*/*%2B*', // Block encoded '+'
+            '**/collections/*/*&*', // Block other combinations
+
+            // Common Shopify filters
+            '**/*size_*', '**/*taille_*',
+            '**/*color_*', '**/*couleur_*',
+            '**/*price_*', '**/*prix_*',
+            '**/*brand_*', '**/*marque_*',
+            '**/*type_*', '**/*vendor_*',
+
+            // Sort & View parameters often found in Shopify
+            '**/*sort_by=*', '**/*view=*',
         ];
 
         // Not useful anymore as we analyze the URL to check which parameters to keep or to remove

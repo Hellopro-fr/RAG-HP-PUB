@@ -468,6 +468,28 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     }
   };
 
+  const cleanPatterns = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir nettoyer les patterns ? Cela supprimera les URLs correspondant aux filtres (login, cart, facebook, etc.).')) {
+      return;
+    }
+
+    setRepairing(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/clean-patterns`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      setSuccessMsg(`Nettoyage patterns terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
+      fetchFiles(); // Refresh list
+    } catch (err) {
+      setError(`Erreur lors du nettoyage patterns : ${err.message}`);
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   const repairQueue = async () => {
     if (!window.confirm('Êtes-vous sûr de vouloir nettoyer la queue ? Cela supprimera toutes les URLs qui ne correspondent pas au domaine cible.')) {
       return;
@@ -504,6 +526,15 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
             <Code className="w-5 h-5" /> Éditeur Request Queue
           </h3>
           <div className="flex items-center gap-4">
+            <button
+              onClick={cleanPatterns}
+              disabled={repairing || loading}
+              className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 rounded text-sm text-white disabled:opacity-50 transition-colors"
+              title="Supprimer les patterns exclus (login, cart, etc.)"
+            >
+              {repairing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Filter className="w-4 h-4" />}
+              Nettoyer Patterns
+            </button>
             <button
               onClick={repairQueue}
               disabled={repairing || loading}
