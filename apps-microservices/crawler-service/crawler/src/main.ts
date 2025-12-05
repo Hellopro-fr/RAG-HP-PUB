@@ -3,6 +3,9 @@ import axios from "axios";
 import fs from "fs/promises"; // Added for file system operations
 import { createClient } from 'redis';
 import os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
 import { router } from "./routes.js";
 import {
     getPathAfterDomain,
@@ -73,6 +76,35 @@ attachFSLogger(nameLogs); // Logs will now be created inside the job's storagePa
 
 console.info("Crawler starting with arguments:");
 console.info(JSON.stringify(args, null, 2));
+
+// --- PRE-FLIGHT CHECKS ---
+// 1. Kill orphan processes from previous runs
+console.log('🧹 Checking for orphan browser processes...');
+try {
+    // Kill Chrome/Chromium processes (|| true prevents error if no processes found)
+    await execAsync('pkill -9 -f "chrome|chromium" || true');
+    await execAsync('pkill -9 -f "playwright" || true');
+    console.log('✅ Orphan processes cleaned.');
+} catch (e) {
+    console.warn('⚠️  Could not clean orphan processes:', e);
+}
+
+// 2. Check available memory
+const totalMem = os.totalmem();
+const freeMem = os.freemem();
+const usedMem = totalMem - freeMem;
+const memPercent = (usedMem / totalMem) * 100;
+
+console.log(`💾 Memory status: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)}GB / ${(totalMem / 1024 / 1024 / 1024).toFixed(2)}GB (${memPercent.toFixed(1)}% used)`);
+
+if (memPercent > 80) {
+    console.error(`❌ Memory critically low: ${memPercent.toFixed(1)}% used. Aborting to prevent OOM.`);
+    console.error(`   Free memory: ${(freeMem / 1024 / 1024 / 1024).toFixed(2)}GB`);
+    process.exit(1);
+}
+
+console.log('✅ Pre-flight checks passed. Starting crawler...');
+// --- END PRE-FLIGHT CHECKS ---
 
 // --- Heartbeat Mechanism ---
 const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
@@ -207,7 +239,7 @@ if (typeCrawling === "generate_data") {
     await reclaimFailedRequest(domain);
 
     // Launch the crawler
-    await startCrawler(
+    const crawler = await startCrawler(
         router,
         [site],
         domain,
@@ -220,6 +252,27 @@ if (typeCrawling === "generate_data") {
         skipquestionmark, // Ensure it's passed as string
         skipdiez
     );
+
+    // CLEANUP HOOKS: Ensure browsers are properly terminated on shutdown
+    process.on('SIGTERM', async () => {
+        console.log('SIGTERM received, cleaning up browsers...');
+        try {
+            await crawler.teardown();
+        } catch (e) {
+            console.error('Error during teardown:', e);
+        }
+        process.exit(0);
+    });
+
+    process.on('SIGINT', async () => {
+        console.log('SIGINT received, cleaning up browsers...');
+        try {
+            await crawler.teardown();
+        } catch (e) {
+            console.error('Error during teardown:', e);
+        }
+        process.exit(0);
+    });
 }
 
 // --- Finalization and Callback ---
