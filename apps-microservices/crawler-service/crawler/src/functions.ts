@@ -370,7 +370,11 @@ export const startCrawler = async (
                     (!bypassQuestionMark && !skipquestionmark) ||
                     (!bypassDiez && !skipdiez)
                 ) {
-                    const data = await getScrapingData(domain);
+                    // OPTIMIZATION: Load dataset in batches of 1000 instead of loading everything
+                    const dataset = await Dataset.open(domain);
+                    const info = await dataset.getInfo();
+                    const totalItems = info ? info.itemCount : 0;
+
                     const patternQuestionMark = new RegExp(
                         `(?:/[^?]*)?\\?.*$`
                     );
@@ -379,16 +383,39 @@ export const startCrawler = async (
                     );
                     let countQuestionMark = 0;
                     let countDiez = 0;
+                    let offset = 0;
+                    const batchSize = 1000;
 
-                    for (const item of data.items) {
-                        if (patternQuestionMark.test(item.url)) {
-                            countQuestionMark++;
+                    // Iterate through dataset in batches
+                    while (offset < totalItems) {
+                        const batch = await dataset.getData({
+                            offset,
+                            limit: batchSize
+                        });
+
+                        for (const item of batch.items) {
+                            if (patternQuestionMark.test(item.url)) {
+                                countQuestionMark++;
+                            }
+
+                            if (patternDiez.test(item.url)) {
+                                countDiez++;
+                            }
+
+                            // Early exit if limit reached
+                            if (
+                                (!bypassQuestionMark &&
+                                    !skipquestionmark &&
+                                    countQuestionMark >= limitQuestionMarkDiez) ||
+                                (!bypassDiez &&
+                                    !skipdiez &&
+                                    countDiez >= limitQuestionMarkDiez)
+                            ) {
+                                break;
+                            }
                         }
 
-                        if (patternDiez.test(item.url)) {
-                            countDiez++;
-                        }
-
+                        // Check limits after each batch
                         if (
                             !bypassQuestionMark &&
                             !skipquestionmark &&
@@ -412,6 +439,8 @@ export const startCrawler = async (
                             );
                             break;
                         }
+
+                        offset += batchSize;
                     }
                 }
             },
