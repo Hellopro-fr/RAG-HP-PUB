@@ -1405,6 +1405,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 
             prompt, temperature = await self.build_prompt_async(product_for_prompt, categories, category_info, similar_products)
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking, temperature=temperature)
+            print(prompt)
 
             # Vérifier si l'appel LLM a échoué
             if not llm_result_wrapper.get('success', False):
