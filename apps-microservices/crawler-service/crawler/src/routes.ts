@@ -112,9 +112,40 @@ router.addDefaultHandler(
         const proxyUrl = proxyInfo?.url || null;
 
         // Block resources to save bandwidth and CPU
-        await page.route('**/*.{png,jpg,jpeg,gif,webp,svg,css,woff,woff2,ttf,eot,mp4,mp3}', route => route.abort());
+        await page.route('**/*', (route) => {
+            const request = route.request();
+            const resourceType = request.resourceType();
+            const url = request.url();
+
+            // Block heavy media and fonts
+            if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+                return route.abort();
+            }
+
+            // Block download scripts and binary files
+            if (url.includes('download.php') || url.includes('imp=1') || url.match(/\.(pdf|zip|rar|doc|docx|xls|xlsx)$/i)) {
+                return route.abort();
+            }
+
+            return route.continue();
+        });
 
         let url = request.loadedUrl;
+
+        // CRITICAL SECURITY: Check if the loaded URL is still on the target domain
+        // This handles cases where a valid internal link redirects to an external site (e.g. Facebook)
+        // If we don't check this, the crawler might start crawling the external site.
+        const urlObj = new URL(url);
+        const targetDomain = domain; // Imported from main.js
+
+        // Check if hostname ends with the target domain (handles subdomains too)
+        // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
+        // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
+        if (!urlObj.hostname.includes(targetDomain)) {
+            log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            return;
+        }
+
         let enqueueLinksExcludePath: Array<string> = [
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
             // === SPIDER TRAPS E-COMMERCE (STRICT EXCLUDES) ===
@@ -157,7 +188,7 @@ router.addDefaultHandler(
             '**/wishlist**', '**/liste-envies**', '**/favoris**',
             '**/compare**', '**/comparateur**',
             '**/sendtoafriend**', '**/send-to-friend**',
-            '**/catalog/product/view/**', // Technical duplicates
+            // '**/catalog/product/view/**', // REMOVED: False positive for some Magento sites
 
             // === CALENDRIERS & DATES ===
             '**/*year=*', '**/*month=*', '**/*day=*',
@@ -182,6 +213,28 @@ router.addDefaultHandler(
             // === SPECIFIC SITE EXCLUDES (sellerie-equishop) ===
             '**/PBCPPlayer.asp**', // Heavy video player
             '**/popup/**',
+
+            // === SPECIFIC SITE EXCLUDES (promodis.fr) ===
+            '**/download.php**',   // BLOQUER les downloads
+            '**/*imp=1*',          // BLOQUER les versions print
+            '**/dhtml/download.php*',
+            '**/*.pdf', '**/*.zip', '**/*.rar', '**/*.doc', '**/*.docx', '**/*.xls', '**/*.xlsx',
+
+            // === SPECIFIC SITE EXCLUDES (SHOPIFY SPIDER TRAPS) ===
+            // Filters combinations (infinite loops)
+            '**/collections/*/*+*', // Block multiple tags (e.g. /collections/all/red+blue)
+            '**/collections/*/*%2B*', // Block encoded '+'
+            '**/collections/*/*&*', // Block other combinations
+
+            // Common Shopify filters
+            '**/*size_*', '**/*taille_*',
+            '**/*color_*', '**/*couleur_*',
+            '**/*price_*', '**/*prix_*',
+            '**/*brand_*', '**/*marque_*',
+            '**/*type_*', '**/*vendor_*',
+
+            // Sort & View parameters often found in Shopify
+            '**/*sort_by=*', '**/*view=*',
         ];
 
         // Not useful anymore as we analyze the URL to check which parameters to keep or to remove
@@ -297,18 +350,31 @@ router.addDefaultHandler(
                             return null;
                         }
 
-                        // HARD SECURITY: Explicitly block social media and external platforms
-                        // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
-                        const socialDomains = [
-                            "facebook.com", "twitter.com", "x.com", "linkedin.com",
-                            "instagram.com", "youtube.com", "pinterest.com",
-                            "tiktok.com", "whatsapp.com", "t.me", "telegram.org",
-                            "snapchat.com", "reddit.com", "discord.com",
-                            "dailymotion.com", "vimeo.com", "twitch.tv"
-                        ];
+                        // PREVENTIVE SPIDER TRAP BLOCKING (Before other checks)
+                        // Block nested cart/quotation URLs that create infinite loops
+                        if (request.url.includes('/quotation/cart/') ||
+                            request.url.includes('/cart/cart/') ||
+                            request.url.includes('/catalog/product_compare/')) {
+                            console.log(`Blocked spider trap: ${request.url}`);
+                            return null;
+                        }
 
-                        if (socialDomains.some(domain => request.url.includes(domain))) {
-                            console.log(`Blocked social media URL: ${request.url}`);
+                        // Block URLs with long base64-encoded segments (often dynamic/infinite)
+                        if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
+                            console.log(`Blocked base64 URL: ${request.url}`);
+                            return null;
+                        }
+
+                        // HARD SECURITY: Explicitly block ANY URL that is not on the target domain
+                        // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
+                        try {
+                            const reqUrlObj = new URL(request.url);
+                            if (!reqUrlObj.hostname.includes(domain)) {
+                                console.log(`Blocked external URL: ${request.url}`);
+                                return null;
+                            }
+                        } catch (e) {
+                            console.error(`Invalid URL in transformRequestFunction: ${request.url}`);
                             return null;
                         }
 

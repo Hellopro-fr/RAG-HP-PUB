@@ -3,6 +3,9 @@ import axios from "axios";
 import fs from "fs/promises"; // Added for file system operations
 import { createClient } from 'redis';
 import os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
 import { router } from "./routes.js";
 import {
     getPathAfterDomain,
@@ -73,6 +76,72 @@ attachFSLogger(nameLogs); // Logs will now be created inside the job's storagePa
 
 console.info("Crawler starting with arguments:");
 console.info(JSON.stringify(args, null, 2));
+
+// --- PRE-FLIGHT CHECKS ---
+// 1. Kill orphan processes from previous runs
+console.log('🧹 Checking for orphan browser processes...');
+try {
+    // Kill Chrome/Chromium processes (ignore errors if no processes found)
+    await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true', { timeout: 5000 });
+    await execAsync('pkill -9 -f "playwright" 2>/dev/null || true', { timeout: 5000 });
+    console.log('✅ Orphan processes cleaned.');
+} catch (e: any) {
+    // Ignore expected errors (no processes found, timeout, SIGKILL)
+    if (e.code !== 'ETIMEDOUT' && e.signal !== 'SIGKILL') {
+        console.warn('⚠️  Could not clean orphan processes:', e.message);
+    } else {
+        console.log('✅ No orphan processes found.');
+    }
+}
+
+// 2. Check available memory (Docker container limits, not host VM)
+let totalMem: number;
+let freeMem: number;
+
+try {
+    // Try to read Docker container memory limit from cgroups v2
+    const cgroupMemMax = await fs.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
+    const cgroupMemCurrent = await fs.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
+
+    if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
+        // cgroups v2 (Docker with cgroups v2)
+        totalMem = parseInt(cgroupMemMax.trim());
+        const usedMem = parseInt(cgroupMemCurrent.trim());
+        freeMem = totalMem - usedMem;
+    } else {
+        // Try cgroups v1 (older Docker versions)
+        const cgroupMemLimitV1 = await fs.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
+        const cgroupMemUsageV1 = await fs.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
+
+        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
+            totalMem = parseInt(cgroupMemLimitV1.trim());
+            const usedMem = parseInt(cgroupMemUsageV1.trim());
+            freeMem = totalMem - usedMem;
+        } else {
+            // Fallback to host memory (not in Docker or cgroups not available)
+            totalMem = os.totalmem();
+            freeMem = os.freemem();
+        }
+    }
+} catch (e) {
+    // Fallback to host memory if cgroup reading fails
+    totalMem = os.totalmem();
+    freeMem = os.freemem();
+}
+
+const usedMem = totalMem - freeMem;
+const memPercent = (usedMem / totalMem) * 100;
+
+console.log(`💾 Memory status: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)}GB / ${(totalMem / 1024 / 1024 / 1024).toFixed(2)}GB (${memPercent.toFixed(1)}% used)`);
+
+if (memPercent > 80) {
+    console.error(`❌ Memory critically low: ${memPercent.toFixed(1)}% used. Aborting to prevent OOM.`);
+    console.error(`   Free memory: ${(freeMem / 1024 / 1024 / 1024).toFixed(2)}GB`);
+    process.exit(1);
+}
+
+console.log('✅ Pre-flight checks passed. Starting crawler...');
+// --- END PRE-FLIGHT CHECKS ---
 
 // --- Heartbeat Mechanism ---
 const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
@@ -207,7 +276,7 @@ if (typeCrawling === "generate_data") {
     await reclaimFailedRequest(domain);
 
     // Launch the crawler
-    await startCrawler(
+    const crawler = await startCrawler(
         router,
         [site],
         domain,
@@ -220,6 +289,27 @@ if (typeCrawling === "generate_data") {
         skipquestionmark, // Ensure it's passed as string
         skipdiez
     );
+
+    // CLEANUP HOOKS: Ensure browsers are properly terminated on shutdown
+    process.on('SIGTERM', async () => {
+        console.log('SIGTERM received, cleaning up browsers...');
+        try {
+            await crawler.teardown();
+        } catch (e) {
+            console.error('Error during teardown:', e);
+        }
+        process.exit(0);
+    });
+
+    process.on('SIGINT', async () => {
+        console.log('SIGINT received, cleaning up browsers...');
+        try {
+            await crawler.teardown();
+        } catch (e) {
+            console.error('Error during teardown:', e);
+        }
+        process.exit(0);
+    });
 }
 
 // --- Finalization and Callback ---
