@@ -358,16 +358,6 @@ export const startCrawler = async (
                             `We have reached the limit of ${limitUrls} entries. The crawler will be stopped.`
                         );
                     }
-
-                    // QUEUE SIZE LIMIT: Prevent spider traps from filling the queue infinitely
-                    const queueInfo = await requestQueue.getInfo();
-                    const maxQueueSize = 100000; // 100k URLs max
-                    if (queueInfo && queueInfo.totalRequestCount > maxQueueSize) {
-                        await stopCrawler(
-                            crawler,
-                            `Queue too large: ${queueInfo.totalRequestCount} URLs (max: ${maxQueueSize}). Possible spider trap detected.`
-                        );
-                    }
                 }
             },
         ],
