@@ -350,6 +350,21 @@ router.addDefaultHandler(
                             return null;
                         }
 
+                        // PREVENTIVE SPIDER TRAP BLOCKING (Before other checks)
+                        // Block nested cart/quotation URLs that create infinite loops
+                        if (request.url.includes('/quotation/cart/') ||
+                            request.url.includes('/cart/cart/') ||
+                            request.url.includes('/catalog/product_compare/')) {
+                            console.log(`Blocked spider trap: ${request.url}`);
+                            return null;
+                        }
+
+                        // Block URLs with long base64-encoded segments (often dynamic/infinite)
+                        if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
+                            console.log(`Blocked base64 URL: ${request.url}`);
+                            return null;
+                        }
+
                         // HARD SECURITY: Explicitly block ANY URL that is not on the target domain
                         // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
                         try {
