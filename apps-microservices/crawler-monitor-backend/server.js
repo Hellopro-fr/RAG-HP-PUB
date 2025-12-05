@@ -1,10 +1,14 @@
 import 'dotenv/config';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+const execAsync = promisify(exec);
+
 import express from 'express';
 import cors from 'cors';
 import { createClient } from 'redis';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { readFile, readdir, writeFile, stat } from 'fs/promises';
+import { readFile, readdir, writeFile, unlink } from 'fs/promises';
 import { join, normalize } from 'path';
 import { existsSync } from 'fs';
 import helmet from 'helmet';
@@ -130,7 +134,7 @@ function parseLogFile(content) {
       errors.push(match[1].trim());
     }
 
-    // 3. Extraire les warnings (REGEX CORRIGÉ)
+    // 3. Extraire les warnings
     const warnings = [];
     const warnRegex = /\[stderr\]\s*WARN[^\n]*:\s*([^\n]+)/g;
     while ((match = warnRegex.exec(content)) !== null) {
@@ -144,7 +148,7 @@ function parseLogFile(content) {
       errors,
       warnings,
       rawContent: content,
-      hasStats: !!stats // Indicateur pour le frontend
+      hasStats: !!stats
     };
   } catch (error) {
     console.error('Error parsing log:', error);
@@ -245,12 +249,12 @@ app.get('/api/jobs/:id/details', async (req, res) => {
   }
 });
 
-// Helper to find the request_urls directory
-async function findRequestUrlsDir(jobId) {
+// Helper to find the request_queues directory
+async function findRequestQueuesDir(jobId) {
   // Check possible paths
   const paths = [
-    join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'request_urls'),
-    join(CRAWLER_STORAGE_PATH, jobId, 'request_urls')
+    join(CRAWLER_STORAGE_PATH, jobId, 'storage', 'request_queues'),
+    join(CRAWLER_STORAGE_PATH, jobId, 'request_queues')
   ];
 
   for (const p of paths) {
@@ -259,47 +263,226 @@ async function findRequestUrlsDir(jobId) {
   return null;
 }
 
-app.get('/api/jobs/:id/request-urls', async (req, res) => {
+// --- Pattern Matching ---
+
+const ignoredExtensions = [
+  "7z", "7zip", "bz2", "rar", "tar", "tar.gz", "xz", "zip",
+  "mng", "pct", "bmp", "gif", "jpg", "jpeg", "png", "pst", "psp", "tif", "tiff", "ai", "drw", "dxf", "eps", "ps", "svg", "cdr", "ico", "webp",
+  "mp3", "wma", "ogg", "wav", "ra", "aac", "mid", "au", "aiff",
+  "3gp", "asf", "asx", "avi", "mov", "mp4", "mpg", "qt", "rm", "swf", "wmv", "m4a", "m4v", "flv", "webm",
+  "xls", "xlsx", "ppt", "pptx", "pps", "doc", "docx", "odt", "ods", "odg", "odp",
+  "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml"
+].join("|");
+
+const excludePatterns = [
+  `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
+  // === SPIDER TRAPS E-COMMERCE ===
+  '**/*order=*', '**/*sort=*', '**/*dir=*', '**/*limit=*',
+  '**/*resultsPerPage=*', '**/*filter=*', '**/*filters[*',
+  '**/*price=*', '**/*price_min=*', '**/*price_max=*',
+  '**/*id_category=*', '**/*categoryId=*', '**/*productListView=*',
+  '**/*q=*', '**/*search=*', '**/*query=*',
+  '**/*page=*/**/*page=*', '**/*offset=*', '**/*start=*',
+  '**/*view=*', '**/*mode=*', '**/*display=*', '**/*per_page=*', '**/*items=*',
+  // === AUTH & ACCOUNT ===
+  '**/connexion**', '**/login**', '**/signin**', '**/log-in**',
+  '**/register**', '**/signup**', '**/inscription**',
+  '**/account**', '**/mon-compte**', '**/my-account**',
+  '**/profile**', '**/profil**',
+  '**/password**', '**/mot-de-passe**', '**/reset-password**',
+  '**/logout**', '**/deconnexion**',
+  '**/forgot-password**', '**/oubli-mot-de-passe**',
+  '**/customer/account/**', '**/customer/**',
+  // === SHOPPING ===
+  '**/panier**', '**/cart**', '**/basket**',
+  '**/checkout**', '**/commande**', '**/order**',
+  '**/add-to-cart**', '**/addtocart**',
+  '**/payment**', '**/paiement**',
+  '**/shipping**', '**/livraison**',
+  '**/confirmation**',
+  '**/quotation/**', '**/devis/**',
+  // === USER ACTIONS ===
+  '**/wishlist**', '**/liste-envies**', '**/favoris**',
+  '**/compare**', '**/comparateur**',
+  '**/sendtoafriend**', '**/send-to-friend**',
+  // === CALENDAR ===
+  '**/*year=*', '**/*month=*', '**/*day=*',
+  '**/*date=*', '**/*from=*', '**/*to=*',
+  '**/calendrier/**', '**/calendar/**',
+  // === SOCIAL ===
+  '**/*facebook*', '**/*twitter*', '**/*linkedin*',
+  '**/*instagram*', '**/*youtube*', '**/*pinterest*',
+  '**/*tiktok*', '**/*whatsapp*',
+  '**/*share*', '**/*partager*',
+  '**/mailto:*', '**/tel:*', '**/*://t.me/*',
+  // === TRACKING ===
+  '**/*redirect*', '**/*track*', '**/*click*',
+  '**/*ref=*', '**/*referrer=*', '**/*source=*',
+  // === API ===
+  '**/api/**', '**/wp-json/**', '**/rest/**',
+  '**/feed/**', '**/feeds/**', '**/rss/**',
+  '**/PBCPPlayer.asp**', '**/popup/**',
+  // === SPECIFIC SITE EXCLUDES (promodis.fr) ===
+  '**/download.php*', '**/dhtml/download.php*',
+  '**/*imp=1*',
+  // === SHOPIFY TRAPS ===
+  '**/collections/all*', '**/collections/vendors*', '**/collections/types*'
+];
+
+// Unified matchesPattern function
+const matchesPattern = (url, pattern) => {
+  // Handle extension pattern specifically
+  if (pattern.includes('@(')) {
+    const extRegex = new RegExp(`\\.(${ignoredExtensions})([?#].*)?$`, 'i');
+    return extRegex.test(url);
+  }
+
+  // Remove leading/trailing globstars to get the "core" pattern
+  let clean = pattern.replace(/^\*\*\//, '').replace(/\*\*$/, '').replace(/^\*\*/, '');
+
+  // If it's a query param pattern (contains =), simple include is usually enough
+  if (clean.includes('=')) {
+    return url.toLowerCase().includes(clean.replace(/\*/g, '').toLowerCase());
+  }
+
+  // Check if it has internal wildcards (e.g. *facebook*)
+  if (clean.includes('*')) {
+    // It's a glob-like pattern. Escape special chars, then replace * with .*
+    const escaped = clean.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const regexStr = escaped.replace(/\*/g, '.*');
+    return new RegExp(regexStr, 'i').test(url);
+  } else {
+    // It's a segment pattern (e.g. cart, login)
+    // Match whole segment to avoid "cartouche" matching "cart"
+    const escaped = clean.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    const segmentRegex = new RegExp(`(^|[/?#&=.])${escaped}([/?#&=.]|$)`, 'i');
+    return segmentRegex.test(url);
+  }
+};
+
+// Improved search sanitization
+function sanitizeSearchTerm(term) {
+  // Remove or escape shell metacharacters
+  return term.replace(/[`$();&|<>{}[\]\\!]/g, '\\$&');
+}
+
+// --- API Routes ---
+
+app.get('/api/jobs/:id/request-queues', async (req, res) => {
   const { id } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 50;
+  const search = (req.query.search || '').toLowerCase();
+
   try {
-    const baseDir = await findRequestUrlsDir(id);
+    const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.json([]); // No directory found, return empty list
+      return res.json({ items: [], total: 0, page, limit });
     }
 
-    const entries = await readdir(baseDir, { withFileTypes: true });
-    const files = [];
+    let matchingFiles = [];
 
-    // Iterate over domain directories
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const domainDir = join(baseDir, entry.name);
-        const domainFiles = await readdir(domainDir);
-        for (const file of domainFiles) {
-          if (file.endsWith('.json')) {
-            files.push({
-              name: file,
-              domain: entry.name,
-              path: join(entry.name, file) // Relative path for API usage
-            });
+    if (search) {
+      try {
+        // Sanitize search term to prevent command injection
+        const safeSearch = sanitizeSearchTerm(search);
+        // BusyBox grep doesn't support --include, so we use find + xargs
+        const { stdout } = await execAsync(`find "${baseDir}" -type f -name "*.json" -exec grep -l -i "${safeSearch}" {} +`);
+
+        if (stdout) {
+          const absolutePaths = stdout.trim().split('\n');
+          for (const fullPath of absolutePaths) {
+            const relativePath = fullPath.replace(baseDir + '/', '');
+            const parts = relativePath.split('/');
+            if (parts.length >= 2) {
+              matchingFiles.push({
+                name: parts[parts.length - 1],
+                domain: parts[parts.length - 2],
+                fullPath: fullPath,
+                relativePath: relativePath
+              });
+            }
+          }
+        }
+      } catch (e) {
+        // grep returns exit code 1 if no matches found
+        if (e.code !== 1) {
+          console.error('Grep error:', e);
+        }
+      }
+    } else {
+      // No search, list all files
+      const entries = await readdir(baseDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const domainDir = join(baseDir, entry.name);
+          const domainFiles = await readdir(domainDir);
+
+          for (const file of domainFiles) {
+            if (file.endsWith('.json')) {
+              matchingFiles.push({
+                name: file,
+                domain: entry.name,
+                fullPath: join(domainDir, file),
+                relativePath: join(entry.name, file)
+              });
+            }
           }
         }
       }
     }
 
-    res.json(files);
+    const total = matchingFiles.length;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedFiles = matchingFiles.slice(startIndex, endIndex);
+
+    // Read content ONLY for the current page
+    const items = await Promise.all(paginatedFiles.map(async (f) => {
+      try {
+        const content = await readFile(f.fullPath, 'utf-8');
+        const data = JSON.parse(content);
+        return {
+          name: f.name,
+          domain: f.domain,
+          path: f.relativePath,
+          url: data.url,
+          method: data.method,
+          retryCount: data.retryCount,
+          errorMessages: data.errorMessages
+        };
+      } catch (err) {
+        console.error(`Error reading queue file ${f.name}:`, err);
+        return {
+          name: f.name,
+          domain: f.domain,
+          path: f.relativePath,
+          url: 'Error reading file',
+          method: 'UNKNOWN'
+        };
+      }
+    }));
+
+    res.json({
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    });
+
   } catch (error) {
-    console.error(`Error listing request urls for job ${id}:`, error);
-    res.status(500).json({ error: 'Failed to list request urls' });
+    console.error(`Error listing request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to list request queues' });
   }
 });
 
-app.get('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
+app.get('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   const { id, domain, filename } = req.params;
   try {
-    const baseDir = await findRequestUrlsDir(id);
+    const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.status(404).json({ error: 'Request URLs directory not found' });
+      return res.status(404).json({ error: 'Request queues directory not found' });
     }
 
     const filePath = normalize(join(baseDir, domain, filename));
@@ -316,19 +499,19 @@ app.get('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
     const content = await readFile(filePath, 'utf-8');
     res.json(JSON.parse(content));
   } catch (error) {
-    console.error(`Error reading request url file ${filename}:`, error);
+    console.error(`Error reading request queue file ${filename}:`, error);
     res.status(500).json({ error: 'Failed to read file' });
   }
 });
 
-app.post('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
+app.post('/api/jobs/:id/request-queues/:domain/:filename', async (req, res) => {
   const { id, domain, filename } = req.params;
   const content = req.body;
 
   try {
-    const baseDir = await findRequestUrlsDir(id);
+    const baseDir = await findRequestQueuesDir(id);
     if (!baseDir) {
-      return res.status(404).json({ error: 'Request URLs directory not found' });
+      return res.status(404).json({ error: 'Request queues directory not found' });
     }
 
     const filePath = normalize(join(baseDir, domain, filename));
@@ -341,8 +524,118 @@ app.post('/api/jobs/:id/request-urls/:domain/:filename', async (req, res) => {
     await writeFile(filePath, JSON.stringify(content, null, 2), 'utf-8');
     res.json({ success: true });
   } catch (error) {
-    console.error(`Error saving request url file ${filename}:`, error);
+    console.error(`Error saving request queue file ${filename}:`, error);
     res.status(500).json({ error: 'Failed to save file' });
+  }
+});
+
+app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestQueuesDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request queues directory not found' });
+    }
+
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    let deletedCount = 0;
+    let scannedCount = 0;
+
+    // Iterate over domain directories
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const domainDir = join(baseDir, entry.name);
+        const targetDomain = entry.name;
+        const domainFiles = await readdir(domainDir);
+
+        for (const file of domainFiles) {
+          if (file.endsWith('.json')) {
+            scannedCount++;
+            try {
+              const filePath = join(domainDir, file);
+              const content = await readFile(filePath, 'utf-8');
+              const data = JSON.parse(content);
+
+              if (data.url) {
+                try {
+                  const urlObj = new URL(data.url);
+                  // Check if hostname includes the target domain (handles subdomains)
+                  if (!urlObj.hostname.includes(targetDomain)) {
+                    console.log(`[Repair] Deleting invalid URL: ${data.url} (Target: ${targetDomain})`);
+                    await unlink(filePath);
+                    deletedCount++;
+                  }
+                } catch (e) {
+                  // Invalid URL, skip
+                }
+              }
+            } catch (err) {
+              console.error(`Error processing file ${file} for repair:`, err);
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ scanned: scannedCount, deleted: deletedCount });
+  } catch (error) {
+    console.error(`Error repairing request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to repair request queues' });
+  }
+});
+
+app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestQueuesDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request queues directory not found' });
+    }
+
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    let deletedCount = 0;
+    let scannedCount = 0;
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const domainDir = join(baseDir, entry.name);
+        const domainFiles = await readdir(domainDir);
+
+        for (const file of domainFiles) {
+          if (file.endsWith('.json')) {
+            scannedCount++;
+            try {
+              const filePath = join(domainDir, file);
+              const content = await readFile(filePath, 'utf-8');
+              const data = JSON.parse(content);
+
+              if (data.url) {
+                let matched = false;
+                for (const pattern of excludePatterns) {
+                  if (matchesPattern(data.url, pattern)) {
+                    matched = true;
+                    console.log(`[Clean] Deleting pattern match: ${data.url} (Pattern: ${pattern})`);
+                    break;
+                  }
+                }
+
+                if (matched) {
+                  await unlink(filePath);
+                  deletedCount++;
+                }
+              }
+            } catch (err) {
+              console.error(`Error processing file ${file} for cleaning:`, err);
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ scanned: scannedCount, deleted: deletedCount });
+  } catch (error) {
+    console.error(`Error cleaning request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to clean request queues' });
   }
 });
 

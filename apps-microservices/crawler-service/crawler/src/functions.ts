@@ -245,7 +245,7 @@ export const startCrawler = async (
                     operatingSystems: ["windows", "macos", "linux"], // OS to emulate
                 },
             },
-            retireBrowserAfterPageCount: 10, // Force browser restart to prevent memory leaks
+            retireBrowserAfterPageCount: 5, // Aggressive rotation to prevent memory leaks on unstable sites
         },
 
         minConcurrency: 1, // Ensure at least one browser is running

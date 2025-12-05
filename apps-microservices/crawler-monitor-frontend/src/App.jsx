@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import {
   Activity, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw, Code,
   Search, Calendar, Filter, Server, Download, ChevronLeft, ChevronRight,
-  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft, Cpu
+  AlertCircle, Info, Zap, ExternalLink, TrendingUp, LogOut, AlignLeft, Cpu, Trash2
 } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
@@ -348,14 +348,22 @@ const ErrorVisualization = ({ errors, warnings }) => {
   );
 };
 
-const RequestUrlEditor = ({ jobId, onClose, token }) => {
+const RequestQueueEditor = ({ jobId, onClose, token }) => {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [limit] = useState(50);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
 
   const authFetch = async (url, options = {}) => {
     const headers = {
@@ -372,14 +380,31 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
 
   useEffect(() => {
     fetchFiles();
-  }, [jobId]);
+  }, [jobId, page, searchTerm]); // Refetch on page or search change
 
   const fetchFiles = async () => {
     setLoading(true);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-urls`);
+      const query = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        search: searchTerm
+      });
+
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues?${query}`);
       const data = await res.json();
-      setFiles(data);
+
+      // Handle paginated response
+      if (data.items) {
+        setFiles(data.items);
+        setTotalPages(data.totalPages);
+        setTotalItems(data.total);
+      } else {
+        // Fallback for old API structure (array)
+        setFiles(Array.isArray(data) ? data : []);
+        setTotalPages(1);
+        setTotalItems(Array.isArray(data) ? data.length : 0);
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -393,7 +418,7 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-urls/${file.domain}/${file.name}`);
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/${file.domain}/${file.name}`);
       const data = await res.json();
       setContent(JSON.stringify(data, null, 2));
     } catch (err) {
@@ -427,13 +452,15 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
         throw new Error('JSON Invalide: ' + e.message);
       }
 
-      await authFetch(`${API_URL}/jobs/${jobId}/request-urls/${selectedFile.domain}/${selectedFile.name}`, {
+      await authFetch(`${API_URL}/jobs/${jobId}/request-queues/${selectedFile.domain}/${selectedFile.name}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(jsonContent)
       });
 
       setSuccessMsg('Fichier sauvegardé avec succès !');
+      // Refresh list to update metadata if changed
+      fetchFiles();
     } catch (err) {
       setError(`Erreur: ${err.message}`);
     } finally {
@@ -441,38 +468,148 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
     }
   };
 
+  const cleanPatterns = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir nettoyer les patterns ? Cela supprimera les URLs correspondant aux filtres (login, cart, facebook, etc.).')) {
+      return;
+    }
+
+    setRepairing(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/clean-patterns`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      setSuccessMsg(`Nettoyage patterns terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
+      fetchFiles(); // Refresh list
+    } catch (err) {
+      setError(`Erreur lors du nettoyage patterns : ${err.message}`);
+    } finally {
+      setRepairing(false);
+    }
+  };
+
+  const repairQueue = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir nettoyer la queue ? Cela supprimera toutes les URLs qui ne correspondent pas au domaine cible.')) {
+      return;
+    }
+
+    setRepairing(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/repair`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      setSuccessMsg(`Nettoyage terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
+      fetchFiles(); // Refresh list
+    } catch (err) {
+      setError(`Erreur lors du nettoyage : ${err.message}`);
+    } finally {
+      setRepairing(false);
+    }
+  };
+
+  // Search is now handled server-side via fetchFiles
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setPage(1); // Reset to first page on search
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
+      <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col transition-all">
         <div className="flex justify-between items-center p-4 border-b border-gray-700">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            <Code className="w-5 h-5" /> Éditeur Request URLs
+            <Code className="w-5 h-5" /> Éditeur Request Queue
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
-            <XCircle className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={cleanPatterns}
+              disabled={repairing || loading}
+              className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 rounded text-sm text-white disabled:opacity-50 transition-colors"
+              title="Supprimer les patterns exclus (login, cart, etc.)"
+            >
+              {repairing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Filter className="w-4 h-4" />}
+              Nettoyer Patterns
+            </button>
+            <button
+              onClick={repairQueue}
+              disabled={repairing || loading}
+              className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm text-white disabled:opacity-50 transition-colors"
+              title="Supprimer les URLs hors domaine"
+            >
+              {repairing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Nettoyer / Réparer
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-white">
+              <XCircle className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar list */}
           <div className="w-1/3 border-r border-gray-700 flex flex-col">
-            <div className="p-3 bg-gray-900 border-b border-gray-700">
-              <h4 className="text-sm font-semibold text-gray-400">Fichiers disponibles</h4>
+            <div className="p-3 bg-gray-900 border-b border-gray-700 space-y-2">
+              <div className="flex justify-between items-center">
+                <h4 className="text-sm font-semibold text-gray-400">Requêtes ({totalItems})</h4>
+                <span className="text-xs text-gray-500">Page {page}/{totalPages}</span>
+              </div>
+              <input
+                type="text"
+                placeholder="Rechercher URL..."
+                className="w-full bg-gray-800 text-white text-xs p-2 rounded border border-gray-700 focus:border-blue-500 outline-none"
+                value={searchTerm}
+                onChange={handleSearchChange}
+              />
             </div>
+
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
               {loading && !selectedFile && <div className="text-center p-4"><RefreshCw className="animate-spin mx-auto" /></div>}
-              {files.length === 0 && !loading && <div className="text-center p-4 text-gray-500">Aucun fichier trouvé</div>}
+              {files.length === 0 && !loading && <div className="text-center p-4 text-gray-500">Aucune requête trouvée</div>}
               {files.map(file => (
                 <button
                   key={file.path}
                   onClick={() => loadFile(file)}
-                  className={`w-full text-left px-3 py-2 rounded text-sm truncate ${selectedFile?.path === file.path ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
+                  className={`w-full text-left px-3 py-2 rounded text-sm truncate group ${selectedFile?.path === file.path ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'
                     }`}
                 >
-                  {file.name}
-                  <span className="block text-xs opacity-70">{file.domain}</span>
+                  <div className="font-medium truncate" title={file.url || file.name}>
+                    {file.url || file.name}
+                  </div>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${file.method === 'GET' ? 'bg-green-900/50 text-green-300' : 'bg-yellow-900/50 text-yellow-300'
+                      }`}>
+                      {file.method || 'UNK'}
+                    </span>
+                    <span className="text-xs opacity-50">{file.retryCount || 0} retries</span>
+                  </div>
                 </button>
               ))}
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="p-2 bg-gray-900 border-t border-gray-700 flex justify-between items-center">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1 || loading}
+                className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent text-white"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <span className="text-xs text-gray-400">
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages || loading}
+                className="p-1 rounded hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent text-white"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
             </div>
           </div>
 
@@ -481,8 +618,11 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
             {selectedFile ? (
               <>
                 <div className="p-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
-                  <span className="text-sm font-mono text-gray-300">{selectedFile.path}</span>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col overflow-hidden mr-2">
+                    <span className="text-xs font-mono text-gray-400 truncate">{selectedFile.path}</span>
+                    <span className="text-sm font-bold text-white truncate" title={selectedFile.url}>{selectedFile.url}</span>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
                     <button
                       onClick={formatJson}
                       className="flex items-center gap-2 px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm text-white"
@@ -514,7 +654,7 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-500">
-                Sélectionnez un fichier pour l'éditer
+                Sélectionnez une requête pour l'éditer
               </div>
             )}
           </div>
@@ -525,7 +665,7 @@ const RequestUrlEditor = ({ jobId, onClose, token }) => {
 };
 
 const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
-  const [showUrlEditor, setShowUrlEditor] = useState(false);
+  const [showQueueEditor, setShowQueueEditor] = useState(false);
 
   if (!job) return null;
   if (job.error) {
@@ -544,11 +684,11 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
         <h2 className="text-2xl font-bold text-white">Job #{job.id}</h2>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowUrlEditor(true)}
+            onClick={() => setShowQueueEditor(true)}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-white"
           >
             <Code className="w-4 h-4" />
-            Éditer URLs
+            Éditer Queue
           </button>
           <button
             onClick={onToggleRaw}
@@ -560,7 +700,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
         </div>
       </div>
 
-      {showUrlEditor && <RequestUrlEditor jobId={job.id} onClose={() => setShowUrlEditor(false)} token={token} />}
+      {showQueueEditor && <RequestQueueEditor jobId={job.id} onClose={() => setShowQueueEditor(false)} token={token} />}
 
       {showRaw ? (
         <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />
@@ -795,7 +935,7 @@ const ReplicaMonitor = ({ replicas }) => {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full ${statusColor === 'green' ? 'bg-green-500 animate-pulse' :
-                        statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'
+                      statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'
                       }`} />
                     <span className="text-white font-semibold text-sm truncate">
                       {replica.replicaId.substring(0, 12)}
