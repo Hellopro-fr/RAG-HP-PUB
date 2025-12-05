@@ -1073,8 +1073,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
         temperature = prompt_data['temperature']
 
         # Formater les catégories avec fil d'ariane et description enrichie (avec échappement des guillemets)
+        # (Average score: {cat['average_score']:.2f} , Product  Count: {cat['product_count']} )
         formatted_categories = "\n".join([
-            f"- ID: {cat['id']}, Nom: {self._escape_text(cat['name'])} (Average score: {cat['average_score']:.2f} , Product  Count: {cat['product_count']} )\n"
+            f"- ID: {cat['id']}, Nom: {self._escape_text(cat['name'])} \n"
             f"  Fil d'ariane: {self._escape_text(str(category_info.get(cat['id'], {}).get('fil_ariane', 'N/A')))}\n"
             f"  Description: {self._escape_text(str(category_info.get(cat['id'], {}).get('summary', 'N/A')))}"
             for cat in categories[:self.categories_limit]
