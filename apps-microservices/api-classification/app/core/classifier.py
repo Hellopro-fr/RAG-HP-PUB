@@ -1179,7 +1179,11 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
-                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                try:
+                    raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else (response.dict() if hasattr(response, 'dict') and callable(response.dict) else {})
+                except Exception as e:
+                    logger.warning(f"Impossible de convertir la réponse OpenAI en dict: {e}")
+                    raw_response_dict = {}
                 return {"success": True, "response": response, "raw_response": raw_response_dict}
 
             elif self.llm_choice == 'DeepSeek' and self.deepseek_client:
@@ -1192,7 +1196,11 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
-                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                try:
+                    raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else (response.dict() if hasattr(response, 'dict') and callable(response.dict) else {})
+                except Exception as e:
+                    logger.warning(f"Impossible de convertir la réponse DeepSeek en dict: {e}")
+                    raw_response_dict = {}
                 return {"success": True, "response": response, "raw_response": raw_response_dict}
             else:
                 raise ValueError(f"LLM {self.llm_choice} non configuré")
