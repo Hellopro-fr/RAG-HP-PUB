@@ -269,6 +269,16 @@ router.addDefaultHandler(
 
         if (!isDoublon) {
             allUrlsCrawled.add(url);
+
+            // SAFETY LIMIT: Prevent unbounded memory growth
+            // Clear Set if it exceeds 100k URLs (prevents OOM on very large sites)
+            // Crawlee's RequestQueue will continue to handle deduplication
+            const MAX_URLS_IN_MEMORY = 100000;
+            if (allUrlsCrawled.size > MAX_URLS_IN_MEMORY) {
+                log.warning(`⚠️  allUrlsCrawled Set exceeded ${MAX_URLS_IN_MEMORY.toLocaleString()} URLs. Clearing to prevent OOM. Crawlee RequestQueue will handle deduplication.`);
+                allUrlsCrawled.clear();
+            }
+
             // OPTIMIZATION: Removed synchronous disk write on every request (updateUrlsCrawled)
             // This was causing massive CPU/IO overhead with 250k URLs.
             // Persistence is now handled by the Dataset and RequestQueue.
