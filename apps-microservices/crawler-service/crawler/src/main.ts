@@ -198,6 +198,7 @@ try {
                 domain: domain,
                 cpu: Math.min(cpuPercent, 1), // Cap at 100%
                 ram: memoryUsage.rss,
+                totalRam: totalMem, // ADDED: Total RAM limit for dynamic percentage calculation
                 topProcesses: topProcesses,
                 timestamp: Date.now(),
                 status: 'running'
