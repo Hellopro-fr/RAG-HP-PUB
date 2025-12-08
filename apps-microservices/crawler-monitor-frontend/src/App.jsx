@@ -827,14 +827,16 @@ const ReplicaMonitor = ({ replicas }) => {
     return 'red';
   };
 
-  const CircularProgress = ({ cpu, ram }) => {
+  const CircularProgress = ({ cpu, ram, totalRam }) => {
     const size = 140;
     const strokeWidth = 12;
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
 
     const cpuPercent = Math.min((cpu || 0) * 100, 100);
-    const ramPercent = Math.min((ram / (4 * 1024 * 1024 * 1024)) * 100, 100);
+    // DYNAMIC: Use totalRam from heartbeat, fallback to 6GB if not provided
+    const ramLimit = totalRam || (6 * 1024 * 1024 * 1024);
+    const ramPercent = Math.min((ram / ramLimit) * 100, 100);
 
     const cpuOffset = circumference - (cpuPercent / 100) * circumference;
     const ramOffset = circumference - (ramPercent / 100) * circumference;
@@ -947,7 +949,7 @@ const ReplicaMonitor = ({ replicas }) => {
                 {/* Circular Progress */}
                 <div className="flex flex-col items-center mb-4">
                   <div className="relative">
-                    <CircularProgress cpu={replica.cpu} ram={replica.ram} />
+                    <CircularProgress cpu={replica.cpu} ram={replica.ram} totalRam={replica.totalRam} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <div className="text-center">
                         <div className="text-xs text-gray-400">CPU</div>
