@@ -120,6 +120,10 @@ class ProductClassifier:
         self.optimize_service_url = os.getenv('OPTIMIZE_SERVICE_URL', 'http://optimize-service:8563')
         self.optimize_service_timeout = int(os.getenv('OPTIMIZE_SERVICE_TIMEOUT', '30'))
 
+        # Configuration timeout DeepSeek (max 30 minutes selon doc officielle)
+        # Par défaut 5 minutes, mais peut aller jusqu'à 30 minutes sous forte charge
+        self.deepseek_timeout = int(os.getenv('DEEPSEEK_TIMEOUT', '300'))  # 5 minutes par défaut
+
         self._initialize_clients()
 
     def _initialize_clients(self):
@@ -138,9 +142,9 @@ class ProductClassifier:
                 self.deepseek_client = openai.OpenAI(
                     api_key=api_key,
                     base_url="https://api.deepseek.com",
-                    timeout=60
+                    timeout=self.deepseek_timeout  # Timeout configurable (5 min par défaut, max 30 min)
                 )
-                #logger.info("Client DeepSeek configuré")
+                logger.info(f"Client DeepSeek configuré avec timeout de {self.deepseek_timeout}s")
             else:
                 raise ValueError("DEEPSEEK_API_KEY manquante")
 
@@ -590,7 +594,7 @@ class ProductClassifier:
             deepseek_client = openai.OpenAI(
                 api_key=api_key,
                 base_url="https://api.deepseek.com",
-                timeout=60
+                timeout=self.deepseek_timeout  # Timeout configurable (5 min par défaut, max 30 min)
             )
 
             response = await asyncio.to_thread(
@@ -601,7 +605,18 @@ class ProductClassifier:
                 max_tokens=500
             )
 
-            summary = response.choices[0].message.content.strip()
+            # Gérer le cas où DeepSeek retourne des lignes vides sous forte charge
+            summary = response.choices[0].message.content.strip() if response.choices and response.choices[0].message.content else ""
+
+            # Si le résumé est vide ou invalide, utiliser la description tronquée
+            if not summary or len(summary) < 10:
+                logger.warning(f"Résumé DeepSeek vide ou invalide pour catégorie {category_id}, utilisation de la description tronquée")
+                return {
+                    "summary": description[:200] + "..." if len(description) > 200 else description,
+                    "input_tokens": 0,
+                    "output_tokens": 0
+                }
+
             input_tokens = response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
             output_tokens = response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
 
@@ -1232,6 +1247,33 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     temperature=temperature,
                     response_format={"type": "json_object"}
                 )
+
+                # Vérifier si la réponse est valide (gérer les lignes vides sous forte charge)
+                if not response.choices or not response.choices[0].message.content:
+                    logger.warning("DeepSeek a retourné une réponse vide (serveur sous forte charge)")
+                    return {
+                        "success": False,
+                        "error": "Réponse vide de DeepSeek (serveur sous forte charge)",
+                        "error_type": "EmptyResponse",
+                        "raw_response": {
+                            "error": "Réponse vide de DeepSeek",
+                            "error_type": "EmptyResponse"
+                        }
+                    }
+
+                content = response.choices[0].message.content.strip()
+                if not content or len(content) < 5:
+                    logger.warning(f"DeepSeek a retourné un contenu invalide: {content}")
+                    return {
+                        "success": False,
+                        "error": f"Contenu invalide de DeepSeek: {content}",
+                        "error_type": "InvalidContent",
+                        "raw_response": {
+                            "error": f"Contenu invalide: {content}",
+                            "error_type": "InvalidContent"
+                        }
+                    }
+
                 # Convertir en dictionnaire pour la sérialisation JSON
                 try:
                     raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else (response.dict() if hasattr(response, 'dict') and callable(response.dict) else {})
