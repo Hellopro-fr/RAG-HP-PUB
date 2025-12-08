@@ -251,7 +251,16 @@ if (dropData) {
     isHistorised = true;
 }
 
-export let allUrlsCrawled = new Set(getUrlsCrawled(domain, isHistorised, dropData ? 'true' : undefined));
+// CRITICAL FIX: Only load URLs into memory for fresh crawls to prevent OOM
+// When resuming (dropData=false), Crawlee's RequestQueue handles deduplication
+// This prevents loading 6000+ URLs into RAM which causes memory overload
+export let allUrlsCrawled = new Set(
+    dropData ? getUrlsCrawled(domain, isHistorised, 'true') : []
+);
+
+if (!dropData && allUrlsCrawled.size === 0) {
+    console.log('⚠️  Resume mode: allUrlsCrawled Set is empty. Relying on Crawlee RequestQueue for deduplication.');
+}
 
 if (skipquestionmark || skipdiez) {
     console.log("Filtering URLs in the queue...");
