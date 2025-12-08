@@ -966,7 +966,16 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 
             # Parser la réponse JSON
             try:
-                llm_result = json.loads(raw_llm.choices[0].message.content)
+                # Extraire le contenu de manière uniforme (compatible Qwen/OpenAI/DeepSeek)
+                if hasattr(raw_llm, 'choices') and raw_llm.choices:
+                    content = raw_llm.choices[0].message.content
+                elif isinstance(raw_llm, str):
+                    content = raw_llm
+                else:
+                    logger.error(f"[KEYWORDS] ❌ Format de réponse LLM non reconnu: {type(raw_llm)}")
+                    return [], {"input_tokens": input_tokens, "output_tokens": output_tokens}
+
+                llm_result = json.loads(content)
                 logger.info(f"[KEYWORDS] 🔍 JSON parsé: {llm_result}")
             except (AttributeError, KeyError, json.JSONDecodeError) as e:
                 logger.error(f"[KEYWORDS] ❌ Erreur parsing JSON: {e}")
@@ -1179,7 +1188,11 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
-                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                try:
+                    raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else (response.dict() if hasattr(response, 'dict') and callable(response.dict) else {})
+                except Exception as e:
+                    logger.warning(f"Impossible de convertir la réponse OpenAI en dict: {e}")
+                    raw_response_dict = {}
                 return {"success": True, "response": response, "raw_response": raw_response_dict}
 
             elif self.llm_choice == 'DeepSeek' and self.deepseek_client:
@@ -1192,7 +1205,11 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
-                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                try:
+                    raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else (response.dict() if hasattr(response, 'dict') and callable(response.dict) else {})
+                except Exception as e:
+                    logger.warning(f"Impossible de convertir la réponse DeepSeek en dict: {e}")
+                    raw_response_dict = {}
                 return {"success": True, "response": response, "raw_response": raw_response_dict}
             else:
                 raise ValueError(f"LLM {self.llm_choice} non configuré")
@@ -1445,7 +1462,16 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 total_output_tokens += getattr(raw_llm.usage, 'completion_tokens', 0)
 
             try:
-                llm_result = json.loads(raw_llm.choices[0].message.content)
+                # Extraire le contenu de manière uniforme (compatible Qwen/OpenAI/DeepSeek)
+                if hasattr(raw_llm, 'choices') and raw_llm.choices:
+                    content = raw_llm.choices[0].message.content
+                elif isinstance(raw_llm, str):
+                    content = raw_llm
+                else:
+                    logger.error(f"Format de réponse LLM non reconnu: {type(raw_llm)}")
+                    content = str(raw_llm)
+
+                llm_result = json.loads(content)
             except (AttributeError, KeyError, json.JSONDecodeError) as e:
                 return {
                     'id_produit': product['id_produit'],
