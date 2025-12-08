@@ -213,9 +213,14 @@ export const startCrawler = async (
 
     let proxyConfiguration: ProxyConfiguration | undefined;
 
+    // CRITICAL MEMORY OPTIMIZATION: Force Crawlee to use disk instead of RAM
+    // This prevents OOM when resuming crawls with 4000+ URLs in queue
+    // availableMemoryRatio: 0.2 = Crawlee will free memory when usage > 20%
+    // This forces RequestQueue to use disk storage instead of keeping everything in RAM
     let configuration = new Configuration({
         maxUsedCpuRatio: 0.95,
-        availableMemoryRatio: 0.95
+        availableMemoryRatio: 0.95,
+        persistStorage: true         // Force all storage to disk (not just cache)
     });
 
     if (PROXY_PASSWORD) {
