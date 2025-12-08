@@ -219,7 +219,7 @@ export const startCrawler = async (
     // This forces RequestQueue to use disk storage instead of keeping everything in RAM
     let configuration = new Configuration({
         maxUsedCpuRatio: 0.95,
-        availableMemoryRatio: 0.85,
+        availableMemoryRatio: 0.95,
         persistStorage: true         // Force all storage to disk (not just cache)
     });
 
