@@ -38,6 +38,7 @@ async def _cache_with_short_key(
 ):
     """
     Wrapper autour de cache_or_execute qui génère des clés courtes via hash.
+    Retourne le résultat avec tokens mis à 0 si provient du cache Redis.
 
     Args:
         func: Fonction à exécuter si cache miss
@@ -48,21 +49,46 @@ async def _cache_with_short_key(
         **func_kwargs: Arguments nommés à passer à la fonction
 
     Returns:
-        Résultat de la fonction (depuis cache ou exécution)
+        Résultat de la fonction (depuis cache ou exécution) avec tokens=0 si depuis cache
     """
+    from common_utils.redis.cache_service import redis_client
+    import json
+
     # Générer une clé courte: préfixe + hash court des données
     data_hash = hashlib.md5(str(key_data).encode()).hexdigest()[:12]
     short_key = f"{key_prefix}:{data_hash}"
 
-    # Utiliser cache_or_execute avec une clé simple
-    # On crée un wrapper qui n'utilise que des arguments simples
+    # Créer le wrapper pour cache_or_execute
     async def _wrapper():
         return await func(*func_args, **func_kwargs)
 
-    # Remplacer le nom de la fonction pour générer une clé prévisible
     _wrapper.__name__ = short_key
 
-    return await cache_or_execute(_wrapper, expire_seconds=expire_seconds)
+    # Générer la clé de cache complète (même logique que cache_or_execute)
+    args_str = json.dumps((), sort_keys=True, default=str)
+    kwargs_str = json.dumps({}, sort_keys=True, default=str)
+    cache_key = f"cache:{short_key}:{args_str}:{kwargs_str}"
+
+    # Vérifier si la clé existe déjà dans le cache
+    from_cache = False
+    if redis_client:
+        try:
+            cached_value = await redis_client.get(cache_key)
+            from_cache = (cached_value is not None)
+        except Exception:
+            pass  # Ignorer les erreurs Redis
+
+    # Exécuter avec cache
+    result = await cache_or_execute(_wrapper, expire_seconds=expire_seconds)
+
+    # Si le résultat vient du cache, mettre les tokens à 0
+    if from_cache and isinstance(result, dict) and 'input_tokens' in result:
+        result_copy = result.copy()
+        result_copy['input_tokens'] = 0
+        result_copy['output_tokens'] = 0
+        return result_copy
+
+    return result
 
 # Import du client gRPC pour Qwen
 try:
