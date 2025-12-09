@@ -468,6 +468,25 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     }
   };
 
+  const [queueAnalysis, setQueueAnalysis] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const analyzeQueue = async () => {
+    setAnalyzing(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/analyze`);
+      const data = await res.json();
+      setQueueAnalysis(data);
+      setSuccessMsg(`Analyse terminée : ${data.total} URLs analysées`);
+    } catch (err) {
+      setError(`Erreur lors de l'analyse : ${err.message}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const cleanPatterns = async () => {
     if (!window.confirm('Êtes-vous sûr de vouloir nettoyer les patterns ? Cela supprimera les URLs correspondant aux filtres (login, cart, facebook, etc.).')) {
       return;
@@ -482,6 +501,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
       });
       const data = await res.json();
       setSuccessMsg(`Nettoyage patterns terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
+      setQueueAnalysis(null); // Reset analysis after cleanup
       fetchFiles(); // Refresh list
     } catch (err) {
       setError(`Erreur lors du nettoyage patterns : ${err.message}`);
