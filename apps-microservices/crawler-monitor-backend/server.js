@@ -694,44 +694,56 @@ app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
       return res.status(404).json({ error: 'Request queues directory not found' });
     }
 
+    // Flatten all files from all domains into a single array for batch processing
     const entries = await readdir(baseDir, { withFileTypes: true });
-    let deletedCount = 0;
-    let scannedCount = 0;
-
+    let allFiles = [];
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const domainDir = join(baseDir, entry.name);
         const domainFiles = await readdir(domainDir);
-
         for (const file of domainFiles) {
           if (file.endsWith('.json')) {
-            scannedCount++;
-            try {
-              const filePath = join(domainDir, file);
-              const content = await readFile(filePath, 'utf-8');
-              const data = JSON.parse(content);
-
-              if (data.url) {
-                let matched = false;
-                for (const pattern of excludePatterns) {
-                  if (matchesPattern(data.url, pattern)) {
-                    matched = true;
-                    console.log(`[Clean] Deleting pattern match: ${data.url} (Pattern: ${pattern})`);
-                    break;
-                  }
-                }
-
-                if (matched) {
-                  await unlink(filePath);
-                  deletedCount++;
-                }
-              }
-            } catch (err) {
-              console.error(`Error processing file ${file} for cleaning:`, err);
-            }
+            allFiles.push({
+              path: join(domainDir, file),
+              name: file,
+              domain: entry.name
+            });
           }
         }
       }
+    }
+
+    let scannedCount = 0;
+    let deletedCount = 0;
+    const BATCH_SIZE = 50; // Process 50 files in parallel
+
+    // Process in batches
+    for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
+      const batch = allFiles.slice(i, i + BATCH_SIZE);
+
+      const results = await Promise.all(batch.map(async (fileObj) => {
+        try {
+          const content = await readFile(fileObj.path, 'utf-8');
+          const data = JSON.parse(content);
+
+          if (data.url) {
+            for (const pattern of excludePatterns) {
+              if (matchesPattern(data.url, pattern)) {
+                await unlink(fileObj.path);
+                console.log(`[Clean] Deleting pattern match: ${data.url} (Pattern: ${pattern})`);
+                return true; // Deleted
+              }
+            }
+          }
+          return false; // Not deleted
+        } catch (err) {
+          console.error(`Error processing file ${fileObj.name} for cleaning:`, err);
+          return false;
+        }
+      }));
+
+      scannedCount += batch.length;
+      deletedCount += results.filter(Boolean).length;
     }
 
     res.json({ scanned: scannedCount, deleted: deletedCount });
