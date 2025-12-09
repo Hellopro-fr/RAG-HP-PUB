@@ -215,11 +215,11 @@ export const startCrawler = async (
 
     // CRITICAL MEMORY OPTIMIZATION: Force Crawlee to use disk instead of RAM
     // This prevents OOM when resuming crawls with 4000+ URLs in queue
-    // availableMemoryRatio: 0.2 = Crawlee will free memory when usage > 20%
-    // This forces RequestQueue to use disk storage instead of keeping everything in RAM
+    // availableMemoryRatio: 0.80 = Crawlee will free memory when usage > 80%
+    // This provides ~1.2GB safety margin (6144MB * 0.80 = 4915MB used, 1229MB free)
     let configuration = new Configuration({
         maxUsedCpuRatio: 0.95,
-        availableMemoryRatio: 0.95,
+        availableMemoryRatio: 0.80,  // Reduced from 0.95 to provide safety margin
         persistStorage: true         // Force all storage to disk (not just cache)
     });
 
@@ -547,8 +547,9 @@ export const getUrlsCrawled = (
     dropData: string | undefined = undefined
 ) => {
     // console.log(`name of domaine ${name}`);
-    //verifie if the folder of the domain does exist , if not create it
-    var folderName = `./storage/request_urls/${name}`;
+    // Since process.chdir(storagePath) has been called, we're already in the job directory
+    // So ./request_urls/ will point to /app/storage/{jobId}/request_urls/
+    var folderName = `./request_urls/${name}`;
     // console.log(`folderName ${folderName}`);
     try {
         if (!fs.existsSync(folderName)) {
@@ -557,7 +558,7 @@ export const getUrlsCrawled = (
     } catch (err) {
         console.error("Couldn't create the folder ");
         console.error(err);
-        folderName = "./storage/request_urls";
+        folderName = "./request_urls";
     }
 
     var fileUrls = `${folderName}/${name}.json`;
