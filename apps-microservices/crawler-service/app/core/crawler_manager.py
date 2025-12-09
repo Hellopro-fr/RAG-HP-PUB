@@ -418,7 +418,11 @@ class CrawlerManager:
                     copied_anything = True
             
             if not copied_anything:
-                raise HTTPException(status_code=404, detail="None of the requested components were found for this crawl job.")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"None of the requested components were found for crawl '{crawl_id}'. "
+                    f"The crawl data may have been cleaned up after archiving to GCS."
+                )
 
             # Create the final archive from the contents of the staging directory
             archive_base_path = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
