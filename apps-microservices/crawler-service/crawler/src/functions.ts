@@ -214,12 +214,10 @@ export const startCrawler = async (
     let proxyConfiguration: ProxyConfiguration | undefined;
 
     // CRITICAL MEMORY OPTIMIZATION: Force Crawlee to use disk instead of RAM
-    // This prevents OOM when resuming crawls with 4000+ URLs in queue
-    // availableMemoryRatio: 0.80 = Crawlee will free memory when usage > 80%
-    // This provides ~1.2GB safety margin (6144MB * 0.80 = 4915MB used, 1229MB free)
+
     let configuration = new Configuration({
         maxUsedCpuRatio: 0.95,
-        availableMemoryRatio: 0.80,  // Reduced from 0.95 to provide safety margin
+        availableMemoryRatio: 0.95,
         persistStorage: true         // Force all storage to disk (not just cache)
     });
 
@@ -661,6 +659,14 @@ export const updateUrlsCrawled = (
 export const getScrapingData = async (name: string, countArray: number = 0) => {
     try {
         let dataset = await Dataset.open(name);
+
+        // Check if dataset exists and has items
+        const info = await dataset.getInfo();
+        if (!info || info.itemCount === 0) {
+            // Return empty structure if dataset is empty or doesn't exist
+            return { items: [], total: 0, offset: 0, count: 0, limit: 0 };
+        }
+
         let data;
 
         if (countArray === 0) {

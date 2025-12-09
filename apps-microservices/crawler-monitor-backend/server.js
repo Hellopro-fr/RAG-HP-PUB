@@ -584,7 +584,109 @@ app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
   }
 });
 
+app.get('/api/jobs/:id/request-queues/analyze', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestQueuesDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request queues directory not found' });
+    }
+
+    const stats = {
+      total: 0,
+      blocked: 0,      // URLs matching exclude patterns
+      valid: 0,        // URLs not matching any pattern
+      pending: 0,      // URLs with handledAt === undefined
+      handled: 0,      // URLs with handledAt !== undefined
+      examples: {
+        blocked: [],   // Sample of blocked URLs
+        valid: []      // Sample of valid URLs
+      }
+    };
+
+    const entries = await readdir(baseDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const domainDir = join(baseDir, entry.name);
+        const domainFiles = await readdir(domainDir);
+
+        for (const file of domainFiles) {
+          if (file.endsWith('.json')) {
+            stats.total++;
+            try {
+              const filePath = join(domainDir, file);
+              const content = await readFile(filePath, 'utf-8');
+              const data = JSON.parse(content);
+
+              if (data.url) {
+                // Check if URL matches any exclude pattern
+                let isBlocked = false;
+                let matchedPattern = null;
+
+                for (const pattern of excludePatterns) {
+                  if (matchesPattern(data.url, pattern)) {
+                    isBlocked = true;
+                    matchedPattern = pattern;
+                    stats.blocked++;
+
+                    // Store sample (max 5)
+                    if (stats.examples.blocked.length < 5) {
+                      stats.examples.blocked.push({
+                        url: data.url,
+                        pattern: matchedPattern
+                      });
+                    }
+                    break;
+                  }
+                }
+
+                if (!isBlocked) {
+                  stats.valid++;
+
+                  // Store sample (max 5)
+                  if (stats.examples.valid.length < 5) {
+                    stats.examples.valid.push(data.url);
+                  }
+                }
+
+                // Check if handled
+                if (data.handledAt) {
+                  stats.handled++;
+                } else {
+                  stats.pending++;
+                }
+              }
+            } catch (err) {
+              console.error(`Error analyzing file ${file}:`, err);
+            }
+          }
+        }
+      }
+    }
+
+    // Calculate percentages
+    stats.blockedPercent = stats.total > 0 ? ((stats.blocked / stats.total) * 100).toFixed(1) : 0;
+    stats.validPercent = stats.total > 0 ? ((stats.valid / stats.total) * 100).toFixed(1) : 0;
+
+    // Add recommendation
+    if (stats.blockedPercent > 90) {
+      stats.recommendation = 'Use "Clean Patterns" to remove blocked URLs';
+    } else if (stats.valid === 0) {
+      stats.recommendation = 'Safe to drop entire queue (no valid URLs)';
+    } else {
+      stats.recommendation = 'Use "Clean Patterns" to preserve valid URLs';
+    }
+
+    res.json(stats);
+  } catch (error) {
+    console.error(`Error analyzing request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to analyze request queues' });
+  }
+});
+
 app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
+
   const { id } = req.params;
   try {
     const baseDir = await findRequestQueuesDir(id);
