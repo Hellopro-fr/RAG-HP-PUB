@@ -807,7 +807,7 @@ class SearchOrchestrator:
         final_filter_expr = await self._build_filter_expression(filtre, source_name)
 
         #todo à supprimer après test
-        logger.info(f"Query filter : {filtre}")
+        logger.info(f"Query filter : {self.request}")
 
         return await database_client.search_vector(
             collection=source_name,
