@@ -1194,6 +1194,27 @@ const App = () => {
     };
   }, [token]);
 
+  // Clean up zombie replicas (older than 30s)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setReplicas(prev => {
+        const now = Date.now();
+        const next = {};
+        let changed = false;
+        Object.entries(prev).forEach(([id, data]) => {
+          // Keep if heartbeat is recent (< 30s)
+          if (now - data.timestamp < 30000) {
+            next[id] = data;
+          } else {
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchJobs = useCallback(async () => {
     setLoading(true);
     try {
