@@ -808,6 +808,7 @@ class SearchOrchestrator:
 
         #todo à supprimer après test
         logger.info(f"Query filter final : {final_filter_expr}")
+        print(f"Query filter final : {final_filter_expr}")
 
         return await database_client.search_vector(
             collection=source_name,
