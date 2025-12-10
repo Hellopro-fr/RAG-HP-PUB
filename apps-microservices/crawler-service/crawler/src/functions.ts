@@ -214,9 +214,7 @@ export const startCrawler = async (
     let proxyConfiguration: ProxyConfiguration | undefined;
 
     // CRITICAL MEMORY OPTIMIZATION: Force Crawlee to use disk instead of RAM
-    // This prevents OOM when resuming crawls with 4000+ URLs in queue
-    // availableMemoryRatio: 0.2 = Crawlee will free memory when usage > 20%
-    // This forces RequestQueue to use disk storage instead of keeping everything in RAM
+
     let configuration = new Configuration({
         maxUsedCpuRatio: 0.95,
         availableMemoryRatio: 0.95,
@@ -547,8 +545,9 @@ export const getUrlsCrawled = (
     dropData: string | undefined = undefined
 ) => {
     // console.log(`name of domaine ${name}`);
-    //verifie if the folder of the domain does exist , if not create it
-    var folderName = `./storage/request_urls/${name}`;
+    // Since process.chdir(storagePath) has been called, we're already in the job directory
+    // So ./request_urls/ will point to /app/storage/{jobId}/request_urls/
+    var folderName = `./request_urls/${name}`;
     // console.log(`folderName ${folderName}`);
     try {
         if (!fs.existsSync(folderName)) {
@@ -557,7 +556,7 @@ export const getUrlsCrawled = (
     } catch (err) {
         console.error("Couldn't create the folder ");
         console.error(err);
-        folderName = "./storage/request_urls";
+        folderName = "./request_urls";
     }
 
     var fileUrls = `${folderName}/${name}.json`;
@@ -660,6 +659,14 @@ export const updateUrlsCrawled = (
 export const getScrapingData = async (name: string, countArray: number = 0) => {
     try {
         let dataset = await Dataset.open(name);
+
+        // Check if dataset exists and has items
+        const info = await dataset.getInfo();
+        if (!info || info.itemCount === 0) {
+            // Return empty structure if dataset is empty or doesn't exist
+            return { items: [], total: 0, offset: 0, count: 0, limit: 0 };
+        }
+
         let data;
 
         if (countArray === 0) {

@@ -50,7 +50,7 @@ COPY --from=builder /app/crawler/package-lock.json /app/crawler/package-lock.jso
 # Expose the port for the FastAPI application
 EXPOSE 8503
 
-# Increase Node.js heap limit to 6GB to match Docker resources
+# Set Node.js heap size to match Docker container limit (6GB)
 ENV NODE_OPTIONS="--max-old-space-size=6144"
 
 # Command to run the FastAPI server. Uvicorn will be found in the venv's PATH.
