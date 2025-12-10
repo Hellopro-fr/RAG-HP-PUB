@@ -510,8 +510,8 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     }
   };
 
-  const repairQueue = async () => {
-    if (!window.confirm('Êtes-vous sûr de vouloir nettoyer la queue ? Cela supprimera toutes les URLs qui ne correspondent pas au domaine cible.')) {
+  const dropQueue = async () => {
+    if (!window.confirm('☠️ DANGER : Êtes-vous sûr de vouloir TOUT SUPPRIMER ?\n\nCela va vider entièrement la queue de requêtes. Le crawler repartira de zéro (mais l\'historique des URLs déjà visitées est conservé).\n\nCette action est irréversible pour la queue actuelle.')) {
       return;
     }
 
@@ -519,14 +519,15 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/repair`, {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/drop`, {
         method: 'POST'
       });
       const data = await res.json();
-      setSuccessMsg(`Nettoyage terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
-      fetchFiles(); // Refresh list
+      setSuccessMsg(`Queue entièrement vidée avec succès !`);
+      fetchFiles(); // Refresh list - should be empty
+      setQueueAnalysis(null); // Clear analysis
     } catch (err) {
-      setError(`Erreur lors du nettoyage : ${err.message}`);
+      setError(`Erreur lors du "Drop" : ${err.message}`);
     } finally {
       setRepairing(false);
     }
@@ -605,18 +606,22 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
                   </div>
 
                   {/* Smart Actions */}
-                  <div className="pt-1">
-                    {queueAnalysis.valid === 0 ? (
-                      <button
-                        onClick={repairQueue}
-                        className="w-full py-1.5 bg-red-600 hover:bg-red-700 rounded text-white flex justify-center items-center gap-2"
-                      >
-                        <Trash2 className="w-3 h-3" /> Tout Supprimer
-                      </button>
-                    ) : (
+                  <div className="pt-1 flex gap-2">
+                    {/* Always allow Drop/Reset if user wants to force restart */}
+                    <button
+                      onClick={dropQueue}
+                      className="flex-1 py-1.5 bg-red-900/50 hover:bg-red-800 text-red-200 border border-red-800 rounded flex justify-center items-center gap-2"
+                      title="Supprimer TOUTES les URLs (Valides et Bloquées)"
+                    >
+                      <Trash2 className="w-3 h-3" /> Tout Supprimer
+                    </button>
+
+                    {/* Show Clean Patterns only if there are blocked items */}
+                    {queueAnalysis.blocked > 0 && (
                       <button
                         onClick={cleanPatterns}
-                        className="w-full py-1.5 bg-orange-600 hover:bg-orange-700 rounded text-white flex justify-center items-center gap-2"
+                        className="flex-1 py-1.5 bg-orange-600 hover:bg-orange-700 rounded text-white flex justify-center items-center gap-2"
+                        title="Supprimer uniquement les URLs bloquées"
                       >
                         <Filter className="w-3 h-3" /> Nettoyer ({queueAnalysis.blocked})
                       </button>
@@ -756,7 +761,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors text-white"
           >
             <Code className="w-4 h-4" />
-            Éditer Queue
+            Explorer la Queue
           </button>
           <button
             onClick={onToggleRaw}
