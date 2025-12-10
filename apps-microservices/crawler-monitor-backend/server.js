@@ -596,8 +596,8 @@ app.post('/api/jobs/:id/request-queues/drop', async (req, res) => {
 
     console.log(`[Drop] Dropping entire request queue for job ${id}`);
 
-    // Force delete the directory
-    await fs.promises.rm(baseDir, { recursive: true, force: true });
+    // Force delete the directory using system command (more robust than fs.rm in older node versions)
+    await execAsync(`rm -rf "${baseDir}"`);
 
     // Recreate the empty directory structure
     await fs.promises.mkdir(baseDir, { recursive: true });
