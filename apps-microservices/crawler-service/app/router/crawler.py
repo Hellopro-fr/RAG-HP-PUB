@@ -210,6 +210,16 @@ async def download_crawl_results(
         crawl_id = job_info['crawl_id']
         archive_path = await crawler_manager.get_results_archive(job_info, include)
         
+        # Validate that the archive file was actually created before returning
+        if not os.path.exists(archive_path):
+            logger.error(
+                f"Archive file was not created at expected path: {archive_path}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Could not generate results archive for crawl '{crawl_id}'. "
+                f"The crawl data may have been cleaned up after archiving to GCS."
+            )
+
         # Delete the temporary archive file after the response is sent
         background_tasks.add_task(lambda path: os.remove(path), archive_path)
         

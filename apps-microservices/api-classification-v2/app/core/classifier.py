@@ -38,6 +38,7 @@ async def _cache_with_short_key(
 ):
     """
     Wrapper autour de cache_or_execute qui génère des clés courtes via hash.
+    Retourne le résultat avec tokens mis à 0 si provient du cache Redis.
 
     Args:
         func: Fonction à exécuter si cache miss
@@ -48,21 +49,46 @@ async def _cache_with_short_key(
         **func_kwargs: Arguments nommés à passer à la fonction
 
     Returns:
-        Résultat de la fonction (depuis cache ou exécution)
+        Résultat de la fonction (depuis cache ou exécution) avec tokens=0 si depuis cache
     """
+    from common_utils.redis.cache_service import redis_client
+    import json
+
     # Générer une clé courte: préfixe + hash court des données
     data_hash = hashlib.md5(str(key_data).encode()).hexdigest()[:12]
     short_key = f"{key_prefix}:{data_hash}"
 
-    # Utiliser cache_or_execute avec une clé simple
-    # On crée un wrapper qui n'utilise que des arguments simples
+    # Créer le wrapper pour cache_or_execute
     async def _wrapper():
         return await func(*func_args, **func_kwargs)
 
-    # Remplacer le nom de la fonction pour générer une clé prévisible
     _wrapper.__name__ = short_key
 
-    return await cache_or_execute(_wrapper, expire_seconds=expire_seconds)
+    # Générer la clé de cache complète (même logique que cache_or_execute)
+    args_str = json.dumps((), sort_keys=True, default=str)
+    kwargs_str = json.dumps({}, sort_keys=True, default=str)
+    cache_key = f"cache:{short_key}:{args_str}:{kwargs_str}"
+
+    # Vérifier si la clé existe déjà dans le cache
+    from_cache = False
+    if redis_client:
+        try:
+            cached_value = await redis_client.get(cache_key)
+            from_cache = (cached_value is not None)
+        except Exception:
+            pass  # Ignorer les erreurs Redis
+
+    # Exécuter avec cache
+    result = await cache_or_execute(_wrapper, expire_seconds=expire_seconds)
+
+    # Si le résultat vient du cache, mettre les tokens à 0
+    if from_cache and isinstance(result, dict) and 'input_tokens' in result:
+        result_copy = result.copy()
+        result_copy['input_tokens'] = 0
+        result_copy['output_tokens'] = 0
+        return result_copy
+
+    return result
 
 # Import du client gRPC pour Qwen
 try:
@@ -94,6 +120,10 @@ class ProductClassifier:
         self.optimize_service_url = os.getenv('OPTIMIZE_SERVICE_URL', 'http://optimize-service:8563')
         self.optimize_service_timeout = int(os.getenv('OPTIMIZE_SERVICE_TIMEOUT', '30'))
 
+        # Configuration timeout DeepSeek (max 30 minutes selon doc officielle)
+        # Par défaut 5 minutes, mais peut aller jusqu'à 30 minutes sous forte charge
+        self.deepseek_timeout = int(os.getenv('DEEPSEEK_TIMEOUT', '300'))  # 5 minutes par défaut
+
         self._initialize_clients()
 
     def _initialize_clients(self):
@@ -112,9 +142,9 @@ class ProductClassifier:
                 self.deepseek_client = openai.OpenAI(
                     api_key=api_key,
                     base_url="https://api.deepseek.com",
-                    timeout=60
+                    timeout=self.deepseek_timeout  # Timeout configurable (5 min par défaut, max 30 min)
                 )
-                #logger.info("Client DeepSeek configuré")
+                logger.info(f"Client DeepSeek configuré avec timeout de {self.deepseek_timeout}s")
             else:
                 raise ValueError("DEEPSEEK_API_KEY manquante")
 
@@ -564,7 +594,7 @@ class ProductClassifier:
             deepseek_client = openai.OpenAI(
                 api_key=api_key,
                 base_url="https://api.deepseek.com",
-                timeout=60
+                timeout=self.deepseek_timeout  # Timeout configurable (5 min par défaut, max 30 min)
             )
 
             response = await asyncio.to_thread(
@@ -575,7 +605,18 @@ class ProductClassifier:
                 max_tokens=500
             )
 
-            summary = response.choices[0].message.content.strip()
+            # Gérer le cas où DeepSeek retourne des lignes vides sous forte charge
+            summary = response.choices[0].message.content.strip() if response.choices and response.choices[0].message.content else ""
+
+            # Si le résumé est vide ou invalide, utiliser la description tronquée
+            if not summary or len(summary) < 10:
+                logger.warning(f"Résumé DeepSeek vide ou invalide pour catégorie {category_id}, utilisation de la description tronquée")
+                return {
+                    "summary": description[:200] + "..." if len(description) > 200 else description,
+                    "input_tokens": 0,
+                    "output_tokens": 0
+                }
+
             input_tokens = response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
             output_tokens = response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
 
@@ -965,7 +1006,15 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 
             # Parser la réponse JSON
             try:
-                response_content = raw_llm.choices[0].message.content
+                # Extraire le contenu de manière uniforme (compatible Qwen/OpenAI/DeepSeek)
+                if hasattr(raw_llm, 'choices') and raw_llm.choices:
+                    response_content = raw_llm.choices[0].message.content
+                elif isinstance(raw_llm, str):
+                    response_content = raw_llm
+                else:
+                    logger.error(f"[KEYWORDS] ❌ Format de réponse LLM non reconnu: {type(raw_llm)}")
+                    return [], {"input_tokens": input_tokens, "output_tokens": output_tokens}
+
                 logger.info(f"[KEYWORDS] 🔍 Réponse brute LLM: {response_content[:200]}...")  # Log des 200 premiers caractères
 
                 llm_result = json.loads(response_content)
@@ -1073,8 +1122,9 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
         temperature = prompt_data['temperature']
 
         # Formater les catégories avec fil d'ariane et description enrichie (avec échappement des guillemets)
+        # (Average score: {cat['average_score']:.2f} , Product  Count: {cat['product_count']} )
         formatted_categories = "\n".join([
-            f"- ID: {cat['id']}, Nom: {self._escape_text(cat['name'])} (Average score: {cat['average_score']:.2f} , Product  Count: {cat['product_count']} )\n"
+            f"- ID: {cat['id']}, Nom: {self._escape_text(cat['name'])} \n"
             f"  Fil d'ariane: {self._escape_text(str(category_info.get(cat['id'], {}).get('fil_ariane', 'N/A')))}\n"
             f"  Description: {self._escape_text(str(category_info.get(cat['id'], {}).get('summary', 'N/A')))}"
             for cat in categories[:self.categories_limit]
@@ -1181,7 +1231,11 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     response_format={"type": "json_object"}
                 )
                 # Convertir en dictionnaire pour la sérialisation JSON
-                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                try:
+                    raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else (response.dict() if hasattr(response, 'dict') and callable(response.dict) else {})
+                except Exception as e:
+                    logger.warning(f"Impossible de convertir la réponse OpenAI en dict: {e}")
+                    raw_response_dict = {}
                 return {"success": True, "response": response, "raw_response": raw_response_dict}
 
             elif self.llm_choice == 'DeepSeek' and self.deepseek_client:
@@ -1193,8 +1247,39 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     temperature=temperature,
                     response_format={"type": "json_object"}
                 )
+
+                # Vérifier si la réponse est valide (gérer les lignes vides sous forte charge)
+                if not response.choices or not response.choices[0].message.content:
+                    logger.warning("DeepSeek a retourné une réponse vide (serveur sous forte charge)")
+                    return {
+                        "success": False,
+                        "error": "Réponse vide de DeepSeek (serveur sous forte charge)",
+                        "error_type": "EmptyResponse",
+                        "raw_response": {
+                            "error": "Réponse vide de DeepSeek",
+                            "error_type": "EmptyResponse"
+                        }
+                    }
+
+                content = response.choices[0].message.content.strip()
+                if not content or len(content) < 5:
+                    logger.warning(f"DeepSeek a retourné un contenu invalide: {content}")
+                    return {
+                        "success": False,
+                        "error": f"Contenu invalide de DeepSeek: {content}",
+                        "error_type": "InvalidContent",
+                        "raw_response": {
+                            "error": f"Contenu invalide: {content}",
+                            "error_type": "InvalidContent"
+                        }
+                    }
+
                 # Convertir en dictionnaire pour la sérialisation JSON
-                raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else response.dict()
+                try:
+                    raw_response_dict = response.model_dump() if hasattr(response, 'model_dump') else (response.dict() if hasattr(response, 'dict') and callable(response.dict) else {})
+                except Exception as e:
+                    logger.warning(f"Impossible de convertir la réponse DeepSeek en dict: {e}")
+                    raw_response_dict = {}
                 return {"success": True, "response": response, "raw_response": raw_response_dict}
             else:
                 raise ValueError(f"LLM {self.llm_choice} non configuré")
@@ -1404,6 +1489,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 
             prompt, temperature = await self.build_prompt_async(product_for_prompt, categories, category_info, similar_products)
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking, temperature=temperature)
+            print(prompt)
 
             # Vérifier si l'appel LLM a échoué
             if not llm_result_wrapper.get('success', False):
@@ -1438,7 +1524,16 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 total_output_tokens += getattr(raw_llm.usage, 'completion_tokens', 0)
 
             try:
-                llm_result = json.loads(raw_llm.choices[0].message.content)
+                # Extraire le contenu de manière uniforme (compatible Qwen/OpenAI/DeepSeek)
+                if hasattr(raw_llm, 'choices') and raw_llm.choices:
+                    content = raw_llm.choices[0].message.content
+                elif isinstance(raw_llm, str):
+                    content = raw_llm
+                else:
+                    logger.error(f"Format de réponse LLM non reconnu: {type(raw_llm)}")
+                    content = str(raw_llm)
+
+                llm_result = json.loads(content)
             except (AttributeError, KeyError, json.JSONDecodeError) as e:
                 return {
                     'id_produit': product['id_produit'],

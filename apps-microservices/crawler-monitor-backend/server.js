@@ -584,7 +584,7 @@ app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
+app.get('/api/jobs/:id/request-queues/analyze', async (req, res) => {
   const { id } = req.params;
   try {
     const baseDir = await findRequestQueuesDir(id);
@@ -592,9 +592,19 @@ app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
       return res.status(404).json({ error: 'Request queues directory not found' });
     }
 
+    const stats = {
+      total: 0,
+      blocked: 0,      // URLs matching exclude patterns
+      valid: 0,        // URLs not matching any pattern
+      pending: 0,      // URLs with handledAt === undefined
+      handled: 0,      // URLs with handledAt !== undefined
+      examples: {
+        blocked: [],   // Sample of blocked URLs
+        valid: []      // Sample of valid URLs
+      }
+    };
+
     const entries = await readdir(baseDir, { withFileTypes: true });
-    let deletedCount = 0;
-    let scannedCount = 0;
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
@@ -603,33 +613,137 @@ app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
 
         for (const file of domainFiles) {
           if (file.endsWith('.json')) {
-            scannedCount++;
+            stats.total++;
             try {
               const filePath = join(domainDir, file);
               const content = await readFile(filePath, 'utf-8');
               const data = JSON.parse(content);
 
               if (data.url) {
-                let matched = false;
+                // Check if URL matches any exclude pattern
+                let isBlocked = false;
+                let matchedPattern = null;
+
                 for (const pattern of excludePatterns) {
                   if (matchesPattern(data.url, pattern)) {
-                    matched = true;
-                    console.log(`[Clean] Deleting pattern match: ${data.url} (Pattern: ${pattern})`);
+                    isBlocked = true;
+                    matchedPattern = pattern;
+                    stats.blocked++;
+
+                    // Store sample (max 5)
+                    if (stats.examples.blocked.length < 5) {
+                      stats.examples.blocked.push({
+                        url: data.url,
+                        pattern: matchedPattern
+                      });
+                    }
                     break;
                   }
                 }
 
-                if (matched) {
-                  await unlink(filePath);
-                  deletedCount++;
+                if (!isBlocked) {
+                  stats.valid++;
+
+                  // Store sample (max 5)
+                  if (stats.examples.valid.length < 5) {
+                    stats.examples.valid.push(data.url);
+                  }
+                }
+
+                // Check if handled
+                if (data.handledAt) {
+                  stats.handled++;
+                } else {
+                  stats.pending++;
                 }
               }
             } catch (err) {
-              console.error(`Error processing file ${file} for cleaning:`, err);
+              console.error(`Error analyzing file ${file}:`, err);
             }
           }
         }
       }
+    }
+
+    // Calculate percentages
+    stats.blockedPercent = stats.total > 0 ? ((stats.blocked / stats.total) * 100).toFixed(1) : 0;
+    stats.validPercent = stats.total > 0 ? ((stats.valid / stats.total) * 100).toFixed(1) : 0;
+
+    // Add recommendation
+    if (stats.blockedPercent > 90) {
+      stats.recommendation = 'Use "Clean Patterns" to remove blocked URLs';
+    } else if (stats.valid === 0) {
+      stats.recommendation = 'Safe to drop entire queue (no valid URLs)';
+    } else {
+      stats.recommendation = 'Use "Clean Patterns" to preserve valid URLs';
+    }
+
+    res.json(stats);
+  } catch (error) {
+    console.error(`Error analyzing request queues for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to analyze request queues' });
+  }
+});
+
+app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
+
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestQueuesDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request queues directory not found' });
+    }
+
+    // Flatten all files from all domains into a single array for batch processing
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    let allFiles = [];
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const domainDir = join(baseDir, entry.name);
+        const domainFiles = await readdir(domainDir);
+        for (const file of domainFiles) {
+          if (file.endsWith('.json')) {
+            allFiles.push({
+              path: join(domainDir, file),
+              name: file,
+              domain: entry.name
+            });
+          }
+        }
+      }
+    }
+
+    let scannedCount = 0;
+    let deletedCount = 0;
+    const BATCH_SIZE = 50; // Process 50 files in parallel
+
+    // Process in batches
+    for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
+      const batch = allFiles.slice(i, i + BATCH_SIZE);
+
+      const results = await Promise.all(batch.map(async (fileObj) => {
+        try {
+          const content = await readFile(fileObj.path, 'utf-8');
+          const data = JSON.parse(content);
+
+          if (data.url) {
+            for (const pattern of excludePatterns) {
+              if (matchesPattern(data.url, pattern)) {
+                await unlink(fileObj.path);
+                console.log(`[Clean] Deleting pattern match: ${data.url} (Pattern: ${pattern})`);
+                return true; // Deleted
+              }
+            }
+          }
+          return false; // Not deleted
+        } catch (err) {
+          console.error(`Error processing file ${fileObj.name} for cleaning:`, err);
+          return false;
+        }
+      }));
+
+      scannedCount += batch.length;
+      deletedCount += results.filter(Boolean).length;
     }
 
     res.json({ scanned: scannedCount, deleted: deletedCount });

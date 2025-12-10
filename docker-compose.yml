@@ -1040,7 +1040,7 @@ services:
       resources:
         limits:
           cpus: '1.0' # Limit to 1 CPU core
-          memory: 4G   # Limit to 4GB of RAM
+          memory: 6G   # Limit to 6GB of RAM
     logging: *logging_defaults
 
   api-chatbot-service:

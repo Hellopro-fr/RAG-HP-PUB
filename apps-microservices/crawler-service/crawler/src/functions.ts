@@ -213,9 +213,12 @@ export const startCrawler = async (
 
     let proxyConfiguration: ProxyConfiguration | undefined;
 
+    // CRITICAL MEMORY OPTIMIZATION: Force Crawlee to use disk instead of RAM
+
     let configuration = new Configuration({
         maxUsedCpuRatio: 0.95,
-        availableMemoryRatio: 0.95
+        availableMemoryRatio: 0.95,
+        persistStorage: true         // Force all storage to disk (not just cache)
     });
 
     if (PROXY_PASSWORD) {
@@ -358,16 +361,6 @@ export const startCrawler = async (
                             `We have reached the limit of ${limitUrls} entries. The crawler will be stopped.`
                         );
                     }
-
-                    // QUEUE SIZE LIMIT: Prevent spider traps from filling the queue infinitely
-                    const queueInfo = await requestQueue.getInfo();
-                    const maxQueueSize = 100000; // 100k URLs max
-                    if (queueInfo && queueInfo.totalRequestCount > maxQueueSize) {
-                        await stopCrawler(
-                            crawler,
-                            `Queue too large: ${queueInfo.totalRequestCount} URLs (max: ${maxQueueSize}). Possible spider trap detected.`
-                        );
-                    }
                 }
             },
         ],
@@ -380,7 +373,11 @@ export const startCrawler = async (
                     (!bypassQuestionMark && !skipquestionmark) ||
                     (!bypassDiez && !skipdiez)
                 ) {
-                    const data = await getScrapingData(domain);
+                    // OPTIMIZATION: Load dataset in batches of 1000 instead of loading everything
+                    const dataset = await Dataset.open(domain);
+                    const info = await dataset.getInfo();
+                    const totalItems = info ? info.itemCount : 0;
+
                     const patternQuestionMark = new RegExp(
                         `(?:/[^?]*)?\\?.*$`
                     );
@@ -389,16 +386,39 @@ export const startCrawler = async (
                     );
                     let countQuestionMark = 0;
                     let countDiez = 0;
+                    let offset = 0;
+                    const batchSize = 1000;
 
-                    for (const item of data.items) {
-                        if (patternQuestionMark.test(item.url)) {
-                            countQuestionMark++;
+                    // Iterate through dataset in batches
+                    while (offset < totalItems) {
+                        const batch = await dataset.getData({
+                            offset,
+                            limit: batchSize
+                        });
+
+                        for (const item of batch.items) {
+                            if (patternQuestionMark.test(item.url)) {
+                                countQuestionMark++;
+                            }
+
+                            if (patternDiez.test(item.url)) {
+                                countDiez++;
+                            }
+
+                            // Early exit if limit reached
+                            if (
+                                (!bypassQuestionMark &&
+                                    !skipquestionmark &&
+                                    countQuestionMark >= limitQuestionMarkDiez) ||
+                                (!bypassDiez &&
+                                    !skipdiez &&
+                                    countDiez >= limitQuestionMarkDiez)
+                            ) {
+                                break;
+                            }
                         }
 
-                        if (patternDiez.test(item.url)) {
-                            countDiez++;
-                        }
-
+                        // Check limits after each batch
                         if (
                             !bypassQuestionMark &&
                             !skipquestionmark &&
@@ -422,6 +442,8 @@ export const startCrawler = async (
                             );
                             break;
                         }
+
+                        offset += batchSize;
                     }
                 }
             },
@@ -523,8 +545,9 @@ export const getUrlsCrawled = (
     dropData: string | undefined = undefined
 ) => {
     // console.log(`name of domaine ${name}`);
-    //verifie if the folder of the domain does exist , if not create it
-    var folderName = `./storage/request_urls/${name}`;
+    // Since process.chdir(storagePath) has been called, we're already in the job directory
+    // So ./request_urls/ will point to /app/storage/{jobId}/request_urls/
+    var folderName = `./request_urls/${name}`;
     // console.log(`folderName ${folderName}`);
     try {
         if (!fs.existsSync(folderName)) {
@@ -533,7 +556,7 @@ export const getUrlsCrawled = (
     } catch (err) {
         console.error("Couldn't create the folder ");
         console.error(err);
-        folderName = "./storage/request_urls";
+        folderName = "./request_urls";
     }
 
     var fileUrls = `${folderName}/${name}.json`;
@@ -636,6 +659,14 @@ export const updateUrlsCrawled = (
 export const getScrapingData = async (name: string, countArray: number = 0) => {
     try {
         let dataset = await Dataset.open(name);
+
+        // Check if dataset exists and has items
+        const info = await dataset.getInfo();
+        if (!info || info.itemCount === 0) {
+            // Return empty structure if dataset is empty or doesn't exist
+            return { items: [], total: 0, offset: 0, count: 0, limit: 0 };
+        }
+
         let data;
 
         if (countArray === 0) {

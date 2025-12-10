@@ -81,17 +81,54 @@ console.info(JSON.stringify(args, null, 2));
 // 1. Kill orphan processes from previous runs
 console.log('🧹 Checking for orphan browser processes...');
 try {
-    // Kill Chrome/Chromium processes (|| true prevents error if no processes found)
-    await execAsync('pkill -9 -f "chrome|chromium" || true');
-    await execAsync('pkill -9 -f "playwright" || true');
+    // Kill Chrome/Chromium processes (ignore errors if no processes found)
+    await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true', { timeout: 5000 });
+    await execAsync('pkill -9 -f "playwright" 2>/dev/null || true', { timeout: 5000 });
     console.log('✅ Orphan processes cleaned.');
-} catch (e) {
-    console.warn('⚠️  Could not clean orphan processes:', e);
+} catch (e: any) {
+    // Ignore expected errors (no processes found, timeout, SIGKILL)
+    if (e.code !== 'ETIMEDOUT' && e.signal !== 'SIGKILL') {
+        console.warn('⚠️  Could not clean orphan processes:', e.message);
+    } else {
+        console.log('✅ No orphan processes found.');
+    }
 }
 
-// 2. Check available memory
-const totalMem = os.totalmem();
-const freeMem = os.freemem();
+// 2. Check available memory (Docker container limits, not host VM)
+let totalMem: number;
+let freeMem: number;
+
+try {
+    // Try to read Docker container memory limit from cgroups v2
+    const cgroupMemMax = await fs.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
+    const cgroupMemCurrent = await fs.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
+
+    if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
+        // cgroups v2 (Docker with cgroups v2)
+        totalMem = parseInt(cgroupMemMax.trim());
+        const usedMem = parseInt(cgroupMemCurrent.trim());
+        freeMem = totalMem - usedMem;
+    } else {
+        // Try cgroups v1 (older Docker versions)
+        const cgroupMemLimitV1 = await fs.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
+        const cgroupMemUsageV1 = await fs.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
+
+        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
+            totalMem = parseInt(cgroupMemLimitV1.trim());
+            const usedMem = parseInt(cgroupMemUsageV1.trim());
+            freeMem = totalMem - usedMem;
+        } else {
+            // Fallback to host memory (not in Docker or cgroups not available)
+            totalMem = os.totalmem();
+            freeMem = os.freemem();
+        }
+    }
+} catch (e) {
+    // Fallback to host memory if cgroup reading fails
+    totalMem = os.totalmem();
+    freeMem = os.freemem();
+}
+
 const usedMem = totalMem - freeMem;
 const memPercent = (usedMem / totalMem) * 100;
 
@@ -161,6 +198,7 @@ try {
                 domain: domain,
                 cpu: Math.min(cpuPercent, 1), // Cap at 100%
                 ram: memoryUsage.rss,
+                totalRam: totalMem, // ADDED: Total RAM limit for dynamic percentage calculation
                 topProcesses: topProcesses,
                 timestamp: Date.now(),
                 status: 'running'
@@ -214,7 +252,16 @@ if (dropData) {
     isHistorised = true;
 }
 
-export let allUrlsCrawled = new Set(getUrlsCrawled(domain, isHistorised, dropData ? 'true' : undefined));
+// CRITICAL FIX: Only load URLs into memory for fresh crawls to prevent OOM
+// When resuming (dropData=false), Crawlee's RequestQueue handles deduplication
+// This prevents loading 6000+ URLs into RAM which causes memory overload
+export let allUrlsCrawled = new Set(
+    dropData ? getUrlsCrawled(domain, isHistorised, 'true') : []
+);
+
+if (!dropData && allUrlsCrawled.size === 0) {
+    console.log('⚠️  Resume mode: allUrlsCrawled Set is empty. Relying on Crawlee RequestQueue for deduplication.');
+}
 
 if (skipquestionmark || skipdiez) {
     console.log("Filtering URLs in the queue...");

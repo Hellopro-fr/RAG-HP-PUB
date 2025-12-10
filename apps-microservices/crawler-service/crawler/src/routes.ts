@@ -148,22 +148,38 @@ router.addDefaultHandler(
 
         let enqueueLinksExcludePath: Array<string> = [
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
-            // === SPIDER TRAPS E-COMMERCE (STRICT EXCLUDES) ===
-            // Facettes et filtres
-            '**/*order=*', '**/*sort=*', '**/*dir=*', '**/*limit=*',
-            '**/*resultsPerPage=*', '**/*filter=*', '**/*filters[*',
-            '**/*price=*', '**/*price_min=*', '**/*price_max=*',
-            '**/*id_category=*', '**/*categoryId=*',
-            '**/*productListView=*',
+
+            // === SPIDER TRAPS E-COMMERCE (QUERY STRING PATTERNS) ===
+            // FIXED: Patterns now match query strings (?param=value) not just paths
+            // Facettes et filtres - Match both ? and & variations
+            '**/?*order=*', '**/*?*order=*', '**/*&order=*',
+            '**/?*sort=*', '**/*?*sort=*', '**/*&sort=*',
+            '**/?*dir=*', '**/*?*dir=*', '**/*&dir=*',
+            '**/?*limit=*', '**/*?*limit=*', '**/*&limit=*',
+            '**/?*resultsPerPage=*', '**/*?*resultsPerPage=*', '**/*&resultsPerPage=*',
+            '**/?*filter=*', '**/*?*filter=*', '**/*&filter=*',
+            '**/?*filters[*', '**/*?*filters[*', '**/*&filters[*',
+            '**/?*price=*', '**/*?*price=*', '**/*&price=*',
+            '**/?*price_min=*', '**/*?*price_min=*', '**/*&price_min=*',
+            '**/?*price_max=*', '**/*?*price_max=*', '**/*&price_max=*',
+            '**/?*id_category=*', '**/*?*id_category=*', '**/*&id_category=*',
+            '**/?*categoryId=*', '**/*?*categoryId=*', '**/*&categoryId=*',
+            '**/?*productListView=*', '**/*?*productListView=*', '**/*&productListView=*',
 
             // Recherche et pagination avancée
-            '**/*q=*', '**/*search=*', '**/*query=*',
+            '**/?*q=*', '**/*?*q=*', '**/*&q=*',
+            '**/?*search=*', '**/*?*search=*', '**/*&search=*',
+            '**/?*query=*', '**/*?*query=*', '**/*&query=*',
             '**/*page=*/**/*page=*', // Double pagination
-            '**/*offset=*', '**/*start=*',
+            '**/?*offset=*', '**/*?*offset=*', '**/*&offset=*',
+            '**/?*start=*', '**/*?*start=*', '**/*&start=*',
 
             // Tris et affichages multiples
-            '**/*view=*', '**/*mode=*', '**/*display=*',
-            '**/*per_page=*', '**/*items=*',
+            '**/?*view=*', '**/*?*view=*', '**/*&view=*',
+            '**/?*mode=*', '**/*?*mode=*', '**/*&mode=*',
+            '**/?*display=*', '**/*?*display=*', '**/*&display=*',
+            '**/?*per_page=*', '**/*?*per_page=*', '**/*&per_page=*',
+            '**/?*items=*', '**/*?*items=*', '**/*&items=*',
 
             // === AUTHENTIFICATION & COMPTE (CRITICAL FOR OOM) ===
             '**/connexion**', '**/login**', '**/signin**', '**/log-in**',
@@ -188,11 +204,14 @@ router.addDefaultHandler(
             '**/wishlist**', '**/liste-envies**', '**/favoris**',
             '**/compare**', '**/comparateur**',
             '**/sendtoafriend**', '**/send-to-friend**',
-            // '**/catalog/product/view/**', // REMOVED: False positive for some Magento sites
 
             // === CALENDRIERS & DATES ===
-            '**/*year=*', '**/*month=*', '**/*day=*',
-            '**/*date=*', '**/*from=*', '**/*to=*',
+            '**/?*year=*', '**/*?*year=*', '**/*&year=*',
+            '**/?*month=*', '**/*?*month=*', '**/*&month=*',
+            '**/?*day=*', '**/*?*day=*', '**/*&day=*',
+            '**/?*date=*', '**/*?*date=*', '**/*&date=*',
+            '**/?*from=*', '**/*?*from=*', '**/*&from=*',
+            '**/?*to=*', '**/*?*to=*', '**/*&to=*',
             '**/calendrier/**', '**/calendar/**',
 
             // === RÉSEAUX SOCIAUX & PARTAGE (SCOPE LEAK PREVENTION) ===
@@ -204,37 +223,34 @@ router.addDefaultHandler(
 
             // === TRACKING & ANALYTICS ===
             '**/*redirect*', '**/*track*', '**/*click*',
-            '**/*ref=*', '**/*referrer=*', '**/*source=*',
+            '**/?*ref=*', '**/*?*ref=*', '**/*&ref=*',
+            '**/?*referrer=*', '**/*?*referrer=*', '**/*&referrer=*',
+            '**/?*source=*', '**/*?*source=*', '**/*&source=*',
 
             // === APIS & TECHNIQUES ===
             '**/api/**', '**/wp-json/**', '**/rest/**',
             '**/feed/**', '**/feeds/**', '**/rss/**',
 
             // === SPECIFIC SITE EXCLUDES (sellerie-equishop) ===
-            '**/PBCPPlayer.asp**', // Heavy video player
+            '**/PBCPPlayer.asp**',
             '**/popup/**',
 
             // === SPECIFIC SITE EXCLUDES (promodis.fr) ===
-            '**/download.php**',   // BLOQUER les downloads
-            '**/*imp=1*',          // BLOQUER les versions print
+            '**/download.php**',
+            '**/*imp=1*',
             '**/dhtml/download.php*',
             '**/*.pdf', '**/*.zip', '**/*.rar', '**/*.doc', '**/*.docx', '**/*.xls', '**/*.xlsx',
 
             // === SPECIFIC SITE EXCLUDES (SHOPIFY SPIDER TRAPS) ===
-            // Filters combinations (infinite loops)
-            '**/collections/*/*+*', // Block multiple tags (e.g. /collections/all/red+blue)
-            '**/collections/*/*%2B*', // Block encoded '+'
-            '**/collections/*/*&*', // Block other combinations
-
-            // Common Shopify filters
+            '**/collections/*/*+*',
+            '**/collections/*/*%2B*',
+            '**/collections/*/*&*',
             '**/*size_*', '**/*taille_*',
             '**/*color_*', '**/*couleur_*',
             '**/*price_*', '**/*prix_*',
             '**/*brand_*', '**/*marque_*',
             '**/*type_*', '**/*vendor_*',
-
-            // Sort & View parameters often found in Shopify
-            '**/*sort_by=*', '**/*view=*',
+            '**/?*sort_by=*', '**/*?*sort_by=*', '**/*&sort_by=*',
         ];
 
         // Not useful anymore as we analyze the URL to check which parameters to keep or to remove
@@ -253,6 +269,16 @@ router.addDefaultHandler(
 
         if (!isDoublon) {
             allUrlsCrawled.add(url);
+
+            // SAFETY LIMIT: Prevent unbounded memory growth
+            // Clear Set if it exceeds 100k URLs (prevents OOM on very large sites)
+            // Crawlee's RequestQueue will continue to handle deduplication
+            const MAX_URLS_IN_MEMORY = 100000;
+            if (allUrlsCrawled.size > MAX_URLS_IN_MEMORY) {
+                log.warning(`⚠️  allUrlsCrawled Set exceeded ${MAX_URLS_IN_MEMORY.toLocaleString()} URLs. Clearing to prevent OOM. Crawlee RequestQueue will handle deduplication.`);
+                allUrlsCrawled.clear();
+            }
+
             // OPTIMIZATION: Removed synchronous disk write on every request (updateUrlsCrawled)
             // This was causing massive CPU/IO overhead with 250k URLs.
             // Persistence is now handled by the Dataset and RequestQueue.
@@ -337,7 +363,7 @@ router.addDefaultHandler(
 
                 await enqueueLinks({
                     strategy: "same-domain",
-                    // globs: enqueueLinksIncludePath,
+                    globs: enqueueLinksIncludePath, // FIXED: Uncommented to enable URL restrictions
                     exclude: enqueueLinksExcludePath,
                     transformRequestFunction: (request) => {
                         if (
@@ -347,6 +373,36 @@ router.addDefaultHandler(
                             console.log(
                                 `Bloqué par robots.txt : ${request.url}`
                             );
+                            return null;
+                        }
+
+                        // === NEW: PREVENTIVE PARAMETER FILTERING (BEFORE ENQUEUE) ===
+                        // This blocks URLs with forbidden query parameters BEFORE they enter the queue
+                        // This is MORE RELIABLE than glob patterns for query strings
+                        try {
+                            const urlObj = new URL(request.url);
+                            const forbiddenParams = [
+                                'order', 'sort', 'dir', 'limit', 'resultsPerPage',
+                                'filter', 'price', 'price_min', 'price_max',
+                                'id_category', 'categoryId', 'productListView',
+                                'q', 'search', 'query', 'offset', 'start',
+                                'view', 'mode', 'display', 'per_page', 'items',
+                                'year', 'month', 'day', 'date', 'from', 'to',
+                                'ref', 'referrer', 'source', 'sort_by',
+                                // Shopify specific
+                                'size_', 'taille_', 'color_', 'couleur_',
+                                'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
+                            ];
+
+                            for (const param of forbiddenParams) {
+                                if (urlObj.searchParams.has(param) ||
+                                    Array.from(urlObj.searchParams.keys()).some(key => key.startsWith(param))) {
+                                    console.log(`🚫 Blocked forbidden param "${param}": ${request.url}`);
+                                    return null;
+                                }
+                            }
+                        } catch (e) {
+                            console.error(`Invalid URL in param check: ${request.url}`);
                             return null;
                         }
 

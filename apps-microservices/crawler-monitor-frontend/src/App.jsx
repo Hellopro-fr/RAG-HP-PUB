@@ -468,6 +468,25 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     }
   };
 
+  const [queueAnalysis, setQueueAnalysis] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const analyzeQueue = async () => {
+    setAnalyzing(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await authFetch(`${API_URL}/jobs/${jobId}/request-queues/analyze`);
+      const data = await res.json();
+      setQueueAnalysis(data);
+      setSuccessMsg(`Analyse terminée : ${data.total} URLs analysées`);
+    } catch (err) {
+      setError(`Erreur lors de l'analyse : ${err.message}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const cleanPatterns = async () => {
     if (!window.confirm('Êtes-vous sûr de vouloir nettoyer les patterns ? Cela supprimera les URLs correspondant aux filtres (login, cart, facebook, etc.).')) {
       return;
@@ -482,6 +501,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
       });
       const data = await res.json();
       setSuccessMsg(`Nettoyage patterns terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
+      setQueueAnalysis(null); // Reset analysis after cleanup
       fetchFiles(); // Refresh list
     } catch (err) {
       setError(`Erreur lors du nettoyage patterns : ${err.message}`);
@@ -526,24 +546,6 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
             <Code className="w-5 h-5" /> Éditeur Request Queue
           </h3>
           <div className="flex items-center gap-4">
-            <button
-              onClick={cleanPatterns}
-              disabled={repairing || loading}
-              className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 rounded text-sm text-white disabled:opacity-50 transition-colors"
-              title="Supprimer les patterns exclus (login, cart, etc.)"
-            >
-              {repairing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Filter className="w-4 h-4" />}
-              Nettoyer Patterns
-            </button>
-            <button
-              onClick={repairQueue}
-              disabled={repairing || loading}
-              className="flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm text-white disabled:opacity-50 transition-colors"
-              title="Supprimer les URLs hors domaine"
-            >
-              {repairing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              Nettoyer / Réparer
-            </button>
             <button onClick={onClose} className="text-gray-400 hover:text-white">
               <XCircle className="w-6 h-6" />
             </button>
@@ -551,13 +553,79 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar list */}
-          <div className="w-1/3 border-r border-gray-700 flex flex-col">
-            <div className="p-3 bg-gray-900 border-b border-gray-700 space-y-2">
+          {/* Left Panel: Analysis, Actions, Search, File List, Pagination */}
+          <div className="w-1/3 border-r border-gray-700 flex flex-col bg-gray-800">
+            {/* Header & Tools */}
+            <div className="p-3 bg-gray-900 border-b border-gray-700 space-y-3">
               <div className="flex justify-between items-center">
-                <h4 className="text-sm font-semibold text-gray-400">Requêtes ({totalItems})</h4>
-                <span className="text-xs text-gray-500">Page {page}/{totalPages}</span>
+                <h4 className="text-sm font-semibold text-gray-400">Queue ({totalItems})</h4>
+                <div className="flex gap-2">
+                  {!queueAnalysis && (
+                    <button
+                      onClick={analyzeQueue}
+                      disabled={analyzing}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs text-white flex items-center gap-1"
+                      title="Analyser la composition de la queue"
+                    >
+                      {analyzing ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                      Analyser
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Analysis Results Widget */}
+              {queueAnalysis && (
+                <div className="bg-gray-800 p-3 rounded border border-gray-600 text-xs space-y-2 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex justify-between font-bold text-white mb-1">
+                    <span>Résultat Analyse</span>
+                    <button
+                      onClick={() => setQueueAnalysis(null)}
+                      className="text-gray-500 hover:text-white"
+                      title="Fermer"
+                    >
+                      <XCircle className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-red-900/30 p-1.5 rounded border border-red-900/50">
+                      <span className="text-red-400 block">Bloquées</span>
+                      <span className="font-bold text-white">{queueAnalysis.blocked}</span>
+                    </div>
+                    <div className="bg-green-900/30 p-1.5 rounded border border-green-900/50">
+                      <span className="text-green-400 block">Valides</span>
+                      <span className="font-bold text-white">{queueAnalysis.valid}</span>
+                    </div>
+                  </div>
+
+                  <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden flex w-full">
+                    <div style={{ width: `${queueAnalysis.blockedPercent}%` }} className="bg-red-500 h-full" />
+                    <div style={{ width: `${queueAnalysis.validPercent}%` }} className="bg-green-500 h-full" />
+                  </div>
+
+                  {/* Smart Actions */}
+                  <div className="pt-1">
+                    {queueAnalysis.valid === 0 ? (
+                      <button
+                        onClick={repairQueue}
+                        className="w-full py-1.5 bg-red-600 hover:bg-red-700 rounded text-white flex justify-center items-center gap-2"
+                      >
+                        <Trash2 className="w-3 h-3" /> Tout Supprimer
+                      </button>
+                    ) : (
+                      <button
+                        onClick={cleanPatterns}
+                        className="w-full py-1.5 bg-orange-600 hover:bg-orange-700 rounded text-white flex justify-center items-center gap-2"
+                      >
+                        <Filter className="w-3 h-3" /> Nettoyer ({queueAnalysis.blocked})
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Search */}
               <input
                 type="text"
                 placeholder="Rechercher URL..."
@@ -827,14 +895,16 @@ const ReplicaMonitor = ({ replicas }) => {
     return 'red';
   };
 
-  const CircularProgress = ({ cpu, ram }) => {
+  const CircularProgress = ({ cpu, ram, totalRam }) => {
     const size = 140;
     const strokeWidth = 12;
     const radius = (size - strokeWidth) / 2;
     const circumference = 2 * Math.PI * radius;
 
     const cpuPercent = Math.min((cpu || 0) * 100, 100);
-    const ramPercent = Math.min((ram / (4 * 1024 * 1024 * 1024)) * 100, 100);
+    // DYNAMIC: Use totalRam from heartbeat, fallback to 6GB if not provided
+    const ramLimit = totalRam || (6 * 1024 * 1024 * 1024);
+    const ramPercent = Math.min((ram / ramLimit) * 100, 100);
 
     const cpuOffset = circumference - (cpuPercent / 100) * circumference;
     const ramOffset = circumference - (ramPercent / 100) * circumference;
@@ -947,7 +1017,7 @@ const ReplicaMonitor = ({ replicas }) => {
                 {/* Circular Progress */}
                 <div className="flex flex-col items-center mb-4">
                   <div className="relative">
-                    <CircularProgress cpu={replica.cpu} ram={replica.ram} />
+                    <CircularProgress cpu={replica.cpu} ram={replica.ram} totalRam={replica.totalRam} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <div className="text-center">
                         <div className="text-xs text-gray-400">CPU</div>

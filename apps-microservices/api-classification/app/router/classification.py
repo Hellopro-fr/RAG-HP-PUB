@@ -200,7 +200,7 @@ async def classify_single_product(product: ProductInput):
 
         # Conversion en modèle de réponse
         return ClassificationResult(**result)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -227,8 +227,8 @@ async def classify_batch_products(batch_input: BatchProductsInput):
         if len(batch_input.produits) == 0:
             raise HTTPException(status_code=400, detail="Liste de produits vide")
 
-        if len(batch_input.produits) > 1000:  # Limite de sécurité
-            raise HTTPException(status_code=400, detail="Trop de produits (max 1000)")
+        if len(batch_input.produits) > 1200:  # Limite de sécurité
+            raise HTTPException(status_code=400, detail="Trop de produits (max 1200)")
 
         # Conversion des modèles Pydantic en dicts
         products_dict = []
@@ -244,7 +244,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 
         # Conversion en modèle de réponse
         classification_results = [ClassificationResult(**res) for res in result['resultats']]
-        
+
         return BatchClassificationResponse(
             total_produits=result['total_produits'],
             success_count=result['success_count'],
@@ -253,7 +253,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
             llm_type=result.get('llm_type'),
             processing_time_total=result['processing_time_total']
         )
-        
+
     except HTTPException:
         metric_status = 'failure'
         raise
@@ -269,8 +269,8 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 
         if num_products == 0:
              PROCESSING_TIME_SECONDS.labels(
-                service_name="api-classification-service", 
-                status=metric_status, 
+                service_name="api-classification-service",
+                status=metric_status,
                 collection_type='empty_batch'
             ).observe(duration)
         else:
@@ -288,20 +288,20 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 
 # @router.post("/classify/batch/async")
 # async def classify_batch_products_async(
-#     batch_input: BatchProductsInput, 
+#     batch_input: BatchProductsInput,
 #     background_tasks: BackgroundTasks
 # ):
 #     """Lance une classification en lot en arrière-plan (pour de gros volumes)"""
 #     try:
 #         if not classifier.is_llm_configured():
 #             raise HTTPException(status_code=503, detail="LLM non configuré")
-        
+
 #         if len(batch_input.produits) == 0:
 #             raise HTTPException(status_code=400, detail="Liste de produits vide")
-        
+
 #         # Génération d'un ID de tâche
 #         task_id = f"batch_{int(time.time())}"
-        
+
 #         # Conversion des modèles Pydantic en dicts
 #         products_dict = []
 #         for product in batch_input.produits:
@@ -311,20 +311,20 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 #                 'description': product.description,
 #                 'id_categorie_attendue': product.id_categorie_attendue
 #             })
-        
+
 #         # Lancement de la tâche en arrière-plan
 #         background_tasks.add_task(
 #             _process_batch_classification,
 #             task_id,
 #             products_dict
 #         )
-        
+
 #         return {
 #             "task_id": task_id,
 #             "message": f"Classification de {len(products_dict)} produits lancée en arrière-plan",
 #             "total_products": len(products_dict)
 #         }
-        
+
 #     except HTTPException:
 #         raise
 #     except Exception as e:
@@ -342,10 +342,10 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 #             "total_products": len(products),
 #             "start_time": time.time()
 #         }
-        
+
 #         logger.info(f"Début traitement batch {task_id} - {len(products)} produits")
 #         result = classifier.classify_batch(products)
-        
+
 #         # Sauvegarder le résultat complet
 #         task_results[task_id] = {
 #             "status": "COMPLETED",
@@ -355,9 +355,9 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 #             "end_time": time.time(),
 #             "result": result
 #         }
-        
+
 #         logger.info(f"Fin traitement batch {task_id} - {result['success_count']} succès, {result['error_count']} erreurs")
-        
+
 #     except Exception as e:
 #         # Marquer comme échoué
 #         task_results[task_id] = {
@@ -376,14 +376,14 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 #     """Récupère le statut d'une tâche de classification en lot"""
 #     if task_id not in task_results:
 #         raise HTTPException(status_code=404, detail="Tâche non trouvée")
-    
+
 #     task_info = task_results[task_id].copy()
-    
+
 #     # Ajouter des infos calculées
 #     if "start_time" in task_info:
 #         elapsed_time = time.time() - task_info["start_time"]
 #         task_info["elapsed_time"] = round(elapsed_time, 2)
-    
+
 #     return task_info
 
 # @router.get("/classify/batch/result/{task_id}", response_model=BatchClassificationResponse)
@@ -392,19 +392,19 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 #     """Récupère le résultat complet d'une tâche terminée"""
 #     if task_id not in task_results:
 #         raise HTTPException(status_code=404, detail="Tâche non trouvée")
-    
+
 #     task_info = task_results[task_id]
-    
+
 #     if task_info["status"] == "PROCESSING":
 #         raise HTTPException(status_code=202, detail="Tâche en cours de traitement")
 #     elif task_info["status"] == "FAILED":
 #         raise HTTPException(status_code=500, detail=f"Tâche échouée: {task_info.get('error', 'Erreur inconnue')}")
 #     elif task_info["status"] != "COMPLETED":
 #         raise HTTPException(status_code=400, detail=f"Statut de tâche invalide: {task_info['status']}")
-    
+
 #     result = task_info["result"]
 #     classification_results = [ClassificationResult(**res) for res in result['resultats']]
-    
+
 #     return BatchClassificationResponse(
 #         total_produits=result['total_produits'],
 #         success_count=result['success_count'],
@@ -419,7 +419,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 #     """Supprime une tâche du cache"""
 #     if task_id not in task_results:
 #         raise HTTPException(status_code=404, detail="Tâche non trouvée")
-    
+
 #     del task_results[task_id]
 #     return {"message": f"Tâche {task_id} supprimée"}
 
@@ -435,7 +435,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
 #             "total_products": task_info.get("total_products", 0),
 #             "elapsed_time": round(time.time() - task_info["start_time"], 2) if "start_time" in task_info else None
 #         }
-    
+
 #     return {"tasks": tasks_summary, "total_tasks": len(tasks_summary)}
 
 @router.post("/classify/batch/distributed", response_model=BatchClassificationResponse)
@@ -664,8 +664,8 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
 
         if num_products == 0:
              PROCESSING_TIME_SECONDS.labels(
-                service_name="api-classification-service", 
-                status=metric_status, 
+                service_name="api-classification-service",
+                status=metric_status,
                 collection_type='empty_batch'
             ).observe(duration)
         else:
