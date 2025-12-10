@@ -251,8 +251,8 @@ export const startCrawler = async (
             retireBrowserAfterPageCount: 5, // Aggressive rotation to prevent memory leaks on unstable sites
         },
 
-        minConcurrency: 1, // Ensure at least one browser is running
-        maxConcurrency: 2, // CRITICAL: Reduced to 2 to prevent OOM on CPU-saturated machines (was 15)
+        // minConcurrency: 1, // Ensure at least one browser is running
+        maxConcurrency: 1, // CRITICAL: Reduced to 2 to prevent OOM on CPU-saturated machines (was 15)
         navigationTimeoutSecs: 90, // Increased to 90s to tolerate slow sites (was 60s)
         requestHandlerTimeoutSecs: 120, // Increased to allow for retries and slow processing
 
