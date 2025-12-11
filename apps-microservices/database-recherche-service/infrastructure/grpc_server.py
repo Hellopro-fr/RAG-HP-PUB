@@ -17,12 +17,18 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         logging.info(f"Requête de recherche reçue pour la collection '{request.collection_name}' avec top_k={request.top_k}")
         # TODO: Sécuriser ce flux (authentification, validation des entrées)
         try:
+            kwargs = {}
+            if "options" in request:
+                for key, value in request["options"].items():
+                    kwargs[key] = value
+
             results = self.use_case.execute_search(
                 collection_name=request.collection_name,
                 vector=list(request.query_embedding),
                 top_k=request.top_k,
                 filter_expression=request.filter_expression if request.HasField('filter_expression') else None,
-                output_fields=list(request.output_fields) if request.output_fields else None
+                output_fields=list(request.output_fields) if request.output_fields else None,
+                **kwargs
             )
             
             proto_results = []
