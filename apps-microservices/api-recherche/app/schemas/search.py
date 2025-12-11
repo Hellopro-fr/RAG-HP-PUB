@@ -56,7 +56,8 @@ class SearchRequestWs(BaseModel):
     )
     options: Optional[RerankerOptions] = RerankerOptions()
     type: int = 1
-    cache: bool = True
+    cache: bool = True,
+    get_n_chunks_pj: bool = False,
 
 
 # Schéma de réponse détaillé

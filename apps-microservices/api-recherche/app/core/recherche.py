@@ -807,13 +807,15 @@ class SearchOrchestrator:
         final_filter_expr = await self._build_filter_expression(filtre, source_name)
 
         #todo à supprimer après test
-        logger.info(f"Query filter : {filtre}")
+        get_n_chunks_pj = True if filtre.get("autre_chunks","") == "avec" else False
+        logger.info(f"get_n_chunks_pjr : {get_n_chunks_pj}")
 
         return await database_client.search_vector(
             collection=source_name,
             vector=query_vector,
             k=k,
             filter_expr=final_filter_expr,
+            get_n_chunks_pj=get_n_chunks_pj,
         )
 
     async def _build_filter_expression(self, filtre: dict, source_name: str) -> str:

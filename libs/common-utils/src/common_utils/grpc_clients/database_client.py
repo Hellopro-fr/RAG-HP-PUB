@@ -30,6 +30,8 @@ async def search_vector(
                 request.filter_expression = filter_expr
             if kwargs.get("output_fields") and isinstance(kwargs.get("output_fields"), list):
                 request.output_fields.extend(kwargs.get("output_fields", []))
+            if "get_n_chunks_pj" in kwargs:
+                request.get_n_chunks_pj = kwargs.get("get_n_chunks_pj",False)
 
             response = await stub.Search(request)
             return response.results
