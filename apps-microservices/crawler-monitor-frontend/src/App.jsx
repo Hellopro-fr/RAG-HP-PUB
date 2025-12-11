@@ -739,6 +739,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
 
 const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
   const [showQueueEditor, setShowQueueEditor] = useState(false);
+  const [showDatasetAnalyzer, setShowDatasetAnalyzer] = useState(false);
 
   if (!job) return null;
   if (job.error) {
@@ -764,6 +765,13 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
             Explorer la Queue
           </button>
           <button
+            onClick={() => setShowDatasetAnalyzer(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors text-white"
+          >
+            <Server className="w-4 h-4" />
+            Analyser Dataset
+          </button>
+          <button
             onClick={onToggleRaw}
             className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
           >
@@ -774,6 +782,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, token }) => {
       </div>
 
       {showQueueEditor && <RequestQueueEditor jobId={job.id} onClose={() => setShowQueueEditor(false)} token={token} />}
+      {showDatasetAnalyzer && <DatasetAnalyzer jobId={job.id} onClose={() => setShowDatasetAnalyzer(false)} token={token} />}
 
       {showRaw ? (
         <AdvancedLogViewer content={job.rawContent || "Contenu brut non disponible."} jobId={job.id} />
