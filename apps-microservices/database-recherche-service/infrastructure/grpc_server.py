@@ -2,6 +2,7 @@ import grpc
 import logging
 from concurrent import futures
 from google.protobuf import struct_pb2
+from google.protobuf.json_format import MessageToDict
 import json 
 
 from grpc_stubs import database_pb2
@@ -17,18 +18,18 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         logging.info(f"Requête de recherche reçue pour la collection '{request.collection_name}' avec top_k={request.top_k}")
         # TODO: Sécuriser ce flux (authentification, validation des entrées)
         try:
-            # kwargs = {}
-            # if "options" in request:
-            #     for key, value in request.get("options",{}).items():
-            #         kwargs[key] = value
-            logging.info(f"Request options : {request.options}")
+            kwargs = {}
+            if "options" in request:
+                kwargs = MessageToDict(request['options'])
+
+            logging.info(f"Request options : {kwargs}")
             results = self.use_case.execute_search(
                 collection_name=request.collection_name,
                 vector=list(request.query_embedding),
                 top_k=request.top_k,
                 filter_expression=request.filter_expression if request.HasField('filter_expression') else None,
                 output_fields=list(request.output_fields) if request.output_fields else None,
-                # **kwargs
+                **kwargs
             )
             
             proto_results = []
