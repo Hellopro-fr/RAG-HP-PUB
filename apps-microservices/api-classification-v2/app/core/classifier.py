@@ -1285,16 +1285,26 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 raise ValueError(f"LLM {self.llm_choice} non configuré")
 
         except Exception as e:
-            logger.error(f"Erreur LLM: {e}")
+            error_message = str(e)
+            logger.error(f"Erreur LLM: {error_message}")
+
+            # Détecter si c'est une erreur critique 402 (Insufficient Balance)
+            is_insufficient_balance = "402" in error_message or "Insufficient Balance" in error_message
+
+            if is_insufficient_balance:
+                logger.critical(f"🚨 ERREUR CRITIQUE: Solde DeepSeek insuffisant - {error_message}")
+
             # Capturer l'exception complète avec ses détails
             return {
                 "success": False,
-                "error": str(e),
-                "error_type": type(e).__name__,
+                "error": error_message,
+                "error_type": "InsufficientBalance" if is_insufficient_balance else type(e).__name__,
+                "critical": is_insufficient_balance,  # Flag pour arrêter le traitement batch
                 "raw_response": {
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                    "exception_details": str(e)
+                    "error": error_message,
+                    "error_type": "InsufficientBalance" if is_insufficient_balance else type(e).__name__,
+                    "exception_details": error_message,
+                    "critical": is_insufficient_balance
                 }
             }
 
@@ -1723,6 +1733,43 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 
         # Exécuter toutes les tâches en parallèle et attendre leurs résultats
         results = await asyncio.gather(*tasks)
+
+        # 🚨 VÉRIFIER SI UNE ERREUR CRITIQUE (402 Insufficient Balance) EST SURVENUE
+        critical_error_index = None
+        for i, result in enumerate(results):
+            if result.get('status') == 'ERROR':
+                # Vérifier dans llm_response si c'est une erreur critique
+                llm_responses = result.get('llm_response', [])
+                if llm_responses and isinstance(llm_responses, list) and len(llm_responses) > 0:
+                    llm_response = llm_responses[0] if isinstance(llm_responses[0], dict) else {}
+                    if llm_response.get('critical') or llm_response.get('error_type') == 'InsufficientBalance':
+                        critical_error_index = i
+                        logger.critical(f"🚨 Erreur critique détectée au produit {i + 1}/{len(products)}: {result.get('error')} - Arrêt du traitement des produits restants")
+                        break
+
+        # Si erreur critique détectée, marquer tous les produits suivants comme ERROR
+        if critical_error_index is not None:
+            for i in range(critical_error_index + 1, len(results)):
+                results[i] = {
+                    'id_produit': products[i]['id_produit'],
+                    'titre_produit': products[i].get('_nom_produit_original', products[i]['nom_produit']),
+                    'titre_produit_optimise': None,
+                    'description_produit': products[i].get('description', ''),
+                    'status': 'ERROR',
+                    'id_categorie': None,
+                    'nom_categorie': None,
+                    'score_llm': None,
+                    'categorie_candidates': [],
+                    'generated_keywords': [],
+                    'error': 'Traitement arrêté : Solde DeepSeek insuffisant',
+                    'llm_type': llm_override if llm_override else self.llm_choice,
+                    'enable_thinking': enable_thinking,
+                    'llm_response': None,
+                    'processing_time': 0,
+                    'input_tokens': 0,
+                    'output_tokens': 0
+                }
+            logger.warning(f"⚠️ {len(results) - critical_error_index - 1} produits marqués comme non traités suite à l'erreur critique")
 
         # 🔧 Si optimize=True, corriger les résultats pour avoir le bon titre_produit et titre_produit_optimise
         # ET additionner les tokens d'optimisation batch aux tokens de chaque résultat
