@@ -820,4 +820,55 @@ class CrawlerManager:
             logger.info(
                 f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
 
+    async def cleanup_archives(self, max_age_hours: int):
+        """
+        Deletes archive files that are older than `max_age_hours` to save disk space.
+        Scanning is performed in a separate thread to avoid blocking.
+        """
+        archives_dir = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
+        if not os.path.exists(archives_dir):
+            return
+
+        logger.info(f"Starting archive cleanup. Removing files older than {max_age_hours} hours.")
+        
+        # Define the sync cleanup function logic
+        def _cleanup_sync():
+            deleted_count = 0
+            retained_count = 0
+            errors = 0
+            now = datetime.now().timestamp()
+            max_age_seconds = max_age_hours * 3600
+            
+            try:
+                for filename in os.listdir(archives_dir):
+                    file_path = os.path.join(archives_dir, filename)
+                    if not os.path.isfile(file_path):
+                        continue
+                        
+                    # Calculate age
+                    try:
+                        mtime = os.path.getmtime(file_path)
+                        age = now - mtime
+                        
+                        if age > max_age_seconds:
+                            os.remove(file_path)
+                            deleted_count += 1
+                        else:
+                            retained_count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to process/delete archive '{filename}': {e}")
+                        errors += 1
+                        
+            except Exception as e:
+                logger.error(f"Error listing archives directory during cleanup: {e}")
+                
+            return deleted_count, retained_count, errors
+
+        # Run in thread
+        try:
+            deleted, retained, errors = await anyio.to_thread.run_sync(_cleanup_sync)
+            logger.info(f"Archive cleanup complete. Deleted: {deleted}, Retained: {retained}, Errors: {errors}")
+        except Exception as e:
+            logger.error(f"Failed to execute archive cleanup: {e}")
+
 crawler_manager = CrawlerManager()

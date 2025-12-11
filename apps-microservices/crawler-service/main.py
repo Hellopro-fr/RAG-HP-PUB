@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 # --- Reconciliation Task ---
 reconciliation_task: Optional[asyncio.Task] = None
+archive_cleanup_task: Optional[asyncio.Task] = None
 
 async def reconcile_running_jobs_count():
     """
@@ -39,6 +40,28 @@ async def reconcile_running_jobs_count():
         
         # Wait for the next interval
         await asyncio.sleep(settings.RECONCILIATION_INTERVAL_SECONDS)
+
+
+async def scheduled_archive_cleanup():
+    """
+    Periodically cleans up old archive files to manage disk usage.
+    Runs every hour and deletes files older than 24 hours.
+    """
+    CLEANUP_INTERVAL_SECONDS = 3600  # Run every hour
+    MAX_AGE_HOURS = 24  # Trigger deletion for files > 24h old
+
+    while True:
+        try:
+            # Initial delay to stagger from startup
+            await asyncio.sleep(60)
+            
+            await crawler_manager.cleanup_archives(max_age_hours=MAX_AGE_HOURS)
+            
+        except Exception as e:
+            logger.error(f"Error during archive cleanup task: {e}", exc_info=True)
+        
+        # Wait for the next interval
+        await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
 
 
 app = FastAPI(
@@ -90,6 +113,10 @@ async def startup_event():
     reconciliation_task = asyncio.create_task(reconcile_running_jobs_count())
     logger.info(f"Started background task for reconciling running jobs every {settings.RECONCILIATION_INTERVAL_SECONDS} seconds.")
 
+    # Start the background archive cleanup task
+    archive_cleanup_task = asyncio.create_task(scheduled_archive_cleanup())
+    logger.info("Started background task for archive cleanup (every 1 hour).")
+
 @app.on_event("shutdown")
 async def shutdown_event():
     global reconciliation_task
@@ -102,6 +129,13 @@ async def shutdown_event():
             await reconciliation_task
         except asyncio.CancelledError:
             logger.info("Reconciliation task successfully cancelled.")
+            
+    if archive_cleanup_task:
+        archive_cleanup_task.cancel()
+        try:
+            await archive_cleanup_task
+        except asyncio.CancelledError:
+            logger.info("Archive cleanup task successfully cancelled.")
             
     await crawler_manager.shutdown()
     await close_redis_pool()
