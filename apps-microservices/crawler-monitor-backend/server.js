@@ -710,6 +710,189 @@ app.get('/api/jobs/:id/request-queues/analyze', async (req, res) => {
   }
 });
 
+// Helper to find dataset directory
+async function findDatasetDir(jobId) {
+  // Structure based on user feedback:
+  // CRAWLER_STORAGE_PATH / {jobId} / storage / datasets / {domain}
+  // Example: .../4767/storage/datasets/promodis.fr
+
+  try {
+    const jobDir = join(CRAWLER_STORAGE_PATH, jobId);
+    const nestedStorageDatasets = join(jobDir, 'storage', 'datasets');
+
+    // Check if this path exists
+    if (fs.existsSync(nestedStorageDatasets)) {
+      const entries = await readdir(nestedStorageDatasets, { withFileTypes: true });
+      // Find the first directory found inside (which should be the domain)
+      const domainDir = entries.find(dirent => dirent.isDirectory());
+      if (domainDir) {
+        return join(nestedStorageDatasets, domainDir.name);
+      }
+    }
+  } catch (e) {
+    console.warn(`Failed to find dataset in new structure for job ${jobId}: ${e.message}`);
+  }
+
+  // Fallback to legacy structure if any
+  // ... (keeping previous logic as backup or removing if confirmed incorrect?)
+  // Let's keep a simplified standard structure check just in case.
+  const standardDatasets = join(CRAWLER_STORAGE_PATH, 'datasets');
+  if (fs.existsSync(join(standardDatasets, jobId))) return join(standardDatasets, jobId);
+
+  return null;
+}
+
+app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Attempt to locate the dataset folder
+    // Since we don't know the exact folder name (could be domain), we need a robust way.
+    // However, given the current context, we can assume typical Crawlee behavior.
+
+    // For this specific system, let's look for a folder in `storage/datasets` that matches the job ID OR the domain.
+    // Ideally we should query Redis to get the domain.
+
+    let datasetDir = await findDatasetDir(id);
+
+    // If still not found, try `default` folder if single tenant? No, multi-job.
+    if (!datasetDir) {
+      // Try searching for any folder matching the ID
+      const redisClient = createClient({ url: REDIS_URL });
+      await redisClient.connect();
+      const jobData = JSON.parse(await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
+      await redisClient.quit();
+
+      if (jobData && jobData.domain) {
+        datasetDir = join(CRAWLER_STORAGE_PATH, 'datasets', jobData.domain);
+      }
+    }
+
+    if (!datasetDir || !fs.existsSync(datasetDir)) {
+      return res.status(404).json({ error: 'Dataset directory not found.' });
+    }
+
+    const files = await readdir(datasetDir);
+    const urlMap = new Map(); // URL -> Count
+    let totalItems = 0;
+    let duplicateItems = 0;
+    const duplicatesExample = [];
+
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        try {
+          const content = await readFile(join(datasetDir, file), 'utf-8');
+          const data = JSON.parse(content);
+          if (data.url) {
+            totalItems++;
+            const count = urlMap.get(data.url) || 0;
+            urlMap.set(data.url, count + 1);
+
+            if (count === 1) { // It's now a duplicate (count becomes 2)
+              duplicateItems++;
+              if (duplicatesExample.length < 5) {
+                duplicatesExample.push(data.url);
+              }
+            } else if (count > 1) {
+              duplicateItems++;
+            }
+          }
+        } catch (e) {/* ignore malformed */ }
+      }
+    }
+
+    res.json({
+      path: datasetDir,
+      totalItems,
+      uniqueUrls: urlMap.size,
+      duplicateCount: totalItems - urlMap.size,
+      duplicatesExample
+    });
+
+  } catch (error) {
+    console.error('Error analyzing dataset:', error);
+    res.status(500).json({ error: 'Analysis failed' });
+  }
+});
+
+app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
+  const { id } = req.params;
+  try {
+    let datasetDir = await findDatasetDir(id);
+
+    // Same fallback logic
+    if (!datasetDir) {
+      const redisClient = createClient({ url: REDIS_URL });
+      await redisClient.connect();
+      const jobData = JSON.parse(await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
+      await redisClient.quit();
+      if (jobData && jobData.domain) {
+        datasetDir = join(CRAWLER_STORAGE_PATH, 'datasets', jobData.domain);
+      }
+    }
+
+    if (!datasetDir || !fs.existsSync(datasetDir)) {
+      return res.status(404).json({ error: 'Dataset directory not found.' });
+    }
+
+    const files = await readdir(datasetDir);
+    // Sort files by modification time (keep newest? or oldest? usually keep newest contains better data, or oldest is original.
+    // Let's keep the NEWEST version if we assume re-crawl improves data. OR keep oldest to be stable.
+    // Actually, Crawlee appends new files with incremental numbers typically.
+    // Let's keep the LATEST one.
+
+    // We need to read all files to know their URLs.
+    const seenUrls = new Set();
+    let removedCount = 0;
+
+    // To do this safely: 
+    // 1. Read all files and map URL -> [List of Files with Metadata]
+    // 2. For each URL with > 1 file:
+    //    Sort files by ID/Date. Keep one. Remove others.
+
+    const urlFilesMap = new Map(); // URL -> [{file, ctime}]
+
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        const filePath = join(datasetDir, file);
+        try {
+          const content = await readFile(filePath, 'utf-8');
+          const data = JSON.parse(content);
+          if (data.url) {
+            const stats = await fs.promises.stat(filePath);
+            const entry = { file, path: filePath, mtime: stats.mtimeMs };
+
+            if (!urlFilesMap.has(data.url)) {
+              urlFilesMap.set(data.url, []);
+            }
+            urlFilesMap.get(data.url).push(entry);
+          }
+        } catch (e) { }
+      }
+    }
+
+    // Now purge
+    for (const [url, fileEntries] of urlFilesMap.entries()) {
+      if (fileEntries.length > 1) {
+        // Sort by mtime descending (newest first)
+        fileEntries.sort((a, b) => b.mtime - a.mtime);
+
+        // Keep the first one (newest), remove the rest
+        const toRemove = fileEntries.slice(1);
+        for (const item of toRemove) {
+          await fs.promises.unlink(item.path);
+          removedCount++;
+        }
+      }
+    }
+
+    res.json({ success: true, removedCount, message: `Removed ${removedCount} duplicate files.` });
+
+  } catch (error) {
+    console.error('Error deduplicating dataset:', error);
+    res.status(500).json({ error: 'Deduplication failed' });
+  }
+});
+
 app.post('/api/jobs/:id/request-queues/clean-patterns', async (req, res) => {
 
   const { id } = req.params;
