@@ -5,6 +5,7 @@ import os
 import re
 import tempfile
 import shutil
+import anyio
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 
@@ -382,6 +383,22 @@ class CrawlerManager:
         if job_info["status"] == "running":
              raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
         
+        # Offload the blocking I/O operation (file copying and compression) to a worker thread
+        # to prevent blocking the main event loop and causing 504 timeouts.
+        try:
+            return await anyio.to_thread.run_sync(self._generate_archive_sync, job_info, include)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error in background archive generation for '{crawl_id}': {e}", exc_info=True)
+            raise e
+
+    def _generate_archive_sync(self, job_info: dict, include: List[IncludeInArchive]) -> str:
+        """
+        Synchronous helper function to generate the archive.
+        This runs in a separate thread.
+        """
+        crawl_id = job_info['crawl_id']
         job_storage_path = job_info["storage_path"]
         domain = job_info["domain"]
         
