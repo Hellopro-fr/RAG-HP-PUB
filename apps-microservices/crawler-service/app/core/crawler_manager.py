@@ -6,6 +6,8 @@ import re
 import tempfile
 import shutil
 import anyio
+import tarfile
+import hashlib
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 
@@ -396,64 +398,87 @@ class CrawlerManager:
     def _generate_archive_sync(self, job_info: dict, include: List[IncludeInArchive]) -> str:
         """
         Synchronous helper function to generate the archive.
-        This runs in a separate thread.
+        Optimized for performance:
+        1. Checks for existing cached archive properly hashing the inputs.
+        2. Uses direct tarfile writing (no temp dir staging).
+        3. Uses reduced compression level for speed.
         """
         crawl_id = job_info['crawl_id']
         job_storage_path = job_info["storage_path"]
         domain = job_info["domain"]
+
+        # Sort include list to ensure deterministic hash
+        sorted_include = sorted([item.value for item in include])
+        include_hash = hashlib.md5(json.dumps(sorted_include).encode()).hexdigest()
         
-        # Use a temporary directory to stage the files for archiving
-        with tempfile.TemporaryDirectory() as staging_dir:
-            # This is the root inside the staging area that will mirror the on-disk structure
-            archive_content_root = os.path.join(staging_dir, "storage")
-            os.makedirs(archive_content_root, exist_ok=True)
-            
-            # Map the user's request to the actual folder names
-            path_mappings = {
-                IncludeInArchive.DATASET: os.path.join("datasets", domain),
-                IncludeInArchive.DATASET_NFR: os.path.join("datasets", f"nfr-{domain}"),
-                IncludeInArchive.DATASET_ERROR: os.path.join("datasets", f"error-{domain}"),
-                IncludeInArchive.REQUEST_QUEUES: os.path.join("request_queues", domain),
-                IncludeInArchive.REQUEST_URLS: os.path.join("request_urls", domain),
-                IncludeInArchive.MISCELLANEOUS: os.path.join("miscellaneous", domain),
-            }
+        # Define the centralized archive path with hash to allow caching of different requests
+        archive_base_path = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
+        os.makedirs(archive_base_path, exist_ok=True)
+        final_archive_path = os.path.join(archive_base_path, f"{crawl_id}-results-{include_hash}.tar.gz")
 
-            crawlee_storage_base = os.path.join(job_storage_path, 'storage')
-            
-            copied_anything = False
-            for item in set(include): # Use set to avoid processing duplicate requests
-                relative_path = path_mappings.get(item)
-                if not relative_path: continue
-                
-                source_path = os.path.join(crawlee_storage_base, relative_path)
-                
-                if os.path.exists(source_path):
-                    destination_path = os.path.join(archive_content_root, relative_path)
-                    # Ensure parent directories exist in the staging area
-                    os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-                    shutil.copytree(source_path, destination_path)
-                    copied_anything = True
-            
-            if not copied_anything:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"None of the requested components were found for crawl '{crawl_id}'. "
-                    f"The crawl data may have been cleaned up after archiving to GCS."
-                )
-
-            # Create the final archive from the contents of the staging directory
-            archive_base_path = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
-            os.makedirs(archive_base_path, exist_ok=True)
-            archive_name = os.path.join(archive_base_path, f"{crawl_id}-results")
-            
-            # This will create an archive containing a single 'storage' folder at its root
-            final_archive_path = shutil.make_archive(
-                base_name=archive_name,
-                format='gztar',
-                root_dir=staging_dir
-            )
-            
+        # --- CACHING STRATEGY ---
+        # If the file already exists, return it immediately!
+        if os.path.exists(final_archive_path):
+            logger.info(f"Returning cached archive for '{crawl_id}' (hash: {include_hash})")
             return final_archive_path
+
+        # Map the user's request to the actual folder names
+        path_mappings = {
+            IncludeInArchive.DATASET: os.path.join("datasets", domain),
+            IncludeInArchive.DATASET_NFR: os.path.join("datasets", f"nfr-{domain}"),
+            IncludeInArchive.DATASET_ERROR: os.path.join("datasets", f"error-{domain}"),
+            IncludeInArchive.REQUEST_QUEUES: os.path.join("request_queues", domain),
+            IncludeInArchive.REQUEST_URLS: os.path.join("request_urls", domain),
+            IncludeInArchive.MISCELLANEOUS: os.path.join("miscellaneous", domain),
+        }
+
+        crawlee_storage_base = os.path.join(job_storage_path, 'storage')
+        copied_anything = False
+
+        # Use a temporary file for writing the partial archive to avoid race conditions
+        # or serving incomplete files if the process fails mid-way.
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".tar.gz", dir=archive_base_path) as tmp_file:
+            try:
+                # Open tarfile with reduced compression level (1 = fastest)
+                with tarfile.open(fileobj=tmp_file, mode='w:gz', compresslevel=1) as tar:
+                    for item in set(include):
+                        relative_path = path_mappings.get(item)
+                        if not relative_path: continue
+                        
+                        source_path = os.path.join(crawlee_storage_base, relative_path)
+                        
+                        if os.path.exists(source_path):
+                            # Add to tar directly! No staging copy.
+                            # arcname ensures it sits inside a 'storage' folder in the archive
+                            # to match the structure expected by the user/frontend (?)
+                            # The original implementation put it under 'storage/...' via staging.
+                            arcname = os.path.join("storage", relative_path)
+                            tar.add(source_path, arcname=arcname)
+                            copied_anything = True
+                
+                if not copied_anything:
+                    # Don't leave the empty temp file
+                    tmp_file.close() # Ensure closed before remove
+                    os.remove(tmp_file.name)
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"None of the requested components were found for crawl '{crawl_id}'. "
+                        f"The crawl data may have been cleaned up after archiving to GCS."
+                    )
+            
+            except Exception:
+                # Cleanup on error
+                tmp_file.close()
+                if os.path.exists(tmp_file.name):
+                    os.remove(tmp_file.name)
+                raise
+
+            # Atomic move: only put the file in its final place when fully done
+            tmp_file.close()
+            shutil.move(tmp_file.name, final_archive_path)
+            
+        logger.info(f"Created new optimized archive for '{crawl_id}' at {final_archive_path}")
+        return final_archive_path
         
     async def reindex_storage(self) -> ReindexResponse:
         """Scans storage for orphaned jobs and re-indexes them in Redis."""
