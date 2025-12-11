@@ -8,7 +8,7 @@ import cors from 'cors';
 import { createClient } from 'redis';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { readFile, readdir, writeFile, unlink, stat } from 'fs/promises';
+import { readFile, readdir, writeFile, unlink, stat, mkdir } from 'fs/promises';
 import { join, normalize } from 'path';
 import { existsSync } from 'fs';
 import helmet from 'helmet';
@@ -600,7 +600,7 @@ app.post('/api/jobs/:id/request-queues/drop', async (req, res) => {
     await execAsync(`rm -rf "${baseDir}"`);
 
     // Recreate the empty directory structure
-    await fs.promises.mkdir(baseDir, { recursive: true });
+    await mkdir(baseDir, { recursive: true });
 
     res.json({ success: true, message: "Queue dropped successfully" });
   } catch (error) {
@@ -743,6 +743,7 @@ async function findDatasetDir(jobId) {
 }
 
 app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
+  console.log('🔍 DATASET ANALYZE ENDPOINT HIT (DEBUG: FS FIX APPLIED)');
   const { id } = req.params;
   try {
     // Attempt to locate the dataset folder
