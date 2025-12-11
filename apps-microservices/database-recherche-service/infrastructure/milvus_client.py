@@ -117,6 +117,9 @@ class MilvusClient:
             if not connections.has_connection("default"):
                 self.__init__() # Tentative de reconnexion
 
+            if collection_name == "pjechanges":
+                logging.info(f"Param search : {kwargs}")
+
             collection = self._ensure_collection_loaded(collection_name)
 
             fields_without_embedding = []
