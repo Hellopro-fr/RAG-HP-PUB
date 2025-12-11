@@ -19,7 +19,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         try:
             kwargs = {}
             if "options" in request:
-                for key, value in request["options"].items():
+                for key, value in request.get("options",{}).items():
                     kwargs[key] = value
 
             results = self.use_case.execute_search(
