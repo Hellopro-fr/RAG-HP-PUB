@@ -8,7 +8,7 @@ import cors from 'cors';
 import { createClient } from 'redis';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
-import { readFile, readdir, writeFile, unlink } from 'fs/promises';
+import { readFile, readdir, writeFile, unlink, stat } from 'fs/promises';
 import { join, normalize } from 'path';
 import { existsSync } from 'fs';
 import helmet from 'helmet';
@@ -721,7 +721,7 @@ async function findDatasetDir(jobId) {
     const nestedStorageDatasets = join(jobDir, 'storage', 'datasets');
 
     // Check if this path exists
-    if (fs.existsSync(nestedStorageDatasets)) {
+    if (existsSync(nestedStorageDatasets)) {
       const entries = await readdir(nestedStorageDatasets, { withFileTypes: true });
       // Find the first directory found inside (which should be the domain)
       const domainDir = entries.find(dirent => dirent.isDirectory());
@@ -737,7 +737,7 @@ async function findDatasetDir(jobId) {
   // ... (keeping previous logic as backup or removing if confirmed incorrect?)
   // Let's keep a simplified standard structure check just in case.
   const standardDatasets = join(CRAWLER_STORAGE_PATH, 'datasets');
-  if (fs.existsSync(join(standardDatasets, jobId))) return join(standardDatasets, jobId);
+  if (existsSync(join(standardDatasets, jobId))) return join(standardDatasets, jobId);
 
   return null;
 }
