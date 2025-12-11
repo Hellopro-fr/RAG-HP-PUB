@@ -3,6 +3,8 @@ import os
 import logging
 from typing import List, Optional
 
+from google.protobuf import struct_pb2
+
 from grpc_stubs import database_pb2
 from grpc_stubs import database_pb2_grpc
 
@@ -31,7 +33,9 @@ async def search_vector(
             if kwargs.get("output_fields") and isinstance(kwargs.get("output_fields"), list):
                 request.output_fields.extend(kwargs.get("output_fields", []))
             if "get_n_chunks_pj" in kwargs:
-                request.get_n_chunks_pj = kwargs.get("get_n_chunks_pj",False)
+                options_struct = struct_pb2.Struct()
+                options_struct.update({"get_n_chunks_pj":kwargs.get("get_n_chunks_pj",False)})
+                request.options = options_struct
 
             response = await stub.Search(request)
             return response.results

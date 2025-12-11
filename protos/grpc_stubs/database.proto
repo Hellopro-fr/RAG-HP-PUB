@@ -16,6 +16,7 @@ message SearchRequest {
   int32 top_k = 3;
   optional string filter_expression = 4;
   repeated string output_fields = 5;
+  optional google.protobuf.Struct options = 6;
 }
 
 message ClassicSearchRequest {
