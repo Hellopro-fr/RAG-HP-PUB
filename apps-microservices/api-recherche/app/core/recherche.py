@@ -805,6 +805,10 @@ class SearchOrchestrator:
 
     async def _create_search_task(self, source_name, filtre, query_vector, k):
         final_filter_expr = await self._build_filter_expression(filtre, source_name)
+
+        #todo à supprimer après test
+        logger.info(f"Query filter : {filtre}")
+
         return await database_client.search_vector(
             collection=source_name,
             vector=query_vector,

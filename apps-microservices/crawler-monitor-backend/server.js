@@ -582,6 +582,31 @@ app.post('/api/jobs/:id/request-queues/repair', async (req, res) => {
     console.error(`Error repairing request queues for job ${id}:`, error);
     res.status(500).json({ error: 'Failed to repair request queues' });
   }
+
+});
+
+// Endpoint to DROP the entire request queue (RESET)
+app.post('/api/jobs/:id/request-queues/drop', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const baseDir = await findRequestQueuesDir(id);
+    if (!baseDir) {
+      return res.status(404).json({ error: 'Request queues directory not found' });
+    }
+
+    console.log(`[Drop] Dropping entire request queue for job ${id}`);
+
+    // Force delete the directory using system command (more robust than fs.rm in older node versions)
+    await execAsync(`rm -rf "${baseDir}"`);
+
+    // Recreate the empty directory structure
+    await fs.promises.mkdir(baseDir, { recursive: true });
+
+    res.json({ success: true, message: "Queue dropped successfully" });
+  } catch (error) {
+    console.error(`Error dropping request queue for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to drop request queue' });
+  }
 });
 
 app.get('/api/jobs/:id/request-queues/analyze', async (req, res) => {

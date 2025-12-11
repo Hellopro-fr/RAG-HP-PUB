@@ -283,7 +283,11 @@ if (typeCrawling === "generate_data") {
     console.log("Data generation mode is not fully supported in API mode. Exiting.");
 } else {
     // Reclaim failed request
-    await reclaimFailedRequest(domain);
+    try {
+        await reclaimFailedRequest(domain);
+    } catch (error) {
+        console.warn(`⚠️ Warning: Failed to reclaim failed requests for ${domain}. The crawler will continue without them. Error: ${error}`);
+    }
 
     // Launch the crawler
     const crawler = await startCrawler(
