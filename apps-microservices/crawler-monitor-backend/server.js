@@ -767,7 +767,7 @@ app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
       }
     }
 
-    if (!datasetDir || !fs.existsSync(datasetDir)) {
+    if (!datasetDir || !existsSync(datasetDir)) {
       return res.status(404).json({ error: 'Dataset directory not found.' });
     }
 
@@ -830,7 +830,7 @@ app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
       }
     }
 
-    if (!datasetDir || !fs.existsSync(datasetDir)) {
+    if (!datasetDir || !existsSync(datasetDir)) {
       return res.status(404).json({ error: 'Dataset directory not found.' });
     }
 
@@ -858,7 +858,7 @@ app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
           const content = await readFile(filePath, 'utf-8');
           const data = JSON.parse(content);
           if (data.url) {
-            const stats = await fs.promises.stat(filePath);
+            const stats = await stat(filePath);
             const entry = { file, path: filePath, mtime: stats.mtimeMs };
 
             if (!urlFilesMap.has(data.url)) {
@@ -879,7 +879,7 @@ app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
         // Keep the first one (newest), remove the rest
         const toRemove = fileEntries.slice(1);
         for (const item of toRemove) {
-          await fs.promises.unlink(item.path);
+          await unlink(item.path);
           removedCount++;
         }
       }
