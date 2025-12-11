@@ -220,8 +220,9 @@ async def download_crawl_results(
                 f"The crawl data may have been cleaned up after archiving to GCS."
             )
 
-        # Delete the temporary archive file after the response is sent
-        background_tasks.add_task(lambda path: os.remove(path), archive_path)
+        # Archive is now cached for performance, so we do NOT delete it immediately.
+        # Cleanup should be handled by a separate retention policy/cron if needed.
+        # background_tasks.add_task(lambda path: os.remove(path), archive_path)
         
         return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
     except HTTPException as e:
