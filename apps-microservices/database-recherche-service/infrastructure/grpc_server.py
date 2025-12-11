@@ -22,7 +22,6 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             if request.HasField('options'):
                 kwargs = MessageToDict(request.options)
 
-            logging.info(f"Request options : {kwargs}")
             results = self.use_case.execute_search(
                 collection_name=request.collection_name,
                 vector=list(request.query_embedding),

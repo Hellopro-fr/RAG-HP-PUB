@@ -117,9 +117,6 @@ class MilvusClient:
             if not connections.has_connection("default"):
                 self.__init__() # Tentative de reconnexion
 
-            if collection_name == "pjechanges":
-                logging.info(f"Param search : {kwargs}")
-
             collection = self._ensure_collection_loaded(collection_name)
 
             fields_without_embedding = []
@@ -148,7 +145,10 @@ class MilvusClient:
             # Formatage des résultats en entités du domaine
             domain_results = []
             
-            is_context_collection = (collection_name == "pjechanges" and kwargs.get("get_n_chunks_pj", False))
+            is_context_collection = (collection_name == "pjechanges" and kwargs.get("get_n_chunks_pj"))
+            if collection_name == "pjechanges":
+                logging.info(f"Param search : {kwargs}")
+                logging.info(f"is_context_collection : {is_context_collection}")
 
             if is_context_collection:
                 seen_ids = set()
@@ -256,6 +256,8 @@ class MilvusClient:
                         metadata=metadata,
                         source=collection_name
                     ))
+
+                    logging.info(f"res pj: {domain_results}")
             else:
                 for hit in results[0]:
                     domain_results.append(SearchResultEntity(
