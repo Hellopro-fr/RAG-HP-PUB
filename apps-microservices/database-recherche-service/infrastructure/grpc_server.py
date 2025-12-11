@@ -18,11 +18,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         logging.info(f"Requête de recherche reçue pour la collection '{request.collection_name}' avec top_k={request.top_k}")
         # TODO: Sécuriser ce flux (authentification, validation des entrées)
         try:
-            # kwargs = {}
-            # if "options" in request:
-            #     kwargs = MessageToDict(request['options'])
+            kwargs = {}
+            if request.HasField('options'):
+                kwargs = MessageToDict(request.options)
 
-            # logging.info(f"Request options : {kwargs}")
+            logging.info(f"Request options : {kwargs}")
             results = self.use_case.execute_search(
                 collection_name=request.collection_name,
                 vector=list(request.query_embedding),
