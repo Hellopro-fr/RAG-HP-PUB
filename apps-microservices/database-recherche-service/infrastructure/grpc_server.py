@@ -29,7 +29,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 top_k=request.top_k,
                 filter_expression=request.filter_expression if request.HasField('filter_expression') else None,
                 output_fields=list(request.output_fields) if request.output_fields else None,
-                # **kwargs
+                **kwargs
             )
             
             proto_results = []
