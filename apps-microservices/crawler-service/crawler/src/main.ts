@@ -274,13 +274,29 @@ if (skipquestionmark || skipdiez) {
 export const requestQueue = await RequestQueue.open(domain);
 
 // --- QUEUE HEALTH CHECK ---
-// Prevent zombie crawlers when queue has items but none are pending (polluted state)
+// Intelligent queue state detection using handled/pending/total counts
 const queueInfo = await requestQueue.getInfo();
-if (queueInfo && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
-    console.error(`❌ CRITICAL: The request queue for ${domain} has ${queueInfo.totalRequestCount} items but 0 are pending.`);
-    console.error(`ℹ️  This state (polluted queue) prevents the crawler from running.`);
-    console.error(`💡 SOLUTION: Using the Monitor Interface, click on 'Queue Editor' > 'Analyze' then 'Clean Patterns' or 'Reset Queue' or 'Drop Queue'.`);
-    process.exit(1); // Exit to prevent zombie idle state
+
+// Case 1: Crawl completed successfully (all items handled)
+if (queueInfo && queueInfo.handledRequestCount === queueInfo.totalRequestCount && queueInfo.pendingRequestCount === 0) {
+    console.log(`✅ Crawl already completed: ${queueInfo.handledRequestCount}/${queueInfo.totalRequestCount} items handled.`);
+    console.log(`ℹ️  No pending items. Exiting gracefully.`);
+    process.exit(0); // Success exit
+}
+
+// Case 2: Corrupted/polluted queue (items exist but none are handled or pending)
+if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
+    console.error(`❌ CRITICAL: Corrupted queue detected for ${domain}`);
+    console.error(`   Total items: ${queueInfo.totalRequestCount}`);
+    console.error(`   Handled: 0, Pending: 0`);
+    console.error(`ℹ️  All items are locked/stuck in an invalid state.`);
+    console.error(`💡 SOLUTION: Use Monitor Interface > 'Queue Editor' > 'Analyze' then 'Clean Patterns' or 'Drop Queue'.`);
+    process.exit(1); // Error exit
+}
+
+// Case 3: Normal operation - items are pending or being processed
+if (queueInfo) {
+    console.log(`📊 Queue status: ${queueInfo.pendingRequestCount} pending, ${queueInfo.handledRequestCount} handled, ${queueInfo.totalRequestCount} total`);
 }
 // --------------------------
 
