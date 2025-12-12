@@ -258,19 +258,7 @@ export let allUrlsCrawled = new Set(
     getUrlsCrawled(domain, isHistorised, 'true')
 );
 
-if (skipquestionmark || skipdiez) {
-    console.log("Filtering URLs in the queue...");
-    const requestQueueList = getAllRequestQueues(domain);
-
-    if (requestQueueList.length > 0) {
-        let parameters: any = {};
-        if (toKeep.length > 0) parameters.toKeep = toKeep;
-        if (toRemove.length > 0) parameters.toRemove = toRemove;
-        parseJsonFiles(requestQueueList, skipquestionmark, skipdiez, parameters);
-    }
-}
-
-// Open requestQueue
+// Open requestQueue FIRST (before any operations)
 export const requestQueue = await RequestQueue.open(domain);
 
 // --- QUEUE HEALTH CHECK ---
@@ -299,6 +287,19 @@ if (queueInfo) {
     console.log(`📊 Queue status: ${queueInfo.pendingRequestCount} pending, ${queueInfo.handledRequestCount} handled, ${queueInfo.totalRequestCount} total`);
 }
 // --------------------------
+
+// URL Filtering (AFTER health check, only if queue is healthy)
+if (skipquestionmark || skipdiez) {
+    console.log("Filtering URLs in the queue...");
+    const requestQueueList = getAllRequestQueues(domain);
+
+    if (requestQueueList.length > 0) {
+        let parameters: any = {};
+        if (toKeep.length > 0) parameters.toKeep = toKeep;
+        if (toRemove.length > 0) parameters.toRemove = toRemove;
+        parseJsonFiles(requestQueueList, skipquestionmark, skipdiez, parameters);
+    }
+}
 
 if (typeCrawling === "generate_data") {
     // This logic might need adjustment in an API context
