@@ -278,7 +278,7 @@ export const requestQueue = await RequestQueue.open(domain);
 const queueInfo = await requestQueue.getInfo();
 
 // Case 1: Crawl completed successfully (all items handled)
-if (queueInfo && queueInfo.handledRequestCount === queueInfo.totalRequestCount && queueInfo.pendingRequestCount === 0) {
+if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCount === queueInfo.totalRequestCount && queueInfo.pendingRequestCount === 0) {
     console.log(`✅ Crawl already completed: ${queueInfo.handledRequestCount}/${queueInfo.totalRequestCount} items handled.`);
     console.log(`ℹ️  No pending items. Exiting gracefully.`);
     process.exit(0); // Success exit
