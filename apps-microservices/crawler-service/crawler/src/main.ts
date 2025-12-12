@@ -252,16 +252,11 @@ if (dropData) {
     isHistorised = true;
 }
 
-// CRITICAL FIX: Only load URLs into memory for fresh crawls to prevent OOM
-// When resuming (dropData=false), Crawlee's RequestQueue handles deduplication
-// This prevents loading 6000+ URLs into RAM which causes memory overload
+// Load all previously crawled URLs for deduplication
+// Note: This loads the full history into RAM, which may cause OOM on large datasets
 export let allUrlsCrawled = new Set(
-    dropData ? getUrlsCrawled(domain, isHistorised, 'true') : []
+    getUrlsCrawled(domain, isHistorised, 'true')
 );
-
-if (!dropData && allUrlsCrawled.size === 0) {
-    console.log('⚠️  Resume mode: allUrlsCrawled Set is empty. Relying on Crawlee RequestQueue for deduplication.');
-}
 
 if (skipquestionmark || skipdiez) {
     console.log("Filtering URLs in the queue...");
@@ -277,6 +272,17 @@ if (skipquestionmark || skipdiez) {
 
 // Open requestQueue
 export const requestQueue = await RequestQueue.open(domain);
+
+// --- QUEUE HEALTH CHECK ---
+// Prevent zombie crawlers when queue has items but none are pending (polluted state)
+const queueInfo = await requestQueue.getInfo();
+if (queueInfo && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
+    console.error(`❌ CRITICAL: The request queue for ${domain} has ${queueInfo.totalRequestCount} items but 0 are pending.`);
+    console.error(`ℹ️  This state (polluted queue) prevents the crawler from running.`);
+    console.error(`💡 SOLUTION: Using the Monitor Interface, click on 'Queue Editor' > 'Analyze' then 'Clean Patterns' or 'Reset Queue' or 'Drop Queue'.`);
+    process.exit(1); // Exit to prevent zombie idle state
+}
+// --------------------------
 
 if (typeCrawling === "generate_data") {
     // This logic might need adjustment in an API context
