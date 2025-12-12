@@ -596,13 +596,25 @@ app.post('/api/jobs/:id/request-queues/drop', async (req, res) => {
 
     console.log(`[Drop] Dropping entire request queue for job ${id}`);
 
-    // Force delete the directory using system command (more robust than fs.rm in older node versions)
-    await execAsync(`rm -rf "${baseDir}"`);
+    // Find the domain subdirectory (similar to dataset logic)
+    const entries = await readdir(baseDir, { withFileTypes: true });
+    const domainDir = entries.find(dirent => dirent.isDirectory());
 
-    // Recreate the empty directory structure
-    await mkdir(baseDir, { recursive: true });
+    if (domainDir) {
+      const domainQueuePath = join(baseDir, domainDir.name);
+      console.log(`[Drop] Deleting domain queue: ${domainQueuePath}`);
 
-    res.json({ success: true, message: "Queue dropped successfully" });
+      // Delete the domain-specific queue folder
+      await execAsync(`rm -rf "${domainQueuePath}"`);
+
+      // Recreate empty folder
+      await mkdir(domainQueuePath, { recursive: true });
+
+      res.json({ success: true, message: `Queue dropped successfully for ${domainDir.name}` });
+    } else {
+      // No domain folder found, queue is already empty
+      res.json({ success: true, message: "Queue already empty" });
+    }
   } catch (error) {
     console.error(`Error dropping request queue for job ${id}:`, error);
     res.status(500).json({ error: 'Failed to drop request queue' });
