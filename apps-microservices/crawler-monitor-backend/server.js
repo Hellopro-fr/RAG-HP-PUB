@@ -723,10 +723,11 @@ app.get('/api/jobs/:id/request-queues/analyze', async (req, res) => {
 });
 
 // Helper to find dataset directory
-async function findDatasetDir(jobId) {
+async function findDatasetDir(jobId, datasetName = null) {
   // Structure based on user feedback:
   // CRAWLER_STORAGE_PATH / {jobId} / storage / datasets / {domain}
   // Example: .../4767/storage/datasets/promodis.fr
+  // Or for non-French: .../4767/storage/datasets/nfr-promodis.fr
 
   try {
     const jobDir = join(CRAWLER_STORAGE_PATH, jobId);
@@ -735,10 +736,19 @@ async function findDatasetDir(jobId) {
     // Check if this path exists
     if (existsSync(nestedStorageDatasets)) {
       const entries = await readdir(nestedStorageDatasets, { withFileTypes: true });
-      // Find the first directory found inside (which should be the domain)
-      const domainDir = entries.find(dirent => dirent.isDirectory());
-      if (domainDir) {
-        return join(nestedStorageDatasets, domainDir.name);
+
+      if (datasetName) {
+        // Look for specific dataset name
+        const targetDir = entries.find(dirent => dirent.isDirectory() && dirent.name === datasetName);
+        if (targetDir) {
+          return join(nestedStorageDatasets, targetDir.name);
+        }
+      } else {
+        // Find the first directory found inside (which should be the domain)
+        const domainDir = entries.find(dirent => dirent.isDirectory());
+        if (domainDir) {
+          return join(nestedStorageDatasets, domainDir.name);
+        }
       }
     }
   } catch (e) {
@@ -746,10 +756,15 @@ async function findDatasetDir(jobId) {
   }
 
   // Fallback to legacy structure if any
-  // ... (keeping previous logic as backup or removing if confirmed incorrect?)
-  // Let's keep a simplified standard structure check just in case.
   const standardDatasets = join(CRAWLER_STORAGE_PATH, 'datasets');
-  if (existsSync(join(standardDatasets, jobId))) return join(standardDatasets, jobId);
+  if (datasetName) {
+    const specificDatasetPath = join(standardDatasets, datasetName);
+    if (existsSync(specificDatasetPath)) {
+      return specificDatasetPath;
+    }
+  } else if (existsSync(join(standardDatasets, jobId))) {
+    return join(standardDatasets, jobId);
+  }
 
   return null;
 }
@@ -758,147 +773,161 @@ app.get('/api/jobs/:id/dataset/analyze', async (req, res) => {
   console.log('🔍 DATASET ANALYZE ENDPOINT HIT (DEBUG: FS FIX APPLIED)');
   const { id } = req.params;
   try {
-    // Attempt to locate the dataset folder
-    // Since we don't know the exact folder name (could be domain), we need a robust way.
-    // However, given the current context, we can assume typical Crawlee behavior.
+    // Get job data to find domain
+    const redisClient = createClient({ url: REDIS_URL });
+    await redisClient.connect();
+    const jobData = JSON.parse(await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
+    await redisClient.quit();
 
-    // For this specific system, let's look for a folder in `storage/datasets` that matches the job ID OR the domain.
-    // Ideally we should query Redis to get the domain.
-
-    let datasetDir = await findDatasetDir(id);
-
-    // If still not found, try `default` folder if single tenant? No, multi-job.
-    if (!datasetDir) {
-      // Try searching for any folder matching the ID
-      const redisClient = createClient({ url: REDIS_URL });
-      await redisClient.connect();
-      const jobData = JSON.parse(await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
-      await redisClient.quit();
-
-      if (jobData && jobData.domain) {
-        datasetDir = join(CRAWLER_STORAGE_PATH, 'datasets', jobData.domain);
-      }
+    if (!jobData || !jobData.domain) {
+      return res.status(404).json({ error: 'Job not found or domain missing' });
     }
 
-    if (!datasetDir || !existsSync(datasetDir)) {
-      return res.status(404).json({ error: 'Dataset directory not found.' });
-    }
+    const domain = jobData.domain;
 
-    const files = await readdir(datasetDir);
-    const urlMap = new Map(); // URL -> Count
+    // Find both datasets
+    const mainDatasetDir = await findDatasetDir(id); // Main dataset ({domain})
+    const nfrDatasetDir = await findDatasetDir(id, `nfr-${domain}`); // Non-French dataset
+
+    const urlMap = new Map(); // URL -> { count, datasets: ['main'|'nfr'] }
     let totalItems = 0;
+    let mainItems = 0;
+    let nfrItems = 0;
     let duplicateItems = 0;
     const duplicatesExample = [];
 
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        try {
-          const content = await readFile(join(datasetDir, file), 'utf-8');
-          const data = JSON.parse(content);
-          if (data.url) {
-            totalItems++;
-            const count = urlMap.get(data.url) || 0;
-            urlMap.set(data.url, count + 1);
+    // Helper function to scan a dataset
+    const scanDataset = async (dir, label) => {
+      if (!dir || !existsSync(dir)) return 0;
 
-            if (count === 1) { // It's now a duplicate (count becomes 2)
-              duplicateItems++;
-              if (duplicatesExample.length < 5) {
-                duplicatesExample.push(data.url);
+      const files = await readdir(dir);
+      let count = 0;
+
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          try {
+            const content = await readFile(join(dir, file), 'utf-8');
+            const data = JSON.parse(content);
+            if (data.url) {
+              totalItems++;
+              count++;
+
+              const existing = urlMap.get(data.url);
+              if (existing) {
+                existing.count++;
+                existing.datasets.push(label);
+                duplicateItems++;
+                if (duplicatesExample.length < 5 && !duplicatesExample.includes(data.url)) {
+                  duplicatesExample.push(data.url);
+                }
+              } else {
+                urlMap.set(data.url, { count: 1, datasets: [label] });
               }
-            } else if (count > 1) {
-              duplicateItems++;
             }
-          }
-        } catch (e) {/* ignore malformed */ }
+          } catch (e) {/* ignore malformed */ }
+        }
       }
-    }
+      return count;
+    };
+
+    // Scan both datasets
+    mainItems = await scanDataset(mainDatasetDir, 'main');
+    nfrItems = await scanDataset(nfrDatasetDir, 'nfr');
 
     res.json({
-      path: datasetDir,
+      path: mainDatasetDir || 'N/A',
+      nfrPath: nfrDatasetDir || 'N/A',
       totalItems,
+      mainItems,
+      nfrItems,
       uniqueUrls: urlMap.size,
-      duplicateCount: totalItems - urlMap.size,
+      duplicateCount: duplicateItems,
       duplicatesExample
     });
-
   } catch (error) {
-    console.error('Error analyzing dataset:', error);
-    res.status(500).json({ error: 'Analysis failed' });
+    console.error(`Error analyzing dataset for job ${id}:`, error);
+    res.status(500).json({ error: 'Failed to analyze dataset' });
   }
 });
 
 app.post('/api/jobs/:id/dataset/deduplicate', async (req, res) => {
   const { id } = req.params;
   try {
-    let datasetDir = await findDatasetDir(id);
+    // Get job data to find domain
+    const redisClient = createClient({ url: REDIS_URL });
+    await redisClient.connect();
+    const jobData = JSON.parse(await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
+    await redisClient.quit();
 
-    // Same fallback logic
-    if (!datasetDir) {
-      const redisClient = createClient({ url: REDIS_URL });
-      await redisClient.connect();
-      const jobData = JSON.parse(await redisClient.get(`${CRAWL_JOB_PREFIX}${id}`) || '{}');
-      await redisClient.quit();
-      if (jobData && jobData.domain) {
-        datasetDir = join(CRAWLER_STORAGE_PATH, 'datasets', jobData.domain);
-      }
+    if (!jobData || !jobData.domain) {
+      return res.status(404).json({ error: 'Job not found or domain missing' });
     }
 
-    if (!datasetDir || !existsSync(datasetDir)) {
-      return res.status(404).json({ error: 'Dataset directory not found.' });
-    }
+    const domain = jobData.domain;
 
-    const files = await readdir(datasetDir);
-    // Sort files by modification time (keep newest? or oldest? usually keep newest contains better data, or oldest is original.
-    // Let's keep the NEWEST version if we assume re-crawl improves data. OR keep oldest to be stable.
-    // Actually, Crawlee appends new files with incremental numbers typically.
-    // Let's keep the LATEST one.
+    // Find both datasets
+    const mainDatasetDir = await findDatasetDir(id);
+    const nfrDatasetDir = await findDatasetDir(id, `nfr-${domain}`);
 
-    // We need to read all files to know their URLs.
-    const seenUrls = new Set();
-    let removedCount = 0;
+    let totalRemovedCount = 0;
+    let mainRemovedCount = 0;
+    let nfrRemovedCount = 0;
 
-    // To do this safely: 
-    // 1. Read all files and map URL -> [List of Files with Metadata]
-    // 2. For each URL with > 1 file:
-    //    Sort files by ID/Date. Keep one. Remove others.
+    // Helper function to deduplicate a dataset
+    const deduplicateDataset = async (dir) => {
+      if (!dir || !existsSync(dir)) return 0;
 
-    const urlFilesMap = new Map(); // URL -> [{file, ctime}]
+      const files = await readdir(dir);
+      const urlFilesMap = new Map(); // URL -> [{file, path, mtime}]
 
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        const filePath = join(datasetDir, file);
-        try {
-          const content = await readFile(filePath, 'utf-8');
-          const data = JSON.parse(content);
-          if (data.url) {
-            const stats = await stat(filePath);
-            const entry = { file, path: filePath, mtime: stats.mtimeMs };
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          const filePath = join(dir, file);
+          try {
+            const content = await readFile(filePath, 'utf-8');
+            const data = JSON.parse(content);
+            if (data.url) {
+              const stats = await stat(filePath);
+              const entry = { file, path: filePath, mtime: stats.mtimeMs };
 
-            if (!urlFilesMap.has(data.url)) {
-              urlFilesMap.set(data.url, []);
+              if (!urlFilesMap.has(data.url)) {
+                urlFilesMap.set(data.url, []);
+              }
+              urlFilesMap.get(data.url).push(entry);
             }
-            urlFilesMap.get(data.url).push(entry);
-          }
-        } catch (e) { }
-      }
-    }
-
-    // Now purge
-    for (const [url, fileEntries] of urlFilesMap.entries()) {
-      if (fileEntries.length > 1) {
-        // Sort by mtime descending (newest first)
-        fileEntries.sort((a, b) => b.mtime - a.mtime);
-
-        // Keep the first one (newest), remove the rest
-        const toRemove = fileEntries.slice(1);
-        for (const item of toRemove) {
-          await unlink(item.path);
-          removedCount++;
+          } catch (e) { }
         }
       }
-    }
 
-    res.json({ success: true, removedCount, message: `Removed ${removedCount} duplicate files.` });
+      // Purge duplicates (keep newest)
+      let removedCount = 0;
+      for (const [url, fileEntries] of urlFilesMap.entries()) {
+        if (fileEntries.length > 1) {
+          // Sort by mtime descending (newest first)
+          fileEntries.sort((a, b) => b.mtime - a.mtime);
+
+          // Keep the first one (newest), remove the rest
+          const toRemove = fileEntries.slice(1);
+          for (const item of toRemove) {
+            await unlink(item.path);
+            removedCount++;
+          }
+        }
+      }
+
+      return removedCount;
+    };
+
+    // Deduplicate both datasets
+    mainRemovedCount = await deduplicateDataset(mainDatasetDir);
+    nfrRemovedCount = await deduplicateDataset(nfrDatasetDir);
+    totalRemovedCount = mainRemovedCount + nfrRemovedCount;
+
+    res.json({
+      removedCount: totalRemovedCount,
+      mainRemovedCount,
+      nfrRemovedCount
+    });
 
   } catch (error) {
     console.error('Error deduplicating dataset:', error);

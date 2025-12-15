@@ -807,15 +807,18 @@ class SearchOrchestrator:
         final_filter_expr = await self._build_filter_expression(filtre, source_name)
 
         #todo à supprimer après test
-        get_n_chunks_pj = True if filtre.get("autre_chunks","") == "avec" else False
-        logger.info(f"get_n_chunks_pjr : {get_n_chunks_pj}")
+        context_mode = filtre.get("autre_chunks",None)
+        if context_mode == "none":
+            context_mode = None
+
+        logger.info(f"context_mode autre chunks : {context_mode}")
 
         return await database_client.search_vector(
             collection=source_name,
             vector=query_vector,
             k=k,
             filter_expr=final_filter_expr,
-            get_n_chunks_pj=get_n_chunks_pj,
+            context_mode=context_mode,
         )
 
     async def _build_filter_expression(self, filtre: dict, source_name: str) -> str:
