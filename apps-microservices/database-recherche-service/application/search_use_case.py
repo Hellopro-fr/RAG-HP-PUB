@@ -14,7 +14,7 @@ class SearchUseCase:
         top_k: int,
         filter_expression: Optional[str] = None,
         output_fields: Optional[List[str]] = None,
-        get_n_chunks_pj: Optional[bool] = False
+        context_mode: Optional[str] = None
     ) -> List[SearchResultEntity]:
         
         # Préparation des kwargs pour le client Milvus
@@ -23,7 +23,7 @@ class SearchUseCase:
             search_kwargs['expr'] = filter_expression
         if output_fields:
             search_kwargs['output_fields'] = output_fields
-        search_kwargs['get_n_chunks_pj'] = get_n_chunks_pj
+        search_kwargs['context_mode'] = context_mode
 
         return self.db_client.search(collection_name, vector, top_k, **search_kwargs)
     
