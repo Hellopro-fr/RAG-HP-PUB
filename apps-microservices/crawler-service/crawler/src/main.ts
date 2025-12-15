@@ -274,12 +274,22 @@ if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCoun
 
 // Case 2: Corrupted/polluted queue (items exist but none are handled or pending)
 if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
-    console.error(`❌ CRITICAL: Corrupted queue detected for ${domain}`);
-    console.error(`   Total items: ${queueInfo.totalRequestCount}`);
-    console.error(`   Handled: 0, Pending: 0`);
-    console.error(`ℹ️  All items are locked/stuck in an invalid state.`);
-    console.error(`💡 SOLUTION: Use Monitor Interface > 'Queue Editor' > 'Analyze' then 'Clean Patterns' or 'Drop Queue'.`);
-    process.exit(1); // Error exit
+    if (breakLimit) {
+        // Bypass mode: Log warning but continue
+        console.warn(`⚠️  WARNING: Corrupted queue detected for ${domain} but breakLimit=true, bypassing check.`);
+        console.warn(`   Total items: ${queueInfo.totalRequestCount}`);
+        console.warn(`   Handled: 0, Pending: 0`);
+        console.warn(`ℹ️  Crawler will attempt to continue despite locked queue state.`);
+    } else {
+        // Normal mode: Exit with error
+        console.error(`❌ CRITICAL: Corrupted queue detected for ${domain}`);
+        console.error(`   Total items: ${queueInfo.totalRequestCount}`);
+        console.error(`   Handled: 0, Pending: 0`);
+        console.error(`ℹ️  All items are locked/stuck in an invalid state.`);
+        console.error(`💡 SOLUTION: Use Monitor Interface > 'Queue Editor' > 'Analyze' then 'Clean Patterns' or 'Drop Queue'.`);
+        console.error(`💡 OR: Set breaklimit=True to force bypass this check (not recommended).`);
+        process.exit(1); // Error exit
+    }
 }
 
 // Case 3: Normal operation - items are pending or being processed
