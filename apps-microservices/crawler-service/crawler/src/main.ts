@@ -252,17 +252,43 @@ if (dropData) {
     isHistorised = true;
 }
 
-// CRITICAL FIX: Only load URLs into memory for fresh crawls to prevent OOM
-// When resuming (dropData=false), Crawlee's RequestQueue handles deduplication
-// This prevents loading 6000+ URLs into RAM which causes memory overload
+// Load all previously crawled URLs for deduplication
+// Note: This loads the full history into RAM, which may cause OOM on large datasets
 export let allUrlsCrawled = new Set(
-    dropData ? getUrlsCrawled(domain, isHistorised, 'true') : []
+    getUrlsCrawled(domain, isHistorised, 'true')
 );
 
-if (!dropData && allUrlsCrawled.size === 0) {
-    console.log('⚠️  Resume mode: allUrlsCrawled Set is empty. Relying on Crawlee RequestQueue for deduplication.');
+// Open requestQueue FIRST (before any operations)
+export const requestQueue = await RequestQueue.open(domain);
+
+// --- QUEUE HEALTH CHECK ---
+// Intelligent queue state detection using handled/pending/total counts
+const queueInfo = await requestQueue.getInfo();
+
+// Case 1: Crawl completed successfully (all items handled)
+if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCount === queueInfo.totalRequestCount && queueInfo.pendingRequestCount === 0) {
+    console.log(`✅ Crawl already completed: ${queueInfo.handledRequestCount}/${queueInfo.totalRequestCount} items handled.`);
+    console.log(`ℹ️  No pending items. Exiting gracefully.`);
+    process.exit(0); // Success exit
 }
 
+// Case 2: Corrupted/polluted queue (items exist but none are handled or pending)
+if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
+    console.error(`❌ CRITICAL: Corrupted queue detected for ${domain}`);
+    console.error(`   Total items: ${queueInfo.totalRequestCount}`);
+    console.error(`   Handled: 0, Pending: 0`);
+    console.error(`ℹ️  All items are locked/stuck in an invalid state.`);
+    console.error(`💡 SOLUTION: Use Monitor Interface > 'Queue Editor' > 'Analyze' then 'Clean Patterns' or 'Drop Queue'.`);
+    process.exit(1); // Error exit
+}
+
+// Case 3: Normal operation - items are pending or being processed
+if (queueInfo) {
+    console.log(`📊 Queue status: ${queueInfo.pendingRequestCount} pending, ${queueInfo.handledRequestCount} handled, ${queueInfo.totalRequestCount} total`);
+}
+// --------------------------
+
+// URL Filtering (AFTER health check, only if queue is healthy)
 if (skipquestionmark || skipdiez) {
     console.log("Filtering URLs in the queue...");
     const requestQueueList = getAllRequestQueues(domain);
@@ -274,9 +300,6 @@ if (skipquestionmark || skipdiez) {
         parseJsonFiles(requestQueueList, skipquestionmark, skipdiez, parameters);
     }
 }
-
-// Open requestQueue
-export const requestQueue = await RequestQueue.open(domain);
 
 if (typeCrawling === "generate_data") {
     // This logic might need adjustment in an API context

@@ -540,6 +540,10 @@ router.addDefaultHandler(
                 log.warning(`Le site ${url} n'est pas en Français.`);
                 let dataset = await Dataset.open("nfr-" + domain);
                 await dataset.pushData({ url, content });
+
+                // CRITICAL FIX: Mark request as handled even for non-French pages
+                // Without this, handledRequestCount stays at 0, triggering false "corrupted queue" errors
+                await requestQueue.markRequestHandled(request);
             }
         } else {
             console.log(`Doublon url : ${url}`);
