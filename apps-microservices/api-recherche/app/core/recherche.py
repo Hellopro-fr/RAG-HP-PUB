@@ -808,6 +808,9 @@ class SearchOrchestrator:
 
         #todo à supprimer après test
         context_mode = filtre.get("autre_chunks",None)
+        if context_mode == "none":
+            context_mode = None
+
         logger.info(f"context_mode autre chunks : {context_mode}")
 
         return await database_client.search_vector(
