@@ -856,13 +856,31 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-rest-milvus/Dockerfile
-    container_name: api-rest-milvus
+    #container_name: api-rest-milvus
     profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
-    ports:
-      - "8517:8517"
+    # Port commenté car accessible via nginx load balancer
+    # ports:
+    #   - "8517:8517"
     env_file:
       - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  api-rest-milvus-lb:
+    image: nginx:alpine
+    container_name: api-rest-milvus-lb
+    profiles: ["app"]
+    ports:
+      - "8517:80"
+    volumes:
+      - ./apps-microservices/api-rest-milvus/nginx-rest-milvus.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-rest-milvus-service
+    networks:
+      - services-net
+    restart: unless-stopped
     logging: *logging_defaults
 
   api-check-doublon-produit:
