@@ -8,6 +8,29 @@ from domain.search_result import SearchResultEntity
 MILVUS_HOST = os.getenv("ZILLIZ_URI")
 MILVUS_PORT = os.getenv("ZILLIZ_PORT", "19530")
 
+# Configuration des collections (inchangée)
+COLLECTION_CONFIG = {
+    "pjechanges": {
+        "group_field": "fichier_source", # Identifiant du document
+        "seq_field": "chunk_number"      # Identifiant de la séquence (0, 1, 2...)
+    },
+    "produits_3": {
+        "group_field": "id_produit",
+        "seq_field": "chunk_number"
+    },
+    "devis": {
+        "group_field": "lead_id",
+        "seq_field": "chunk_number"
+    },
+    "echanges": {
+        "group_field": "conversation_id",
+        "seq_field": "chunk_number"
+    },
+    "siteweb_2": {
+        "group_field": "url",
+        "seq_field": "chunk_number"
+    },
+}
 class MilvusClient:
     def __init__(self):
         self._loaded_collections = {}
@@ -115,145 +138,41 @@ class MilvusClient:
     def search(self, collection_name: str, vector: list[float], top_k: int, **kwargs) -> list[SearchResultEntity]:
         try:
             if not connections.has_connection("default"):
-                self.__init__() # Tentative de reconnexion
+                self.__init__()
 
             collection = self._ensure_collection_loaded(collection_name)
 
+            # Gestion des champs de sortie
             fields_without_embedding = []
             if kwargs.get("output_fields"):
                 fields_without_embedding = [f for f in kwargs.get("output_fields") if f != "embedding"]
             else:
                 all_fields = [field.name for field in collection.schema.fields]
                 fields_without_embedding = [f for f in all_fields if f != "embedding"]
-                
+            
             if 'text' not in fields_without_embedding:
                 fields_without_embedding.append('text')
-            
-            # Définition des paramètres de recherche
+
+            # --- 1. Recherche Vectorielle ---
             search_params = {"metric_type": "COSINE", "params": {"ef": self._ef_search(top_k)}}
             
             results = collection.search(
                 data=[vector],
-                anns_field="embedding", # Le nom du champ contenant les vecteurs
+                anns_field="embedding",
                 param=search_params,
                 limit=top_k,
-                output_fields=kwargs.get("fields", fields_without_embedding), # Le champ contenant l'ID du document
+                output_fields=kwargs.get("fields", fields_without_embedding),
                 expr=kwargs.get("expr", None)
             )
 
-
-            # Formatage des résultats en entités du domaine
             domain_results = []
             
-            is_context_collection = (collection_name == "pjechanges" and kwargs.get("get_n_chunks_pj"))
-
-            if is_context_collection:
-                seen_ids = set()
-                candidates = []       # Liste temporaire pour garder l'ordre et les infos
-                context_targets = []  # Liste des tuples (fichier_source, chunk_number) à aller chercher
-                
-
-                for hit in results[0]:
-                    # Dédoublonnage par ID Milvus
-                    if hit.id in seen_ids:
-                        continue
-                    seen_ids.add(hit.id)
-                    
-                    # On s'arrête dès qu'on a atteint le top_k désiré après dédoublonnage
-                    if len(candidates) >= top_k:
-                        break
-
-                    entity_data = hit.entity
-                    
-                    # Stockage intermédiaire
-                    candidate = {
-                        "hit": hit,
-                        "fichier_source": entity_data.get('fichier_source'),
-                        "chunk_number": entity_data.get('chunk_number'),
-                        "context_pre": None,
-                        "context_post": None
-                    }
-                    candidates.append(candidate)
-
-                    # Calcul des cibles pour le contexte (seulement pour pjechanges)
-                    if is_context_collection:
-                        src = candidate["fichier_source"]
-                        num = candidate["chunk_number"]
-                        
-                        if src is not None and num is not None:
-                            # Préparer la récupération de n-1 (si n > 0)
-                            if num > 0:
-                                context_targets.append((src, num - 1))
-                            # Préparer la récupération de n+1
-                            context_targets.append((src, num + 1))
-
-                # 5. Récupération des chunks adjacents (Batch Query)
-                # Uniquement si on a des cibles et qu'on est sur la bonne collection
-                context_map = {} # Clé: (fichier_source, chunk_number) -> Valeur: Texte
-
-                if context_targets:
-                    # Pour gérer le top_k=200, on batch les requêtes pour éviter
-                    # l'erreur "expression too long" de Milvus.
-                    BATCH_SIZE = 50 
-                    
-                    # On déduplique les cibles de contexte (au cas où deux résultats demandent le même voisin)
-                    unique_targets = list(set(context_targets))
-                    
-                    for i in range(0, len(unique_targets), BATCH_SIZE):
-                        batch = unique_targets[i : i + BATCH_SIZE]
-                        expr_parts = []
-                        
-                        for src, num in batch:
-                            # Echappement des quotes simples dans le nom de fichier au cas où
-                            safe_src = src.replace("'", "\\'")
-                            expr_parts.append(f"(fichier_source == '{safe_src}' && chunk_number == {num})")
-                        
-                        full_expr = " || ".join(expr_parts)
-                        
-                        try:
-                            context_hits = collection.query(
-                                expr=full_expr,
-                                output_fields=fields_without_embedding
-                            )
-                            
-                            for c in context_hits:
-                                key = (c['fichier_source'], c['chunk_number'])
-                                context_map[key] = c['text']
-                        except Exception as e:
-                            logging.warning(f"Erreur lors de la récupération d'un batch de contexte : {e}")
-                            # On continue même si un batch échoue
-
-                # 6. Formatage final des entités
-                for item in candidates:
-                    hit = item['hit']
-                    
-                    # Injection du contexte si disponible
-                    if is_context_collection:
-                        src = item['fichier_source']
-                        num = item['chunk_number']
-                        
-                        # Récupération depuis la map (renvoie None si non trouvé)
-                        txt_pre = context_map.get((src, num - 1))
-                        txt_post = context_map.get((src, num + 1))
-                    else:
-                        txt_pre = None
-                        txt_post = None
-
-                    # Construction des métadonnées
-                    metadata = self._serialize_entity(hit.entity, collection_name)
-                    
-                    # Vous pouvez soit les mettre dans metadata, soit passer des arguments au constructeur
-                    # Option A : Dans metadata
-                    metadata['context_pre'] = txt_pre
-                    metadata['context_post'] = txt_post
-
-                    domain_results.append(SearchResultEntity(
-                        id=hit.id,
-                        score=hit.distance,
-                        metadata=metadata,
-                        source=collection_name
-                    ))
-            else:
+            # Mode de contexte : 'adjacent', 'full', ou None
+            context_mode = kwargs.get("context_mode")
+            col_conf = COLLECTION_CONFIG.get(collection_name)
+            
+            # Si pas de contexte demandé ou config inexistante, retour simple
+            if not context_mode or not col_conf:
                 for hit in results[0]:
                     domain_results.append(SearchResultEntity(
                         id=hit.id,
@@ -261,9 +180,135 @@ class MilvusClient:
                         metadata=self._serialize_entity(hit.entity, collection_name),
                         source=collection_name
                     ))
+                return domain_results
+
+            # --- 2. Préparation du contexte ---
+            group_field = col_conf["group_field"]
+            seq_field = col_conf["seq_field"]
+
+            seen_ids = set()
+            candidates = []       
+            context_queries = set() # Pour stocker les IDs ou tuples à récupérer
+
+            for hit in results[0]:
+                if hit.id in seen_ids:
+                    continue
+                seen_ids.add(hit.id)
+                
+                if len(candidates) >= top_k:
+                    break
+
+                entity_data = hit.entity
+                group_val = entity_data.get(group_field)
+                seq_val = entity_data.get(seq_field)
+
+                candidate = {
+                    "hit": hit,
+                    "group_val": group_val,
+                    "seq_val": seq_val
+                }
+                candidates.append(candidate)
+
+                if group_val is not None:
+                    if context_mode == "adjacent" and seq_val is not None:
+                        # Cas N-1 et N+1
+                        if seq_val > 0:
+                            context_queries.add((group_val, seq_val - 1))
+                        context_queries.add((group_val, seq_val + 1))
+                    
+                    elif context_mode == "full":
+                        # Cas Full : on veut tout le document identifié par group_val
+                        context_queries.add(group_val)
+
+            # --- 3. Récupération Batch des Contextes ---
+            context_map = {} 
+
+            if context_queries:
+                query_list = list(context_queries)
+                BATCH_SIZE = 50
+                
+                for i in range(0, len(query_list), BATCH_SIZE):
+                    batch = query_list[i : i + BATCH_SIZE]
+                    full_expr = ""
+
+                    # Construction de la requête Milvus
+                    if context_mode == "adjacent":
+                        expr_parts = []
+                        for g_val, s_val in batch:
+                            safe_g_val = str(g_val).replace("'", "\\'") if isinstance(g_val, str) else g_val
+                            g_str = f"'{safe_g_val}'" if isinstance(g_val, str) else safe_g_val
+                            expr_parts.append(f"({group_field} == {g_str} && {seq_field} == {s_val})")
+                        full_expr = " || ".join(expr_parts)
+
+                    elif context_mode == "full":
+                        expr_parts = []
+                        for g_val in batch:
+                            safe_g_val = str(g_val).replace("'", "\\'") if isinstance(g_val, str) else g_val
+                            g_str = f"'{safe_g_val}'" if isinstance(g_val, str) else safe_g_val
+                            expr_parts.append(f"{group_field} == {g_str}")
+                        full_expr = " || ".join(expr_parts)
+
+                    # Exécution
+                    if full_expr:
+                        try:
+                            context_hits = collection.query(
+                                expr=full_expr,
+                                output_fields=fields_without_embedding
+                            )
+
+                            for c in context_hits:
+                                c_group = c.get(group_field)
+                                c_seq = c.get(seq_field)
+                                
+                                if context_mode == "adjacent":
+                                    key = (c_group, c_seq)
+                                    context_map[key] = c.get('text')
+                                
+                                elif context_mode == "full":
+                                    # On groupe tous les chunks par ID de document
+                                    if c_group not in context_map:
+                                        context_map[c_group] = []
+                                    context_map[c_group].append(c)
+
+                        except Exception as e:
+                            logging.warning(f"Erreur batch contexte ({context_mode}): {e}")
+
+            # --- 4. Assemblage Final ---
+            for item in candidates:
+                hit = item['hit']
+                metadata = self._serialize_entity(hit.entity, collection_name)
+                
+                g_val = item['group_val']
+                s_val = item['seq_val']
+
+                if context_mode == "adjacent":
+                    # Ajout simple de n-1 et n+1
+                    metadata['context_pre'] = context_map.get((g_val, s_val - 1))
+                    metadata['context_post'] = context_map.get((g_val, s_val + 1))
+                
+                elif context_mode == "full":
+                    # Récupération de tous les chunks associés à ce fichier
+                    all_chunks = context_map.get(g_val, [])
+                    
+                    # On itère sur tous les chunks trouvés pour ce document
+                    for chunk in all_chunks:
+                        # On récupère le numéro (ex: 1, 2, 3...)
+                        c_num = chunk.get(seq_field)
+                        c_txt = chunk.get('text')
+                        
+                        if c_num is not None:
+                            # Création dynamique : context_1, context_2, etc.
+                            metadata[f"context_{c_num}"] = c_txt
+
+                domain_results.append(SearchResultEntity(
+                    id=hit.id,
+                    score=hit.distance,
+                    metadata=metadata,
+                    source=collection_name
+                ))
 
             return domain_results
 
         except Exception as e:
-            logging.error(f"Erreur lors de la recherche dans Milvus sur la collection '{collection_name}': {e}", exc_info=True)
+            logging.error(f"Search failed: {e}")
             return []
