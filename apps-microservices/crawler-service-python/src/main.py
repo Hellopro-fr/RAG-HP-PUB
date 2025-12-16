@@ -109,6 +109,7 @@ async def main():
     parser.add_argument("--method", default="prod")
     parser.add_argument("--skipquestionmark", default="False")
     parser.add_argument("--skipdiez", default="False")
+    parser.add_argument("--maxConcurrency", default=5, type=int)
     
     args = parser.parse_args()
     
@@ -117,6 +118,7 @@ async def main():
     job_id = args.id
     storage_path = args.storagePath
     proxy_apify_password = args.proxyapify
+    max_concurrency = args.maxConcurrency
     
     break_limit = str(args.breaklimit).lower() == 'true'
     drop_data = str(args.dropdata).lower() == 'true'
@@ -202,7 +204,10 @@ async def main():
             }
         )
         
-        browser_pool = BrowserPool(plugins=[browser_plugin])
+        browser_pool = BrowserPool(
+            plugins=[browser_plugin],
+            retire_browser_after_page_count=10
+        )
 
         crawler = PlaywrightCrawler(
             request_handler=router,
@@ -210,6 +215,12 @@ async def main():
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
         )
+        
+        # Note: Crawlee Python auto-manages concurrency via AutoscaledPool
+        # The --maxConcurrency argument is available but not directly settable in current version
+        # Concurrency adapts based on CPU, memory, and event loop metrics
+        # Browser rotation is handled via retire_browser_after_page_count=10 in BrowserPool
+        
         # Assign error handler manually 
         crawler.failed_request_handler = error_handler
         
