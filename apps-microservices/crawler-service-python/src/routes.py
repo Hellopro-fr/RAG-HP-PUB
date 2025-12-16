@@ -67,10 +67,15 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         
     all_urls_crawled.add(url)
     
-    # Safety Limit for Set
-    if len(all_urls_crawled) > 100000:
-        log.warning("all_urls_crawled exceeded 100k items. Clearing to prevent OOM. Deduplication relies on RequestQueue now.")
+    # Smart Memory Management: Keep most recent URLs when limit reached
+    # This prevents re-crawls while managing memory efficiently
+    if len(all_urls_crawled) > 500000:
+        log.warning(f"all_urls_crawled exceeded 500k items. Keeping 250k most recent URLs to prevent re-crawls.")
+        # Convert to list, keep last 250k (most recent), rebuild set
+        recent_urls = list(all_urls_crawled)[-250000:]
         all_urls_crawled.clear()
+        all_urls_crawled.update(recent_urls)
+        log.info(f"Deduplication set trimmed. Now contains {len(all_urls_crawled)} URLs.")
 
     # Limit Checking & Counting logic
     global count_question_mark, count_diez
