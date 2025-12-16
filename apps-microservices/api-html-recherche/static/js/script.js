@@ -160,6 +160,22 @@ $(function () {
     },
     minimumInputLength: 0,
   };
+  
+  var OPTIONS_SELECT2_SIMPLE = {
+      width: "100%",
+      closeOnSelect: true,
+      dropdownCssClass: "custom-select2-filter",
+      dropdownAutoWidth: true,
+      allowClear: false,        // Pas de croix de suppression
+      placeholder: "",           // Pas de placeholder
+      minimumResultsForSearch: Infinity,  // Désactive le champ de recherche
+      language: {
+        lang: "fr",
+        noResults: function () {
+          return "Aucun résultat trouvé";
+        }
+      }
+  };
 
   function GetURLParameter(sParam) {
     var sPageURL = window.location.search.substring(1);
@@ -656,6 +672,13 @@ $(function () {
         var options = Object.assign({}, OPTIONS_SELECT2);
         $item.select2(options);
       }
+    });
+
+    // Gestion des selects simples (NOUVEAU)
+    $(".init-select2-simple").each(function (i, item) {
+      const $item = $(item);
+      var options = Object.assign({}, OPTIONS_SELECT2_SIMPLE);
+      $item.select2(options);
     });
   }
 
@@ -1769,9 +1792,9 @@ $(function () {
       const class_supplier = result.source == "devis" ? "hidden" : ""
       let class_bg_other_chunks = "bg-white"
       if(result.is_pre_chunks) {
-        class_bg_other_chunks = "bg-blue-100"
+        class_bg_other_chunks = "bg-blue-50/75"
       } else if(result.is_post_chunks) {
-        class_bg_other_chunks = "bg-green-100"
+        class_bg_other_chunks = "bg-green-50/75"
       }
 
       state.copiedContent += `
