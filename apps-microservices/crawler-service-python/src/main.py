@@ -64,6 +64,38 @@ async def heartbeat_task(redis_url: str, job_id: str, domain: str, hostname: str
     finally:
         await redis.aclose()
 
+async def monitor_task(crawler: PlaywrightCrawler):
+    """
+    Monitors crawler health and progress.
+    Replaces the complex 'checkQueue' logic from Node.js with a simple stall detector.
+    """
+    last_finished = 0
+    stalled_checks = 0
+    
+    while True:
+        await asyncio.sleep(30)
+        try:
+            if not crawler.running:
+                break
+                
+            stats = crawler.statistics.state
+            finished = stats.requests_finished
+            failed = stats.requests_failed
+            total = finished + failed
+            
+            logger.info(f"Health Check: Finished={finished}, Failed={failed}, Queued=Unknown (managed by Crawlee)")
+            
+            if finished == last_finished:
+                stalled_checks += 1
+                if stalled_checks >= 10: # 5 minutes without progress
+                    logger.warning(f"⚠️ Crawler might be stalled! No progress for 5 minutes. (Processed: {total})")
+            else:
+                stalled_checks = 0
+                last_finished = finished
+                
+        except Exception as e:
+            logger.error(f"Monitor task error: {e}")
+
 async def main():
     parser = argparse.ArgumentParser(description="Python Crawler Service")
     parser.add_argument("--domain", required=True)
@@ -77,6 +109,7 @@ async def main():
     parser.add_argument("--method", default="prod")
     parser.add_argument("--skipquestionmark", default="False")
     parser.add_argument("--skipdiez", default="False")
+    parser.add_argument("--maxConcurrency", default=5, type=int)
     
     args = parser.parse_args()
     
@@ -85,6 +118,7 @@ async def main():
     job_id = args.id
     storage_path = args.storagePath
     proxy_apify_password = args.proxyapify
+    max_concurrency = args.maxConcurrency
     
     break_limit = str(args.breaklimit).lower() == 'true'
     drop_data = str(args.dropdata).lower() == 'true'
@@ -108,7 +142,7 @@ async def main():
         sys.exit(1)
 
     # Load History & Drop Data logic
-    from utils import get_urls_crawled, drop_dataset, update_urls_crawled
+    from utils import get_urls_crawled, drop_dataset, update_urls_crawled, is_stopped_manually
     from routes import router, error_handler
     import routes
     
@@ -148,6 +182,9 @@ async def main():
            logger.error(f"Failed to create ProxyConfiguration: {e}")
            sys.exit(1)
 
+    # Set Global Domain for Routes
+    routes.DOMAIN = domain
+
     # Start Heartbeat
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
     hostname = os.uname().nodename
@@ -167,7 +204,10 @@ async def main():
             }
         )
         
-        browser_pool = BrowserPool(plugins=[browser_plugin])
+        browser_pool = BrowserPool(
+            plugins=[browser_plugin],
+            retire_browser_after_page_count=10
+        )
 
         crawler = PlaywrightCrawler(
             request_handler=router,
@@ -175,8 +215,17 @@ async def main():
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
         )
-        # Assign error handler manually as init might not accept it directly in this version
+        
+        # Note: Crawlee Python auto-manages concurrency via AutoscaledPool
+        # The --maxConcurrency argument is available but not directly settable in current version
+        # Concurrency adapts based on CPU, memory, and event loop metrics
+        # Browser rotation is handled via retire_browser_after_page_count=10 in BrowserPool
+        
+        # Assign error handler manually 
         crawler.failed_request_handler = error_handler
+        
+        # Start Monitor Task
+        mon_task = asyncio.create_task(monitor_task(crawler))
 
         # Run
         await crawler.run([site])
@@ -214,8 +263,12 @@ async def main():
         sys.exit(1)
     finally:
         hb_task.cancel()
+        if 'mon_task' in locals():
+            mon_task.cancel()
         try:
             await hb_task
+            if 'mon_task' in locals():
+               await mon_task
         except asyncio.CancelledError:
             pass
 
