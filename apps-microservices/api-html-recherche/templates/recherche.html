@@ -368,36 +368,47 @@
           </div>
           <div class="p-4 space-y-4">
             <!-- Sélection type de recherche -->
-            <fieldset class="space-y-4">
-              <label class="text-sm font-medium text-custom-noir">Type de recherche</label>
-              <div class="flex gap-6">
-                <div class="inline-flex items-center">
-                  <label class="relative flex items-center cursor-pointer" for="type-vectorielle">
-                    <input name="type-recherche" type="radio"
-                      class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
-                      id="type-vectorielle" value="1" checked />
-                    <span
-                      class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
-                  </label>
-                  <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-vectorielle">
-                    Vectorielle
-                  </label>
+            <div class="space-y-2">
+              <fieldset class="space-y-4">
+                <label class="text-sm font-medium text-custom-noir">Type de recherche</label>
+                <div class="flex gap-6">
+                  <div class="inline-flex items-center">
+                    <label class="relative flex items-center cursor-pointer" for="type-vectorielle">
+                      <input name="type-recherche" type="radio"
+                        class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
+                        id="type-vectorielle" value="1" checked />
+                      <span
+                        class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
+                    </label>
+                    <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-vectorielle">
+                      Vectorielle
+                    </label>
+                  </div>
+  
+                  <div class="inline-flex items-center">
+                    <label class="relative flex items-center cursor-pointer" for="type-classique">
+                      <input name="type-recherche" type="radio"
+                        class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
+                        id="type-classique" value="2" />
+                      <span
+                        class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
+                    </label>
+                    <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-classique">
+                      Classique
+                    </label>
+                  </div>
                 </div>
-
-                <div class="inline-flex items-center">
-                  <label class="relative flex items-center cursor-pointer" for="type-classique">
-                    <input name="type-recherche" type="radio"
-                      class="peer h-5 w-5 cursor-pointer appearance-none rounded-full border border-slate-200 bg-slate-100 checked:border-slate-300 transition-all"
-                      id="type-classique" value="2" />
-                    <span
-                      class="absolute bg-slate-800 w-3 h-3 rounded-full opacity-0 peer-checked:opacity-100 transition-opacity duration-200 top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
-                  </label>
-                  <label class="ml-2 text-slate-600 cursor-pointer text-sm" for="type-classique">
-                    Classique
-                  </label>
-                </div>
+              </fieldset>
+              <div class="space-y-1" id="otherChunksBloc">
+                <label class="text-xs text-custom-gris">Afficher les autre chunks</label>
+                <select id="autreChunks"
+                  class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm">
+                  <option value="none">Non</option>
+                  <option value="adjacent">Chunks Adjacents</option>
+                  <option value="full">Tous les chunks</option>
+                </select>
               </div>
-            </fieldset>
+            </div>
             <!-- Top K Results -->
             <div class="space-y-2">
               <label class="text-sm font-medium text-custom-noir">Nombre de résultats (top_k)</label>
@@ -618,7 +629,7 @@
                     <input type="checkbox" id="pj" class="checkbox-custom" />
                     <label for="pj" class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Pièces jointes</label>
                   </div>
-                  <div id="pjSubfilters" class="pl-6 hidden">
+                  <div id="pjSubfilters" class="pl-6 space-y-2">
                     <div class="space-y-1">
                       <label class="text-xs text-custom-gris">Type du document</label>
                       <select id="pjModele"

@@ -37,8 +37,6 @@ async def search_vector(
                 options_struct.update({"context_mode":kwargs.get("context_mode",None)})
                 request.options = options_struct
 
-            logging.info(f"Request db_client : {request}")
-
             response = await stub.Search(request)
             return response.results
     except grpc.aio.AioRpcError as e:

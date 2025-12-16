@@ -811,8 +811,6 @@ class SearchOrchestrator:
         if context_mode == "none":
             context_mode = None
 
-        logger.info(f"context_mode autre chunks : {context_mode}")
-
         return await database_client.search_vector(
             collection=source_name,
             vector=query_vector,

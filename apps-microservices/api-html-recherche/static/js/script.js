@@ -924,6 +924,12 @@ $(function () {
       e.preventDefault();
       state.typeRecherche = $(this).val();
       updateSearchButtons()
+      const ClassBlocAutreChunks = "hidden"
+      if(state.typeRecherche == 1) {
+        $('#otherChunksBloc').removeClass(ClassBlocAutreChunks)
+      } else {
+        $('#otherChunksBloc').addClass(ClassBlocAutreChunks)
+      }
     });
 
 
@@ -1212,9 +1218,80 @@ $(function () {
     }
   }
 
+  function expandPjResults(results) {
+    const expanded = [];
+    const autreChunks = $('#autreChunks').val() || [];
+    let isFullChunks = false 
+    let isAdjacentChunks = false
+    
+    if (autreChunks.length > 0 && state.typeRecherche == 1) {
+      if(autreChunks == "full") {
+        isFullChunks = true
+      } else if (autreChunks == "adjacent") {
+        isAdjacentChunks = true
+      }
+    }
+
+    results.forEach(item => {
+        if (isAdjacentChunks) {
+            if (item.metadata.context_pre && item.metadata.context_pre.trim() !== "") {
+                const preItem = JSON.parse(JSON.stringify(item));
+                
+                preItem.metadata.entity.text = item.metadata.context_pre;
+                preItem.metadata.entity.chunk_id = +preItem.metadata.entity.chunk_id - 1;
+                if (preItem.id) {
+                    preItem.id += '_pre';
+                }
+                // On peut ajouter un indicateur si besoin de styliser différemment plus tard
+                preItem._isContext = 'pre'; 
+                
+                expanded.push(preItem);
+            }
+
+            expanded.push(item);
+
+            if (item.metadata.context_post && item.metadata.context_post.trim() !== "") {
+                const postItem = JSON.parse(JSON.stringify(item));
+                
+                postItem.metadata.entity.text = item.metadata.context_post;
+                postItem.metadata.entity.chunk_id = +postItem.metadata.entity.chunk_id + 1;
+
+                if (postItem.id) {
+                    postItem.id += '_post';
+                }
+                postItem._isContext = 'post';
+
+                expanded.push(postItem);
+            }
+
+        } else if (isFullChunks) {
+            for(let i = 1;;i++) {
+                const actualItem = JSON.parse(JSON.stringify(item));
+
+                if(!item.metadata[`context_${i}`]) {
+                  break
+                }
+
+                actualItem.metadata.entity.text = item.metadata[`context_${i}`];
+                actualItem.metadata.entity.chunk_id = i;
+                if (actualItem.id) {
+                    actualItem.id = i;
+                }
+                
+                expanded.push(actualItem);
+            }
+        } else {
+            expanded.push(item);
+        }
+    });
+
+    return expanded;
+  }
+
   function handleSearchResultsPayload(payload) {
+    const expandedResults = expandPjResults(payload.results);
     // Met à jour les résultats de recherche dans l'état, en les adaptant
-    state.searchResults = payload.results.map(adaptSearchResult);
+    state.searchResults = expandedResults.map(adaptSearchResult);
     console.log("Mise à jour de l'état avec les résultats :", state.searchResults);
 
     // 1. Extraire les IDs des résultats qui sont des produits
@@ -1308,7 +1385,9 @@ $(function () {
       confidence: result.score * 100, // S'assure que le score existe
       url: url || '#',
       id_produit: meta.id_produit,
-      chunk_info: `${meta.chunk_id}/${meta.total_chunks}`
+      chunk_info: `${meta.chunk_id}/${meta.total_chunks}`,
+      is_pre_chunks: result._isContext == "pre",
+      is_post_chunks: result._isContext == "post"
     };
   }
 
@@ -1382,6 +1461,12 @@ $(function () {
         .filter(sourceName => state.selectedSources[sourceName])
         .map(sourceName => {
           const filtreSpecifique = {};
+          const autreChunks = $('#autreChunks').val() || [];
+
+          if (autreChunks.length > 0 && state.typeRecherche == 1) {
+            filtreSpecifique.autre_chunks = autreChunks;
+          }
+
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
             case 'produits':
@@ -1449,9 +1534,15 @@ $(function () {
               break;
             case 'pj':
               const pjModele = $('#pjModele').val() || [];
+              const pjAutreChunks = $('#pjAutreChunks').val() || [];
+
               if (pjModele.length > 0) {
                 filtreSpecifique.page_type = pjModele;
               }
+              if (pjAutreChunks.length > 0) {
+                filtreSpecifique.autre_chunks = pjAutreChunks;
+              }
+
               sourceName = 'pjechanges';
               break;
             case 'echanges':
@@ -1676,6 +1767,12 @@ $(function () {
       const relevanceHtml = (state.typeRecherche == 1) ? getRelevanceCard(result.confidence / 100) : "";
       const sourceBadgeHtml = getSourceBadge(result.source);
       const class_supplier = result.source == "devis" ? "hidden" : ""
+      let class_bg_other_chunks = "bg-white"
+      if(result.is_pre_chunks) {
+        class_bg_other_chunks = "bg-blue-100"
+      } else if(result.is_post_chunks) {
+        class_bg_other_chunks = "bg-green-100"
+      }
 
       state.copiedContent += `
       --------------------------------
@@ -1686,7 +1783,7 @@ $(function () {
       Texte : ${result.snippet || ""}
       `;
       const resultCardHtml = `
-        <div class="bg-white rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
+        <div class="${class_bg_other_chunks} rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
               <div class="flex items-start justify-between gap-2">
                   <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${result.title}</h3>
