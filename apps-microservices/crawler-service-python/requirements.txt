@@ -1,0 +1,10 @@
+crawlee[playwright]
+apify-fingerprint-datapoints
+playwright
+pydantic
+pydantic-settings
+redis
+psutil
+beautifulsoup4
+lxml
+python-dotenv
