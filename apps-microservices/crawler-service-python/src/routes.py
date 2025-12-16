@@ -33,6 +33,9 @@ FORBIDDEN_PARAMS = [
 
 router = Router()
 
+# Global set for deduplication (populated dynamically)
+all_urls_crawled: set[str] = set()
+
 @router.default_handler
 async def request_handler(context: PlaywrightCrawlingContext) -> None:
     page = context.page
@@ -40,6 +43,19 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     log = context.log
     
     url = request.url
+    
+    # Deduplication Check
+    if url in all_urls_crawled:
+        log.info(f"Skipping duplicate URL (history): {url}")
+        return
+        
+    all_urls_crawled.add(url)
+    
+    # Safety Limit for Set
+    if len(all_urls_crawled) > 100000:
+        log.warning("all_urls_crawled exceeded 100k items. Clearing to prevent OOM. Deduplication relies on RequestQueue now.")
+        all_urls_crawled.clear()
+
     log.info(f"Processing {url} ...")
 
     # Block resources (Images, Fonts, CSS)
