@@ -1032,9 +1032,8 @@ services:
 
   crawler-service:
     build:
-      context: .
-      # Switch to Python Service
-      dockerfile: ./apps-microservices/crawler-service-python/Dockerfile
+      context: ./apps-microservices/crawler-service-python
+      dockerfile: Dockerfile
     profiles: ["crawling"]
     # The 'ports' mapping has been removed to prevent conflicts.
     # We now 'expose' the port, making it accessible to other services
