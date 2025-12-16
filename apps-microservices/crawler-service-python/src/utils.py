@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from datetime import datetime
 import psutil
 import os
 from playwright.async_api import Page
@@ -228,3 +229,27 @@ async def detect_captcha(page: Page, content: str) -> str:
         logger.error(f"Error checking captcha: {e}")
         
     return captcha_detected 
+
+def is_stopped_manually(domain: str, historised: bool = False) -> bool:
+    """
+    Checks if a file named "{domain}.txt" exists in the 'stopper' directory.
+    If it exists, indicates the crawler should stop.
+    """
+    stopper_file = f"stopper/{domain}.txt"
+    try:
+        if os.path.exists(stopper_file):
+            if historised:
+                logger.info("The crawler has been stopped manually.")
+                history_file = f"stopper/history-{domain}.txt"
+                with open(history_file, "a") as f:
+                     date_str = datetime.now().isoformat()
+                     f.write(f"- Date arrêt : {date_str}\n")
+                try:
+                    os.remove(stopper_file)
+                except Exception as e:
+                     logger.warning(f"Could not remove stopper file: {e}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error checking stopper file: {e}")
+        return False 

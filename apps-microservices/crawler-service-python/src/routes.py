@@ -3,7 +3,7 @@ from crawlee.router import Router
 import re
 from urllib.parse import urlparse, parse_qs
 import logging
-from utils import process_page
+from utils import process_page, is_stopped_manually
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ all_urls_crawled: set[str] = set()
 SKIP_QUESTION_MARK = False
 SKIP_DIEZ = False
 LIMIT_QUESTION_MARK_DIEZ = 50
+DOMAIN = ""
 
 # Global Counters
 count_question_mark = 0
@@ -52,6 +53,12 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     log = context.log
     
     url = request.url
+    
+    # Check Manual Stop
+    if DOMAIN and is_stopped_manually(DOMAIN, historised=True):
+         log.warning("🛑 Manual STOP detected via file. Stopping crawler...")
+         await context.crawler.stop()
+         return
     
     # Deduplication Check
     if url in all_urls_crawled:
