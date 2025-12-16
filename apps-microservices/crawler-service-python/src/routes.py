@@ -121,6 +121,12 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         "title": await page.title(),
         "content": content[:200] + "..." # Truncated for POC
     })
+    
+    # Enqueue links with filtering
+    await context.enqueue_links(
+        strategy="same-domain",
+        transform_request_function=filter_request
+    )
 
 async def error_handler(context: PlaywrightCrawlingContext) -> None:
     request = context.request
@@ -166,12 +172,6 @@ async def error_handler(context: PlaywrightCrawlingContext) -> None:
         })
     except Exception as e:
          log.error(f"Failed to push to error dataset: {e}")
-
-    # Enqueue links with filtering
-    await context.enqueue_links(
-        strategy="same-domain",
-        transform_request_function=filter_request
-    )
 
 def filter_request(request):
     if isinstance(request, dict):
