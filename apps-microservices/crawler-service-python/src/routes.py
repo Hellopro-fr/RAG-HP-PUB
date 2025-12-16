@@ -120,12 +120,22 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     
     content = await process_page(page, url, log)
     
-    # Push data to dataset
-    await context.push_data({
-        "url": url,
-        "title": await page.title(),
-        "content": content[:200] + "..." # Truncated for POC
-    })
+    # Push data to Named Dataset (Legacy Node.js Compatibility)
+    from crawlee.storages import Dataset
+    if DOMAIN:
+        dataset = await Dataset.open(DOMAIN)
+        await dataset.push_data({
+            "url": url,
+            "title": await page.title(),
+            "content": content  # Full content stored
+        })
+    else:
+        # Fallback to default
+        await context.push_data({
+            "url": url,
+            "title": await page.title(),
+            "content": content 
+        })
     
     # Enqueue links with filtering
     await context.enqueue_links(

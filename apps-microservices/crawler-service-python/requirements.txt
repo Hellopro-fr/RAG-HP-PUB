@@ -8,3 +8,7 @@ psutil
 beautifulsoup4
 lxml
 python-dotenv
+fastapi
+uvicorn[standard]
+httpx
+aiofiles
