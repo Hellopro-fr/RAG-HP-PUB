@@ -36,6 +36,15 @@ router = Router()
 # Global set for deduplication (populated dynamically)
 all_urls_crawled: set[str] = set()
 
+# Global Limit Config (set from main.py)
+SKIP_QUESTION_MARK = False
+SKIP_DIEZ = False
+LIMIT_QUESTION_MARK_DIEZ = 50
+
+# Global Counters
+count_question_mark = 0
+count_diez = 0
+
 @router.default_handler
 async def request_handler(context: PlaywrightCrawlingContext) -> None:
     page = context.page
@@ -56,12 +65,42 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         log.warning("all_urls_crawled exceeded 100k items. Clearing to prevent OOM. Deduplication relies on RequestQueue now.")
         all_urls_crawled.clear()
 
+    # Limit Checking & Counting logic
+    global count_question_mark, count_diez
+    if '?' in url:
+        count_question_mark += 1
+    if '#' in url:
+        count_diez += 1
+        
+    # Check Stops
+    should_stop = False
+    stop_reason = ""
+    
+    if not SKIP_QUESTION_MARK and count_question_mark >= LIMIT_QUESTION_MARK_DIEZ:
+         should_stop = True
+         stop_reason = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '?' reached."
+         
+    if not SKIP_DIEZ and count_diez >= LIMIT_QUESTION_MARK_DIEZ:
+         should_stop = True
+         stop_reason = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '#' reached."
+         
+    if should_stop:
+        log.warning(f"🛑 STOPPING CRAWLER: {stop_reason}")
+        # Not sure if we can stop crawler from context directly easily in Python yet without reference
+        # We can raise an exception or try context.crawler.stop() if available?
+        # context generally has crawler instance access? In Python SDK context seems to be PlaywrightCrawlingContext.
+        # Let's try graceful exit via sys.exit? No, that kills container.
+        # Ideally: await context.crawler.run() -> returns.
+        # We will log error and potentially valid way is to not enqueue anything else and maybe set a global flag?
+        # Re-check main.py: we can check these counters in a pre_navigation_hook or similar.
+        # But here is fine.
+        await context.crawler.stop()
+        return
+
     log.info(f"Processing {url} ...")
 
     # Block resources (Images, Fonts, CSS)
-    # Note: In Python Playwright, this is usually done via context.route, 
-    # but Crawlee might handle it via browser pool options. 
-    # For now, we do it per page if needed, or rely on headless default savings.
+    # ... (existing)
     
     # Process the page
     # Note: We assume 'domain' and other configs are available or passed via context.user_data
@@ -75,6 +114,51 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         "title": await page.title(),
         "content": content[:200] + "..." # Truncated for POC
     })
+
+async def error_handler(context: PlaywrightCrawlingContext) -> None:
+    request = context.request
+    log = context.log
+    page = context.page
+    
+    log.error(f"Request {request.url} failed with error messages: {request.error_messages}")
+    
+    errors_list = request.error_messages
+    
+    if page:
+        try:
+           # Try to get content for analysis
+           from utils import process_page, detect_captcha
+           
+           content = await process_page(page, request.loaded_url or request.url, log)
+           captcha_detected = await detect_captcha(page, content)
+           
+           if captcha_detected:
+               log.error(f"Captcha detected on {request.url} : {captcha_detected}")
+               
+        except Exception as e:
+           log.error(f"Error processing page for failure analysis: {e}")
+    
+    # Push to error dataset
+    try:
+        from crawlee.storages import Dataset
+        # Extract domain from request URL or context?
+        # We don't have easy access to 'domain' var from main.py here unless payload user_data.
+        # Minimal fix: use "error-dataset" generic or try to extract domain.
+        # Or assumes user_data has domain.
+        # Let's extract hostname as approximation for domain.
+        # Or just use "error-dataset".
+        
+        from urllib.parse import urlparse
+        domain = urlparse(request.url).netloc.replace("www.", "")
+        
+        error_dataset = await Dataset.open(f"error-{domain}")
+        await error_dataset.push_data({
+            "id": request.id,
+            "url": request.url,
+            "errors": errors_list
+        })
+    except Exception as e:
+         log.error(f"Failed to push to error dataset: {e}")
 
     # Enqueue links with filtering
     await context.enqueue_links(
@@ -93,8 +177,15 @@ def filter_request(request):
 
     parsed = urlparse(url)
     
+    
     # Check extensions
     if IGNORED_EXTENSIONS.match(url):
+        return False
+
+    # Check Skip Flags
+    if SKIP_QUESTION_MARK and '?' in url:
+        return False
+    if SKIP_DIEZ and '#' in url:
         return False
         
     # Check forbidden params

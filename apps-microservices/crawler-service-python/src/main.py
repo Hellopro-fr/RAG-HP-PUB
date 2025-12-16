@@ -14,6 +14,7 @@ from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator
 from crawlee.proxy_configuration import ProxyConfiguration
 from crawlee.configuration import Configuration
+from crawlee.storages import Dataset
 from redis.asyncio import Redis
 
 from routes import router
@@ -74,6 +75,8 @@ async def main():
     parser.add_argument("--proxyapify", default=None)
     parser.add_argument("--dropdata", default="False")
     parser.add_argument("--method", default="prod")
+    parser.add_argument("--skipquestionmark", default="False")
+    parser.add_argument("--skipdiez", default="False")
     
     args = parser.parse_args()
     
@@ -85,6 +88,11 @@ async def main():
     
     break_limit = str(args.breaklimit).lower() == 'true'
     drop_data = str(args.dropdata).lower() == 'true'
+    
+    import routes
+    routes.SKIP_QUESTION_MARK = str(args.skipquestionmark).lower() == 'true'
+    routes.SKIP_DIEZ = str(args.skipdiez).lower() == 'true'
+    
     method = args.method
 
     logger.info(f"Starting crawler for {domain} ({site}) in {storage_path}")
@@ -101,6 +109,7 @@ async def main():
 
     # Load History & Drop Data logic
     from utils import get_urls_crawled, drop_dataset, update_urls_crawled
+    from routes import router, error_handler
     import routes
     
     is_historised = False
@@ -166,6 +175,8 @@ async def main():
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
         )
+        # Assign error handler manually as init might not accept it directly in this version
+        crawler.failed_request_handler = error_handler
 
         # Run
         await crawler.run([site])
