@@ -197,3 +197,34 @@ def update_urls_crawled(name: str, list_urls: list[str]):
             json.dump(list_urls, f)
     except Exception as e:
         logger.error(f"Error updating urls crawled: {e}") 
+
+async def detect_captcha(page: Page, content: str) -> str:
+    """
+    Detects various types of Captchas on the page.
+    Returns the name of the captcha detected or empty string.
+    """
+    captcha_detected = ""
+    
+    try:
+        # Check selectors first
+        if await page.query_selector(".g-recaptcha"):
+            return "reCAPTCHA V2"
+            
+        if await page.query_selector(".cf-turnstile"):
+            return "Cloudflare Turnstile"
+            
+        # Check content strings
+        if "grecaptcha.execute" in content or "grecaptcha.enterprise.execute" in content:
+            return "reCAPTCHA V3"
+        elif "api.leminnow.com" in content:
+            return "Lemin Captcha"
+        elif "geo.captcha-delivery.com" in content:
+            return "DataDome Captcha"
+        elif "s_s_c_user_id" in content and "s_s_c_session_id" in content and \
+             "s_s_c_web_server_sign" in content and "s_s_c_web_server_sign2" in content:
+            return "KeyCAPTCHA"
+            
+    except Exception as e:
+        logger.error(f"Error checking captcha: {e}")
+        
+    return captcha_detected 
