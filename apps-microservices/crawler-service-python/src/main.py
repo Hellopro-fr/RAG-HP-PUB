@@ -72,6 +72,8 @@ async def main():
     parser.add_argument("--callbackUrl", required=True)
     parser.add_argument("--breaklimit", default="False")
     parser.add_argument("--proxyapify", default=None)
+    parser.add_argument("--dropdata", default="False")
+    parser.add_argument("--method", default="prod")
     
     args = parser.parse_args()
     
@@ -82,6 +84,8 @@ async def main():
     proxy_apify_password = args.proxyapify
     
     break_limit = str(args.breaklimit).lower() == 'true'
+    drop_data = str(args.dropdata).lower() == 'true'
+    method = args.method
 
     logger.info(f"Starting crawler for {domain} ({site}) in {storage_path}")
 
@@ -94,6 +98,28 @@ async def main():
     except Exception as e:
         logger.error(f"Failed to change CWD: {e}")
         sys.exit(1)
+
+    # Load History & Drop Data logic
+    from utils import get_urls_crawled, drop_dataset, update_urls_crawled
+    import routes
+    
+    is_historised = False
+    if drop_data:
+        logger.info("Dropping datasets and request queue...")
+        try:
+           # We use our custom drop_dataset logic
+           drop_dataset(domain)
+           drop_dataset(f"error-{domain}")
+           drop_dataset(f"nfr-{domain}")
+           is_historised = True
+        except Exception as e:
+           logger.warning(f"Failed to drop datasets: {e}")
+
+    # Load previously crawled URLs
+    # This populates the Set in routes.py
+    history = get_urls_crawled(domain, is_historised, drop_data)
+    routes.all_urls_crawled = set(history)
+    logger.info(f"Loaded {len(routes.all_urls_crawled)} URLs from history.")
 
     # Configure Crawlee
     # Note: Crawlee Python automatic storage configuration relies on CRAWLEE_STORAGE_DIR env var
@@ -145,6 +171,32 @@ async def main():
         await crawler.run([site])
         
         logger.info("Crawl finished successfully")
+        # --- Post-Crawl Logic ---
+        stats = crawler.statistics.state
+        
+        # Update history file with new URLs
+        if len(routes.all_urls_crawled) > 0:
+            update_urls_crawled(domain, list(routes.all_urls_crawled))
+            
+        # Write callback payload
+        if method != "test":
+            payload = {
+                "id_domaine": job_id,
+                "success": stats.requests_finished,
+                "failed": stats.requests_failed,
+                "isFinished": 1 if stats.requests_finished > 0 else 0, # Simple check for POC
+                "method": method,
+                "isError": "", # TODO: Add granular error codes (limitCrawl, etc.)
+                "storagePath": storage_path
+            }
+            
+            payload_path = os.path.join(storage_path, "_callback_payload.json")
+            try:
+                with open(payload_path, "w") as f:
+                    json.dump(payload, f, indent=2)
+                logger.info(f"Callback payload written to {payload_path}")
+            except Exception as e:
+                logger.error(f"Failed to write callback payload: {e}")
         
     except Exception as e:
         logger.error(f"Crawl failed: {e}")

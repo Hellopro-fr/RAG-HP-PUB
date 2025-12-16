@@ -5,6 +5,7 @@ import psutil
 import os
 from playwright.async_api import Page
 import logging
+import json
 
 
 logger = logging.getLogger(__name__)
@@ -106,3 +107,93 @@ def get_system_stats():
         "ram_percent": mem.percent,
         "cpu_percent": cpu_percent
     }
+
+def drop_dataset(name: str):
+    """
+    Drops (deletes) an existing dataset by its name.
+    Useful when you need to start fresh before a new crawling session.
+    """
+    try:
+        # In Crawlee Python, we might need to access storage client directly or just remove the folder.
+        # For now, let's assume we can't easily drop via SDK static method (API differs).
+        # We will remove the directory manually if it's local storage.
+        storage_path = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
+        dataset_path = os.path.join(storage_path, "datasets", name)
+        queue_path = os.path.join(storage_path, "request_queues", name)
+        
+        if os.path.exists(dataset_path):
+            import shutil
+            shutil.rmtree(dataset_path)
+        
+        if os.path.exists(queue_path):
+            import shutil
+            shutil.rmtree(queue_path)
+            
+    except Exception as e:
+        logger.error(f"Error dropDataset: {e}")
+
+def get_urls_crawled(name: str, historised: bool, drop_data: bool = False) -> list[str]:
+    """
+    Retrieves all url scraped from a folder request_urls/{domain}
+    Manages history rotation.
+    """
+    folder_name = f"./request_urls/{name}"
+    
+    try:
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name, exist_ok=True)
+    except Exception as e:
+        logger.error(f"Couldn't create the folder {folder_name}: {e}")
+        folder_name = "./request_urls"
+
+    file_urls = f"{folder_name}/{name}.json"
+
+    if drop_data:
+        logger.info(f"Dropping the file {file_urls}")
+        if os.path.exists(file_urls):
+            os.remove(file_urls)
+
+    if os.path.exists(file_urls):
+        list_urls = []
+        if historised:
+            logger.info("The list of urls crawled have been historised")
+            date_string = time.strftime("%Y-%m-%d")
+            file_historised = f"{folder_name}/{date_string}-{name}.json"
+            
+            import shutil
+            shutil.copyfile(file_urls, file_historised)
+            
+            # Reset current file
+            with open(file_urls, "w") as f:
+                json.dump([], f)
+        else:
+            try:
+                with open(file_urls, "r") as f:
+                    content = json.load(f)
+                    if isinstance(content, list) and len(content) > 0:
+                        list_urls = content
+            except Exception as e:
+                logger.error(f"Error reading history file: {e}")
+                
+        return list_urls
+    else:
+        logger.info("First creation of the file list urls")
+        with open(file_urls, "w") as f:
+            json.dump([], f)
+        return []
+
+def update_urls_crawled(name: str, list_urls: list[str]):
+    """
+    Update the content of the file named "{domaine}.json" in the folder request_urls/{domain}
+    """
+    folder_name = f"./request_urls/{name}"
+    file_urls = f"{folder_name}/{name}.json"
+
+    if not os.path.exists(folder_name):
+         os.makedirs(folder_name, exist_ok=True)
+
+    try:
+        with open(file_urls, "w") as f:
+            json.dump(list_urls, f)
+    except Exception as e:
+        logger.error(f"Error updating urls crawled: {e}") 
