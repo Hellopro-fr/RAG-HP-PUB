@@ -641,7 +641,7 @@ services:
     # depends_on:
     #   - ocr-service
     deploy:
-      replicas: 10
+      replicas: 2
     logging: *logging_defaults
 
   nettoyage-bruit-ocr-service:

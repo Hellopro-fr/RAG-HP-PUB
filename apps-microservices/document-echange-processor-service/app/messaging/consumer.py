@@ -12,7 +12,7 @@ from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
-BATCH_SIZE = 3
+BATCH_SIZE = 10
 BATCH_TIMEOUT_SECONDS = 0.5
 
 class Consumer:
@@ -52,8 +52,12 @@ class Consumer:
         return queue
 
     def _get_retry_count(self, message: aio_pika.abc.AbstractIncomingMessage) -> int:
-        if message.headers and 'x-death' in message.headers:
-            for death in message.headers['x-death']:
+        headers = message.headers or {}
+        if 'x-retry-count' in headers:
+            return int(headers['x-retry-count'])
+
+        if 'x-death' in headers:
+            for death in headers['x-death']:
                 if death.get('queue') == self.retry_queue_name:
                     return death.get('count', 0)
         return 0
@@ -76,7 +80,6 @@ class Consumer:
                         message = await asyncio.wait_for(self.message_buffer.get(), timeout=BATCH_TIMEOUT_SECONDS)
                         batch.append(message)
                     except asyncio.TimeoutError:
-                        # Le timeout a été atteint, on sort pour traiter le batch partiel
                         break
             except asyncio.CancelledError:
                 print("   -> Tâche de traitement de batch annulée.")
@@ -88,86 +91,124 @@ class Consumer:
             start_time = time.monotonic()
             batch_size = len(batch)
             print(f"⚙️  Traitement d'un batch de {batch_size} messages...")
-            messages_to_process = [json.loads(msg.body) for msg in batch]
             
+            # --- ACK-EARLY STRATEGY ---
+            # On acquitte les messages AVANT le traitement long pour éviter le timeout RabbitMQ.
+            # Si le traitement échoue, on devra republier manuellement le message.
+            for msg in batch:
+                try:
+                    await msg.ack()
+                except Exception as e:
+                    print(f"⚠️ Impossible d'acquitter le message {msg.delivery_tag} avant traitement: {e}")
+                    # On continue quand même, car si la co est coupée, le traitement sera probablement perdu ou republié plus tard.
+
+            messages_to_process = []
+            valid_batch_indices = [] # Indices des messages qui ont pu être décodés
+            
+            for i, msg in enumerate(batch):
+                try:
+                    messages_to_process.append(json.loads(msg.body))
+                    valid_batch_indices.append(i)
+                except json.JSONDecodeError:
+                     print(f"❌ Erreur de décodage JSON pour le message {msg.delivery_tag}. Message ignoré (déjà acké).")
+                     # Optionnel: Envoyer directement en DLQ si JSON invalide irrécupérable
+
+            if not messages_to_process:
+                continue
+
             try:
+                # Ce traitement peut être TRÈS long (minutes/heures)
                 processed_results = await process_document_data_for_templating(messages_to_process)
                 
                 async with self.connection.channel() as channel:
+                    # processed_results correspond aux messages_to_process, qui correspondent aux valid_batch_indices
                     for i, result in enumerate(processed_results):
-                        original_message = batch[i]
-
+                        original_msg_index = valid_batch_indices[i]
+                        original_message = batch[original_msg_index]
                         retry_count = self._get_retry_count(original_message)
 
                         if result['status'] == 'success':
                             await self.publisher.publish_message(result['processed_message'], channel)
-                            await original_message.ack()
-                        elif result['status'] == 'error' or retry_count >= MAX_RETRIES:
-                            print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
-                            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                            # Message déjà acké au début
                             
-                            dlq_headers = DLQProperties.create_dlq_headers(
-                                Exception(result['error_message']), 
-                                'document-echange-processor-service', 
-                                MAX_RETRIES, 
-                                original_message
-                            )
-                            
-                            await dlx.publish(
-                                aio_pika.Message(
-                                    body=original_message.body,
-                                    headers=dlq_headers,
-                                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                                ),
-                                routing_key=self.routing_key
-                            )
-                            await original_message.ack()
-                        else: # status == 'error'
-                            # retry_count = self._get_retry_count(original_message)
-                            if retry_count < MAX_RETRIES:
-                                print(f"   -> NACK du message (tag: {original_message.delivery_tag}) pour nouvelle tentative.")
-                                await original_message.nack(requeue=False)
+                        elif result['status'] == 'error':
+                            if retry_count >= MAX_RETRIES:
+                                print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi manuel à la DLQ.")
+                                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                                
+                                dlq_headers = DLQProperties.create_dlq_headers(
+                                    Exception(result['error_message']), 
+                                    'document-echange-processor-service', 
+                                    MAX_RETRIES, 
+                                    original_message
+                                )
+                                
+                                await dlx.publish(
+                                    aio_pika.Message(
+                                        body=original_message.body,
+                                        headers=dlq_headers,
+                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                    ),
+                                    routing_key=self.routing_key
+                                )
+                            else:
+                                # Retry manuel : On republie dans l'exchange de retry
+                                # On incrémente notre compteur personnalisé
+                                new_retry_count = retry_count + 1
+                                print(f"   -> Erreur traitement (tentative {new_retry_count}/{MAX_RETRIES}). Republiation manuelle vers retry_exchange.")
+                                
+                                retry_ex = await channel.get_exchange(self.retry_exchange, ensure=True)
+                                
+                                # On copie les headers et on met à jour le compteur
+                                new_headers = (original_message.headers or {}).copy()
+                                new_headers['x-retry-count'] = new_retry_count
+                                # On nettoie x-death pour éviter la confusion (optionnel, mais propre si on gère tout manuellement)
+                                # if 'x-death' in new_headers: del new_headers['x-death']
+
+                                await retry_ex.publish(
+                                    aio_pika.Message(
+                                        body=original_message.body,
+                                        headers=new_headers,
+                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                    ),
+                                    routing_key=self.routing_key
+                                )
 
             except Exception as e:
-                print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}. NACK de tous les messages du batch.")
+                print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}.")
                 traceback.print_exc()
 
-                original_message = batch[0]
-                retry_count = self._get_retry_count(original_message)
-                if retry_count >= MAX_RETRIES:
+                # En cas de crash global du batch, on essaie de sauver les messages en les republiant
+                # Attention : si la connexion est morte, ceci échouera aussi.
+                try:
+                     async with self.connection.channel() as rescue_channel:
+                        retry_ex = await rescue_channel.get_exchange(self.retry_exchange, ensure=True)
+                        
+                        for idx in valid_batch_indices:
+                            msg = batch[idx]
+                            current_headers = (msg.headers or {}).copy()
+                            cnt = self._get_retry_count(msg)
+                            current_headers['x-retry-count'] = cnt + 1
+                            
+                            if cnt < MAX_RETRIES:
+                                await retry_ex.publish(
+                                    aio_pika.Message(
+                                        body=msg.body,
+                                        headers=current_headers,
+                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                    ),
+                                    routing_key=self.routing_key
+                                )
+                            else:
+                                # DLQ logic if needed for batched crash
+                                pass 
+                except Exception as rescue_error:
+                    print(f"💀 Impossible de sauver le batch après crash : {rescue_error}")
 
-                    async with self.connection.channel() as dlq_channel:
-                        print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi à la DLQ finale.")
-                        dlx = await dlq_channel.get_exchange(self.dead_letter_exchange, ensure=True)
-                        
-                        dlq_headers = DLQProperties.create_dlq_headers(
-                            Exception(f"erreur catastrophique : {e}"), 
-                            'document-echange-processor-service', 
-                            MAX_RETRIES, 
-                            original_message
-                        )
-                        
-                        await dlx.publish(
-                            aio_pika.Message(
-                                body=original_message.body,
-                                headers=dlq_headers,
-                                delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                            ),
-                            routing_key=self.routing_key
-                        )
-                        await original_message.ack()
-                else:
-                    for msg in batch:
-                        try:
-                            await msg.nack(requeue=False)
-                        except aiormq.exceptions.ChannelInvalidStateError:
-                            # Le canal est déjà mort, on ne peut rien faire d'autre que de laisser la boucle principale se reconnecter.
-                            print("   -> Le canal est déjà fermé. Impossible de NACK les messages restants. Ils seront re-délivrés après reconnexion.")
-                            break # Sortir de la boucle de nack
             finally:
                 end_time = time.monotonic()
                 duration = end_time - start_time
-                print(f"🏁 Traitement du batch de {batch_size} message(s) terminé en {duration:.4f} secondes.")
+                print(f"🏁 Traitement du batch terminé en {duration:.4f} secondes.")
     
     async def _on_message(self, message: aio_pika.abc.AbstractIncomingMessage):
         """Callback léger qui met les messages dans un buffer asynchrone."""
