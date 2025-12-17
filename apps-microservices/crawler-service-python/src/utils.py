@@ -124,11 +124,17 @@ def drop_dataset(name: str):
         
         if os.path.exists(dataset_path):
             import shutil
-            shutil.rmtree(dataset_path)
+            if os.path.islink(dataset_path):
+                os.unlink(dataset_path)
+            else:
+                shutil.rmtree(dataset_path)
         
         if os.path.exists(queue_path):
             import shutil
-            shutil.rmtree(queue_path)
+            if os.path.islink(queue_path):
+                os.unlink(queue_path)
+            else:
+                shutil.rmtree(queue_path)
             
     except Exception as e:
         logger.error(f"Error dropDataset: {e}")
