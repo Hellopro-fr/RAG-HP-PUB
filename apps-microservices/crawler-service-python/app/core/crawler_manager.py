@@ -368,6 +368,7 @@ class CrawlerManager:
         
         return CrawlStatus(
             crawl_id=crawl_id,
+            id_domaine=crawl_id, # Legacy alias
             status=job_info["status"],
             domain=job_info["domain"],
             start_url=job_info["start_url"],

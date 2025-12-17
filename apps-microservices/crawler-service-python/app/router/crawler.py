@@ -20,34 +20,10 @@ logger = logging.getLogger(__name__)
 
 CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 
-# --- SANDBOX LOGIC ---
-def _sandbox_id_in(crawl_id: str) -> str:
-    """Redirects 4776 input to 4776_python internally."""
-    if crawl_id == "4776":
-        return "4776_python"
-    return crawl_id
 
-def _sandbox_id_out(data: any) -> any:
-    """
-    Recursively replaces '4776_python' with '4776' in the output data 
-    to hide the implementation detail from the client.
-    """
-    if isinstance(data, str):
-        if data == "4776_python":
-            return "4776"
-        # Also clean up paths/URLs if they leak the ID
-        return data.replace("4776_python", "4776")
-    elif isinstance(data, dict):
-        return {k: _sandbox_id_out(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [_sandbox_id_out(item) for item in data]
-    return data
-# ---------------------
+# --- SANDBOX LOGIC REMOVED ---
 
 async def get_job_or_recover(crawl_id: str) -> dict:
-    # 1. Input Rewrite
-    crawl_id = _sandbox_id_in(crawl_id)
-    
     job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
     job_info = await cache_service.get_json(job_key)
 
@@ -142,9 +118,6 @@ async def get_capacity():
 @router.post("/start", response_model=CrawlResponse, status_code=status.HTTP_202_ACCEPTED)
 async def start_new_crawl(payload: CrawlRequest):
     try:
-        # 1. Input Rewrite
-        actual_crawl_id = _sandbox_id_in(payload.id)
-
         params = {
             "typecrawling": payload.type_crawling,
             "method": payload.method,
@@ -164,18 +137,16 @@ async def start_new_crawl(payload: CrawlRequest):
         crawl_id = await crawler_manager.start_crawl(
             domain=payload.domain,
             start_url=str(payload.start_url),
-            crawl_id=actual_crawl_id, # Use REWRITTEN ID
+            crawl_id=payload.id,
             callback_url=str(payload.callback_url),
             failure_callback_url=str(payload.failure_callback_url) if payload.failure_callback_url else None,
             params=params
         )
         
-        # 2. Output Sanitize
-        response_model = CrawlResponse(
+        return CrawlResponse(
             message="Crawl job accepted and started.",
             crawl_id=crawl_id
         )
-        return _sandbox_id_out(response_model.dict()) # Return as dict to bypass Pydantic re-validation or use construct
         
     except HTTPException as e:
         raise e
@@ -186,26 +157,22 @@ async def start_new_crawl(payload: CrawlRequest):
 @router.post("/stop/{crawl_id}", response_model=StopResponse)
 async def stop_existing_crawl(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     # Input is already handled by dependency
-    input_id = crawl_id # Original ID from URL
+    input_id = crawl_id 
     success = await crawler_manager.stop_crawl(job_info)
     if not success:
         raise HTTPException(status_code=409, detail=f"Crawl job with ID '{input_id}' not found or not in a running state.")
     
-    # 2. Output Sanitize
-    return _sandbox_id_out(StopResponse(message="Stop signal sent to crawl job.", crawl_id=input_id).dict())
+    return StopResponse(message="Stop signal sent to crawl job.", crawl_id=input_id)
 
 @router.get("/status", response_model=Dict[str, CrawlStatus])
 async def get_all_crawl_statuses():
     all_statuses = await crawler_manager.get_all_statuses()
-    # 2. Output Sanitize all
-    return _sandbox_id_out(all_statuses) # Pydantic will serialize this dict map
+    return all_statuses
 
 @router.get("/status/{crawl_id}", response_model=CrawlStatus)
 async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):
-    # Input ID is handled by Depends
     status_data = await crawler_manager.get_status(job_info)
-    # 2. Output Sanitize
-    return _sandbox_id_out(status_data) # Returns dict, Pydantic compatible
+    return status_data
 
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
@@ -214,7 +181,7 @@ async def download_crawl_results(
     job_info: dict = Depends(get_job_or_recover)
 ):
     try:
-        crawl_id = job_info['crawl_id'] # This is the REAL (rewritten) ID
+        crawl_id = job_info['crawl_id']
         archive_path = await crawler_manager.get_results_archive(job_info, include)
         
         if not os.path.exists(archive_path):
@@ -223,9 +190,7 @@ async def download_crawl_results(
                 detail=f"Could not generate results archive for crawl '{crawl_id}'."
             )
 
-        # We return the file. The filename should probably be sanitized to the original ID ?
-        original_id = _sandbox_id_out(crawl_id)
-        return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{original_id}-results.tar.gz")
+        return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -237,11 +202,9 @@ async def download_crawl_results(
 async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     try:
         gcs_url = await crawler_manager.archive_crawl(job_info)
-        # Note: GCS URL might contain the REAL ID. We sanitize it too.
-        sanitized_url = _sandbox_id_out(gcs_url)
         return ArchiveResponse(
             message="Crawl archived successfully.",
-            gcs_url=sanitized_url
+            gcs_url=gcs_url
         )
     except HTTPException as e:
         raise e
@@ -251,8 +214,5 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
 
 @router.get("/archive/{crawl_id}")
 async def get_archived_crawl(crawl_id: str):
-    # Retrieve logic might need rewrite
-    # Assuming retrieve_archived_crawl takes ID.
-    real_id = _sandbox_id_in(crawl_id)
-    result = await crawler_manager.retrieve_archived_crawl(real_id)
-    return _sandbox_id_out(result)
+    result = await crawler_manager.retrieve_archived_crawl(crawl_id)
+    return result

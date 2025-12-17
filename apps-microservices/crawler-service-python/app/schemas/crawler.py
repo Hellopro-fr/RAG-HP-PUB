@@ -60,6 +60,7 @@ class ArchiveResponse(BaseModel):
 
 class CrawlStatus(BaseModel):
     crawl_id: str
+    id_domaine: str # Legacy ID alias
     status: str = Field(..., description="Current status: running, stopping, finished, failed", example="running")
     domain: str
     start_url: HttpUrl
