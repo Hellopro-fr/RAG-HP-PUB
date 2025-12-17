@@ -53,6 +53,36 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     log = context.log
     
     url = request.url
+
+    # --- Block Resources (Performance & Bandwidth) ---
+    async def route_handler(route):
+        try:
+            req = route.request
+            resource_type = req.resource_type
+            req_url = req.url
+            
+            # Block heavy media and fonts
+            if resource_type in ['image', 'media', 'font', 'stylesheet']:
+                await route.abort()
+                return
+
+            # Block download scripts and binary files
+            if 'download.php' in req_url or 'imp=1' in req_url:
+                await route.abort()
+                return
+            
+            # Block binary extensions
+            if re.search(r'\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$', req_url, re.IGNORECASE):
+                await route.abort()
+                return
+
+            await route.continue_()
+        except Exception:
+            # Ignore route errors (e.g. page closed)
+            pass
+
+    await page.route("**/*", route_handler)
+    # -------------------------------------------------
     
     # Check Manual Stop
     if DOMAIN and is_stopped_manually(DOMAIN, historised=True):
@@ -68,10 +98,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     all_urls_crawled.add(url)
     
     # Smart Memory Management: Keep most recent URLs when limit reached
-    # This prevents re-crawls while managing memory efficiently
     if len(all_urls_crawled) > 500000:
         log.warning(f"all_urls_crawled exceeded 500k items. Keeping 250k most recent URLs to prevent re-crawls.")
-        # Convert to list, keep last 250k (most recent), rebuild set
         recent_urls = list(all_urls_crawled)[-250000:]
         all_urls_crawled.clear()
         all_urls_crawled.update(recent_urls)
@@ -98,26 +126,12 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
          
     if should_stop:
         log.warning(f"🛑 STOPPING CRAWLER: {stop_reason}")
-        # Not sure if we can stop crawler from context directly easily in Python yet without reference
-        # We can raise an exception or try context.crawler.stop() if available?
-        # context generally has crawler instance access? In Python SDK context seems to be PlaywrightCrawlingContext.
-        # Let's try graceful exit via sys.exit? No, that kills container.
-        # Ideally: await context.crawler.run() -> returns.
-        # We will log error and potentially valid way is to not enqueue anything else and maybe set a global flag?
-        # Re-check main.py: we can check these counters in a pre_navigation_hook or similar.
-        # But here is fine.
         await context.crawler.stop()
         return
 
     log.info(f"Processing {url} ...")
 
-    # Block resources (Images, Fonts, CSS)
-    # ... (existing)
-    
     # Process the page
-    # Note: We assume 'domain' and other configs are available or passed via context.user_data
-    # For this POC, we'll keep it simple.
-    
     content = await process_page(page, url, log)
     
     # Push data to Named Dataset (Legacy Node.js Compatibility)
@@ -169,13 +183,6 @@ async def error_handler(context: PlaywrightCrawlingContext) -> None:
     # Push to error dataset
     try:
         from crawlee.storages import Dataset
-        # Extract domain from request URL or context?
-        # We don't have easy access to 'domain' var from main.py here unless payload user_data.
-        # Minimal fix: use "error-dataset" generic or try to extract domain.
-        # Or assumes user_data has domain.
-        # Let's extract hostname as approximation for domain.
-        # Or just use "error-dataset".
-        
         from urllib.parse import urlparse
         domain = urlparse(request.url).netloc.replace("www.", "")
         
@@ -188,6 +195,67 @@ async def error_handler(context: PlaywrightCrawlingContext) -> None:
     except Exception as e:
          log.error(f"Failed to push to error dataset: {e}")
 
+# Extended Clean List (from Node.js)
+PARAMS_TO_REMOVE = [
+    # === CART & WISHLIST ===
+    "add-to-cart", "add_to_cart", "addtocart",
+    "add-to-compare", "add_to_compare",
+    "add-to-wishlist", "add_to_wishlist", "addtowishlist",
+    "remove_from_wishlist", "remove_wishlist",
+    "remove_compare", "remove_item",
+    "quantity", "qty",
+    # === TRACKING UTM (Marketing) ===
+    "utm_source", "utm_medium", "utm_campaign",
+    "utm_content", "utm_term", "utm_id",
+    "utm_referrer", "utm_name",
+    # === FACEBOOK & META ===
+    "fbclid", "fb_action_ids", "fb_action_types", "fb_source", "fb_ref",
+    # === GOOGLE ADS & ANALYTICS ===
+    "gclid", "gclsrc", "dclid", "srsltid", "utmcct", "utmcsr",
+    "utmcmd", "utmccn", "_ga", "_gid", "_gat",
+    # === OTHERS ===
+    "mc_cid", "mc_eid", "twclid", "li_fat_id", "msclkid",
+    "igshid", "tt_medium", "tt_content", "_wpnonce", "sessionid", 
+    "PHPSESSID", "sid", "aff_id", "click_id", "timestamp", "random", "nocache"
+]
+
+# Dynamic Configs from Main
+TO_REMOVE_CUSTOM: list[str] = []
+TO_KEEP_CUSTOM: list[str] = []
+
+def clean_url_params(url: str) -> str:
+    """Removes tracking and useless parameters from URL."""
+    try:
+        parsed = urlparse(url)
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        
+        # 1. Logic for KEEPING specific params (overrides remove)
+        if TO_KEEP_CUSTOM:
+            keys_to_delete = []
+            for key in query.keys():
+                if key not in TO_KEEP_CUSTOM:
+                    keys_to_delete.append(key)
+            for key in keys_to_delete:
+                del query[key]
+        
+        # 2. Logic for REMOVING (if not in Keep mode or mixed)
+        # Note: If TO_KEEP is set, we usually only keep those. 
+        # But if TO_KEEP is empty, we remove dirty ones.
+        else:
+            # Combine hardcoded + custom
+            blocklist = set(PARAMS_TO_REMOVE + TO_REMOVE_CUSTOM)
+            
+            for param in list(query.keys()): # list() to allow modification
+                if param in blocklist:
+                    del query[param]
+                
+        # Reconstruct
+        from urllib.parse import urlencode, urlunparse
+        new_query = urlencode(query, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+    except Exception:
+        return url
+
 def filter_request(request):
     if isinstance(request, dict):
         url = request.get('url')
@@ -196,9 +264,22 @@ def filter_request(request):
 
     if not url:
         return False
+        
+    # 1. Clean URL (Remove UTMs, etc.)
+    cleaned_url = clean_url_params(url)
+    
+    # Update request URL if it changed
+    if cleaned_url != url:
+        if isinstance(request, dict):
+            request['url'] = cleaned_url
+        else:
+            try:
+                request.url = cleaned_url
+            except AttributeError:
+                pass # Some request objects might be immutable
+        url = cleaned_url
 
     parsed = urlparse(url)
-    
     
     # Check extensions
     if IGNORED_EXTENSIONS.match(url):
@@ -210,15 +291,18 @@ def filter_request(request):
     if SKIP_DIEZ and '#' in url:
         return False
         
-    # Check forbidden params
+    # Check forbidden params (Blocking)
     query = parse_qs(parsed.query)
     for param in FORBIDDEN_PARAMS:
         if param in query:
-            # logger.info(f"Blocked forbidden param {param}: {url}")
             return False
             
     # Check Spider Traps (Path based)
     if '/quotation/cart/' in url or '/cart/cart/' in url or '/catalog/product_compare/' in url:
+        return False
+        
+    # Check base64 long strings (often dynamic infinite urls)
+    if re.search(r'/url/[a-zA-Z0-9]{20,}', url):
         return False
         
     return request

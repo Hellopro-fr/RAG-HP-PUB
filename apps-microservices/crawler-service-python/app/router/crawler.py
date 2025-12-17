@@ -21,8 +21,6 @@ logger = logging.getLogger(__name__)
 CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 
 
-# --- SANDBOX LOGIC REMOVED ---
-
 async def get_job_or_recover(crawl_id: str) -> dict:
     job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
     job_info = await cache_service.get_json(job_key)
