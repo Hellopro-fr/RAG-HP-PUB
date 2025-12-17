@@ -142,9 +142,14 @@ async def main():
         sys.exit(1)
 
     # Load History & Drop Data logic
-    from utils import get_urls_crawled, drop_dataset, update_urls_crawled, is_stopped_manually
+    from utils import get_urls_crawled, drop_dataset, update_urls_crawled, is_stopped_manually, attach_file_logger
     from routes import router, error_handler
     import routes
+    
+    # Attach File Logger
+    now_str = datetime.now().isoformat().replace(":", "-")
+    log_name = f"{domain}-logs-{now_str}.log"
+    attach_file_logger(log_name)
     
     is_historised = False
     if drop_data:
