@@ -5,6 +5,7 @@ import json
 import asyncio
 import aiormq
 import traceback
+import gc
 
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
@@ -209,6 +210,16 @@ class Consumer:
                 end_time = time.monotonic()
                 duration = end_time - start_time
                 print(f"🏁 Traitement du batch terminé en {duration:.4f} secondes.")
+                
+                # Nettoyage explicite de la mémoire après chaque batch
+                try:
+                    del batch
+                    if 'messages_to_process' in locals(): del messages_to_process
+                    if 'processed_results' in locals(): del processed_results
+                    gc.collect()
+                    print("🧹 Mémoire nettoyée (GC collect).")
+                except Exception as e:
+                    print(f"Message non critique : Erreur lors du nettoyage mémoire : {e}")
     
     async def _on_message(self, message: aio_pika.abc.AbstractIncomingMessage):
         """Callback léger qui met les messages dans un buffer asynchrone."""

@@ -1,5 +1,6 @@
 import os
 from typing import List, Dict
+import urllib.parse
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
@@ -13,11 +14,22 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     for document in documents:
         document_data = document.get("data",{}).get("original_data",{})
         # document_data = document.get("data",{})
-        docs.append(document_data.get("document"))
+        raw_url = document_data.get("document")
+        if raw_url:
+            # Encodage de l'URL pour gérer les caractères spéciaux (ex: 100% -> 100%25)
+            # safe=":/?&=" préserve la structure de l'URL http://...
+            encoded_url = urllib.parse.quote(raw_url, safe=":/?&=")
+            docs.append(encoded_url)
 
     extractor = DeepseekOCRDocExtractor()
     response = await extractor.extract_from_urls(docs)
     results = extractor.get_clean_result(response)
+    
+    # Libération immédiate des ressources lourdes OCR
+    del extractor
+    del response
+    # On ne peut pas supprimer 'docs' tout de suite si on en a besoin, mais ici ils sont petits (juste des chemins), 
+    # c'est surtout le modèle OCR et la réponse brute qui prennent de la place.
     
     processed_messages_result = []
 
