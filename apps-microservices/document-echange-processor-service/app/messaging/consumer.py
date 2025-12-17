@@ -133,47 +133,25 @@ class Consumer:
                             # Message déjà acké au début
                             
                         elif result['status'] == 'error':
-                            if retry_count >= MAX_RETRIES:
-                                print(f"   -> Échec final pour le message (tag: {original_message.delivery_tag}). Envoi manuel à la DLQ.")
-                                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
-                                
-                                dlq_headers = DLQProperties.create_dlq_headers(
-                                    Exception(result['error_message']), 
-                                    'document-echange-processor-service', 
-                                    MAX_RETRIES, 
-                                    original_message
-                                )
-                                
-                                await dlx.publish(
-                                    aio_pika.Message(
-                                        body=original_message.body,
-                                        headers=dlq_headers,
-                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                                    ),
-                                    routing_key=self.routing_key
-                                )
-                            else:
-                                # Retry manuel : On republie dans l'exchange de retry
-                                # On incrémente notre compteur personnalisé
-                                new_retry_count = retry_count + 1
-                                print(f"   -> Erreur traitement (tentative {new_retry_count}/{MAX_RETRIES}). Republiation manuelle vers retry_exchange.")
-                                
-                                retry_ex = await channel.get_exchange(self.retry_exchange, ensure=True)
-                                
-                                # On copie les headers et on met à jour le compteur
-                                new_headers = (original_message.headers or {}).copy()
-                                new_headers['x-retry-count'] = new_retry_count
-                                # On nettoie x-death pour éviter la confusion (optionnel, mais propre si on gère tout manuellement)
-                                # if 'x-death' in new_headers: del new_headers['x-death']
-
-                                await retry_ex.publish(
-                                    aio_pika.Message(
-                                        body=original_message.body,
-                                        headers=new_headers,
-                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-                                    ),
-                                    routing_key=self.routing_key
-                                )
+                            # Envoi direct à la DLQ sans retry
+                            print(f"   -> Erreur de traitement pour le message (tag: {original_message.delivery_tag}). Envoi direct à la DLQ.")
+                            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                            
+                            dlq_headers = DLQProperties.create_dlq_headers(
+                                Exception(result['error_message']), 
+                                'document-echange-processor-service', 
+                                retry_count,  # On garde le compteur actuel pour traçabilité
+                                original_message
+                            )
+                            
+                            await dlx.publish(
+                                aio_pika.Message(
+                                    body=original_message.body,
+                                    headers=dlq_headers,
+                                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                ),
+                                routing_key=self.routing_key
+                            )
 
             except Exception as e:
                 print(f"❌ ERREUR CATASTROPHIQUE sur le batch: {e}.")
