@@ -279,3 +279,29 @@ def attach_file_logger(file_name: str):
         
     except Exception as e:
         print(f"Failed to attach file logger: {e}") # Use print as logger might not be ready or error is in logging system 
+
+def ensure_alias_symlink(sanitized_name: str, original_name: str, base_dirs: list[str]):
+    """
+    Creates a symlink from original_name to sanitized_name in provided base directories
+    to ensure compatibility with legacy systems expecting the original name (e.g. with dots).
+    """
+    if sanitized_name == original_name:
+        return
+
+    for base_dir in base_dirs:
+        try:
+            if not os.path.exists(base_dir):
+                continue
+            
+            # Correct paths: we are inside base_dir
+            # Structure: ./storage/datasets/sanitized-name
+            # We want:   ./storage/datasets/original.name -> sanitized-name
+            
+            target_path = os.path.join(base_dir, sanitized_name)
+            link_path = os.path.join(base_dir, original_name)
+            
+            if os.path.exists(target_path) and not os.path.exists(link_path):
+                os.symlink(sanitized_name, link_path)
+                logger.info(f"Created symlink alias: {link_path} -> {sanitized_name}")
+        except Exception as e:
+            logger.warning(f"Failed to create symlink alias in {base_dir}: {e}")
