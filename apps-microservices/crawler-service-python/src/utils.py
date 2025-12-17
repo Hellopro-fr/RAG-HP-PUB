@@ -252,4 +252,30 @@ def is_stopped_manually(domain: str, historised: bool = False) -> bool:
         return False
     except Exception as e:
         logger.error(f"Error checking stopper file: {e}")
-        return False 
+        return False
+
+def attach_file_logger(file_name: str):
+    """
+    Attaches a FileHandler to the root logger to save logs to a file.
+    Follows the structure: ./logs/YYYY/MM/file_name
+    """
+    try:
+        now = datetime.now()
+        folder_date = f"{now.year}/{now.month:02d}"
+        folder_path = f"./logs/{folder_date}"
+        
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path, exist_ok=True)
+            
+        file_path = f"{folder_path}/{file_name}"
+        
+        file_handler = logging.FileHandler(file_path, mode='a', encoding='utf-8')
+        file_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        
+        logging.getLogger().addHandler(file_handler)
+        logging.info(f"File logger attached: {file_path}")
+        
+    except Exception as e:
+        print(f"Failed to attach file logger: {e}") # Use print as logger might not be ready or error is in logging system 
