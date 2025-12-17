@@ -179,8 +179,25 @@ class Consumer:
                                     routing_key=self.routing_key
                                 )
                             else:
-                                # DLQ logic if needed for batched crash
-                                pass 
+                                # MAX_RETRIES atteint : envoi à la DLQ
+                                print(f"   -> MAX_RETRIES atteint pour le message (tag: {msg.delivery_tag}). Envoi à la DLQ.")
+                                dlx = await rescue_channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                                
+                                dlq_headers = DLQProperties.create_dlq_headers(
+                                    Exception(f"Erreur catastrophique batch: {e}"), 
+                                    'document-echange-processor-service', 
+                                    cnt, 
+                                    msg
+                                )
+                                
+                                await dlx.publish(
+                                    aio_pika.Message(
+                                        body=msg.body,
+                                        headers=dlq_headers,
+                                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                                    ),
+                                    routing_key=self.routing_key
+                                ) 
                 except Exception as rescue_error:
                     print(f"💀 Impossible de sauver le batch après crash : {rescue_error}")
 
