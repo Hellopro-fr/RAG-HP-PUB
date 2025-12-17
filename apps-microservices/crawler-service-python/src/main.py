@@ -231,7 +231,7 @@ async def main():
         # CRITICAL FIX for Resume: Use named RequestQueue (same as Node.js)
         # explicit opening ensures we connect to storage/request_queues/{domain}
         from crawlee.storages import RequestQueue
-        request_queue = await RequestQueue.open(domain)
+        request_queue = await RequestQueue.open(name=domain)
         logger.info(f"Opened RequestQueue: {domain}")
 
         crawler = PlaywrightCrawler(

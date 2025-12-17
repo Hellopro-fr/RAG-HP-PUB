@@ -137,7 +137,7 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     # Push data to Named Dataset (Legacy Node.js Compatibility)
     from crawlee.storages import Dataset
     if DOMAIN:
-        dataset = await Dataset.open(DOMAIN)
+        dataset = await Dataset.open(name=DOMAIN)
         await dataset.push_data({
             "url": url,
             "title": await page.title(),
@@ -186,7 +186,7 @@ async def error_handler(context: PlaywrightCrawlingContext) -> None:
         from urllib.parse import urlparse
         domain = urlparse(request.url).netloc.replace("www.", "")
         
-        error_dataset = await Dataset.open(f"error-{domain}")
+        error_dataset = await Dataset.open(name=f"error-{domain}")
         await error_dataset.push_data({
             "id": request.id,
             "url": request.url,
