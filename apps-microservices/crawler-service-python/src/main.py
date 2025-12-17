@@ -111,7 +111,10 @@ async def main():
     parser.add_argument("--skipdiez", default="False")
     parser.add_argument("--maxConcurrency", default=5, type=int)
     
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    
+    if unknown:
+        logger.warning(f"Ignored unknown CLI arguments: {unknown}")
     
     domain = args.domain
     site = args.site
