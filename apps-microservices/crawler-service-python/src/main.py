@@ -253,7 +253,7 @@ async def main():
 
         crawler = PlaywrightCrawler(
             request_handler=router,
-            request_queue=request_queue,
+            request_manager=request_queue, # Correct argument name is request_manager
             max_requests_per_crawl=5000 if not break_limit else None,
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
