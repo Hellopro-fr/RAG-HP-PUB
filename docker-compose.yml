@@ -1032,36 +1032,12 @@ services:
 
   crawler-service:
     build:
-      context: .
-      dockerfile: ./apps-microservices/crawler-service/Dockerfile
-    # LEGACY Node.js Service - Use profile 'crawling-legacy' to run
-    profiles: ["crawling-legacy"]
-    # The 'ports' mapping has been removed to prevent conflicts.
-    expose:
-      - "8503"
-    volumes:
-      - crawler_data:/app/storage
-      - ./apps-microservices/crawler-service/crawler_archives:/app/archives
-    env_file:
-      - .env
-    environment:
-      - MAX_CONCURRENT_CRAWLS=1
-      - DEFAULT_MAX_GLOBAL_CRAWLS=3
-      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
-    deploy:
-      replicas: 1
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 6G
-    logging: *logging_defaults
-
-  crawler-service-python:
-    build:
       context: ./apps-microservices/crawler-service-python
       dockerfile: Dockerfile
-    # NEW Python Service - Default 'crawling' profile
     profiles: ["crawling"]
+    # The 'ports' mapping has been removed to prevent conflicts.
+    # We now 'expose' the port, making it accessible to other services
+    # on the Docker network (like our reverse-proxy), but NOT to the host.
     expose:
       - "8503"
     volumes:
@@ -1070,19 +1046,17 @@ services:
     env_file:
       - .env
     environment:
+      # Max concurrent crawls for each individual instance.
       - MAX_CONCURRENT_CRAWLS=1
+      # Fallback value if the Redis config key is missing. Set to default replica count.
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
-    networks:
-      services-net:
-        aliases:
-          - crawler-service # Masquerade as crawler-service for the reverse-proxy
     deploy:
-      replicas: 1
+      replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
         limits:
-          cpus: '1.0'
-          memory: 6G
+          cpus: '1.0' # Limit to 1 CPU core
+          memory: 6G   # Limit to 6GB of RAM
     logging: *logging_defaults
 
   api-chatbot-service:
@@ -1119,6 +1093,8 @@ services:
     volumes:
       # Mount our new nginx configuration file into the container.
       - ./apps-microservices/crawler-service/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - crawler-service
     logging: *logging_defaults
 
   crawler-monitor-backend:
