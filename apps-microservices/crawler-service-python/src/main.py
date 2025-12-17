@@ -184,6 +184,10 @@ async def main():
 
     # Set Global Domain for Routes
     routes.DOMAIN = domain
+    
+    # Inject Dynamic Configs
+    routes.TO_KEEP_CUSTOM = to_keep
+    routes.TO_REMOVE_CUSTOM = to_remove
 
     # Start Heartbeat
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
@@ -209,8 +213,15 @@ async def main():
             retire_browser_after_page_count=10
         )
 
+        # CRITICAL FIX for Resume: Use named RequestQueue (same as Node.js)
+        # explicit opening ensures we connect to storage/request_queues/{domain}
+        from crawlee.storages import RequestQueue
+        request_queue = await RequestQueue.open(domain)
+        logger.info(f"Opened RequestQueue: {domain}")
+
         crawler = PlaywrightCrawler(
             request_handler=router,
+            request_queue=request_queue,
             max_requests_per_crawl=5000 if not break_limit else None,
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
