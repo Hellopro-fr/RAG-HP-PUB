@@ -110,6 +110,9 @@ async def main():
     parser.add_argument("--skipquestionmark", default="False")
     parser.add_argument("--skipdiez", default="False")
     parser.add_argument("--maxConcurrency", default=5, type=int)
+    # Add new params for URL cleaning (comma separated)
+    parser.add_argument("--tokeep", default="")
+    parser.add_argument("--toremove", default="")
     
     args, unknown = parser.parse_known_args()
     
@@ -122,6 +125,10 @@ async def main():
     storage_path = args.storagePath
     proxy_apify_password = args.proxyapify
     max_concurrency = args.maxConcurrency
+    
+    # Parse lists
+    to_keep = [x.strip() for x in args.tokeep.split(',') if x.strip()]
+    to_remove = [x.strip() for x in args.toremove.split(',') if x.strip()]
     
     break_limit = str(args.breaklimit).lower() == 'true'
     drop_data = str(args.dropdata).lower() == 'true'
