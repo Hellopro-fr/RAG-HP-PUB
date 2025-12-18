@@ -112,6 +112,7 @@ async def main():
     # Add new params for URL cleaning (comma separated)
     parser.add_argument("--tokeep", default="")
     parser.add_argument("--toremove", default="")
+    parser.add_argument("--typecrawling", default="link") # Legacy Node.js arg
     
     args, unknown = parser.parse_known_args()
     
