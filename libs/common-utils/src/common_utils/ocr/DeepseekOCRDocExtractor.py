@@ -8,15 +8,17 @@ from urllib.parse import urlparse
 import asyncio
 import tempfile
 import os
+from pypdf import PdfReader
 
 
 BASE_URL_OCR = os.environ.get("URL_OCR", "http://34.34.166.5:8501")
+MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "19"))
 
 
 class DeepseekOCRDocExtractor:
     """Client asynchrone pour l'API OCR externe utilisant Deepseek"""
     
-    def __init__(self, base_url: str = BASE_URL_OCR, timeout: int = 300, download_timeout: int = 120):
+    def __init__(self, base_url: str = BASE_URL_OCR, timeout: int = 300, download_timeout: int = 120, max_pdf_pages: int = MAX_PDF_PAGES):
         """
         Initialise le client OCR
         
@@ -24,12 +26,15 @@ class DeepseekOCRDocExtractor:
             base_url: URL de base de l'API (ex: "http://localhost:8000")
             timeout: Timeout en secondes pour les requêtes OCR
             download_timeout: Timeout en secondes pour le téléchargement des fichiers
+            max_pdf_pages: Nombre maximum de pages autorisées pour un PDF (défaut: 50)
         """
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self.download_timeout = download_timeout
+        self.max_pdf_pages = max_pdf_pages
         self.endpoint = f"{self.base_url}/ocr/batch"
         logging.info(f"URL ocr : {self.base_url}")
+        logging.info(f"Limite de pages PDF : {self.max_pdf_pages}")
     
     def _is_supported_format(self, filename: str) -> bool:
         """
@@ -44,6 +49,67 @@ class DeepseekOCRDocExtractor:
         supported_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'}
         ext = Path(filename).suffix.lower()
         return ext in supported_extensions
+    
+    def _is_pdf(self, filename: str) -> bool:
+        """
+        Vérifie si le fichier est un PDF
+        
+        Args:
+            filename: Nom du fichier
+            
+        Returns:
+            True si le fichier est un PDF, False sinon
+        """
+        return Path(filename).suffix.lower() == '.pdf'
+    
+    def _count_pdf_pages(self, content: BytesIO) -> int:
+        """
+        Compte le nombre de pages d'un PDF
+        
+        Args:
+            content: Contenu du PDF en BytesIO
+            
+        Returns:
+            Nombre de pages du PDF
+            
+        Raises:
+            ValueError: Si le fichier n'est pas un PDF valide
+        """
+        try:
+            content.seek(0)
+            reader = PdfReader(content)
+            page_count = len(reader.pages)
+            content.seek(0)  # Réinitialiser la position pour une lecture ultérieure
+            return page_count
+        except Exception as e:
+            raise ValueError(f"Impossible de lire le PDF: {str(e)}")
+    
+    def _validate_pdf_page_count(self, content: BytesIO, filename: str) -> None:
+        """
+        Valide que le nombre de pages du PDF ne dépasse pas la limite autorisée
+        
+        Args:
+            content: Contenu du PDF en BytesIO
+            filename: Nom du fichier (pour les logs)
+            
+        Raises:
+            ValueError: Si le nombre de pages dépasse la limite
+        """
+        if not self._is_pdf(filename):
+            # Les images et autres formats ne sont pas concernés
+            return
+        
+        page_count = self._count_pdf_pages(content)
+        
+        if page_count > self.max_pdf_pages:
+            error_msg = (
+                f"Le fichier '{filename}' contient {page_count} pages, "
+                f"ce qui dépasse la limite autorisée de {self.max_pdf_pages} pages."
+            )
+            logging.warning(error_msg)
+            raise ValueError(error_msg)
+        
+        logging.info(f"Validation réussie pour '{filename}': {page_count} page(s)")
     
     async def _download_file(self, url: str) -> tuple[BytesIO, str]:
         """
@@ -120,6 +186,15 @@ class DeepseekOCRDocExtractor:
             
             for file_content, filename in downloads:
                 downloaded_files.append(file_content)
+                
+                # Validation du nombre de pages pour les PDFs
+                try:
+                    self._validate_pdf_page_count(file_content, filename)
+                except ValueError as e:
+                    # Fermer les fichiers déjà téléchargés avant de lever l'exception
+                    for file_io in downloaded_files:
+                        file_io.close()
+                    raise
                 
                 # Détection du type MIME
                 mime_type, _ = mimetypes.guess_type(filename)

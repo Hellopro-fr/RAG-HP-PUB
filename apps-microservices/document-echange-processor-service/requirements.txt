@@ -9,3 +9,4 @@ accelerate
 python-dotenv
 presidio_analyzer
 presidio_anonymizer
+pypdf
