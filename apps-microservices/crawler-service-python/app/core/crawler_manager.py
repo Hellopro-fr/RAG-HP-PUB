@@ -332,35 +332,46 @@ class CrawlerManager:
                 pass
 
         # Calculate stats
+        # Calculate stats
         domain = job_info["domain"]
-        crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
-        dataset_path = os.path.join(crawlee_storage_base, domain) # Python crawlee uses 'default' usually? 
-        # Wait, Crawlee Python default dataset is 'default'. 
-        # But we might have dropped it. 
-        # User output showed: temp-storage-prodeal-test/storage/datasets/default/
-        # But wait, original code used domain name as dataset name?
-        # In Node version: yes. In Python version we use PlaywrightCrawler.
-        # Check main.py: await context.push_data(...) -> goes to default dataset.
-        # But does it rename it?
-        # Let's check main.py or routes.py.
-        # We need to ensure we look in the right place.
-        # Python Crawlee by default puts data in storage/datasets/default.
-        # If we want it to be 'domain', we need to open named dataset.
-        # Current python 'routes.py': await context.push_data(...) -> uses default.
-        # So we should look in 'default'.
-        # However, for compatibility maybe we should have verified this.
-        # For now I will assume 'default' if domain dir not found.
+        crawlee_scan_name = getattr(settings, 'CRAWLEE_STORAGE_NAME', domain.replace('.', '-'))
         
-        real_dataset_path = dataset_path
+        crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
+        
+        # Check Main Dataset (Sanitized Name)
+        real_dataset_path = os.path.join(crawlee_storage_base, crawlee_scan_name)
         if not os.path.isdir(real_dataset_path):
-            # Check default
+            # Check default fallback
             default_path = os.path.join(crawlee_storage_base, "default")
             if os.path.isdir(default_path):
                 real_dataset_path = default_path
+            # Check legacy/original name (if symlink exists and points correctly)
+            elif os.path.isdir(os.path.join(crawlee_storage_base, domain)):
+                real_dataset_path = os.path.join(crawlee_storage_base, domain)
 
         urls_crawled = _count_files_in_dir(real_dataset_path)
-        error_urls_crawled = _count_files_in_dir(os.path.join(crawlee_storage_base, f"error-{domain}"))
-        nfr_urls_crawled = _count_files_in_dir(os.path.join(crawlee_storage_base, f"nfr-{domain}"))
+        
+        # Check Error & NFR Datasets (Sanitized Names)
+        # Check Error & NFR Datasets (Sanitized Names with Fallback)
+        # 1. Error Dataset
+        error_dataset_path = os.path.join(crawlee_storage_base, f"error-{crawlee_scan_name}")
+        if not os.path.isdir(error_dataset_path):
+             # Try legacy (error-prodealcenter.fr)
+             legacy_error = os.path.join(crawlee_storage_base, f"error-{domain}")
+             if os.path.isdir(legacy_error):
+                 error_dataset_path = legacy_error
+        
+        error_urls_crawled = _count_files_in_dir(error_dataset_path)
+        
+        # 2. NFR Dataset
+        nfr_dataset_path = os.path.join(crawlee_storage_base, f"nfr-{crawlee_scan_name}")
+        if not os.path.isdir(nfr_dataset_path):
+             # Try legacy (nfr-prodealcenter.fr)
+             legacy_nfr = os.path.join(crawlee_storage_base, f"nfr-{domain}")
+             if os.path.isdir(legacy_nfr):
+                 nfr_dataset_path = legacy_nfr
+                 
+        nfr_urls_crawled = _count_files_in_dir(nfr_dataset_path)
 
         last_activity = None
         # Try to find last modified file

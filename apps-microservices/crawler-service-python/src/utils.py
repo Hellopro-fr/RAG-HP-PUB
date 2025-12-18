@@ -98,15 +98,72 @@ def get_system_stats():
     mem = psutil.virtual_memory()
     cpu_percent = psutil.cpu_percent(interval=None)
     
-    # Get top 3 memory consuming processes (simplified)
-    # logic to list top processes can be complex in python one-liner, 
-    # for now we return basic stats
+    # Get top 3 memory consuming processes (mimicking Node.js logic)
+    top_processes = []
+    try:
+        import subprocess
+        # Command: ps aux --sort=-rss | head -n 4 | tail -n 3
+        # Output cols: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+        cmd = "ps aux --sort=-rss | head -n 4 | tail -n 3"
+        output = subprocess.check_output(cmd, shell=True).decode('utf-8').strip()
+        
+        for line in output.split('\n'):
+            parts = line.split()
+            if len(parts) > 10:
+                # RSS is usually column 5 (index 5) or 6 depending on ps version, but usually 6th col (index 5)
+                # USER(0) PID(1) %CPU(2) %MEM(3) VSZ(4) RSS(5)
+                rss_kb = int(parts[5])
+                # Command starts from index 10
+                command = " ".join(parts[10:])[:30] # Truncate to 30 chars
+                
+                top_processes.append({
+                    "name": command,
+                    "ram": rss_kb * 1024 # Convert KB to Bytes
+                })
+    except Exception as e:
+        logger.error(f"Failed to get top processes: {e}")
+
     
+    # Defaults (Host memory)
+    total_mem = mem.total
+    used_mem = mem.used
+    
+    # Try reading Cgroup memory limits (for Docker container accuracy)
+    try:
+        # Cgroup V2
+        cgroup_max = "/sys/fs/cgroup/memory.max"
+        cgroup_current = "/sys/fs/cgroup/memory.current"
+        
+        # Cgroup V1
+        cgroup_limit_v1 = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+        cgroup_usage_v1 = "/sys/fs/cgroup/memory/memory.usage_in_bytes"
+
+        if os.path.exists(cgroup_max):
+            with open(cgroup_max, "r") as f:
+                val = f.read().strip()
+                if val != "max":
+                    total_mem = int(val)
+            with open(cgroup_current, "r") as f:
+                used_mem = int(f.read().strip())
+        elif os.path.exists(cgroup_limit_v1):
+             with open(cgroup_limit_v1, "r") as f:
+                val = f.read().strip()
+                # Unset limit is often very larg number
+                if int(val) < 900000000000000: # reasonable check
+                    total_mem = int(val)
+             with open(cgroup_usage_v1, "r") as f:
+                used_mem = int(f.read().strip())
+                
+    except Exception:
+        # Fallback to psutil (host stats)
+        pass
+
     return {
-        "ram_used_gb": mem.used / (1024**3),
-        "ram_total_gb": mem.total / (1024**3),
-        "ram_percent": mem.percent,
-        "cpu_percent": cpu_percent
+        "ram_used_gb": used_mem / (1024**3),
+        "ram_total_gb": total_mem / (1024**3),
+        "ram_percent": (used_mem / total_mem) * 100 if total_mem > 0 else 0,
+        "cpu_percent": cpu_percent,
+        "top_processes": top_processes
     }
 
 def drop_dataset(name: str):
@@ -306,8 +363,20 @@ def ensure_alias_symlink(sanitized_name: str, original_name: str, base_dirs: lis
             target_path = os.path.join(base_dir, sanitized_name)
             link_path = os.path.join(base_dir, original_name)
             
+            # Scenario A: New Crawl (Legacy Alias)
+            # Create link: prodealcenter.fr -> prodealcenter-fr
+            # Condition: Target (sanitized) exists, Link (original) does NOT exist
             if os.path.exists(target_path) and not os.path.exists(link_path):
                 os.symlink(sanitized_name, link_path)
                 logger.info(f"Created symlink alias: {link_path} -> {sanitized_name}")
+                
+            # Scenario B: Resume Legacy Crawl (Reverse Alias)
+            # Create link: prodealcenter-fr -> prodealcenter.fr
+            # Condition: Link (original) exists (is a real dir), Target (sanitized) does NOT exist
+            elif os.path.exists(link_path) and not os.path.exists(target_path):
+                 if os.path.isdir(link_path) and not os.path.islink(link_path):
+                     os.symlink(original_name, target_path)
+                     logger.info(f"Created REVERSE symlink for resume: {target_path} -> {original_name}")
+                     
         except Exception as e:
             logger.warning(f"Failed to create symlink alias in {base_dir}: {e}")
