@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies

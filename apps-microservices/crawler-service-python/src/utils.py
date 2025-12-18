@@ -354,8 +354,10 @@ def ensure_alias_symlink(sanitized_name: str, original_name: str, base_dirs: lis
     for base_dir in base_dirs:
         try:
             if not os.path.exists(base_dir):
+                logger.warning(f"Symlink Base Dir NOT FOUND: {base_dir}")
                 continue
             
+            logger.info(f"Checking symlinks in {os.path.abspath(base_dir)}...")
             # Correct paths: we are inside base_dir
             # Structure: ./storage/datasets/sanitized-name
             # We want:   ./storage/datasets/original.name -> sanitized-name
@@ -377,6 +379,31 @@ def ensure_alias_symlink(sanitized_name: str, original_name: str, base_dirs: lis
                  if os.path.isdir(link_path) and not os.path.islink(link_path):
                      os.symlink(original_name, target_path)
                      logger.info(f"Created REVERSE symlink for resume: {target_path} -> {original_name}")
+
+            # Scenario C: Conflict Resolution (Accidental Directory Blocking Resume)
+            # Condition: BOTH exist and BOTH are directories (no symlinks)
+            # This happens if a run started without the fix and created a fresh 'prodealcenter-fr'
+            elif os.path.isdir(link_path) and os.path.isdir(target_path) and not os.path.islink(target_path) and not os.path.islink(link_path):
+                try:
+                    # HEURISTIC: If 'sanitized' (new) is tiny vs 'original' (legacy), assume accidental creation
+                    # Check file counts
+                    count_target = len(os.listdir(target_path))
+                    count_link = len(os.listdir(link_path))
+                    
+                    # If legacy has significantly more data (e.g. > 100 items) and new has very little (< 50)
+                    if count_link > 100 and count_target < 100:
+                        logger.warning(f"Conflict usage detected! Found small new dir '{sanitized_name}' ({count_target} items) vs large legacy '{original_name}' ({count_link} items).")
+                        logger.warning("Assuming accidental creation. Backing up new dir and forcing Resume.")
+                        
+                        import shutil
+                        backup_name = f"{sanitized_name}_backup_{int(datetime.now().timestamp())}"
+                        backup_path = os.path.join(base_dir, backup_name)
+                        os.rename(target_path, backup_path)
+                        
+                        os.symlink(original_name, target_path)
+                        logger.info(f"Fixed Collision: Moved to {backup_name} and linked {target_path} -> {original_name}")
+                except Exception as inner_e:
+                     logger.error(f"Failed to resolve directory conflict: {inner_e}")
                      
         except Exception as e:
             logger.warning(f"Failed to create symlink alias in {base_dir}: {e}")
