@@ -40,7 +40,9 @@ all_urls_crawled: set[str] = set()
 SKIP_QUESTION_MARK = False
 SKIP_DIEZ = False
 LIMIT_QUESTION_MARK_DIEZ = 50
+LIMIT_QUESTION_MARK_DIEZ = 50
 DOMAIN = ""
+CRAWLEE_STORAGE_NAME = ""
 
 # Global Counters
 count_question_mark = 0
@@ -136,8 +138,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     
     # Push data to Named Dataset (Legacy Node.js Compatibility)
     from crawlee.storages import Dataset
-    if DOMAIN:
-        dataset = await Dataset.open(name=DOMAIN)
+    if CRAWLEE_STORAGE_NAME:
+        dataset = await Dataset.open(name=CRAWLEE_STORAGE_NAME)
         await dataset.push_data({
             "url": url,
             "title": await page.title(),
@@ -185,8 +187,9 @@ async def error_handler(context: PlaywrightCrawlingContext) -> None:
         from crawlee.storages import Dataset
         from urllib.parse import urlparse
         domain = urlparse(request.url).netloc.replace("www.", "")
+        safe_domain_name = domain.replace('.', '-')
         
-        error_dataset = await Dataset.open(name=f"error-{domain}")
+        error_dataset = await Dataset.open(name=f"error-{safe_domain_name}")
         await error_dataset.push_data({
             "id": request.id,
             "url": request.url,

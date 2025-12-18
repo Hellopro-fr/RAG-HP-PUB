@@ -75,9 +75,7 @@ async def monitor_task(crawler: PlaywrightCrawler):
     while True:
         await asyncio.sleep(30)
         try:
-            if not crawler.running:
-                break
-                
+            # Stats check
             stats = crawler.statistics.state
             finished = stats.requests_finished
             failed = stats.requests_failed
@@ -200,6 +198,10 @@ async def main():
     # Set Global Domain for Routes
     routes.DOMAIN = domain
     
+    # Sanitize storage name (Crawlee requirement: a-z0-9-)
+    crawlee_storage_name = domain.replace('.', '-')
+    routes.CRAWLEE_STORAGE_NAME = crawlee_storage_name
+    
     # Inject Dynamic Configs
     routes.TO_KEEP_CUSTOM = to_keep
     routes.TO_REMOVE_CUSTOM = to_remove
@@ -231,12 +233,25 @@ async def main():
         # CRITICAL FIX for Resume: Use named RequestQueue (same as Node.js)
         # explicit opening ensures we connect to storage/request_queues/{domain}
         from crawlee.storages import RequestQueue
-        request_queue = await RequestQueue.open(name=domain)
-        logger.info(f"Opened RequestQueue: {domain}")
+        # Python Crawlee does not allow dots in name, so we use sanitized
+        request_queue = await RequestQueue.open(name=crawlee_storage_name)
+        logger.info(f"Opened RequestQueue: {crawlee_storage_name} (domain: {domain})")
+
+        # --- SYMLINK HACK: Alias sanitized name to original name for downstream compatibility ---
+        # We need to link:
+        # storage/request_queues/prodealcenter.fr -> prodealcenter-fr
+        # storage/datasets/prodealcenter.fr -> prodealcenter-fr (created later but we can prep)
+        # Note: Crawlee might create these folders lazily. RequestQueue is created now.
+        from utils import ensure_alias_symlink
+        CRAWLEE_STORAGE_DIR = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
+        base_queues = os.path.join(CRAWLEE_STORAGE_DIR, "request_queues")
+        base_datasets = os.path.join(CRAWLEE_STORAGE_DIR, "datasets") 
+        ensure_alias_symlink(crawlee_storage_name, domain, [base_queues, base_datasets])
+        # ---------------------------------------------------------------------------------------
 
         crawler = PlaywrightCrawler(
             request_handler=router,
-            request_queue=request_queue,
+            request_manager=request_queue, # Correct argument name is request_manager
             max_requests_per_crawl=5000 if not break_limit else None,
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,

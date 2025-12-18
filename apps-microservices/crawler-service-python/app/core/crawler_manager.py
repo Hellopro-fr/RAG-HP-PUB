@@ -127,7 +127,7 @@ class CrawlerManager:
 
         # Build Python Command
         command = [
-            "python", settings.CRAWLER_EXECUTABLE_PATH,
+            "python", "-u", settings.CRAWLER_EXECUTABLE_PATH,
             f"--domain={domain}", f"--site={start_url}", f"--id={crawl_id}",
             f"--storagePath={job_storage_path}", f"--callbackUrl={callback_url}",
         ]
@@ -393,15 +393,47 @@ class CrawlerManager:
         
         archive_dir = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
         os.makedirs(archive_dir, exist_ok=True)
+        # Custom Archiving with Name Remapping (Sanitized -> Original)
+        # We need to present "prodealcenter-fr" as "prodealcenter.fr" in the archive
+        import tarfile
+        
+        crawlee_scan_name = getattr(settings, 'CRAWLEE_STORAGE_NAME', job_info.get('domain', '').replace('.', '-'))
+        original_domain = job_info.get('domain')
+        
         target = os.path.join(archive_dir, f"{crawl_id}")
+        target_file = f"{target}.tar.gz"
         
-        # shutil.make_archive creates target + .tar.gz
-        # We should just archive the whole storage_path for POC simplicity or refine.
-        # Users selection might be complex to implement perfectly in one go.
-        # I will archive the whole storage dir for now to ensure we have data.
-        
-        final = shutil.make_archive(target, 'gztar', storage_path)
-        return final
+        with tarfile.open(target_file, "w:gz") as tar:
+            # Walk through the storage path
+            for root, dirs, files in os.walk(storage_path):
+                # skip looking into the archives folder itself to avoid recursion if it's inside
+                if "archives" in root:
+                    continue
+                    
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    
+                    # Calculate relative path for archive
+                    rel_path = os.path.relpath(full_path, storage_path)
+                    
+                    # REMAPPING LOGIC:
+                    # If the path contains the sanitized name, replace it with original
+                    # e.g. datasets/prodealcenter-fr/items.json -> datasets/prodealcenter.fr/items.json
+                    if crawlee_scan_name in rel_path and original_domain and crawlee_scan_name != original_domain:
+                        arcname = rel_path.replace(crawlee_scan_name, original_domain)
+                    else:
+                        arcname = rel_path
+                        
+                    # Filter out symlinks or duplicates if needed, but for now just add file
+                    # We might want to skip the symlinks themselves if we are remapping the real folder!
+                    # If we find a symlink that MATCHES the original name, we should SKIP it 
+                    # because we are already mapping the real folder to that name.
+                    if os.path.islink(full_path):
+                        continue
+                        
+                    tar.add(full_path, arcname=arcname)
+                    
+        return target_file
 
     async def cleanup_running_job(self, crawl_id: str, process: asyncio.subprocess.Process):
         process.terminate()
