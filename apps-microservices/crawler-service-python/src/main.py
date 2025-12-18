@@ -75,7 +75,6 @@ async def monitor_task(crawler: PlaywrightCrawler):
     while True:
         await asyncio.sleep(30)
         try:
-        try:
             # Stats check
             stats = crawler.statistics.state
             finished = stats.requests_finished
