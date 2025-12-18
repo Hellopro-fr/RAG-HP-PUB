@@ -127,7 +127,7 @@ class CrawlerManager:
 
         # Build Python Command
         command = [
-            "python", settings.CRAWLER_EXECUTABLE_PATH,
+            "python", "-u", settings.CRAWLER_EXECUTABLE_PATH,
             f"--domain={domain}", f"--site={start_url}", f"--id={crawl_id}",
             f"--storagePath={job_storage_path}", f"--callbackUrl={callback_url}",
         ]
