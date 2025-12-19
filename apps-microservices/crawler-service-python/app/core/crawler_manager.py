@@ -305,6 +305,44 @@ class CrawlerManager:
         await self._publish_update(crawl_id, "stopping")
         return True
 
+    async def force_finish_crawl(self, job_info: dict, target_status: str = "finished") -> dict:
+        """
+        Force a job to a terminal status (finished/failed).
+        Used to clean up stuck 'stopping' or 'running' jobs that have no active process.
+        """
+        crawl_id = job_info['crawl_id']
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        
+        old_status = job_info.get("status")
+        
+        # Validate target status
+        if target_status not in ("finished", "failed"):
+            target_status = "finished"
+        
+        # Update status
+        job_info["status"] = target_status
+        job_info["pid"] = None
+        if "last_heartbeat" in job_info:
+            del job_info["last_heartbeat"]
+        
+        await cache_service.set_json(job_key, job_info)
+        await self._publish_update(crawl_id, target_status)
+        
+        # Write completion marker
+        marker_path = os.path.join(job_info["storage_path"], '_completion_marker.json')
+        try:
+            async with aiofiles.open(marker_path, 'w') as f:
+                await f.write(json.dumps({
+                    "final_status": target_status,
+                    "forced": True,
+                    "forced_at": datetime.utcnow().isoformat()
+                }))
+        except Exception as e:
+            logger.warning(f"Could not write completion marker for force-finish: {e}")
+        
+        logger.info(f"Force-finished job '{crawl_id}': {old_status} -> {target_status}")
+        return {"crawl_id": crawl_id, "old_status": old_status, "new_status": target_status}
+
     async def reindex_storage(self) -> ReindexResponse:
         """Scans storage for orphaned jobs and re-indexes them in Redis."""
         logger.info("Starting storage re-indexing process.")
@@ -420,44 +458,44 @@ class CrawlerManager:
                 pass
 
         # Calculate stats
-        # Calculate stats
         domain = job_info["domain"]
-        crawlee_scan_name = getattr(settings, 'CRAWLEE_STORAGE_NAME', domain.replace('.', '-'))
+        # Compute sanitized name from domain (don't rely on global settings)
+        sanitized_name = domain.replace('.', '-')
         
         crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
         
-        # Check Main Dataset (Sanitized Name)
-        real_dataset_path = os.path.join(crawlee_storage_base, crawlee_scan_name)
+        # Check Main Dataset - try ORIGINAL domain name FIRST (for Node.js data)
+        # Node.js uses dots: prodealcenter.fr
+        real_dataset_path = os.path.join(crawlee_storage_base, domain)
         if not os.path.isdir(real_dataset_path):
-            # Check default fallback
-            default_path = os.path.join(crawlee_storage_base, "default")
-            if os.path.isdir(default_path):
-                real_dataset_path = default_path
-            # Check legacy/original name (if symlink exists and points correctly)
-            elif os.path.isdir(os.path.join(crawlee_storage_base, domain)):
-                real_dataset_path = os.path.join(crawlee_storage_base, domain)
+            # Try sanitized name (Python Crawlee: prodealcenter-fr)
+            sanitized_path = os.path.join(crawlee_storage_base, sanitized_name)
+            if os.path.isdir(sanitized_path):
+                real_dataset_path = sanitized_path
+            # Try default fallback
+            elif os.path.isdir(os.path.join(crawlee_storage_base, "default")):
+                real_dataset_path = os.path.join(crawlee_storage_base, "default")
 
         urls_crawled = _count_files_in_dir(real_dataset_path)
         
-        # Check Error & NFR Datasets (Sanitized Names)
-        # Check Error & NFR Datasets (Sanitized Names with Fallback)
+        # Check Error & NFR Datasets - try ORIGINAL domain first (Node.js format)
         # 1. Error Dataset
-        error_dataset_path = os.path.join(crawlee_storage_base, f"error-{crawlee_scan_name}")
+        error_dataset_path = os.path.join(crawlee_storage_base, f"error-{domain}")
         if not os.path.isdir(error_dataset_path):
-             # Try legacy (error-prodealcenter.fr)
-             legacy_error = os.path.join(crawlee_storage_base, f"error-{domain}")
-             if os.path.isdir(legacy_error):
-                 error_dataset_path = legacy_error
+             # Try sanitized (error-prodealcenter-fr)
+             sanitized_error = os.path.join(crawlee_storage_base, f"error-{sanitized_name}")
+             if os.path.isdir(sanitized_error):
+                 error_dataset_path = sanitized_error
         
         error_urls_crawled = _count_files_in_dir(error_dataset_path)
         
         # 2. NFR Dataset
-        nfr_dataset_path = os.path.join(crawlee_storage_base, f"nfr-{crawlee_scan_name}")
+        nfr_dataset_path = os.path.join(crawlee_storage_base, f"nfr-{domain}")
         if not os.path.isdir(nfr_dataset_path):
-             # Try legacy (nfr-prodealcenter.fr)
-             legacy_nfr = os.path.join(crawlee_storage_base, f"nfr-{domain}")
-             if os.path.isdir(legacy_nfr):
-                 nfr_dataset_path = legacy_nfr
+             # Try sanitized (nfr-prodealcenter-fr)
+             sanitized_nfr = os.path.join(crawlee_storage_base, f"nfr-{sanitized_name}")
+             if os.path.isdir(sanitized_nfr):
+                 nfr_dataset_path = sanitized_nfr
                  
         nfr_urls_crawled = _count_files_in_dir(nfr_dataset_path)
 
