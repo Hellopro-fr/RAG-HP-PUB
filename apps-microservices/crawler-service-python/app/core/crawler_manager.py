@@ -206,6 +206,72 @@ class CrawlerManager:
         except Exception as e:
             logger.error(f"Failed to send failure webhook for '{crawl_id}': {e}")
 
+    async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped"):
+        """
+        Send webhook when a job is stopped or force-finished.
+        Uses callback_url (not failure_callback_url) to match PHP script's expected format.
+        
+        PHP expects these parameters for stop/partial:
+        - id_domaine, storagePath, isFinished, isError, domain, success, failed, stored_files_count
+        """
+        crawl_id = job_info['crawl_id']
+        domain = job_info.get('domain', 'unknown')
+        storage_path = job_info.get('storage_path', '')
+        
+        # Use callback_url (the PHP script expects id_domaine + storagePath for this route)
+        url = job_info.get("callback_url")
+        if not url:
+            logger.warning(f"No callback URL for stop notification of '{crawl_id}'.")
+            return
+        
+        # Calculate file counts for the report
+        urls_crawled = 0
+        error_urls = 0
+        try:
+            dataset_path = os.path.join(storage_path, 'storage', 'datasets', domain)
+            if not os.path.isdir(dataset_path):
+                # Try sanitized name
+                dataset_path = os.path.join(storage_path, 'storage', 'datasets', domain.replace('.', '-'))
+            if os.path.isdir(dataset_path):
+                urls_crawled = len([f for f in os.listdir(dataset_path) if os.path.isfile(os.path.join(dataset_path, f))])
+            
+            error_path = os.path.join(storage_path, 'storage', 'datasets', f'error-{domain}')
+            if not os.path.isdir(error_path):
+                error_path = os.path.join(storage_path, 'storage', 'datasets', f"error-{domain.replace('.', '-')}")
+            if os.path.isdir(error_path):
+                error_urls = len([f for f in os.listdir(error_path) if os.path.isfile(os.path.join(error_path, f))])
+        except Exception as e:
+            logger.warning(f"Could not count files for stop webhook: {e}")
+        
+        # Map reason to PHP's expected isError values
+        is_error_map = {
+            "stopped": "stoppedManually",
+            "finished": "",  # Empty = success
+            "failed": "insufficientData"
+        }
+        is_error = is_error_map.get(reason, "stoppedManually")
+        is_finished = 1 if reason == "finished" else 0
+        
+        # PHP-compatible parameters (matching script_process_detect_fiche_produit.php)
+        params = {
+            "id_domaine": crawl_id,
+            "storagePath": storage_path,
+            "isFinished": is_finished,
+            "isError": is_error,
+            "domain": domain,
+            "success": urls_crawled,
+            "failed": error_urls,
+            "stored_files_count": urls_crawled,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(str(url), params=params, timeout=30.0)
+                logger.info(f"Sent stop webhook for '{crawl_id}' (reason: {reason}). Status: {response.status_code}")
+        except Exception as e:
+            logger.error(f"Failed to send stop webhook for '{crawl_id}': {e}")
+
     async def _monitor_process(self, crawl_id: str, process: asyncio.subprocess.Process):
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
         job_info_initial = await cache_service.get_json(job_key)
@@ -303,6 +369,9 @@ class CrawlerManager:
         job_info["status"] = "stopping"
         await cache_service.set_json(job_key, job_info)
         await self._publish_update(crawl_id, "stopping")
+        
+        # Send stop notification callback
+        asyncio.create_task(self._send_stop_webhook(job_info, "stopped"))
         return True
 
     async def force_finish_crawl(self, job_info: dict, target_status: str = "finished") -> dict:
@@ -327,6 +396,9 @@ class CrawlerManager:
         
         await cache_service.set_json(job_key, job_info)
         await self._publish_update(crawl_id, target_status)
+        
+        # Send force-finish notification callback
+        asyncio.create_task(self._send_stop_webhook(job_info, target_status))
         
         # Write completion marker
         marker_path = os.path.join(job_info["storage_path"], '_completion_marker.json')
