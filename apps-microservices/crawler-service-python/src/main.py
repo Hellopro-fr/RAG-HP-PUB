@@ -240,8 +240,9 @@ async def main():
         from utils import ensure_alias_symlink
         CRAWLEE_STORAGE_DIR = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
         base_queues = os.path.join(CRAWLEE_STORAGE_DIR, "request_queues")
-        base_datasets = os.path.join(CRAWLEE_STORAGE_DIR, "datasets") 
-        ensure_alias_symlink(crawlee_storage_name, domain, [base_queues, base_datasets])
+        base_datasets = os.path.join(CRAWLEE_STORAGE_DIR, "datasets")
+        base_kvs = os.path.join(CRAWLEE_STORAGE_DIR, "key_value_stores")
+        ensure_alias_symlink(crawlee_storage_name, domain, [base_queues, base_datasets, base_kvs])
         # ---------------------------------------------------------------------------------------
 
         # CRITICAL FIX for Resume: Use named RequestQueue (same as Node.js)

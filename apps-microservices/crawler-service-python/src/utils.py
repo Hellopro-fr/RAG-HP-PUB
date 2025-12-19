@@ -347,6 +347,12 @@ def ensure_alias_symlink(sanitized_name: str, original_name: str, base_dirs: lis
     """
     Creates a symlink from original_name to sanitized_name in provided base directories
     to ensure compatibility with legacy systems expecting the original name (e.g. with dots).
+    
+    Handles 4 scenarios:
+    A) New Crawl: sanitized exists, original doesn't -> create original -> sanitized
+    B) Resume Legacy: original exists (real dir), sanitized doesn't -> create sanitized -> original
+    C) Conflict: Both exist as real dirs -> backup smaller, link to larger
+    D) Broken Symlink: Either path is a broken symlink -> remove and retry
     """
     if sanitized_name == original_name:
         return
@@ -354,46 +360,54 @@ def ensure_alias_symlink(sanitized_name: str, original_name: str, base_dirs: lis
     for base_dir in base_dirs:
         try:
             if not os.path.exists(base_dir):
-                logger.warning(f"Symlink Base Dir NOT FOUND: {base_dir}")
+                # Base dir might not exist yet (lazy creation by Crawlee)
                 continue
             
             logger.info(f"Checking symlinks in {os.path.abspath(base_dir)}...")
-            # Correct paths: we are inside base_dir
-            # Structure: ./storage/datasets/sanitized-name
-            # We want:   ./storage/datasets/original.name -> sanitized-name
             
             target_path = os.path.join(base_dir, sanitized_name)
             link_path = os.path.join(base_dir, original_name)
             
-            # Scenario A: New Crawl (Legacy Alias)
+            # --- Scenario D: Broken Symlink Cleanup ---
+            # Check for broken symlinks FIRST and remove them
+            if os.path.islink(target_path) and not os.path.exists(target_path):
+                logger.warning(f"Removing broken symlink: {target_path}")
+                os.unlink(target_path)
+            if os.path.islink(link_path) and not os.path.exists(link_path):
+                logger.warning(f"Removing broken symlink: {link_path}")
+                os.unlink(link_path)
+            
+            # Re-check existence after cleanup
+            target_exists = os.path.exists(target_path)
+            link_exists = os.path.exists(link_path)
+            target_is_link = os.path.islink(target_path)
+            link_is_link = os.path.islink(link_path)
+            target_is_dir = os.path.isdir(target_path)
+            link_is_dir = os.path.isdir(link_path)
+            
+            # --- Scenario A: New Crawl (Legacy Alias) ---
             # Create link: prodealcenter.fr -> prodealcenter-fr
-            # Condition: Target (sanitized) exists, Link (original) does NOT exist
-            if os.path.exists(target_path) and not os.path.exists(link_path):
+            if target_exists and not link_exists:
                 os.symlink(sanitized_name, link_path)
                 logger.info(f"Created symlink alias: {link_path} -> {sanitized_name}")
                 
-            # Scenario B: Resume Legacy Crawl (Reverse Alias)
+            # --- Scenario B: Resume Legacy Crawl (Reverse Alias) ---
             # Create link: prodealcenter-fr -> prodealcenter.fr
-            # Condition: Link (original) exists (is a real dir), Target (sanitized) does NOT exist
-            elif os.path.exists(link_path) and not os.path.exists(target_path):
-                 if os.path.isdir(link_path) and not os.path.islink(link_path):
+            elif link_exists and not target_exists:
+                 if link_is_dir and not link_is_link:
                      os.symlink(original_name, target_path)
                      logger.info(f"Created REVERSE symlink for resume: {target_path} -> {original_name}")
 
-            # Scenario C: Conflict Resolution (Accidental Directory Blocking Resume)
-            # Condition: BOTH exist and BOTH are directories (no symlinks)
-            # This happens if a run started without the fix and created a fresh 'prodealcenter-fr'
-            elif os.path.isdir(link_path) and os.path.isdir(target_path) and not os.path.islink(target_path) and not os.path.islink(link_path):
+            # --- Scenario C: Conflict Resolution (Both dirs exist) ---
+            elif link_is_dir and target_is_dir and not target_is_link and not link_is_link:
                 try:
-                    # HEURISTIC: If 'sanitized' (new) is tiny vs 'original' (legacy), assume accidental creation
-                    # Check file counts
                     count_target = len(os.listdir(target_path))
                     count_link = len(os.listdir(link_path))
                     
-                    # If legacy has significantly more data (e.g. > 100 items) and new has very little (< 50)
-                    if count_link > 100 and count_target < 100:
-                        logger.warning(f"Conflict usage detected! Found small new dir '{sanitized_name}' ({count_target} items) vs large legacy '{original_name}' ({count_link} items).")
-                        logger.warning("Assuming accidental creation. Backing up new dir and forcing Resume.")
+                    # Use RATIO-based comparison: if one has 10x more files, it's the real one
+                    # Also handle edge case where one is empty
+                    if count_link > 0 and (count_target == 0 or count_link / max(count_target, 1) > 5):
+                        logger.warning(f"Conflict: '{sanitized_name}' ({count_target}) vs '{original_name}' ({count_link}). Backing up smaller.")
                         
                         import shutil
                         backup_name = f"{sanitized_name}_backup_{int(datetime.now().timestamp())}"
@@ -401,7 +415,19 @@ def ensure_alias_symlink(sanitized_name: str, original_name: str, base_dirs: lis
                         os.rename(target_path, backup_path)
                         
                         os.symlink(original_name, target_path)
-                        logger.info(f"Fixed Collision: Moved to {backup_name} and linked {target_path} -> {original_name}")
+                        logger.info(f"Fixed: {target_path} -> {original_name} (backup: {backup_name})")
+                    elif count_target > 0 and (count_link == 0 or count_target / max(count_link, 1) > 5):
+                        logger.warning(f"Conflict: '{original_name}' ({count_link}) vs '{sanitized_name}' ({count_target}). Backing up smaller.")
+                        
+                        import shutil
+                        backup_name = f"{original_name}_backup_{int(datetime.now().timestamp())}"
+                        backup_path = os.path.join(base_dir, backup_name)
+                        os.rename(link_path, backup_path)
+                        
+                        os.symlink(sanitized_name, link_path)
+                        logger.info(f"Fixed: {link_path} -> {sanitized_name} (backup: {backup_name})")
+                    else:
+                        logger.warning(f"Conflict: Both dirs have similar file counts ({count_target} vs {count_link}). Manual intervention may be needed.")
                 except Exception as inner_e:
                      logger.error(f"Failed to resolve directory conflict: {inner_e}")
                      

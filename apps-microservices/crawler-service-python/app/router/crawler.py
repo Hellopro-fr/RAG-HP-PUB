@@ -37,16 +37,32 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl job not found.")
 
     marker_path = os.path.join(job_storage_path, '_completion_marker.json')
-    final_status = "failed" 
+    final_status = None  # Will be determined below
 
-    try:
-        if os.path.exists(marker_path):
+    # Check completion marker for finished/failed jobs
+    if os.path.exists(marker_path):
+        try:
             async with aiofiles.open(marker_path, 'r') as f:
                 content = await f.read()
                 marker_data = json.loads(content)
             final_status = marker_data.get("final_status", "failed")
-    except Exception:
-        logger.error(f"Could not parse completion marker for '{crawl_id}'. Defaulting to 'failed'.")
+        except Exception:
+            logger.error(f"Could not parse completion marker for '{crawl_id}'.")
+            final_status = "failed"
+    else:
+        # No completion marker: job may still be running OR crashed without cleanup
+        # Heuristic: if storage was modified recently (< 2 hours), assume running
+        try:
+            storage_mtime = os.path.getmtime(job_storage_path)
+            age_hours = (datetime.now().timestamp() - storage_mtime) / 3600
+            if age_hours < 2:
+                final_status = "running"
+                logger.info(f"No completion marker for '{crawl_id}', but storage modified {age_hours:.1f}h ago. Assuming RUNNING.")
+            else:
+                final_status = "failed"
+                logger.warning(f"No completion marker for '{crawl_id}', storage stale ({age_hours:.1f}h). Assuming FAILED.")
+        except Exception:
+            final_status = "failed"
 
     # Reconstruct metadata by parsing the log file (best effort)
     domain, start_url = "unknown", "http://unknown.com"
