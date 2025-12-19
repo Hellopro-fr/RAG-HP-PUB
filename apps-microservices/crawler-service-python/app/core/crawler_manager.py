@@ -305,6 +305,94 @@ class CrawlerManager:
         await self._publish_update(crawl_id, "stopping")
         return True
 
+    async def reindex_storage(self) -> ReindexResponse:
+        """Scans storage for orphaned jobs and re-indexes them in Redis."""
+        logger.info("Starting storage re-indexing process.")
+        
+        summary = {"scanned_directories": 0, "reindexed_jobs": 0, "already_indexed": 0, "errors": 0}
+        
+        try:
+            redis_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
+            redis_key_set = set(redis_keys)
+            
+            storage_path = settings.CRAWLER_STORAGE_PATH
+            if not os.path.isdir(storage_path):
+                logger.warning(f"Storage path does not exist: {storage_path}")
+                return ReindexResponse(**summary)
+            
+            storage_dirs = [d for d in os.listdir(storage_path) 
+                           if os.path.isdir(os.path.join(storage_path, d)) and d != "archives"]
+            summary["scanned_directories"] = len(storage_dirs)
+
+            for crawl_id in storage_dirs:
+                job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+                if job_key in redis_key_set:
+                    summary["already_indexed"] += 1
+                    continue
+
+                # This is an orphaned job, let's re-index it.
+                logger.warning(f"Found orphaned crawl job on disk: '{crawl_id}'. Re-indexing.")
+                job_storage_path = os.path.join(storage_path, crawl_id)
+                marker_path = os.path.join(job_storage_path, '_completion_marker.json')
+                
+                final_status = "failed"  # Default status for orphans
+                
+                if os.path.exists(marker_path):
+                    try:
+                        with open(marker_path, 'r') as f:
+                            marker_data = json.load(f)
+                        final_status = marker_data.get("final_status", "failed")
+                    except Exception:
+                        logger.error(f"Could not parse completion marker for '{crawl_id}'. Defaulting to 'failed'.")
+                else:
+                    # No marker: check if job is recent (might be running/crashed)
+                    try:
+                        storage_mtime = os.path.getmtime(job_storage_path)
+                        age_hours = (datetime.utcnow().timestamp() - storage_mtime) / 3600
+                        if age_hours < 2:
+                            final_status = "running"
+                        else:
+                            final_status = "failed"
+                    except Exception:
+                        final_status = "failed"
+                
+                # Reconstruct metadata by parsing the log file (best effort)
+                domain, start_url = "unknown", "http://unknown.com"
+                log_path = os.path.join(job_storage_path, 'crawler.log')
+                if os.path.exists(log_path):
+                    try:
+                        with open(log_path, 'r', errors='ignore') as f:
+                            for i, line in enumerate(f):
+                                if i > 200:
+                                    break
+                                if '"domain":' in line:
+                                    match = re.search(r'"domain":\s*"([^"]+)"', line)
+                                    if match: domain = match.group(1)
+                                if '"site":' in line:
+                                    match = re.search(r'"site":\s*"([^"]+)"', line)
+                                    if match: start_url = match.group(1)
+                                if domain != "unknown" and start_url != "http://unknown.com":
+                                    break
+                    except Exception as e:
+                        logger.error(f"Error reading log for '{crawl_id}': {e}")
+                
+                reindexed_data = {
+                    "crawl_id": crawl_id, "status": final_status, "domain": domain,
+                    "start_url": start_url, "start_time": datetime.fromtimestamp(os.path.getctime(job_storage_path)),
+                    "storage_path": job_storage_path,
+                    "failure_callback_url": None, "pid": None
+                }
+                
+                await cache_service.set_json(job_key, reindexed_data)
+                summary["reindexed_jobs"] += 1
+        
+        except Exception as e:
+            summary["errors"] += 1
+            logger.error(f"An error occurred during re-indexing: {e}", exc_info=True)
+
+        logger.info(f"Re-indexing complete: {summary}")
+        return ReindexResponse(**summary)
+
     async def get_all_statuses(self) -> Dict[str, CrawlStatus]:
         all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
         statuses = {}
