@@ -373,9 +373,20 @@ class CrawlerManager:
                  
         nfr_urls_crawled = _count_files_in_dir(nfr_dataset_path)
 
+        # Calculate last_activity from most recent file modification time
         last_activity = None
-        # Try to find last modified file
-        # ... logic similar to original ...
+        if os.path.isdir(real_dataset_path):
+            try:
+                files = [
+                    os.path.join(real_dataset_path, f) 
+                    for f in os.listdir(real_dataset_path) 
+                    if os.path.isfile(os.path.join(real_dataset_path, f))
+                ]
+                if files:
+                    latest_file = max(files, key=os.path.getmtime)
+                    last_activity = datetime.fromtimestamp(os.path.getmtime(latest_file))
+            except Exception as e:
+                logger.warning(f"Could not determine last_activity for '{crawl_id}': {e}")
         
         return CrawlStatus(
             crawl_id=crawl_id,
