@@ -178,6 +178,19 @@ async def stop_existing_crawl(crawl_id: str, job_info: dict = Depends(get_job_or
     
     return StopResponse(message="Stop signal sent to crawl job.", crawl_id=input_id)
 
+@router.post("/force-finish/{crawl_id}")
+async def force_finish_crawl(
+    crawl_id: str, 
+    target_status: str = Query("finished", description="Target status: 'finished' or 'failed'"),
+    job_info: dict = Depends(get_job_or_recover)
+):
+    """
+    Force a stuck job to a terminal status.
+    Use this to clean up jobs stuck in 'stopping' or 'running' state without an active process.
+    """
+    result = await crawler_manager.force_finish_crawl(job_info, target_status)
+    return result
+
 @router.get("/status", response_model=Dict[str, CrawlStatus])
 async def get_all_crawl_statuses():
     all_statuses = await crawler_manager.get_all_statuses()
