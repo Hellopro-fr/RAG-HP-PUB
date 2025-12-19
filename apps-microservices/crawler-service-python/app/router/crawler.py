@@ -243,3 +243,13 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
 async def get_archived_crawl(crawl_id: str):
     result = await crawler_manager.retrieve_archived_crawl(crawl_id)
     return result
+
+@router.post("/reconcile-jobs")
+async def reconcile_jobs():
+    """
+    Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
+    marks them as failed, and corrects the global running jobs counter.
+    Use this to fix counter drift where running_jobs > actual running jobs.
+    """
+    await crawler_manager.reconcile_jobs()
+    return {"status": "reconciliation_complete"}
