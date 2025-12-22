@@ -37,16 +37,32 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl job not found.")
 
     marker_path = os.path.join(job_storage_path, '_completion_marker.json')
-    final_status = "failed" 
+    final_status = None  # Will be determined below
 
-    try:
-        if os.path.exists(marker_path):
+    # Check completion marker for finished/failed jobs
+    if os.path.exists(marker_path):
+        try:
             async with aiofiles.open(marker_path, 'r') as f:
                 content = await f.read()
                 marker_data = json.loads(content)
             final_status = marker_data.get("final_status", "failed")
-    except Exception:
-        logger.error(f"Could not parse completion marker for '{crawl_id}'. Defaulting to 'failed'.")
+        except Exception:
+            logger.error(f"Could not parse completion marker for '{crawl_id}'.")
+            final_status = "failed"
+    else:
+        # No completion marker: job may still be running OR crashed without cleanup
+        # Heuristic: if storage was modified recently (< 2 hours), assume running
+        try:
+            storage_mtime = os.path.getmtime(job_storage_path)
+            age_hours = (datetime.now().timestamp() - storage_mtime) / 3600
+            if age_hours < 2:
+                final_status = "running"
+                logger.info(f"No completion marker for '{crawl_id}', but storage modified {age_hours:.1f}h ago. Assuming RUNNING.")
+            else:
+                final_status = "failed"
+                logger.warning(f"No completion marker for '{crawl_id}', storage stale ({age_hours:.1f}h). Assuming FAILED.")
+        except Exception:
+            final_status = "failed"
 
     # Reconstruct metadata by parsing the log file (best effort)
     domain, start_url = "unknown", "http://unknown.com"
@@ -162,6 +178,19 @@ async def stop_existing_crawl(crawl_id: str, job_info: dict = Depends(get_job_or
     
     return StopResponse(message="Stop signal sent to crawl job.", crawl_id=input_id)
 
+@router.post("/force-finish/{crawl_id}")
+async def force_finish_crawl(
+    crawl_id: str, 
+    target_status: str = Query("finished", description="Target status: 'finished' or 'failed'"),
+    job_info: dict = Depends(get_job_or_recover)
+):
+    """
+    Force a stuck job to a terminal status.
+    Use this to clean up jobs stuck in 'stopping' or 'running' state without an active process.
+    """
+    result = await crawler_manager.force_finish_crawl(job_info, target_status)
+    return result
+
 @router.get("/status", response_model=Dict[str, CrawlStatus])
 async def get_all_crawl_statuses():
     all_statuses = await crawler_manager.get_all_statuses()
@@ -214,3 +243,13 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
 async def get_archived_crawl(crawl_id: str):
     result = await crawler_manager.retrieve_archived_crawl(crawl_id)
     return result
+
+@router.post("/reconcile-jobs")
+async def reconcile_jobs():
+    """
+    Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
+    marks them as failed, and corrects the global running jobs counter.
+    Use this to fix counter drift where running_jobs > actual running jobs.
+    """
+    await crawler_manager.reconcile_jobs()
+    return {"status": "reconciliation_complete"}

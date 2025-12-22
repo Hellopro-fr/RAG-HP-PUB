@@ -47,9 +47,10 @@ async def heartbeat_task(redis_url: str, job_id: str, domain: str, hostname: str
                 "replicaId": hostname,
                 "jobId": job_id,
                 "domain": domain,
-                "cpu": stats["cpu_percent"],
-                "ram": stats["ram_used_gb"] * 1024 * 1024 * 1024, # Convert GB to Bytes for compat
-                "totalRam": stats["ram_total_gb"] * 1024 * 1024 * 1024,
+                "cpu": stats["cpu_percent"] / 100.0, # Frontend likely expects 0.0-1.0 or percent? Node.js sent Math.min(cpuPercent, 1) where cpuPercent was 0-1. psutil returns 0-100. So divide by 100.
+                "ram": int(stats["ram_used_gb"] * 1024 * 1024 * 1024), 
+                "totalRam": int(stats["ram_total_gb"] * 1024 * 1024 * 1024),
+                "topProcesses": stats["top_processes"],
                 "timestamp": int(datetime.now().timestamp() * 1000),
                 "status": "running"
             }
@@ -111,6 +112,7 @@ async def main():
     # Add new params for URL cleaning (comma separated)
     parser.add_argument("--tokeep", default="")
     parser.add_argument("--toremove", default="")
+    parser.add_argument("--typecrawling", default="link") # Legacy Node.js arg
     
     args, unknown = parser.parse_known_args()
     
@@ -230,13 +232,6 @@ async def main():
             retire_browser_after_page_count=10
         )
 
-        # CRITICAL FIX for Resume: Use named RequestQueue (same as Node.js)
-        # explicit opening ensures we connect to storage/request_queues/{domain}
-        from crawlee.storages import RequestQueue
-        # Python Crawlee does not allow dots in name, so we use sanitized
-        request_queue = await RequestQueue.open(name=crawlee_storage_name)
-        logger.info(f"Opened RequestQueue: {crawlee_storage_name} (domain: {domain})")
-
         # --- SYMLINK HACK: Alias sanitized name to original name for downstream compatibility ---
         # We need to link:
         # storage/request_queues/prodealcenter.fr -> prodealcenter-fr
@@ -245,9 +240,17 @@ async def main():
         from utils import ensure_alias_symlink
         CRAWLEE_STORAGE_DIR = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
         base_queues = os.path.join(CRAWLEE_STORAGE_DIR, "request_queues")
-        base_datasets = os.path.join(CRAWLEE_STORAGE_DIR, "datasets") 
-        ensure_alias_symlink(crawlee_storage_name, domain, [base_queues, base_datasets])
+        base_datasets = os.path.join(CRAWLEE_STORAGE_DIR, "datasets")
+        base_kvs = os.path.join(CRAWLEE_STORAGE_DIR, "key_value_stores")
+        ensure_alias_symlink(crawlee_storage_name, domain, [base_queues, base_datasets, base_kvs])
         # ---------------------------------------------------------------------------------------
+
+        # CRITICAL FIX for Resume: Use named RequestQueue (same as Node.js)
+        # explicit opening ensures we connect to storage/request_queues/{domain}
+        from crawlee.storages import RequestQueue
+        # Python Crawlee does not allow dots in name, so we use sanitized
+        request_queue = await RequestQueue.open(name=crawlee_storage_name)
+        logger.info(f"Opened RequestQueue: {crawlee_storage_name} (domain: {domain})")
 
         crawler = PlaywrightCrawler(
             request_handler=router,

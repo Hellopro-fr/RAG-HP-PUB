@@ -86,9 +86,11 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     await page.route("**/*", route_handler)
     # -------------------------------------------------
     
-    # Check Manual Stop
-    if DOMAIN and is_stopped_manually(DOMAIN, historised=True):
+    # Check Manual Stop (like Node.js preNavigationHooks - don't delete file)
+    # Per Crawlee Python docs: stop() halts new requests but allows current ones to finish
+    if DOMAIN and is_stopped_manually(DOMAIN, historised=False):
          log.warning("🛑 Manual STOP detected via file. Stopping crawler...")
+         # Official API: crawler.stop() - sets flag to halt, no new requests processed
          await context.crawler.stop()
          return
     
