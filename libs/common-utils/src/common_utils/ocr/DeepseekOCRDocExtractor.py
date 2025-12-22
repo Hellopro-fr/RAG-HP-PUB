@@ -237,6 +237,68 @@ class DeepseekOCRDocExtractor:
             for file_io in downloaded_files:
                 file_io.close()
     
+    async def extract_from_files(
+        self, 
+        files_data: List[tuple[BytesIO, str]], 
+        prompt: Optional[str] = "<image>\nConvert the document to markdown."
+    ) -> Dict[str, Any]:
+        """
+        Traite des fichiers déjà téléchargés en mémoire (asynchrone)
+        Évite le re-téléchargement des fichiers déjà en mémoire
+        
+        Args:
+            files_data: Liste de tuples (file_content: BytesIO, filename: str)
+            prompt: Prompt optionnel pour personnaliser l'extraction
+            
+        Returns:
+            Dictionnaire contenant les résultats de l'extraction
+            
+        Raises:
+            httpx.HTTPError: En cas d'erreur réseau
+        """
+        files = []
+        
+        try:
+            for file_content, filename in files_data:
+                # Détection du type MIME
+                mime_type, _ = mimetypes.guess_type(filename)
+                if mime_type is None:
+                    mime_type = 'application/pdf'
+                
+                # Réinitialiser la position de lecture
+                file_content.seek(0)
+                
+                files.append(
+                    ('files', (filename, file_content, mime_type))
+                )
+            
+            # Préparation des données du formulaire
+            data = {}
+            if prompt is not None:
+                data['prompt'] = prompt
+            
+            # Envoi de la requête à l'API OCR (asynchrone)
+            async with httpx.AsyncClient(timeout=None) as client:
+                response = await client.post(
+                    self.endpoint,
+                    files=files,
+                    data=data if data else None
+                )
+                
+                # Vérification de la réponse
+                response.raise_for_status()
+                
+                return response.json()
+            
+        except httpx.TimeoutException:
+            raise httpx.HTTPError(
+                f"Timeout après {self.timeout}s lors de l'appel à l'API OCR"
+            )
+        except httpx.HTTPError as e:
+            raise httpx.HTTPError(
+                f"Erreur lors du traitement: {str(e)}"
+            )
+    
     async def extract_from_url(
         self, 
         url: str, 
