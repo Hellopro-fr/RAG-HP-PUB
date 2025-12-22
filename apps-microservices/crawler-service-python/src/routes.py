@@ -272,7 +272,7 @@ def filter_request(request):
         url = getattr(request, 'url', None)
 
     if not url:
-        return False
+        return None
         
     # 1. Clean URL (Remove UTMs, etc.)
     cleaned_url = clean_url_params(url)
@@ -292,26 +292,42 @@ def filter_request(request):
     
     # Check extensions
     if IGNORED_EXTENSIONS.match(url):
-        return False
-
+        return None  # Changed from False to None for safety
+    
     # Check Skip Flags
     if SKIP_QUESTION_MARK and '?' in url:
-        return False
+        return None
     if SKIP_DIEZ and '#' in url:
-        return False
+        return None
         
     # Check forbidden params (Blocking)
     query = parse_qs(parsed.query)
     for param in FORBIDDEN_PARAMS:
         if param in query:
-            return False
+            return None
             
     # Check Spider Traps (Path based)
     if '/quotation/cart/' in url or '/cart/cart/' in url or '/catalog/product_compare/' in url:
-        return False
+        return None
         
     # Check base64 long strings (often dynamic infinite urls)
     if re.search(r'/url/[a-zA-Z0-9]{20,}', url):
-        return False
+        return None
         
+    # CRITICAL FIX: The caller does `Request.from_url(**result)`, so we MUST return a dict.
+    # If request was an object, we risk crashing provided we can't cast it to dict easily.
+    # But usually enqueue_links passes a dict (request_options). 
+    # If it is an object, convert to dict.
+    if not isinstance(request, dict):
+         # Try to convert to dict if possible, or construct shallow copy
+         # Crawlee Python Request objects might not have to_dict, so we manually build minimal dict
+         return {
+             "url": url,
+             "unique_key": getattr(request, 'unique_key', url),
+             "method": getattr(request, 'method', 'GET'),
+             "payload": getattr(request, 'payload', None),
+             "headers": getattr(request, 'headers', None),
+             "user_data": getattr(request, 'user_data', {})
+         }
+
     return request
