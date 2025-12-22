@@ -141,6 +141,18 @@ async def main():
 
     logger.info(f"Starting crawler for {domain} ({site}) in {storage_path}")
 
+    # --- MEMORY PRE-FLIGHT CHECK ---
+    # Parity with Node.js: Warn if memory usage is already > 80%, but DO NOT ABORT (User Request)
+    pre_stats = get_system_stats()
+    ram_percent = pre_stats["ram_percent"]
+    if ram_percent > 80:
+        logger.warning(f"⚠️ Memory is high: {ram_percent:.1f}% used. Starting anyway (relying on AutoscaledPool).")
+        logger.warning(f"   Limits: {pre_stats['ram_used_gb']:.2f}GB / {pre_stats['ram_total_gb']:.2f}GB")
+        # sys.exit(1) # DISABLED per user request
+    else:
+        logger.info(f"✅ Pre-flight memory check passed: {ram_percent:.1f}% used")
+    # -------------------------------
+
     # Change CWD to storage path
     try:
         if not os.path.exists(storage_path):
