@@ -146,7 +146,8 @@ async def main():
         if not os.path.exists(storage_path):
             os.makedirs(storage_path, exist_ok=True)
         os.chdir(storage_path)
-        logger.info(f"Changed working directory to: {os.getcwd()}")
+        # CRITICAL: Frontend expects this exact string subset to parse logs correctly
+        logger.info(f"[stdout] Changed working directory to: {os.getcwd()}")
     except Exception as e:
         logger.error(f"Failed to change CWD: {e}")
         sys.exit(1)
@@ -199,6 +200,7 @@ async def main():
 
     # Set Global Domain for Routes
     routes.DOMAIN = domain
+    routes.BASE_URL = site
     
     # Sanitize storage name (Crawlee requirement: a-z0-9-)
     crawlee_storage_name = domain.replace('.', '-')

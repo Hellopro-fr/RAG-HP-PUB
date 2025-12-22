@@ -42,6 +42,7 @@ SKIP_DIEZ = False
 LIMIT_QUESTION_MARK_DIEZ = 50
 LIMIT_QUESTION_MARK_DIEZ = 50
 DOMAIN = ""
+BASE_URL = ""
 CRAWLEE_STORAGE_NAME = ""
 
 # Global Counters
@@ -156,8 +157,11 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         })
     
     # Enqueue links with filtering
+    # Enqueue links with filtering
+    # Matches Node.js: enqueueLinksIncludePath = [`${baseUrl}${includePath}/**/*`]
+    # This prevents crawling subdomains or external domains allowed by 'same-domain' strategy
     await context.enqueue_links(
-        strategy="same-domain",
+        globs=[f"{BASE_URL}/**/*"], 
         transform_request_function=filter_request
     )
 
