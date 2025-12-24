@@ -11,15 +11,29 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     anonymize = AnonymizeText()
     extractor = DeepseekOCRDocExtractor()
     
-    # Étape 1: Pré-validation de chaque document individuellement
-    valid_files_data = []  # Liste de tuples (file_content, filename, document_item)
-    invalid_results = []
+    # Structure pour maintenir l'ordre des documents
+    # Chaque entrée contiendra le résultat final pour le document à cet index
+    results_by_index: Dict[int, Dict] = {}
     
-    for document in documents:
+    # Liste de tuples (index_original, file_content, filename, document_item) pour les documents valides
+    valid_files_data = []
+    
+    # Étape 1: Pré-validation de chaque document individuellement
+    for index, document in enumerate(documents):
         document_data = document.get("data", {}).get("original_data", {})
         raw_url = document_data.get("document")
         
         if not raw_url:
+            # Document sans URL -> erreur pour DLQ (conserver l'index)
+            results_by_index[index] = {
+                "status": "error",
+                "error_message": "Document sans URL de fichier",
+                "processed_message": {
+                    "text": "",
+                    "len": 0,
+                    "nb_pages": 0
+                }
+            }
             continue
             
         # Encodage de l'URL pour gérer les caractères spéciaux (ex: 100% -> 100%25)
@@ -35,7 +49,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             
             # Si validation OK, conserver le fichier en mémoire pour l'OCR
             # NE PAS fermer file_content ici, il sera utilisé pour l'OCR
-            valid_files_data.append((file_content, filename, document))
+            valid_files_data.append((index, file_content, filename, document))
             print(f"✅ Document valide: {nom_doc}")
             
         except ValueError as e:
@@ -43,7 +57,7 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             error_msg = str(e)
             print(f"❌ Document invalide: {nom_doc} - {error_msg}")
             
-            invalid_results.append({
+            results_by_index[index] = {
                 "status": "error",
                 "error_message": f"Validation échouée pour '{nom_doc}': {error_msg}",
                 "processed_message": {
@@ -51,13 +65,13 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
                     "len": 0,
                     "nb_pages": 0
                 }
-            })
+            }
         except Exception as e:
             # Autre erreur (téléchargement, etc.) -> erreur pour DLQ
             error_msg = str(e)
             print(f"❌ Erreur lors de la validation de {nom_doc}: {error_msg}")
             
-            invalid_results.append({
+            results_by_index[index] = {
                 "status": "error",
                 "error_message": f"Erreur de validation pour '{nom_doc}': {error_msg}",
                 "processed_message": {
@@ -65,65 +79,68 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
                     "len": 0,
                     "nb_pages": 0
                 }
-            })
+            }
     
     # Étape 2: Traiter uniquement les documents valides avec OCR (sans re-téléchargement)
-    results = {}
+    ocr_results = {}
+    ocr_failed = False
+    ocr_error_msg = ""
+    
     if valid_files_data:
         try:
             print(f"🔄 Traitement OCR de {len(valid_files_data)} document(s) valide(s)...")
             
             # Préparer les données pour extract_from_files (file_content, filename)
-            files_for_ocr = [(file_content, filename) for file_content, filename, _ in valid_files_data]
+            files_for_ocr = [(file_content, filename) for _, file_content, filename, _ in valid_files_data]
             
             # Utiliser extract_from_files au lieu de extract_from_urls (pas de re-téléchargement)
             response = await extractor.extract_from_files(files_for_ocr)
-            results = extractor.get_clean_result(response)
+            ocr_results = extractor.get_clean_result(response)
             del response
         except Exception as e:
             # Si l'OCR échoue pour le batch, tous les documents valides deviennent des erreurs
-            error_msg = str(e)
-            print(f"❌ Erreur OCR batch: {error_msg}")
-            
-            for file_content, filename, document_item in valid_files_data:
-                document_data = document_item.get("data", {}).get("original_data", {})
-                nom_doc = os.path.basename(document_data.get("document", "inconnu"))
-                
-                invalid_results.append({
-                    "status": "error",
-                    "error_message": f"Erreur OCR pour '{nom_doc}': {error_msg}",
-                    "processed_message": {
-                        "text": "",
-                        "len": 0,
-                        "nb_pages": 0
-                    }
-                })
+            ocr_failed = True
+            ocr_error_msg = str(e)
+            print(f"❌ Erreur OCR batch: {ocr_error_msg}")
         finally:
             # Fermer tous les fichiers en mémoire après traitement OCR
-            for file_content, _, _ in valid_files_data:
+            for _, file_content, _, _ in valid_files_data:
                 file_content.close()
     
     # Libération immédiate des ressources lourdes OCR
     del extractor
     
     # Étape 3: Traiter les résultats OCR des documents valides
-    processed_messages_result = []
-
-    for file_content, filename, document_item in valid_files_data:
-        output_message = {}
+    success_count = 0
+    error_count = len(results_by_index)  # Compteur d'erreurs déjà enregistrées
+    
+    for index, file_content, filename, document_item in valid_files_data:
         document_data = document_item.get("data", {}).get("original_data", {})
         nom_doc = os.path.basename(document_data.get("document", "inconnu"))
-
-        if filename in results:
-            texts = results.get(filename).get("text", "")
-            nb_pages = results.get(filename).get("total_pages")
-            text_to_embed_clean = texts
+        
+        # Si l'OCR a échoué globalement, marquer tous les documents valides comme erreur
+        if ocr_failed:
+            results_by_index[index] = {
+                "status": "error",
+                "error_message": f"Erreur OCR pour '{nom_doc}': {ocr_error_msg}",
+                "processed_message": {
+                    "text": "",
+                    "len": 0,
+                    "nb_pages": 0
+                }
+            }
+            error_count += 1
+            continue
+        
+        if filename in ocr_results:
+            texts = ocr_results.get(filename).get("text", "")
+            nb_pages = ocr_results.get(filename).get("total_pages")
         else:
             texts = ""
             nb_pages = 0
 
         if nb_pages >= 20 or len(texts.strip()) < 200:
-            processed_messages_result.append({
+            results_by_index[index] = {
                 "status": "error",
                 "error_message": f"Doc à ne pas traiter : nb_pages = {nb_pages} | len = {len(texts.strip())}",
                 "processed_message": {
@@ -131,7 +148,8 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
                     "len": len(texts),
                     "nb_pages": nb_pages
                 }
-            })
+            }
+            error_count += 1
             
         elif texts:  
             cleaner = CleanHTML(texts)
@@ -150,14 +168,41 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
                 "nb_pages": nb_pages
             }
 
-            processed_messages_result.append({
+            results_by_index[index] = {
                 "status": "success",
                 "processed_message": output_message
+            }
+            success_count += 1
+        else:
+            # Cas où texts est vide mais pas capturé par la condition précédente
+            results_by_index[index] = {
+                "status": "error",
+                "error_message": f"Aucun texte extrait pour '{nom_doc}'",
+                "processed_message": {
+                    "text": "",
+                    "len": 0,
+                    "nb_pages": nb_pages
+                }
+            }
+            error_count += 1
+    
+    # Étape 4: Construire la liste de résultats dans l'ordre original des documents
+    all_results = []
+    for i in range(len(documents)):
+        if i in results_by_index:
+            all_results.append(results_by_index[i])
+        else:
+            # Sécurité : si un index manque, ajouter une erreur générique
+            all_results.append({
+                "status": "error",
+                "error_message": "Erreur interne: résultat manquant pour ce document",
+                "processed_message": {
+                    "text": "",
+                    "len": 0,
+                    "nb_pages": 0
+                }
             })
+            error_count += 1
     
-    # Étape 4: Combiner les résultats valides et invalides
-    all_results = invalid_results + processed_messages_result
-    
-    print(f"🔍Document-Echange-Processor: {len(processed_messages_result)} succès, {len(invalid_results)} erreurs")
+    print(f"🔍Document-Echange-Processor: {success_count} succès, {error_count} erreurs")
     return all_results
-    
