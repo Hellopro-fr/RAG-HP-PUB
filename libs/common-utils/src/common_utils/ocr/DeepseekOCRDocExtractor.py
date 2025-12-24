@@ -100,6 +100,7 @@ class DeepseekOCRDocExtractor:
             return
         
         page_count = self._count_pdf_pages(content)
+        logging.info(f"Nombre de pages du PDF: {page_count}")
         
         if page_count > self.max_pdf_pages:
             error_msg = (
