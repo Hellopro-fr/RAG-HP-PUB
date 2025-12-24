@@ -20,7 +20,8 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     
     # Étape 1: Pré-validation de chaque document individuellement
     for index, document in enumerate(documents):
-        document_data = document.get("data", {}).get("original_data", {})
+        document_data = document.get("data", {})
+        
         raw_url = document_data.get("document")
         
         if not raw_url:
@@ -115,7 +116,11 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
     error_count = len(results_by_index)  # Compteur d'erreurs déjà enregistrées
     
     for index, file_content, filename, document_item in valid_files_data:
-        document_data = document_item.get("data", {}).get("original_data", {})
+        # Support des deux structures de message
+        if "document" in document_item:
+            document_data = document_item
+        else:
+            document_data = document_item.get("data", {})
         nom_doc = os.path.basename(document_data.get("document", "inconnu"))
         
         # Si l'OCR a échoué globalement, marquer tous les documents valides comme erreur
