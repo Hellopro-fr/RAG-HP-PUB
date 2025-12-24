@@ -141,12 +141,25 @@ async def main():
 
     logger.info(f"Starting crawler for {domain} ({site}) in {storage_path}")
 
+    # --- MEMORY PRE-FLIGHT CHECK ---
+    # Parity with Node.js: Warn if memory usage is already > 80%, but DO NOT ABORT (User Request)
+    pre_stats = get_system_stats()
+    ram_percent = pre_stats["ram_percent"]
+    if ram_percent > 80:
+        logger.warning(f"⚠️ Memory is high: {ram_percent:.1f}% used. Starting anyway (relying on AutoscaledPool).")
+        logger.warning(f"   Limits: {pre_stats['ram_used_gb']:.2f}GB / {pre_stats['ram_total_gb']:.2f}GB")
+        # sys.exit(1) # DISABLED per user request
+    else:
+        logger.info(f"✅ Pre-flight memory check passed: {ram_percent:.1f}% used")
+    # -------------------------------
+
     # Change CWD to storage path
     try:
         if not os.path.exists(storage_path):
             os.makedirs(storage_path, exist_ok=True)
         os.chdir(storage_path)
-        logger.info(f"Changed working directory to: {os.getcwd()}")
+        # CRITICAL: Frontend expects this exact string subset to parse logs correctly
+        logger.info(f"[stdout] Changed working directory to: {os.getcwd()}")
     except Exception as e:
         logger.error(f"Failed to change CWD: {e}")
         sys.exit(1)
@@ -199,6 +212,7 @@ async def main():
 
     # Set Global Domain for Routes
     routes.DOMAIN = domain
+    routes.BASE_URL = site
     
     # Sanitize storage name (Crawlee requirement: a-z0-9-)
     crawlee_storage_name = domain.replace('.', '-')

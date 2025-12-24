@@ -203,6 +203,17 @@ def get_urls_crawled(name: str, historised: bool, drop_data: bool = False) -> li
     """
     folder_name = f"./request_urls/{name}"
     
+    # CHECK LEGACY PATH (Node.js style: unsanitized domain)
+    # If passed name is sanitized (e.g. prodealcenter-fr) but original (prodealcenter.fr) exists
+    # we should prefer the original one where data resides.
+    original_domain_guess = name.replace('-', '.')
+    legacy_folder = f"./request_urls/{original_domain_guess}"
+    
+    if os.path.exists(legacy_folder):
+        logger.info(f"Detected legacy history folder: {legacy_folder}")
+        folder_name = legacy_folder
+        name = original_domain_guess # Update name to match file inside
+    
     try:
         if not os.path.exists(folder_name):
             os.makedirs(folder_name, exist_ok=True)
