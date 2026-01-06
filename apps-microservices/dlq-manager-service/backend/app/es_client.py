@@ -14,6 +14,68 @@ class ElasticsearchClient:
     def __init__(self, client: AsyncElasticsearch):
         self.client = client
 
+    async def check_url_in_dlq(self, url: str) -> Dict[str, Any]:
+        """
+        Vérifie si une URL existe dans les DLQ Elasticsearch.
+        Recherche dans original_payload.data.url et original_payload.url
+        
+        Args:
+            url: L'URL à vérifier
+            
+        Returns:
+            Dict avec exists (bool), count (int), et latest (dict) si trouvé
+        """
+        # Normaliser l'URL (retirer trailing slash)
+        normalized_url = url.rstrip('/')
+        
+        query = {
+            "bool": {
+                "should": [
+                    # Recherche exacte sur les champs keyword
+                    {"term": {"original_payload.data.url.keyword": url}},
+                    {"term": {"original_payload.url.keyword": url}},
+                    {"term": {"original_payload.data.url.keyword": normalized_url}},
+                    {"term": {"original_payload.url.keyword": normalized_url}},
+                    # Recherche par phrase pour plus de flexibilité
+                    {"match_phrase": {"original_payload.data.url": url}},
+                    {"match_phrase": {"original_payload.url": url}}
+                ],
+                "minimum_should_match": 1
+            }
+        }
+        
+        try:
+            response = await self.client.search(
+                index=ELASTIC_INDEX_NAME,
+                body={
+                    "query": query,
+                    "size": 1,
+                    "sort": [{"@timestamp": "desc"}],
+                    "_source": ["service_name", "error_reason", "@timestamp", "status", "original_payload.data.url", "original_payload.url"]
+                }
+            )
+            
+            hits = response['hits']['hits']
+            total_count = response['hits']['total']['value']
+            
+            if hits:
+                return {
+                    "exists": True,
+                    "count": total_count,
+                    "latest": {
+                        "service_name": hits[0]['_source'].get('service_name', 'N/A'),
+                        "error_reason": hits[0]['_source'].get('error_reason', 'N/A'),
+                        "timestamp": hits[0]['_source'].get('@timestamp', 'N/A'),
+                        "status": hits[0]['_source'].get('status', 'New')
+                    }
+                }
+            return {"exists": False, "count": 0}
+            
+        except Exception as e:
+            # Log l'erreur mais retourne un résultat safe
+            print(f"Erreur lors de la vérification DLQ pour URL {url}: {e}")
+            return {"exists": False, "count": 0, "error": str(e)}
+
     async def get_dashboard_stats(self, filters: Dict = None) -> Dict[str, Any]:
         """Runs aggregations for the dashboard, focusing only on 'New' messages."""
         # This is the base filter for the entire dashboard: only show actionable "New" messages.

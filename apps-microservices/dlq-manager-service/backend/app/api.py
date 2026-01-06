@@ -13,6 +13,33 @@ from .models import (
 
 router = APIRouter()
 
+@router.get("/check-url")
+async def check_url_in_dlq(url: str, es_client: ElasticsearchClient = Depends(get_es_client)):
+    """
+    Vérifie si une URL existe dans les DLQ Elasticsearch.
+    
+    Args:
+        url: L'URL à vérifier (query parameter)
+        
+    Returns:
+        - exists: bool - true si l'URL est trouvée dans les DLQ
+        - count: int - nombre d'occurrences trouvées
+        - latest: dict - détails de l'occurrence la plus récente (si exists=true)
+    
+    Exemple d'utilisation:
+        GET /api/check-url?url=https://example.com/page
+    """
+    try:
+        if not url:
+            raise HTTPException(status_code=400, detail="Le paramètre 'url' est requis")
+        result = await es_client.check_url_in_dlq(url)
+        return result
+    except Exception as e:
+        print(f"--- UNHANDLED ERROR IN /api/check-url ---")
+        print(traceback.format_exc())
+        print("------------------------------------------")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+
 @router.post("/dashboard-stats")
 async def get_dashboard_stats(filters: Optional[Dict[str, Any]] = Body(None), es_client: ElasticsearchClient = Depends(get_es_client)):
     """
