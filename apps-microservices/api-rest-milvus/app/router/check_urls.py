@@ -290,20 +290,37 @@ async def check_urls_existence(request: CheckUrlsRequest):
     return CheckUrlsResponse(**response_data)
 
 
+# --- SCHEMA POUR ENDPOINT SIMPLE ---
+
+class CheckUrlsSimpleRequest(BaseModel):
+    """Modèle de requête pour la vérification simple d'URLs."""
+    urls: List[str] = Field(
+        ...,
+        description="Liste des URLs à vérifier",
+        json_schema_extra={
+            "example": [
+                "https://example.com/page1",
+                "https://example.com/page2"
+            ]
+        }
+    )
+    collection_name: Optional[str] = Field(
+        default=COLLECTION_NAME,
+        description=f"Nom de la collection Milvus (défaut: {COLLECTION_NAME})"
+    )
+
+
 @router.post(
     "/check-urls-existence/simple",
     summary="Vérification simple d'une liste d'URLs",
     description="Version simplifiée pour vérifier une liste d'URLs sans groupement par domaine."
 )
-async def check_urls_simple(
-    urls: List[str] = Field(..., description="Liste des URLs à vérifier"),
-    collection_name: Optional[str] = Field(default=COLLECTION_NAME, description="Nom de la collection")
-):
+async def check_urls_simple(request: CheckUrlsSimpleRequest):
     """
     Version simplifiée pour vérifier une liste d'URLs directement.
     Retourne uniquement les URLs trouvées et manquantes.
     """
-    if not urls:
+    if not request.urls:
         return {
             "status": "success",
             "found_urls": [],
@@ -311,7 +328,7 @@ async def check_urls_simple(
             "count": {"found": 0, "missing": 0, "total": 0}
         }
     
-    collection_name = collection_name or COLLECTION_NAME
+    collection_name = request.collection_name or COLLECTION_NAME
     
     if not utility.has_collection(collection_name):
         raise HTTPException(
@@ -323,7 +340,7 @@ async def check_urls_simple(
         collection = Collection(collection_name)
         collection.load()
         
-        urls_unique = list(set(urls))
+        urls_unique = list(set(request.urls))
         result = _check_urls_batch(collection, urls_unique)
         
         found_urls = sorted(list(result["found_urls"]))
@@ -346,3 +363,4 @@ async def check_urls_simple(
             status_code=500,
             detail=f"Erreur: {str(e)}"
         )
+
