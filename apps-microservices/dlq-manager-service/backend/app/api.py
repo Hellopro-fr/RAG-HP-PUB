@@ -8,7 +8,7 @@ from .es_client import ElasticsearchClient, get_es_client
 from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client, get_rabbitmq_channel
 from .models import (
     SearchRequest, RequeueBulkRequest, UpdateStatusBulkRequest,
-    EditAndRequeueRequest, RequeueByFilterRequest
+    EditAndRequeueRequest, RequeueByFilterRequest, CheckUrlsBatchRequest
 )
 
 router = APIRouter()
@@ -38,6 +38,37 @@ async def check_url_in_dlq(url: str, es_client: ElasticsearchClient = Depends(ge
         print(f"--- UNHANDLED ERROR IN /api/check-url ---")
         print(traceback.format_exc())
         print("------------------------------------------")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
+
+
+@router.post("/check-urls")
+async def check_urls_batch_in_dlq(request: CheckUrlsBatchRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
+    """
+    Vérifie si une liste d'URLs existe dans les DLQ Elasticsearch.
+    
+    Args:
+        request: CheckUrlsBatchRequest avec une liste d'URLs
+        
+    Returns:
+        - results: Dict avec le statut de chaque URL
+        - summary: Statistiques globales (total, found, missing)
+    
+    Exemple d'utilisation:
+        POST /api/check-urls
+        Body: {"urls": ["https://example.com/page1", "https://example.com/page2"]}
+    """
+    try:
+        if not request.urls:
+            return {
+                "results": {},
+                "summary": {"total": 0, "found": 0, "missing": 0}
+            }
+        result = await es_client.check_urls_batch_in_dlq(request.urls)
+        return result
+    except Exception as e:
+        print(f"--- UNHANDLED ERROR IN /api/check-urls ---")
+        print(traceback.format_exc())
+        print("-------------------------------------------")
         raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
 
 @router.post("/dashboard-stats")
