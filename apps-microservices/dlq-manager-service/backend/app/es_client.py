@@ -76,6 +76,106 @@ class ElasticsearchClient:
             print(f"Erreur lors de la vérification DLQ pour URL {url}: {e}")
             return {"exists": False, "count": 0, "error": str(e)}
 
+    async def check_urls_batch_in_dlq(self, urls: List[str]) -> Dict[str, Any]:
+        """
+        Vérifie si une liste d'URLs existe dans les DLQ Elasticsearch.
+        Utilise msearch pour optimiser les performances.
+        
+        Args:
+            urls: Liste d'URLs à vérifier
+            
+        Returns:
+            Dict avec:
+            - results: Dict[url, {exists, count, latest}]
+            - summary: {total, found, missing}
+        """
+        if not urls:
+            return {
+                "results": {},
+                "summary": {"total": 0, "found": 0, "missing": 0}
+            }
+        
+        # Dédupliquer les URLs
+        unique_urls = list(set(urls))
+        
+        # Construire les requêtes msearch
+        search_lines = []
+        for url in unique_urls:
+            normalized_url = url.rstrip('/')
+            
+            # Header de la requête (index)
+            search_lines.append({"index": ELASTIC_INDEX_NAME})
+            
+            # Body de la requête
+            query = {
+                "bool": {
+                    "should": [
+                        {"term": {"original_payload.data.url.keyword": url}},
+                        {"term": {"original_payload.url.keyword": url}},
+                        {"term": {"original_payload.data.url.keyword": normalized_url}},
+                        {"term": {"original_payload.url.keyword": normalized_url}},
+                        {"match_phrase": {"original_payload.data.url": url}},
+                        {"match_phrase": {"original_payload.url": url}}
+                    ],
+                    "minimum_should_match": 1
+                }
+            }
+            search_lines.append({
+                "query": query,
+                "size": 1,
+                "sort": [{"@timestamp": "desc"}],
+                "_source": ["service_name", "error_reason", "@timestamp", "status", "original_payload.data.url", "original_payload.url"]
+            })
+        
+        try:
+            # Exécuter msearch
+            response = await self.client.msearch(body=search_lines)
+            
+            # Traiter les résultats
+            results = {}
+            found_count = 0
+            
+            for i, url in enumerate(unique_urls):
+                resp = response['responses'][i]
+                
+                if 'error' in resp:
+                    results[url] = {"exists": False, "count": 0, "error": str(resp['error'])}
+                    continue
+                
+                hits = resp['hits']['hits']
+                total_count = resp['hits']['total']['value']
+                
+                if hits:
+                    found_count += 1
+                    results[url] = {
+                        "exists": True,
+                        "count": total_count,
+                        "latest": {
+                            "service_name": hits[0]['_source'].get('service_name', 'N/A'),
+                            "error_reason": hits[0]['_source'].get('error_reason', 'N/A'),
+                            "timestamp": hits[0]['_source'].get('@timestamp', 'N/A'),
+                            "status": hits[0]['_source'].get('status', 'New')
+                        }
+                    }
+                else:
+                    results[url] = {"exists": False, "count": 0}
+            
+            return {
+                "results": results,
+                "summary": {
+                    "total": len(unique_urls),
+                    "found": found_count,
+                    "missing": len(unique_urls) - found_count
+                }
+            }
+            
+        except Exception as e:
+            print(f"Erreur lors de la vérification batch DLQ: {e}")
+            return {
+                "results": {url: {"exists": False, "count": 0, "error": str(e)} for url in unique_urls},
+                "summary": {"total": len(unique_urls), "found": 0, "missing": len(unique_urls), "error": str(e)}
+            }
+
     async def get_dashboard_stats(self, filters: Dict = None) -> Dict[str, Any]:
         """Runs aggregations for the dashboard, focusing only on 'New' messages."""
         # This is the base filter for the entire dashboard: only show actionable "New" messages.
