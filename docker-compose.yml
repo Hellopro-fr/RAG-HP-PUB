@@ -1032,7 +1032,7 @@ services:
 
   crawler-service:
     build:
-      context: ./apps-microservices/crawler-service-python
+      context: ./apps-microservices/crawler-service
       dockerfile: Dockerfile
     profiles: ["crawling"]
     # The 'ports' mapping has been removed to prevent conflicts.
