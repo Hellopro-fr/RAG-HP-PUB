@@ -7,6 +7,8 @@ from domain.search_result import SearchResultEntity
 
 MILVUS_HOST = os.getenv("ZILLIZ_URI")
 MILVUS_PORT = os.getenv("ZILLIZ_PORT", "19530")
+MILVUS_USER = os.getenv("ZILLIZ_USER")
+MILVUS_PASSWORD = os.getenv("ZILLIZ_PASSWORD")
 
 # Configuration des collections (inchangée)
 COLLECTION_CONFIG = {
@@ -36,7 +38,7 @@ class MilvusClient:
         self._loaded_collections = {}
         try:
             logging.info(f"Connexion à Milvus sur {MILVUS_HOST}:{MILVUS_PORT}")
-            connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
+            connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT, user=MILVUS_USER, password=MILVUS_PASSWORD)
         except Exception as e:
             logging.error(f"Impossible de se connecter à Milvus: {e}", exc_info=True)
             # Dans une application réelle, une stratégie de retry serait appropriée.
