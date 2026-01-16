@@ -1139,8 +1139,6 @@ services:
 networks:
   services-net:
     driver: bridge
-    name: global-services-net 
-    # external: true
     
 volumes:
   elasticsearch-data:
