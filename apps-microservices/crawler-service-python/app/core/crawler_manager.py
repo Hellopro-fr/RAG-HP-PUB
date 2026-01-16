@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import signal
 import tempfile
 import shutil
 import tarfile
@@ -43,6 +44,16 @@ class CrawlerManager:
     """
     def __init__(self):
         self.local_processes: Dict[str, asyncio.subprocess.Process] = {}
+
+    def _kill_process_group(self, pid: int):
+        """Kill a process and all its children via the process group."""
+        try:
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
+            logger.info(f"Killed process group for PID {pid}")
+        except ProcessLookupError:
+            logger.debug(f"Process group for PID {pid} already terminated")
+        except Exception as e:
+            logger.warning(f"Could not kill process group for PID {pid}: {e}")
 
     async def _publish_update(self, crawl_id: str, status: str):
         try:
@@ -140,7 +151,8 @@ class CrawlerManager:
         logger.info(f"Starting crawl '{crawl_id}' with command: {' '.join(command)}")
         
         process = await asyncio.create_subprocess_exec(
-            *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            start_new_session=True  # Create new process group for safe cleanup
         )
         self.local_processes[crawl_id] = process
 
@@ -313,6 +325,8 @@ class CrawlerManager:
             await log_file_handle.close()
 
         # Cleanup
+        # Kill the process group to ensure all Chrome children are terminated
+        self._kill_process_group(process.pid)
         await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
         job_info = await cache_service.get_json(job_key)
         
@@ -728,8 +742,8 @@ class CrawlerManager:
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
 
         try:
-            # 1. Terminate the subprocess
-            process.terminate()
+            # 1. Kill the subprocess and all its children (Chrome processes)
+            self._kill_process_group(process.pid)
             
             # 2. Update state in Redis
             job_info = await cache_service.get_json(job_key)

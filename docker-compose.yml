@@ -1032,8 +1032,8 @@ services:
 
   crawler-service:
     build:
-      context: .
-      dockerfile: apps-microservices/crawler-service/Dockerfile
+      context: ./apps-microservices/crawler-service-python/
+      dockerfile: Dockerfile
     profiles: ["crawling"]
     # The 'ports' mapping has been removed to prevent conflicts.
     # We now 'expose' the port, making it accessible to other services
@@ -1042,7 +1042,7 @@ services:
       - "8503"
     volumes:
       - crawler_data:/app/storage
-      - ./apps-microservices/crawler-service/crawler_archives:/app/archives
+      - ./apps-microservices/crawler-service-python/crawler_archives:/app/archives
     env_file:
       - .env
     environment:
