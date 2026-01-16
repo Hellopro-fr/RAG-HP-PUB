@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     ZILLIZ_URI_DEV: str
     ZILLIZ_URI: str
     ZILLIZ_PORT: str
+    ZILLIZ_USER: str
+    ZILLIZ_PASSWORD: str
     ZILLIZ_API_KEY: str
     RABBITMQ_URL: str
     KEY_WEBHOOK: str
