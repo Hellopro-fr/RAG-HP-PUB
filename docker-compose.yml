@@ -873,7 +873,7 @@ services:
     container_name: api-rest-milvus-lb
     profiles: ["app"]
     ports:
-      - "8517:80"
+      - "8517:8517"
     volumes:
       - ./apps-microservices/api-rest-milvus/nginx-rest-milvus.conf:/etc/nginx/nginx.conf:ro
     depends_on:
