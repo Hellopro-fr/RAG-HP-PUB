@@ -38,6 +38,7 @@ class MilvusClient:
         self._loaded_collections = {}
         try:
             logging.info(f"Connexion à Milvus sur {MILVUS_HOST}:{MILVUS_PORT}")
+            logging.info(f"Connexion à Milvus sur {MILVUS_USER}:{MILVUS_PASSWORD}")
             connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT, user=MILVUS_USER, password=MILVUS_PASSWORD)
         except Exception as e:
             logging.error(f"Impossible de se connecter à Milvus: {e}", exc_info=True)
