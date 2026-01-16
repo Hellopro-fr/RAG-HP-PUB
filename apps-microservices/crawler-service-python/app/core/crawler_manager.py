@@ -28,11 +28,20 @@ CRAWL_UPDATES_CHANNEL = "crawl_updates"
 STALE_JOB_THRESHOLD_SECONDS = 180
 
 def _count_files_in_dir(path: str) -> int:
-    """Safely counts files in a directory."""
+    """Safely counts JSON data files in a Crawlee dataset directory.
+    
+    Excludes metadata files like __metadata__.json and only counts
+    actual data files (e.g., 000000001.json, 000000002.json, etc.).
+    """
     if not os.path.isdir(path):
         return 0
     try:
-        return len([name for name in os.listdir(path) if os.path.isfile(os.path.join(path, name))])
+        return len([
+            name for name in os.listdir(path) 
+            if os.path.isfile(os.path.join(path, name)) 
+            and name.endswith('.json') 
+            and not name.startswith('__')
+        ])
     except OSError:
         return 0
 
