@@ -442,6 +442,8 @@ services:
       - "8515:8515"
     env_file:
       - .env
+    networks:
+      - services-net
     logging: *logging_defaults
   
   api-html-recherche-service:
