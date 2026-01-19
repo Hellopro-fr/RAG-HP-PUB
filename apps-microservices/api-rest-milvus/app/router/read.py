@@ -354,8 +354,8 @@ def get_ressource_rest(collection_name: str, id_milvus: Optional[int] = None, me
                 "code": 500
             }
         
-
+@lru_cache(maxsize=None)
 def _connect_to_milvus():
         # connections.connect("default", uri=.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
         config = Configuration()
-        connections.connect("default", host=config.ZILLIZ_URI, port=config.ZILLIZ_PORT)
+        connections.connect("default", host=config.ZILLIZ_URI, port=config.ZILLIZ_PORT, user=config.ZILLIS_USER, password=config.ZILLIS_PASSWORD)
