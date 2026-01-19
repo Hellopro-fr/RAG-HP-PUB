@@ -543,4 +543,4 @@ def _delete_cascade(
 def _connect_to_milvus():
     """Établit la connexion à Milvus."""
     config = Configuration()
-    connections.connect("default", host=config.ZILLIZ_URI, port=config.ZILLIZ_PORT)
+    connections.connect("default", host=config.ZILLIZ_URI, port=config.ZILLIZ_PORT, user=config.ZILLIZ_USER, password=config.ZILLIZ_PASSWORD)
