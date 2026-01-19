@@ -625,6 +625,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   document-echange-processor-service:
     build:
       context: .
