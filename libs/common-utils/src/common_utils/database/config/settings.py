@@ -14,6 +14,8 @@ class Configuration:
     ZILLIZ_URI: Optional[str] = os.environ.get("ZILLIZ_URI")
     ZILLIZ_API_KEY: Optional[str] = os.environ.get("ZILLIZ_API_KEY")
     ZILLIZ_PORT: Optional[int] = os.environ.get("ZILLIZ_PORT")
+    ZILLIZ_USER: Optional[str] = os.environ.get("ZILLIZ_USER")
+    ZILLIZ_PASSWORD: Optional[str] = os.environ.get("ZILLIZ_PASSWORD")
     
     M_PARAMS: Optional[int] = int(os.environ.get("M_PARAMS") or 32)
     EF_PARAMS: Optional[int] = int(os.environ.get("EF_PARAMS") or 300)

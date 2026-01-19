@@ -28,20 +28,20 @@ class MilvusWebsiteCrud:
     def __init__(self, config: Configuration = settings , **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
-        # if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_API_KEY:
-        if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_PORT:
-            raise ValueError("Zilliz Cloud URI and API Key/Port must be set in the environment.")
+        if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_PORT or not self.config.ZILLIZ_USER or not self.config.ZILLIZ_PASSWORD:
+            raise ValueError("Zilliz Cloud URI and Port and User and Password must be set in the environment.")
         self.logger = kwargs.get('logger', logging)
         
     def _connect_to_milvus(self):
         # Check if a connection with the alias 'default' already exists.
         if not connections.has_connection("default"):
             print("Connexion sur Zilliz cloud...")
-            # connections.connect("default", uri=self.config.ZILLIZ_URI, token=self.config.ZILLIZ_API_KEY)
             connections.connect(
                 alias="default",
                 host=self.config.ZILLIZ_URI, 
                 port=self.config.ZILLIZ_PORT,
+                user=self.config.ZILLIZ_USER,
+                password=self.config.ZILLIZ_PASSWORD,
                 timeout=10 # Add a 10-second timeout to prevent indefinite hanging
             )
             print("✓ Connexion sur Zilliz cloud avec succès.")
