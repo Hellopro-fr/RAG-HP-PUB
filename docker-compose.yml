@@ -594,6 +594,7 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     logging: *logging_defaults
+
   deepseek-ocr:
     build: 
       context: .

@@ -98,7 +98,7 @@ class MilvusDocumentCrud:
             return {"status": "error", "message": f"Erreur inattendue : {e}", "code": 500}
 
 
-BASE_URL_OCR = os.environ.get("URL_OCR", "http://34.34.166.5:8501")
+BASE_URL_OCR = os.environ.get("URL_OCR", "http://localhost:8501")
 
 class DeepseekOCRDocExtractor:
     """Client asynchrone pour l'API OCR externe utilisant Deepseek"""

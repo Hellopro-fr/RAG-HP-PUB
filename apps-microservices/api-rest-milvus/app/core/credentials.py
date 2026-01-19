@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     M_PARAMS: str
     EF_PARAMS: str
     
-    ADRESSE_VM_API_RECHERCHE : str   = "http://34.34.166.5"
+    ADRESSE_VM_API_RECHERCHE : str   = "http://localhost"
     PORT_API_RECHERCHE       : int   = 8500
     COLLECTION_PRODUIT_NAME  : str   = "produits_3"
     

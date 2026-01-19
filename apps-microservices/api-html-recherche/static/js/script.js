@@ -1454,9 +1454,7 @@ $(function () {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.close();
     }
-
-    // let wsUrl = "ws://34.34.166.5:8511/ws/search"; // L'URL est maintenant ici VM1
-    // let wsUrl = "ws://34.34.166.5:8500/search-service/ws/search"; // L'URL est maintenant ici
+    
     // if (GetURLParameter("domain") == 1) {
     
     let wsUrl = "wss://api.hellopro.eu/search-service/ws/search";
