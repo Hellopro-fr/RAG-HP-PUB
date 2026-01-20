@@ -88,20 +88,38 @@ class DLQArchiver:
         doc = self._process_message_to_doc(body, properties)
         self.documents_buffer.append((method.delivery_tag, doc))
 
-    def _remove_embedding_recursively(self, obj):
-        """Recursively finds and removes/replaces 'embedding' keys from an object."""
+    def _extract_and_sanitize_embeddings(self, obj, path="", embeddings_dict=None):
+        """
+        Recursively finds 'embedding' keys, extracts them into a dictionary with their JSON paths,
+        and replaces them with placeholders in the original object.
+        
+        Args:
+            obj: The object to process (dict, list, or primitive)
+            path: Current JSON path (e.g., "data.chunks.0")
+            embeddings_dict: Dictionary to store extracted embeddings {path: embedding_array}
+        
+        Returns:
+            The sanitized object with embeddings replaced by placeholders
+        """
+        if embeddings_dict is None:
+            embeddings_dict = {}
+        
         if isinstance(obj, dict):
             for key in list(obj.keys()):
-                if key == 'embedding':
-                    # Replace the large vector with a placeholder for context
-                    vector_len = len(obj[key]) if isinstance(obj[key], list) else 'N/A'
+                current_path = f"{path}.{key}" if path else key
+                if key == 'embedding' and isinstance(obj[key], list):
+                    # Extract the embedding before replacing
+                    vector_len = len(obj[key])
+                    embeddings_dict[current_path] = obj[key]
                     obj[key] = f"Vector of size {vector_len} (removed for archiving)"
                 else:
-                    self._remove_embedding_recursively(obj[key])
+                    self._extract_and_sanitize_embeddings(obj[key], current_path, embeddings_dict)
         elif isinstance(obj, list):
-            for item in obj:
-                self._remove_embedding_recursively(item)
-        return obj
+            for idx, item in enumerate(obj):
+                current_path = f"{path}.{idx}" if path else str(idx)
+                self._extract_and_sanitize_embeddings(item, current_path, embeddings_dict)
+        
+        return obj, embeddings_dict
 
     def _process_message_to_doc(self, body, properties):
         """Transforms a RabbitMQ message into an Elasticsearch document with robust parsing."""
@@ -117,7 +135,11 @@ class DLQArchiver:
         except json.JSONDecodeError:
             original_payload = {"raw_body": body.decode('utf-8', errors='ignore')}
         
-        sanitized_payload = self._remove_embedding_recursively(original_payload)
+        # Extract embeddings and sanitize the payload
+        sanitized_payload, embeddings_dict = self._extract_and_sanitize_embeddings(original_payload)
+        
+        # Serialize embeddings to JSON string if any were found
+        raw_embedding_data = json.dumps(embeddings_dict) if embeddings_dict else None
         
         headers = properties.headers or {}
         
@@ -145,10 +167,17 @@ class DLQArchiver:
             
         source_doc = {
             "@timestamp": datetime.utcnow().isoformat(),
-            "service_name": str(service_name or "N/A"), "error_reason": str(error_reason or "Raison inconnue"),
-            "retry_count": safe_retry_count, "original_exchange": str(original_exchange or "N/A"),
-            "original_routing_key": str(original_routing_key or "N/A"), "original_payload": sanitized_payload,
+            "service_name": str(service_name or "N/A"),
+            "error_reason": str(error_reason or "Raison inconnue"),
+            "retry_count": safe_retry_count,
+            "original_exchange": str(original_exchange or "N/A"),
+            "original_routing_key": str(original_routing_key or "N/A"),
+            "original_payload": sanitized_payload,
         }
+        
+        # Add serialized embeddings if any were extracted
+        if raw_embedding_data:
+            source_doc["_raw_embedding_data"] = raw_embedding_data
         return {
             "_index": ELASTIC_INDEX_NAME,
             "_id": message_hash,

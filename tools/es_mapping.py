@@ -18,6 +18,11 @@ INDEX_MAPPING = {
         ],
         "properties": {
             "@timestamp": {"type": "date"},
+            "_raw_embedding_data": {
+                "type": "keyword",
+                "index": False,
+                "doc_values": False
+            },
             "service_name": {
                 "type": "keyword"
             },
