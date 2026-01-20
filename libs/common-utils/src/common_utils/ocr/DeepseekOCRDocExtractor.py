@@ -11,7 +11,7 @@ import os
 from pypdf import PdfReader
 
 
-BASE_URL_OCR = os.environ.get("URL_OCR", "http://localhost:8501")
+BASE_URL_OCR = os.environ.get("URL_OCR", "http://deepseek-ocr:8501")
 MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "19"))
 
 
