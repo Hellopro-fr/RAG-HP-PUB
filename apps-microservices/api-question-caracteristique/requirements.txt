@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+openai
+python-dotenv
+pymilvus
+pydantic-settings
+requests
+grpcio
+grpcio-tools
+protobuf
+googleapis-common-protos
+google-genai
+tenacity
