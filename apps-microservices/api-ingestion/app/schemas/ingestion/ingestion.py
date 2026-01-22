@@ -2,19 +2,63 @@ from typing import Annotated, Dict, Optional
 import uuid
 from pydantic import ConfigDict, BaseModel, Field
 from app.schemas.base import GetBase as Base
-from app.core.ingestion.ingestion import CollectionName
+from app.core.ingestion.ingestion import CollectionName, CollectionNameGraph
+
 
 class BaseIngestion(BaseModel):
-    data: Annotated[dict, Field(title="Les données à publier", description="Un objet JSON contenant les informations du produit ou autre.")]
+    data: Annotated[
+        dict,
+        Field(
+            title="Les données à publier",
+            description="Un objet JSON contenant les informations du produit ou autre.",
+        ),
+    ]
     collection: Annotated[
-        CollectionName, # <-- Use the Enum as the type
-        Field(title="Nom de la collection de destination")
+        CollectionName,  # <-- Use the Enum as the type
+        Field(title="Nom de la collection de destination"),
     ] = CollectionName.PRODUIT
-    database: Annotated[str, Field(title="Nom de la base de données", description="La base de données dans laquelle les données seront stockées. Par défaut, c'est 'milvus'.")] = "milvus"
-    origin: Annotated[Optional[str], Field(
-        title="Origine des données produits",
-        description="Indique l'origine ou la source des données produits uniquement. Champ non obligatoire."
-    )] = None
+    database: Annotated[
+        str,
+        Field(
+            title="Nom de la base de données",
+            description="La base de données dans laquelle les données seront stockées. Par défaut, c'est 'milvus'.",
+        ),
+    ] = "milvus"
+    origin: Annotated[
+        Optional[str],
+        Field(
+            title="Origine des données produits",
+            description="Indique l'origine ou la source des données produits uniquement. Champ non obligatoire.",
+        ),
+    ] = None
+
+
+class BaseIngestionGraph(BaseModel):
+    data: Annotated[
+        dict,
+        Field(
+            title="Les données à publier",
+            description="Un objet JSON contenant les informations du produit ou autre.",
+        ),
+    ]
+    collection: Annotated[
+        CollectionNameGraph,  # <-- Use the Enum as the type
+        Field(title="Nom de la collection de destination"),
+    ] = CollectionNameGraph.PRODUIT
+    database: Annotated[
+        str,
+        Field(
+            title="Nom de la base de données",
+            description="La base de données dans laquelle les données seront stockées. Par défaut, c'est 'neo4j'.",
+        ),
+    ] = "neo4j"
+    origin: Annotated[
+        Optional[str],
+        Field(
+            title="Origine des données produits",
+            description="Indique l'origine ou la source des données produits uniquement. Champ non obligatoire.",
+        ),
+    ] = None
 
 
 class BaseIngestionReponse(BaseModel):
@@ -23,4 +67,6 @@ class BaseIngestionReponse(BaseModel):
 
 
 class BaseIngestionReponseSucces(BaseIngestionReponse):
-    details: Annotated[dict, Field(title="info de détails de retour de publication de message")]
+    details: Annotated[
+        dict, Field(title="info de détails de retour de publication de message")
+    ]

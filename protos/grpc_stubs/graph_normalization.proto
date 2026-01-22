@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package graph_normalization;
+
+service GraphNormalizationService {
+  // Normalize a single quantity (value + unit)
+  rpc NormalizeQuantity(NormalizeQuantityRequest) returns (NormalizeQuantityResponse);
+  
+  // Normalize a numeric range (min/max + unit)
+  rpc NormalizeRange(NormalizeRangeRequest) returns (NormalizeRangeResponse);
+}
+
+message NormalizeQuantityRequest {
+  string label = 1;
+  string unit = 2;
+  string value = 3; // Raw value as string
+  string data_type = 4; // numeric, text, list
+}
+
+message NormalizeQuantityResponse {
+  bool success = 1;
+  float canonical_value = 2;
+  string canonical_unit = 3;
+  string error_message = 4;
+}
+
+message NormalizeRangeRequest {
+  string label = 1;
+  string unit = 2;
+  float min_value = 3;
+  float max_value = 4;
+  string data_type = 5;
+}
+
+message NormalizeRangeResponse {
+  bool success = 1;
+  float canonical_min = 2;
+  float canonical_max = 3;
+  string canonical_unit = 4;
+  string error_message = 5;
+}

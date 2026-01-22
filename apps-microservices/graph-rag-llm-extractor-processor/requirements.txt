@@ -1,0 +1,13 @@
+pika
+httpx
+python-dotenv
+pydantic
+pydantic-settings
+prometheus-client
+waitress
+openai
+google-genai
+anthropic
+grpcio
+grpcio-tools
+protobuf
