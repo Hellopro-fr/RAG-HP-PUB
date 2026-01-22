@@ -1,0 +1,9 @@
+grpcio
+grpcio-tools
+protobuf
+pydantic
+pydantic-settings
+pint
+prometheus-client
+waitress
+waitress

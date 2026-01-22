@@ -13,6 +13,9 @@ def publish_message(channel, exchange_name: str, routing_key: str, data: dict):
         exchange_name: Le nom de l'exchange de destination.
         routing_key: La clé de routage du message.
         data: Le dictionnaire Python à publier.
+    
+    Returns:
+        bool: True if message was published successfully, False otherwise.
     """
     for i in range(3):  # Essaye de se reconnecter 3 fois
         try:
@@ -30,7 +33,17 @@ def publish_message(channel, exchange_name: str, routing_key: str, data: dict):
             logging.info(f"Message publié sur exchange '{exchange_name}' avec la clé '{routing_key}'.")
             return True
         except Exception as e:
-            logging.error(f"Erreur lors de la publication du message: {e}")
-            print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion...")
-            connection = RabbitMQConnection().create_connection(max_retries=10, retry_delay=5)
-            channel = connection.channel()
+            logging.error(f"Erreur lors de la publication du message (tentative {i+1}/3): {e}")
+            print(f"⚠️ Connexion perdue: {e}, tentative de reconnexion ({i+1}/3)...")
+            try:
+                connection = RabbitMQConnection().create_connection(max_retries=3, retry_delay=2)
+                if connection:
+                    channel = connection.channel()
+                else:
+                    logging.error("Impossible de créer une nouvelle connexion RabbitMQ")
+            except Exception as conn_error:
+                logging.error(f"Erreur lors de la reconnexion: {conn_error}")
+    
+    # All retries failed
+    logging.error(f"Échec de la publication du message après 3 tentatives sur exchange '{exchange_name}'")
+    return False

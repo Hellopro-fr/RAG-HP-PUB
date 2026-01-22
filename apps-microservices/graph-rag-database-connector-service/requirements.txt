@@ -1,0 +1,15 @@
+grpcio
+grpcio-tools
+protobuf
+asyncio
+uvloop
+python-dotenv
+pydantic-settings
+# Neo4j dependencies
+neo4j
+langchain-community
+langchain-core
+# Metrics
+prometheus-client
+waitress
+waitress
