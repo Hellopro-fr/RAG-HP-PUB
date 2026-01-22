@@ -12,6 +12,11 @@ class IncludeInArchive(str, Enum):
     REQUEST_URLS = "request_urls"
     MISCELLANEOUS = "miscellaneous"
 
+class CrawlMode(str, Enum):
+    """Mode of operation for the crawler."""
+    STANDARD = "standard"
+    UPDATE = "update"
+
 class CapacityResponse(BaseModel):
     running_jobs: int
     max_global_jobs: int
@@ -24,12 +29,23 @@ class ReindexResponse(BaseModel):
     already_indexed: int
     errors: int
 
+class UpdateThresholds(BaseModel):
+    """Thresholds for aborting an update job."""
+    max_errors: Optional[int] = Field(None, description="Abort if error count exceeds this value.")
+    max_redirects: Optional[int] = Field(None, description="Abort if redirect count exceeds this value.")
+    max_new_urls: Optional[int] = Field(None, description="Abort if new URL discovery count exceeds this value.")
+
 class CrawlRequest(BaseModel):
     id: str = Field(..., description="An identifier for the crawl job, e.g., from a database.", example="domaine_123")
     domain: str = Field(..., description="The domain name being crawled.", example="example.com")
     start_url: HttpUrl = Field(..., description="The initial URL to start crawling from.", example="https://example.com")
     callback_url: HttpUrl = Field(..., description="URL to be called when the crawl finishes successfully.", example="https://api.example.com/crawl_finished_hook")
     failure_callback_url: Optional[HttpUrl] = Field(None, description="URL to be called if the crawl job fails.", example="https://api.example.com/crawl_failed_hook")
+
+    # Update Mode Parameters
+    crawl_mode: CrawlMode = Field(CrawlMode.STANDARD, description="Mode of operation: 'standard' for fresh crawl, 'update' for diff check.")
+    previous_crawl_id: Optional[str] = Field(None, description="ID of the previous crawl to update from (required if mode is 'update').")
+    update_thresholds: Optional[UpdateThresholds] = Field(None, description="Circuit breaker thresholds for update mode.")
 
     # Optional parameters mirroring the old shell script (with legacy aliases)
     type_crawling: Optional[str] = Field(None, example="default", alias="typecrawling")

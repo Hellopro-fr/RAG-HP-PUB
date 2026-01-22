@@ -198,14 +198,12 @@ def drop_dataset(name: str):
 
 def get_urls_crawled(name: str, historised: bool, drop_data: bool = False) -> list[str]:
     """
-    Retrieves all url scraped from a folder request_urls/{domain}
-    Manages history rotation.
+    Retrieves all url scraped from a folder request_urls/{domain}.
+    Used now primarily for seeding Redis.
     """
     folder_name = f"./request_urls/{name}"
     
-    # CHECK LEGACY PATH (Node.js style: unsanitized domain)
-    # If passed name is sanitized (e.g. prodealcenter-fr) but original (prodealcenter.fr) exists
-    # we should prefer the original one where data resides.
+    # CHECK LEGACY PATH
     original_domain_guess = name.replace('-', '.')
     legacy_folder = f"./request_urls/{original_domain_guess}"
     
@@ -272,6 +270,54 @@ def update_urls_crawled(name: str, list_urls: list[str]):
             json.dump(list_urls, f)
     except Exception as e:
         logger.error(f"Error updating urls crawled: {e}") 
+
+def load_dataset_urls_generator(previous_id: str, domain: str):
+    """
+    Generator that efficiently yields URLs from a previous crawl's dataset.
+    Scans the storage directory structure to find the datasets.
+    """
+    # Base storage root (assuming we are in /app/storage/{current_id} when this runs, 
+    # we need to go up to /app/storage/{previous_id})
+    # But usually we can just use absolute paths if provided or assume relative to /app/storage
+    
+    # We are in CWD = /app/storage/{current_id}
+    # So previous is ../{previous_id}
+    
+    base_storage = os.path.abspath("..")
+    prev_job_path = os.path.join(base_storage, previous_id)
+    
+    if not os.path.isdir(prev_job_path):
+        logger.error(f"Previous job storage not found at {prev_job_path}")
+        return
+
+    # Check for sanitized name vs original
+    crawlee_base = os.path.join(prev_job_path, "storage", "datasets")
+    dataset_path = os.path.join(crawlee_base, domain)
+    
+    if not os.path.isdir(dataset_path):
+        sanitized = domain.replace('.', '-')
+        dataset_path = os.path.join(crawlee_base, sanitized)
+    
+    if not os.path.isdir(dataset_path):
+        logger.error(f"Dataset for domain {domain} not found in {prev_job_path}")
+        return
+
+    logger.info(f"Loading URLs from previous dataset: {dataset_path}")
+    
+    try:
+        # scandir is more efficient for large directories
+        with os.scandir(dataset_path) as it:
+            for entry in it:
+                if entry.is_file() and entry.name.endswith('.json') and not entry.name.startswith('__'):
+                    try:
+                        with open(entry.path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            if 'url' in data:
+                                yield data['url']
+                    except Exception as e:
+                        logger.warning(f"Error reading dataset file {entry.name}: {e}")
+    except Exception as e:
+        logger.error(f"Error iterating dataset directory: {e}")
 
 async def detect_captcha(page: Page, content: str) -> str:
     """

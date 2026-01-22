@@ -151,6 +151,9 @@ class CrawlerManager:
             f"--domain={domain}", f"--site={start_url}", f"--id={crawl_id}",
             f"--storagePath={job_storage_path}", f"--callbackUrl={callback_url}",
         ]
+        
+        # Mapping API params to CLI flags
+        # Special handling for thresholds which are nested in schema but flat in params dict here
         for key, value in params.items():
             if value is not None:
                 # Handle boolean flags correctly (usually key=True/False string)
@@ -171,7 +174,8 @@ class CrawlerManager:
             "start_url": start_url, "start_time": datetime.utcnow(),
             "storage_path": job_storage_path,
             "callback_url": callback_url,
-            "failure_callback_url": failure_callback_url, "pid": process.pid
+            "failure_callback_url": failure_callback_url, "pid": process.pid,
+            "crawl_mode": params.get("crawlMode", "standard") # Persist mode for webhooks logic
         }
         await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_data)
         await cache_service.increment_key(CRAWL_RUNNING_COUNT_KEY)
@@ -182,9 +186,16 @@ class CrawlerManager:
 
     async def _send_success_webhook(self, job_info: dict):
         callback_url = job_info.get("callback_url")
+        crawl_id = job_info["crawl_id"]
+        
+        # --- Update Mode Override ---
+        if job_info.get("crawl_mode") == "update":
+            logger.info(f"Update Mode: Skipping success webhook for '{crawl_id}' to {callback_url}")
+            return
+        # ----------------------------
+
         if not callback_url: return
 
-        crawl_id = job_info["crawl_id"]
         # Use simple os.path.join as we assume standard structure
         payload_path = os.path.join(job_info["storage_path"], '_callback_payload.json')
 
@@ -218,7 +229,13 @@ class CrawlerManager:
         except Exception as e:
             logger.error(f"Failed to send success webhook for '{crawl_id}': {e}")
 
-    async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int):
+    async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int, crawl_mode: str = "standard"):
+        # --- Update Mode Override ---
+        if crawl_mode == "update":
+            logger.info(f"Update Mode: Skipping failure webhook for '{crawl_id}' to {url}")
+            return
+        # ----------------------------
+
         params = {"crawl_id": crawl_id, "domain": domain, "exit_code": exit_code, "timestamp": datetime.utcnow().isoformat()}
         try:
             async with httpx.AsyncClient() as client:
@@ -370,7 +387,13 @@ class CrawlerManager:
                 asyncio.create_task(self._send_success_webhook(job_info))
             else:
                 if job_info.get("failure_callback_url"):
-                    asyncio.create_task(self._send_failure_webhook(str(job_info["failure_callback_url"]), crawl_id, job_info["domain"], exit_code))
+                    asyncio.create_task(self._send_failure_webhook(
+                        str(job_info["failure_callback_url"]), 
+                        crawl_id, 
+                        job_info["domain"], 
+                        exit_code,
+                        job_info.get("crawl_mode", "standard") # Pass mode
+                    ))
 
         if crawl_id in self.local_processes:
             del self.local_processes[crawl_id]
@@ -623,9 +646,6 @@ class CrawlerManager:
             last_heartbeat=job_info.get("last_heartbeat")
         )
 
-    # ... archive/reindex methods omitted for brevity, but needed ...
-    # I will implement basic archive support.
-    
     async def get_results_archive(self, job_info: dict, include: List[IncludeInArchive]) -> str:
         # Simplified sync version call
         # ...
@@ -780,7 +800,8 @@ class CrawlerManager:
                         str(job_info["failure_callback_url"]),
                         crawl_id,
                         job_info["domain"],
-                        -1  
+                        -1,
+                        job_info.get("crawl_mode", "standard") # Pass mode
                     )
             else:
                  logger.warning(f"Could not find job '{crawl_id}' in Redis during shutdown or it was not in 'running' state.")
@@ -881,7 +902,8 @@ class CrawlerManager:
                                 str(job_data["failure_callback_url"]),
                                 crawl_id,
                                 job_data.get("domain", "unknown"),
-                                -1
+                                -1,
+                                job_data.get("crawl_mode", "standard") # Pass mode
                             ))
 
                         stale_jobs_count += 1
