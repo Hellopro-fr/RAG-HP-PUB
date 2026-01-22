@@ -18,7 +18,7 @@ class Consumer:
         # RabbitMQ components
         self.exchange_name = 'data_exchange_produits'
         self.routing_key = 'new_data.product'
-        self.queue_name = 'image_download_queue_v2'
+        self.queue_name = 'image_download_tasks_queue'
         self.retry_exchange = 'retry_exchange'
         self.retry_queue_name = f'{self.queue_name}_retry'
         self.dead_letter_exchange = 'dead_letter_exchange'
