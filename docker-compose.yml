@@ -137,6 +137,22 @@ services:
 
   # --- Services Applicatifs (Clients) ---
 
+  image-download-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/image-download-service/Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    volumes:
+      - ./storage/images:/app/storage/images
+    environment:
+      - APIFY_PROXY=${APIFY_PROXY}
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   llm-service:
     build:
       context: .
