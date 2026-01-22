@@ -1,6 +1,7 @@
 import logging
 import threading
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 from app.messaging.consumer import Consumer
 from app.messaging.publisher import Publisher
@@ -37,32 +38,43 @@ app = FastAPI(
     title="Image Download Service",
     description="Service for downloading and archiving images",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    openapi_tags=[
+        {
+            "name": "Image Download Service",
+            "description": "Operations for archiving and downloading images by domain",
+        }
+    ]
 )
 
 archiver = Archiver()
 
-@app.get("/health", tags=["Health"])
+@app.get("/health", tags=["Image Download Service"])
 def health_check():
     """Health check endpoint for the service."""
     return {"status": "ok"}
 
-@app.post("/archive/{domain}", tags=["Archive"], response_model=dict)
+@app.post("/archive/{domain}", tags=["Image Download Service"])
 async def trigger_archive(domain: str):
     """
-    Triggers creation of a .tar.gz archive for the specified domain.
+    Triggers creation of a .tar.gz archive for the specified domain and returns it as a downloadable file.
     
     **Parameters:**
     - `domain`: The domain name for which to create the archive
     
     **Returns:**
-    - `status`: "success" or "error"
-    - `archive_path`: Path to the created archive (on success)
-    - `message`: Error message (on failure)
+    - The archive file (.tar.gz) as a downloadable attachment
     """
     try:
         path = await archiver.create_archive(domain)
-        return {"status": "success", "archive_path": path}
+        
+        # Return the archive as a downloadable file
+        return FileResponse(
+            path,
+            media_type="application/gzip",
+            filename=f"{domain}.tar.gz",
+            headers={"Content-Disposition": f"attachment; filename=\"{domain}.tar.gz\""}
+        )
     except ValueError as e:
         return {"status": "error", "message": str(e)}
     except Exception as e:
