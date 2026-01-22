@@ -14,11 +14,12 @@ from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator
 from crawlee.proxy_configuration import ProxyConfiguration
 from crawlee.configuration import Configuration
-from crawlee.storages import Dataset
+from crawlee.storages import Dataset, RequestQueue
 from redis.asyncio import Redis
 
-from routes import router
-from utils import get_system_stats
+import routes
+from state import DedupManager, StatsManager
+from utils import get_system_stats, get_urls_crawled, update_urls_crawled, drop_dataset, is_stopped_manually, attach_file_logger, ensure_alias_symlink, load_dataset_urls_generator
 
 # Configure Logging
 logging.basicConfig(
@@ -82,7 +83,7 @@ async def monitor_task(crawler: PlaywrightCrawler):
             failed = stats.requests_failed
             total = finished + failed
             
-            logger.info(f"Health Check: Finished={finished}, Failed={failed}, Queued=Unknown (managed by Crawlee)")
+            logger.info(f"Health Check: Finished={finished}, Failed={failed}, Queued=Unknown")
             
             if finished == last_finished:
                 stalled_checks += 1
@@ -102,6 +103,8 @@ async def main():
     parser.add_argument("--id", required=True)
     parser.add_argument("--storagePath", required=True)
     parser.add_argument("--callbackUrl", required=True)
+    
+    # Standard Options
     parser.add_argument("--breaklimit", default="False")
     parser.add_argument("--proxyapify", default=None)
     parser.add_argument("--dropdata", default="False")
@@ -112,7 +115,14 @@ async def main():
     # Add new params for URL cleaning (comma separated)
     parser.add_argument("--tokeep", default="")
     parser.add_argument("--toremove", default="")
-    parser.add_argument("--typecrawling", default="link") # Legacy Node.js arg
+    parser.add_argument("--typecrawling", default="link")
+
+    # Update Mode Options
+    parser.add_argument("--crawlMode", default="standard")
+    parser.add_argument("--previousCrawlId", default=None)
+    parser.add_argument("--maxErrors", default=0, type=int)
+    parser.add_argument("--maxRedirects", default=0, type=int)
+    parser.add_argument("--maxNewUrls", default=0, type=int)
     
     args, unknown = parser.parse_known_args()
     
@@ -124,7 +134,9 @@ async def main():
     job_id = args.id
     storage_path = args.storagePath
     proxy_apify_password = args.proxyapify
-    max_concurrency = args.maxConcurrency
+    
+    crawl_mode = args.crawlMode
+    previous_crawl_id = args.previousCrawlId
     
     # Parse lists
     to_keep = [x.strip() for x in args.tokeep.split(',') if x.strip()]
@@ -133,13 +145,20 @@ async def main():
     break_limit = str(args.breaklimit).lower() == 'true'
     drop_data = str(args.dropdata).lower() == 'true'
     
-    import routes
+    # Configure Routes Global Vars
     routes.SKIP_QUESTION_MARK = str(args.skipquestionmark).lower() == 'true'
     routes.SKIP_DIEZ = str(args.skipdiez).lower() == 'true'
+    routes.DOMAIN = domain
+    routes.BASE_URL = site
+    routes.TO_KEEP_CUSTOM = to_keep
+    routes.TO_REMOVE_CUSTOM = to_remove
     
-    method = args.method
+    # Inject Limits
+    routes.max_errors = args.maxErrors
+    routes.max_redirects = args.maxRedirects
+    routes.max_new_urls = args.maxNewUrls
 
-    logger.info(f"Starting crawler for {domain} ({site}) in {storage_path}")
+    logger.info(f"Starting crawler for {domain} ({site}) in {storage_path} (Mode: {crawl_mode})")
 
     # --- MEMORY PRE-FLIGHT CHECK ---
     # Parity with Node.js: Warn if memory usage is already > 80%, but DO NOT ABORT (User Request)
@@ -164,16 +183,22 @@ async def main():
         logger.error(f"Failed to change CWD: {e}")
         sys.exit(1)
 
-    # Load History & Drop Data logic
-    from utils import get_urls_crawled, drop_dataset, update_urls_crawled, is_stopped_manually, attach_file_logger
-    from routes import router, error_handler
-    import routes
-    
     # Attach File Logger
     now_str = datetime.now().isoformat().replace(":", "-")
     log_name = f"{domain}-logs-{now_str}.log"
     attach_file_logger(log_name)
+
+    # Sanitize storage name
+    crawlee_storage_name = domain.replace('.', '-')
+    routes.CRAWLEE_STORAGE_NAME = crawlee_storage_name
     
+    # Symlink aliases
+    CRAWLEE_STORAGE_DIR = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
+    base_queues = os.path.join(CRAWLEE_STORAGE_DIR, "request_queues")
+    base_datasets = os.path.join(CRAWLEE_STORAGE_DIR, "datasets")
+    base_kvs = os.path.join(CRAWLEE_STORAGE_DIR, "key_value_stores")
+    ensure_alias_symlink(crawlee_storage_name, domain, [base_queues, base_datasets, base_kvs])
+
     is_historised = False
     if drop_data:
         logger.info("Dropping datasets and request queue...")
@@ -185,47 +210,73 @@ async def main():
            is_historised = True
         except Exception as e:
            logger.warning(f"Failed to drop datasets: {e}")
+    # ------------------------------------
 
-    # Load previously crawled URLs
-    # This populates the Set in routes.py
-    history = get_urls_crawled(domain, is_historised, drop_data)
-    routes.all_urls_crawled = set(history)
-    logger.info(f"Loaded {len(routes.all_urls_crawled)} URLs from history.")
-
-    # Configure Crawlee
-    # Note: Crawlee Python automatic storage configuration relies on CRAWLEE_STORAGE_DIR env var
-    # or it defaults to ./storage within CWD. Since we changed CWD, it should be fine.
+    # --- STATE MANAGEMENT INIT ---
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
     
+    # Initialize Managers
+    dedup_manager = DedupManager(redis_url, job_id)
+    stats_manager = StatsManager(redis_url, job_id, storage_path)
+    
+    # Inject into routes
+    routes.dedup_manager = dedup_manager
+    routes.stats_manager = stats_manager
+    
+    # Load Stats if resuming
+    await stats_manager.load_state_from_disk()
+    
+    # Load Historical URLs into Redis (Cold Storage -> Hot Redis)
+    # Note: We pass `drop_data` here because get_urls_crawled handles file removal if True
+    history_urls = get_urls_crawled(domain, is_historised, drop_data) 
+    if history_urls:
+        logger.info(f"Seeding {len(history_urls)} historical URLs into Redis Deduplication...")
+        await dedup_manager.load_from_list(history_urls)
+
+    # Initialize Request Queue
+    request_queue = await RequestQueue.open(name=crawlee_storage_name)
+    logger.info(f"Opened RequestQueue: {crawlee_storage_name}")
+    
+    # --- SEEDING LOGIC ---
+    if crawl_mode == "update":
+        if not previous_crawl_id:
+            logger.error("Update mode requires --previousCrawlId")
+            sys.exit(1)
+            
+        logger.info(f"Running in UPDATE mode. Seeding from previous crawl: {previous_crawl_id}")
+        
+        # Generator for memory efficiency
+        count = 0
+        async for url in load_dataset_urls_generator(previous_crawl_id, domain):
+             # 1. Add to Redis (Mark as Known)
+             await dedup_manager.add_url(url)
+             
+             # 2. Add to Queue (Mark as Existing for Verification)
+             await request_queue.add_request({
+                 "url": url,
+                 "userData": {"is_existing": True}
+             })
+             count += 1
+             if count % 1000 == 0:
+                 logger.info(f"Seeded {count} URLs...")
+                 
+        logger.info(f"Finished seeding {count} URLs from previous crawl.")
+        
+    elif await request_queue.is_empty():
+        # Standard Seed
+        logger.info("Seeding standard start URL...")
+        await request_queue.add_request({"url": site, "userData": {"is_existing": False}})
+        # Don't add to Dedup here, let request_handler handle the add for proper counting
+    
+    # Start Heartbeat
+    hostname = os.uname().nodename
+    hb_task = asyncio.create_task(heartbeat_task(redis_url, job_id, domain, hostname))
+
     # Configure Proxy
     proxy_configuration = None
     if proxy_apify_password:
-        # Construct Apify Proxy URL
-        # Format: http://auto:{password}@proxy.apify.com:8000
         proxy_url = f"http://auto:{proxy_apify_password}@proxy.apify.com:8000"
-        logger.info(f"Configuring Apify Proxy (auto/port 8000)")
-        
-        try:
-           proxy_configuration = ProxyConfiguration(proxy_urls=[proxy_url])
-        except Exception as e:
-           logger.error(f"Failed to create ProxyConfiguration: {e}")
-           sys.exit(1)
-
-    # Set Global Domain for Routes
-    routes.DOMAIN = domain
-    routes.BASE_URL = site
-    
-    # Sanitize storage name (Crawlee requirement: a-z0-9-)
-    crawlee_storage_name = domain.replace('.', '-')
-    routes.CRAWLEE_STORAGE_NAME = crawlee_storage_name
-    
-    # Inject Dynamic Configs
-    routes.TO_KEEP_CUSTOM = to_keep
-    routes.TO_REMOVE_CUSTOM = to_remove
-
-    # Start Heartbeat
-    redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
-    hostname = os.uname().nodename
-    hb_task = asyncio.create_task(heartbeat_task(redis_url, job_id, domain, hostname))
+        proxy_configuration = ProxyConfiguration(proxy_urls=[proxy_url])
 
     try:
         # Initialize Crawler
@@ -240,35 +291,11 @@ async def main():
                 "args": ["--no-sandbox", "--disable-setuid-sandbox"]
             }
         )
-        
-        browser_pool = BrowserPool(
-            plugins=[browser_plugin],
-            retire_browser_after_page_count=10
-        )
-
-        # --- SYMLINK HACK: Alias sanitized name to original name for downstream compatibility ---
-        # We need to link:
-        # storage/request_queues/prodealcenter.fr -> prodealcenter-fr
-        # storage/datasets/prodealcenter.fr -> prodealcenter-fr (created later but we can prep)
-        # Note: Crawlee might create these folders lazily. RequestQueue is created now.
-        from utils import ensure_alias_symlink
-        CRAWLEE_STORAGE_DIR = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
-        base_queues = os.path.join(CRAWLEE_STORAGE_DIR, "request_queues")
-        base_datasets = os.path.join(CRAWLEE_STORAGE_DIR, "datasets")
-        base_kvs = os.path.join(CRAWLEE_STORAGE_DIR, "key_value_stores")
-        ensure_alias_symlink(crawlee_storage_name, domain, [base_queues, base_datasets, base_kvs])
-        # ---------------------------------------------------------------------------------------
-
-        # CRITICAL FIX for Resume: Use named RequestQueue (same as Node.js)
-        # explicit opening ensures we connect to storage/request_queues/{domain}
-        from crawlee.storages import RequestQueue
-        # Python Crawlee does not allow dots in name, so we use sanitized
-        request_queue = await RequestQueue.open(name=crawlee_storage_name)
-        logger.info(f"Opened RequestQueue: {crawlee_storage_name} (domain: {domain})")
+        browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
 
         crawler = PlaywrightCrawler(
-            request_handler=router,
-            request_manager=request_queue, # Correct argument name is request_manager
+            request_handler=routes.router,
+            request_manager=request_queue,
             max_requests_per_crawl=5000 if not break_limit else None,
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
@@ -279,32 +306,39 @@ async def main():
         # Concurrency adapts based on CPU, memory, and event loop metrics
         # Browser rotation is handled via retire_browser_after_page_count=10 in BrowserPool
         
-        # Assign error handler manually 
-        crawler.failed_request_handler = error_handler
+        # Assign error handler manually
+        crawler.failed_request_handler = routes.error_handler
         
         # Start Monitor Task
         mon_task = asyncio.create_task(monitor_task(crawler))
 
         # Run
-        await crawler.run([site])
+        await crawler.run()
         
         logger.info("Crawl finished successfully")
+        
         # --- Post-Crawl Logic ---
         stats = crawler.statistics.state
         
-        # Update history file with new URLs
-        if len(routes.all_urls_crawled) > 0:
-            update_urls_crawled(domain, list(routes.all_urls_crawled))
-            
+        # Save Stats State
+        await stats_manager.save_state_to_disk()
+        
         # Write callback payload
-        if method != "test":
+        if args.method != "test":
+            # Determine error status from stats or manual stops
+            is_error = ""
+            # Check if we stopped due to thresholds
+            if args.maxErrors and await stats_manager.check_threshold("errors", args.maxErrors): is_error = "limitErrors"
+            elif args.maxRedirects and await stats_manager.check_threshold("redirects", args.maxRedirects): is_error = "limitRedirects"
+            elif args.maxNewUrls and await stats_manager.check_threshold("new_urls", args.maxNewUrls): is_error = "limitNewUrls"
+            
             payload = {
                 "id_domaine": job_id,
                 "success": stats.requests_finished,
                 "failed": stats.requests_failed,
-                "isFinished": 1 if stats.requests_finished > 0 else 0, # Simple check for POC
-                "method": method,
-                "isError": "", # TODO: Add granular error codes (limitCrawl, etc.)
+                "isFinished": 1 if stats.requests_finished > 0 else 0,
+                "method": args.method,
+                "isError": is_error, 
                 "storagePath": storage_path
             }
             
@@ -319,14 +353,31 @@ async def main():
     except Exception as e:
         logger.error(f"Crawl failed: {e}")
         sys.exit(1)
+        
     finally:
+        logger.info("Starting teardown...")
         hb_task.cancel()
-        if 'mon_task' in locals():
-            mon_task.cancel()
+        if 'mon_task' in locals(): mon_task.cancel()
+        
+        # --- PERSISTENCE & CLEANUP ---
+        try:
+            logger.info("Persisting crawled URLs history...")
+             # Retrieve full list from Redis
+            final_url_list = []
+            async for url in dedup_manager.get_all_urls():
+                final_url_list.append(url)
+             
+            update_urls_crawled(domain, final_url_list)
+            logger.info(f"Updated history file with {len(final_url_list)} URLs.")
+        except Exception as e:
+             logger.error(f"Failed to update history file: {e}")
+
+        # 2. Cleanup Redis
+        if dedup_manager: await dedup_manager.cleanup()
+        if stats_manager: await stats_manager.cleanup()
+        
         try:
             await hb_task
-            if 'mon_task' in locals():
-               await mon_task
         except asyncio.CancelledError:
             pass
 

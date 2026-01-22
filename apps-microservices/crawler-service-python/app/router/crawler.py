@@ -133,6 +133,7 @@ async def get_capacity():
 async def start_new_crawl(payload: CrawlRequest):
     try:
         params = {
+            "crawlMode": payload.crawl_mode.value,
             "typecrawling": payload.type_crawling,
             "method": payload.method,
             "dropdata": payload.drop_data,
@@ -147,6 +148,18 @@ async def start_new_crawl(payload: CrawlRequest):
             "percrawl": payload.per_crawl,
             "perminute": payload.per_minute,
         }
+
+        # Add update specific params
+        if payload.previous_crawl_id:
+             params["previousCrawlId"] = payload.previous_crawl_id
+        
+        if payload.update_thresholds:
+             if payload.update_thresholds.max_errors:
+                 params["maxErrors"] = payload.update_thresholds.max_errors
+             if payload.update_thresholds.max_redirects:
+                 params["maxRedirects"] = payload.update_thresholds.max_redirects
+             if payload.update_thresholds.max_new_urls:
+                 params["maxNewUrls"] = payload.update_thresholds.max_new_urls
         
         crawl_id = await crawler_manager.start_crawl(
             domain=payload.domain,

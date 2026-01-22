@@ -4,6 +4,10 @@ import re
 from urllib.parse import urlparse, parse_qs
 import logging
 from utils import process_page, is_stopped_manually
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from state import DedupManager, StatsManager
 
 logger = logging.getLogger(__name__)
 
@@ -33,29 +37,45 @@ FORBIDDEN_PARAMS = [
 
 router = Router()
 
-# Global set for deduplication (populated dynamically)
-all_urls_crawled: set[str] = set()
-
-# Global Limit Config (set from main.py)
+# Global Limit Config
 SKIP_QUESTION_MARK = False
 SKIP_DIEZ = False
-LIMIT_QUESTION_MARK_DIEZ = 50
 LIMIT_QUESTION_MARK_DIEZ = 50
 DOMAIN = ""
 BASE_URL = ""
 CRAWLEE_STORAGE_NAME = ""
 
-# Global Counters
+# Global Counters (Local)
 count_question_mark = 0
 count_diez = 0
+
+# Managers (Injected from main.py)
+dedup_manager: Optional['DedupManager'] = None
+stats_manager: Optional['StatsManager'] = None
+max_errors: Optional[int] = None
+max_redirects: Optional[int] = None
+max_new_urls: Optional[int] = None
 
 @router.default_handler
 async def request_handler(context: PlaywrightCrawlingContext) -> None:
     page = context.page
     request = context.request
     log = context.log
-    
     url = request.url
+    
+    # --- Check Circuit Breaker (Global thresholds) ---
+    if stats_manager:
+        # Check all relevant thresholds
+        breached = False
+        if max_errors and await stats_manager.check_threshold("errors", max_errors): breached = True
+        if max_redirects and await stats_manager.check_threshold("redirects", max_redirects): breached = True
+        if max_new_urls and await stats_manager.check_threshold("new_urls", max_new_urls): breached = True
+        
+        if breached:
+             log.warning("🛑 Circuit breaker triggered! Stopping crawler.")
+             await context.crawler.stop()
+             return
+    # -------------------------------------------------
 
     # --- Block Resources (Performance & Bandwidth) ---
     async def route_handler(route):
@@ -95,22 +115,33 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
          await context.crawler.stop()
          return
     
-    # Deduplication Check
-    if url in all_urls_crawled:
-        log.info(f"Skipping duplicate URL (history): {url}")
-        return
-        
-    all_urls_crawled.add(url)
+    # --- Deduplication & "Double Check" (Redis) ---
+    # We differentiate between "Verified Existing" (Update mode) and "Discovered/Standard" URLs.
+    is_existing = request.user_data.get("is_existing", False)
     
-    # Smart Memory Management: Keep most recent URLs when limit reached
-    if len(all_urls_crawled) > 500000:
-        log.warning(f"all_urls_crawled exceeded 500k items. Keeping 250k most recent URLs to prevent re-crawls.")
-        recent_urls = list(all_urls_crawled)[-250000:]
-        all_urls_crawled.clear()
-        all_urls_crawled.update(recent_urls)
-        log.info(f"Deduplication set trimmed. Now contains {len(all_urls_crawled)} URLs.")
+    if dedup_manager and not is_existing:
+        # This is a new/standard URL. 
+        # We try to add it to Redis. 
+        # If add_url returns False, it means it's ALREADY in Redis (processed by another worker or in history).
+        # This acts as the "Double Check" the user requested.
+        is_new = await dedup_manager.add_url(url)
+        
+        if not is_new:
+            log.info(f"Skipping duplicate URL (Redis Double Check): {url}")
+            return
+            
+        # It is genuinely new. Increment stats if tracking.
+        if stats_manager:
+             await stats_manager.increment("new_urls")
+             # Stop check is handled at top of next request or via background, 
+             # but we can check here to be safe.
+             if max_new_urls and await stats_manager.check_threshold("new_urls", max_new_urls):
+                 log.warning("🛑 Max new URLs limit reached during processing. Stopping.")
+                 await context.crawler.stop()
+                 return
+    # -----------------------------------------------
 
-    # Limit Checking & Counting logic
+    # Limit Checking (Question Mark / Diez)
     global count_question_mark, count_diez
     if '?' in url:
         count_question_mark += 1
@@ -134,12 +165,28 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         await context.crawler.stop()
         return
 
-    log.info(f"Processing {url} ...")
+    log.info(f"Processing {url} (Existing: {is_existing}) ...")
+
+    # --- UPDATE MODE VERIFICATION ---
+    if is_existing and stats_manager:
+        # Check for redirects by comparing requested URL with loaded URL
+        # Playwright auto-follows redirects, so page.url might be different
+        final_url = page.url
+        # Simple check: different and not just a trailing slash diff
+        if final_url != url and final_url.rstrip('/') != url.rstrip('/'):
+            log.info(f"Redirect detected: {url} -> {final_url}")
+            await stats_manager.increment("redirects")
+            
+            if max_redirects and await stats_manager.check_threshold("redirects", max_redirects):
+                log.warning("🛑 Max redirects reached. Stopping.")
+                await context.crawler.stop()
+                return
+    # --------------------------------
 
     # Process the page
     content = await process_page(page, url, log)
     
-    # Push data to Named Dataset (Legacy Node.js Compatibility)
+    # Push data
     from crawlee.storages import Dataset
     if CRAWLEE_STORAGE_NAME:
         dataset = await Dataset.open(name=CRAWLEE_STORAGE_NAME)
@@ -157,9 +204,6 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         })
     
     # Enqueue links with filtering
-    # Enqueue links with filtering
-    # Matches Node.js: enqueueLinksIncludePath = [`${baseUrl}${includePath}/**/*`]
-    # This prevents crawling subdomains or external domains allowed by 'same-domain' strategy
     await context.enqueue_links(
         globs=[f"{BASE_URL}/**/*"], 
         transform_request_function=filter_request
@@ -172,6 +216,14 @@ async def error_handler(context: PlaywrightCrawlingContext) -> None:
     
     log.error(f"Request {request.url} failed with error messages: {request.error_messages}")
     
+    # --- Circuit Breaker: Error Count ---
+    if stats_manager:
+        await stats_manager.increment("errors")
+        if max_errors and await stats_manager.check_threshold("errors", max_errors):
+            log.warning("🛑 Max errors reached. Stopping.")
+            await context.crawler.stop()
+    # ------------------------------------
+
     errors_list = request.error_messages
     
     if page:
@@ -204,7 +256,7 @@ async def error_handler(context: PlaywrightCrawlingContext) -> None:
     except Exception as e:
          log.error(f"Failed to push to error dataset: {e}")
 
-# Extended Clean List (from Node.js)
+# Extended Clean List
 PARAMS_TO_REMOVE = [
     # === CART & WISHLIST ===
     "add-to-cart", "add_to_cart", "addtocart",
@@ -265,14 +317,17 @@ def clean_url_params(url: str) -> str:
     except Exception:
         return url
 
-def filter_request(request):
+async def filter_request(request):
+    """
+    Filters requests and handles preliminary deduplication check.
+    Does NOT add to Redis here - that happens in request_handler for the "Double Check" pattern.
+    """
     if isinstance(request, dict):
         url = request.get('url')
     else:
         url = getattr(request, 'url', None)
 
-    if not url:
-        return None
+    if not url: return None
         
     # 1. Clean URL (Remove UTMs, etc.)
     cleaned_url = clean_url_params(url)
@@ -313,11 +368,21 @@ def filter_request(request):
     # Check base64 long strings (often dynamic infinite urls)
     if re.search(r'/url/[a-zA-Z0-9]{20,}', url):
         return None
+
+    # --- Redis Deduplication Check ---
+    # We check if it is KNOWN. If it is, we skip enqueueing.
+    # We do NOT add it here. The addition happens in request_handler (Processing Time).
+    # This prevents queue bloat while maintaining the double-check logic.
+    if dedup_manager:
+        # Check if we've seen this URL (either in history, seed, or this session)
+        is_known = await dedup_manager.is_known(url)
         
-    # CRITICAL FIX: The caller does `Request.from_url(**result)`, so we MUST return a dict.
-    # If request was an object, we risk crashing provided we can't cast it to dict easily.
-    # But usually enqueue_links passes a dict (request_options). 
-    # If it is an object, convert to dict.
+        if is_known:
+             # Already crawled/known -> Skip
+             return None
+    # ---------------------------------
+
+    # Construct dict for Crawlee
     if not isinstance(request, dict):
          # Try to convert to dict if possible, or construct shallow copy
          # Crawlee Python Request objects might not have to_dict, so we manually build minimal dict
@@ -327,7 +392,12 @@ def filter_request(request):
              "method": getattr(request, 'method', 'GET'),
              "payload": getattr(request, 'payload', None),
              "headers": getattr(request, 'headers', None),
-             "user_data": getattr(request, 'user_data', {})
+             "user_data": {"is_existing": False} # Mark as discovered/new
          }
+    
+    # Ensure user_data indicates this is a new URL
+    if 'user_data' not in request:
+        request['user_data'] = {}
+    request['user_data']['is_existing'] = False
 
     return request
