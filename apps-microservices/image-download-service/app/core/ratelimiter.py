@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 class RateLimiter:
     def __init__(self, redis_url: str = None):
-        self.redis_url = redis_url or os.environ.get("REDIS_URL", "redis://redis:6379")
+        self.redis_url = redis_url or os.environ.get("REDIS_URL", "redis://localhost:6379")
         self.redis = redis.from_url(self.redis_url)
         # Default limit: 2 requests per second per domain
         self.default_rate = 2 
