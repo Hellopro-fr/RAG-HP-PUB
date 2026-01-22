@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+aiohttp
+aiofiles
+pika
+redis
+python-dotenv
+prometheus-client
