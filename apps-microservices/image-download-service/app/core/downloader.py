@@ -39,7 +39,7 @@ class Downloader:
              logger.info(f"Configured generic Proxy: {self.proxy_url}")
 
     async def download_image(self, url: str, domain: str, product_id: str, storage_base: str = "/app/storage/images") -> Optional[str]:
-        await self.rate_limiter.acquire(domain)
+        self.rate_limiter.acquire(domain)
         
         target_dir = os.path.join(storage_base, domain, product_id)
         os.makedirs(target_dir, exist_ok=True)
