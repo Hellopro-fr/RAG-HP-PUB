@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package graph_database;
+import "google/protobuf/struct.proto";
+
+// GraphDatabaseService provides Neo4j graph database operations
+service GraphDatabaseService {
+  // Execute a raw Cypher query against the graph database
+  rpc ExecuteRawCypher(ExecuteCypherRequest) returns (ExecuteCypherResponse);
+  // Execute multiple Cypher queries in a batch (transactional)
+  rpc ExecuteBatchCypher(ExecuteBatchCypherRequest) returns (ExecuteBatchCypherResponse);
+  // Get the current graph schema (node labels, relationships, properties)
+  rpc GetGraphSchema(GetGraphSchemaRequest) returns (GetGraphSchemaResponse);
+  // Setup constraints and indexes for the graph
+  rpc SetupSchema(SetupSchemaRequest) returns (SetupSchemaResponse);
+}
+
+// Request to execute a single Cypher query
+message ExecuteCypherRequest {
+  string cypher_query = 1;                    // The Cypher query to execute
+  google.protobuf.Struct parameters = 2;     // Query parameters as key-value pairs
+  bool read_only = 3;                         // If true, execute in read-only mode
+}
+
+// Response from a single Cypher query execution
+message ExecuteCypherResponse {
+  bool success = 1;
+  string error_message = 2;                   // Error message if success is false
+  repeated google.protobuf.Struct results = 3; // Query results as list of records
+  int32 records_affected = 4;                 // Number of records created/modified/deleted
+}
+
+// Request to execute multiple Cypher queries in batch
+message ExecuteBatchCypherRequest {
+  repeated CypherStatement statements = 1;   // List of Cypher statements to execute
+  bool transactional = 2;                    // If true, rollback all on any failure
+}
+
+// A single Cypher statement with parameters
+message CypherStatement {
+  string cypher_query = 1;
+  google.protobuf.Struct parameters = 2;
+}
+
+// Response from batch Cypher execution
+message ExecuteBatchCypherResponse {
+  bool success = 1;
+  string error_message = 2;
+  repeated BatchResult results = 3;
+}
+
+// Result for a single statement in the batch
+message BatchResult {
+  int32 index = 1;                           // Index of the statement in the batch
+  bool success = 2;
+  string error_message = 3;
+  int32 records_affected = 4;
+}
+
+// Request to get the graph schema
+message GetGraphSchemaRequest {
+  bool include_properties = 1;               // If true, include property types
+  bool include_indexes = 2;                  // If true, include index information
+}
+
+// Response containing the graph schema
+message GetGraphSchemaResponse {
+  repeated NodeLabel node_labels = 1;
+  repeated RelationshipType relationship_types = 2;
+  string schema_text = 3;                    // Human-readable schema description
+}
+
+// Node label with its properties
+message NodeLabel {
+  string name = 1;
+  repeated PropertyInfo properties = 2;
+}
+
+// Relationship type with its properties
+message RelationshipType {
+  string name = 1;
+  string source_label = 2;
+  string target_label = 3;
+  repeated PropertyInfo properties = 4;
+}
+
+// Property information
+message PropertyInfo {
+  string name = 1;
+  string data_type = 2;
+  bool indexed = 3;
+  bool unique = 4;
+}
+
+// Request to setup schema constraints and indexes
+message SetupSchemaRequest {
+  bool apply_constraints = 1;
+  bool apply_indexes = 2;
+}
+
+// Response from schema setup
+message SetupSchemaResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string applied_constraints = 3;
+  repeated string applied_indexes = 4;
+}

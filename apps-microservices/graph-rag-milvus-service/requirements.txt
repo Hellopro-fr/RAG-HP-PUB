@@ -1,0 +1,13 @@
+grpcio
+grpcio-tools
+protobuf
+asyncio
+uvloop
+python-dotenv
+pydantic-settings
+# Milvus dependencies
+pymilvus
+# Metrics
+prometheus-client
+waitress
+waitress

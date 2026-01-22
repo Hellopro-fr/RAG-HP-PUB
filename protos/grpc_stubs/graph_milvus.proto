@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package graph_milvus;
+
+// GraphMilvusService provides Milvus operations for canonical Graph RAG entities
+service GraphMilvusService {
+  // Entity Operations (for semantic vigil deduplication)
+  rpc UpsertCanonicalEntity(UpsertEntityRequest) returns (UpsertResponse);
+  rpc UpsertEntityBatch(UpsertEntityBatchRequest) returns (UpsertBatchResponse);
+  rpc SearchSimilarEntities(SearchEntitiesRequest) returns (SearchResponse);
+  rpc CheckEntitiesExist(CheckExistRequest) returns (CheckExistResponse);
+  
+  // Label Operations (for characteristic label deduplication)
+  rpc UpsertCanonicalLabel(UpsertLabelRequest) returns (UpsertResponse);
+  rpc UpsertLabelBatch(UpsertLabelBatchRequest) returns (UpsertBatchResponse);
+  rpc SearchSimilarLabels(SearchLabelsRequest) returns (SearchResponse);
+  rpc CheckLabelsExist(CheckLabelsExistRequest) returns (CheckLabelsExistResponse);
+  
+  // Characteristic Operations (for characteristic value deduplication)
+  rpc UpsertCharacteristic(UpsertCharacteristicRequest) returns (UpsertResponse);
+  rpc UpsertCharacteristicBatch(UpsertCharacteristicBatchRequest) returns (UpsertBatchResponse);
+  rpc SearchSimilarCharacteristics(SearchCharacteristicsRequest) returns (SearchResponse);
+  
+  // Collection Management
+  rpc SetupCollections(SetupCollectionsRequest) returns (SetupCollectionsResponse);
+}
+
+// --- Entity Messages ---
+message UpsertEntityRequest {
+  string id = 1;
+  string entity_type = 2;
+  repeated float embedding = 3;
+}
+
+message UpsertEntityBatchRequest {
+  repeated EntityItem entities = 1;
+}
+
+message EntityItem {
+  string id = 1;
+  string entity_type = 2;
+  repeated float embedding = 3;
+}
+
+// --- Label Messages ---
+message UpsertLabelRequest {
+  string label = 1;
+  repeated float embedding = 2;
+}
+
+message UpsertLabelBatchRequest {
+  repeated LabelItem labels = 1;
+}
+
+message LabelItem {
+  string label = 1;
+  repeated float embedding = 2;
+}
+
+// --- Characteristic Messages ---
+message UpsertCharacteristicRequest {
+  string id = 1;
+  string text = 2;
+  string label_id = 3;
+  repeated float embedding = 4;
+}
+
+message UpsertCharacteristicBatchRequest {
+  repeated CharacteristicItem characteristics = 1;
+}
+
+message CharacteristicItem {
+  string id = 1;
+  string text = 2;
+  string label_id = 3;
+  repeated float embedding = 4;
+}
+
+// --- Search Messages ---
+message SearchEntitiesRequest {
+  repeated float embedding = 1;
+  string entity_type = 2;
+  int32 top_k = 3;
+  float threshold = 4;  // Similarity threshold (0.0 - 1.0)
+}
+
+message SearchLabelsRequest {
+  repeated float embedding = 1;
+  int32 top_k = 2;
+  float threshold = 3;
+}
+
+message SearchCharacteristicsRequest {
+  repeated float embedding = 1;
+  int32 top_k = 2;
+  float threshold = 3;
+}
+
+message SearchResponse {
+  repeated SearchResult results = 1;
+}
+
+message SearchResult {
+  string id = 1;
+  float distance = 2;
+  string label = 3;  // Used for label searches
+}
+
+// --- Check Exist Messages ---
+message CheckExistRequest {
+  repeated string ids = 1;
+}
+
+message CheckExistResponse {
+  repeated string existing_ids = 1;
+}
+
+message CheckLabelsExistRequest {
+  repeated string labels = 1;
+}
+
+message CheckLabelsExistResponse {
+  repeated string existing_labels = 1;
+}
+
+// --- Common Responses ---
+message UpsertResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message UpsertBatchResponse {
+  bool success = 1;
+  string error_message = 2;
+  int32 inserted_count = 3;
+}
+
+message SetupCollectionsRequest {
+  int32 embedding_dimension = 1;
+}
+
+message SetupCollectionsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string created_collections = 3;
+}

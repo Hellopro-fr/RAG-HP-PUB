@@ -137,6 +137,26 @@ services:
 
   # --- Services Applicatifs (Clients) ---
 
+  image-download-service:
+    build:
+      context: ./apps-microservices/image-download-service
+      dockerfile: Dockerfile
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "8505:8505"
+    volumes:
+      - ./storage/images:/app/storage/images
+    environment:
+      - APIFY_PROXY=${APIFY_PROXY}
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   llm-service:
     build:
       context: .
@@ -175,6 +195,7 @@ services:
     #     condition: service_healthy
     networks:
       - services-net
+      - graph-rag-net
     logging: *logging_defaults
 
   reranking-model-service:
@@ -238,6 +259,7 @@ services:
       - .env
     networks:
       - services-net
+      - graph-rag-net
     logging: *logging_defaults
 
   api-recherche-service:
@@ -1018,6 +1040,7 @@ services:
     command: --config.file=/etc/prometheus/prometheus.yml
     networks:
       - services-net
+      - graph-rag-net
     logging: *logging_defaults
 
   grafana:
@@ -1143,8 +1166,384 @@ services:
     networks:
       - services-net
     logging: *logging_defaults
-    
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    networks:
+      - graph-rag-net
+    healthcheck:
+        test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+        interval: 10s
+        timeout: 10s
+        retries: 5
+
+  neo4j:
+    image: neo4j:5.15.0
+    ports:
+      - "7474:7474" # Browser
+      - "7687:7687" # Bolt
+    environment:
+      # NEO4J_AUTH: neo4j/password
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 2G
+      NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}"
+      # NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_apoc_export_file_enabled: true
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - graph-rag-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - graph-rag-net
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - minio_data:/data
+    command: minio server /data
+    networks:
+      - graph-rag-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus:
+    image: milvusdb/milvus:v2.3.2
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: minioadmin
+      MINIO_SECRET_ACCESS_KEY: minioadmin
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - etcd
+      - minio
+    networks:
+      - graph-rag-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # --- Microservices ---
+
+  graph-rag-database-connector-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-database-connector-service/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "50055:50055"
+    #   - "8560:8560"
+    expose:
+      - "50055"
+      - "8560"
+    environment:
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      PROMETHEUS_PORT: 8560
+    # depends_on:
+    #   neo4j:
+    #     condition: service_healthy
+    deploy:
+      replicas: 20
+    networks:
+      - graph-rag-net
+
+  graph-rag-milvus-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-milvus-service/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "50056:50056"
+    #   - "8566:8566"
+    expose:
+      - "50056"
+      - "8566"
+    environment:
+      ZILLIZ_URI: ${ZILLIZ_URI}
+      ZILLIZ_TOKEN: ${ZILLIZ_TOKEN}
+      PROMETHEUS_PORT: 8566
+    # depends_on:
+    #   milvus:
+    #     condition: service_healthy
+    deploy:
+      replicas: 10
+    networks:
+      - graph-rag-net
+
+  graph-rag-normalize-unite-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-normalize-unite-service/Dockerfile
+    profiles: ["graph-rag"]
+    ports:
+      - "50057:50057"
+      - "8567:8567"
+    environment:
+      PROMETHEUS_PORT: 8567
+    networks:
+      - graph-rag-net
+
+  # --- Processors ---
+
+  graph-rag-produit-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-produit-processor/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "8561:8561"
+    expose:
+      - "8561"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      PROMETHEUS_PORT: 8561
+    # depends_on:
+    #   # - rabbitmq
+    #   - graph-rag-database-connector-service
+    deploy:
+      replicas: 10
+    networks:
+      - graph-rag-net
+
+  graph-rag-llm-extractor-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-llm-extractor-processor/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "8562:8562"
+    expose:
+      - "8562"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      LLM_PROVIDER: ${LLM_PROVIDER} # or openai
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      SPACY_SERVICE_URL: graph-rag-spacy-service:50058
+      PROMETHEUS_PORT: 8562
+    # depends_on:
+    #   - rabbitmq
+    deploy:
+      replicas: 10
+    networks:
+      - graph-rag-net
+
+  graph-rag-normalize-unite-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-normalize-unite-processor/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "8568:8568"
+    expose:
+      - "8568"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      PROMETHEUS_PORT: 8568
+    # depends_on:
+    #   # - rabbitmq
+    #   - graph-rag-normalize-unite-service
+    deploy:
+      replicas: 2
+    networks:
+      - graph-rag-net
+
+  graph-rag-semantique-vigil-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-semantique-vigil-processor/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "8563:8563"
+    expose:
+      - "8563"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      EMBEDDING_SERVICE_URL: embedding-model-service:50052
+      EMBEDDING_API_URL: ${EMBEDDING_API_URL}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      PROMETHEUS_PORT: 8563
+    # depends_on:
+    #   # - rabbitmq
+    #   # - embedding-model-service
+    #   - graph-rag-milvus-service
+    deploy:
+      replicas: 5
+    networks:
+      - graph-rag-net
+
+  graph-rag-etl-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-etl-processor/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "8564:8564"
+    expose:
+      - "8564"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      PROMETHEUS_PORT: 8564
+    # depends_on:
+    #   # - rabbitmq
+    #   - graph-rag-database-connector-service
+    deploy:
+      replicas: 5
+    networks:
+      - graph-rag-net
+
+  graph-rag-categorie-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-categorie-processor/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "8570:8570"
+    expose:
+      - "8570"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      PROMETHEUS_PORT: 8570
+    # depends_on:
+    #   # - rabbitmq
+    #   - graph-rag-database-connector-service
+    deploy:
+      replicas: 2
+    networks:
+      - graph-rag-net
+
+  graph-rag-question-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-question-processor/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "8571:8571"
+    expose:
+      - "8571"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      PROMETHEUS_PORT: 8571
+    # depends_on:
+    #   # - rabbitmq
+    #   - graph-rag-database-connector-service
+    deploy:
+      replicas: 2
+    networks:
+      - graph-rag-net
+
+  graph-rag-reponse-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-reponse-processor/Dockerfile
+    profiles: ["graph-rag"]
+    # ports:
+    #   - "8572:8572"
+    expose:
+      - "8572"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      PROMETHEUS_PORT: 8572
+    # depends_on:
+    #   # - rabbitmq
+    #   - graph-rag-database-connector-service
+    deploy:
+      replicas: 2
+    networks:
+      - graph-rag-net
+
+  graph-rag-spacy-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-spacy-service/Dockerfile
+    profiles: ["graph-rag"]
+    ports:
+      - "50058:50058"
+      - "8569:8569"
+    environment:
+      PROMETHEUS_PORT: 8569
+    networks:
+      - graph-rag-net
+
+  # --- API ---
+
+  graph-rag-api-recherche-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-api-recherche-service/Dockerfile
+    profiles: ["graph-rag"]
+    ports:
+      - "8000:8000"
+      - "8565:8565"
+    environment:
+      API_PORT: 8000
+      EMBEDDING_SERVICE_URL: embedding-model-service:50052
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PROMETHEUS_PORT: 8565
+    # depends_on:
+    #   # - embedding-model-service
+    #   - graph-rag-milvus-service
+    #   - graph-rag-database-connector-service
+    #   - graph-rag-normalize-unite-service
+    networks:
+      - graph-rag-net
+
 networks:
+  graph-rag-net:
+    driver: bridge
   services-net:
     driver: bridge
     
@@ -1155,3 +1554,9 @@ volumes:
     driver: local
   grafana-storage:
   crawler_data:
+  neo4j_data:
+  neo4j_logs:
+  milvus_data:
+  etcd_data:
+  minio_data:
+  prometheus_data:

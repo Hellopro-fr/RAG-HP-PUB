@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package graph_spacy;
+
+// GraphSpacyService provides basic NLP operations using generic Spacy models (e.g. fr_core_news_sm)
+service GraphSpacyService {
+  // Lemmatize returns the base form of words in the text
+  rpc Lemmatize(LemmatizeRequest) returns (LemmatizeResponse);
+  
+  // ExtractEntities returns named entities found in the text
+  rpc ExtractEntities(ExtractEntitiesRequest) returns (ExtractEntitiesResponse);
+}
+
+message LemmatizeRequest {
+  string text = 1;
+}
+
+message LemmatizeResponse {
+  repeated Token tokens = 1;
+}
+
+message Token {
+  string text = 1;
+  string lemma = 2;
+  string pos = 3;  // Part of speech
+  bool is_stop = 4;
+}
+
+message ExtractEntitiesRequest {
+  string text = 1;
+}
+
+message ExtractEntitiesResponse {
+  repeated Entity entities = 1;
+}
+
+message Entity {
+  string text = 1;
+  string label = 2;
+  int32 start_char = 3;
+  int32 end_char = 4;
+}
