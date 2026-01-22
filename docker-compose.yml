@@ -139,8 +139,8 @@ services:
 
   image-download-service:
     build:
-      context: .
-      dockerfile: ./apps-microservices/image-download-service/Dockerfile
+      context: ./apps-microservices/image-download-service
+      dockerfile: Dockerfile
     profiles: ["app"]
     restart: unless-stopped
     volumes:
