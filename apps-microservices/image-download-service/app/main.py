@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.messaging.consumer import Consumer
 from app.messaging.publisher import Publisher
+from app.core.archiver import Archiver
 import os
 import aio_pika
 
@@ -49,6 +50,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Image Download Service", lifespan=lifespan)
 
+archiver = Archiver()
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.post("/archive/{domain}")
+async def trigger_archive(domain: str):
+    """
+    Triggers creation of a .tar.gz archive for the specified domain.
+    """
+    try:
+        path = await archiver.create_archive(domain)
+        return {"status": "success", "archive_path": path}
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+    except Exception as e:
+        logger.error(f"Archive error: {e}")
+        return {"status": "error", "message": "Internal server error during archiving"}

@@ -27,7 +27,7 @@ class Downloader:
         # We'll initialize ratelimiter lazily or pass it in
         self.rate_limiter = RateLimiter()
         # Proxy config
-        self.proxy_password = os.environ.get("APIFY_PROXY_PASSWORD")
+        self.proxy_password = os.environ.get("APIFY_PROXY")
         self.proxy_url = os.environ.get("PROXY_URL") 
         
         if self.proxy_password and not self.proxy_url:
@@ -66,7 +66,8 @@ class Downloader:
         
         for attempt in range(retries):
             try:
-                async with aiohttp.ClientSession(timeout=timeout) as session:
+                headers = {"User-Agent": random.choice(USER_AGENTS)}
+                async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
                     # Proxy usage only if configured
                     kwargs = {}
                     if self.proxy_url:
