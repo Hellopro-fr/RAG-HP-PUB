@@ -48,6 +48,9 @@ class Consumer:
         else:
             raise Exception(f"❌ Could not connect to RabbitMQ after {max_retries} attempts.")
 
+        # --- Main Queue (Simple, no DLQ for now) ---
+        self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
+        
         # --- DLQ Infrastructure ---
         self.channel.exchange_declare(exchange=self.dead_letter_exchange, exchange_type='topic', durable=True)
         self.channel.queue_declare(queue=self.dead_letter_queue_name, durable=True)
@@ -63,8 +66,7 @@ class Consumer:
         self.channel.queue_declare(queue=self.retry_queue_name, durable=True, arguments=retry_queue_args)
         self.channel.queue_bind(exchange=self.retry_exchange, queue=self.retry_queue_name, routing_key=self.routing_key)
 
-        # --- Main Queue ---
-        self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
+        # --- Main Queue with DLQ ---
         main_queue_args = {
             'x-dead-letter-exchange': self.retry_exchange,
             'x-dead-letter-routing-key': self.routing_key
