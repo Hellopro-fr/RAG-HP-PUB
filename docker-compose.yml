@@ -143,6 +143,8 @@ services:
       dockerfile: Dockerfile
     profiles: ["app"]
     restart: unless-stopped
+    ports:
+      - "8505:8505"
     volumes:
       - ./storage/images:/app/storage/images
     environment:
