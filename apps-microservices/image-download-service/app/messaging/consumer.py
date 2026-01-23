@@ -94,6 +94,14 @@ class Consumer:
             
             logger.info(f"Received task for product {product_data.get('id_produit')}")
             
+            # --- FILTER: Process only 'site_web' source ---
+            source = product_data.get("source")
+            if source != "site_web":
+                logger.info(f"Skipping product {product_data.get('id_produit')}: Source '{source}' != 'site_web'")
+                channel.basic_ack(delivery_tag=method.delivery_tag)
+                return
+            # ----------------------------------------------
+            
             # Synchronous wrapper for async download
             import asyncio
             loop = asyncio.new_event_loop()

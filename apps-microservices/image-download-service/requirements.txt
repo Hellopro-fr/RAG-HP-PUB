@@ -7,3 +7,4 @@ redis
 python-dotenv
 prometheus-client
 aio-pika
+Pillow
