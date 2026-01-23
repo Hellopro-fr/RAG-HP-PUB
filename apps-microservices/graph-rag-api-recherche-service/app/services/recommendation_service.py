@@ -292,17 +292,9 @@ class RecommendationService:
 
             scored_products = []
             for rec in results:
-                prod_data = rec.get("product_data", {})
-
-                # # Ensure defaults for required fields
-                # if "id_produit" not in prod_data:
-                #     prod_data["id_produit"] = "unknown"
-                # if "nom_produit" not in prod_data:
-                #     prod_data["nom_produit"] = "unknown"
-
                 scored_products.append(
                     ScoredProduct(
-                        **prod_data,
+                        **rec["product_data"],
                         score=rec.get("global_score", 0.0),
                         details=rec.get("details", []),
                         info={"weights": weights_map},
