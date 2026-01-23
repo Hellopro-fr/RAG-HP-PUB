@@ -23,9 +23,55 @@ class ComplexFilterRequest(BaseModel):
     v: int = 4
 
 
-class ScoredProduct(BaseModel):
-    # id_produit: str
-    # nom_produit: str
+class BaseNormalizer(BaseModel):
+    @field_validator("*", mode="before")
+    def normalize_whitespace(cls, v):
+        if isinstance(v, str):
+            return re.sub(r"\s+", " ", v).strip()
+        return v
+
+
+class ProduitPayload(BaseNormalizer):
+    url: Optional[str] = Field(None, description="URL de la page du produit")
+    nom_produit: str = Field(..., description="Nom commercial du produit")
+    domaine: Optional[str] = Field(None, description="Domaine du site web source")
+    fournisseur: Optional[str] = Field(
+        None, description="Nom du fournisseur proposant le produit"
+    )
+    id_fournisseur: str = Field(..., description="ID numérique du fournisseur")
+    categorie: Optional[str] = Field(
+        None, description="Nom de la catégorie principale du produit"
+    )
+    id_categorie: str = Field(..., description="ID numérique de la catégorie")
+    source: Optional[str] = Field(
+        None, description="Origine de la donnée (ex: produits_bo)"
+    )
+    fichier_source: Optional[str] = Field(
+        None, description="Nom du fichier d'où provient la donnée"
+    )
+    date_ajout: Optional[datetime] = Field(
+        None, description="Date d'ajout du produit dans le système"
+    )
+    id_produit: str = Field(..., description="ID alphanumérique original du produit")
+    sku: Optional[str] = Field(None, description="SKU (Stock Keeping Unit) du produit")
+    ean: Optional[str] = Field(
+        None, description="Code EAN (European Article Number) du produit"
+    )
+    url_image: Optional[str] = Field(None, description="URL vers les images du produit")
+    reference: Optional[str] = Field(None, description="Référence fabricant du produit")
+    prix_ttc: Optional[float] = Field(None, description="Prix Toutes Taxes Comprises")
+    statut: Optional[str] = Field(
+        None, description="Statut de disponibilité du produit (ex: En stock)"
+    )
+    description: Optional[str] = Field(
+        None, description="Description technique ou commerciale du produit"
+    )
+
+    def get_graph_id(self) -> str:
+        return f"id_produit_{self.id_produit}"
+
+
+class ScoredProduct(ProduitPayload):
     score: float
     details: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -35,9 +81,6 @@ class ScoredProduct(BaseModel):
         default_factory=dict,
         description="DEBUG: List of information about the product.",
     )
-
-    # class Config:
-    #     extra = "allow"
 
 
 class ResultProduct(BaseModel):
