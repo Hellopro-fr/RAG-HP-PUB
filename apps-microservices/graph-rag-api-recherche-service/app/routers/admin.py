@@ -19,6 +19,7 @@ async def execute_raw_cypher(request: CypherQueryRequest):
     try:
         results = await clients.execute_cypher(request.query, request.params)
 
+        logging.info(f"Results: {results}")
         end_time = time.perf_counter()
         duration = end_time - start_time
 
