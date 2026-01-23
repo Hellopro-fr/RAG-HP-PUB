@@ -1292,6 +1292,7 @@ services:
       replicas: 20
     networks:
       - services-net
+      - services-ext-net
 
   graph-rag-milvus-service:
     build:
@@ -1555,6 +1556,9 @@ services:
 networks:
   services-net:
     driver: bridge
+  services-ext-net:
+    name: rag-hp-pub_services-net
+    external: true
     
 volumes:
   elasticsearch-data:
