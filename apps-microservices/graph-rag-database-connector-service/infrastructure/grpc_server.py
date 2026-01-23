@@ -44,6 +44,12 @@ class GraphDatabaseServiceImpl(graph_database_pb2_grpc.GraphDatabaseServiceServi
                 struct_to_dict(request.parameters) if request.parameters else None
             )
 
+            # Debug: Log parameters with their types
+            if parameters:
+                logging.debug(f"📝 Parameters received:")
+                for key, value in parameters.items():
+                    logging.debug(f"   {key}: {value} (type: {type(value).__name__})")
+
             results, records_affected = self.use_case.execute_cypher(
                 query=request.cypher_query,
                 parameters=parameters,
