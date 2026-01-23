@@ -1291,7 +1291,9 @@ services:
     deploy:
       replicas: 20
     networks:
-      - graph-rag-net
+      - services-net
+      - services-ext-net
+      - services-global-net
 
   graph-rag-milvus-service:
     build:
@@ -1314,7 +1316,7 @@ services:
     deploy:
       replicas: 10
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-normalize-unite-service:
     build:
@@ -1332,7 +1334,7 @@ services:
     deploy:
       replicas: 5
     networks:
-      - graph-rag-net
+      - services-net
 
   # --- Processors ---
 
@@ -1355,7 +1357,7 @@ services:
     deploy:
       replicas: 5
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-llm-extractor-processor:
     build:
@@ -1379,7 +1381,7 @@ services:
     deploy:
       replicas: 5
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-normalize-unite-processor:
     build:
@@ -1400,7 +1402,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-semantique-vigil-processor:
     build:
@@ -1425,7 +1427,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-etl-processor:
     build:
@@ -1446,7 +1448,7 @@ services:
     deploy:
       replicas: 5
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-categorie-processor:
     build:
@@ -1467,7 +1469,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-question-processor:
     build:
@@ -1488,7 +1490,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-reponse-processor:
     build:
@@ -1509,7 +1511,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-spacy-service:
     build:
@@ -1522,7 +1524,7 @@ services:
     environment:
       PROMETHEUS_PORT: 8569
     networks:
-      - graph-rag-net
+      - services-net
 
   # --- API ---
 
@@ -1551,14 +1553,17 @@ services:
     #   - graph-rag-normalize-unite-service
     networks:
       - services-net
-      - graph-rag-net
 
 networks:
-  graph-rag-net:
-    driver: bridge
   services-net:
     driver: bridge
-    
+  services-ext-net:
+    name: rag-hp-pub_services-net
+    external: true
+  services-global-net:
+    driver: bridge
+    name: global-services-net
+    external: true
 volumes:
   elasticsearch-data:
     driver: local

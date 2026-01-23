@@ -67,10 +67,10 @@ class Neo4jConnector:
             if not self._verify_driver_connection():
                 logging.warning("Neo4j driver connection stale, reconnecting...")
                 self._reset_connections()
-        
+
         if self._driver is None:
             self._driver = GraphDatabase.driver(
-                settings.NEO4J_URI, 
+                settings.NEO4J_URI,
                 auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
                 max_connection_lifetime=300,  # 5 minutes max connection lifetime
                 connection_acquisition_timeout=30,  # 30 seconds to acquire connection
@@ -93,10 +93,13 @@ class Neo4jConnector:
         """
         max_retries = 2
         last_error = None
-        
+
         for attempt in range(max_retries):
             try:
                 graph = self.get_graph()
+                print(f"parameters: {parameters}")
+                if parameters.top_k:
+                    parameters.top_k = int(parameters.top_k)
                 results = graph.query(query, params=parameters or {})
                 records_affected = len(results) if results else 0
                 return results, records_affected
@@ -107,9 +110,11 @@ class Neo4jConnector:
             except Exception as e:
                 logging.error(f"Cypher execution error: {e}")
                 raise
-        
+
         # If we get here, all retries failed
-        logging.error(f"Cypher execution failed after {max_retries} attempts: {last_error}")
+        logging.error(
+            f"Cypher execution failed after {max_retries} attempts: {last_error}"
+        )
         raise last_error
 
     def execute_batch_cypher(
@@ -128,20 +133,24 @@ class Neo4jConnector:
         """
         max_retries = 2
         last_error = None
-        
+
         for attempt in range(max_retries):
             try:
                 return self._execute_batch_internal(statements, transactional)
             except (ServiceUnavailable, OSError) as e:
                 last_error = e
-                logging.warning(f"Neo4j connection error in batch (attempt {attempt + 1}): {e}")
+                logging.warning(
+                    f"Neo4j connection error in batch (attempt {attempt + 1}): {e}"
+                )
                 self._reset_connections()
             except Exception as e:
                 logging.error(f"Batch execution error: {e}")
                 raise
-        
+
         # If we get here, all retries failed
-        logging.error(f"Batch execution failed after {max_retries} attempts: {last_error}")
+        logging.error(
+            f"Batch execution failed after {max_retries} attempts: {last_error}"
+        )
         return [(False, str(last_error), 0) for _ in statements]
 
     def _execute_batch_internal(

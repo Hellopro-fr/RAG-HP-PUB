@@ -269,9 +269,19 @@ class RecommendationService:
             "filters": flat_filters,
             "weights": weights_map,
             "id_categorie": str(request.id_categorie) if request.id_categorie else None,
-            "top_k": request.top_k,
+            "top_k": int(request.top_k),
             "target_product_id": target_product_id,
         }
+
+        # Debug: Log parameters with their types
+        logging.info(f"📝 Cypher params being sent:")
+        for key, value in params.items():
+            if key not in ["filters", "weights"]:  # Skip large nested params
+                logging.info(f"   {key}: {value} (type: {type(value).__name__})")
+            else:
+                logging.info(
+                    f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>"
+                )
 
         try:
             results = await clients.execute_cypher(cypher_query, params)
