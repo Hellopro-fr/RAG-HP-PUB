@@ -15,8 +15,8 @@ class RateLimiter:
         except Exception as e:
             logger.warning(f"⚠️ RateLimiter: Redis unavailable ({e}), rate limiting disabled")
             self.redis = None
-        # Default limit: 10 requests per second per domain (Increased for speed)
-        self.default_rate = 10 
+        # Default limit: 100 requests per second per domain (High for testing/CDNs)
+        self.default_rate = 100 
         self.window = 1 # second
 
     def acquire(self, domain: str) -> bool:

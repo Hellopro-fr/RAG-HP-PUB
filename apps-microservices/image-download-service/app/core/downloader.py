@@ -3,7 +3,6 @@ import os
 import logging
 import asyncio
 from typing import Optional, List, Dict
-from app.core.ratelimiter import RateLimiter
 from app.core.image_processor import ImageProcessor
 import random
 
@@ -20,9 +19,11 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
 ]
 
+# Local rate limit: delay between requests (seconds)
+LOCAL_RATE_DELAY = float(os.environ.get("IMAGE_DOWNLOAD_DELAY", 0.5))
+
 class Downloader:
     def __init__(self):
-        self.rate_limiter = RateLimiter()
         self.image_processor = ImageProcessor()
         
         # Proxy config
@@ -39,7 +40,7 @@ class Downloader:
         """
         Downloads image bytes and delegates to ImageProcessor.
         """
-        self.rate_limiter.acquire(domain)
+        # Rate limiting now handled at product level via asyncio.sleep()
         
         retries = 3
         timeout = aiohttp.ClientTimeout(total=30)
@@ -100,8 +101,13 @@ class Downloader:
             urls = [urls]
         
         processed_images = []
-        for url in urls:
+        for i, url in enumerate(urls):
             if not url: continue
+            
+            # Local rate limiting: 2 req/s (sleep 0.5s between requests)
+            if i > 0:
+                await asyncio.sleep(0.5)
+                
             result = await self.download_and_process(url, domain, product_id, product_name)
             if result:
                 processed_images.append(result)

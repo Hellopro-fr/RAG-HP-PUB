@@ -80,7 +80,7 @@ class Consumer:
         """Start consuming messages."""
         self.connect()
         
-        self.channel.basic_qos(prefetch_count=1)
+        self.channel.basic_qos(prefetch_count=20)  # Batch processing: 20 messages per replica
         self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message)
         
         logger.info(f"[*] Waiting for messages in {self.queue_name}")
