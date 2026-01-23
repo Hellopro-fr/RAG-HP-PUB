@@ -192,6 +192,8 @@ class RecommendationService:
 
         # Build Cypher Query (V4)
         cypher_query = """
+        // --- STEP 1: ANCHOR TRAVERSAL (V3 Strategy) ---
+        // Find only relevant products first
         UNWIND $filters AS f
         MATCH (r:Reponse {id_reponse: f.rid})
         MATCH (r)<-[:EQUIVAUT_A|COUVRE]-(intermediate)<-[:A_POUR_CARACTERISTIQUE|EST_PROPOSE_PAR]-(p:Produit)
@@ -201,8 +203,14 @@ class RecommendationService:
         
         WITH DISTINCT p, $filters AS active_filters
         
+        // --- STEP 2: CLASSIC SCORING (V1 Logic) ---
+        // Broadcast filters to the reduced set of products
         UNWIND active_filters AS f
+        
+        // Bulk Match Characteristics for the specific Response (rid)
         OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)-[:EQUIVAUT_A]->(r:Reponse {id_reponse: f.rid})
+        
+        // Bundle Constraints with their matching Characteristics
         WITH p, f, collect(pc) AS pcs
         WITH p, f, [c IN f.constraints | {
             cid: c.id_caracteristique,
@@ -210,31 +218,40 @@ class RecommendationService:
             matches: [pc IN pcs WHERE toString(pc.id_source_caracteristique) = toString(c.id_caracteristique)]
         }] AS constraint_data
         
+        // Evaluate Scores per Characteristic ID
         WITH p, f, [item IN constraint_data | {
             cid: item.cid,
             score: CASE 
+                // Blocking Check
                 WHEN ANY(pc IN item.matches WHERE 
-                    (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list)) OR
+                    (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
+                    OR
                     (item.conf.blocking_numeric IS NOT NULL AND (item.conf.blocking_numeric.unit IS NULL OR pc.unite_canonique = item.conf.blocking_numeric.unit) AND (
                         (item.conf.blocking_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.blocking_numeric.min) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique >= item.conf.blocking_numeric.min))) OR
                         (item.conf.blocking_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.blocking_numeric.max) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_max_canonique <= item.conf.blocking_numeric.max))) OR
                         (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
                     ))
                 ) THEN -2.0
+                // Target Check
                 WHEN ANY(pc IN item.matches WHERE 
-                    (size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)) OR
+                    (size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list))
+                    OR
                     (item.conf.target_numeric IS NOT NULL AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit) AND (
                         (item.conf.target_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.target_numeric.min) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.min)))) OR
                         (item.conf.target_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.target_numeric.max) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.max)))) OR
                         (item.conf.target_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.target_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact) AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact))))
                     ))
                 ) THEN 1.0
+                // Connected Check
                 WHEN size(item.matches) > 0 THEN 0.5
+                // Default
                 ELSE 0.1
             END,
-            has_pc: size(item.matches) > 0
+            has_pc: size(item.matches) > 0,
+            is_blocked: ANY(pc IN item.matches WHERE (size(item.conf.blocking_list) > 0 OR item.conf.blocking_numeric IS NOT NULL))
         }] AS char_results
         
+        // Aggregate Response Score and Weights
         WITH p, f.rid AS rid, char_results,
              EXISTS((p)-[:EST_PROPOSE_PAR]->(:Fournisseur)-[:COUVRE]->(:Reponse {id_reponse: f.rid})) AS supplier_covers
         
@@ -247,6 +264,7 @@ class RecommendationService:
              (supplier_covers OR ANY(res IN char_results WHERE res.has_pc OR res.score = -2.0)) AS matched,
              coalesce($weights[rid], 1.0) as weight
         
+        // Global Product Scoring and Detail Construction
         WITH p, collect({
             rid: rid, 
             score: rid_score, 
@@ -258,7 +276,7 @@ class RecommendationService:
         WITH p, details,
              reduce(s = 0.0, d IN details | s + (d.score * d.weight)) AS numerator,
              reduce(w = 0.0, d IN details | w + d.weight) AS denominator
-             
+        
         WITH p, details, (numerator / denominator) AS global_score
         
         ORDER BY global_score DESC
