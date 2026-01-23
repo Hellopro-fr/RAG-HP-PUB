@@ -1293,6 +1293,7 @@ services:
     networks:
       - services-net
       - services-ext-net
+      - services-global-net
 
   graph-rag-milvus-service:
     build:
@@ -1559,7 +1560,10 @@ networks:
   services-ext-net:
     name: rag-hp-pub_services-net
     external: true
-    
+  services-global-net:
+    driver: bridge
+    name: global-services-net
+    external: true
 volumes:
   elasticsearch-data:
     driver: local
