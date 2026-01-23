@@ -269,7 +269,7 @@ class RecommendationService:
             "filters": flat_filters,
             "weights": weights_map,
             "id_categorie": str(request.id_categorie) if request.id_categorie else None,
-            "top_k": request.top_k,
+            "top_k": int(request.top_k),
             "target_product_id": target_product_id,
         }
 
