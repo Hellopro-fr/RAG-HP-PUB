@@ -10,6 +10,8 @@ from google.protobuf.json_format import MessageToDict
 from grpc_stubs import graph_database_pb2
 from grpc_stubs import graph_database_pb2_grpc
 
+import time
+
 GRAPH_DATABASE_SERVICE_URL = os.getenv(
     "GRAPH_DATABASE_SERVICE_URL", "graph-rag-database-connector-service:50051"
 )
