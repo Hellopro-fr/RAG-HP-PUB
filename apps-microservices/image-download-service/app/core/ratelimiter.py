@@ -15,8 +15,8 @@ class RateLimiter:
         except Exception as e:
             logger.warning(f"⚠️ RateLimiter: Redis unavailable ({e}), rate limiting disabled")
             self.redis = None
-        # Default limit: 2 requests per second per domain
-        self.default_rate = 2 
+        # Default limit: 10 requests per second per domain (Increased for speed)
+        self.default_rate = 10 
         self.window = 1 # second
 
     def acquire(self, domain: str) -> bool:
@@ -28,7 +28,7 @@ class RateLimiter:
             return True
 
         key = f"ratelimit:{domain}"
-        max_retries = 20 # Prevent infinite loop
+        max_retries = 60 # Prevent infinite loop (Wait up to 30s)
         
         for _ in range(max_retries):
             try:
