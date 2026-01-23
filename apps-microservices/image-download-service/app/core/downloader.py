@@ -1,12 +1,10 @@
 import aiohttp
-import aiofiles
 import os
 import logging
 import asyncio
-from typing import Optional, List
-from urllib.parse import urlparse
+from typing import Optional, List, Dict
 from app.core.ratelimiter import RateLimiter
-
+from app.core.image_processor import ImageProcessor
 import random
 
 logger = logging.getLogger(__name__)
@@ -24,43 +22,25 @@ USER_AGENTS = [
 
 class Downloader:
     def __init__(self):
-        # We'll initialize ratelimiter lazily or pass it in
         self.rate_limiter = RateLimiter()
+        self.image_processor = ImageProcessor()
+        
         # Proxy config
         self.proxy_password = os.environ.get("APIFY_PROXY")
         self.proxy_url = os.environ.get("PROXY_URL") 
         
         if self.proxy_password and not self.proxy_url:
-             # Construct Apify Proxy URL if password is provided but generic URL is not
-             # Using "auto" session to rotate IPs per request (or per session if we kept it)
              self.proxy_url = f"http://auto:{self.proxy_password}@proxy.apify.com:8000"
              logger.info(f"Configured Apify Proxy (auto/port 8000)")
         elif self.proxy_url:
              logger.info(f"Configured generic Proxy: {self.proxy_url}")
 
-    async def download_image(self, url: str, domain: str, product_id: str, storage_base: str = "/app/storage/images") -> Optional[str]:
+    async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage") -> Optional[Dict[str, str]]:
+        """
+        Downloads image bytes and delegates to ImageProcessor.
+        """
         self.rate_limiter.acquire(domain)
         
-        target_dir = os.path.join(storage_base, domain, product_id)
-        os.makedirs(target_dir, exist_ok=True)
-        
-        # Extract filename
-        try:
-            parsed = urlparse(url)
-            filename = os.path.basename(parsed.path)
-            if not filename:
-                filename = "image_unknown.jpg"
-            # Simple sanitization
-            filename = "".join([c for c in filename if c.isalpha() or c.isdigit() or c in "._-"])
-        except Exception:
-            filename = "image.jpg"
-
-        file_path = os.path.join(target_dir, filename)
-        
-        # Check if exists
-        if os.path.exists(file_path):
-            return file_path
-
         retries = 3
         timeout = aiohttp.ClientTimeout(total=30)
         
@@ -68,47 +48,66 @@ class Downloader:
             try:
                 headers = {"User-Agent": random.choice(USER_AGENTS)}
                 async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-                    # Proxy usage only if configured
                     kwargs = {}
                     if self.proxy_url:
                         kwargs["proxy"] = self.proxy_url
 
                     async with session.get(url, **kwargs) as response:
                         if response.status == 200:
-                            f = await aiofiles.open(file_path, mode='wb')
-                            await f.write(await response.read())
-                            await f.close()
-                            return file_path
+                            content = await response.read()
+                            
+                            # Process image (Synchronous call, but fast enough for threaded consumer or we could offload)
+                            # Since we are in an async method called by a sync wrapper in consumer, we are fine.
+                            # But wait, Consumer calls this in a loop via run_until_complete.
+                            # Image processing is CPU bound. For now, we do it inline.
+                            
+                            try:
+                                paths = self.image_processor.process_image(
+                                    content=content,
+                                    domain=domain,
+                                    product_id=product_id,
+                                    product_name=product_name,
+                                    base_storage_dir=storage_base
+                                )
+                                return paths
+                            except Exception as e:
+                                logger.error(f"Image processing failed for {url}: {e}")
+                                return None
+                            
                         else:
                             logger.warning(f"Failed to download {url}: Status {response.status}")
             except Exception as e:
                 logger.warning(f"Error downloading {url} (Attempt {attempt+1}): {e}")
-                await asyncio.sleep(attempt * 1) # Exponential-ish backoff
+                await asyncio.sleep(attempt * 1)
         
         return None
 
     async def process_product(self, product_data: dict) -> dict:
         """
-        Downloads images for a product.
-        Returns the updated product data with local paths.
+        Downloads and processes images for a product.
         """
         domain = product_data.get("domaine", "unknown")
         product_id = product_data.get("id_produit", "unknown")
+        # Try to find product name
+        product_name = product_data.get("nom") or product_data.get("nom_produit") or product_data.get("name") or f"produit-{product_id}"
+        
         urls = product_data.get("url_images")
         
         if not urls:
             return product_data
 
-        # Handle string vs list
         if isinstance(urls, str):
             urls = [urls]
         
-        local_paths = []
+        processed_images = []
         for url in urls:
             if not url: continue
-            path = await self.download_image(url, domain, product_id)
-            if path:
-                local_paths.append(path)
+            result = await self.download_and_process(url, domain, product_id, product_name)
+            if result:
+                processed_images.append(result)
         
-        product_data["local_image_paths"] = local_paths
+        # Update product data with new structure
+        # We might want to store list of {main, thumb}
+        product_data["processed_images"] = processed_images
+        
         return product_data
