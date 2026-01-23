@@ -90,7 +90,12 @@ async def execute_cypher(
         async with grpc.aio.insecure_channel(GRAPH_DATABASE_SERVICE_URL) as channel:
             stub = graph_database_pb2_grpc.GraphDatabaseServiceStub(channel)
 
-            start_time = time.perf_counter()
+            # Debug: Log parameters with their types before sending
+            if parameters:
+                logging.debug(f"📤 Sending Cypher params via gRPC:")
+                for key, value in parameters.items():
+                    logging.debug(f"   {key}: {value} (type: {type(value).__name__})")
+
             request = graph_database_pb2.ExecuteCypherRequest(
                 cypher_query=query,
                 parameters=_dict_to_struct(parameters or {}),
@@ -104,8 +109,7 @@ async def execute_cypher(
                 for result_struct in response.results
             ]
 
-            query_time = time.perf_counter() - start_time
-            return response.success, query_time, results, response.records_affected
+            return response.success, results, response.records_affected
     except grpc.aio.AioRpcError as e:
         logging.error(f"gRPC error executing Cypher: {e.details()}")
         raise e
