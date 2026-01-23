@@ -152,7 +152,7 @@ services:
     # ports:
     #   - "8505:8000" # Removed to allow scaling (avoid port conflict). Access via API Gateway.
     volumes:
-      - ./storage:/app/storage
+      - image_download_data:/app/storage
     environment:
       - APIFY_PROXY=${APIFY_PROXY}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
@@ -1571,4 +1571,5 @@ volumes:
     driver: local
   grafana-storage:
   crawler_data:
+  image_download_data:
   prometheus_data:
