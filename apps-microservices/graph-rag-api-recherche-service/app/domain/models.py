@@ -24,14 +24,20 @@ class ComplexFilterRequest(BaseModel):
 
 
 class ScoredProduct(BaseModel):
-    id_produit: str
-    nom_produit: str
+    # id_produit: str
+    # nom_produit: str
     score: float
-    details: List[Dict[str, Any]] = []
-    info: Dict[str, Any] = {}
+    details: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="DEBUG: Detailed score breakdown per response.",
+    )
+    info: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="DEBUG: List of information about the product.",
+    )
 
-    class Config:
-        extra = "allow"
+    # class Config:
+    #     extra = "allow"
 
 
 class ResultProduct(BaseModel):

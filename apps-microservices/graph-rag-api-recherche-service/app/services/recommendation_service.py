@@ -184,7 +184,9 @@ class RecommendationService:
     ) -> ResultProduct:
         start_time = time.perf_counter()
 
+        norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_unwind(request)
+        norm_time = time.perf_counter() - norm_start
         all_rids = [f["rid"] for f in flat_filters]
         weights_map = await self._get_question_weights(all_rids)
 
@@ -284,17 +286,19 @@ class RecommendationService:
                 )
 
         try:
+            query_start = time.perf_counter()
             results = await clients.execute_cypher(cypher_query, params)
+            query_time = time.perf_counter() - query_start
 
             scored_products = []
             for rec in results:
                 prod_data = rec.get("product_data", {})
 
-                # Ensure defaults for required fields
-                if "id_produit" not in prod_data:
-                    prod_data["id_produit"] = "unknown"
-                if "nom_produit" not in prod_data:
-                    prod_data["nom_produit"] = "unknown"
+                # # Ensure defaults for required fields
+                # if "id_produit" not in prod_data:
+                #     prod_data["id_produit"] = "unknown"
+                # if "nom_produit" not in prod_data:
+                #     prod_data["nom_produit"] = "unknown"
 
                 scored_products.append(
                     ScoredProduct(
@@ -305,11 +309,15 @@ class RecommendationService:
                     )
                 )
 
+            total_time = time.perf_counter() - start_time
             return ResultProduct(
                 data=scored_products,
                 info={
+                    "query_time": query_time,
+                    "normalization_time": norm_time,
+                    "total_time": total_time,
                     "count": len(scored_products),
-                    "total_time": time.perf_counter() - start_time,
+                    "version": "v4_classic_inverted",
                 },
             )
         except Exception as e:
