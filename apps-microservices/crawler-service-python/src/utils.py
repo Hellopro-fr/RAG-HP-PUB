@@ -7,6 +7,7 @@ import os
 from playwright.async_api import Page
 import logging
 import json
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 
 logger = logging.getLogger(__name__)
@@ -490,3 +491,66 @@ def ensure_alias_symlink(sanitized_name: str, original_name: str, base_dirs: lis
                      
         except Exception as e:
             logger.warning(f"Failed to create symlink alias in {base_dir}: {e}")
+
+def process_url(
+    url: str,
+    skip_question_mark: bool,
+    skip_diez: bool,
+    to_keep: list[str] = None,
+    to_remove: list[str] = None
+) -> str:
+    """
+    Process a URL to filter query parameters and remove hash fragments.
+    Ported from Node.js processUrl function.
+    """
+    # Default parameters to keep if no custom lists provided
+    default_parameters_to_keep = ["page", "id", "lang"]
+
+    # Validate parameters
+    if to_keep and to_remove:
+        raise ValueError("Cannot specify both toKeep and toRemove parameters")
+
+    try:
+        # Parse URL
+        parsed = urlparse(url)
+        scheme, netloc, path, params, query, fragment = parsed
+        
+        # 1. Handle Hash (#)
+        # In Node: if (url.includes("#")) ... if (skipDiez) hashPart = ""
+        if skip_diez:
+            fragment = ""
+        
+        # 2. Handle Query (?)
+        # In Node: if (skipQuestionMark && baseUrlPart.includes("?"))
+        if skip_question_mark and query:
+            query_dict = parse_qs(query, keep_blank_values=True)
+            new_query_dict = {}
+            
+            if to_keep:
+                # Keep only specified parameters
+                for key in query_dict:
+                    if key in to_keep:
+                        new_query_dict[key] = query_dict[key]
+            
+            elif to_remove:
+                # Remove specified parameters
+                new_query_dict = query_dict.copy()
+                for key in to_remove:
+                    if key in new_query_dict:
+                        del new_query_dict[key]
+            
+            else:
+                # Use default parameters
+                for key in query_dict:
+                    if key in default_parameters_to_keep:
+                        new_query_dict[key] = query_dict[key]
+            
+            # Rebuild query string
+            query = urlencode(new_query_dict, doseq=True)
+            
+        # Reconstruct URL
+        return urlunparse((scheme, netloc, path, params, query, fragment))
+        
+    except Exception as e:
+        logger.error(f"Error processing URL {url}: {e}")
+        return url

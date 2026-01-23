@@ -3,7 +3,7 @@ from crawlee.router import Router
 import re
 from urllib.parse import urlparse, parse_qs
 import logging
-from utils import process_page, is_stopped_manually
+from utils import process_page, is_stopped_manually, process_url
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -265,57 +265,74 @@ PARAMS_TO_REMOVE = [
     "remove_from_wishlist", "remove_wishlist",
     "remove_compare", "remove_item",
     "quantity", "qty",
+
     # === TRACKING UTM (Marketing) ===
     "utm_source", "utm_medium", "utm_campaign",
     "utm_content", "utm_term", "utm_id",
     "utm_referrer", "utm_name",
+
     # === FACEBOOK & META ===
-    "fbclid", "fb_action_ids", "fb_action_types", "fb_source", "fb_ref",
+    "fbclid", "fb_action_ids", "fb_action_types",
+    "fb_source", "fb_ref",
+
     # === GOOGLE ADS & ANALYTICS ===
-    "gclid", "gclsrc", "dclid", "srsltid", "utmcct", "utmcsr",
-    "utmcmd", "utmccn", "_ga", "_gid", "_gat",
-    # === OTHERS ===
-    "mc_cid", "mc_eid", "twclid", "li_fat_id", "msclkid",
-    "igshid", "tt_medium", "tt_content", "_wpnonce", "sessionid", 
-    "PHPSESSID", "sid", "aff_id", "click_id", "timestamp", "random", "nocache"
+    "gclid", "gclsrc", "dclid",
+    "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
+    "_ga", "_gid", "_gat",
+
+    # === HUBSPOT ===
+    "hsa_acc", "hsa_cam", "hsa_grp",
+    "hsa_ad", "hsa_src", "hsa_mt",
+    "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
+    "hsCtaTracking", "hsCta",
+
+    # === MAILCHIMP ===
+    "mc_cid", "mc_eid",
+
+    # === SOCIAL MEDIA TRACKING ===
+    "twclid", "li_fat_id", "msclkid",
+    "igshid", "tt_medium", "tt_content",
+
+    # === WORDPRESS ===
+    "_wpnonce", "preview", "preview_id",
+    "preview_nonce", "et_blog",
+
+    # === PRESTASHOP ===
+    "id_product", "id_category", "pid",
+    "controller", "id_product_attribute",
+    "isolang", "id_lang",
+
+    # === SHOPIFY ===
+    "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
+    "pr_ref_pid", "pr_seq",
+    "variant", "selling_plan",
+
+    # === MAGENTO ===
+    "SID", "___store", "___from_store",
+
+    # === SESSION & TRACKING ===
+    "sessionid", "session_id", "PHPSESSID",
+    "sid", "s_id",
+    "_gl", "ref", "referrer",
+
+    # === AFFILIATE & MARKETING ===
+    "aff_id", "affiliate", "partner",
+    "coupon", "discount", "promo",
+    "voucher",
+
+    # === AUTRES TRACKING ===
+    "click_id", "transaction_id",
+    "source", "medium", "campaign",
+
+    # === FILTRES SOUVENT INUTILES ===
+    "view", "mode", "display",
+    "timestamp", "random", "nocache",
+    "order", "sort", "resultsPerPage", "productListView", # Added for deduplication
 ]
 
 # Dynamic Configs from Main
 TO_REMOVE_CUSTOM: list[str] = []
 TO_KEEP_CUSTOM: list[str] = []
-
-def clean_url_params(url: str) -> str:
-    """Removes tracking and useless parameters from URL."""
-    try:
-        parsed = urlparse(url)
-        query = parse_qs(parsed.query, keep_blank_values=True)
-        
-        # 1. Logic for KEEPING specific params (overrides remove)
-        if TO_KEEP_CUSTOM:
-            keys_to_delete = []
-            for key in query.keys():
-                if key not in TO_KEEP_CUSTOM:
-                    keys_to_delete.append(key)
-            for key in keys_to_delete:
-                del query[key]
-        
-        # 2. Logic for REMOVING (if not in Keep mode or mixed)
-        # Note: If TO_KEEP is set, we usually only keep those. 
-        # But if TO_KEEP is empty, we remove dirty ones.
-        else:
-            # Combine hardcoded + custom
-            blocklist = set(PARAMS_TO_REMOVE + TO_REMOVE_CUSTOM)
-            
-            for param in list(query.keys()): # list() to allow modification
-                if param in blocklist:
-                    del query[param]
-                
-        # Reconstruct
-        from urllib.parse import urlencode, urlunparse
-        new_query = urlencode(query, doseq=True)
-        return urlunparse(parsed._replace(query=new_query))
-    except Exception:
-        return url
 
 async def filter_request(request):
     """
@@ -329,8 +346,21 @@ async def filter_request(request):
 
     if not url: return None
         
-    # 1. Clean URL (Remove UTMs, etc.)
-    cleaned_url = clean_url_params(url)
+    # 1. Clean URL (Standard cleaning: UTMs, etc.)
+    # In Node, this was "toAlwaysRemove". We reuse PARAMS_TO_REMOVE here.
+    # We pass skip_question_mark=True to force processing of the query params for this step.
+    cleaned_url = process_url(url, skip_question_mark=True, skip_diez=False, to_remove=PARAMS_TO_REMOVE)
+
+    # 2. Logic for Skip Flags (Modifying/Cleaning the URL instead of dropping)
+    # If SKIP flags are set, we process the cleaned_url further
+    if SKIP_QUESTION_MARK or SKIP_DIEZ:
+        cleaned_url = process_url(
+            cleaned_url,
+            SKIP_QUESTION_MARK,
+            SKIP_DIEZ,
+            to_keep=TO_KEEP_CUSTOM,
+            to_remove=TO_REMOVE_CUSTOM
+        )
     
     # Update request URL if it changed
     if cleaned_url != url:
@@ -349,12 +379,6 @@ async def filter_request(request):
     if IGNORED_EXTENSIONS.match(url):
         return None  # Changed from False to None for safety
     
-    # Check Skip Flags
-    if SKIP_QUESTION_MARK and '?' in url:
-        return None
-    if SKIP_DIEZ and '#' in url:
-        return None
-        
     # Check forbidden params (Blocking)
     query = parse_qs(parsed.query)
     for param in FORBIDDEN_PARAMS:
