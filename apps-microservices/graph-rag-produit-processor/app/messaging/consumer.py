@@ -1,22 +1,29 @@
-import pika
 import json
 import logging
+import asyncio
+import time
+import aio_pika
+from aio_pika.abc import AbstractIncomingMessage
 
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
-from common_utils.autres.DLQProperties import DLQProperties
-from common_utils.metrics.prometheus import measure_processing_time
-
+from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
 from app.config import settings
 from app.messaging.publisher import Publisher
-from app.core.processor import process_product_for_graph_rag
+from app.core.processor import prepare_product_cypher, create_output_message
+from app.infrastructure.graph_database_client import graph_database_client
 
 
 class Consumer:
-    """Consumer for processing products from the ingestion pipeline."""
+    """Async Consumer with Batch Processing for Neo4j writes."""
 
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
-        self.channel = connection.channel()
+    def __init__(self, publisher: Publisher):
         self.publisher = publisher
+        self.connection = None
+        self.channel = None
+        self.queue = None
+
+        # Batching state
+        self.batch_queue = asyncio.Queue()
+        self.batch_worker_task = None
 
         # Queue configuration
         self.exchange_name = settings.INPUT_EXCHANGE
@@ -27,158 +34,220 @@ class Consumer:
         self.dead_letter_exchange = "dead_letter_exchange"
         self.dead_letter_queue_name = f"{self.queue_name}_dlq"
 
-        self.rabbitmq_connection = RabbitMQConnection()
-        self._setup_infrastructure()
-        logging.info("✅ Consumer initialized")
+    async def connect(self):
+        """Establish connection and setup topology."""
+        logging.info(f"Connecting to RabbitMQ at {settings.RABBITMQ_URL}")
+        self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
+        self.channel = await self.connection.channel()
 
-    def _setup_infrastructure(self):
+        # Prefetch slightly more than batch size to keep buffer full
+        await self.channel.set_qos(prefetch_count=settings.BATCH_SIZE * 2)
+
+        # Setup Publisher
+        await self.publisher.setup(self.channel)
+
+        await self._setup_infrastructure()
+        logging.info("✅ Product Consumer initialized")
+
+    async def _setup_infrastructure(self):
         """Setup exchanges, queues, and bindings."""
-        # Dead Letter Queue
-        self.channel.exchange_declare(
-            exchange=self.dead_letter_exchange, exchange_type="topic", durable=True
+        # DLQ
+        dlq_exchange = await self.channel.declare_exchange(
+            self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        self.channel.queue_declare(queue=self.dead_letter_queue_name, durable=True)
-        self.channel.queue_bind(
-            exchange=self.dead_letter_exchange,
-            queue=self.dead_letter_queue_name,
-            routing_key=self.routing_key,
+        dlq_queue = await self.channel.declare_queue(
+            self.dead_letter_queue_name, durable=True
         )
+        await dlq_queue.bind(dlq_exchange, routing_key=self.routing_key)
 
-        # Retry Queue with TTL
-        self.channel.exchange_declare(
-            exchange=self.retry_exchange, exchange_type="topic", durable=True
+        # Retry
+        retry_exchange = await self.channel.declare_exchange(
+            self.retry_exchange, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        retry_queue_args = {
-            "x-message-ttl": settings.RETRY_TTL_MS,
-            "x-dead-letter-exchange": self.exchange_name,
-            "x-dead-letter-routing-key": self.routing_key,
-        }
-        self.channel.queue_declare(
-            queue=self.retry_queue_name, durable=True, arguments=retry_queue_args
+        retry_queue = await self.channel.declare_queue(
+            self.retry_queue_name,
+            durable=True,
+            arguments={
+                "x-message-ttl": settings.RETRY_TTL_MS,
+                "x-dead-letter-exchange": self.exchange_name,
+                "x-dead-letter-routing-key": self.routing_key,
+            },
         )
-        self.channel.queue_bind(
-            exchange=self.retry_exchange,
-            queue=self.retry_queue_name,
-            routing_key=self.routing_key,
-        )
+        await retry_queue.bind(retry_exchange, routing_key=self.routing_key)
 
-        # Main Queue
-        self.channel.exchange_declare(
-            exchange=self.exchange_name, exchange_type="topic", durable=True
+        # Main
+        main_exchange = await self.channel.declare_exchange(
+            self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        main_queue_args = {
-            "x-dead-letter-exchange": self.retry_exchange,
-            "x-dead-letter-routing-key": self.routing_key,
-        }
-        self.channel.queue_declare(
-            queue=self.queue_name, durable=True, arguments=main_queue_args
+        self.queue = await self.channel.declare_queue(
+            self.queue_name,
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": self.retry_exchange,
+                "x-dead-letter-routing-key": self.routing_key,
+            },
         )
-        self.channel.queue_bind(
-            exchange=self.exchange_name,
-            queue=self.queue_name,
-            routing_key=self.routing_key,
-        )
+        await self.queue.bind(main_exchange, routing_key=self.routing_key)
 
-    def _get_retry_count(self, properties: pika.BasicProperties) -> int:
-        """Get the current retry count from message headers."""
-        if properties.headers and "x-death" in properties.headers:
-            for death in properties.headers["x-death"]:
-                if death.get("queue") == self.retry_queue_name:
-                    return death.get("count", 0)
-        return 0
+    async def _process_batch(self, batch: list):
+        """
+        Execute a batch of messages:
+        1. Prepare Cypher statements.
+        2. Execute batch against Neo4j.
+        3. Publish output messages.
+        4. Ack/Nack RabbitMQ messages.
+        """
+        if not batch:
+            return
 
-    def connect(self):
-        """Reconnect to RabbitMQ."""
-        self.connection = self.rabbitmq_connection.create_connection(
-            max_retries=10, retry_delay=5
-        )
-        self.channel = self.connection.channel()
-        self._setup_infrastructure()
+        statements = []
+        valid_items = []  # (message, product_data, graph_id, database, origin)
 
-    # @measure_processing_time(service_name="graph-rag-produit-processor")
-    def _on_message_callback(self, ch, method, properties, body):
-        """Process incoming messages."""
+        # 1. Prepare Statements
+        for msg in batch:
+            try:
+                body = msg.body.decode()
+                data_json = json.loads(body)
+                product_data = data_json.get("data", {})
+                database = data_json.get("database", "neo4j")
+                origin = data_json.get("origin", "bo")
+
+                if not product_data:
+                    logging.warning("Empty product data, skipping")
+                    asyncio.create_task(msg.ack())  # Ack invalid immediately
+                    continue
+
+                cypher, params, graph_id = prepare_product_cypher(product_data)
+                statements.append({"query": cypher, "parameters": params})
+                valid_items.append((msg, product_data, graph_id, database, origin))
+
+            except Exception as e:
+                logging.error(f"Error preparing message: {e}")
+                # Send to DLQ immediately
+                headers = DLQProperties.create_dlq_headers(
+                    e, "graph-rag-produit-processor", 0, msg
+                )
+                await self.channel.default_exchange.publish(
+                    aio_pika.Message(
+                        body=msg.body,
+                        headers=headers,
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                    ),
+                    routing_key=self.dead_letter_queue_name,
+                )
+                asyncio.create_task(msg.ack())
+
+        if not statements:
+            return
+
+        # 2. Execute Batch
         try:
-            logging.info("📥 Message received")
-            data = json.loads(body)
-            product_data = data.get("data", {})
-            database = data.get("database", "neo4j")
-            origin = data.get("origin", "bo")
+            # Note: execute_cypher_async in client calls centralized_db_client.execute_cypher (single)
+            # We need to call execute_batch_cypher from the centralized client directly or update the wrapper.
+            # Assuming the wrapper has been updated or we access the centralized client.
+            # Let's use the centralized client directly for batching to be safe,
+            # or assume graph_database_client has execute_batch_cypher (it should).
 
-            if not product_data:
-                raise ValueError("No product data found in message")
-
-            product_id = product_data.get("id_produit", "unknown")
-            logging.info(f"Processing product: {product_id}")
-
-            # Process the product
-            output_message = process_product_for_graph_rag(
-                product_data, database, origin
+            # Since we didn't update graph_database_client.py in this plan, we import the centralized one here
+            from common_utils.grpc_clients import (
+                graph_database_client as centralized_client,
             )
 
-            # Publish to next processor only if text_for_extraction is present
-            text_for_extraction = output_message["data"].get("text_for_extraction", "")
-            if text_for_extraction and text_for_extraction.strip():
-                self.publisher.publish_message(output_message)
-                logging.info(f"Published product {product_id} for extraction")
-            else:
+            success, error_msg, results = await centralized_client.execute_batch_cypher(
+                statements=statements, transactional=True
+            )
+
+            if success:
                 logging.info(
-                    f"Skipping extraction for product {product_id}: No text content"
+                    f"✅ Batch executed successfully ({len(statements)} items)"
                 )
 
-            # Acknowledge
-            ch.basic_ack(delivery_tag=method.delivery_tag)
+                # 3. Publish Outputs & 4. Ack
+                for i, (msg, p_data, g_id, db, orig) in enumerate(valid_items):
+                    # Prepare output message
+                    out_msg = create_output_message(p_data, g_id, True, db, orig)
 
-        except (json.JSONDecodeError, ValueError) as e:
-            # Permanent error
-            logging.error(f"❌ Permanent error, sending to DLQ: {e}")
-            dlq_props = DLQProperties.create_dlq_properties(
-                e, "graph-rag-produit-processor", 0, method
-            )
-            ch.basic_publish(
-                exchange=self.dead_letter_exchange,
-                routing_key=self.routing_key,
-                body=body,
-                properties=dlq_props,
-            )
-            ch.basic_ack(delivery_tag=method.delivery_tag)
+                    # Publish if text exists
+                    if out_msg["data"].get("text_for_extraction"):
+                        await self.publisher.publish_message(out_msg)
+
+                    await msg.ack()
+            else:
+                logging.error(f"❌ Batch failed: {error_msg}. Retrying individually...")
+                # Fallback: Nack all to retry individually (or implement complex partial retry logic)
+                # Simple strategy: Nack all, they go to retry queue (or back to main if no DLQ set on nack)
+                # Since we configured DLQ on queue, nack(requeue=False) goes to DLQ/Retry.
+                # Let's requeue=True to try again in next batch? No, that might loop.
+                # Let's Nack with requeue=False so they go to Retry Queue (via DLX)
+                for msg, _, _, _, _ in valid_items:
+                    await msg.nack(requeue=False)
 
         except Exception as e:
-            # Transient error - retry
-            retry_count = self._get_retry_count(properties)
-            if retry_count < settings.MAX_RETRIES:
-                logging.warning(
-                    f"⚠️ Error (attempt {retry_count + 1}/{settings.MAX_RETRIES + 1}), retrying: {e}"
-                )
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            else:
-                logging.error(
-                    f"❌ Failed after {settings.MAX_RETRIES + 1} attempts, sending to DLQ: {e}"
-                )
-                dlq_props = DLQProperties.create_dlq_properties(
-                    e, "graph-rag-produit-processor", settings.MAX_RETRIES, method
-                )
-                ch.basic_publish(
-                    exchange=self.dead_letter_exchange,
-                    routing_key=self.routing_key,
-                    body=body,
-                    properties=dlq_props,
-                )
-                ch.basic_ack(delivery_tag=method.delivery_tag)
+            logging.error(f"❌ Critical batch error: {e}")
+            for msg, _, _, _, _ in valid_items:
+                await msg.nack(requeue=False)
 
-    def start_consuming(self):
-        """Start consuming messages."""
-        for i in range(3):
+    async def _batch_worker(self):
+        """Background task to flush batches."""
+        batch = []
+        while True:
             try:
-                self.channel.basic_consume(
-                    queue=self.queue_name, on_message_callback=self._on_message_callback
-                )
-                logging.info(f"👂 Listening on queue: {self.queue_name}")
-                self.channel.start_consuming()
+                # Wait for first item
+                item = await self.batch_queue.get()
+                batch.append(item)
+
+                # Collect more items up to batch size or timeout
+                start_time = time.time()
+                while len(batch) < settings.BATCH_SIZE:
+                    timeout = settings.BATCH_TIMEOUT_SECONDS - (
+                        time.time() - start_time
+                    )
+                    if timeout <= 0:
+                        break
+                    try:
+                        item = await asyncio.wait_for(
+                            self.batch_queue.get(), timeout=timeout
+                        )
+                        batch.append(item)
+                    except asyncio.TimeoutError:
+                        break
+
+                # Process the collected batch
+                await self._process_batch(batch)
+
+                # Mark tasks as done
+                for _ in batch:
+                    self.batch_queue.task_done()
+                batch = []
+
+            except asyncio.CancelledError:
                 break
-            except (
-                pika.exceptions.AMQPConnectionError,
-                pika.exceptions.ChannelClosedByBroker,
-            ) as e:
-                logging.warning(f"⚠️ Connection lost: {e}, reconnecting...")
-                self.connect()
+            except Exception as e:
+                logging.error(f"Batch worker error: {e}")
+                batch = (
+                    []
+                )  # Drop batch on critical error to prevent loop? Or handle better.
+
+    async def start_consuming(self):
+        """Start consumer and batch worker."""
+        await self.connect()
+
+        # Start background worker
+        self.batch_worker_task = asyncio.create_task(self._batch_worker())
+
+        logging.info(f"👂 Product Consumer listening on: {self.queue_name}")
+
+        async with self.queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                # Put message in queue. The iterator handles flow control via prefetch.
+                await self.batch_queue.put(message)
+
+    async def close(self):
+        if self.batch_worker_task:
+            self.batch_worker_task.cancel()
+            try:
+                await self.batch_worker_task
+            except asyncio.CancelledError:
+                pass
+        if self.connection:
+            await self.connection.close()

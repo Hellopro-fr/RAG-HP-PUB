@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # gRPC Services
     EMBEDDING_SERVICE_URL: str = "localhost:50051"
     MILVUS_SERVICE_URL: str = "localhost:50056"
-    
+
     # HTTP Embedding Service (Temporary)
     EMBEDDING_API_URL: str = ""
     EMBEDDING_API_KEY: str = ""
@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # Retry Configuration
     MAX_RETRIES: int = 3
     RETRY_TTL_MS: int = 30000
+
+    # Batching Configuration
+    BATCH_SIZE: int = 10
+    BATCH_TIMEOUT_SECONDS: float = 2.0
 
     class Config:
         env_file = ".env"

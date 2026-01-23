@@ -143,10 +143,16 @@ services:
       dockerfile: Dockerfile
     profiles: ["app"]
     restart: unless-stopped
-    ports:
-      - "8505:8505"
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    # ports:
+    #   - "8505:8000" # Removed to allow scaling (avoid port conflict). Access via API Gateway.
     volumes:
-      - ./storage/images:/app/storage/images
+      - image_download_data:/app/storage
     environment:
       - APIFY_PROXY=${APIFY_PROXY}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
@@ -1285,7 +1291,9 @@ services:
     deploy:
       replicas: 20
     networks:
-      - graph-rag-net
+      - services-net
+      - services-ext-net
+      - services-global-net
 
   graph-rag-milvus-service:
     build:
@@ -1308,20 +1316,25 @@ services:
     deploy:
       replicas: 10
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-normalize-unite-service:
     build:
       context: .
       dockerfile: apps-microservices/graph-rag-normalize-unite-service/Dockerfile
     profiles: ["graph-rag"]
-    ports:
-      - "50057:50057"
-      - "8567:8567"
+    # ports:
+    #   - "50057:50057"
+    #   - "8567:8567"
+    expose:
+      - "50057"
+      - "8567"
     environment:
       PROMETHEUS_PORT: 8567
+    deploy:
+      replicas: 5
     networks:
-      - graph-rag-net
+      - services-net
 
   # --- Processors ---
 
@@ -1342,9 +1355,9 @@ services:
     #   # - rabbitmq
     #   - graph-rag-database-connector-service
     deploy:
-      replicas: 10
+      replicas: 5
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-llm-extractor-processor:
     build:
@@ -1366,9 +1379,9 @@ services:
     # depends_on:
     #   - rabbitmq
     deploy:
-      replicas: 10
+      replicas: 5
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-normalize-unite-processor:
     build:
@@ -1389,7 +1402,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-semantique-vigil-processor:
     build:
@@ -1412,9 +1425,9 @@ services:
     #   # - embedding-model-service
     #   - graph-rag-milvus-service
     deploy:
-      replicas: 5
+      replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-etl-processor:
     build:
@@ -1435,7 +1448,7 @@ services:
     deploy:
       replicas: 5
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-categorie-processor:
     build:
@@ -1456,7 +1469,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-question-processor:
     build:
@@ -1477,7 +1490,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-reponse-processor:
     build:
@@ -1498,7 +1511,7 @@ services:
     deploy:
       replicas: 2
     networks:
-      - graph-rag-net
+      - services-net
 
   graph-rag-spacy-service:
     build:
@@ -1511,7 +1524,7 @@ services:
     environment:
       PROMETHEUS_PORT: 8569
     networks:
-      - graph-rag-net
+      - services-net
 
   # --- API ---
 
@@ -1519,12 +1532,12 @@ services:
     build:
       context: .
       dockerfile: apps-microservices/graph-rag-api-recherche-service/Dockerfile
-    profiles: ["graph-rag"]
+    profiles: ["graph-rag-api"]
     ports:
-      - "8000:8000"
+      - "8525:8525"
       - "8565:8565"
     environment:
-      API_PORT: 8000
+      API_PORT: 8525
       EMBEDDING_SERVICE_URL: embedding-model-service:50052
       MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
       GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
@@ -1539,14 +1552,18 @@ services:
     #   - graph-rag-database-connector-service
     #   - graph-rag-normalize-unite-service
     networks:
-      - graph-rag-net
+      - services-net
 
 networks:
-  graph-rag-net:
-    driver: bridge
   services-net:
     driver: bridge
-    
+  services-ext-net:
+    name: rag-hp-pub_services-net
+    external: true
+  services-global-net:
+    driver: bridge
+    name: global-services-net
+    external: true
 volumes:
   elasticsearch-data:
     driver: local
@@ -1554,9 +1571,5 @@ volumes:
     driver: local
   grafana-storage:
   crawler_data:
-  neo4j_data:
-  neo4j_logs:
-  milvus_data:
-  etcd_data:
-  minio_data:
+  image_download_data:
   prometheus_data:

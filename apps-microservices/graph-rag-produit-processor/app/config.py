@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     MAX_RETRIES: int = 3
     RETRY_TTL_MS: int = 30000
 
+    # Batching Configuration
+    BATCH_SIZE: int = 10
+    BATCH_TIMEOUT_SECONDS: float = 2.0
+
     class Config:
         env_file = ".env"
         case_sensitive = True
