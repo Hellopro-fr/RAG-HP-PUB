@@ -1167,99 +1167,99 @@ services:
       - services-net
     logging: *logging_defaults
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: user
-      RABBITMQ_DEFAULT_PASS: password
-    networks:
-      - graph-rag-net
-    healthcheck:
-        test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-        interval: 10s
-        timeout: 10s
-        retries: 5
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"
+  #   environment:
+  #     RABBITMQ_DEFAULT_USER: user
+  #     RABBITMQ_DEFAULT_PASS: password
+  #   networks:
+  #     - graph-rag-net
+  #   healthcheck:
+  #       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+  #       interval: 10s
+  #       timeout: 10s
+  #       retries: 5
 
-  neo4j:
-    image: neo4j:5.15.0
-    ports:
-      - "7474:7474" # Browser
-      - "7687:7687" # Bolt
-    environment:
-      # NEO4J_AUTH: neo4j/password
-      NEO4J_dbms_memory_heap_initial__size: 512m
-      NEO4J_dbms_memory_heap_max__size: 2G
-      NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}"
-      # NEO4J_PLUGINS=["apoc", "graph-data-science"]
-      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
-      NEO4J_apoc_export_file_enabled: true
-      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-    networks:
-      - graph-rag-net
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 5
+  # neo4j:
+  #   image: neo4j:5.15.0
+  #   ports:
+  #     - "7474:7474" # Browser
+  #     - "7687:7687" # Bolt
+  #   environment:
+  #     # NEO4J_AUTH: neo4j/password
+  #     NEO4J_dbms_memory_heap_initial__size: 512m
+  #     NEO4J_dbms_memory_heap_max__size: 2G
+  #     NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}"
+  #     # NEO4J_PLUGINS=["apoc", "graph-data-science"]
+  #     NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+  #     NEO4J_apoc_export_file_enabled: true
+  #     NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+  #   volumes:
+  #     - neo4j_data:/data
+  #     - neo4j_logs:/logs
+  #   networks:
+  #     - graph-rag-net
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+  #     interval: 10s
+  #     timeout: 10s
+  #     retries: 5
 
-  etcd:
-    image: quay.io/coreos/etcd:v3.5.5
-    environment:
-      - ETCD_AUTO_COMPACTION_MODE=revision
-      - ETCD_AUTO_COMPACTION_RETENTION=1000
-      - ETCD_QUOTA_BACKEND_BYTES=4294967296
-      - ETCD_SNAPSHOT_COUNT=50000
-    volumes:
-      - etcd_data:/etcd
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
-    networks:
-      - graph-rag-net
+  # etcd:
+  #   image: quay.io/coreos/etcd:v3.5.5
+  #   environment:
+  #     - ETCD_AUTO_COMPACTION_MODE=revision
+  #     - ETCD_AUTO_COMPACTION_RETENTION=1000
+  #     - ETCD_QUOTA_BACKEND_BYTES=4294967296
+  #     - ETCD_SNAPSHOT_COUNT=50000
+  #   volumes:
+  #     - etcd_data:/etcd
+  #   command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+  #   networks:
+  #     - graph-rag-net
 
-  minio:
-    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
-    environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-    volumes:
-      - minio_data:/data
-    command: minio server /data
-    networks:
-      - graph-rag-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
+  # minio:
+  #   image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+  #   environment:
+  #     MINIO_ACCESS_KEY: minioadmin
+  #     MINIO_SECRET_KEY: minioadmin
+  #   volumes:
+  #     - minio_data:/data
+  #   command: minio server /data
+  #   networks:
+  #     - graph-rag-net
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+  #     interval: 30s
+  #     timeout: 20s
+  #     retries: 3
 
-  milvus:
-    image: milvusdb/milvus:v2.3.2
-    command: ["milvus", "run", "standalone"]
-    environment:
-      ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
-      MINIO_ACCESS_KEY_ID: minioadmin
-      MINIO_SECRET_ACCESS_KEY: minioadmin
-    volumes:
-      - milvus_data:/var/lib/milvus
-    ports:
-      - "19530:19530"
-      - "9091:9091"
-    depends_on:
-      - etcd
-      - minio
-    networks:
-      - graph-rag-net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
+  # milvus:
+  #   image: milvusdb/milvus:v2.3.2
+  #   command: ["milvus", "run", "standalone"]
+  #   environment:
+  #     ETCD_ENDPOINTS: etcd:2379
+  #     MINIO_ADDRESS: minio:9000
+  #     MINIO_ACCESS_KEY_ID: minioadmin
+  #     MINIO_SECRET_ACCESS_KEY: minioadmin
+  #   volumes:
+  #     - milvus_data:/var/lib/milvus
+  #   ports:
+  #     - "19530:19530"
+  #     - "9091:9091"
+  #   depends_on:
+  #     - etcd
+  #     - minio
+  #   networks:
+  #     - graph-rag-net
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+  #     interval: 30s
+  #     timeout: 20s
+  #     retries: 3
 
   # --- Microservices ---
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
+from crawlee import Request
 from crawlee.crawlers import PlaywrightCrawler
 from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator
@@ -252,10 +253,8 @@ async def main():
              await dedup_manager.add_url(url)
              
              # 2. Add to Queue (Mark as Existing for Verification)
-             await request_queue.add_request({
-                 "url": url,
-                 "userData": {"is_existing": True}
-             })
+             # FIX: Must use Request object, not dict
+             await request_queue.add_request(Request.from_url(url, user_data={"is_existing": True}))
              count += 1
              if count % 1000 == 0:
                  logger.info(f"Seeded {count} URLs...")
@@ -265,7 +264,8 @@ async def main():
     elif await request_queue.is_empty():
         # Standard Seed
         logger.info("Seeding standard start URL...")
-        await request_queue.add_request({"url": site, "userData": {"is_existing": False}})
+        # FIX: Must use Request object, not dict
+        await request_queue.add_request(Request.from_url(site, user_data={"is_existing": False}))
         # Don't add to Dedup here, let request_handler handle the add for proper counting
     
     # Start Heartbeat
