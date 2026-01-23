@@ -50,9 +50,7 @@ class RateLimiter:
         
         logger.warning(f"Rate limit timeout for {domain}")
         return True # Fail open after retries
-        except Exception as e:
-            logger.error(f"Rate limiter error: {e}")
-            return True  # Fail open
+
 
     def close(self):
         if self.redis:
