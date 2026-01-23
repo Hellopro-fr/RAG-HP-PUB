@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # Retry Configuration
     MAX_RETRIES: int = 3
     RETRY_TTL_MS: int = 30000
+    BATCH_SIZE: int = 5
 
     class Config:
         env_file = ".env"
