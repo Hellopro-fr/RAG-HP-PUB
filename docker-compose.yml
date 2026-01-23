@@ -1532,10 +1532,10 @@ services:
       dockerfile: apps-microservices/graph-rag-api-recherche-service/Dockerfile
     profiles: ["graph-rag-api"]
     ports:
-      - "8000:8000"
+      - "8525:8525"
       - "8565:8565"
     environment:
-      API_PORT: 8000
+      API_PORT: 8525
       EMBEDDING_SERVICE_URL: embedding-model-service:50052
       MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
       GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
@@ -1550,6 +1550,7 @@ services:
     #   - graph-rag-database-connector-service
     #   - graph-rag-normalize-unite-service
     networks:
+      - services-net
       - graph-rag-net
 
 networks:
