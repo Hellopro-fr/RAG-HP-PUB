@@ -8,7 +8,9 @@ from common_utils.metrics.prometheus import start_metrics_server_in_thread
 from app.config import settings
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    force=True,
 )
 
 
@@ -23,7 +25,9 @@ async def main():
     logging.info("Applying Neo4j constraints and indexes...")
     try:
         constraints, indexes = use_case.setup_schema()
-        logging.info(f"✅ Applied {len(constraints)} constraints and {len(indexes)} indexes")
+        logging.info(
+            f"✅ Applied {len(constraints)} constraints and {len(indexes)} indexes"
+        )
     except Exception as e:
         logging.error(f"⚠️ Failed to apply constraints/indexes: {e}")
 
