@@ -143,8 +143,14 @@ services:
       dockerfile: Dockerfile
     profiles: ["app"]
     restart: unless-stopped
-    ports:
-      - "8505:8505"
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    # ports:
+    #   - "8505:8000" # Removed to allow scaling (avoid port conflict). Access via API Gateway.
     volumes:
       - ./storage/images:/app/storage/images
     environment:

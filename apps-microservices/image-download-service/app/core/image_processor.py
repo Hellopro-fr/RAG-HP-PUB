@@ -71,12 +71,12 @@ class ImageProcessor:
             filename = f"{normalized_name}-{product_id}{extension}"
             
             # Define paths
-            # /images/produit-2/X/Y/Z/ (Main)
-            main_rel_dir = os.path.join("images", "produit-2", rep1, rep2, rep3)
+            # {domain}/images/produit-2/X/Y/Z/ (Main)
+            main_rel_dir = os.path.join(domain, "images", "produit-2", rep1, rep2, rep3)
             main_full_dir = os.path.join(base_storage_dir, main_rel_dir)
             
-            # /images/produit-3/X/Y/Z/ (Thumbnail)
-            thumb_rel_dir = os.path.join("images", "produit-3", rep1, rep2, rep3)
+            # {domain}/images/produit-3/X/Y/Z/ (Thumbnail)
+            thumb_rel_dir = os.path.join(domain, "images", "produit-3", rep1, rep2, rep3)
             thumb_full_dir = os.path.join(base_storage_dir, thumb_rel_dir)
             
             # Create directories
