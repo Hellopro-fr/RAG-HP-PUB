@@ -94,10 +94,10 @@ class Consumer:
             
             logger.info(f"Received task for product {product_data.get('id_produit')}")
             
-            # --- FILTER: Process only 'site_web' source ---
+            # --- FILTER: Process only 'site_web' or 'test_web' source ---
             source = product_data.get("source")
-            if source != "site_web":
-                logger.info(f"Skipping product {product_data.get('id_produit')}: Source '{source}' != 'site_web'")
+            if source not in ["site_web", "test_web"]:
+                # Silently skip other sources
                 channel.basic_ack(delivery_tag=method.delivery_tag)
                 return
             # ----------------------------------------------
