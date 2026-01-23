@@ -98,8 +98,8 @@ class Neo4jConnector:
             try:
                 graph = self.get_graph()
                 print(f"parameters: {parameters}")
-                if parameters.top_k:
-                    parameters.top_k = int(parameters.top_k)
+                if parameters.get("top_k"):
+                    parameters["top_k"] = int(parameters["top_k"])
                 results = graph.query(query, params=parameters or {})
                 records_affected = len(results) if results else 0
                 return results, records_affected
