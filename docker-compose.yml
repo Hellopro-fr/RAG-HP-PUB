@@ -152,7 +152,7 @@ services:
     # ports:
     #   - "8505:8000" # Removed to allow scaling (avoid port conflict). Access via API Gateway.
     volumes:
-      - ./storage/images:/app/storage/images
+      - ./storage:/app/storage
     environment:
       - APIFY_PROXY=${APIFY_PROXY}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
