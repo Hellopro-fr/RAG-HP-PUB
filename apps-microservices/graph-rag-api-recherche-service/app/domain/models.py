@@ -29,8 +29,9 @@ class ScoredProduct(BaseModel):
     score: float
     details: List[Dict[str, Any]] = []
     info: Dict[str, Any] = {}
-    # Including other product fields as flexible dict to avoid strict schema issues with Neo4j return
-    extra_data: Dict[str, Any] = Field(default_factory=dict)
+
+    class Config:
+        extra = "allow"
 
 
 class ResultProduct(BaseModel):
