@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     MAX_RETRIES: int = 3
     RETRY_TTL_MS: int = 30000
 
+    # Concurrency Control
+    # Controls how many LLM requests can run in parallel per container
+    MAX_CONCURRENCY: int = 10 
+
     class Config:
         env_file = ".env"
         case_sensitive = True

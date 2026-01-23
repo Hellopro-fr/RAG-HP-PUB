@@ -1,20 +1,41 @@
-import pika
 import json
 import logging
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
-from common_utils.autres.DLQProperties import DLQProperties
-from common_utils.metrics.prometheus import measure_processing_time
+import asyncio
+import time
+import random
+import aio_pika
+from aio_pika.abc import AbstractIncomingMessage
+from collections import defaultdict
+
+# Use the Async version of DLQProperties if available
+try:
+    from common_utils.autres.DLQPropertiesAsync import (
+        DLQPropertiesAsync as DLQProperties,
+    )
+except ImportError:
+    from common_utils.autres.DLQProperties import DLQProperties
 
 from app.config import settings
-from app.core.processor import process_etl
+from app.core.processor import prepare_etl_statements
+
+# Import centralized client for batch execution
+from common_utils.grpc_clients import graph_database_client as centralized_client
 from datetime import datetime
 
+
 class Consumer:
-    """Consumer for Final ETL queue."""
+    """Async Consumer for Final ETL with Batch Processing and Deadlock Prevention."""
 
-    def __init__(self, connection: pika.BlockingConnection):
-        self.channel = connection.channel()
+    def __init__(self, connection: aio_pika.RobustConnection):
+        self.connection = connection
+        self.channel = None
+        self.queue = None
 
+        # Batching state
+        self.batch_queue = asyncio.Queue()
+        self.batch_worker_task = None
+
+        # Queue configuration
         self.exchange_name = settings.INPUT_EXCHANGE
         self.routing_key = settings.INPUT_ROUTING_KEY
         self.queue_name = settings.INPUT_QUEUE
@@ -23,132 +44,320 @@ class Consumer:
         self.dead_letter_exchange = "dead_letter_exchange"
         self.dead_letter_queue_name = f"{self.queue_name}_dlq"
 
-        self.rabbitmq_connection = RabbitMQConnection()
-        self._setup_infrastructure()
+    async def setup(self):
+        """Setup channel and topology."""
+        self.channel = await self.connection.channel()
+
+        # Prefetch slightly more than batch size
+        await self.channel.set_qos(
+            prefetch_count=(
+                settings.BATCH_SIZE * 2 if hasattr(settings, "BATCH_SIZE") else 50
+            )
+        )
+
+        await self._setup_infrastructure()
         logging.info("✅ ETL Consumer initialized")
 
-    def _setup_infrastructure(self):
-        self.channel.exchange_declare(
-            exchange=self.dead_letter_exchange, exchange_type="topic", durable=True
+    async def _setup_infrastructure(self):
+        """Setup exchanges, queues, and bindings."""
+        # DLQ
+        dlq_exchange = await self.channel.declare_exchange(
+            self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        self.channel.queue_declare(queue=self.dead_letter_queue_name, durable=True)
-        self.channel.queue_bind(
-            exchange=self.dead_letter_exchange,
-            queue=self.dead_letter_queue_name,
-            routing_key=self.routing_key,
+        dlq_queue = await self.channel.declare_queue(
+            self.dead_letter_queue_name, durable=True
         )
+        await dlq_queue.bind(dlq_exchange, routing_key=self.routing_key)
 
-        self.channel.exchange_declare(
-            exchange=self.retry_exchange, exchange_type="topic", durable=True
+        # Retry
+        retry_exchange = await self.channel.declare_exchange(
+            self.retry_exchange, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        retry_queue_args = {
-            "x-message-ttl": settings.RETRY_TTL_MS,
-            "x-dead-letter-exchange": self.exchange_name,
-            "x-dead-letter-routing-key": self.routing_key,
-        }
-        self.channel.queue_declare(
-            queue=self.retry_queue_name, durable=True, arguments=retry_queue_args
+        retry_queue = await self.channel.declare_queue(
+            self.retry_queue_name,
+            durable=True,
+            arguments={
+                "x-message-ttl": settings.RETRY_TTL_MS,
+                "x-dead-letter-exchange": self.exchange_name,
+                "x-dead-letter-routing-key": self.routing_key,
+            },
         )
-        self.channel.queue_bind(
-            exchange=self.retry_exchange,
-            queue=self.retry_queue_name,
-            routing_key=self.routing_key,
+        await retry_queue.bind(retry_exchange, routing_key=self.routing_key)
+
+        # Main
+        main_exchange = await self.channel.declare_exchange(
+            self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
         )
-
-        self.channel.exchange_declare(
-            exchange=self.exchange_name, exchange_type="topic", durable=True
+        self.queue = await self.channel.declare_queue(
+            self.queue_name,
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": self.retry_exchange,
+                "x-dead-letter-routing-key": self.routing_key,
+            },
         )
-        main_queue_args = {
-            "x-dead-letter-exchange": self.retry_exchange,
-            "x-dead-letter-routing-key": self.routing_key,
-        }
-        self.channel.queue_declare(
-            queue=self.queue_name, durable=True, arguments=main_queue_args
-        )
-        self.channel.queue_bind(
-            exchange=self.exchange_name,
-            queue=self.queue_name,
-            routing_key=self.routing_key,
-        )
+        await self.queue.bind(main_exchange, routing_key=self.routing_key)
 
-    def _get_retry_count(self, properties: pika.BasicProperties) -> int:
-        if properties.headers and "x-death" in properties.headers:
-            for death in properties.headers["x-death"]:
-                if death.get("queue") == self.retry_queue_name:
-                    return death.get("count", 0)
-        return 0
+    def _detect_deadlock_candidates(self, valid_items: list) -> tuple:
+        """
+        Analyze items and separate into:
+        - no_deadlock_items: Items with unique graph_id (safe for batch)
+        - deadlock_items: Items with duplicate graph_id (process sequentially)
 
-    def connect(self):
-        self.connection = self.rabbitmq_connection.create_connection(
-            max_retries=10, retry_delay=5
-        )
-        self.channel = self.connection.channel()
-        self._setup_infrastructure()
+        Returns: (no_deadlock_items, deadlock_items)
+        """
+        # Group items by graph_id
+        graph_id_groups = defaultdict(list)
+        for item in valid_items:
+            msg, stmts, graph_id = item
+            graph_id_groups[graph_id].append(item)
 
-    @measure_processing_time(service_name="graph-rag-etl-processor")
-    def _on_message_callback(self, ch, method, properties, body):
-        try:
-            logging.info("📥 ETL: Message received")
-            message = json.loads(body)
-            data = message.get("data", {})
-            database = message.get("database", "neo4j")
-            origin = message.get("origin", "bo")
+        no_deadlock_items = []
+        deadlock_items = []
 
-            success = process_etl(data, database, origin)
-
-            if success:
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                logging.info("🕒 Write time : " + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
-                logging.info("✅ Graph write successful")
-
+        for graph_id, items in graph_id_groups.items():
+            if len(items) == 1:
+                # Unique graph_id - safe for batch
+                no_deadlock_items.append(items[0])
             else:
-                logging.warning("⚠️ Graph write reported failure")
-                # Trigger retry logic via exception
-                raise Exception("Graph write failed")
-
-        except (json.JSONDecodeError, ValueError) as e:
-            logging.error(f"❌ Permanent error: {e}")
-            dlq_props = DLQProperties.create_dlq_properties(
-                e, "graph-rag-etl-processor", 0, method
-            )
-            ch.basic_publish(
-                exchange=self.dead_letter_exchange,
-                routing_key=self.routing_key,
-                body=body,
-                properties=dlq_props,
-            )
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-
-        except Exception as e:
-            retry_count = self._get_retry_count(properties)
-            if retry_count < settings.MAX_RETRIES:
-                logging.warning(f"⚠️ Error (attempt {retry_count + 1}), retrying: {e}")
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            else:
-                logging.error(f"❌ Failed after retries: {e}")
-                dlq_props = DLQProperties.create_dlq_properties(
-                    e, "graph-rag-etl-processor", settings.MAX_RETRIES, method
+                # Multiple items with same graph_id - potential deadlock
+                # Keep first one in no_deadlock, rest go to deadlock queue
+                no_deadlock_items.append(items[0])
+                deadlock_items.extend(items[1:])
+                logging.debug(
+                    f"⚠️ Detected {len(items)} items with same graph_id '{graph_id}' - {len(items)-1} will be processed sequentially"
                 )
-                ch.basic_publish(
-                    exchange=self.dead_letter_exchange,
-                    routing_key=self.routing_key,
-                    body=body,
-                    properties=dlq_props,
-                )
-                ch.basic_ack(delivery_tag=method.delivery_tag)
 
-    def start_consuming(self):
-        for i in range(3):
+        if deadlock_items:
+            logging.info(
+                f"🔒 Deadlock prevention: {len(no_deadlock_items)} items for batch, {len(deadlock_items)} items for sequential"
+            )
+
+        return no_deadlock_items, deadlock_items
+
+    async def _execute_batch_with_retry(
+        self, statements: list, max_retries: int = 3
+    ) -> bool:
+        """Execute batch with deadlock retry logic. Returns True on success."""
+        for attempt in range(max_retries):
             try:
-                self.channel.basic_consume(
-                    queue=self.queue_name, on_message_callback=self._on_message_callback
+                success, error_msg, results = (
+                    await centralized_client.execute_batch_cypher(
+                        statements=statements, transactional=True
+                    )
                 )
-                logging.info(f"👂 ETL listening on: {self.queue_name}")
-                self.channel.start_consuming()
+
+                if success:
+                    return True
+
+                # Check for Deadlock or Transient errors
+                if (
+                    "Deadlock" in error_msg
+                    or "Transient" in error_msg
+                    or "Lock" in error_msg
+                ):
+                    sleep_time = random.uniform(0.5, 2.0)
+                    logging.warning(
+                        f"⚠️ Deadlock detected (attempt {attempt+1}/{max_retries}). Retrying in {sleep_time:.2f}s..."
+                    )
+                    await asyncio.sleep(sleep_time)
+                    continue
+                else:
+                    logging.error(f"❌ Non-transient batch error: {error_msg}")
+                    return False
+
+            except Exception as e:
+                logging.error(f"❌ Critical batch exception: {e}")
+                return False
+
+        return False
+
+    async def _process_items_sequentially(self, items: list):
+        """Process items one by one (for potential deadlock candidates)."""
+        for msg, stmts, g_id in items:
+            try:
+                success, err, _ = await centralized_client.execute_batch_cypher(
+                    statements=stmts, transactional=True
+                )
+
+                if success:
+                    await msg.ack()
+                    logging.debug(f"✅ Sequential item {g_id} processed successfully")
+                else:
+                    logging.error(
+                        f"❌ Sequential item failed for {g_id}: {err}. Requeueing."
+                    )
+                    await msg.nack(requeue=True)
+                    await asyncio.sleep(0.2)
+
+            except Exception as e:
+                logging.error(f"❌ Error processing sequential item {g_id}: {e}")
+                await msg.nack(requeue=True)
+
+    async def _process_batch(self, batch: list):
+        """
+        Execute a batch of ETL messages with Deadlock Prevention.
+
+        Strategy:
+        1. Parse and prepare all items
+        2. Detect potential deadlock candidates (items with same graph_id)
+        3. Batch process items with unique graph_ids
+        4. Sequentially process potential deadlock items
+        """
+        if not batch:
+            return
+
+        all_statements = []
+        valid_items = []  # (message, statements_for_this_msg, graph_id)
+
+        # 1. Prepare Statements
+        logging.info("Start processing batch")
+        for msg in batch:
+            try:
+                body = msg.body.decode()
+                data_json = json.loads(body)
+                data = data_json.get("data", {})
+                database = data_json.get("database", "neo4j")
+                origin = data_json.get("origin", "bo")
+                graph_id = data.get("graph_id", "")
+
+                if not data:
+                    logging.warning("Empty data in ETL message, skipping")
+                    asyncio.create_task(msg.ack())
+                    continue
+
+                # Generate list of statements for this single message
+                msg_statements = prepare_etl_statements(data, database, origin)
+
+                if not msg_statements:
+                    asyncio.create_task(msg.ack())
+                    continue
+
+                # Add to valid items
+                valid_items.append((msg, msg_statements, graph_id or "unknown"))
+
+            except Exception as e:
+                logging.error(f"Error preparing ETL message: {e}")
+                headers = DLQProperties.create_dlq_headers(
+                    e, "graph-rag-etl-processor", 0, msg
+                )
+                await self.channel.default_exchange.publish(
+                    aio_pika.Message(
+                        body=msg.body,
+                        headers=headers,
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                    ),
+                    routing_key=self.dead_letter_queue_name,
+                )
+                asyncio.create_task(msg.ack())
+
+        if not valid_items:
+            return
+
+        # 2. Detect and separate deadlock candidates
+        no_deadlock_items, deadlock_items = self._detect_deadlock_candidates(
+            valid_items
+        )
+
+        # 3. Batch process items with no deadlock risk
+        if no_deadlock_items:
+            # Sort by graph_id to minimize deadlock chance
+            no_deadlock_items.sort(key=lambda x: x[2])
+
+            # Build statements list for batch
+            batch_statements = []
+            for _, stmts, _ in no_deadlock_items:
+                batch_statements.extend(stmts)
+
+            # Execute batch
+            batch_success = await self._execute_batch_with_retry(
+                batch_statements, max_retries=3
+            )
+
+            if batch_success:
+                logging.info(
+                    f"✅ ETL Batch executed successfully ({len(batch_statements)} statements, {len(no_deadlock_items)} items)"
+                )
+                logging.info(
+                    "🕒 Write time : " + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+                )
+                # Ack all batch messages
+                for msg, _, _ in no_deadlock_items:
+                    await msg.ack()
+            else:
+                # Batch failed - fall back to sequential for all batch items
+                logging.warning(
+                    "⚠️ Batch failed. Switching to sequential processing for batch items."
+                )
+                await self._process_items_sequentially(no_deadlock_items)
+
+        # 4. Process potential deadlock items sequentially
+        if deadlock_items:
+            logging.info(
+                f"🔄 Processing {len(deadlock_items)} potential deadlock items sequentially..."
+            )
+            await self._process_items_sequentially(deadlock_items)
+
+    async def _batch_worker(self):
+        """Background task to flush batches."""
+        batch = []
+        # Default batch settings if not in config
+        batch_size = getattr(settings, "BATCH_SIZE", 50)
+        batch_timeout = getattr(settings, "BATCH_TIMEOUT_SECONDS", 2.0)
+
+        while True:
+            try:
+                # Wait for first item
+                item = await self.batch_queue.get()
+                batch.append(item)
+
+                # Collect more items
+                start_time = time.time()
+                while len(batch) < batch_size:
+                    timeout = batch_timeout - (time.time() - start_time)
+                    if timeout <= 0:
+                        break
+                    try:
+                        item = await asyncio.wait_for(
+                            self.batch_queue.get(), timeout=timeout
+                        )
+                        batch.append(item)
+                    except asyncio.TimeoutError:
+                        break
+
+                # Process
+                await self._process_batch(batch)
+
+                # Mark done
+                for _ in batch:
+                    self.batch_queue.task_done()
+                batch = []
+
+            except asyncio.CancelledError:
                 break
-            except (
-                pika.exceptions.AMQPConnectionError,
-                pika.exceptions.ChannelClosedByBroker,
-            ) as e:
-                logging.warning(f"⚠️ Connection lost: {e}, reconnecting...")
-                self.connect()
+            except Exception as e:
+                logging.error(f"Batch worker error: {e}")
+                batch = []
+
+    async def start_consuming(self):
+        """Start consumer and batch worker."""
+        await self.setup()
+
+        # Start background worker
+        self.batch_worker_task = asyncio.create_task(self._batch_worker())
+
+        logging.info(f"👂 ETL Consumer listening on: {self.queue_name}")
+
+        async with self.queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                await self.batch_queue.put(message)
+
+    async def close(self):
+        if self.batch_worker_task:
+            self.batch_worker_task.cancel()
+            try:
+                await self.batch_worker_task
+            except asyncio.CancelledError:
+                pass
+        if self.connection:
+            await self.connection.close()

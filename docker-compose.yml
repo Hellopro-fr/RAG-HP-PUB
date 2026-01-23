@@ -1321,11 +1321,16 @@ services:
       context: .
       dockerfile: apps-microservices/graph-rag-normalize-unite-service/Dockerfile
     profiles: ["graph-rag"]
-    ports:
-      - "50057:50057"
-      - "8567:8567"
+    # ports:
+    #   - "50057:50057"
+    #   - "8567:8567"
+    expose:
+      - "50057"
+      - "8567"
     environment:
       PROMETHEUS_PORT: 8567
+    deploy:
+      replicas: 5
     networks:
       - graph-rag-net
 
@@ -1348,7 +1353,7 @@ services:
     #   # - rabbitmq
     #   - graph-rag-database-connector-service
     deploy:
-      replicas: 10
+      replicas: 5
     networks:
       - graph-rag-net
 
@@ -1372,7 +1377,7 @@ services:
     # depends_on:
     #   - rabbitmq
     deploy:
-      replicas: 10
+      replicas: 5
     networks:
       - graph-rag-net
 
@@ -1418,7 +1423,7 @@ services:
     #   # - embedding-model-service
     #   - graph-rag-milvus-service
     deploy:
-      replicas: 5
+      replicas: 2
     networks:
       - graph-rag-net
 
@@ -1525,7 +1530,7 @@ services:
     build:
       context: .
       dockerfile: apps-microservices/graph-rag-api-recherche-service/Dockerfile
-    profiles: ["graph-rag"]
+    profiles: ["graph-rag-api"]
     ports:
       - "8000:8000"
       - "8565:8565"
@@ -1560,9 +1565,4 @@ volumes:
     driver: local
   grafana-storage:
   crawler_data:
-  neo4j_data:
-  neo4j_logs:
-  milvus_data:
-  etcd_data:
-  minio_data:
   prometheus_data:

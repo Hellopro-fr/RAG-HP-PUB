@@ -1,24 +1,28 @@
-import pika
 import json
 import logging
 import asyncio
+import aio_pika
+from aio_pika.abc import AbstractIncomingMessage
 
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
-from common_utils.autres.DLQProperties import DLQProperties
-from common_utils.metrics.prometheus import measure_processing_time
-
+from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
 from app.config import settings
 from app.messaging.publisher import Publisher
 from app.core.processor import extract_entities_and_relationships
 
 
 class Consumer:
-    """Consumer for processing products for LLM extraction."""
+    """Async Consumer for processing products for LLM extraction with Semaphore concurrency."""
 
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
-        self.channel = connection.channel()
+    def __init__(self, publisher: Publisher):
         self.publisher = publisher
+        self.connection = None
+        self.channel = None
+        self.queue = None
 
+        # Concurrency control
+        self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
+
+        # Queue configuration
         self.exchange_name = settings.INPUT_EXCHANGE
         self.routing_key = settings.INPUT_ROUTING_KEY
         self.queue_name = settings.INPUT_QUEUE
@@ -27,141 +31,165 @@ class Consumer:
         self.dead_letter_exchange = "dead_letter_exchange"
         self.dead_letter_queue_name = f"{self.queue_name}_dlq"
 
-        self.rabbitmq_connection = RabbitMQConnection()
-        self._setup_infrastructure()
+    async def connect(self):
+        """Establish connection and setup topology."""
+        logging.info(f"Connecting to RabbitMQ at {settings.RABBITMQ_URL}")
+        self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
+        self.channel = await self.connection.channel()
+
+        # Set prefetch count to match concurrency limit + buffer
+        await self.channel.set_qos(prefetch_count=settings.MAX_CONCURRENCY)
+
+        # Setup Publisher on the same channel/connection
+        await self.publisher.setup(self.channel)
+
+        await self._setup_infrastructure()
         logging.info("✅ LLM Extractor Consumer initialized")
 
-    def _setup_infrastructure(self):
+    async def _setup_infrastructure(self):
         """Setup exchanges, queues, and bindings."""
-        self.channel.exchange_declare(
-            exchange=self.dead_letter_exchange, exchange_type="topic", durable=True
+        # DLQ
+        dlq_exchange = await self.channel.declare_exchange(
+            self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        self.channel.queue_declare(queue=self.dead_letter_queue_name, durable=True)
-        self.channel.queue_bind(
-            exchange=self.dead_letter_exchange,
-            queue=self.dead_letter_queue_name,
-            routing_key=self.routing_key,
+        dlq_queue = await self.channel.declare_queue(
+            self.dead_letter_queue_name, durable=True
         )
+        await dlq_queue.bind(dlq_exchange, routing_key=self.routing_key)
 
-        self.channel.exchange_declare(
-            exchange=self.retry_exchange, exchange_type="topic", durable=True
+        # Retry
+        retry_exchange = await self.channel.declare_exchange(
+            self.retry_exchange, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        retry_queue_args = {
-            "x-message-ttl": settings.RETRY_TTL_MS,
-            "x-dead-letter-exchange": self.exchange_name,
-            "x-dead-letter-routing-key": self.routing_key,
-        }
-        self.channel.queue_declare(
-            queue=self.retry_queue_name, durable=True, arguments=retry_queue_args
+        retry_queue = await self.channel.declare_queue(
+            self.retry_queue_name,
+            durable=True,
+            arguments={
+                "x-message-ttl": settings.RETRY_TTL_MS,
+                "x-dead-letter-exchange": self.exchange_name,
+                "x-dead-letter-routing-key": self.routing_key,
+            },
         )
-        self.channel.queue_bind(
-            exchange=self.retry_exchange,
-            queue=self.retry_queue_name,
-            routing_key=self.routing_key,
-        )
+        await retry_queue.bind(retry_exchange, routing_key=self.routing_key)
 
-        self.channel.exchange_declare(
-            exchange=self.exchange_name, exchange_type="topic", durable=True
+        # Main
+        main_exchange = await self.channel.declare_exchange(
+            self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        main_queue_args = {
-            "x-dead-letter-exchange": self.retry_exchange,
-            "x-dead-letter-routing-key": self.routing_key,
-        }
-        self.channel.queue_declare(
-            queue=self.queue_name, durable=True, arguments=main_queue_args
+        self.queue = await self.channel.declare_queue(
+            self.queue_name,
+            durable=True,
+            arguments={
+                "x-dead-letter-exchange": self.retry_exchange,
+                "x-dead-letter-routing-key": self.routing_key,
+            },
         )
-        self.channel.queue_bind(
-            exchange=self.exchange_name,
-            queue=self.queue_name,
-            routing_key=self.routing_key,
-        )
+        await self.queue.bind(main_exchange, routing_key=self.routing_key)
 
-    def _get_retry_count(self, properties: pika.BasicProperties) -> int:
-        if properties.headers and "x-death" in properties.headers:
-            for death in properties.headers["x-death"]:
+    def _get_retry_count(self, message: AbstractIncomingMessage) -> int:
+        headers = message.headers
+        if headers and "x-death" in headers:
+            for death in headers["x-death"]:
                 if death.get("queue") == self.retry_queue_name:
                     return death.get("count", 0)
         return 0
 
-    def connect(self):
-        self.connection = self.rabbitmq_connection.create_connection(
-            max_retries=10, retry_delay=5
+    async def process_message(self, message: AbstractIncomingMessage):
+        """
+        Process a single message.
+        This method is called inside a Task, guarded by the semaphore in start_consuming.
+        """
+        async with message.process(ignore_processed=True):
+            try:
+                body = message.body.decode()
+                data_json = json.loads(body)
+
+                data = data_json.get("data", {})
+                database = data_json.get("database", "neo4j")
+                origin = data_json.get("origin", "bo")
+                graph_id = data.get("graph_id", "unknown")
+
+                logging.info(f"Processing LLM extraction for: {graph_id}")
+
+                # The heavy lifting (LLM call) happens here
+                output_message = await extract_entities_and_relationships(
+                    data, database, origin
+                )
+
+                # Publish result if valid
+                if output_message.get("data", {}).get("nodes") or output_message.get(
+                    "data", {}
+                ).get("relationships"):
+                    await self.publisher.publish_message(output_message)
+                    logging.info(f"📤 Published extraction result for {graph_id}")
+                else:
+                    logging.warning(f"Empty extraction result for {graph_id}")
+
+                await message.ack()
+
+            except (json.JSONDecodeError, ValueError) as e:
+                logging.error(f"❌ Permanent error: {e}")
+                # Create DLQ headers manually since we are using aio_pika
+                headers = DLQProperties.create_dlq_headers(
+                    e, "graph-rag-llm-extractor-processor", 0, message
+                )
+
+                await self.channel.default_exchange.publish(
+                    aio_pika.Message(
+                        body=message.body,
+                        headers=headers,
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                    ),
+                    routing_key=self.dead_letter_queue_name,
+                )
+                await message.ack()
+
+            except Exception as e:
+                retry_count = self._get_retry_count(message)
+                if retry_count < settings.MAX_RETRIES:
+                    logging.warning(
+                        f"⚠️ Error (attempt {retry_count + 1}), retrying: {e}"
+                    )
+                    await message.nack(
+                        requeue=False
+                    )  # Dead letter will route to retry queue
+                else:
+                    logging.error(f"❌ Failed after retries: {e}")
+                    headers = DLQProperties.create_dlq_headers(
+                        e,
+                        "graph-rag-llm-extractor-processor",
+                        settings.MAX_RETRIES,
+                        message,
+                    )
+
+                    await self.channel.default_exchange.publish(
+                        aio_pika.Message(
+                            body=message.body,
+                            headers=headers,
+                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                        ),
+                        routing_key=self.dead_letter_queue_name,
+                    )
+                    await message.ack()
+
+    async def start_consuming(self):
+        """Start the consumer loop with concurrency control."""
+        await self.connect()
+        logging.info(
+            f"👂 LLM Extractor listening on: {self.queue_name} with concurrency {settings.MAX_CONCURRENCY}"
         )
-        self.channel = self.connection.channel()
-        self._setup_infrastructure()
 
-    # @measure_processing_time(service_name="graph-rag-llm-extractor-processor")
-    def _on_message_callback(self, ch, method, properties, body):
-        try:
-            logging.info("📥 LLM Extractor: Message received")
-            message = json.loads(body)
-            data = message.get("data", {})
-            database = message.get("database", "neo4j")
-            origin = message.get("origin", "bo")
+        async with self.queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                # Acquire semaphore before spawning task
+                await self.semaphore.acquire()
 
-            graph_id = data.get("graph_id", "unknown")
-            logging.info(f"Processing LLM extraction for: {graph_id}")
+                # Create background task
+                task = asyncio.create_task(self.process_message(message))
 
-            # Run async extraction
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                output_message = loop.run_until_complete(
-                    extract_entities_and_relationships(data, database, origin)
-                )
-            finally:
-                loop.close()
+                # Release semaphore when task is done
+                task.add_done_callback(lambda t: self.semaphore.release())
 
-            logging.info(f"Message published : {output_message}")
-            logging.info(f"📤 LLM Extractor: Message published")
-
-            if output_message.get('data').get('nodes') != [] and output_message.get('data').get('relationships') != []:
-                self.publisher.publish_message(output_message)
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-
-        except (json.JSONDecodeError, ValueError) as e:
-            logging.error(f"❌ Permanent error: {e}")
-            dlq_props = DLQProperties.create_dlq_properties(
-                e, "graph-rag-llm-extractor-processor", 0, method
-            )
-            ch.basic_publish(
-                exchange=self.dead_letter_exchange,
-                routing_key=self.routing_key,
-                body=body,
-                properties=dlq_props,
-            )
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-
-        except Exception as e:
-            retry_count = self._get_retry_count(properties)
-            if retry_count < settings.MAX_RETRIES:
-                logging.warning(f"⚠️ Error (attempt {retry_count + 1}), retrying: {e}")
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            else:
-                logging.error(f"❌ Failed after retries: {e}")
-                dlq_props = DLQProperties.create_dlq_properties(
-                    e, "graph-rag-llm-extractor-processor", settings.MAX_RETRIES, method
-                )
-                ch.basic_publish(
-                    exchange=self.dead_letter_exchange,
-                    routing_key=self.routing_key,
-                    body=body,
-                    properties=dlq_props,
-                )
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-
-    def start_consuming(self):
-        for i in range(3):
-            try:
-                self.channel.basic_consume(
-                    queue=self.queue_name, on_message_callback=self._on_message_callback
-                )
-                logging.info(f"👂 LLM Extractor listening on: {self.queue_name}")
-                self.channel.start_consuming()
-                break
-            except (
-                pika.exceptions.AMQPConnectionError,
-                pika.exceptions.ChannelClosedByBroker,
-            ) as e:
-                logging.warning(f"⚠️ Connection lost: {e}, reconnecting...")
-                self.connect()
+    async def close(self):
+        if self.connection:
+            await self.connection.close()
