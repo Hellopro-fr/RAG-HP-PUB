@@ -97,6 +97,7 @@ class Neo4jConnector:
         for attempt in range(max_retries):
             try:
                 graph = self.get_graph()
+                print(f"parameters: {parameters}")
                 if parameters.top_k:
                     parameters.top_k = int(parameters.top_k)
                 results = graph.query(query, params=parameters or {})
