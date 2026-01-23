@@ -23,10 +23,11 @@ async def execute_raw_cypher(request: CypherQueryRequest):
         duration = end_time - start_time
 
         return CypherQueryResponse(
-            results=results,
+            results=results.get("results", []),
             info={
                 "execution_time_seconds": round(duration, 4),
-                "record_count": len(results),
+                "query_time": round(results.get("query_time", 0), 4),
+                "record_count": len(results.get("results", [])),
             },
         )
 

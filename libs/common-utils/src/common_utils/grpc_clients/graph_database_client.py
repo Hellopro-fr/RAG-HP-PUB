@@ -10,6 +10,8 @@ from google.protobuf.json_format import MessageToDict
 from grpc_stubs import graph_database_pb2
 from grpc_stubs import graph_database_pb2_grpc
 
+import time
+
 GRAPH_DATABASE_SERVICE_URL = os.getenv(
     "GRAPH_DATABASE_SERVICE_URL", "graph-rag-database-connector-service:50051"
 )
@@ -88,12 +90,7 @@ async def execute_cypher(
         async with grpc.aio.insecure_channel(GRAPH_DATABASE_SERVICE_URL) as channel:
             stub = graph_database_pb2_grpc.GraphDatabaseServiceStub(channel)
 
-            # Debug: Log parameters with their types before sending
-            if parameters:
-                logging.debug(f"📤 Sending Cypher params via gRPC:")
-                for key, value in parameters.items():
-                    logging.debug(f"   {key}: {value} (type: {type(value).__name__})")
-
+            start_time = time.perf_counter()
             request = graph_database_pb2.ExecuteCypherRequest(
                 cypher_query=query,
                 parameters=_dict_to_struct(parameters or {}),
@@ -107,7 +104,8 @@ async def execute_cypher(
                 for result_struct in response.results
             ]
 
-            return response.success, results, response.records_affected
+            query_time = time.perf_counter() - start_time
+            return response.success, query_time, results, response.records_affected
     except grpc.aio.AioRpcError as e:
         logging.error(f"gRPC error executing Cypher: {e.details()}")
         raise e

@@ -68,15 +68,17 @@ class ServiceClients:
     # --- Graph Database (Neo4j) ---
     async def execute_cypher(
         self, query: str, params: Dict[str, Any] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         try:
-            success, results, _ = await graph_database_client.execute_cypher(
-                query=query, parameters=params, read_only=True
+            success, query_time, results, _ = (
+                await graph_database_client.execute_cypher(
+                    query=query, parameters=params, read_only=True
+                )
             )
-            return results if success else []
+            return {"query_time": query_time, "results": results} if success else {}
         except Exception as e:
             logging.error(f"Graph DB Error: {e}")
-            return []
+            return {}
 
     async def get_graph_schema(self) -> str:
         try:
