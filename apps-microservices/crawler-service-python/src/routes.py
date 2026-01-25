@@ -3,8 +3,9 @@ from crawlee.router import Router
 import re
 from urllib.parse import urlparse, parse_qs
 import logging
-from utils import process_page, is_stopped_manually, process_url
-from typing import Optional, TYPE_CHECKING
+from utils import process_page, is_stopped_manually, process_url, manage_french_detection_method, detect_captcha
+from domain_fr import DomainFR
+from typing import Optional, TYPE_CHECKING, Dict, Any
 
 if TYPE_CHECKING:
     from state import DedupManager, StatsManager
@@ -35,228 +36,7 @@ FORBIDDEN_PARAMS = [
     'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
 ]
 
-router = Router()
-
-# Global Limit Config
-SKIP_QUESTION_MARK = False
-SKIP_DIEZ = False
-LIMIT_QUESTION_MARK_DIEZ = 50
-DOMAIN = ""
-BASE_URL = ""
-CRAWLEE_STORAGE_NAME = ""
-
-# Global Counters (Local)
-count_question_mark = 0
-count_diez = 0
-
-# Managers (Injected from main.py)
-dedup_manager: Optional['DedupManager'] = None
-stats_manager: Optional['StatsManager'] = None
-max_errors: Optional[int] = None
-max_redirects: Optional[int] = None
-max_new_urls: Optional[int] = None
-
-@router.default_handler
-async def request_handler(context: PlaywrightCrawlingContext) -> None:
-    page = context.page
-    request = context.request
-    log = context.log
-    url = request.url
-    
-    # --- Check Circuit Breaker (Global thresholds) ---
-    if stats_manager:
-        # Check all relevant thresholds
-        breached = False
-        if max_errors and await stats_manager.check_threshold("errors", max_errors): breached = True
-        if max_redirects and await stats_manager.check_threshold("redirects", max_redirects): breached = True
-        if max_new_urls and await stats_manager.check_threshold("new_urls", max_new_urls): breached = True
-        
-        if breached:
-             log.warning("🛑 Circuit breaker triggered! Stopping crawler.")
-             await context.crawler.stop()
-             return
-    # -------------------------------------------------
-
-    # --- Block Resources (Performance & Bandwidth) ---
-    async def route_handler(route):
-        try:
-            req = route.request
-            resource_type = req.resource_type
-            req_url = req.url
-            
-            # Block heavy media and fonts
-            if resource_type in ['image', 'media', 'font', 'stylesheet']:
-                await route.abort()
-                return
-
-            # Block download scripts and binary files
-            if 'download.php' in req_url or 'imp=1' in req_url:
-                await route.abort()
-                return
-            
-            # Block binary extensions
-            if re.search(r'\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$', req_url, re.IGNORECASE):
-                await route.abort()
-                return
-
-            await route.continue_()
-        except Exception:
-            # Ignore route errors (e.g. page closed)
-            pass
-
-    await page.route("**/*", route_handler)
-    # -------------------------------------------------
-    
-    # Check Manual Stop (like Node.js preNavigationHooks - don't delete file)
-    # Per Crawlee Python docs: stop() halts new requests but allows current ones to finish
-    if DOMAIN and is_stopped_manually(DOMAIN, historised=False):
-         log.warning("🛑 Manual STOP detected via file. Stopping crawler...")
-         # Official API: crawler.stop() - sets flag to halt, no new requests processed
-         await context.crawler.stop()
-         return
-    
-    # --- Deduplication & "Double Check" (Redis) ---
-    # We differentiate between "Verified Existing" (Update mode) and "Discovered/Standard" URLs.
-    is_existing = request.user_data.get("is_existing", False)
-    
-    if dedup_manager and not is_existing:
-        # This is a new/standard URL. 
-        # We try to add it to Redis. 
-        # If add_url returns False, it means it's ALREADY in Redis (processed by another worker or in history).
-        # This acts as the "Double Check" the user requested.
-        is_new = await dedup_manager.add_url(url)
-        
-        if not is_new:
-            log.info(f"Skipping duplicate URL (Redis Double Check): {url}")
-            return
-            
-        # It is genuinely new. Increment stats if tracking.
-        if stats_manager:
-             await stats_manager.increment("new_urls")
-             # Stop check is handled at top of next request or via background, 
-             # but we can check here to be safe.
-             if max_new_urls and await stats_manager.check_threshold("new_urls", max_new_urls):
-                 log.warning("🛑 Max new URLs limit reached during processing. Stopping.")
-                 await context.crawler.stop()
-                 return
-    # -----------------------------------------------
-
-    # Limit Checking (Question Mark / Diez)
-    global count_question_mark, count_diez
-    if '?' in url:
-        count_question_mark += 1
-    if '#' in url:
-        count_diez += 1
-        
-    # Check Stops
-    should_stop = False
-    stop_reason = ""
-    
-    if not SKIP_QUESTION_MARK and count_question_mark >= LIMIT_QUESTION_MARK_DIEZ:
-         should_stop = True
-         stop_reason = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '?' reached."
-         
-    if not SKIP_DIEZ and count_diez >= LIMIT_QUESTION_MARK_DIEZ:
-         should_stop = True
-         stop_reason = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '#' reached."
-         
-    if should_stop:
-        log.warning(f"🛑 STOPPING CRAWLER: {stop_reason}")
-        await context.crawler.stop()
-        return
-
-    log.info(f"Processing {url} (Existing: {is_existing}) ...")
-
-    # --- UPDATE MODE VERIFICATION ---
-    if is_existing and stats_manager:
-        # Check for redirects by comparing requested URL with loaded URL
-        # Playwright auto-follows redirects, so page.url might be different
-        final_url = page.url
-        # Simple check: different and not just a trailing slash diff
-        if final_url != url and final_url.rstrip('/') != url.rstrip('/'):
-            log.info(f"Redirect detected: {url} -> {final_url}")
-            await stats_manager.increment("redirects")
-            
-            if max_redirects and await stats_manager.check_threshold("redirects", max_redirects):
-                log.warning("🛑 Max redirects reached. Stopping.")
-                await context.crawler.stop()
-                return
-    # --------------------------------
-
-    # Process the page
-    content = await process_page(page, url, log)
-    
-    # Push data
-    from crawlee.storages import Dataset
-    if CRAWLEE_STORAGE_NAME:
-        dataset = await Dataset.open(name=CRAWLEE_STORAGE_NAME)
-        await dataset.push_data({
-            "url": url,
-            "title": await page.title(),
-            "content": content  # Full content stored
-        })
-    else:
-        # Fallback to default
-        await context.push_data({
-            "url": url,
-            "title": await page.title(),
-            "content": content 
-        })
-    
-    # Enqueue links with filtering
-    await context.enqueue_links(
-        globs=[f"{BASE_URL}/**/*"], 
-        transform_request_function=filter_request
-    )
-
-async def error_handler(context: PlaywrightCrawlingContext) -> None:
-    request = context.request
-    log = context.log
-    page = context.page
-    
-    log.error(f"Request {request.url} failed with error messages: {request.error_messages}")
-    
-    # --- Circuit Breaker: Error Count ---
-    if stats_manager:
-        await stats_manager.increment("errors")
-        if max_errors and await stats_manager.check_threshold("errors", max_errors):
-            log.warning("🛑 Max errors reached. Stopping.")
-            await context.crawler.stop()
-    # ------------------------------------
-
-    errors_list = request.error_messages
-    
-    if page:
-        try:
-           # Try to get content for analysis
-           from utils import process_page, detect_captcha
-           
-           content = await process_page(page, request.loaded_url or request.url, log)
-           captcha_detected = await detect_captcha(page, content)
-           
-           if captcha_detected:
-               log.error(f"Captcha detected on {request.url} : {captcha_detected}")
-               
-        except Exception as e:
-           log.error(f"Error processing page for failure analysis: {e}")
-    
-    # Push to error dataset
-    try:
-        from crawlee.storages import Dataset
-        from urllib.parse import urlparse
-        domain = urlparse(request.url).netloc.replace("www.", "")
-        safe_domain_name = domain.replace('.', '-')
-        
-        error_dataset = await Dataset.open(name=f"error-{safe_domain_name}")
-        await error_dataset.push_data({
-            "id": request.id,
-            "url": request.url,
-            "errors": errors_list
-        })
-    except Exception as e:
-         log.error(f"Failed to push to error dataset: {e}")
-
-# Extended Clean List
+# Extended Clean List (Always Remove)
 PARAMS_TO_REMOVE = [
     # === CART & WISHLIST ===
     "add-to-cart", "add_to_cart", "addtocart",
@@ -330,13 +110,301 @@ PARAMS_TO_REMOVE = [
     "order", "sort", "resultsPerPage", "productListView", # Added for deduplication
 ]
 
+router = Router()
+
+# Global Limit Config
+SKIP_QUESTION_MARK = False
+SKIP_DIEZ = False
+LIMIT_QUESTION_MARK_DIEZ = 50
+DOMAIN = ""
+BASE_URL = ""
+CRAWLEE_STORAGE_NAME = ""
+
 # Dynamic Configs from Main
 TO_REMOVE_CUSTOM: list[str] = []
 TO_KEEP_CUSTOM: list[str] = []
 
+# Global Counters (Local)
+count_question_mark = 0
+count_diez = 0
+
+# Managers (Injected from main.py)
+dedup_manager: Optional['DedupManager'] = None
+stats_manager: Optional['StatsManager'] = None
+max_errors: Optional[int] = None
+max_redirects: Optional[int] = None
+max_new_urls: Optional[int] = None
+
+# Initialize DomainFR logic
+domain_fr = DomainFR("")
+
+@router.default_handler
+async def request_handler(context: PlaywrightCrawlingContext) -> None:
+    page = context.page
+    request = context.request
+    log = context.log
+    
+    # Use loaded_url to ensure we check the actual page we are on (handles redirects)
+    url = request.loaded_url or request.url
+    
+    # --- Check Circuit Breaker (Global thresholds) ---
+    if stats_manager:
+        # Check all relevant thresholds
+        breached = False
+        if max_errors and await stats_manager.check_threshold("errors", max_errors): breached = True
+        if max_redirects and await stats_manager.check_threshold("redirects", max_redirects): breached = True
+        if max_new_urls and await stats_manager.check_threshold("new_urls", max_new_urls): breached = True
+        
+        if breached:
+             log.warning("🛑 Circuit breaker triggered! Stopping crawler.")
+             await context.crawler.stop()
+             return
+    # -------------------------------------------------
+
+    # --- Block Resources (Performance & Bandwidth) ---
+    async def route_handler(route):
+        try:
+            req = route.request
+            resource_type = req.resource_type
+            req_url = req.url
+            
+            # Block heavy media and fonts
+            if resource_type in ['image', 'media', 'font', 'stylesheet']:
+                await route.abort()
+                return
+
+            # Block download scripts and binary files
+            if 'download.php' in req_url or 'imp=1' in req_url:
+                await route.abort()
+                return
+            
+            # Block binary extensions
+            if re.search(r'\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$', req_url, re.IGNORECASE):
+                await route.abort()
+                return
+
+            await route.continue_()
+        except Exception:
+            # Ignore route errors (e.g. page closed)
+            pass
+
+    await page.route("**/*", route_handler)
+    # -------------------------------------------------
+    
+    # Check Manual Stop
+    if DOMAIN and is_stopped_manually(DOMAIN, historised=False):
+         log.warning("🛑 Manual STOP detected via file. Stopping crawler...")
+         await context.crawler.stop()
+         return
+    
+    # --- Deduplication & "Double Check" (Redis) ---
+    is_existing = request.user_data.get("is_existing", False)
+    
+    if dedup_manager and not is_existing:
+        # Double check Redis before processing
+        is_new = await dedup_manager.add_url(url)
+        
+        if not is_new:
+            log.info(f"Skipping duplicate URL (Redis Double Check): {url}")
+            return
+            
+        # It is genuinely new
+        if stats_manager:
+             await stats_manager.increment("new_urls")
+             if max_new_urls and await stats_manager.check_threshold("new_urls", max_new_urls):
+                 log.warning("🛑 Max new URLs limit reached during processing. Stopping.")
+                 await context.crawler.stop()
+                 return
+    # -----------------------------------------------
+
+    # Limit Checking (Question Mark / Diez)
+    global count_question_mark, count_diez
+    if '?' in url:
+        count_question_mark += 1
+    if '#' in url:
+        count_diez += 1
+        
+    # Check Stops
+    should_stop = False
+    stop_reason = ""
+    
+    if not SKIP_QUESTION_MARK and count_question_mark >= LIMIT_QUESTION_MARK_DIEZ:
+         should_stop = True
+         stop_reason = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '?' reached."
+         
+    if not SKIP_DIEZ and count_diez >= LIMIT_QUESTION_MARK_DIEZ:
+         should_stop = True
+         stop_reason = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '#' reached."
+         
+    if should_stop:
+        log.warning(f"🛑 STOPPING CRAWLER: {stop_reason}")
+        await context.crawler.stop()
+        return
+
+    log.info(f"Processing {url} (Existing: {is_existing}) ...")
+
+    # --- UPDATE MODE VERIFICATION ---
+    if is_existing and stats_manager:
+        final_url = page.url
+        if final_url != url and final_url.rstrip('/') != url.rstrip('/'):
+            log.info(f"Redirect detected: {url} -> {final_url}")
+            await stats_manager.increment("redirects")
+            
+            if max_redirects and await stats_manager.check_threshold("redirects", max_redirects):
+                log.warning("🛑 Max redirects reached. Stopping.")
+                await context.crawler.stop()
+                return
+    # --------------------------------
+
+    # 1. Process the page (Scroll & Get Content)
+    content = await process_page(page, url, log)
+    
+    # 2. FRENCH LANGUAGE CHECK
+    is_main_site = (url == BASE_URL)
+    french_detection_method = None
+    is_enqueuing_links = False
+    
+    proxy_info = getattr(context, 'proxy_info', None)
+    proxy_url = proxy_info.url if proxy_info else None
+
+    try:
+        if is_main_site:
+            # Process normally and store the method
+            domain_fr.homepage = url
+            
+            # Check content
+            check_page = await domain_fr.check_page_if_french(content, is_check_url=False)
+            
+            if check_page["ok"]:
+                res = manage_french_detection_method(DOMAIN, check_page["method"])
+                if isinstance(res, Exception):
+                     log.error(f"Failed to store French detection method: {res}")
+                     await context.crawler.stop()
+                     return
+                french_detection_method = res
+                is_enqueuing_links = True
+            else:
+                # Content check failed, try URL/Redirect check
+                check_url_res = await DomainFR.check_url(url, track_redirect=False, proxy_url=proxy_url)
+                if check_url_res["ok"]:
+                     res = manage_french_detection_method(DOMAIN, check_url_res["method"])
+                     if isinstance(res, Exception):
+                         log.error(f"Failed to store French detection method: {res}")
+                         await context.crawler.stop()
+                         return
+                     french_detection_method = res
+                     is_enqueuing_links = True
+
+        else:
+            # Internal Page: Retrieve stored method
+            french_detection_method = manage_french_detection_method(DOMAIN)
+            
+            if isinstance(french_detection_method, Exception):
+                log.error(f"Failed to retrieve French detection method: {french_detection_method}")
+                await context.crawler.stop()
+                return
+            
+            # Create new instance with forced method
+            domain_fr_with_method = DomainFR(url, str(french_detection_method))
+            check_page = await domain_fr_with_method.check_page_if_french(content, is_check_url=False)
+            
+            if check_page["ok"]:
+                is_enqueuing_links = True
+            else:
+                # Fallback URL check
+                check_url_res = await DomainFR.check_url(url, track_redirect=False, proxy_url=proxy_url)
+                if check_url_res["ok"] and check_url_res["method"] == french_detection_method:
+                    is_enqueuing_links = True
+
+    except Exception as e:
+        log.error(f"Error during French detection: {e}")
+        is_enqueuing_links = False
+
+    # 3. Branching Logic based on Language Check
+    if is_enqueuing_links:
+        # === SUCCESS: Page is French ===
+        from crawlee.storages import Dataset
+        if CRAWLEE_STORAGE_NAME:
+            dataset = await Dataset.open(name=CRAWLEE_STORAGE_NAME)
+            await dataset.push_data({
+                "url": url,
+                "title": await page.title(),
+                "content": content
+            })
+        else:
+            await context.push_data({
+                "url": url,
+                "title": await page.title(),
+                "content": content 
+            })
+        
+        # Enqueue links (cleaned)
+        await context.enqueue_links(
+            globs=[f"{BASE_URL}/**/*"], 
+            transform_request_function=filter_request
+        )
+    else:
+        # === FAILURE: Page is NOT French ===
+        log.warning(f"Le site {url} n'est pas en Français.")
+        from crawlee.storages import Dataset
+        
+        # Format name properly
+        nfr_dataset_name = f"nfr-{DOMAIN}".replace('.', '-')
+        
+        dataset = await Dataset.open(name=nfr_dataset_name)
+        await dataset.push_data({"url": url, "content": content})
+        
+        # Note: We do NOT call enqueue_links here, effectively stopping this branch.
+
+async def error_handler(context: PlaywrightCrawlingContext) -> None:
+    request = context.request
+    log = context.log
+    page = context.page
+    
+    log.error(f"Request {request.url} failed with error messages: {request.error_messages}")
+    
+    # --- Circuit Breaker: Error Count ---
+    if stats_manager:
+        await stats_manager.increment("errors")
+        if max_errors and await stats_manager.check_threshold("errors", max_errors):
+            log.warning("🛑 Max errors reached. Stopping.")
+            await context.crawler.stop()
+    # ------------------------------------
+
+    errors_list = request.error_messages
+    
+    if page:
+        try:
+           # Try to get content for analysis
+           content = await process_page(page, request.loaded_url or request.url, log)
+           captcha_detected = await detect_captcha(page, content)
+           
+           if captcha_detected:
+               log.error(f"Captcha detected on {request.url} : {captcha_detected}")
+               
+        except Exception as e:
+           log.error(f"Error processing page for failure analysis: {e}")
+    
+    # Push to error dataset
+    try:
+        from crawlee.storages import Dataset
+        from urllib.parse import urlparse
+        domain_part = urlparse(request.url).netloc.replace("www.", "")
+        safe_domain_name = domain_part.replace('.', '-')
+        
+        error_dataset = await Dataset.open(name=f"error-{safe_domain_name}")
+        await error_dataset.push_data({
+            "id": request.id,
+            "url": request.url,
+            "errors": errors_list
+        })
+    except Exception as e:
+         log.error(f"Failed to push to error dataset: {e}")
+
 async def filter_request(request):
     """
     Filters requests and handles preliminary deduplication check.
+    Handles URL Cleaning (Point 1).
     Does NOT add to Redis here - that happens in request_handler for the "Double Check" pattern.
     """
     if isinstance(request, dict):
@@ -346,18 +414,17 @@ async def filter_request(request):
 
     if not url: return None
         
-    # 1. Clean URL (Standard cleaning: UTMs, etc.)
-    # In Node, this was "toAlwaysRemove". We reuse PARAMS_TO_REMOVE here.
-    # We pass skip_question_mark=True to force processing of the query params for this step.
+    # 1. Standard Cleaning (Always remove specific params)
+    # We pass skip_question_mark=True to force query string parsing/rebuilding in process_url
     cleaned_url = process_url(url, skip_question_mark=True, skip_diez=False, to_remove=PARAMS_TO_REMOVE)
 
-    # 2. Logic for Skip Flags (Modifying/Cleaning the URL instead of dropping)
-    # If SKIP flags are set, we process the cleaned_url further
+    # 2. Logic for Skip Flags (Point 1: Clean instead of Drop)
+    # If SKIP flags are set, we process the cleaned_url further to strip query/hash
     if SKIP_QUESTION_MARK or SKIP_DIEZ:
         cleaned_url = process_url(
             cleaned_url,
-            SKIP_QUESTION_MARK,
-            SKIP_DIEZ,
+            skip_question_mark=SKIP_QUESTION_MARK,
+            skip_diez=SKIP_DIEZ,
             to_keep=TO_KEEP_CUSTOM,
             to_remove=TO_REMOVE_CUSTOM
         )
@@ -370,16 +437,16 @@ async def filter_request(request):
             try:
                 request.url = cleaned_url
             except AttributeError:
-                pass # Some request objects might be immutable
+                pass 
         url = cleaned_url
 
     parsed = urlparse(url)
     
     # Check extensions
     if IGNORED_EXTENSIONS.match(url):
-        return None  # Changed from False to None for safety
+        return None
     
-    # Check forbidden params (Blocking)
+    # Check forbidden params (Blocking entire URL if present)
     query = parse_qs(parsed.query)
     for param in FORBIDDEN_PARAMS:
         if param in query:
@@ -389,37 +456,28 @@ async def filter_request(request):
     if '/quotation/cart/' in url or '/cart/cart/' in url or '/catalog/product_compare/' in url:
         return None
         
-    # Check base64 long strings (often dynamic infinite urls)
+    # Check base64 long strings
     if re.search(r'/url/[a-zA-Z0-9]{20,}', url):
         return None
 
     # --- Redis Deduplication Check ---
-    # We check if it is KNOWN. If it is, we skip enqueueing.
-    # We do NOT add it here. The addition happens in request_handler (Processing Time).
-    # This prevents queue bloat while maintaining the double-check logic.
     if dedup_manager:
-        # Check if we've seen this URL (either in history, seed, or this session)
         is_known = await dedup_manager.is_known(url)
-        
         if is_known:
-             # Already crawled/known -> Skip
              return None
     # ---------------------------------
 
-    # Construct dict for Crawlee
+    # Construct dict for Crawlee if needed
     if not isinstance(request, dict):
-         # Try to convert to dict if possible, or construct shallow copy
-         # Crawlee Python Request objects might not have to_dict, so we manually build minimal dict
          return {
              "url": url,
              "unique_key": getattr(request, 'unique_key', url),
              "method": getattr(request, 'method', 'GET'),
              "payload": getattr(request, 'payload', None),
              "headers": getattr(request, 'headers', None),
-             "user_data": {"is_existing": False} # Mark as discovered/new
+             "user_data": {"is_existing": False}
          }
     
-    # Ensure user_data indicates this is a new URL
     if 'user_data' not in request:
         request['user_data'] = {}
     request['user_data']['is_existing'] = False

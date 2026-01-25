@@ -554,3 +554,37 @@ def process_url(
     except Exception as e:
         logger.error(f"Error processing URL {url}: {e}")
         return url
+
+    def manage_french_detection_method(
+        name: str,
+        check_french_method: Optional[str] = None
+    ) -> Union[str, Exception]:
+        """
+        Manages French language detection method storage for domains.
+        Stores/Retrieves the method that successfully detected the language (e.g. "langHtml").
+        """
+        try:
+            storage_path = f"./storage/miscellaneous/{name}"
+            file_path = f"{storage_path}/{name}.json"
+            
+            # Create directory if needed
+            if not os.path.exists(storage_path):
+                os.makedirs(storage_path, exist_ok=True)
+
+            # If checkFrenchMethod is provided, we want to store it
+            if check_french_method:
+                with open(file_path, "w", encoding='utf-8') as f:
+                    json.dump({"method": check_french_method}, f, indent=2)
+                return check_french_method
+
+            # If no checkFrenchMethod provided, try to read existing file
+            if os.path.exists(file_path):
+                with open(file_path, "r", encoding='utf-8') as f:
+                    content = json.load(f)
+                    return content.get("method")
+
+            # If no file and no method provided, return Exception (to be handled by caller)
+            return Exception(f"No French detection method stored for domain {name}")
+
+        except Exception as e:
+            return e
