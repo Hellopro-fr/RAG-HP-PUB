@@ -449,6 +449,16 @@ async def main():
             except Exception as e:
                 logger.error(f"Failed to write callback payload: {e}")
         
+            # Exit with error code if crawler stopped due to an error condition
+            # This ensures the failure webhook is sent instead of success webhook
+            error_stop_reasons = [
+                "stalledZeroProgress", "stoppedManually", "limitErrors", 
+                "limitRedirects", "limitNewUrls", "limitQuestionMark", "limitDiez"
+            ]
+            if routes.STOP_REASON in error_stop_reasons:
+                logger.warning(f"Exiting with error code due to: {routes.STOP_REASON}")
+                sys.exit(1)
+        
     except Exception as e:
         logger.error(f"Crawl failed: {e}")
         sys.exit(1)

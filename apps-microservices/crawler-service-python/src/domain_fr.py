@@ -28,7 +28,7 @@ class DomainFR:
         """
         # Base regex for handling conditional comments and HTML tag (Legacy IE stuff)
         # Ported from TS: (?:<!--\[if[^>]*>(?:<!--)?[^<]*<html[^>]*>(?:(?:<!--)?<!\[endif\]-->)?[^<]*)*(?:<!--\[if[^>]*!\\(?ie\\)?\\]><!-->)
-        regex_lang_part = r"(?:<!--\[if[^>]*>(?:<!--)?[^<]*<html[^>]*>(?:(?:<!--)?<!\[endif\]-->)?[^<]*)*(?:<!--\[if[^>]*!\\(?ie\\)?\\]><!-->)"
+        regex_lang_part = r"(?:<!--\[if[^>]*>(?:<!--)?[^<]*<html[^>]*>(?:(?:<!--)?<!\[endif\]-->)?[^<]*)*(?:<!--\[if[^>]*!\(?ie\)?\\]><!-->)"
         
         # Match lang attribute in HTML tag
         # Ported from TS: \s*<html[^>]*\s(?:xml:)?lang=["']?([a-zA-Z-]+)["']?
