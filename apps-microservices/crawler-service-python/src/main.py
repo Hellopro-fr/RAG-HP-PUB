@@ -21,7 +21,7 @@ from redis.asyncio import Redis
 
 import routes
 from state import DedupManager, StatsManager
-from utils import get_system_stats, get_urls_crawled, update_urls_crawled, drop_dataset, is_stopped_manually, attach_file_logger, ensure_alias_symlink, load_dataset_urls_generator, reclaim_failed_requests
+from utils import get_system_stats, get_urls_crawled, update_urls_crawled, drop_dataset, is_stopped_manually, attach_file_logger, ensure_alias_symlink, load_dataset_urls_generator, reclaim_failed_requests, sanitize_queue_on_disk
 
 # Configure Logging
 logging.basicConfig(
@@ -234,6 +234,17 @@ async def main():
     if history_urls:
         logger.info(f"Seeding {len(history_urls)} historical URLs into Redis Deduplication...")
         await dedup_manager.load_from_list(history_urls)
+
+    # --- QUEUE SANITIZATION ON DISK (Point 11) ---
+    # Runs before opening the queue to ensure clean state
+    if routes.SKIP_QUESTION_MARK or routes.SKIP_DIEZ:
+        sanitize_queue_on_disk(
+            crawlee_storage_name,
+            routes.SKIP_QUESTION_MARK,
+            routes.SKIP_DIEZ,
+            to_keep,
+            to_remove
+        )
 
     # Initialize Request Queue
     request_queue = await RequestQueue.open(name=crawlee_storage_name)

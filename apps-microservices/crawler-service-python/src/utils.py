@@ -648,3 +648,75 @@ async def reclaim_failed_requests(queue_name: str, request_queue: RequestQueue):
     
     # Drop the error dataset after reclaiming
     await drop_dataset(error_dataset_name)
+
+def sanitize_queue_on_disk(
+    queue_name: str,
+    skip_question_mark: bool,
+    skip_diez: bool,
+    to_keep: list[str] = None,
+    to_remove: list[str] = None
+):
+    """
+    Parse and modify JSON files from request queues to clean URLs.
+    This runs 'offline' before the queue is loaded into memory by Crawlee.
+    """
+    storage_path = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
+    queue_path = os.path.join(storage_path, "request_queues", queue_name)
+
+    if not os.path.exists(queue_path):
+        return
+
+    logger.info(f"Sanitizing queue on disk: {queue_path}")
+    count = 0
+
+    try:
+        # os.scandir is efficient for iterating directories
+        with os.scandir(queue_path) as it:
+            for entry in it:
+                if entry.is_file() and entry.name.endswith('.json'):
+                    try:
+                        # Read file
+                        with open(entry.path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+
+                        original_url = data.get('url')
+                        if not original_url:
+                            continue
+
+                        # Process URL
+                        new_url = process_url(
+                            original_url,
+                            skip_question_mark,
+                            skip_diez,
+                            to_keep,
+                            to_remove
+                        )
+
+                        if new_url != original_url:
+                            # Update outer URL
+                            data['url'] = new_url
+                            
+                            # Update nested json string if present (Crawlee internal)
+                            if 'json' in data:
+                                try:
+                                    inner = json.loads(data['json'])
+                                    if 'url' in inner:
+                                        inner['url'] = new_url
+                                        # Re-serialize inner JSON
+                                        data['json'] = json.dumps(inner)
+                                except Exception:
+                                    pass # Ignore inner parsing errors if format differs
+
+                            # Write back modified content
+                            with open(entry.path, 'w', encoding='utf-8') as f:
+                                json.dump(data, f, indent=4)
+                            
+                            count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to sanitize file {entry.name}: {e}")
+        
+        if count > 0:
+            logger.info(f"Sanitized {count} URLs in queue on disk.")
+
+    except Exception as e:
+        logger.error(f"Error iterating queue directory: {e}")
