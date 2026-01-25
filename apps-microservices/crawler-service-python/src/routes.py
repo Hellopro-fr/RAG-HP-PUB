@@ -46,19 +46,69 @@ PARAMS_TO_REMOVE = [
     "remove_from_wishlist", "remove_wishlist",
     "remove_compare", "remove_item",
     "quantity", "qty",
+
     # === TRACKING UTM (Marketing) ===
     "utm_source", "utm_medium", "utm_campaign",
     "utm_content", "utm_term", "utm_id",
     "utm_referrer", "utm_name",
+
     # === FACEBOOK & META ===
-    "fbclid", "fb_action_ids", "fb_action_types", "fb_source", "fb_ref",
+    "fbclid", "fb_action_ids", "fb_action_types",
+    "fb_source", "fb_ref",
+
     # === GOOGLE ADS & ANALYTICS ===
-    "gclid", "gclsrc", "dclid", "srsltid", "utmcct", "utmcsr",
-    "utmcmd", "utmccn", "_ga", "_gid", "_gat",
-    # === OTHERS ===
-    "mc_cid", "mc_eid", "twclid", "li_fat_id", "msclkid",
-    "igshid", "tt_medium", "tt_content", "_wpnonce", "sessionid", 
-    "PHPSESSID", "sid", "aff_id", "click_id", "timestamp", "random", "nocache"
+    "gclid", "gclsrc", "dclid",
+    "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
+    "_ga", "_gid", "_gat",
+
+    # === HUBSPOT ===
+    "hsa_acc", "hsa_cam", "hsa_grp",
+    "hsa_ad", "hsa_src", "hsa_mt",
+    "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
+    "hsCtaTracking", "hsCta",
+
+    # === MAILCHIMP ===
+    "mc_cid", "mc_eid",
+
+    # === SOCIAL MEDIA TRACKING ===
+    "twclid", "li_fat_id", "msclkid",
+    "igshid", "tt_medium", "tt_content",
+
+    # === WORDPRESS ===
+    "_wpnonce", "preview", "preview_id",
+    "preview_nonce", "et_blog",
+
+    # === PRESTASHOP ===
+    "id_product", "id_category", "pid",
+    "controller", "id_product_attribute",
+    "isolang", "id_lang",
+
+    # === SHOPIFY ===
+    "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
+    "pr_ref_pid", "pr_seq",
+    "variant", "selling_plan",
+
+    # === MAGENTO ===
+    "SID", "___store", "___from_store",
+
+    # === SESSION & TRACKING ===
+    "sessionid", "session_id", "PHPSESSID",
+    "sid", "s_id",
+    "_gl", "ref", "referrer",
+
+    # === AFFILIATE & MARKETING ===
+    "aff_id", "affiliate", "partner",
+    "coupon", "discount", "promo",
+    "voucher",
+
+    # === AUTRES TRACKING ===
+    "click_id", "transaction_id",
+    "source", "medium", "campaign",
+
+    # === FILTRES SOUVENT INUTILES ===
+    "view", "mode", "display",
+    "timestamp", "random", "nocache",
+    "order", "sort", "resultsPerPage", "productListView", # Added for deduplication
 ]
 
 router = Router()
@@ -147,6 +197,19 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
          log.warning("🛑 Manual STOP detected via file. Stopping crawler...")
          await context.crawler.stop()
          return
+
+    # --- Cookie Injection (Point 5) ---
+    if DOMAIN:
+        try:
+            await page.context.add_cookies([{
+                "name": "cookieConsent",
+                "value": "accepted",
+                "domain": DOMAIN,
+                "path": "/"
+            }])
+        except Exception as e:
+            log.warning(f"Failed to inject cookie: {e}")
+    # ----------------------------------
     
     # --- Deduplication & "Double Check" (Redis) ---
     is_existing = request.user_data.get("is_existing", False)
