@@ -8,6 +8,7 @@ from playwright.async_api import Page
 import logging
 import json
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from typing import Optional
 
 # Imports for Reclaim Logic
 from crawlee.storages import Dataset, RequestQueue
