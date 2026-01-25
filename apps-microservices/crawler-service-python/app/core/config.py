@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -12,6 +13,9 @@ class Settings(BaseSettings):
     
     # Redis configuration
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379")
+    
+    # Proxy configuration
+    APIFY_PROXY: Optional[str] = os.getenv("APIFY_PROXY", None)
     
     class Config:
         env_file = ".env"
