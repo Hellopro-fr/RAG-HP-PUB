@@ -68,13 +68,14 @@ async def heartbeat_task(redis_url: str, job_id: str, domain: str, hostname: str
     finally:
         await redis.aclose()
 
-async def monitor_task(crawler: PlaywrightCrawler):
+async def monitor_task(crawler: PlaywrightCrawler, stop_reason_setter):
     """
     Monitors crawler health and progress.
-    Replaces the complex 'checkQueue' logic from Node.js with a simple stall detector.
+    Stops the crawler if it stalls with zero progress.
     """
     last_finished = 0
     stalled_checks = 0
+    MAX_STALL_CHECKS = 6  # 6 checks * 30s = 3 minutes
     
     while True:
         await asyncio.sleep(30)
@@ -89,12 +90,23 @@ async def monitor_task(crawler: PlaywrightCrawler):
             
             if finished == last_finished:
                 stalled_checks += 1
-                if stalled_checks >= 10: # 5 minutes without progress
+                
+                # Critical stall: No progress at all after 3 minutes
+                if stalled_checks >= MAX_STALL_CHECKS and total == 0:
+                    logger.error(f"🛑 CRITICAL: Crawler stalled with ZERO pages processed after {MAX_STALL_CHECKS * 30}s. Stopping.")
+                    stop_reason_setter("stalledZeroProgress")
+                    crawler.stop()
+                    return
+                
+                # Regular stall warning (but crawler is making some progress)
+                if stalled_checks >= 10:  # 5 minutes
                     logger.warning(f"⚠️ Crawler might be stalled! No progress for 5 minutes. (Processed: {total})")
             else:
                 stalled_checks = 0
                 last_finished = finished
                 
+        except asyncio.CancelledError:
+            return
         except Exception as e:
             logger.error(f"Monitor task error: {e}")
 
@@ -369,7 +381,7 @@ async def main():
                 try:
                     # Check dataset size
                     dataset = await Dataset.open(name=crawlee_storage_name)
-                    data = await dataset.get_data(fields=['url'])
+                    data = await dataset.get_data()
                     current_count = len(data.items)
                     
                     if current_count >= 5000:
@@ -384,8 +396,12 @@ async def main():
         # Assign error handler manually
         crawler.failed_request_handler = routes.error_handler
         
+        # Helper to set stop reason from monitor task
+        def set_stop_reason(reason: str):
+            routes.STOP_REASON = reason
+        
         # Start Monitor Task
-        mon_task = asyncio.create_task(monitor_task(crawler))
+        mon_task = asyncio.create_task(monitor_task(crawler, set_stop_reason))
 
         # Run
         await crawler.run()
