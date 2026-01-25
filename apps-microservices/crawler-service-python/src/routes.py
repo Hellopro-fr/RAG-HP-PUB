@@ -129,6 +129,9 @@ TO_KEEP_CUSTOM: list[str] = []
 count_question_mark = 0
 count_diez = 0
 
+# Global Stop Reason (Point 18)
+STOP_REASON = ""
+
 # Managers (Injected from main.py)
 dedup_manager: Optional['DedupManager'] = None
 stats_manager: Optional['StatsManager'] = None
@@ -141,6 +144,9 @@ domain_fr = DomainFR("")
 
 @router.default_handler
 async def request_handler(context: PlaywrightCrawlingContext) -> None:
+    # Use global STOP_REASON to communicate with main.py
+    global STOP_REASON, count_question_mark, count_diez
+
     page = context.page
     request = context.request
     log = context.log
@@ -195,6 +201,7 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     # Check Manual Stop
     if DOMAIN and is_stopped_manually(DOMAIN, historised=False):
          log.warning("🛑 Manual STOP detected via file. Stopping crawler...")
+         STOP_REASON = "stoppedManually"
          await context.crawler.stop()
          return
 
@@ -232,7 +239,6 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     # -----------------------------------------------
 
     # Limit Checking (Question Mark / Diez)
-    global count_question_mark, count_diez
     if '?' in url:
         count_question_mark += 1
     if '#' in url:
@@ -240,18 +246,22 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         
     # Check Stops
     should_stop = False
-    stop_reason = ""
+    stop_reason_log = ""
     
     if not SKIP_QUESTION_MARK and count_question_mark >= LIMIT_QUESTION_MARK_DIEZ:
          should_stop = True
-         stop_reason = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '?' reached."
+         stop_reason_log = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '?' reached."
+         STOP_REASON = "limitQuestionMark"
          
-    if not SKIP_DIEZ and count_diez >= LIMIT_QUESTION_MARK_DIEZ:
+    # Logic in Node: if skipdiez is FALSE, we count them. If limit reached, we stop.
+    # The elif here ensures we don't overwrite the reason if both trigger at once (priority to ?)
+    elif not SKIP_DIEZ and count_diez >= LIMIT_QUESTION_MARK_DIEZ:
          should_stop = True
-         stop_reason = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '#' reached."
+         stop_reason_log = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '#' reached."
+         STOP_REASON = "limitDiez"
          
     if should_stop:
-        log.warning(f"🛑 STOPPING CRAWLER: {stop_reason}")
+        log.warning(f"🛑 STOPPING CRAWLER: {stop_reason_log}")
         await context.crawler.stop()
         return
 
