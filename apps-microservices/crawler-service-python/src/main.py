@@ -220,9 +220,9 @@ async def main():
         logger.info("Dropping datasets and request queue...")
         try:
            # We use our custom drop_dataset logic
-           drop_dataset(domain)
-           drop_dataset(f"error-{domain}")
-           drop_dataset(f"nfr-{domain}")
+           await drop_dataset(domain)
+           await drop_dataset(f"error-{domain}")
+           await drop_dataset(f"nfr-{domain}")
            is_historised = True
         except Exception as e:
            logger.warning(f"Failed to drop datasets: {e}")

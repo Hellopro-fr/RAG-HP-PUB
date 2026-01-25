@@ -171,33 +171,14 @@ def get_system_stats():
         "top_processes": top_processes
     }
 
-def drop_dataset(name: str):
+async def drop_dataset(name: str):
     """
     Drops (deletes) an existing dataset by its name.
     Useful when you need to start fresh before a new crawling session.
     """
     try:
-        # In Crawlee Python, we might need to access storage client directly or just remove the folder.
-        # For now, let's assume we can't easily drop via SDK static method (API differs).
-        # We will remove the directory manually if it's local storage.
-        storage_path = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
-        dataset_path = os.path.join(storage_path, "datasets", name)
-        queue_path = os.path.join(storage_path, "request_queues", name)
-        
-        if os.path.exists(dataset_path):
-            import shutil
-            if os.path.islink(dataset_path):
-                os.unlink(dataset_path)
-            else:
-                shutil.rmtree(dataset_path)
-        
-        if os.path.exists(queue_path):
-            import shutil
-            if os.path.islink(queue_path):
-                os.unlink(queue_path)
-            else:
-                shutil.rmtree(queue_path)
-            
+        dataset_to_drop = await Dataset.open(name=name)
+        await dataset_to_drop.drop()
     except Exception as e:
         logger.error(f"Error dropDataset: {e}")
 
@@ -500,8 +481,8 @@ def process_url(
     url: str,
     skip_question_mark: bool,
     skip_diez: bool,
-    to_keep: list[str] = None,
-    to_remove: list[str] = None
+    to_keep: Optional[list[str]] = None,
+    to_remove: Optional[list[str]] = None
 ) -> str:
     """
     Process a URL to filter query parameters and remove hash fragments.
@@ -599,7 +580,7 @@ async def get_scraping_data(name: str):
     Wraps Dataset.open(name).get_data() to match Node.js helper style.
     """
     try:
-        dataset = await Dataset.open(name)
+        dataset = await Dataset.open(name=name)
         return await dataset.get_data()
     except Exception as e:
         # If dataset doesn't exist or error, return None
@@ -636,7 +617,6 @@ async def reclaim_failed_requests(queue_name: str, request_queue: RequestQueue):
             if request:
                 # Reset counters
                 request.retry_count = 0
-                request.error_messages = []
                 request.handled_at = None # Clear handled status
                 
                 # Reclaim (move back to pending)
@@ -654,8 +634,8 @@ def sanitize_queue_on_disk(
     queue_name: str,
     skip_question_mark: bool,
     skip_diez: bool,
-    to_keep: list[str] = None,
-    to_remove: list[str] = None
+    to_keep: Optional[list[str]] = None,
+    to_remove: Optional[list[str]] = None
 ):
     """
     Parse and modify JSON files from request queues to clean URLs.
