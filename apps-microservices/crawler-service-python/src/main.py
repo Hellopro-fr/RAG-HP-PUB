@@ -300,6 +300,11 @@ async def main():
     if crawl_mode != "generate_data": # Just in case we support generate_data later
          await reclaim_failed_requests(crawlee_storage_name, request_queue)
 
+    # Safety Reseed: If queue is empty after reclaim (e.g., initial request was lost), re-add seed.
+    if await request_queue.is_empty():
+        logger.warning("Queue is empty after reclaim. Re-seeding start URL...")
+        await request_queue.add_request(Request.from_url(site, user_data={"is_existing": False}))
+
     # Start Heartbeat
     hostname = os.uname().nodename
     hb_task = asyncio.create_task(heartbeat_task(redis_url, job_id, domain, hostname))
@@ -309,6 +314,11 @@ async def main():
     if proxy_apify_password:
         proxy_url = f"http://auto:{proxy_apify_password}@proxy.apify.com:8000"
         proxy_configuration = ProxyConfiguration(proxy_urls=[proxy_url])
+        # Log proxy URL (mask password for security)
+        masked_proxy = f"http://auto:****@proxy.apify.com:8000"
+        logger.info(f"🌐 Proxy configured: {masked_proxy}")
+    else:
+        logger.warning("⚠️ No proxy configured. Running without proxy (direct connection).")
 
     try:
         # Initialize Crawler
@@ -332,10 +342,10 @@ async def main():
             "max_requests_per_crawl": param_per_crawl if param_per_crawl > 0 else None,
             # Point 8: Rate Limiting
             "concurrency_settings": ConcurrencySettings(max_tasks_per_minute=param_per_minute),
-            # Point 12: Session Pool
             "use_session_pool": True,
             "browser_pool": browser_pool,
             "respect_robots_txt_file": True,
+            "max_request_retries": 5,  # Allow more retries for transient blocks
         }
 
         if proxy_configuration:

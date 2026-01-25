@@ -173,6 +173,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
             log.warning(f"Session retired due to blocked status code: {status}")
             if context.session:
                 context.session.retire()
+            # Raise an error to trigger Crawlee's retry logic for this request
+            raise Exception(f"Request blocked with status {status}. Retrying with new session.")
 
     # --- Check Circuit Breaker (Global thresholds) ---
     if stats_manager:
