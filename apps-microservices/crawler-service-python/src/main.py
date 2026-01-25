@@ -9,8 +9,8 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Updated imports to include SkippedReason, Context
-from crawlee import Request, SkippedReason
+# Updated imports to include ConcurrencySettings
+from crawlee import Request, SkippedReason, ConcurrencySettings
 from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
 from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator
@@ -117,6 +117,8 @@ async def main():
     
     # Added paramPerCrawl (Point 7)
     parser.add_argument("--percrawl", default=500, type=int)
+    # Added paramPerMinute (Point 8)
+    parser.add_argument("--perminute", default=100, type=int)
     
     # Add new params for URL cleaning (comma separated)
     parser.add_argument("--tokeep", default="")
@@ -166,6 +168,8 @@ async def main():
 
     # Limits Configuration
     param_per_crawl = args.percrawl
+    # Point 8: paramPerMinute
+    param_per_minute = args.perminute
 
     logger.info(f"Starting crawler for {domain} ({site}) in {storage_path} (Mode: {crawl_mode})")
 
@@ -320,6 +324,8 @@ async def main():
             request_handler=routes.router,
             request_manager=request_queue,
             max_requests_per_crawl=param_per_crawl if param_per_crawl > 0 else None,
+            # Point 8: Rate Limiting
+            concurrency_settings=ConcurrencySettings(max_tasks_per_minute=param_per_minute),
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
             respect_robots_txt_file=True,
