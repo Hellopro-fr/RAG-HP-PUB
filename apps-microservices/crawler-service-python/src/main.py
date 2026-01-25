@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Updated imports to include ConcurrencySettings
 from crawlee import Request, SkippedReason, ConcurrencySettings
-from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
+from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext, PlaywrightPreNavCrawlingContext
 from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator
 from crawlee.proxy_configuration import ProxyConfiguration
@@ -32,9 +32,6 @@ logger = logging.getLogger("main")
 
 # Load Env
 load_dotenv()
-
-# Point 12: Blocked Status Codes
-BLOCKED_STATUS_CODES = [401, 403, 429, 404, 410, 423, 502, 500, 503]
 
 async def heartbeat_task(redis_url: str, job_id: str, domain: str, hostname: str):
     """
@@ -329,53 +326,49 @@ async def main():
         browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
 
         # Initialize Crawler 
-        crawler = PlaywrightCrawler(
-            request_handler=routes.router,
-            request_manager=request_queue,
-            max_requests_per_crawl=param_per_crawl if param_per_crawl > 0 else None,
+        crawler_args = {
+            "request_handler": routes.router,
+            "request_manager": request_queue,
+            "max_requests_per_crawl": param_per_crawl if param_per_crawl > 0 else None,
             # Point 8: Rate Limiting
-            concurrency_settings=ConcurrencySettings(max_tasks_per_minute=param_per_minute),
+            "concurrency_settings": ConcurrencySettings(max_tasks_per_minute=param_per_minute),
             # Point 12: Session Pool
-            use_session_pool=True,
-            browser_pool=browser_pool,
-            proxy_configuration=proxy_configuration,
-            respect_robots_txt_file=True,
-        )
+            "use_session_pool": True,
+            "browser_pool": browser_pool,
+            "respect_robots_txt_file": True,
+        }
+
+        if proxy_configuration:
+            crawler_args["proxy_configuration"] = proxy_configuration
+
+        crawler = PlaywrightCrawler(**crawler_args)
+        
+        # Inject crawler instance into routes for manual stop control
+        routes.crawler_instance = crawler
         
         # Hook for skipped requests (Robots.txt logging)
         @crawler.on_skipped_request
         async def on_skipped_request(url: str, reason: SkippedReason):
-            if reason == SkippedReason.ROBOTS_TXT:
+            if reason == 'robots_txt':
                 logger.info(f"Bloqué par robots.txt : {url}")
 
         # Hook for Safety Limit (Point 7 - 5000 items)
         @crawler.pre_navigation_hook
-        async def check_global_safety_limit(context: PlaywrightCrawlingContext):
+        async def check_global_safety_limit(context: PlaywrightPreNavCrawlingContext):
             if not break_limit:
                 try:
                     # Check dataset size
-                    dataset = await Dataset.open(crawlee_storage_name)
+                    dataset = await Dataset.open(name=crawlee_storage_name)
                     info = await dataset.get_info()
                     # If we have reached the limit of 5000 items (globally in dataset)
                     if info and info.item_count >= 5000:
                         logger.warning("We have reached the limit of 5000 entries. The crawler will be stopped.")
                         # Point 18: Error Code Granularity
                         routes.STOP_REASON = "limitCrawl"
-                        await context.crawler.stop()
+                        crawler.stop()
                 except Exception as e:
                     logger.error(f"Error checking safety limit: {e}")
 
-        # Hook for Session Rotation on Blocked Status (Point 12)
-        @crawler.post_navigation_hook
-        async def check_blocked_status(context: PlaywrightCrawlingContext):
-            # Playwright response might be None if navigation failed completely
-            response = context.response
-            if response:
-                status = response.status
-                if status in BLOCKED_STATUS_CODES:
-                    logger.warning(f"Session retired due to blocked status code: {status}")
-                    if context.session:
-                        await context.session.retire()
 
         # Assign error handler manually
         crawler.failed_request_handler = routes.error_handler

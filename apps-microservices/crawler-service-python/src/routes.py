@@ -1,12 +1,13 @@
 from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
 from crawlee.router import Router
-from crawlee import EnqueueStrategy
+from crawlee import EnqueueStrategy, RequestOptions
 import re
+import os
 from urllib.parse import urlparse, parse_qs
 import logging
 from utils import process_page, is_stopped_manually, process_url, manage_french_detection_method, detect_captcha
 from domain_fr import DomainFR
-from typing import Optional, TYPE_CHECKING, Dict, Any
+from typing import Optional, TYPE_CHECKING, Dict, Any, Literal
 
 if TYPE_CHECKING:
     from state import DedupManager, StatsManager
@@ -121,7 +122,7 @@ BYPASS_QUESTION_MARK = False
 BYPASS_DIEZ = False
 
 LIMIT_QUESTION_MARK_DIEZ = 50
-DOMAIN = ""
+DOMAIN = os.getenv("DOMAIN", "")
 BASE_URL = ""
 CRAWLEE_STORAGE_NAME = ""
 
@@ -143,13 +144,19 @@ max_errors: Optional[int] = None
 max_redirects: Optional[int] = None
 max_new_urls: Optional[int] = None
 
+# Crawler Instance (Injected from main.py)
+crawler_instance: Optional[PlaywrightCrawler] = None
+
 # Initialize DomainFR logic
 domain_fr = DomainFR("")
+
+# Point 12: Blocked Status Codes
+BLOCKED_STATUS_CODES = [401, 403, 429, 404, 410, 423, 502, 500, 503]
 
 @router.default_handler
 async def request_handler(context: PlaywrightCrawlingContext) -> None:
     # Use global STOP_REASON to communicate with main.py
-    global STOP_REASON, count_question_mark, count_diez
+    global STOP_REASON, count_question_mark, count_diez, crawler_instance
 
     page = context.page
     request = context.request
@@ -158,6 +165,15 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     # Use loaded_url to ensure we check the actual page we are on (handles redirects)
     url = request.loaded_url or request.url
     
+    # --- Check Blocked Status (Point 12) ---
+    response = context.response
+    if response:
+        status = response.status
+        if status in BLOCKED_STATUS_CODES:
+            log.warning(f"Session retired due to blocked status code: {status}")
+            if context.session:
+                context.session.retire()
+
     # --- Check Circuit Breaker (Global thresholds) ---
     if stats_manager:
         # Check all relevant thresholds
@@ -168,7 +184,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         
         if breached:
              log.warning("🛑 Circuit breaker triggered! Stopping crawler.")
-             await context.crawler.stop()
+             if crawler_instance:
+                 crawler_instance.stop()
              return
     # -------------------------------------------------
 
@@ -206,7 +223,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     if DOMAIN and is_stopped_manually(DOMAIN, historised=False):
          log.warning("🛑 Manual STOP detected via file. Stopping crawler...")
          STOP_REASON = "stoppedManually"
-         await context.crawler.stop()
+         if crawler_instance:
+             crawler_instance.stop()
          return
 
     # --- Cookie Injection (Point 5) ---
@@ -238,7 +256,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
              await stats_manager.increment("new_urls")
              if max_new_urls and await stats_manager.check_threshold("new_urls", max_new_urls):
                  log.warning("🛑 Max new URLs limit reached during processing. Stopping.")
-                 await context.crawler.stop()
+                 if crawler_instance:
+                     crawler_instance.stop()
                  return
     # -----------------------------------------------
 
@@ -265,7 +284,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
          
     if should_stop:
         log.warning(f"🛑 STOPPING CRAWLER: {stop_reason_log}")
-        await context.crawler.stop()
+        if crawler_instance:
+            crawler_instance.stop()
         return
 
     log.info(f"Processing {url} (Existing: {is_existing}) ...")
@@ -279,7 +299,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
             
             if max_redirects and await stats_manager.check_threshold("redirects", max_redirects):
                 log.warning("🛑 Max redirects reached. Stopping.")
-                await context.crawler.stop()
+                if crawler_instance:
+                    crawler_instance.stop()
                 return
     # --------------------------------
 
@@ -306,7 +327,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
                 res = manage_french_detection_method(DOMAIN, check_page["method"])
                 if isinstance(res, Exception):
                      log.error(f"Failed to store French detection method: {res}")
-                     await context.crawler.stop()
+                     if crawler_instance:
+                         crawler_instance.stop()
                      return
                 french_detection_method = res
                 is_enqueuing_links = True
@@ -317,7 +339,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
                      res = manage_french_detection_method(DOMAIN, check_url_res["method"])
                      if isinstance(res, Exception):
                          log.error(f"Failed to store French detection method: {res}")
-                         await context.crawler.stop()
+                         if crawler_instance:
+                             crawler_instance.stop()
                          return
                      french_detection_method = res
                      is_enqueuing_links = True
@@ -328,7 +351,8 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
             
             if isinstance(french_detection_method, Exception):
                 log.error(f"Failed to retrieve French detection method: {french_detection_method}")
-                await context.crawler.stop()
+                if crawler_instance:
+                    crawler_instance.stop()
                 return
             
             # Create new instance with forced method
@@ -351,7 +375,7 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     if is_enqueuing_links:
         # === SUCCESS: Page is French ===
         from crawlee.storages import Dataset
-        if CRAWLEE_STORAGE_NAME:
+        if CRAWLEE_STORAGE_NAME != "":
             dataset = await Dataset.open(name=CRAWLEE_STORAGE_NAME)
             await dataset.push_data({
                 "url": url,
@@ -367,7 +391,7 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         
         # Enqueue links (cleaned)
         await context.enqueue_links(
-            strategy=EnqueueStrategy.SAME_DOMAIN,
+            strategy='same-domain',
             transform_request_function=filter_request
         )
     else:
@@ -383,22 +407,29 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         
         # Note: We do NOT call enqueue_links here, effectively stopping this branch.
 
-async def error_handler(context: PlaywrightCrawlingContext) -> None:
+async def error_handler(context: PlaywrightCrawlingContext, error: Exception) -> None:
     request = context.request
     log = context.log
     page = context.page
     
-    log.error(f"Request {request.url} failed with error messages: {request.error_messages}")
+    # Accumulate errors in user_data since Request object doesn't have error_messages attribute
+    errors_list = request.user_data.get("error_messages")
+    if not isinstance(errors_list, list):
+        errors_list = []
+    
+    errors_list.append(str(error))
+    request.user_data["error_messages"] = errors_list
+
+    log.error(f"Request {request.url} failed with error messages: {errors_list}")
     
     # --- Circuit Breaker: Error Count ---
     if stats_manager:
         await stats_manager.increment("errors")
         if max_errors and await stats_manager.check_threshold("errors", max_errors):
             log.warning("🛑 Max errors reached. Stopping.")
-            await context.crawler.stop()
+            if crawler_instance:
+                crawler_instance.stop()
     # ------------------------------------
-
-    errors_list = request.error_messages
     
     if page:
         try:
@@ -428,7 +459,7 @@ async def error_handler(context: PlaywrightCrawlingContext) -> None:
     except Exception as e:
          log.error(f"Failed to push to error dataset: {e}")
 
-async def filter_request(request):
+def filter_request(request: RequestOptions) -> RequestOptions | Literal['skip']:
     """
     Filters requests and handles preliminary deduplication check.
     Handles URL Cleaning (Point 1).
@@ -439,7 +470,7 @@ async def filter_request(request):
     else:
         url = getattr(request, 'url', None)
 
-    if not url: return None
+    if not url: return 'skip'
         
     # 1. Standard Cleaning (Always remove specific params)
     # We pass skip_question_mark=True to force query string parsing/rebuilding in process_url
@@ -471,27 +502,25 @@ async def filter_request(request):
     
     # Check extensions
     if IGNORED_EXTENSIONS.match(url):
-        return None
+        return 'skip'
     
     # Check forbidden params (Blocking entire URL if present)
     query = parse_qs(parsed.query)
     for param in FORBIDDEN_PARAMS:
         if param in query:
-            return None
+            return 'skip'
             
     # Check Spider Traps (Path based)
     if '/quotation/cart/' in url or '/cart/cart/' in url or '/catalog/product_compare/' in url:
-        return None
+        return 'skip'
         
     # Check base64 long strings
     if re.search(r'/url/[a-zA-Z0-9]{20,}', url):
-        return None
+        return 'skip'
 
-    # --- Redis Deduplication Check ---
-    if dedup_manager:
-        is_known = await dedup_manager.is_known(url)
-        if is_known:
-             return None
+    # --- Redis Deduplication Check removed (Sync requirement) ---
+    # Cannot await dedup_manager.is_known(url) in synchronous filter_request
+    # Deduplication is still handled in request_handler via "Double Check"
     # ---------------------------------
 
     # Construct dict for Crawlee if needed
