@@ -9,9 +9,9 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Updated imports to include SkippedReason
+# Updated imports to include SkippedReason, Context
 from crawlee import Request, SkippedReason
-from crawlee.crawlers import PlaywrightCrawler
+from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
 from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator
 from crawlee.proxy_configuration import ProxyConfiguration
@@ -114,6 +114,10 @@ async def main():
     parser.add_argument("--skipquestionmark", default="False")
     parser.add_argument("--skipdiez", default="False")
     parser.add_argument("--maxConcurrency", default=5, type=int)
+    
+    # Added paramPerCrawl (Point 7)
+    parser.add_argument("--percrawl", default=500, type=int)
+    
     # Add new params for URL cleaning (comma separated)
     parser.add_argument("--tokeep", default="")
     parser.add_argument("--toremove", default="")
@@ -159,6 +163,9 @@ async def main():
     routes.max_errors = args.maxErrors
     routes.max_redirects = args.maxRedirects
     routes.max_new_urls = args.maxNewUrls
+
+    # Limits Configuration
+    param_per_crawl = args.percrawl
 
     logger.info(f"Starting crawler for {domain} ({site}) in {storage_path} (Mode: {crawl_mode})")
 
@@ -307,11 +314,12 @@ async def main():
         )
         browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
 
-        # Initialize Crawler with robots.txt enforcement
+        # Initialize Crawler 
+        # Configured max_requests_per_crawl using param_per_crawl (Point 7)
         crawler = PlaywrightCrawler(
             request_handler=routes.router,
             request_manager=request_queue,
-            max_requests_per_crawl=5000 if not break_limit else None,
+            max_requests_per_crawl=param_per_crawl if param_per_crawl > 0 else None,
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
             respect_robots_txt_file=True,
@@ -322,6 +330,21 @@ async def main():
         async def on_skipped_request(url: str, reason: SkippedReason):
             if reason == SkippedReason.ROBOTS_TXT:
                 logger.info(f"Bloqué par robots.txt : {url}")
+
+        # Hook for Safety Limit (Point 7 - 5000 items)
+        @crawler.pre_navigation_hook
+        async def check_global_safety_limit(context: PlaywrightCrawlingContext):
+            if not break_limit:
+                try:
+                    # Check dataset size
+                    dataset = await Dataset.open(crawlee_storage_name)
+                    info = await dataset.get_info()
+                    # If we have reached the limit of 5000 items (globally in dataset)
+                    if info and info.item_count >= 5000:
+                        logger.warning("We have reached the limit of 5000 entries. The crawler will be stopped.")
+                        await context.crawler.stop()
+                except Exception as e:
+                    logger.error(f"Error checking safety limit: {e}")
 
         # Assign error handler manually
         crawler.failed_request_handler = routes.error_handler
