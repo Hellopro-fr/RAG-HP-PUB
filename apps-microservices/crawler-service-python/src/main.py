@@ -33,6 +33,9 @@ logger = logging.getLogger("main")
 # Load Env
 load_dotenv()
 
+# Point 12: Blocked Status Codes
+BLOCKED_STATUS_CODES = [401, 403, 429, 404, 410, 423, 502, 500, 503]
+
 async def heartbeat_task(redis_url: str, job_id: str, domain: str, hostname: str):
     """
     Sends heartbeat to Redis every 2 seconds.
@@ -276,7 +279,6 @@ async def main():
              await dedup_manager.add_url(url)
              
              # 2. Add to Queue (Mark as Existing for Verification)
-             # FIX: Must use Request object, not dict
              await request_queue.add_request(Request.from_url(url, user_data={"is_existing": True}))
              count += 1
              if count % 1000 == 0:
@@ -319,13 +321,14 @@ async def main():
         browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
 
         # Initialize Crawler 
-        # Configured max_requests_per_crawl using param_per_crawl (Point 7)
         crawler = PlaywrightCrawler(
             request_handler=routes.router,
             request_manager=request_queue,
             max_requests_per_crawl=param_per_crawl if param_per_crawl > 0 else None,
             # Point 8: Rate Limiting
             concurrency_settings=ConcurrencySettings(max_tasks_per_minute=param_per_minute),
+            # Point 12: Session Pool
+            use_session_pool=True,
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
             respect_robots_txt_file=True,
@@ -351,6 +354,18 @@ async def main():
                         await context.crawler.stop()
                 except Exception as e:
                     logger.error(f"Error checking safety limit: {e}")
+
+        # Hook for Session Rotation on Blocked Status (Point 12)
+        @crawler.post_navigation_hook
+        async def check_blocked_status(context: PlaywrightCrawlingContext):
+            # Playwright response might be None if navigation failed completely
+            response = context.response
+            if response:
+                status = response.status
+                if status in BLOCKED_STATUS_CODES:
+                    logger.warning(f"Session retired due to blocked status code: {status}")
+                    if context.session:
+                        await context.session.retire()
 
         # Assign error handler manually
         crawler.failed_request_handler = routes.error_handler
