@@ -116,6 +116,10 @@ router = Router()
 # Global Limit Config
 SKIP_QUESTION_MARK = False
 SKIP_DIEZ = False
+# Added bypass flags
+BYPASS_QUESTION_MARK = False
+BYPASS_DIEZ = False
+
 LIMIT_QUESTION_MARK_DIEZ = 50
 DOMAIN = ""
 BASE_URL = ""
@@ -248,14 +252,13 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     should_stop = False
     stop_reason_log = ""
     
-    if not SKIP_QUESTION_MARK and count_question_mark >= LIMIT_QUESTION_MARK_DIEZ:
+    # Logic: Stop if limit reached AND skip is OFF AND bypass is OFF
+    if not SKIP_QUESTION_MARK and not BYPASS_QUESTION_MARK and count_question_mark >= LIMIT_QUESTION_MARK_DIEZ:
          should_stop = True
          stop_reason_log = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '?' reached."
          STOP_REASON = "limitQuestionMark"
          
-    # Logic in Node: if skipdiez is FALSE, we count them. If limit reached, we stop.
-    # The elif here ensures we don't overwrite the reason if both trigger at once (priority to ?)
-    elif not SKIP_DIEZ and count_diez >= LIMIT_QUESTION_MARK_DIEZ:
+    elif not SKIP_DIEZ and not BYPASS_DIEZ and count_diez >= LIMIT_QUESTION_MARK_DIEZ:
          should_stop = True
          stop_reason_log = f"Limit of {LIMIT_QUESTION_MARK_DIEZ} entries with '#' reached."
          STOP_REASON = "limitDiez"

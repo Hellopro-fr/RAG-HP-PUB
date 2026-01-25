@@ -116,6 +116,11 @@ async def main():
     parser.add_argument("--method", default="prod")
     parser.add_argument("--skipquestionmark", default="False")
     parser.add_argument("--skipdiez", default="False")
+    
+    # Bypass Options (Added)
+    parser.add_argument("--bypassquestionmark", default="False")
+    parser.add_argument("--bypassdiez", default="False")
+
     parser.add_argument("--maxConcurrency", default=5, type=int)
     
     # Added paramPerCrawl (Point 7)
@@ -159,6 +164,9 @@ async def main():
     # Configure Routes Global Vars
     routes.SKIP_QUESTION_MARK = str(args.skipquestionmark).lower() == 'true'
     routes.SKIP_DIEZ = str(args.skipdiez).lower() == 'true'
+    routes.BYPASS_QUESTION_MARK = str(args.bypassquestionmark).lower() == 'true'
+    routes.BYPASS_DIEZ = str(args.bypassdiez).lower() == 'true'
+    
     routes.DOMAIN = domain
     routes.BASE_URL = site
     routes.TO_KEEP_CUSTOM = to_keep
@@ -351,6 +359,8 @@ async def main():
                     # If we have reached the limit of 5000 items (globally in dataset)
                     if info and info.item_count >= 5000:
                         logger.warning("We have reached the limit of 5000 entries. The crawler will be stopped.")
+                        # Point 18: Error Code Granularity
+                        routes.STOP_REASON = "limitCrawl"
                         await context.crawler.stop()
                 except Exception as e:
                     logger.error(f"Error checking safety limit: {e}")
@@ -388,10 +398,18 @@ async def main():
         if args.method != "test":
             # Determine error status from stats or manual stops
             is_error = ""
-            # Check if we stopped due to thresholds
-            if args.maxErrors and await stats_manager.check_threshold("errors", args.maxErrors): is_error = "limitErrors"
+            
+            # Point 18: Granular Error Reporting
+            # Priority 1: Explicit Stop Reason (Manual, Limits)
+            if routes.STOP_REASON:
+                is_error = routes.STOP_REASON
+            # Priority 2: Threshold Breaches
+            elif args.maxErrors and await stats_manager.check_threshold("errors", args.maxErrors): is_error = "limitErrors"
             elif args.maxRedirects and await stats_manager.check_threshold("redirects", args.maxRedirects): is_error = "limitRedirects"
             elif args.maxNewUrls and await stats_manager.check_threshold("new_urls", args.maxNewUrls): is_error = "limitNewUrls"
+            # Priority 3: Fallback (NodeJS behavior usually defaults here if not finished)
+            elif stats.requests_finished >= 5000 and not break_limit:
+                 is_error = "limitCrawl"
             
             payload = {
                 "id_domaine": job_id,
