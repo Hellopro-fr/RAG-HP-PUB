@@ -21,7 +21,7 @@ from redis.asyncio import Redis
 
 import routes
 from state import DedupManager, StatsManager
-from utils import get_system_stats, get_urls_crawled, update_urls_crawled, drop_dataset, is_stopped_manually, attach_file_logger, ensure_alias_symlink, load_dataset_urls_generator
+from utils import get_system_stats, get_urls_crawled, update_urls_crawled, drop_dataset, is_stopped_manually, attach_file_logger, ensure_alias_symlink, load_dataset_urls_generator, reclaim_failed_requests
 
 # Configure Logging
 logging.basicConfig(
@@ -267,6 +267,10 @@ async def main():
         logger.info("Seeding standard start URL...")
         await request_queue.add_request(Request.from_url(site, user_data={"is_existing": False}))
     
+    # Reclaim Failed Requests (Point 10)
+    if crawl_mode != "generate_data": # Just in case we support generate_data later
+         await reclaim_failed_requests(crawlee_storage_name, request_queue)
+
     # Start Heartbeat
     hostname = os.uname().nodename
     hb_task = asyncio.create_task(heartbeat_task(redis_url, job_id, domain, hostname))

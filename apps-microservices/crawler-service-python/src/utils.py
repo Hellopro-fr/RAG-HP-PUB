@@ -9,6 +9,9 @@ import logging
 import json
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
+# Imports for Reclaim Logic
+from crawlee.storages import Dataset, RequestQueue
+
 
 logger = logging.getLogger(__name__)
 
@@ -554,37 +557,94 @@ def process_url(
     except Exception as e:
         logger.error(f"Error processing URL {url}: {e}")
         return url
+    
+def manage_french_detection_method(
+    name: str,
+    check_french_method: Optional[str] = None
+) -> Union[str, Exception]:
+    """
+    Manages French language detection method storage for domains.
+    Stores/Retrieves the method that successfully detected the language (e.g. "langHtml").
+    """
+    try:
+        storage_path = f"./storage/miscellaneous/{name}"
+        file_path = f"{storage_path}/{name}.json"
+        
+        # Create directory if needed
+        if not os.path.exists(storage_path):
+            os.makedirs(storage_path, exist_ok=True)
 
-    def manage_french_detection_method(
-        name: str,
-        check_french_method: Optional[str] = None
-    ) -> Union[str, Exception]:
-        """
-        Manages French language detection method storage for domains.
-        Stores/Retrieves the method that successfully detected the language (e.g. "langHtml").
-        """
+        # If checkFrenchMethod is provided, we want to store it
+        if check_french_method:
+            with open(file_path, "w", encoding='utf-8') as f:
+                json.dump({"method": check_french_method}, f, indent=2)
+            return check_french_method
+
+        # If no checkFrenchMethod provided, try to read existing file
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding='utf-8') as f:
+                content = json.load(f)
+                return content.get("method")
+
+        # If no file and no method provided, return Exception (to be handled by caller)
+        return Exception(f"No French detection method stored for domain {name}")
+
+    except Exception as e:
+        return e
+
+async def get_scraping_data(name: str):
+    """
+    Retrieves data from a dataset.
+    Wraps Dataset.open(name).get_data() to match Node.js helper style.
+    """
+    try:
+        dataset = await Dataset.open(name)
+        return await dataset.get_data()
+    except Exception as e:
+        # If dataset doesn't exist or error, return None
+        logger.warning(f"Error accessing dataset {name}: {e}")
+        return None
+
+async def reclaim_failed_requests(queue_name: str, request_queue: RequestQueue):
+    """
+    Reclaims failed requests from error dataset for retry processing.
+    Matches the Node.js reclaimFailedRequest logic.
+    """
+    # In Node, error dataset is named `error-${name}`
+    error_dataset_name = f"error-{queue_name}"
+    
+    logger.info(f"Checking for failed requests in {error_dataset_name}...")
+
+    data = await get_scraping_data(error_dataset_name)
+
+    if not data or not data.items:
+        return
+
+    logger.info(f"Found {len(data.items)} failed requests to reclaim.")
+
+    reclaimed_count = 0
+    for item in data.items:
+        request_id = item.get("id")
+        if not request_id:
+            continue
+
         try:
-            storage_path = f"./storage/miscellaneous/{name}"
-            file_path = f"{storage_path}/{name}.json"
+            # Fetch original request from queue
+            request = await request_queue.get_request(request_id)
             
-            # Create directory if needed
-            if not os.path.exists(storage_path):
-                os.makedirs(storage_path, exist_ok=True)
-
-            # If checkFrenchMethod is provided, we want to store it
-            if check_french_method:
-                with open(file_path, "w", encoding='utf-8') as f:
-                    json.dump({"method": check_french_method}, f, indent=2)
-                return check_french_method
-
-            # If no checkFrenchMethod provided, try to read existing file
-            if os.path.exists(file_path):
-                with open(file_path, "r", encoding='utf-8') as f:
-                    content = json.load(f)
-                    return content.get("method")
-
-            # If no file and no method provided, return Exception (to be handled by caller)
-            return Exception(f"No French detection method stored for domain {name}")
-
+            if request:
+                # Reset counters
+                request.retry_count = 0
+                request.error_messages = []
+                request.handled_at = None # Clear handled status
+                
+                # Reclaim (move back to pending)
+                await request_queue.reclaim_request(request)
+                reclaimed_count += 1
         except Exception as e:
-            return e
+             logger.error(f"Failed to reclaim request {request_id}: {e}")
+
+    logger.info(f"Successfully reclaimed {reclaimed_count} requests.")
+    
+    # Drop the error dataset after reclaiming
+    await drop_dataset(error_dataset_name)
