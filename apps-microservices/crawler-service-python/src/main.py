@@ -359,9 +359,10 @@ async def main():
                 try:
                     # Check dataset size
                     dataset = await Dataset.open(name=crawlee_storage_name)
-                    info = await dataset.get_info()
-                    # If we have reached the limit of 5000 items (globally in dataset)
-                    if info and info.item_count >= 5000:
+                    data = await dataset.get_data(fields=['url'])
+                    current_count = len(data.items)
+                    
+                    if current_count >= 5000:
                         logger.warning("We have reached the limit of 5000 entries. The crawler will be stopped.")
                         # Point 18: Error Code Granularity
                         routes.STOP_REASON = "limitCrawl"
