@@ -310,7 +310,7 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
             else:
                 # Content check failed, try URL/Redirect check
                 check_url_res = await DomainFR.check_url(url, track_redirect=False, proxy_url=proxy_url)
-                if check_url_res["ok"]:
+                if check_url_res and check_url_res.get("ok"):
                      res = manage_french_detection_method(DOMAIN, check_url_res["method"])
                      if isinstance(res, Exception):
                          log.error(f"Failed to store French detection method: {res}")
@@ -337,7 +337,7 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
             else:
                 # Fallback URL check
                 check_url_res = await DomainFR.check_url(url, track_redirect=False, proxy_url=proxy_url)
-                if check_url_res["ok"] and check_url_res["method"] == french_detection_method:
+                if check_url_res and check_url_res.get("ok") and check_url_res.get("method") == french_detection_method:
                     is_enqueuing_links = True
 
     except Exception as e:

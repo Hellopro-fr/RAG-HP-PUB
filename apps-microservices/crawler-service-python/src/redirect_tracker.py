@@ -60,7 +60,7 @@ class RedirectTracker:
                     "https://": httpx.AsyncHTTPTransport(proxy=proxy_url),
                 }
 
-            async with httpx.AsyncClient(mounts=mounts, timeout=10.0, follow_redirects=True, max_redirects=10) as client:
+            async with httpx.AsyncClient(mounts=mounts, timeout=5.0, follow_redirects=True, max_redirects=10) as client:
                 response = await client.get(url)
                 
                 # Process redirect history
@@ -83,16 +83,15 @@ class RedirectTracker:
                     self._redirects.append({
                         "from": str(resp.url),
                         "to": target_url,
-                        "status_code": resp.status_code
                     })
                 
                 self._final_url = str(response.url)
                 
                 return {
                     "success": True,
-                    "initial_url": url,
-                    "final_url": self._final_url,
-                    "redirects": self._redirects,
+                    "initial_url": self.get_initial_url(),
+                    "final_url": self._final_url if self._final_url else url,
+                    "redirects": self.get_redirects(),
                     "redirect_chain": self.get_redirect_chain(),
                     "status_code": response.status_code,
                     "content_type": response.headers.get("content-type", ""),
@@ -100,15 +99,13 @@ class RedirectTracker:
 
         except Exception as e:
             logger.error(f"Error in get_url_redirection: {e}")
-            return {
+            raise Exception(json.dumps({
                 "success": False,
                 "error": str(e),
-                "redirects": self._redirects,
+                "redirects": self.get_redirects(),
                 "redirect_chain": self.get_redirect_chain(),
                 "status_code": 0,
-                "initial_url": url,
-                "final_url": self._final_url or url
-            }
+            }))
 
     @staticmethod
     async def get_url_redirection_pemavor(
@@ -149,8 +146,8 @@ class RedirectTracker:
 
         except Exception as e:
             logger.error(f"Error in get_url_redirection_pemavor: {e}")
-            return {
+            raise Exception(json.dumps({
                 "success": False,
                 "error": str(e),
-                "status_code": 0
-            }
+                "status_code": 0,
+            }))

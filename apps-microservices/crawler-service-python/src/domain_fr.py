@@ -1,5 +1,5 @@
-### src/domain_fr.py
 import re
+import json
 import logging
 from urllib.parse import urlparse
 from typing import Optional, Dict, Any, Union
@@ -161,7 +161,7 @@ class DomainFR:
                     if re.match(r"^(fr|france|french|francais|français)(-[A-Z]{2})?$", val, re.IGNORECASE):
                         return {"ok": True, "method": "pattern_match_query"}
 
-            return {"ok": False, "method": "no_match"}
+            return False
 
         except Exception as e:
             return {"ok": False, "method": "invalid_url", "error": str(e)}
@@ -205,16 +205,17 @@ class DomainFR:
                 if target_content_type:
                     if content_type and target_content_type in content_type:
                         return result
-                    # Implicit else: fall through or return result? Node returns result if no targetContentType
-                    # In Node: if (targetContentType) { if (includes) return result } else { return result }
-                    # This implies if targetContentType is set but NOT matched, we drop out. 
-                    # But for this context, let's assume success.
-                    return result
+                    # Content type doesn't match - fall through to raise exception (matches TypeScript)
                 else:
                     return result
-            else:
-                 # Fallback needed
-                 raise Exception("Redirect failed locally")
+            
+            # Fallback needed - raise exception to trigger Pemavor fallback
+            raise Exception(json.dumps({
+                "ok": False,
+                "method": "redirect_failed",
+                "url": url,
+                "response": response,
+            }))
 
         except Exception as e:
             logger.error(f"Error redirecting with httpx for {url}: {e}")
