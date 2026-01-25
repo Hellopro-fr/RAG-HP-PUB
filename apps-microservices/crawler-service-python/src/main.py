@@ -9,7 +9,8 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
-from crawlee import Request
+# Updated imports to include SkippedReason
+from crawlee import Request, SkippedReason
 from crawlee.crawlers import PlaywrightCrawler
 from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator
@@ -264,9 +265,7 @@ async def main():
     elif await request_queue.is_empty():
         # Standard Seed
         logger.info("Seeding standard start URL...")
-        # FIX: Must use Request object, not dict
         await request_queue.add_request(Request.from_url(site, user_data={"is_existing": False}))
-        # Don't add to Dedup here, let request_handler handle the add for proper counting
     
     # Start Heartbeat
     hostname = os.uname().nodename
@@ -293,19 +292,22 @@ async def main():
         )
         browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
 
+        # Initialize Crawler with robots.txt enforcement
         crawler = PlaywrightCrawler(
             request_handler=routes.router,
             request_manager=request_queue,
             max_requests_per_crawl=5000 if not break_limit else None,
             browser_pool=browser_pool,
             proxy_configuration=proxy_configuration,
+            respect_robots_txt_file=True,
         )
         
-        # Note: Crawlee Python auto-manages concurrency via AutoscaledPool
-        # The --maxConcurrency argument is available but not directly settable in current version
-        # Concurrency adapts based on CPU, memory, and event loop metrics
-        # Browser rotation is handled via retire_browser_after_page_count=10 in BrowserPool
-        
+        # Hook for skipped requests (Robots.txt logging)
+        @crawler.on_skipped_request
+        async def on_skipped_request(url: str, reason: SkippedReason):
+            if reason == SkippedReason.ROBOTS_TXT:
+                logger.info(f"Bloqué par robots.txt : {url}")
+
         # Assign error handler manually
         crawler.failed_request_handler = routes.error_handler
         
