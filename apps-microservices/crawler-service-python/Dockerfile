@@ -13,8 +13,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers (Chromium only for POC)
-RUN playwright install --with-deps chromium
+# Install Playwright browsers (Chromium and Firefox for Camoufox)
+RUN playwright install --with-deps chromium firefox
+
+# Install Camoufox browser binary
+RUN python -m camoufox fetch
 
 # Copy application code
 COPY src/ ./src/

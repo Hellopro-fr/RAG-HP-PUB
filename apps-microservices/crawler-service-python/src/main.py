@@ -9,10 +9,14 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Updated imports to include ConcurrencySettings
+# Camoufox Integration
+from camoufox import AsyncNewBrowser
+from typing_extensions import override
+
+# Updated imports to include ConcurrencySettings and BrowserPool components
 from crawlee import Request, SkippedReason, ConcurrencySettings
 from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext, PlaywrightPreNavCrawlingContext
-from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
+from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin, PlaywrightBrowserController
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator, HeaderGeneratorOptions, ScreenOptions
 from crawlee.proxy_configuration import ProxyConfiguration
 from crawlee.configuration import Configuration
@@ -32,6 +36,23 @@ logger = logging.getLogger("main")
 
 # Load Env
 load_dotenv()
+
+class CamoufoxPlugin(PlaywrightBrowserPlugin):
+    """Example browser plugin that uses Camoufox browser."""
+    @override
+    async def new_browser(self) -> PlaywrightBrowserController:
+        if not self._playwright:
+            raise RuntimeError('Playwright browser plugin is not initialized.')
+
+        return PlaywrightBrowserController(
+            browser=await AsyncNewBrowser(
+                self._playwright, **self._browser_launch_options
+            ),
+            # Increase, if camoufox can handle it in your use case.
+            max_open_pages_per_browser=1,
+            # This turns off the crawlee header_generation. Camoufox has its own.
+            header_generator=None,
+        )
 
 async def heartbeat_task(redis_url: str, job_id: str, domain: str, hostname: str):
     """
@@ -149,6 +170,9 @@ async def main():
     parser.add_argument("--maxRedirects", default=0, type=int)
     parser.add_argument("--maxNewUrls", default=0, type=int)
     
+    # Camoufox Integration
+    parser.add_argument("--camoufox", default="False")
+    
     args, unknown = parser.parse_known_args()
     
     if unknown:
@@ -169,6 +193,7 @@ async def main():
     
     break_limit = str(args.breaklimit).lower() == 'true'
     drop_data = str(args.dropdata).lower() == 'true'
+    use_camoufox = str(args.camoufox).lower() == 'true'
     
     # Configure Routes Global Vars
     routes.SKIP_QUESTION_MARK = str(args.skipquestionmark).lower() == 'true'
@@ -360,26 +385,31 @@ async def main():
 
     try:
         # Initialize Crawler
-        # Configure Browser Pool with Fingerprints
-        fingerprint_generator = DefaultFingerprintGenerator(
-            header_options=HeaderGeneratorOptions(
-                browsers=['chrome', 'firefox', 'safari', 'edge'],
-                operating_systems=['windows', 'macos', 'linux'],
-                devices=['desktop'],
-                locales=['fr']
-            ),
-            screen_options=ScreenOptions(min_width=400)
-        )
-        
-        browser_plugin = PlaywrightBrowserPlugin(
-            browser_type='chromium',
-            fingerprint_generator=fingerprint_generator,
-            browser_launch_options={
-                "headless": True,
-                "args": ["--no-sandbox", "--disable-setuid-sandbox"]
-            }
-        )
-        browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
+        if use_camoufox:
+            logger.info("🕵️ Using Camoufox stealth browser")
+            plugin = CamoufoxPlugin()
+            browser_pool = BrowserPool(plugins=[plugin])
+        else:
+            # Configure Browser Pool with Fingerprints
+            fingerprint_generator = DefaultFingerprintGenerator(
+                header_options=HeaderGeneratorOptions(
+                    browsers=['chrome', 'firefox', 'safari', 'edge'],
+                    operating_systems=['windows', 'macos', 'linux'],
+                    devices=['desktop'],
+                    locales=['fr']
+                ),
+                screen_options=ScreenOptions(min_width=400)
+            )
+            
+            browser_plugin = PlaywrightBrowserPlugin(
+                browser_type='chromium',
+                fingerprint_generator=fingerprint_generator,
+                browser_launch_options={
+                    "headless": True,
+                    "args": ["--no-sandbox", "--disable-setuid-sandbox"]
+                }
+            )
+            browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
 
         # Initialize Crawler 
         crawler_args = {
