@@ -230,7 +230,13 @@ async def main():
     base_queues = os.path.join(CRAWLEE_STORAGE_DIR, "request_queues")
     base_datasets = os.path.join(CRAWLEE_STORAGE_DIR, "datasets")
     base_kvs = os.path.join(CRAWLEE_STORAGE_DIR, "key_value_stores")
+    
+    # 1. Main Domain Symlinks
     ensure_alias_symlink(crawlee_storage_name, domain, [base_queues, base_datasets, base_kvs])
+    
+    # 2. Error & NFR Dataset Symlinks (Bridge legacy folders like 'error-domain.com' to 'error-domain-com')
+    ensure_alias_symlink(f"error-{crawlee_storage_name}", f"error-{domain}", [base_datasets])
+    ensure_alias_symlink(f"nfr-{crawlee_storage_name}", f"nfr-{domain}", [base_datasets])
 
     is_historised = False
     if drop_data:
