@@ -141,7 +141,8 @@ class RecommendationService:
         if isinstance(raw_target, dict):
             for k in ["min", "max", "exact"]:
                 if raw_target.get(k) is not None:
-                    tasks.append(clients.normalize_quantity(raw_target[k], unit, label))
+                    val = self._extract_scalar(raw_target[k])
+                    tasks.append(clients.normalize_quantity(val, unit, label))
                 else:
                     tasks.append(
                         asyncio.sleep(0)
@@ -152,8 +153,9 @@ class RecommendationService:
         if isinstance(raw_blocking, dict):
             for k in ["min", "max", "exact"]:
                 if raw_blocking.get(k) is not None:
+                    val = self._extract_scalar(raw_blocking[k])
                     tasks.append(
-                        clients.normalize_quantity(raw_blocking[k], unit, label)
+                        clients.normalize_quantity(val, unit, label)
                     )
                 else:
                     tasks.append(asyncio.sleep(0))
