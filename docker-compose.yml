@@ -1546,6 +1546,10 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       PROMETHEUS_PORT: 8565
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: ${NEO4J_DATABASE}
     # depends_on:
     #   # - embedding-model-service
     #   - graph-rag-milvus-service
@@ -1553,6 +1557,8 @@ services:
     #   - graph-rag-normalize-unite-service
     networks:
       - services-net
+      - services-ext-net
+      - services-global-net
 
 networks:
   services-net:

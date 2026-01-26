@@ -78,6 +78,35 @@ class ServiceClients:
             logging.error(f"Graph DB Error: {e}")
             return []
 
+    async def execute_cypher_direct(
+        self, query: str, params: Dict[str, Any] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Execute Cypher query directly using Neo4jGraph connection (like old implementation).
+        Bypasses gRPC to avoid protobuf serialization issues.
+        """
+        try:
+            from langchain_community.graphs import Neo4jGraph
+
+            # Lazy initialization of direct Neo4j connection
+            if not hasattr(self, "_neo4j_graph") or self._neo4j_graph is None:
+                self._neo4j_graph = Neo4jGraph(
+                    url=settings.NEO4J_URI,
+                    username=settings.NEO4J_USER,
+                    password=settings.NEO4J_PASSWORD,
+                    database=settings.NEO4J_DATABASE,
+                )
+                logging.info("Direct Neo4jGraph connection established.")
+
+            # Execute query in a thread to avoid blocking
+            results = await asyncio.to_thread(
+                self._neo4j_graph.query, query, params or {}
+            )
+            return results if results else []
+        except Exception as e:
+            logging.error(f"Direct Graph DB Error: {e}", exc_info=True)
+            return []
+
     async def get_graph_schema(self) -> str:
         try:
             schema = await graph_database_client.get_graph_schema(
