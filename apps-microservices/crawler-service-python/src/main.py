@@ -484,7 +484,8 @@ async def main():
             browser_pool = BrowserPool(
                 plugins=[plugin],
                 # Increased timeout for Camoufox browser operations (default is 15s)
-                operation_timeout=timedelta(seconds=30),
+                # Set to 60s because page creation in Docker can be very slow even if browser is launched
+                operation_timeout=timedelta(seconds=60),
                 # Retire browsers after 10 pages to prevent stale/stuck browsers
                 retire_browser_after_page_count=10
             )
@@ -595,7 +596,7 @@ async def main():
                 
                 error_dataset = await Dataset.open(name=error_dataset_name)
                 await error_dataset.push_data({
-                    "id": request.id,
+                    "id": getattr(request, 'id', 'unknown'),
                     "url": request.url,
                     "errors": errors_list
                 })
