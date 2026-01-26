@@ -22,6 +22,8 @@ class ComplexFilterRequest(BaseModel):
     )
     top_k: int = 50
     v: int = 4
+    blocked_val: int = -2
+    different_val: int = -0.3
 
 
 class BaseNormalizer(BaseModel):

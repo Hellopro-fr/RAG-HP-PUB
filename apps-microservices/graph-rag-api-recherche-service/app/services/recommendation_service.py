@@ -278,6 +278,9 @@ class RecommendationService:
         all_rids = [f["rid"] for f in flat_filters]
         weights_map = await self._get_question_weights(all_rids)
 
+        blocked_val = request.blocked_val
+        different_val = request.different_val
+
         # Build Cypher Query (V4)
         cypher_query = """
         // --- STEP 1: ANCHOR TRAVERSAL (V3 Strategy) ---
@@ -319,7 +322,7 @@ class RecommendationService:
                         (item.conf.blocking_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.blocking_numeric.max) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_max_canonique <= item.conf.blocking_numeric.max))) OR
                         (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
                     ))
-                ) THEN -2.0
+                ) THEN $blocked_val
                 // Target Check
                 WHEN ANY(pc IN item.matches WHERE 
                     (size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list))
@@ -331,7 +334,7 @@ class RecommendationService:
                     ))
                 ) THEN 1.0
                 // Connected Check
-                WHEN size(item.matches) > 0 THEN 0.5
+                WHEN size(item.matches) > 0 THEN $different_val
                 // Default
                 ELSE 0.1
             END,
@@ -345,11 +348,11 @@ class RecommendationService:
         
         WITH p, rid, char_results, supplier_covers,
              [res IN char_results | res.score] AS raw_scores,
-             [res IN char_results | CASE WHEN res.score = 0.5 AND supplier_covers THEN 1.0 ELSE res.score END] AS adjusted_scores
+             [res IN char_results | CASE WHEN res.score = $different_val AND supplier_covers THEN 1.0 ELSE res.score END] AS adjusted_scores
         
         WITH p, rid, char_results, adjusted_scores,
-             CASE WHEN -2.0 IN adjusted_scores THEN -2.0 ELSE apoc.coll.max(adjusted_scores) END AS rid_score,
-             (supplier_covers OR ANY(res IN char_results WHERE res.has_pc OR res.score = -2.0)) AS matched,
+             CASE WHEN $blocked_val IN adjusted_scores THEN $blocked_val ELSE apoc.coll.max(adjusted_scores) END AS rid_score,
+             (supplier_covers OR ANY(res IN char_results WHERE res.has_pc OR res.score = $blocked_val)) AS matched,
              coalesce($weights[rid], 1.0) as weight
         
         // Global Product Scoring and Detail Construction
@@ -379,6 +382,8 @@ class RecommendationService:
             "id_categorie": str(request.id_categorie) if request.id_categorie else None,
             "top_k": int(request.top_k),
             "target_product_id": target_product_id,
+            "blocked_val": blocked_val,
+            "different_val": different_val,
         }
 
         # Debug: Log parameters with their types
