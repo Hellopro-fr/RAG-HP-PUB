@@ -171,7 +171,7 @@ async def main():
     parser.add_argument("--maxNewUrls", default=0, type=int)
     
     # Camoufox Integration
-    parser.add_argument("--camoufox", default="False")
+    parser.add_argument("--camoufox", default="True")
     
     args, unknown = parser.parse_known_args()
     

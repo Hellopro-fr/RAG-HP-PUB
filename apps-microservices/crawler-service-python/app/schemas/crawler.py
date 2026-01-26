@@ -65,7 +65,7 @@ class CrawlRequest(BaseModel):
     per_minute: Optional[int] = Field(100, description="Speed limit.", example=100, alias="perminute")
     
     # Camoufox Integration
-    camoufox: Optional[bool] = Field(False, description="Use Camoufox stealth browser.")
+    camoufox: Optional[bool] = Field(True, description="Use Camoufox stealth browser.")
 
 class CrawlResponse(BaseModel):
     message: str
