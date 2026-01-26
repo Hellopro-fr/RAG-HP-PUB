@@ -170,11 +170,59 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     if response:
         status = response.status
         if status in BLOCKED_STATUS_CODES:
-            log.warning(f"Session retired due to blocked status code: {status}")
+            # Get detailed request info for logging
+            proxy_info = getattr(context, 'proxy_info', None)
+            proxy_url_masked = "No proxy" if not proxy_info else f"Proxy: {proxy_info.url.split('@')[-1] if '@' in proxy_info.url else proxy_info.url}"
+            
+            # Get User-Agent from request headers
+            user_agent = "Unknown"
+            try:
+                headers = await page.evaluate("() => navigator.userAgent")
+                user_agent = headers if headers else "Unknown"
+            except Exception:
+                pass
+            
+            # Definitive block message (not "assuming")
+            log.error(f"🚫 BLOCKED: HTTP {status} on {url}")
+            log.error(f"   → {proxy_url_masked}")
+            log.error(f"   → User-Agent: {user_agent[:80]}...")
+            
+            # Push to error dataset for later analysis
+            try:
+                from crawlee.storages import Dataset
+                from datetime import datetime
+                
+                if CRAWLEE_STORAGE_NAME != '':
+                    error_dataset_name = f"error-{CRAWLEE_STORAGE_NAME}"
+                else:
+                    from urllib.parse import urlparse as url_parse
+                    domain_part = url_parse(url).netloc.replace("www.", "")
+                    safe_domain_name = domain_part.replace('.', '-')
+                    error_dataset_name = f"error-{safe_domain_name}"
+                
+                error_dataset = await Dataset.open(name=error_dataset_name)
+                await error_dataset.push_data({
+                    "id": request.id,
+                    "url": url,
+                    "error_type": "blocked_status",
+                    "status_code": status,
+                    "proxy_used": proxy_url_masked,
+                    "user_agent": user_agent,
+                    "timestamp": datetime.now().isoformat(),
+                    "retry_count": request.retry_count
+                })
+                log.info(f"   → Saved to {error_dataset_name}")
+            except Exception as e:
+                log.warning(f"Failed to save blocked request to error dataset: {e}")
+            
+            # Increment error counter for circuit breaker
+            if stats_manager:
+                await stats_manager.increment("errors")
+            
             if context.session:
                 context.session.retire()
             # Raise an error to trigger Crawlee's retry logic for this request
-            raise Exception(f"Request blocked with status {status}. Retrying with new session.")
+            raise Exception(f"BLOCKED: HTTP {status} on {url}. Session rotated, retrying...")
 
     # --- Check Circuit Breaker (Global thresholds) ---
     if stats_manager:
