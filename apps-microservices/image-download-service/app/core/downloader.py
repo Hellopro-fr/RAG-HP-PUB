@@ -56,6 +56,7 @@ class Downloader:
                         kwargs["proxy"] = self.proxy_url
 
                     async with session.get(url, **kwargs) as response:
+                        logger.info(f"Download status for {url}: {response.status}")
                         if response.status == 200:
                             content = await response.read()
                             
@@ -103,6 +104,8 @@ class Downloader:
             urls = [urls]
         
         processed_images = []
+        logger.info(f"Downloading {len(urls)} images for product {product_id} ({domain})")
+        
         for i, url in enumerate(urls):
             if not url: continue
             
