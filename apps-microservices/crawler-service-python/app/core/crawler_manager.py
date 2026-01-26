@@ -9,7 +9,7 @@ import shutil
 import tarfile
 import hashlib
 from datetime import datetime
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Tuple
 
 import aiofiles
 import httpx
@@ -963,14 +963,15 @@ class CrawlerManager:
         else:
             logger.info(f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
 
-    async def cleanup_archives(self, max_age_hours: int):
+    async def cleanup_archives(self, max_age_hours: int) -> Tuple[int, int, int]:
         """
         Deletes archive files that are older than `max_age_hours` to save disk space.
         Scanning is performed in a separate thread to avoid blocking.
+        Returns tuple of (deleted_count, retained_count, errors).
         """
         archives_dir = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
         if not os.path.exists(archives_dir):
-            return
+            return 0, 0, 0
 
         logger.info(f"Starting archive cleanup. Removing files older than {max_age_hours} hours.")
         
@@ -1004,6 +1005,7 @@ class CrawlerManager:
                         
             except Exception as e:
                 logger.error(f"Error listing archives directory during cleanup: {e}")
+                errors += 1
                 
             return deleted_count, retained_count, errors
 
@@ -1011,7 +1013,9 @@ class CrawlerManager:
         try:
             deleted, retained, errors = await asyncio.to_thread(_cleanup_sync)
             logger.info(f"Archive cleanup complete. Deleted: {deleted}, Retained: {retained}, Errors: {errors}")
+            return deleted, retained, errors
         except Exception as e:
             logger.error(f"Failed to execute archive cleanup: {e}")
+            return 0, 0, 1
 
 crawler_manager = CrawlerManager()

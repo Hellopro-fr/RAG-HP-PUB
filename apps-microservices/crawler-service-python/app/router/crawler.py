@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX
 from app.core.redis import cache_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -313,3 +313,23 @@ async def reconcile_jobs():
     """
     await crawler_manager.reconcile_jobs()
     return {"status": "reconciliation_complete"}
+
+@router.post("/prune-archives", response_model=PruneResponse)
+async def prune_archives(
+    max_age_hours: int = Query(24, description="Delete archives older than this many hours.")
+):
+    """
+    Manually triggers the cleanup of old archive files from storage.
+    Useful for freeing up disk space on demand.
+    """
+    try:
+        deleted, retained, errors = await crawler_manager.cleanup_archives(max_age_hours)
+        return PruneResponse(
+            deleted_count=deleted,
+            retained_count=retained,
+            errors=errors,
+            message=f"Cleanup complete. Deleted {deleted} files older than {max_age_hours}h."
+        )
+    except Exception as e:
+        logger.error(f"Manual archive prune failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

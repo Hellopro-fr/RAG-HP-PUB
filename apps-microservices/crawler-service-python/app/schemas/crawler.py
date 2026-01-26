@@ -29,6 +29,13 @@ class ReindexResponse(BaseModel):
     already_indexed: int
     errors: int
 
+class PruneResponse(BaseModel):
+    """Response for the archive cleanup operation."""
+    deleted_count: int
+    retained_count: int
+    errors: int
+    message: str
+
 class UpdateThresholds(BaseModel):
     """Thresholds for aborting an update job."""
     max_errors: Optional[int] = Field(None, description="Abort if error count exceeds this value.")
