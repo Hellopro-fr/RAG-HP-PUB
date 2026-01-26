@@ -305,7 +305,9 @@ class RecommendationService:
 
         try:
             query_start = time.perf_counter()
-            results = await clients.execute_cypher(cypher_query, params)
+            # results = await clients.execute_cypher(cypher_query, params)
+            # Use direct Neo4j connection to avoid gRPC serialization issues
+            results = await clients.execute_cypher_direct(cypher_query, params)
             query_time = time.perf_counter() - query_start
 
             scored_products = []
