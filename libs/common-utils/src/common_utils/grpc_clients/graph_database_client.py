@@ -1,4 +1,5 @@
 import grpc
+import json
 import os
 import logging
 from typing import List, Dict, Any, Tuple, Optional
@@ -103,11 +104,20 @@ async def execute_cypher(
             )
             response = await stub.ExecuteRawCypher(request)
 
-            # Convert results from Struct to dict
-            results = [
-                MessageToDict(result_struct, preserving_proto_field_name=True)
-                for result_struct in response.results
-            ]
+            # Deserialize results from JSON wrapper format
+            # This preserves integer types that would be lost with direct Struct conversion
+            results = []
+            for result_struct in response.results:
+                dict_result = MessageToDict(
+                    result_struct, preserving_proto_field_name=True
+                )
+                if "__json_results__" in dict_result:
+                    # New format: JSON-serialized results
+                    results = json.loads(dict_result["__json_results__"])
+                    break  # All results are in a single wrapper
+                else:
+                    # Legacy format: direct Struct conversion (fallback)
+                    results.append(dict_result)
 
             return response.success, results, response.records_affected
     except grpc.aio.AioRpcError as e:
