@@ -1,4 +1,5 @@
 import grpc
+import json
 import logging
 from concurrent import futures
 from typing import Dict, Any
@@ -56,13 +57,16 @@ class GraphDatabaseServiceImpl(graph_database_pb2_grpc.GraphDatabaseServiceServi
                 read_only=request.read_only,
             )
 
-            # Convert results to protobuf structs
-            result_structs = [dict_to_struct(r) for r in results] if results else []
+            # Serialize results to JSON to preserve integer types
+            # (protobuf Struct converts all numbers to float64)
+            json_results = json.dumps(results, default=str) if results else "[]"
+            wrapper_struct = struct_pb2.Struct()
+            wrapper_struct.update({"__json_results__": json_results})
 
             return graph_database_pb2.ExecuteCypherResponse(
                 success=True,
                 error_message="",
-                results=result_structs,
+                results=[wrapper_struct],
                 records_affected=records_affected,
             )
         except Exception as e:

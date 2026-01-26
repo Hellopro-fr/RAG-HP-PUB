@@ -10,3 +10,6 @@ prometheus-client
 waitress
 langgraph
 langchain-core
+langchain-community
+neo4j
+pint

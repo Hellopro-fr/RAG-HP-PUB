@@ -104,10 +104,16 @@ class Consumer:
             
             # Synchronous wrapper for async download
             import asyncio
+            logger.info(f"Processing product {product_data.get('id_produit')} (Source: {source})")
+            
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
                 result_data = loop.run_until_complete(self.downloader.process_product(product_data))
+                logger.info(f"Processing complete for {product_data.get('id_produit')}")
+            except Exception as loop_error:
+                logger.error(f"Async processing failed for {product_data.get('id_produit')}: {loop_error}")
+                raise loop_error
             finally:
                 loop.close()
             

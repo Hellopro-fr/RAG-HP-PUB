@@ -1,7 +1,9 @@
 import aiohttp
+import aiofiles
 import os
 import logging
 import asyncio
+from datetime import datetime
 from typing import Optional, List, Dict
 from app.core.image_processor import ImageProcessor
 import random
@@ -54,6 +56,7 @@ class Downloader:
                         kwargs["proxy"] = self.proxy_url
 
                     async with session.get(url, **kwargs) as response:
+                        logger.info(f"Download status for {url}: {response.status}")
                         if response.status == 200:
                             content = await response.read()
                             
@@ -101,19 +104,94 @@ class Downloader:
             urls = [urls]
         
         processed_images = []
+        logger.info(f"Downloading {len(urls)} images for product {product_id} ({domain})")
+        
         for i, url in enumerate(urls):
             if not url: continue
             
             # Local rate limiting: 2 req/s (sleep 0.5s between requests)
             if i > 0:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(LOCAL_RATE_DELAY)
                 
             result = await self.download_and_process(url, domain, product_id, product_name)
             if result:
                 processed_images.append(result)
         
         # Update product data with new structure
-        # We might want to store list of {main, thumb}
         product_data["processed_images"] = processed_images
         
+        # Save to manifest for archive synchronization
+        if processed_images:
+            await self._save_to_manifest(domain, product_id, product_name, processed_images)
+        
         return product_data
+
+    async def _save_to_manifest(self, domain: str, product_id: str, product_name: str, processed_images: list):
+        """
+        Appends product metadata to the domain's manifest.json file.
+        This manifest will be included in the archive for the BO to update the database.
+        """
+        import json
+        import aiofiles
+        
+        manifest_dir = f"/app/storage/images/{domain}"
+        manifest_path = f"{manifest_dir}/manifest.json"
+        
+        # Create directory if needed
+        os.makedirs(manifest_dir, exist_ok=True)
+        
+        # Build product entry
+        product_entry = {
+            "id_produit": product_id,
+            "nom": product_name,
+            "images": []
+        }
+        
+        for img in processed_images:
+            # Extract relative paths from full paths
+            main_path = img.get("main_path", "")
+            thumb_path = img.get("thumb_path", "")
+            
+            # Convert to relative paths (e.g., produit-2/1/0/0/nom-60001.jpg)
+            if "/images/" in main_path:
+                main_rel = main_path.split(f"/images/{domain}/")[1] if f"/images/{domain}/" in main_path else main_path
+            else:
+                main_rel = main_path
+                
+            if "/images/" in thumb_path:
+                thumb_rel = thumb_path.split(f"/images/{domain}/")[1] if f"/images/{domain}/" in thumb_path else thumb_path
+            else:
+                thumb_rel = thumb_path
+            
+            product_entry["images"].append({
+                "main": main_rel,
+                "thumb": thumb_rel,
+                "filename": img.get("filename", "")
+            })
+        
+        # Load existing manifest or create new one
+        manifest = {"products": [], "last_updated": ""}
+        
+        try:
+            if os.path.exists(manifest_path):
+                async with aiofiles.open(manifest_path, 'r') as f:
+                    content = await f.read()
+                    manifest = json.loads(content) if content else {"products": [], "last_updated": ""}
+        except Exception as e:
+            logger.warning(f"Could not read manifest: {e}")
+        
+        # Update or add product entry
+        existing_idx = next((i for i, p in enumerate(manifest["products"]) if p["id_produit"] == product_id), None)
+        if existing_idx is not None:
+            manifest["products"][existing_idx] = product_entry
+        else:
+            manifest["products"].append(product_entry)
+        
+        manifest["last_updated"] = datetime.now().isoformat()
+        
+        # Write manifest
+        try:
+            async with aiofiles.open(manifest_path, 'w') as f:
+                await f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
+        except Exception as e:
+            logger.error(f"Could not write manifest: {e}")

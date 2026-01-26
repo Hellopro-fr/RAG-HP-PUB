@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
 
+    # Neo4j Direct Connection (for execute_cypher_direct)
+    NEO4J_URI: str = "bolt://localhost:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "password"
+    NEO4J_DATABASE: str = "neo4j"
+
     # gRPC Services
     EMBEDDING_SERVICE_URL: str = "localhost:50052"
     MILVUS_SERVICE_URL: str = "localhost:50056"
