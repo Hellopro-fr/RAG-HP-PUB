@@ -6,7 +6,7 @@ import json
 import logging
 import signal
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Camoufox Integration
@@ -431,6 +431,8 @@ async def main():
             "browser_pool": browser_pool,
             "respect_robots_txt_file": True,
             "max_request_retries": 5,  # Allow more retries for transient blocks
+            "navigation_timeout": timedelta(seconds=90), # Increased to match Version 2 robustness
+            "request_handler_timeout": timedelta(seconds=120) # Increased to match Version 2 robustness
         }
 
         if proxy_configuration:
@@ -464,10 +466,6 @@ async def main():
                         crawler.stop()
                 except Exception as e:
                     logger.error(f"Error checking safety limit: {e}")
-
-
-        # Assign error handler manually
-        crawler.failed_request_handler = routes.error_handler
         
         # Helper to set stop reason from monitor task
         def set_stop_reason(reason: str):

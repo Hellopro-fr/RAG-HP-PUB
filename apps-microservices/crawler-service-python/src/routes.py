@@ -1,4 +1,4 @@
-from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
+from crawlee.crawlers import BasicCrawlingContext, PlaywrightCrawler, PlaywrightCrawlingContext
 from crawlee.router import Router
 from crawlee import EnqueueStrategy, RequestOptions
 import re
@@ -409,20 +409,30 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         
         # Note: We do NOT call enqueue_links here, effectively stopping this branch.
 
-async def error_handler(context: PlaywrightCrawlingContext, error: Exception) -> None:
+@crawler_instance.failed_request_handler
+async def error_handler(context: BasicCrawlingContext, error: Exception) -> None:
     request = context.request
     log = context.log
-    page = context.page
+    
+    # Safely access page - it might be None if error occurred before navigation
+    page = getattr(context, 'page', None)
     
     # Accumulate errors in user_data since Request object doesn't have error_messages attribute
     errors_list = request.user_data.get("error_messages")
     if not isinstance(errors_list, list):
         errors_list = []
     
-    errors_list.append(str(error))
+    # Extract error info from context if available
+    # For PyCrawlee, error details might be attached differently or just inferred from context
+    # If the handler was called, an exception occurred.
+    
+    # In newer Crawlee versions, the error might be passed as a second arg, 
+    # but the failed_request_handler signature in Python only guarantees 'context'.
+    # We log generic failure.
+    errors_list.append(f"Request failed (handled by error_handler): {error}")
     request.user_data["error_messages"] = errors_list
 
-    log.error(f"Request {request.url} failed with error messages: {errors_list}")
+    log.error(f"Request {request.url} failed. Errors: {errors_list}")
     
     # --- Circuit Breaker: Error Count ---
     if stats_manager:
@@ -448,11 +458,17 @@ async def error_handler(context: PlaywrightCrawlingContext, error: Exception) ->
     # Push to error dataset
     try:
         from crawlee.storages import Dataset
-        from urllib.parse import urlparse
-        domain_part = urlparse(request.url).netloc.replace("www.", "")
-        safe_domain_name = domain_part.replace('.', '-')
         
-        error_dataset = await Dataset.open(name=f"error-{safe_domain_name}")
+        # USE CORRECT STORAGE NAME from global or fallback
+        if CRAWLEE_STORAGE_NAME != '':
+            error_dataset_name = f"error-{CRAWLEE_STORAGE_NAME}"
+        else:
+            from urllib.parse import urlparse
+            domain_part = urlparse(request.url).netloc.replace("www.", "")
+            safe_domain_name = domain_part.replace('.', '-')
+            error_dataset_name = f"error-{safe_domain_name}"
+        
+        error_dataset = await Dataset.open(name=error_dataset_name)
         await error_dataset.push_data({
             "id": request.id,
             "url": request.url,
