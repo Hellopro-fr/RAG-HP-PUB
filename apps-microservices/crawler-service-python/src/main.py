@@ -5,6 +5,7 @@ import os
 import json
 import logging
 import signal
+import traceback
 from pathlib import Path
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -36,6 +37,61 @@ logger = logging.getLogger("main")
 
 # Load Env
 load_dotenv()
+
+# --- EXIT REASON TRACKING ---
+# Global variable to track exit reason across the application
+EXIT_REASON_INFO = {
+    "reason": "unknown",        # completed, error, signal, oom_suspected
+    "details": None,            # Additional details (exception message, signal number)
+    "traceback": None,          # Full traceback if available
+    "stats": None,              # Crawler stats at exit time
+    "timestamp": None           # ISO timestamp of exit
+}
+
+def write_exit_reason(storage_path: str, reason: str, details: str | None = None, tb: str | None = None, stats: dict | None = None):
+    """
+    Writes the exit reason to a JSON file for later analysis.
+    Called from finally blocks and signal handlers.
+    """
+    global EXIT_REASON_INFO
+    
+    EXIT_REASON_INFO["reason"] = reason
+    EXIT_REASON_INFO["details"] = details
+    EXIT_REASON_INFO["traceback"] = tb
+    EXIT_REASON_INFO["stats"] = stats
+    EXIT_REASON_INFO["timestamp"] = datetime.now().isoformat()
+    
+    exit_file = os.path.join(storage_path, "_exit_reason.json")
+    try:
+        with open(exit_file, "w", encoding="utf-8") as f:
+            json.dump(EXIT_REASON_INFO, f, indent=2, ensure_ascii=False)
+        logger.info(f"Exit reason written to {exit_file}")
+    except Exception as e:
+        logger.error(f"Failed to write exit reason file: {e}")
+
+def check_previous_crash(storage_path: str):
+    """
+    Checks if a previous run ended abnormally by looking at the exit reason file.
+    Logs a warning if the previous run crashed.
+    """
+    exit_file = os.path.join(storage_path, "_exit_reason.json")
+    
+    if os.path.exists(exit_file):
+        try:
+            with open(exit_file, "r", encoding="utf-8") as f:
+                prev_reason = json.load(f)
+            
+            reason = prev_reason.get("reason", "unknown")
+            
+            if reason not in ["completed", "stoppedManually", "limitCrawl", "limitQuestionMark", "limitDiez"]:
+                logger.warning(f"⚠️ Previous run ended abnormally: {reason}")
+                if prev_reason.get("details"):
+                    logger.warning(f"   Details: {prev_reason.get('details')}")
+                if prev_reason.get("timestamp"):
+                    logger.warning(f"   Timestamp: {prev_reason.get('timestamp')}")
+        except Exception as e:
+            logger.warning(f"Could not read previous exit reason: {e}")
+# --------------------------------
 
 class CamoufoxPlugin(PlaywrightBrowserPlugin):
     """Example browser plugin that uses Camoufox browser."""
@@ -245,6 +301,10 @@ async def main():
     now_str = datetime.now().isoformat().replace(":", "-")
     log_name = f"{domain}-logs-{now_str}.log"
     attach_file_logger(log_name)
+
+    # --- CRASH DETECTION ---
+    # Check if a previous run ended abnormally
+    check_previous_crash(storage_path)
 
     # Clean up stale stopper file from previous runs to prevent immediate stop (Restart Loop Fix)
     stopper_file = os.path.join(storage_path, "stopper", f"{domain}.txt")
@@ -602,10 +662,39 @@ async def main():
             
             if routes.STOP_REASON in failure_stop_reasons:
                 logger.warning(f"Exiting with error code due to failure condition: {routes.STOP_REASON}")
+                # Write exit reason before exiting
+                write_exit_reason(
+                    storage_path, 
+                    routes.STOP_REASON, 
+                    details=f"Crawler stopped due to: {routes.STOP_REASON}"
+                )
                 sys.exit(1)
+            else:
+                # Normal completion or business limit reached
+                exit_reason = routes.STOP_REASON if routes.STOP_REASON else "completed"
+                write_exit_reason(
+                    storage_path, 
+                    exit_reason, 
+                    details=f"Finished: {stats.requests_finished}, Failed: {stats.requests_failed}",
+                    stats={
+                        "requests_finished": stats.requests_finished,
+                        "requests_failed": stats.requests_failed
+                    }
+                )
         
     except Exception as e:
+        # Capture full traceback for analysis
+        tb_str = traceback.format_exc()
         logger.error(f"Crawl failed: {e}")
+        logger.error(f"Full traceback:\n{tb_str}")
+        
+        # Write exit reason with full traceback
+        write_exit_reason(
+            storage_path, 
+            "error", 
+            details=str(e),
+            tb=tb_str
+        )
         sys.exit(1)
         
     finally:
