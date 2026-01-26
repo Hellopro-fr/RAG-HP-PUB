@@ -10,3 +10,4 @@ prometheus-client
 waitress
 langgraph
 langchain-core
+langchain-community
