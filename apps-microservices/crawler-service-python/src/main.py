@@ -363,7 +363,7 @@ async def main():
         # Configure Browser Pool with Fingerprints
         fingerprint_generator = DefaultFingerprintGenerator(
             header_options=HeaderGeneratorOptions(
-                browsers=['chromium', 'firefox', 'webkit', 'edge'],
+                browsers=['chrome', 'firefox', 'safari', 'edge'],
                 operating_systems=['windows', 'macos', 'linux'],
                 devices=['desktop'],
                 locales=['fr']
