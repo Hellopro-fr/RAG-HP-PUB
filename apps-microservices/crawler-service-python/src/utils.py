@@ -175,10 +175,34 @@ async def drop_dataset(name: str):
     """
     Drops (deletes) an existing dataset by its name.
     Useful when you need to start fresh before a new crawling session.
+    It manually deletes the directory if using local storage to ensure
+    both symlinks and real directories are handled.
     """
     try:
-        dataset_to_drop = await Dataset.open(name=name)
-        await dataset_to_drop.drop()
+        # In Crawlee Python, we might need to access storage client directly or just remove the folder.
+        # We will remove the directory manually if it's local storage.
+        storage_path = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
+        
+        # Paths to clean
+        targets = [
+            os.path.join(storage_path, "datasets", name),
+            os.path.join(storage_path, "request_queues", name),
+            os.path.join(storage_path, "key_value_stores", name) # Also clean KVS
+        ]
+        
+        for target_path in targets:
+            if os.path.exists(target_path) or os.path.islink(target_path):
+                import shutil
+                try:
+                    if os.path.islink(target_path):
+                        os.unlink(target_path)
+                        logger.info(f"Unlinked symlink: {target_path}")
+                    else:
+                        shutil.rmtree(target_path)
+                        logger.info(f"Removed directory: {target_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove {target_path}: {e}")
+            
     except Exception as e:
         logger.error(f"Error dropDataset: {e}")
 

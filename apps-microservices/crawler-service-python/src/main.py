@@ -236,10 +236,18 @@ async def main():
     if drop_data:
         logger.info("Dropping datasets and request queue...")
         try:
-           # We use our custom drop_dataset logic
-           await drop_dataset(domain)
+           # Implement "Double Drop" to remove both original and sanitized folder names
+           # to ensure a clean state regardless of which one is the real directory or symlink.
+           await drop_dataset(domain) 
+           await drop_dataset(crawlee_storage_name)
+           
+           # Also clean up error/nfr datasets
            await drop_dataset(f"error-{domain}")
+           await drop_dataset(f"error-{crawlee_storage_name}")
+           
            await drop_dataset(f"nfr-{domain}")
+           await drop_dataset(f"nfr-{crawlee_storage_name}")
+           
            is_historised = True
         except Exception as e:
            logger.warning(f"Failed to drop datasets: {e}")
