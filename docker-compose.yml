@@ -1553,6 +1553,8 @@ services:
     #   - graph-rag-normalize-unite-service
     networks:
       - services-net
+      - services-ext-net
+      - services-global-net
 
 networks:
   services-net:
