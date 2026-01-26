@@ -246,6 +246,15 @@ async def main():
     log_name = f"{domain}-logs-{now_str}.log"
     attach_file_logger(log_name)
 
+    # Clean up stale stopper file from previous runs to prevent immediate stop (Restart Loop Fix)
+    stopper_file = os.path.join(storage_path, "stopper", f"{domain}.txt")
+    if os.path.exists(stopper_file):
+        try:
+            os.remove(stopper_file)
+            logger.info(f"Removed stale stopper file from previous run: {stopper_file}")
+        except Exception as e:
+            logger.warning(f"Failed to remove stale stopper file: {e}")
+
     # Sanitize storage name
     crawlee_storage_name = domain.replace('.', '-')
     routes.CRAWLEE_STORAGE_NAME = crawlee_storage_name
@@ -513,14 +522,19 @@ async def main():
             except Exception as e:
                 logger.error(f"Failed to write callback payload: {e}")
         
-            # Exit with error code if crawler stopped due to an error condition
-            # This ensures the failure webhook is sent instead of success webhook
-            error_stop_reasons = [
-                "stalledZeroProgress", "stoppedManually", "limitErrors", 
-                "limitRedirects", "limitNewUrls", "limitQuestionMark", "limitDiez"
+            # Exit with error code if crawler stopped due to an error condition (FAILURE ONLY)
+            # This ensures the failure webhook is sent only for genuine crashes.
+            # Business limits (manual stop, max items) are considered SUCCESS (Finished).
+            
+            failure_stop_reasons = [
+                "stalledZeroProgress", # The crawler got stuck
+                "limitErrors",         # Circuit breaker: too many 404s/500s
+                "limitRedirects",      # Circuit breaker: redirect loops
+                "limitNewUrls"         # Circuit breaker: spider trap detection
             ]
-            if routes.STOP_REASON in error_stop_reasons:
-                logger.warning(f"Exiting with error code due to: {routes.STOP_REASON}")
+            
+            if routes.STOP_REASON in failure_stop_reasons:
+                logger.warning(f"Exiting with error code due to failure condition: {routes.STOP_REASON}")
                 sys.exit(1)
         
     except Exception as e:
