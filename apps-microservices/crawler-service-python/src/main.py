@@ -100,15 +100,39 @@ class CamoufoxPlugin(PlaywrightBrowserPlugin):
         if not self._playwright:
             raise RuntimeError('Playwright browser plugin is not initialized.')
 
-        return PlaywrightBrowserController(
-            browser=await AsyncNewBrowser(
-                self._playwright, **self._browser_launch_options
-            ),
-            # Increased from 1 to 3 to reduce browser creation bottleneck
-            max_open_pages_per_browser=3,
-            # This turns off the crawlee header_generation. Camoufox has its own.
-            header_generator=None,
-        )
+        MAX_RETRIES = 3
+        last_error = None
+        
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                logger.info(f"🕵️ Attempt {attempt}/{MAX_RETRIES}: Launching Camoufox browser...")
+                
+                # Wrap creation in timeout because Camoufox can hang in Docker
+                browser = await asyncio.wait_for(
+                    AsyncNewBrowser(self._playwright, **self._browser_launch_options),
+                    timeout=60
+                )
+                
+                logger.info("✅ Camoufox browser launched successfully")
+                return PlaywrightBrowserController(
+                    browser=browser,
+                    # Increased from 1 to 3 to reduce browser creation bottleneck
+                    max_open_pages_per_browser=3,
+                    # This turns off the crawlee header_generation. Camoufox has its own.
+                    header_generator=None,
+                )
+            except asyncio.TimeoutError:
+                last_error = "Timeout waiting for Camoufox to launch (>60s)"
+                logger.warning(f"⚠️ {last_error}. Retrying...")
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"⚠️ Failed to launch Camoufox: {e}. Retrying...")
+                
+            # Small backoff before retry
+            if attempt < MAX_RETRIES:
+                await asyncio.sleep(2)
+                
+        raise RuntimeError(f"Failed to launch Camoufox after {MAX_RETRIES} attempts. Last error: {last_error}")
 
 async def heartbeat_task(redis_url: str, job_id: str, domain: str, hostname: str):
     """
