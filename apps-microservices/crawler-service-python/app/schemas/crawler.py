@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Optional, List
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, ConfigDict
 from datetime import datetime
 
 class IncludeInArchive(str, Enum):
@@ -36,6 +36,8 @@ class UpdateThresholds(BaseModel):
     max_new_urls: Optional[int] = Field(None, description="Abort if new URL discovery count exceeds this value.")
 
 class CrawlRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str = Field(..., description="An identifier for the crawl job, e.g., from a database.", example="domaine_123")
     domain: str = Field(..., description="The domain name being crawled.", example="example.com")
     start_url: HttpUrl = Field(..., description="The initial URL to start crawling from.", example="https://example.com")
@@ -76,7 +78,7 @@ class ArchiveResponse(BaseModel):
 
 class CrawlStatus(BaseModel):
     crawl_id: str
-    id_domaine: str # Legacy ID alias
+    id_domaine: str # Legacy alias
     status: str = Field(..., description="Current status: running, stopping, finished, failed", example="running")
     domain: str
     start_url: HttpUrl
