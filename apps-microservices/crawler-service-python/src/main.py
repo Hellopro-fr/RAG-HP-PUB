@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from crawlee import Request, SkippedReason, ConcurrencySettings
 from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext, PlaywrightPreNavCrawlingContext
 from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin
-from crawlee.fingerprint_suite import DefaultFingerprintGenerator
+from crawlee.fingerprint_suite import DefaultFingerprintGenerator, HeaderGeneratorOptions, ScreenOptions
 from crawlee.proxy_configuration import ProxyConfiguration
 from crawlee.configuration import Configuration
 from crawlee.storages import Dataset, RequestQueue
@@ -335,7 +335,15 @@ async def main():
     try:
         # Initialize Crawler
         # Configure Browser Pool with Fingerprints
-        fingerprint_generator = DefaultFingerprintGenerator()
+        fingerprint_generator = DefaultFingerprintGenerator(
+            header_options=HeaderGeneratorOptions(
+                browsers=['chromium', 'firefox', 'webkit', 'edge'],
+                operating_systems=['windows', 'macos', 'linux'],
+                devices=['desktop'],
+                locales=['fr']
+            ),
+            screen_options=ScreenOptions(min_width=400)
+        )
         
         browser_plugin = PlaywrightBrowserPlugin(
             browser_type='chromium',

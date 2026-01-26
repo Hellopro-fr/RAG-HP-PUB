@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     
     # Proxy configuration
     APIFY_PROXY: Optional[str] = os.getenv("APIFY_PROXY", None)
+
+    # Maintenance configuration
+    RECONCILIATION_INTERVAL_SECONDS: int = int(os.getenv("RECONCILIATION_INTERVAL_SECONDS", "300"))
+    
+    # GCS Configuration
+    GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME")
     
     class Config:
         env_file = ".env"

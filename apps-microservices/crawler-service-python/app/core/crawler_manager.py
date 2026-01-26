@@ -647,56 +647,91 @@ class CrawlerManager:
         )
 
     async def get_results_archive(self, job_info: dict, include: List[IncludeInArchive]) -> str:
-        # Simplified sync version call
-        # ...
-        # I'll rely on shutil for now to keep it simple and fit in limits.
-        # Assuming simple implementation for POC.
+        """
+        Generates a compressed archive of the crawl results.
+        Uses caching based on the hash of requested components.
+        Runs in a separate thread to avoid blocking the event loop.
+        """
         crawl_id = job_info['crawl_id']
+        
+        if job_info["status"] == "running":
+             from fastapi import HTTPException
+             raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
+        
+        # Sort include list to ensure deterministic hash
+        sorted_include = sorted([item.value for item in include])
+        include_hash = hashlib.md5(json.dumps(sorted_include).encode()).hexdigest()
+        
+        # Define the centralized archive path with hash
+        archive_base_path = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
+        os.makedirs(archive_base_path, exist_ok=True)
+        final_archive_path = os.path.join(archive_base_path, f"{crawl_id}-results-{include_hash}.tar.gz")
+
+        # --- CACHING STRATEGY ---
+        if os.path.exists(final_archive_path):
+            logger.info(f"Returning cached archive for '{crawl_id}' (hash: {include_hash})")
+            return final_archive_path
+
+        # Offload blocking I/O
+        try:
+            return await asyncio.to_thread(self._generate_archive_sync, job_info, include, final_archive_path)
+        except Exception as e:
+            logger.error(f"Error in background archive generation for '{crawl_id}': {e}", exc_info=True)
+            raise e
+
+    def _generate_archive_sync(self, job_info: dict, include: List[IncludeInArchive], final_path: str) -> str:
+        """
+        Synchronous helper to generate the archive.
+        Combines V3's directory walking logic with V2's atomicity and structure.
+        """
         storage_path = job_info["storage_path"]
-        
-        archive_dir = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
-        os.makedirs(archive_dir, exist_ok=True)
-        # Custom Archiving with Name Remapping (Sanitized -> Original)
-        # We need to present "prodealcenter-fr" as "prodealcenter.fr" in the archive
-        import tarfile
-        
-        crawlee_scan_name = getattr(settings, 'CRAWLEE_STORAGE_NAME', job_info.get('domain', '').replace('.', '-'))
+        crawl_id = job_info['crawl_id']
         original_domain = job_info.get('domain')
+        crawlee_scan_name = getattr(settings, 'CRAWLEE_STORAGE_NAME', original_domain.replace('.', '-') if original_domain else '')
         
-        target = os.path.join(archive_dir, f"{crawl_id}")
-        target_file = f"{target}.tar.gz"
-        
-        with tarfile.open(target_file, "w:gz") as tar:
-            # Walk through the storage path
-            for root, dirs, files in os.walk(storage_path):
-                # skip looking into the archives folder itself to avoid recursion if it's inside
-                if "archives" in root:
-                    continue
-                    
-                for file in files:
-                    full_path = os.path.join(root, file)
-                    
-                    # Calculate relative path for archive
-                    rel_path = os.path.relpath(full_path, storage_path)
-                    
-                    # REMAPPING LOGIC:
-                    # If the path contains the sanitized name, replace it with original
-                    # e.g. datasets/prodealcenter-fr/items.json -> datasets/prodealcenter.fr/items.json
-                    if crawlee_scan_name in rel_path and original_domain and crawlee_scan_name != original_domain:
-                        arcname = rel_path.replace(crawlee_scan_name, original_domain)
-                    else:
-                        arcname = rel_path
-                        
-                    # Filter out symlinks or duplicates if needed, but for now just add file
-                    # We might want to skip the symlinks themselves if we are remapping the real folder!
-                    # If we find a symlink that MATCHES the original name, we should SKIP it 
-                    # because we are already mapping the real folder to that name.
-                    if os.path.islink(full_path):
-                        continue
-                        
-                    tar.add(full_path, arcname=arcname)
-                    
-        return target_file
+        # Use a temporary file for writing
+        archive_dir = os.path.dirname(final_path)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".tar.gz", dir=archive_dir) as tmp_file:
+            try:
+                # Use reduced compression level for speed
+                with tarfile.open(fileobj=tmp_file, mode='w:gz', compresslevel=1) as tar:
+                    # Walk through the storage path (V3 Logic)
+                    for root, dirs, files in os.walk(storage_path):
+                        # skip archives folder
+                        if "archives" in root:
+                            continue
+                            
+                        for file in files:
+                            full_path = os.path.join(root, file)
+                            
+                            # Calculate relative path
+                            rel_path = os.path.relpath(full_path, storage_path)
+                            
+                            # V3 REMAPPING LOGIC:
+                            # Replace sanitized name with original domain in archive structure
+                            if crawlee_scan_name in rel_path and original_domain and crawlee_scan_name != original_domain:
+                                arcname = rel_path.replace(crawlee_scan_name, original_domain)
+                            else:
+                                arcname = rel_path
+                                
+                            # Skip symlinks
+                            if os.path.islink(full_path):
+                                continue
+                                
+                            tar.add(full_path, arcname=arcname)
+                
+                # Atomic move
+                tmp_file.close()
+                shutil.move(tmp_file.name, final_path)
+                logger.info(f"Created new archive for '{crawl_id}' at {final_path}")
+                return final_path
+
+            except Exception:
+                # Cleanup on error
+                tmp_file.close()
+                if os.path.exists(tmp_file.name):
+                    os.remove(tmp_file.name)
+                raise
 
     async def archive_crawl(self, job_info: dict) -> str:
         """
@@ -927,5 +962,56 @@ class CrawlerManager:
             await cache_service.redis_client.set(CRAWL_RUNNING_COUNT_KEY, true_running_count)
         else:
             logger.info(f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
+
+    async def cleanup_archives(self, max_age_hours: int):
+        """
+        Deletes archive files that are older than `max_age_hours` to save disk space.
+        Scanning is performed in a separate thread to avoid blocking.
+        """
+        archives_dir = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
+        if not os.path.exists(archives_dir):
+            return
+
+        logger.info(f"Starting archive cleanup. Removing files older than {max_age_hours} hours.")
+        
+        # Define the sync cleanup function logic
+        def _cleanup_sync():
+            deleted_count = 0
+            retained_count = 0
+            errors = 0
+            now = datetime.now().timestamp()
+            max_age_seconds = max_age_hours * 3600
+            
+            try:
+                for filename in os.listdir(archives_dir):
+                    file_path = os.path.join(archives_dir, filename)
+                    if not os.path.isfile(file_path):
+                        continue
+                        
+                    # Calculate age
+                    try:
+                        mtime = os.path.getmtime(file_path)
+                        age = now - mtime
+                        
+                        if age > max_age_seconds:
+                            os.remove(file_path)
+                            deleted_count += 1
+                        else:
+                            retained_count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to process/delete archive '{filename}': {e}")
+                        errors += 1
+                        
+            except Exception as e:
+                logger.error(f"Error listing archives directory during cleanup: {e}")
+                
+            return deleted_count, retained_count, errors
+
+        # Run in thread using asyncio
+        try:
+            deleted, retained, errors = await asyncio.to_thread(_cleanup_sync)
+            logger.info(f"Archive cleanup complete. Deleted: {deleted}, Retained: {retained}, Errors: {errors}")
+        except Exception as e:
+            logger.error(f"Failed to execute archive cleanup: {e}")
 
 crawler_manager = CrawlerManager()
