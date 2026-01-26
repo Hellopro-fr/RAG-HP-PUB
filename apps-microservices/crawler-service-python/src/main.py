@@ -104,8 +104,8 @@ class CamoufoxPlugin(PlaywrightBrowserPlugin):
             browser=await AsyncNewBrowser(
                 self._playwright, **self._browser_launch_options
             ),
-            # Increase, if camoufox can handle it in your use case.
-            max_open_pages_per_browser=1,
+            # Increased from 1 to 3 to reduce browser creation bottleneck
+            max_open_pages_per_browser=3,
             # This turns off the crawlee header_generation. Camoufox has its own.
             header_generator=None,
         )
@@ -457,7 +457,13 @@ async def main():
         if use_camoufox:
             logger.info("🕵️ Using Camoufox stealth browser")
             plugin = CamoufoxPlugin()
-            browser_pool = BrowserPool(plugins=[plugin])
+            browser_pool = BrowserPool(
+                plugins=[plugin],
+                # Increased timeout for Camoufox browser operations (default is 15s)
+                operation_timeout=timedelta(seconds=30),
+                # Retire browsers after 10 pages to prevent stale/stuck browsers
+                retire_browser_after_page_count=10
+            )
         else:
             # Configure Browser Pool with Fingerprints
             fingerprint_generator = DefaultFingerprintGenerator(
