@@ -1560,7 +1560,7 @@ services:
       - services-ext-net
       - services-global-net
 
-  graph-rag-api-recherche--debug:
+  graph-rag-api-recherche-service-debug:
     build:
       context: .
       dockerfile: apps-microservices/graph-rag-api-recherche-service-debug/Dockerfile
