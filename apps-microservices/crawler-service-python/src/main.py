@@ -15,7 +15,7 @@ from typing_extensions import override
 
 # Updated imports to include ConcurrencySettings and BrowserPool components
 from crawlee import Request, SkippedReason, ConcurrencySettings
-from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext, PlaywrightPreNavCrawlingContext
+from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext, PlaywrightPreNavCrawlingContext, BasicCrawlingContext
 from crawlee.browsers import BrowserPool, PlaywrightBrowserPlugin, PlaywrightBrowserController
 from crawlee.fingerprint_suite import DefaultFingerprintGenerator, HeaderGeneratorOptions, ScreenOptions
 from crawlee.proxy_configuration import ProxyConfiguration
@@ -25,7 +25,7 @@ from redis.asyncio import Redis
 
 import routes
 from state import DedupManager, StatsManager
-from utils import get_system_stats, get_urls_crawled, update_urls_crawled, drop_dataset, is_stopped_manually, attach_file_logger, ensure_alias_symlink, load_dataset_urls_generator, reclaim_failed_requests, sanitize_queue_on_disk
+from utils import get_system_stats, get_urls_crawled, update_urls_crawled, drop_dataset, is_stopped_manually, attach_file_logger, ensure_alias_symlink, load_dataset_urls_generator, reclaim_failed_requests, sanitize_queue_on_disk, process_page, detect_captcha
 
 # Configure Logging
 logging.basicConfig(
@@ -442,6 +442,75 @@ async def main():
         
         # Inject crawler instance into routes for manual stop control
         routes.crawler_instance = crawler
+        
+        # Failed Request Handler (Error Handler)
+        # Uses closure to access stats_manager, crawler, and crawlee_storage_name
+        @crawler.failed_request_handler
+        async def error_handler(context: BasicCrawlingContext | PlaywrightCrawlingContext, error: Exception) -> None:
+            from crawlee.storages import Dataset
+            
+            request = context.request
+            log = context.log
+            
+            # Safely access page - it might be None if error occurred before navigation
+            page = getattr(context, 'page', None)
+            
+            # Accumulate errors in user_data since Request object doesn't have error_messages attribute
+            errors_list = request.user_data.get("error_messages")
+            if not isinstance(errors_list, list):
+                errors_list = []
+            
+            # Extract error info from context if available
+            # For PyCrawlee, error details might be attached differently or just inferred from context
+            # If the handler was called, an exception occurred.
+            
+            # In newer Crawlee versions, the error might be passed as a second arg, 
+            # but the failed_request_handler signature in Python only guarantees 'context'.
+            # We log generic failure.
+            errors_list.append(f"Request failed (handled by error_handler): {error}")
+            request.user_data["error_messages"] = errors_list
+
+            log.error(f"Request {request.url} failed. Errors: {errors_list}")
+            
+            # --- Circuit Breaker: Error Count ---
+            if stats_manager:
+                await stats_manager.increment("errors")
+                if args.maxErrors and await stats_manager.check_threshold("errors", args.maxErrors):
+                    log.warning("🛑 Max errors reached. Stopping.")
+                    crawler.stop()
+            # ------------------------------------
+            
+            if page:
+                try:
+                   # Try to get content for analysis
+                   content = await process_page(page, request.loaded_url or request.url, log)
+                   captcha_detected = await detect_captcha(page, content)
+                   
+                   if captcha_detected:
+                       log.error(f"Captcha detected on {request.url} : {captcha_detected}")
+                       
+                except Exception as e:
+                   log.error(f"Error processing page for failure analysis: {e}")
+            
+            # Push to error dataset
+            try:
+                # USE CORRECT STORAGE NAME from local scope
+                if crawlee_storage_name != '':
+                    error_dataset_name = f"error-{crawlee_storage_name}"
+                else:
+                    from urllib.parse import urlparse
+                    domain_part = urlparse(request.url).netloc.replace("www.", "")
+                    safe_domain_name = domain_part.replace('.', '-')
+                    error_dataset_name = f"error-{safe_domain_name}"
+                
+                error_dataset = await Dataset.open(name=error_dataset_name)
+                await error_dataset.push_data({
+                    "id": request.id,
+                    "url": request.url,
+                    "errors": errors_list
+                })
+            except Exception as e:
+                 log.error(f"Failed to push to error dataset: {e}")
         
         # Hook for skipped requests (Robots.txt logging)
         @crawler.on_skipped_request
