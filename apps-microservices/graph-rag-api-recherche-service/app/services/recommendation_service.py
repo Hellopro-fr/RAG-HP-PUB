@@ -278,8 +278,8 @@ class RecommendationService:
         all_rids = [f["rid"] for f in flat_filters]
         weights_map = await self._get_question_weights(all_rids)
 
-        blocked_val = request.blocked_val
-        different_val = request.different_val
+        blocked_val = float(request.blocked_val)
+        different_val = float(request.different_val)
 
         # Build Cypher Query (V4)
         cypher_query = """
