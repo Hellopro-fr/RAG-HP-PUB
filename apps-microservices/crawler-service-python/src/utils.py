@@ -703,6 +703,8 @@ def sanitize_queue_on_disk(
                         if new_url != original_url:
                             # Update outer URL
                             data['url'] = new_url
+                            # FIX: Update outer UniqueKey
+                            data['uniqueKey'] = new_url
                             
                             # Update nested json string if present (Crawlee internal)
                             if 'json' in data:
@@ -710,8 +712,12 @@ def sanitize_queue_on_disk(
                                     inner = json.loads(data['json'])
                                     if 'url' in inner:
                                         inner['url'] = new_url
-                                        # Re-serialize inner JSON
-                                        data['json'] = json.dumps(inner)
+                                    # FIX: Update inner UniqueKey
+                                    if 'uniqueKey' in inner:
+                                        inner['uniqueKey'] = new_url
+                                    
+                                    # Re-serialize inner JSON
+                                    data['json'] = json.dumps(inner)
                                 except Exception:
                                     pass # Ignore inner parsing errors if format differs
 
