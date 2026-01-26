@@ -238,12 +238,23 @@ async def main():
     ensure_alias_symlink(f"error-{crawlee_storage_name}", f"error-{domain}", [base_datasets])
     ensure_alias_symlink(f"nfr-{crawlee_storage_name}", f"nfr-{domain}", [base_datasets])
 
+    # --- STATE MANAGEMENT INIT ---
+    # Moved initialization BEFORE drop_data logic to ensure we can clean up Redis
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
+    
+    # Initialize Managers
+    dedup_manager = DedupManager(redis_url, job_id)
+    stats_manager = StatsManager(redis_url, job_id, storage_path)
+    
+    # Inject into routes
+    routes.dedup_manager = dedup_manager
+    routes.stats_manager = stats_manager
+
     is_historised = False
     if drop_data:
-        logger.info("Dropping datasets and request queue...")
+        logger.info("Dropping datasets, request queue, and clearing state...")
         try:
            # Implement "Double Drop" to remove both original and sanitized folder names
-           # to ensure a clean state regardless of which one is the real directory or symlink.
            await drop_dataset(domain) 
            await drop_dataset(crawlee_storage_name)
            
@@ -254,23 +265,24 @@ async def main():
            await drop_dataset(f"nfr-{domain}")
            await drop_dataset(f"nfr-{crawlee_storage_name}")
            
+           # --- STATE CLEANUP ---
+           # Clear Redis keys and local stats file
+           await dedup_manager.cleanup()
+           await stats_manager.cleanup()
+           
+           if os.path.exists(stats_manager.stats_file):
+               try:
+                   os.remove(stats_manager.stats_file)
+                   logger.info(f"Removed local stats file: {stats_manager.stats_file}")
+               except Exception as e:
+                   logger.warning(f"Failed to remove stats file: {e}")
+
            is_historised = True
         except Exception as e:
-           logger.warning(f"Failed to drop datasets: {e}")
+           logger.warning(f"Failed to drop datasets/state: {e}")
     # ------------------------------------
-
-    # --- STATE MANAGEMENT INIT ---
-    redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
     
-    # Initialize Managers
-    dedup_manager = DedupManager(redis_url, job_id)
-    stats_manager = StatsManager(redis_url, job_id, storage_path)
-    
-    # Inject into routes
-    routes.dedup_manager = dedup_manager
-    routes.stats_manager = stats_manager
-    
-    # Load Stats if resuming
+    # Load Stats if resuming (will be empty if we just cleaned it up)
     await stats_manager.load_state_from_disk()
     
     # Load Historical URLs into Redis (Cold Storage -> Hot Redis)
