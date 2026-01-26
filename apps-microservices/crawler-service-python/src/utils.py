@@ -187,7 +187,10 @@ async def drop_dataset(name: str):
         targets = [
             os.path.join(storage_path, "datasets", name),
             os.path.join(storage_path, "request_queues", name),
-            os.path.join(storage_path, "key_value_stores", name) # Also clean KVS
+            os.path.join(storage_path, "key_value_stores", name), # Also clean KVS
+            # Also clean request_urls (check both root and inside storage for safety/consistency)
+            os.path.join("request_urls", name),
+            os.path.join(storage_path, "request_urls", name)
         ]
         
         for target_path in targets:
