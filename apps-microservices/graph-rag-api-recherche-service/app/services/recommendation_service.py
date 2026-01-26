@@ -6,6 +6,8 @@ from typing import List, Dict, Any, Optional
 from app.domain.models import ComplexFilterRequest, ResultProduct, ScoredProduct
 from app.infrastructure.clients import clients
 
+from app.services.unit_normalizer import unit_normalizer
+
 
 class RecommendationService:
     """
