@@ -309,10 +309,13 @@ class RecommendationService:
         ORDER BY p_top.global_score DESC 
         LIMIT 4
         
-        WITH all_products, collect(p_top.node PROJECTION_PLACEHOLDER) AS top_p
+        // Alias node for projection
+        WITH all_products, p_top.node AS top_node
+        WITH all_products, collect(top_node PROJECTION_PLACEHOLDER) AS top_p
         
         UNWIND all_products AS prod
-        RETURN prod.node PROJECTION_PLACEHOLDER AS product_data, prod.details AS details, prod.global_score AS global_score, top_p
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
         """
 
         # Determine projection
