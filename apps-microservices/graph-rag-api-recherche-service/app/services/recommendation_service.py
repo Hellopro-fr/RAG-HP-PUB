@@ -162,13 +162,6 @@ class RecommendationService:
 
         # Execute all normalization calls for this constraint in parallel
         results = await asyncio.gather(*tasks)
-        
-        # DEBUG: Log what gRPC returns
-        print(f"DEBUG _normalize_single_constraint for char_id={char_id}:")
-        print(f"  - raw_target: {raw_target}")
-        print(f"  - raw_blocking: {raw_blocking}")
-        print(f"  - unit: {unit}, label: {label}")
-        print(f"  - gRPC results: {results}")
 
         # Reconstruct structures
         res_idx = 0
