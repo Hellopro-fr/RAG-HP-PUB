@@ -309,8 +309,9 @@ class RecommendationService:
         ORDER BY p_top.global_score DESC 
         LIMIT 4
         
-        // First project the node data, then collect the full structure
-        WITH all_products, (p_top.node) TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, p_top.global_score AS top_score, p_top.details AS top_details
+        // First alias the node, then project the node data
+        WITH all_products, p_top.node AS top_node, p_top.global_score AS top_score, p_top.details AS top_details
+        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details
         WITH all_products, collect({
             product_data: top_product_data,
             score: top_score,
