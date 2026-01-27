@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 from app.domain.models import ComplexFilterRequest, ResultProduct, ScoredProduct
 from app.infrastructure.clients import clients
 
-from app.services.unit_normalizer import unit_normalizer
+# from app.services.unit_normalizer import unit_normalizer
 
 
 class RecommendationService:
@@ -37,90 +37,90 @@ class RecommendationService:
             logging.error(f"Error fetching characteristic labels: {e}")
             return {}
 
-    def _normalize_value_with_context(
-        self, value: Any, unit: Optional[str], label: str
-    ) -> Dict[str, Any]:
-        scalar_value = self._extract_scalar(value)
-        if scalar_value is None:
-            return {}
-        props = {
-            "valeur": scalar_value,
-            "unite": unit,
-            "label": label,
-            "type_donnee": "numeric",
-        }
-        return unit_normalizer.normalize(props)
+    # def _normalize_value_with_context(
+    #     self, value: Any, unit: Optional[str], label: str
+    # ) -> Dict[str, Any]:
+    #     scalar_value = self._extract_scalar(value)
+    #     if scalar_value is None:
+    #         return {}
+    #     props = {
+    #         "valeur": scalar_value,
+    #         "unite": unit,
+    #         "label": label,
+    #         "type_donnee": "numeric",
+    #     }
+    #     return unit_normalizer.normalize(props)
 
-    async def _normalize_constraints_for_unwind_test(
-        self, request: ComplexFilterRequest
-    ) -> List[Dict[str, Any]]:
-        """
-        Classic V1 Normalization: Returns a flat list of filters.
-        """
-        all_char_ids = {
-            str(c.id_caracteristique)
-            for constraints in request.ids.values()
-            for c in constraints
-        }
-        label_map = await self._get_characteristic_labels(list(all_char_ids))
+    # async def _normalize_constraints_for_unwind_test(
+    #     self, request: ComplexFilterRequest
+    # ) -> List[Dict[str, Any]]:
+    #     """
+    #     Classic V1 Normalization: Returns a flat list of filters.
+    #     """
+    #     all_char_ids = {
+    #         str(c.id_caracteristique)
+    #         for constraints in request.ids.values()
+    #         for c in constraints
+    #     }
+    #     label_map = await self._get_characteristic_labels(list(all_char_ids))
 
-        flat_filters = []
-        for rid, constraints in request.ids.items():
-            processed_constraints = []
-            for c in constraints:
-                c_dict = c.model_dump()
-                char_id = str(c_dict.get("id_caracteristique"))
-                label = label_map.get(char_id, "dimensionless")
-                unit = c_dict.get("unite")
+    #     flat_filters = []
+    #     for rid, constraints in request.ids.items():
+    #         processed_constraints = []
+    #         for c in constraints:
+    #             c_dict = c.model_dump()
+    #             char_id = str(c_dict.get("id_caracteristique"))
+    #             label = label_map.get(char_id, "dimensionless")
+    #             unit = c_dict.get("unite")
 
-                target_num = None
-                if isinstance(c_dict.get("valeurs_cibles"), dict):
-                    raw = c_dict["valeurs_cibles"]
-                    norm = {"unit": None, "min": None, "max": None, "exact": None}
-                    for k in ["min", "max", "exact"]:
-                        if raw.get(k) is not None:
-                            res = self._normalize_value_with_context(
-                                raw[k], unit, label
-                            )
-                            if res:
-                                norm[k] = res.get("valeur_canonique")
-                                norm["unit"] = res.get("unite_canonique")
-                    target_num = norm if norm["unit"] else None
+    #             target_num = None
+    #             if isinstance(c_dict.get("valeurs_cibles"), dict):
+    #                 raw = c_dict["valeurs_cibles"]
+    #                 norm = {"unit": None, "min": None, "max": None, "exact": None}
+    #                 for k in ["min", "max", "exact"]:
+    #                     if raw.get(k) is not None:
+    #                         res = self._normalize_value_with_context(
+    #                             raw[k], unit, label
+    #                         )
+    #                         if res:
+    #                             norm[k] = res.get("valeur_canonique")
+    #                             norm["unit"] = res.get("unite_canonique")
+    #                 target_num = norm if norm["unit"] else None
 
-                blocking_num = None
-                if isinstance(c_dict.get("valeurs_bloquantes"), dict):
-                    raw = c_dict["valeurs_bloquantes"]
-                    norm = {"unit": None, "min": None, "max": None, "exact": None}
-                    for k in ["min", "max", "exact"]:
-                        if raw.get(k) is not None:
-                            res = self._normalize_value_with_context(
-                                raw[k], unit, label
-                            )
-                            if res:
-                                norm[k] = res.get("valeur_canonique")
-                                norm["unit"] = res.get("unite_canonique")
-                    blocking_num = norm if norm["unit"] else None
+    #             blocking_num = None
+    #             if isinstance(c_dict.get("valeurs_bloquantes"), dict):
+    #                 raw = c_dict["valeurs_bloquantes"]
+    #                 norm = {"unit": None, "min": None, "max": None, "exact": None}
+    #                 for k in ["min", "max", "exact"]:
+    #                     if raw.get(k) is not None:
+    #                         res = self._normalize_value_with_context(
+    #                             raw[k], unit, label
+    #                         )
+    #                         if res:
+    #                             norm[k] = res.get("valeur_canonique")
+    #                             norm["unit"] = res.get("unite_canonique")
+    #                 blocking_num = norm if norm["unit"] else None
 
-                processed_constraints.append(
-                    {
-                        "id_caracteristique": char_id,
-                        "target_list": (
-                            [str(x) for x in c_dict.get("valeurs_cibles")]
-                            if isinstance(c_dict.get("valeurs_cibles"), list)
-                            else []
-                        ),
-                        "blocking_list": (
-                            [str(x) for x in c_dict.get("valeurs_bloquantes")]
-                            if isinstance(c_dict.get("valeurs_bloquantes"), list)
-                            else []
-                        ),
-                        "target_numeric": target_num,
-                        "blocking_numeric": blocking_num,
-                    }
-                )
+    #             processed_constraints.append(
+    #                 {
+    #                     "id_caracteristique": char_id,
+    #                     "target_list": (
+    #                         [str(x) for x in c_dict.get("valeurs_cibles")]
+    #                         if isinstance(c_dict.get("valeurs_cibles"), list)
+    #                         else []
+    #                     ),
+    #                     "blocking_list": (
+    #                         [str(x) for x in c_dict.get("valeurs_bloquantes")]
+    #                         if isinstance(c_dict.get("valeurs_bloquantes"), list)
+    #                         else []
+    #                     ),
+    #                     "target_numeric": target_num,
+    #                     "blocking_numeric": blocking_num,
+    #                 }
+    #             )
 
-            flat_filters.append({"rid": rid, "constraints": processed_constraints})
-        return flat_filters
+    #         flat_filters.append({"rid": rid, "constraints": processed_constraints})
+    #     return flat_filters
 
     async def _normalize_single_constraint(self, c: Any, label: str) -> Dict[str, Any]:
         """
