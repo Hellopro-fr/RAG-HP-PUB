@@ -498,7 +498,7 @@ async def main():
             # Configure Browser Pool with Fingerprints
             fingerprint_generator = DefaultFingerprintGenerator(
                 header_options=HeaderGeneratorOptions(
-                    browsers=['chrome', 'firefox', 'safari', 'edge'],
+                    browsers=['chrome'],
                     operating_systems=['windows', 'macos', 'linux'],
                     devices=['desktop'],
                     locales=['fr']
@@ -509,10 +509,10 @@ async def main():
             browser_plugin = PlaywrightBrowserPlugin(
                 browser_type='chromium',
                 fingerprint_generator=fingerprint_generator,
-                browser_launch_options={
-                    "headless": True,
-                    "args": ["--no-sandbox", "--disable-setuid-sandbox"]
-                }
+                # browser_launch_options={
+                #     "headless": True,
+                #     "args": ["--no-sandbox", "--disable-setuid-sandbox"]
+                # }
             )
             browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
 
@@ -602,7 +602,7 @@ async def main():
                 
                 error_dataset = await Dataset.open(name=error_dataset_name)
                 await error_dataset.push_data({
-                    "id": getattr(request, 'id', 'unknown'),
+                    "id": getattr(request, 'unique_key', 'unknown'),
                     "url": request.url,
                     "errors": errors_list
                 })
