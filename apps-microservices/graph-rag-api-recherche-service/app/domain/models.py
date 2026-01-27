@@ -87,6 +87,8 @@ class ProduitPayload(BaseNormalizer):
 
 
 class ScoredProduct(ProduitPayload):
+    model_config = ConfigDict(exclude_none=True)
+
     score: float
     details: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -99,6 +101,8 @@ class ScoredProduct(ProduitPayload):
 
 
 class ResultProduct(BaseModel):
+    model_config = ConfigDict(exclude_none=True)
+    
     data: List[ScoredProduct]
     info: Dict[str, Any] = {}
     top_p: List[Union[Dict[str, Any], str]] = []
