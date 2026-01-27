@@ -19,7 +19,7 @@ message NormalizeQuantityRequest {
 
 message NormalizeQuantityResponse {
   bool success = 1;
-  float canonical_value = 2;
+  double canonical_value = 2;
   string canonical_unit = 3;
   string error_message = 4;
 }
@@ -27,15 +27,15 @@ message NormalizeQuantityResponse {
 message NormalizeRangeRequest {
   string label = 1;
   string unit = 2;
-  float min_value = 3;
-  float max_value = 4;
+  double min_value = 3;
+  double max_value = 4;
   string data_type = 5;
 }
 
 message NormalizeRangeResponse {
   bool success = 1;
-  float canonical_min = 2;
-  float canonical_max = 3;
+  double canonical_min = 2;
+  double canonical_max = 3;
   string canonical_unit = 4;
   string error_message = 5;
 }
