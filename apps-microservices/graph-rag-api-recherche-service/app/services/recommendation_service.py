@@ -303,11 +303,13 @@ class RecommendationService:
              ] AS top_per_fournisseur
         
         // Sort top_per_fournisseur by global_score descending and limit to 4
-        WITH all_products,
-             apoc.coll.sortMaps(top_per_fournisseur, 'global_score')[0..4] AS top_p_desc
+        WITH all_products, top_per_fournisseur
+        UNWIND top_per_fournisseur AS p_top
+        WITH all_products, p_top 
+        ORDER BY p_top.global_score DESC 
+        LIMIT 4
         
-        // Reverse to get descending order (sortMaps sorts ascending)
-        WITH all_products, apoc.coll.reverse(top_p_desc) AS top_p
+        WITH all_products, collect(p_top) AS top_p
         
         UNWIND all_products AS prod
         RETURN prod.product_data AS product_data, prod.details AS details, prod.global_score AS global_score, top_p
@@ -367,6 +369,8 @@ class RecommendationService:
                             info={"weights": weights_map},
                         )
                     )
+            
+            total_time = time.perf_counter() - start_time
             return ResultProduct(
                 data=scored_products,
                 info={
