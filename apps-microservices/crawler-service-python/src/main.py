@@ -509,12 +509,19 @@ async def main():
             browser_plugin = PlaywrightBrowserPlugin(
                 browser_type='chromium',
                 fingerprint_generator=fingerprint_generator,
-                # browser_launch_options={
-                #     "headless": True,
-                #     "args": ["--no-sandbox", "--disable-setuid-sandbox"]
-                # }
+                # CRITICAL: These flags are REQUIRED for Chromium to work in Docker
+                browser_launch_options={
+                    "headless": True,
+                    "args": [
+                        "--no-sandbox",              # Required: Docker runs as root
+                        "--disable-setuid-sandbox",  # Required: Additional sandbox workaround
+                        "--disable-dev-shm-usage",   # Prevents /dev/shm memory issues in containers
+                        "--disable-gpu",             # GPU not available in containers
+                    ]
+                }
             )
-            browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=10)
+            # Aligned with Camoufox path: retire_browser_after_page_count=25
+            browser_pool = BrowserPool(plugins=[browser_plugin], retire_browser_after_page_count=25)
 
         # Initialize Crawler 
         crawler_args = {
