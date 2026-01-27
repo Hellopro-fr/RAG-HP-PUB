@@ -310,7 +310,7 @@ class RecommendationService:
         LIMIT 4
         
         // First project the node data, then collect the full structure
-        WITH all_products, p_top.node PROJECTION_PLACEHOLDER AS top_product_data, p_top.global_score AS top_score, p_top.details AS top_details
+        WITH all_products, (p_top.node) TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, p_top.global_score AS top_score, p_top.details AS top_details
         WITH all_products, collect({
             product_data: top_product_data,
             score: top_score,
@@ -330,7 +330,8 @@ class RecommendationService:
         else:
              projection = "{.*}"
              
-        # Inject projection
+        # Inject projection - both placeholders use the same projection format
+        cypher_query = cypher_query.replace("TOP_P_PROJECTION_PLACEHOLDER", projection)
         cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
 
         params = {
