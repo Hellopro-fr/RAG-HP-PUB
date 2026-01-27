@@ -35,9 +35,12 @@ async def wait_and_scroll(
         timeout_secs: Maximum time in seconds to spend scrolling
     """
     try:
-        # REMOVED: networkidle wait - causes hangs on pages with persistent connections
-        # (analytics, websockets, social widgets never finish loading)
-        # We proceed immediately after DOMContentLoaded instead
+        # Wait for initial network requests to complete
+        try:
+            await page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            # Continue even if networkidle times out (common on heavy sites)
+            pass
 
         # Track page height
         previous_height = await page.evaluate("document.body.scrollHeight")
