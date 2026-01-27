@@ -309,9 +309,12 @@ class RecommendationService:
         ORDER BY p_top.global_score DESC 
         LIMIT 4
         
-        // Alias node for projection
-        WITH all_products, p_top.node AS top_node
-        WITH all_products, collect(top_node PROJECTION_PLACEHOLDER) AS top_p
+        // Collect full ScoredProduct-like structure for top_p
+        WITH all_products, collect({
+            product_data: p_top.node PROJECTION_PLACEHOLDER,
+            score: p_top.global_score,
+            details: p_top.details
+        }) AS top_p
         
         UNWIND all_products AS prod
         WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
@@ -362,7 +365,18 @@ class RecommendationService:
 
             if results:
                 # Extract top_p from the first row (it's the same for all rows)
-                top_p = results[0].get("top_p", [])
+                raw_top_p = results[0].get("top_p", [])
+                # Convert top_p entries to ScoredProduct objects
+                for entry in raw_top_p:
+                    if isinstance(entry, dict) and "product_data" in entry:
+                        top_p.append(
+                            ScoredProduct(
+                                **entry["product_data"],
+                                score=entry.get("score", 0.0),
+                                details=entry.get("details", []),
+                                info={"weights": weights_map},
+                            )
+                        )
 
                 for rec in results:
                     scored_products.append(
