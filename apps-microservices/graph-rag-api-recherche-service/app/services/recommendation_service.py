@@ -615,7 +615,7 @@ class RecommendationService:
             score: cid_score, 
             weight: weight,
             matched: matched,
-            ids: apoc.map.fromPairs([res IN char_results | [res.cid, res.score]])
+            // ids: apoc.map.fromPairs([res IN char_results | [res.cid, res.score]])
         }) AS details
         
         WITH p, details,
