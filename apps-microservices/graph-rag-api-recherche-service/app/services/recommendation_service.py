@@ -722,6 +722,7 @@ class RecommendationService:
             total_time = time.perf_counter() - start_time
             return ResultProduct(
                 data=scored_products,
+                top_p=top_p,
                 info={
                     "query_time": query_time,
                     "normalization_time": norm_time,
@@ -729,7 +730,6 @@ class RecommendationService:
                     "count": len(scored_products),
                     "version": "v4_caracteristique",
                 },
-                top_p=top_p,
             )
         except Exception as e:
             logging.error(f"Caracteristique Filter Error: {e}", exc_info=True)
