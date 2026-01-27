@@ -309,7 +309,7 @@ class RecommendationService:
         ORDER BY p_top.global_score DESC 
         LIMIT 4
         
-        WITH all_products, collect(p_top.id_produit) AS top_p
+        WITH all_products, collect(p_top.product_data.id_produit) AS top_p
         
         UNWIND all_products AS prod
         RETURN prod.product_data AS product_data, prod.details AS details, prod.global_score AS global_score, top_p
@@ -348,17 +348,7 @@ class RecommendationService:
 
             if results:
                 # Extract top_p from the first row (it's the same for all rows)
-                top_p_data = results[0].get("top_p", [])
-                
-                for rec in top_p_data:
-                    top_p.append(
-                        ScoredProduct(
-                            **rec["product_data"],
-                            score=rec.get("global_score", 0.0),
-                            details=rec.get("details", []),
-                            info={"weights": weights_map},
-                        )
-                    )
+                top_p = results[0].get("top_p", [])
 
                 for rec in results:
                     scored_products.append(
