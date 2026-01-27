@@ -275,8 +275,9 @@ class RecommendationService:
 
         norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_unwind(request)
+        flat_filters_test = await self._normalize_constraints_for_unwind_test(request)
         print(f"flat_filters: {flat_filters}")
-        print(f"flat_filters test: {self._normalize_constraints_for_unwind_test(request)}")
+        print(f"flat_filters test: {flat_filters_test}")
         norm_time = time.perf_counter() - norm_start
         all_rids = [f["rid"] for f in flat_filters]
         weights_map = await self._get_question_weights(all_rids)
