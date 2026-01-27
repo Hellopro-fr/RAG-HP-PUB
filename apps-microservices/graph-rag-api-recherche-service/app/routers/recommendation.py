@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
-from app.domain.models import ComplexFilterRequest, ResultProduct
+from app.domain.models import ComplexFilterRequest, FilterCaracteristiqueRequest, ResultProduct
 from app.services.recommendation_service import recommendation_service
 
 router = APIRouter()
@@ -17,6 +17,27 @@ async def complex_filter_products(request: ComplexFilterRequest):
 
         # We only support V4 logic in this microservice implementation
         results = await recommendation_service.get_products_by_complex_filters(request)
+        return results
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An internal error occurred while filtering products: {str(e)}",
+        )
+
+
+@router.post("/filter-by-caracteristique", response_model=ResultProduct, response_model_exclude_none=True)
+async def filter_by_caracteristique(request: FilterCaracteristiqueRequest):
+    """
+    Filter products based on CaracteristiqueTechnique constraints.
+    Uses direct caracteristique matching with weights provided in request.
+    Same scoring logic as /filter but keyed by caracteristique ID instead of Reponse ID.
+    """
+    try:
+        if not request.ids:
+            return ResultProduct(data=[], info={"message": "No filters provided"})
+
+        results = await recommendation_service.get_products_by_caracteristique_filters(request)
         return results
 
     except Exception as e:
@@ -57,3 +78,4 @@ async def score_specific_product(product_id: str, request: ComplexFilterRequest)
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An internal error occurred while scoring the product: {str(e)}",
         )
+
