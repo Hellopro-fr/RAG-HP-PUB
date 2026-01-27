@@ -293,13 +293,13 @@ class RecommendationService:
         LIMIT $top_k
         
         // Collect all scored products
-        WITH collect({product_data: PROJECTION_PLACEHOLDER, details: details, global_score: global_score}) AS all_products
+        WITH collect({node: p, details: details, global_score: global_score}) AS all_products
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
              // Group by id_fournisseur and get the top product per fournisseur
-             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.product_data.id_fournisseur]) |
-                 head([prod IN all_products WHERE prod.product_data.id_fournisseur = fournisseur_id | prod])
+             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
+                 head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
              ] AS top_per_fournisseur
         
         // Sort top_per_fournisseur by global_score descending and limit to 4
@@ -309,19 +309,19 @@ class RecommendationService:
         ORDER BY p_top.global_score DESC 
         LIMIT 4
         
-        WITH all_products, collect(p_top.product_data.id_produit) AS top_p
+        WITH all_products, collect(p_top.node PROJECTION_PLACEHOLDER) AS top_p
         
         UNWIND all_products AS prod
-        RETURN prod.product_data AS product_data, prod.details AS details, prod.global_score AS global_score, top_p
+        RETURN prod.node PROJECTION_PLACEHOLDER AS product_data, prod.details AS details, prod.global_score AS global_score, top_p
         """
 
         # Determine projection
         if request.output_fields:
              # Ensure we don't have empty list behavior if user sends []
              fields = [f".{f}" for f in request.output_fields] if len(request.output_fields) > 0 else [".*"]
-             projection = f"p {{ {', '.join(fields)} }}"
+             projection = f"{{ {', '.join(fields)} }}"
         else:
-             projection = "p {.*}"
+             projection = "{.*}"
              
         # Inject projection
         cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
