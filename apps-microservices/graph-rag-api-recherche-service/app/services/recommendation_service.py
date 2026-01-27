@@ -200,7 +200,7 @@ class RecommendationService:
         blocked_val = float(request.blocked_val)
         different_val = float(request.different_val)
 
-        # Build Cypher Query (V4)
+        # Build Cypher Query (V4) with top_p computed in Cypher
         cypher_query = """
         // --- STEP 1: ANCHOR TRAVERSAL (V3 Strategy) ---
         // Find only relevant products first
@@ -292,7 +292,25 @@ class RecommendationService:
         ORDER BY global_score DESC
         LIMIT $top_k
         
-        RETURN p {.*} AS product_data, details, global_score
+        // Collect all scored products
+        WITH collect({product_data: p {.*}, details: details, global_score: global_score}) AS all_products
+        
+        // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
+        WITH all_products,
+             // Group by id_fournisseur and get the top product per fournisseur
+             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.product_data.id_fournisseur]) |
+                 head([prod IN all_products WHERE prod.product_data.id_fournisseur = fournisseur_id | prod])
+             ] AS top_per_fournisseur
+        
+        // Sort top_per_fournisseur by global_score descending and limit to 4
+        WITH all_products,
+             apoc.coll.sortMaps(top_per_fournisseur, 'global_score')[0..4] AS top_p_desc
+        
+        // Reverse to get descending order (sortMaps sorts ascending)
+        WITH all_products, apoc.coll.reverse(top_p_desc) AS top_p
+        
+        UNWIND all_products AS prod
+        RETURN prod.product_data AS product_data, prod.details AS details, prod.global_score AS global_score, top_p
         """
 
         params = {
@@ -322,18 +340,33 @@ class RecommendationService:
             # results = await clients.execute_cypher_direct(cypher_query, params)
             query_time = time.perf_counter() - query_start
 
+            # Parse results - now returns rows of products, each containing the top_p list
             scored_products = []
-            for rec in results:
-                scored_products.append(
-                    ScoredProduct(
-                        **rec["product_data"],
-                        score=rec.get("global_score", 0.0),
-                        details=rec.get("details", []),
-                        info={"weights": weights_map},
-                    )
-                )
+            top_p = []
 
-            total_time = time.perf_counter() - start_time
+            if results:
+                # Extract top_p from the first row (it's the same for all rows)
+                top_p_data = results[0].get("top_p", [])
+                
+                for rec in top_p_data:
+                    top_p.append(
+                        ScoredProduct(
+                            **rec["product_data"],
+                            score=rec.get("global_score", 0.0),
+                            details=rec.get("details", []),
+                            info={"weights": weights_map},
+                        )
+                    )
+
+                for rec in results:
+                    scored_products.append(
+                        ScoredProduct(
+                            **rec["product_data"],
+                            score=rec.get("global_score", 0.0),
+                            details=rec.get("details", []),
+                            info={"weights": weights_map},
+                        )
+                    )
             return ResultProduct(
                 data=scored_products,
                 info={
@@ -343,6 +376,7 @@ class RecommendationService:
                     "count": len(scored_products),
                     "version": "v4_classic_inverted",
                 },
+                top_p=top_p,
             )
         except Exception as e:
             logging.error(f"Recommendation Error: {e}", exc_info=True)

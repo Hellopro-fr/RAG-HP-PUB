@@ -89,6 +89,7 @@ class ScoredProduct(ProduitPayload):
 class ResultProduct(BaseModel):
     data: List[ScoredProduct]
     info: Dict[str, Any] = {}
+    top_p: List[ScoredProduct] = []
 
 
 # --- Product Models ---
