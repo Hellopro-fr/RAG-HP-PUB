@@ -309,7 +309,7 @@ class RecommendationService:
         ORDER BY p_top.global_score DESC 
         LIMIT 4
         
-        WITH all_products, collect(p_top) AS top_p
+        WITH all_products, collect(p_top.id_produit) AS top_p
         
         UNWIND all_products AS prod
         RETURN prod.product_data AS product_data, prod.details AS details, prod.global_score AS global_score, top_p
