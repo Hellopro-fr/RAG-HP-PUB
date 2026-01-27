@@ -29,14 +29,19 @@ class GraphNormalizationServiceImpl(
                 value=request.value,
                 data_type=request.data_type,
             )
+            
+            # DEBUG: Log what the normalizer returns
+            logging.info(f"NormalizeQuantity result from use_case: {result}")
 
             if result:
-                return graph_normalization_pb2.NormalizeQuantityResponse(
+                response = graph_normalization_pb2.NormalizeQuantityResponse(
                     success=True,
                     canonical_value=result.get("valeur_canonique", 0.0),
                     canonical_unit=result.get("unite_canonique", ""),
                     error_message="",
                 )
+                logging.info(f"NormalizeQuantity response: success={response.success}, canonical_value={response.canonical_value}, canonical_unit={response.canonical_unit}")
+                return response
             else:
                 return graph_normalization_pb2.NormalizeQuantityResponse(
                     success=False,
