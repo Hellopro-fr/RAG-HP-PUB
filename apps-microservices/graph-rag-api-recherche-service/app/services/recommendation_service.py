@@ -309,11 +309,12 @@ class RecommendationService:
         ORDER BY p_top.global_score DESC 
         LIMIT 4
         
-        // Collect full ScoredProduct-like structure for top_p
+        // First project the node data, then collect the full structure
+        WITH all_products, p_top.node PROJECTION_PLACEHOLDER AS top_product_data, p_top.global_score AS top_score, p_top.details AS top_details
         WITH all_products, collect({
-            product_data: p_top.node PROJECTION_PLACEHOLDER,
-            score: p_top.global_score,
-            details: p_top.details
+            product_data: top_product_data,
+            score: top_score,
+            details: top_details
         }) AS top_p
         
         UNWIND all_products AS prod
