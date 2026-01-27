@@ -20,11 +20,12 @@ async def wait_and_scroll(
     page: Page,
     url: str,
     log: logging.Logger,
-    max_scrolls: int = 100,
-    timeout_secs: int = 30
+    max_scrolls: int = 15,  # Reduced from 100 - most content loads in first few scrolls
+    timeout_secs: int = 10  # Reduced from 30 - prevents hanging on slow pages
 ) -> None:
     """
     Simulates infinite scroll behavior on a page until no new content loads.
+    Optimized for speed with reduced defaults.
     
     Args:
         page: Playwright Page object
@@ -34,12 +35,9 @@ async def wait_and_scroll(
         timeout_secs: Maximum time in seconds to spend scrolling
     """
     try:
-        # Wait for initial network requests to complete
-        try:
-            await page.wait_for_load_state("networkidle", timeout=5000)
-        except Exception:
-            # Continue even if networkidle times out (common on heavy sites)
-            pass
+        # REMOVED: networkidle wait - causes hangs on pages with persistent connections
+        # (analytics, websockets, social widgets never finish loading)
+        # We proceed immediately after DOMContentLoaded instead
 
         # Track page height
         previous_height = await page.evaluate("document.body.scrollHeight")
@@ -49,18 +47,18 @@ async def wait_and_scroll(
         while True:
             # Check limits
             if scrolls >= max_scrolls:
-                log.warning(f"Max scrolls ({max_scrolls}) reached for {url}")
+                log.debug(f"Max scrolls ({max_scrolls}) reached for {url}")
                 break
 
             if (time.time() - start_time) > timeout_secs:
-                log.warning(f"Scroll timeout ({timeout_secs}s) reached for {url}")
+                log.debug(f"Scroll timeout ({timeout_secs}s) reached for {url}")
                 break
 
             # Scroll to bottom
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
 
-            # Allow time for new content to load
-            await asyncio.sleep(0.75)
+            # Reduced from 0.75s to 0.3s - faster scrolling
+            await asyncio.sleep(0.3)
 
             # Get new page height
             new_height = await page.evaluate("document.body.scrollHeight")

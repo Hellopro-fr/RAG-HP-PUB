@@ -239,34 +239,9 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
              return
     # -------------------------------------------------
 
-    # --- Block Resources (Performance & Bandwidth) ---
-    async def route_handler(route):
-        try:
-            req = route.request
-            resource_type = req.resource_type
-            req_url = req.url
-            
-            # Block heavy media and fonts
-            if resource_type in ['image', 'media', 'font', 'stylesheet']:
-                await route.abort()
-                return
-
-            # Block download scripts and binary files
-            if 'download.php' in req_url or 'imp=1' in req_url:
-                await route.abort()
-                return
-            
-            # Block binary extensions
-            if re.search(r'\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$', req_url, re.IGNORECASE):
-                await route.abort()
-                return
-
-            await route.continue_()
-        except Exception:
-            # Ignore route errors (e.g. page closed)
-            pass
-
-    await page.route("**/*", route_handler)
+    # NOTE: Resource blocking (images, fonts, stylesheets, binary files) is now handled
+    # proactively by the pre_navigation_hook in main.py. This ensures resources are
+    # blocked BEFORE navigation starts, which is faster than blocking them reactively.
     # -------------------------------------------------
     
     # Check Manual Stop

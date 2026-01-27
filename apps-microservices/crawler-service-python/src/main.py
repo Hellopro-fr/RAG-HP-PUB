@@ -94,13 +94,14 @@ def check_previous_crash(storage_path: str):
 # --------------------------------
 
 class CamoufoxPlugin(PlaywrightBrowserPlugin):
-    """Example browser plugin that uses Camoufox browser."""
+    """Browser plugin that uses Camoufox stealth browser with optimized settings."""
     @override
     async def new_browser(self) -> PlaywrightBrowserController:
         if not self._playwright:
             raise RuntimeError('Playwright browser plugin is not initialized.')
 
         MAX_RETRIES = 3
+        BASE_BACKOFF = 2  # Exponential backoff: 2s, 4s, 8s
         last_error = None
         
         for attempt in range(1, MAX_RETRIES + 1):
@@ -108,29 +109,32 @@ class CamoufoxPlugin(PlaywrightBrowserPlugin):
                 logger.info(f"🕵️ Attempt {attempt}/{MAX_RETRIES}: Launching Camoufox browser...")
                 
                 # Wrap creation in timeout because Camoufox can hang in Docker
+                # Reduced from 60s to 45s - fail faster to allow retry
                 browser = await asyncio.wait_for(
                     AsyncNewBrowser(self._playwright, **self._browser_launch_options),
-                    timeout=60
+                    timeout=45
                 )
                 
                 logger.info("✅ Camoufox browser launched successfully")
                 return PlaywrightBrowserController(
                     browser=browser,
-                    # Increased from 1 to 3 to reduce browser creation bottleneck
-                    max_open_pages_per_browser=3,
+                    # Increased from 3 to 5 to reduce browser creation bottleneck
+                    max_open_pages_per_browser=5,
                     # This turns off the crawlee header_generation. Camoufox has its own.
                     header_generator=None,
                 )
             except asyncio.TimeoutError:
-                last_error = "Timeout waiting for Camoufox to launch (>60s)"
+                last_error = "Timeout waiting for Camoufox to launch (>45s)"
                 logger.warning(f"⚠️ {last_error}. Retrying...")
             except Exception as e:
                 last_error = str(e)
                 logger.warning(f"⚠️ Failed to launch Camoufox: {e}. Retrying...")
                 
-            # Small backoff before retry
+            # Exponential backoff before retry (2s, 4s, 8s)
             if attempt < MAX_RETRIES:
-                await asyncio.sleep(2)
+                backoff_time = BASE_BACKOFF ** attempt
+                logger.info(f"⏳ Waiting {backoff_time}s before retry...")
+                await asyncio.sleep(backoff_time)
                 
         raise RuntimeError(f"Failed to launch Camoufox after {MAX_RETRIES} attempts. Last error: {last_error}")
 
@@ -483,11 +487,12 @@ async def main():
             plugin = CamoufoxPlugin()
             browser_pool = BrowserPool(
                 plugins=[plugin],
-                # Increased timeout for Camoufox browser operations (default is 15s)
-                # Set to 60s because page creation in Docker can be very slow even if browser is launched
-                operation_timeout=timedelta(seconds=60),
-                # Retire browsers after 10 pages to prevent stale/stuck browsers
-                retire_browser_after_page_count=10
+                # Reduced from 60s to 30s - fail faster on stuck page creation
+                # This allows the retry mechanism to kick in sooner
+                operation_timeout=timedelta(seconds=30),
+                # Increased from 10 to 25 - reduce browser restart overhead
+                # Browser launches are expensive in Docker, keep browsers longer
+                retire_browser_after_page_count=25
             )
         else:
             # Configure Browser Pool with Fingerprints
@@ -522,8 +527,9 @@ async def main():
             "browser_pool": browser_pool,
             "respect_robots_txt_file": True,
             "max_request_retries": 5,  # Allow more retries for transient blocks
-            "navigation_timeout": timedelta(seconds=90), # Increased to match Version 2 robustness
-            "request_handler_timeout": timedelta(seconds=120) # Increased to match Version 2 robustness
+            # Reduced timeouts to fail faster - prevents hanging on slow/blocked pages
+            "navigation_timeout": timedelta(seconds=45),
+            "request_handler_timeout": timedelta(seconds=60)
         }
 
         if proxy_configuration:
@@ -626,6 +632,47 @@ async def main():
                         crawler.stop()
                 except Exception as e:
                     logger.error(f"Error checking safety limit: {e}")
+        
+        # --- PROACTIVE RESOURCE BLOCKING (Performance Optimization) ---
+        # This hook runs BEFORE navigation, blocking heavy resources at the network level
+        # before the browser even attempts to load them. This is much faster than
+        # blocking after navigation starts.
+        @crawler.pre_navigation_hook
+        async def block_resources_before_navigation(context: PlaywrightPreNavCrawlingContext):
+            """Block heavy resources before navigation to speed up page loading."""
+            page = context.page
+            
+            async def resource_route_handler(route):
+                try:
+                    req = route.request
+                    resource_type = req.resource_type
+                    req_url = req.url
+                    
+                    # Block heavy media and fonts - saves bandwidth and speeds up load
+                    if resource_type in ['image', 'media', 'font', 'stylesheet']:
+                        await route.abort()
+                        return
+
+                    # Block download scripts and tracking pixels
+                    if 'download.php' in req_url or 'imp=1' in req_url:
+                        await route.abort()
+                        return
+                    
+                    # Block binary file extensions
+                    import re
+                    if re.search(r'\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$', req_url, re.IGNORECASE):
+                        await route.abort()
+                        return
+
+                    await route.continue_()
+                except Exception:
+                    # Ignore route errors (e.g. page already closed)
+                    pass
+            
+            try:
+                await page.route("**/*", resource_route_handler)
+            except Exception as e:
+                logger.warning(f"Failed to set up resource blocking: {e}")
         
         # Helper to set stop reason from monitor task
         def set_stop_reason(reason: str):
