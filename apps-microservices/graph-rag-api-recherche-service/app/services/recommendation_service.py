@@ -696,28 +696,38 @@ class RecommendationService:
             top_p = []
 
             if results:
-                # Extract top_p from the first row
+                # Extract top_p and scored_products in parallel using list comprehensions
                 raw_top_p = results[0].get("top_p", [])
-                for entry in raw_top_p:
+                
+                def build_top_p_product(entry):
                     if isinstance(entry, dict) and "product_data" in entry:
-                        top_p.append(
-                            ScoredProduct(
-                                **entry["product_data"],
-                                score=entry.get("score", 0.0),
-                                details=entry.get("details", []),
-                                info={"weights": weights_map},
-                            )
+                        return ScoredProduct(
+                            **entry["product_data"],
+                            score=entry.get("score", 0.0),
+                            details=entry.get("details", []),
                         )
-
-                for rec in results:
-                    scored_products.append(
-                        ScoredProduct(
-                            **rec["product_data"],
-                            score=rec.get("global_score", 0.0),
-                            details=rec.get("details", []),
-                            info={"weights": weights_map},
-                        )
+                    return None
+                
+                def build_scored_product(rec):
+                    return ScoredProduct(
+                        **rec["product_data"],
+                        score=rec.get("global_score", 0.0),
+                        details=rec.get("details", []),
                     )
+                
+                # Use ThreadPoolExecutor for parallel processing
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor() as executor:
+                    # Process both lists in parallel
+                    top_p_future = executor.submit(
+                        lambda: [p for p in map(build_top_p_product, raw_top_p) if p is not None]
+                    )
+                    scored_future = executor.submit(
+                        lambda: list(map(build_scored_product, results))
+                    )
+                    
+                    top_p = top_p_future.result()
+                    scored_products = scored_future.result()
             
             total_time = time.perf_counter() - start_time
             return ResultProduct(
@@ -729,6 +739,7 @@ class RecommendationService:
                     "total_time": total_time,
                     "count": len(scored_products),
                     "version": "v4_caracteristique",
+                    "weights": weights_map,
                 },
             )
         except Exception as e:
