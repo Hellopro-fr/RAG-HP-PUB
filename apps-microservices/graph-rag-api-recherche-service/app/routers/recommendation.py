@@ -5,7 +5,7 @@ from app.services.recommendation_service import recommendation_service
 router = APIRouter()
 
 
-@router.post("/filter", response_model=ResultProduct)
+@router.post("/filter", response_model=ResultProduct, response_model_exclude_none=True)
 async def complex_filter_products(request: ComplexFilterRequest):
     """
     Advanced filter: Filters products based on detailed constraints.
@@ -26,7 +26,7 @@ async def complex_filter_products(request: ComplexFilterRequest):
         )
 
 
-@router.post("/{product_id}/score", response_model=ResultProduct)
+@router.post("/{product_id}/score", response_model=ResultProduct, response_model_exclude_none=True)
 async def score_specific_product(product_id: str, request: ComplexFilterRequest):
     """
     Calculates the score of a specific product against the provided complex filters.
