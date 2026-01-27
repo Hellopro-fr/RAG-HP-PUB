@@ -16,6 +16,10 @@ class ComplexFilterRequest(BaseModel):
         ...,
         description="Map of Reponse ID to list of Constraints. Example: {'q_22_r_1': [{'id_caracteristique': '29', 'valeurs_cibles': ['3']}]}",
     )
+    output_fields: Optional[List[str]] = Field(
+        None,
+        description="List of fields to return in the product data. If None, returns all fields.",
+    )
     id_categorie: Optional[str] = Field(
         None,
         description="Optional Category ID to filter products. If provided, only products belonging to this category will be returned.",
@@ -36,16 +40,20 @@ class BaseNormalizer(BaseModel):
 
 class ProduitPayload(BaseNormalizer):
     url: Optional[str] = Field(None, description="URL de la page du produit")
-    nom_produit: str = Field(..., description="Nom commercial du produit")
+    nom_produit: Optional[str] = Field(None, description="Nom commercial du produit")
     domaine: Optional[str] = Field(None, description="Domaine du site web source")
     fournisseur: Optional[str] = Field(
         None, description="Nom du fournisseur proposant le produit"
     )
-    id_fournisseur: str = Field(..., description="ID numérique du fournisseur")
+    id_fournisseur: Optional[str] = Field(
+        None, description="ID numérique du fournisseur"
+    )
     categorie: Optional[str] = Field(
         None, description="Nom de la catégorie principale du produit"
     )
-    id_categorie: str = Field(..., description="ID numérique de la catégorie")
+    id_categorie: Optional[str] = Field(
+        None, description="ID numérique de la catégorie"
+    )
     source: Optional[str] = Field(
         None, description="Origine de la donnée (ex: produits_bo)"
     )
@@ -55,7 +63,9 @@ class ProduitPayload(BaseNormalizer):
     date_ajout: Optional[datetime] = Field(
         None, description="Date d'ajout du produit dans le système"
     )
-    id_produit: str = Field(..., description="ID alphanumérique original du produit")
+    id_produit: Optional[str] = Field(
+        None, description="ID alphanumérique original du produit"
+    )
     sku: Optional[str] = Field(None, description="SKU (Stock Keeping Unit) du produit")
     ean: Optional[str] = Field(
         None, description="Code EAN (European Article Number) du produit"
@@ -89,7 +99,7 @@ class ScoredProduct(ProduitPayload):
 class ResultProduct(BaseModel):
     data: List[ScoredProduct]
     info: Dict[str, Any] = {}
-    top_p: List[str] = []
+    top_p: List[Dict[str, Any]] = []
 
 
 # --- Product Models ---

@@ -293,7 +293,7 @@ class RecommendationService:
         LIMIT $top_k
         
         // Collect all scored products
-        WITH collect({product_data: p {.*}, details: details, global_score: global_score}) AS all_products
+        WITH collect({product_data: PROJECTION_PLACEHOLDER, details: details, global_score: global_score}) AS all_products
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
@@ -314,6 +314,17 @@ class RecommendationService:
         UNWIND all_products AS prod
         RETURN prod.product_data AS product_data, prod.details AS details, prod.global_score AS global_score, top_p
         """
+
+        # Determine projection
+        if request.output_fields:
+             # Ensure we don't have empty list behavior if user sends []
+             fields = [f".{f}" for f in request.output_fields] if len(request.output_fields) > 0 else [".*"]
+             projection = f"p {{ {', '.join(fields)} }}"
+        else:
+             projection = "p {.*}"
+             
+        # Inject projection
+        cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
 
         params = {
             "filters": flat_filters,
