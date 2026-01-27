@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional, Union, Dict, Any
 from datetime import datetime
 import re
@@ -39,6 +39,8 @@ class BaseNormalizer(BaseModel):
 
 
 class ProduitPayload(BaseNormalizer):
+    model_config = ConfigDict(exclude_none=True)
+
     url: Optional[str] = Field(None, description="URL de la page du produit")
     nom_produit: Optional[str] = Field(None, description="Nom commercial du produit")
     domaine: Optional[str] = Field(None, description="Domaine du site web source")
