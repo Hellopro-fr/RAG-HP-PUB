@@ -1069,7 +1069,7 @@ services:
 
   crawler-service:
     build:
-      context: ./apps-microservices/crawler-service-python/
+      context: ./apps-microservices/crawler-service/
       dockerfile: Dockerfile
     profiles: ["crawling"]
     init: true
@@ -1080,7 +1080,7 @@ services:
       - "8503"
     volumes:
       - crawler_data:/app/storage
-      - ./apps-microservices/crawler-service-python/crawler_archives:/app/archives
+      - ./apps-microservices/crawler-service/crawler_archives:/app/archives
     env_file:
       - .env
     environment:
