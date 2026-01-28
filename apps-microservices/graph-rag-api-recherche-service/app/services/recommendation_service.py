@@ -679,38 +679,74 @@ class RecommendationService:
                                             ELSE 0.5
                                         END
                                         
-                                    // Need: Max Authorized -> Use P_max (worst case): Score = P_max / N_lim  
+                                    // Need: Max Authorized -> Check all product range scenarios
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
-                                            WHEN pc.valeur_max_canonique IS NULL THEN 0.0
-                                            WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                            ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                            // R1: Product has both min and max -> use P_max (worst case)
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R3: Product has only max -> use P_max
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R4: Neither known -> uncertainty
+                                            ELSE 0.5
                                         END
                                         
-                                    // Need: Working Range -> Jaccard-style overlap (Overlap / Need Length)
+                                    // Need: Working Range -> Check all product range scenarios
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
                                         CASE
-                                            WHEN pc.valeur_min_canonique IS NULL OR pc.valeur_max_canonique IS NULL THEN 0.5
-                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
-                                                 OR pc.valeur_min_canonique > item.conf.target_numeric.max 
-                                            THEN 0.0
-                                            WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
-                                            ELSE toFloat(
-                                                (CASE 
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
-                                                    THEN pc.valeur_max_canonique 
-                                                    ELSE item.conf.target_numeric.max 
+                                            // R1: Product has both min and max -> Jaccard-style overlap
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
+                                                         OR pc.valeur_min_canonique > item.conf.target_numeric.max 
+                                                    THEN 0.0
+                                                    WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
+                                                    ELSE toFloat(
+                                                        (CASE 
+                                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
+                                                            THEN pc.valeur_max_canonique 
+                                                            ELSE item.conf.target_numeric.max 
+                                                        END
+                                                        -
+                                                        CASE 
+                                                            WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
+                                                            THEN pc.valeur_min_canonique 
+                                                            ELSE item.conf.target_numeric.min 
+                                                        END)
+                                                        /
+                                                        (item.conf.target_numeric.max - item.conf.target_numeric.min)
+                                                    )
                                                 END
-                                                -
-                                                CASE 
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
-                                                    THEN pc.valeur_min_canonique 
-                                                    ELSE item.conf.target_numeric.min 
-                                                END)
-                                                /
-                                                (item.conf.target_numeric.max - item.conf.target_numeric.min)
-                                            )
+                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    ELSE 1.0
+                                                END
+                                            // R3: Product has only max -> if P_max >= target_min, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    ELSE 1.0
+                                                END
+                                            // R4: Neither known -> uncertainty
+                                            ELSE 0.5
                                         END
                                         
                                     ELSE 1.0
@@ -785,33 +821,69 @@ class RecommendationService:
                                         END
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
-                                            WHEN pc.valeur_max_canonique IS NULL THEN 0.0
-                                            WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                            ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                            // R1: Product has both min and max -> use P_max (worst case)
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R3: Product has only max -> use P_max
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R4: Neither known -> uncertainty
+                                            ELSE 0.5
                                         END
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
                                         CASE
-                                            WHEN pc.valeur_min_canonique IS NULL OR pc.valeur_max_canonique IS NULL THEN 0.5
-                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
-                                                 OR pc.valeur_min_canonique > item.conf.target_numeric.max 
-                                            THEN 0.0
-                                            WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
-                                            ELSE toFloat(
-                                                (CASE 
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
-                                                    THEN pc.valeur_max_canonique 
-                                                    ELSE item.conf.target_numeric.max 
+                                            // R1: Product has both min and max -> Jaccard-style overlap
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
+                                                         OR pc.valeur_min_canonique > item.conf.target_numeric.max 
+                                                    THEN 0.0
+                                                    WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
+                                                    ELSE toFloat(
+                                                        (CASE 
+                                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
+                                                            THEN pc.valeur_max_canonique 
+                                                            ELSE item.conf.target_numeric.max 
+                                                        END
+                                                        -
+                                                        CASE 
+                                                            WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
+                                                            THEN pc.valeur_min_canonique 
+                                                            ELSE item.conf.target_numeric.min 
+                                                        END)
+                                                        /
+                                                        (item.conf.target_numeric.max - item.conf.target_numeric.min)
+                                                    )
                                                 END
-                                                -
-                                                CASE 
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
-                                                    THEN pc.valeur_min_canonique 
-                                                    ELSE item.conf.target_numeric.min 
-                                                END)
-                                                /
-                                                (item.conf.target_numeric.max - item.conf.target_numeric.min)
-                                            )
+                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    ELSE 1.0
+                                                END
+                                            // R3: Product has only max -> if P_max >= target_min, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    ELSE 1.0
+                                                END
+                                            // R4: Neither known -> uncertainty
+                                            ELSE 0.5
                                         END
                                     ELSE 1.0
                                 END
@@ -884,33 +956,69 @@ class RecommendationService:
                                         END
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
-                                            WHEN pc.valeur_max_canonique IS NULL THEN 0.0
-                                            WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                            ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                            // R1: Product has both min and max -> use P_max (worst case)
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R3: Product has only max -> use P_max
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                                END
+                                            // R4: Neither known -> uncertainty
+                                            ELSE 0.5
                                         END
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
                                         CASE
-                                            WHEN pc.valeur_min_canonique IS NULL OR pc.valeur_max_canonique IS NULL THEN 0.5
-                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
-                                                 OR pc.valeur_min_canonique > item.conf.target_numeric.max 
-                                            THEN 0.0
-                                            WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
-                                            ELSE toFloat(
-                                                (CASE 
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
-                                                    THEN pc.valeur_max_canonique 
-                                                    ELSE item.conf.target_numeric.max 
+                                            // R1: Product has both min and max -> Jaccard-style overlap
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
+                                                         OR pc.valeur_min_canonique > item.conf.target_numeric.max 
+                                                    THEN 0.0
+                                                    WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
+                                                    ELSE toFloat(
+                                                        (CASE 
+                                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
+                                                            THEN pc.valeur_max_canonique 
+                                                            ELSE item.conf.target_numeric.max 
+                                                        END
+                                                        -
+                                                        CASE 
+                                                            WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
+                                                            THEN pc.valeur_min_canonique 
+                                                            ELSE item.conf.target_numeric.min 
+                                                        END)
+                                                        /
+                                                        (item.conf.target_numeric.max - item.conf.target_numeric.min)
+                                                    )
                                                 END
-                                                -
-                                                CASE 
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
-                                                    THEN pc.valeur_min_canonique 
-                                                    ELSE item.conf.target_numeric.min 
-                                                END)
-                                                /
-                                                (item.conf.target_numeric.max - item.conf.target_numeric.min)
-                                            )
+                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
+                                                    ELSE 1.0
+                                                END
+                                            // R3: Product has only max -> if P_max >= target_min, product CAN satisfy
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    ELSE 1.0
+                                                END
+                                            // R4: Neither known -> uncertainty
+                                            ELSE 0.5
                                         END
                                     ELSE 1.0
                                 END
