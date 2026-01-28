@@ -1069,8 +1069,8 @@ services:
 
   crawler-service:
     build:
-      context: ./apps-microservices/crawler-service/
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps-microservices/crawler-service/Dockerfile
     profiles: ["crawling"]
     init: true
     # The 'ports' mapping has been removed to prevent conflicts.
