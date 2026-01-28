@@ -1,5 +1,6 @@
 import { RequestQueue, RobotsFile } from "crawlee";
 import fs from "fs";
+import fsPromises from "fs/promises";
 import { createClient } from 'redis';
 import os from 'os';
 import { exec } from "child_process";
@@ -121,8 +122,8 @@ let freeMem: number;
 
 try {
     // Try to read Docker container memory limit from cgroups v2
-    const cgroupMemMax = await fs.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
-    const cgroupMemCurrent = await fs.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
+    const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
+    const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
 
     if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
         // cgroups v2 (Docker with cgroups v2)
@@ -131,8 +132,8 @@ try {
         freeMem = totalMem - usedMem;
     } else {
         // Try cgroups v1 (older Docker versions)
-        const cgroupMemLimitV1 = await fs.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
-        const cgroupMemUsageV1 = await fs.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
+        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
+        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
 
         if (cgroupMemLimitV1 && cgroupMemUsageV1) {
             totalMem = parseInt(cgroupMemLimitV1.trim());
@@ -267,7 +268,6 @@ if (fs.existsSync(`stopper/${domain}.txt`)) {
 }
 
 // Init Managers
-const redisUrl = process.env.REDIS_URL || "redis://redis:6379";
 context.dedupManager = new DedupManager(redisUrl, id);
 context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
 

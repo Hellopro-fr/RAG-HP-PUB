@@ -893,7 +893,7 @@ export const stopCrawler = async (crawler: PlaywrightCrawler, message: string) =
         await crawler.autoscaledPool?.abort();
         crawler.log.info("The crawler has been gracefully stopped.");
     } catch (error) {
-        crawler.log.error("An error occurred when stopping the crawler : ", error);
+        crawler.log.error("An error occurred when stopping the crawler : ", { error: error instanceof Error ? error.message : String(error) });
     }
 };
 

@@ -83,12 +83,12 @@ router.addDefaultHandler(
         // This handles cases where a valid internal link redirects to an external site (e.g. Facebook)
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
-        const targetDomain = domain; // Imported from main.js
+        const targetDomain = domain ?? ''; // Imported from main.js
 
         // Check if hostname ends with the target domain (handles subdomains too)
         // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
         // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
-        if (!urlObj.hostname.includes(targetDomain)) {
+        if (!targetDomain || !urlObj.hostname.includes(targetDomain)) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
             return;
         }
@@ -275,7 +275,7 @@ router.addDefaultHandler(
                         // HARD SECURITY: Explicitly block ANY URL that is not on the target domain
                         // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
                         try {
-                            if (!reqUrlObj.hostname.includes(domain)) {
+                            if (!domain || !reqUrlObj.hostname.includes(domain)) {
                                 console.log(`Blocked external URL: ${request.url}`);
                                 return null;
                             }
