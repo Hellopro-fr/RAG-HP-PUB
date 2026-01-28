@@ -1,15 +1,9 @@
 import { createPlaywrightRouter, Dataset } from "crawlee";
+// Removed circular imports from main.js (domain, skipquestionmark etc)
 import {
-    domain,
+    domain, // Keep basic exports if needed, but prefer context for config
     requestQueue,
-    // baseUrl,
-    // enqueueLinksIncludePath,
     robots,
-    skipquestionmark,
-    skipdiez,
-    // allUrlsCrawled,
-    toKeep,
-    toRemove,
     site,
 } from "./main.js";
 import {
@@ -18,7 +12,6 @@ import {
     processUrl,
     routerDefaultHandler,
     stopCrawler,
-    // updateUrlsCrawled,
 } from "./functions.js";
 import { DomainFR } from "./class/DomainFR.js";
 import { context } from "./context.js";
@@ -83,7 +76,7 @@ router.addDefaultHandler(
         // This handles cases where a valid internal link redirects to an external site (e.g. Facebook)
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
-        const targetDomain = domain ?? ''; // Imported from main.js
+        const targetDomain = context.config.domain; 
 
         // Check if hostname ends with the target domain (handles subdomains too)
         // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
@@ -151,7 +144,7 @@ router.addDefaultHandler(
                 {
                     name: "cookieConsent",
                     value: "accepted",
-                    domain: domain,
+                    domain: targetDomain,
                     path: "/",
                 },
             ]);
@@ -175,8 +168,7 @@ router.addDefaultHandler(
                 const checkPageIfFrench = await domainFR.checkPageIfFrench(content, false);
 
                 if (checkPageIfFrench["ok"]) {
-                    // Store the successful method
-                    frenchDetectionMethod = manageFrenchDetectionMethod(domain as string, checkPageIfFrench["method"]);
+                    frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkPageIfFrench["method"]);
                     if (frenchDetectionMethod instanceof Error) {
                         log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
                         await stopCrawler(crawler, "Failed to store French detection method");
@@ -187,7 +179,7 @@ router.addDefaultHandler(
                 } else {
                     const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
                     if (checkUrl["ok"]) {
-                        frenchDetectionMethod = manageFrenchDetectionMethod(domain as string, checkUrl["method"]);
+                        frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrl["method"]);
                         if (frenchDetectionMethod instanceof Error) {
                             log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
                             await stopCrawler(crawler, "Failed to store French detection method");
@@ -198,8 +190,7 @@ router.addDefaultHandler(
                     }
                 }
             } else {
-                // Try to get stored method
-                frenchDetectionMethod = manageFrenchDetectionMethod(domain as string);
+                frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string);
                 if (frenchDetectionMethod instanceof Error) {
                     log.error(`Failed to retrieve French detection method: ${frenchDetectionMethod.message}`);
                     await stopCrawler(crawler, "No French detection method found");
@@ -228,7 +219,7 @@ router.addDefaultHandler(
                     requestQueue,
                     url,
                     content,
-                    domain,
+                    targetDomain,
                     title
                 );
 
@@ -236,15 +227,113 @@ router.addDefaultHandler(
                     strategy: "same-domain",
                     exclude: enqueueLinksExcludePath,
                     transformRequestFunction: (request) => {
+                        // 1. Robots Check
                         if (robots && !robots.isAllowed(request.url, "Googlebot")) {
                             console.log(`Bloqué par robots.txt : ${request.url}`);
                             return null;
                         }
 
-                        const reqUrlObj = new URL(request.url);
+                        // 2. Initial CLEANING of the URL (Moved to TOP)
+                        // This ensures we strip parameters BEFORE checking forbidden list
+                        const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
+                        
+                        // List parameters always to remove
+                        const alwaysRemove = [
+                            // === CART & WISHLIST ===
+                            "add-to-cart", "add_to_cart", "addtocart",
+                            "add-to-compare", "add_to_compare",
+                            "add-to-wishlist", "add_to_wishlist", "addtowishlist",
+                            "remove_from_wishlist", "remove_wishlist",
+                            "remove_compare", "remove_item",
+                            "quantity", "qty",
 
-                        // V3 Feature: Forbidden Params Check
+                            // === TRACKING UTM (Marketing) ===
+                            "utm_source", "utm_medium", "utm_campaign",
+                            "utm_content", "utm_term", "utm_id",
+                            "utm_referrer", "utm_name",
+
+                            // === FACEBOOK & META ===
+                            "fbclid", "fb_action_ids", "fb_action_types",
+                            "fb_source", "fb_ref",
+
+                            // === GOOGLE ADS & ANALYTICS ===
+                            "gclid", "gclsrc", "dclid",
+                            "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
+                            "_ga", "_gid", "_gat",
+
+                            // === HUBSPOT ===
+                            "hsa_acc", "hsa_cam", "hsa_grp",
+                            "hsa_ad", "hsa_src", "hsa_mt",
+                            "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
+                            "hsCtaTracking", "hsCta",
+
+                            // === MAILCHIMP ===
+                            "mc_cid", "mc_eid",
+
+                            // === SOCIAL MEDIA TRACKING ===
+                            "twclid", "li_fat_id", "msclkid",
+                            "igshid", "tt_medium", "tt_content",
+
+                            // === WORDPRESS ===
+                            "_wpnonce", "preview", "preview_id",
+                            "preview_nonce", "et_blog",
+
+                            // === PRESTASHOP ===
+                            "id_product", "id_category", "pid",
+                            "controller", "id_product_attribute",
+                            "isolang", "id_lang",
+
+                            // === SHOPIFY ===
+                            "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
+                            "pr_ref_pid", "pr_seq",
+                            "variant", "selling_plan",
+
+                            // === MAGENTO ===
+                            "SID", "___store", "___from_store",
+
+                            // === SESSION & TRACKING ===
+                            "sessionid", "session_id", "PHPSESSID",
+                            "sid", "s_id",
+                            "_gl", "ref", "referrer",
+
+                            // === AFFILIATE & MARKETING ===
+                            "aff_id", "affiliate", "partner",
+                            "coupon", "discount", "promo",
+                            "voucher",
+
+                            // === AUTRES TRACKING ===
+                            "click_id", "transaction_id",
+                            "source", "medium", "campaign",
+
+                            // === FILTRES SOUVENT INUTILES ===
+                            "view", "mode", "display",
+                            "timestamp", "random", "nocache",
+                            "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
+                        ];
+
+                        // Always strip the "Always Remove" list first
+                        request.url = processUrl(request.url, true, false, { toRemove: alwaysRemove });
+
+                        // Now apply the dynamic config (skipQuestionMark, etc)
+                        if (skipQuestionMark || skipDiez) {
+                            let parameters = {};
+                            if (toKeep && toKeep.length > 0) parameters = { toKeep };
+                            if (toRemove && toRemove.length > 0) parameters = { ...parameters, toRemove };
+                            
+                            request.url = processUrl(
+                                request.url,
+                                skipQuestionMark,
+                                skipDiez,
+                                parameters
+                            );
+                        }
+
+                        // 3. Security Checks & Forbidden Params
+                        // Now that URL is clean, we check if it still contains forbidden stuff
                         try {
+                            const reqUrlObj = new URL(request.url);
+
+                            // Forbidden Params Check
                             for (const param of FORBIDDEN_PARAMS) {
                                 if (reqUrlObj.searchParams.has(param) ||
                                     Array.from(reqUrlObj.searchParams.keys()).some(key => key.startsWith(param))) {
@@ -252,131 +341,29 @@ router.addDefaultHandler(
                                     return null;
                                 }
                             }
-                        } catch (e) {
-                            console.error(`Invalid URL in param check: ${request.url}`);
-                            return null;
-                        }
 
-                        // PREVENTIVE SPIDER TRAP BLOCKING (Before other checks)
-                        // Block nested cart/quotation URLs that create infinite loops
-                        if (request.url.includes('/quotation/cart/') ||
-                            request.url.includes('/cart/cart/') ||
-                            request.url.includes('/catalog/product_compare/')) {
-                            console.log(`Blocked spider trap: ${request.url}`);
-                            return null;
-                        }
+                            // Spider Trap Checks
+                            if (request.url.includes('/quotation/cart/') ||
+                                request.url.includes('/cart/cart/') ||
+                                request.url.includes('/catalog/product_compare/')) {
+                                console.log(`Blocked spider trap: ${request.url}`);
+                                return null;
+                            }
 
-                        // Block URLs with long base64-encoded segments (often dynamic/infinite)
-                        if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
-                            console.log(`Blocked base64 URL: ${request.url}`);
-                            return null;
-                        }
+                            if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
+                                console.log(`Blocked base64 URL: ${request.url}`);
+                                return null;
+                            }
 
-                        // HARD SECURITY: Explicitly block ANY URL that is not on the target domain
-                        // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
-                        try {
-                            if (!domain || !reqUrlObj.hostname.includes(domain)) {
+                            // External Domain Check
+                            if (targetDomain && !reqUrlObj.hostname.includes(targetDomain)) {
                                 console.log(`Blocked external URL: ${request.url}`);
                                 return null;
                             }
+
                         } catch (e) {
                             console.error(`Invalid URL in transformRequestFunction: ${request.url}`);
                             return null;
-                        }
-
-                        // List parameters always to remove
-                        let toAlwaysRemove = {
-                            toRemove: [
-                                // === CART & WISHLIST ===
-                                "add-to-cart", "add_to_cart", "addtocart",
-                                "add-to-compare", "add_to_compare",
-                                "add-to-wishlist", "add_to_wishlist", "addtowishlist",
-                                "remove_from_wishlist", "remove_wishlist",
-                                "remove_compare", "remove_item",
-                                "quantity", "qty",
-
-                                // === TRACKING UTM (Marketing) ===
-                                "utm_source", "utm_medium", "utm_campaign",
-                                "utm_content", "utm_term", "utm_id",
-                                "utm_referrer", "utm_name",
-
-                                // === FACEBOOK & META ===
-                                "fbclid", "fb_action_ids", "fb_action_types",
-                                "fb_source", "fb_ref",
-
-                                // === GOOGLE ADS & ANALYTICS ===
-                                "gclid", "gclsrc", "dclid",
-                                "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
-                                "_ga", "_gid", "_gat",
-
-                                // === HUBSPOT ===
-                                "hsa_acc", "hsa_cam", "hsa_grp",
-                                "hsa_ad", "hsa_src", "hsa_mt",
-                                "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
-                                "hsCtaTracking", "hsCta",
-
-                                // === MAILCHIMP ===
-                                "mc_cid", "mc_eid",
-
-                                // === SOCIAL MEDIA TRACKING ===
-                                "twclid", "li_fat_id", "msclkid",
-                                "igshid", "tt_medium", "tt_content",
-
-                                // === WORDPRESS ===
-                                "_wpnonce", "preview", "preview_id",
-                                "preview_nonce", "et_blog",
-
-                                // === PRESTASHOP ===
-                                "id_product", "id_category", "pid",
-                                "controller", "id_product_attribute",
-                                "isolang", "id_lang",
-
-                                // === SHOPIFY ===
-                                "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
-                                "pr_ref_pid", "pr_seq",
-                                "variant", "selling_plan",
-
-                                // === MAGENTO ===
-                                "SID", "___store", "___from_store",
-
-                                // === SESSION & TRACKING ===
-                                "sessionid", "session_id", "PHPSESSID",
-                                "sid", "s_id",
-                                "_gl", "ref", "referrer",
-
-                                // === AFFILIATE & MARKETING ===
-                                "aff_id", "affiliate", "partner",
-                                "coupon", "discount", "promo",
-                                "voucher",
-
-                                // === AUTRES TRACKING ===
-                                "click_id", "transaction_id",
-                                "source", "medium", "campaign",
-
-                                // === FILTRES SOUVENT INUTILES ===
-                                "view", "mode", "display",
-                                "timestamp", "random", "nocache",
-                                "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
-                            ],
-                        };
-                        request.url = processUrl(
-                            request.url,
-                            true, // skip question mark here
-                            false,
-                            toAlwaysRemove
-                        );
-
-                        // If skipquestionmark or skipdiez is true, we need to process the URL
-                        if (skipquestionmark || skipdiez) {
-                            let parameters = {};
-                            if (toKeep.length > 0) parameters = { toKeep: toKeep };
-                            if (toRemove.length > 0) parameters = { ...parameters, toRemove: toRemove };
-                            request.url = processUrl(
-                                request.url,
-                                Boolean(skipquestionmark),
-                                Boolean(skipdiez),
-                                parameters
-                            );
                         }
 
                         return request;
@@ -384,9 +371,8 @@ router.addDefaultHandler(
                 });
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
-                let dataset = await Dataset.open("nfr-" + domain);
+                let dataset = await Dataset.open("nfr-" + targetDomain);
                 await dataset.pushData({ url, content });
-                // V3 Fix: Mark handled to avoid queue lock
                 await requestQueue.markRequestHandled(request);
             }
         } else {

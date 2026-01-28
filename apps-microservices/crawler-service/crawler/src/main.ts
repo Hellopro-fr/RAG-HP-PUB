@@ -49,17 +49,19 @@ const callbackUrl = getArg('callbackUrl', 'npm_config_callbackurl');
 const typeCrawling = getArg('typecrawling', 'npm_config_typecrawling');
 const method = getArg('method', 'npm_config_method');
 const apifyProxyPassword = getArg('proxyapify', 'npm_config_proxyapify');
+
+// Local vars for parsing, stored in context
 const breakLimit = (getArg('breaklimit', 'npm_config_breaklimit') || 'false').toLowerCase() === 'true';
 const dropData = (getArg('dropdata', 'npm_config_dropdata') || 'false').toLowerCase() === 'true';
-export const skipquestionmark = (getArg('skipquestionmark', 'npm_config_skipquestionmark') || 'false').toLowerCase() === 'true';
-export const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerCase() === 'true';
+const skipquestionmark = (getArg('skipquestionmark', 'npm_config_skipquestionmark') || 'false').toLowerCase() === 'true';
+const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerCase() === 'true';
 const bypassQuestionMark = (getArg('bypassquestionmark', 'npm_config_bypassquestionmark') || 'false').toLowerCase() === 'true';
 const bypassDiez = (getArg('bypassdiez', 'npm_config_bypassdiez') || 'false').toLowerCase() === 'true';
 
 let paramPerCrawl = Number(getArg('percrawl', 'npm_config_percrawl')) || 500;
 let paramPerMinute = Number(getArg('perminute', 'npm_config_perminute')) || 100;
-export const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(Boolean);
-export const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
+const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(Boolean);
+const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
 
 // V3 Params
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
@@ -68,14 +70,22 @@ const maxErrors = Number(getArg('maxErrors', 'npm_config_maxerrors')) || 0;
 const maxRedirects = Number(getArg('maxRedirects', 'npm_config_maxredirects')) || 0;
 const maxNewUrls = Number(getArg('maxNewUrls', 'npm_config_maxnewurls')) || 0;
 
-// Setup Context
+// Setup Context immediately to resolve circular dependencies
 context.config = {
     maxErrors,
     maxRedirects,
     maxNewUrls,
     domain: domain || "",
     baseUrl: site || "",
-    crawleeStorageName: domain ? domain.replace('.', '-') : ""
+    crawleeStorageName: domain ? domain.replace('.', '-') : "",
+    // Filtering
+    skipQuestionMark: skipquestionmark,
+    skipDiez: skipdiez,
+    bypassQuestionMark: bypassQuestionMark,
+    bypassDiez: bypassDiez,
+    toKeep: toKeep,
+    toRemove: toRemove,
+    breakLimit: breakLimit
 };
 
 if (!id || !domain || !site || !storagePath || !callbackUrl) {

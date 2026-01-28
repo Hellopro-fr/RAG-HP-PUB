@@ -12,7 +12,15 @@ export const context = {
         maxNewUrls: 0,
         domain: "",
         baseUrl: "",
-        crawleeStorageName: ""
+        crawleeStorageName: "",
+        // Filtering Options
+        skipQuestionMark: false,
+        skipDiez: false,
+        bypassQuestionMark: false,
+        bypassDiez: false,
+        toKeep: [] as string[],
+        toRemove: [] as string[],
+        breakLimit: false
     },
     stopReason: ""
 };
