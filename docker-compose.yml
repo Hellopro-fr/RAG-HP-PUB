@@ -1072,6 +1072,7 @@ services:
       context: ./apps-microservices/crawler-service-python/
       dockerfile: Dockerfile
     profiles: ["crawling"]
+    init: true
     # The 'ports' mapping has been removed to prevent conflicts.
     # We now 'expose' the port, making it accessible to other services
     # on the Docker network (like our reverse-proxy), but NOT to the host.
@@ -1143,7 +1144,7 @@ services:
       context: ./apps-microservices/crawler-monitor-backend
       dockerfile: Dockerfile
     container_name: crawler-monitor-backend
-    profiles: ["crawling"]
+    profiles: ["disabled"]
     restart: unless-stopped
     expose:
       - "3001"
@@ -1163,7 +1164,7 @@ services:
       context: ./apps-microservices/crawler-monitor-frontend
       dockerfile: Dockerfile
     container_name: crawler-monitor-frontend
-    profiles: ["crawling"]
+    profiles: ["disabled"]
     restart: unless-stopped
     ports:
       - "3002:8099" # Exposé sur le port 3002
