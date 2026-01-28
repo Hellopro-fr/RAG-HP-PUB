@@ -58,7 +58,7 @@ const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerC
 const bypassQuestionMark = (getArg('bypassquestionmark', 'npm_config_bypassquestionmark') || 'false').toLowerCase() === 'true';
 const bypassDiez = (getArg('bypassdiez', 'npm_config_bypassdiez') || 'false').toLowerCase() === 'true';
 
-let paramPerCrawl = Number(getArg('percrawl', 'npm_config_percrawl')) || 500;
+let paramPerCrawl = Number(getArg('percrawl', 'npm_config_percrawl')) || 0;
 let paramPerMinute = Number(getArg('perminute', 'npm_config_perminute')) || 100;
 const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(Boolean);
 const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
