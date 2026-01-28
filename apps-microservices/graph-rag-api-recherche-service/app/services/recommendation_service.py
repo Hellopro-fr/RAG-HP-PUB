@@ -540,7 +540,7 @@ class RecommendationService:
         blocked_val = float(request.blocked_val)
         different_val = float(request.different_val)
 
-        # Build Cypher Query for caracteristique-based filtering
+        # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
         // --- STEP 1: ANCHOR TRAVERSAL by CaracteristiqueTechnique ---
         UNWIND $filters AS f
@@ -553,7 +553,7 @@ class RecommendationService:
         
         WITH DISTINCT p, $filters AS active_filters
         
-        // --- STEP 2: SCORING by CaracteristiqueTechnique ---
+        // --- STEP 2: SCORING by CaracteristiqueTechnique with CONTINUOUS SCORING ---
         UNWIND active_filters AS f
         
         // Match Characteristics for the specific caracteristique ID
@@ -568,11 +568,11 @@ class RecommendationService:
             matches: [pc IN pcs WHERE toString(pc.id_source_caracteristique) = toString(c.id_caracteristique)]
         }] AS constraint_data
         
-        // Evaluate Scores per Characteristic ID
+        // Evaluate Scores per Characteristic ID with CONTINUOUS SCORING FORMULAS
         WITH p, f, [item IN constraint_data | {
             cid: item.cid,
             score: CASE 
-                // Blocking Check
+                // ============== BLOCKING CHECK (Fatal Mismatch = 0) ==============
                 WHEN ANY(pc IN item.matches WHERE 
                     (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
                     OR
@@ -582,16 +582,293 @@ class RecommendationService:
                         (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
                     ))
                 ) THEN $blocked_val
-                // Target Check
+                
+                // ============== TARGET LIST CHECK (Binary 1.0) ==============
                 WHEN ANY(pc IN item.matches WHERE 
-                    (size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list))
-                    OR
-                    (item.conf.target_numeric IS NOT NULL AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit) AND (
-                        (item.conf.target_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.target_numeric.min) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.min)))) OR
-                        (item.conf.target_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.target_numeric.max) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.max)))) OR
-                        (item.conf.target_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.target_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact) AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact))))
-                    ))
+                    size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
                 ) THEN 1.0
+                
+                // ============== CONTINUOUS NUMERIC SCORING ==============
+                WHEN ANY(pc IN item.matches WHERE 
+                    item.conf.target_numeric IS NOT NULL 
+                    AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
+                ) THEN
+                    // Calculate continuous score and clamp between 0.0 and 1.0
+                    CASE
+                        WHEN head([pc IN item.matches WHERE 
+                            item.conf.target_numeric IS NOT NULL 
+                            AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
+                        | CASE
+                            // === SCENARIO 1: PRODUCT HAS EXACT VALUE (SingleValue) ===
+                            WHEN pc.type_donnee = 'numeric' THEN
+                                CASE
+                                    // Need: Exact Value -> Score = 1 - |P_val - N_val| / N_val
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE 
+                                            WHEN item.conf.target_numeric.exact = 0 THEN 
+                                                CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
+                                            ELSE 
+                                                toFloat(1.0 - abs(pc.valeur_canonique - item.conf.target_numeric.exact) / abs(item.conf.target_numeric.exact))
+                                        END
+                                        
+                                    // Need: Min Required -> If P < N: 0, else N_req / P_val (Efficiency Penalty)
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique < item.conf.target_numeric.min THEN 0.0
+                                            WHEN pc.valeur_canonique = 0 THEN 0.0
+                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
+                                        END
+                                        
+                                    // Need: Max Authorized -> If P > N: 0, else P_val / N_lim (Proximity Reward)
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique > item.conf.target_numeric.max THEN 0.0
+                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                            ELSE toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
+                                        END
+                                        
+                                    // Need: Working Range -> Inside = 1.0, Outside = 0
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
+                                                 AND pc.valeur_canonique <= item.conf.target_numeric.max 
+                                            THEN 1.0
+                                            ELSE 0.0
+                                        END
+                                        
+                                    ELSE 1.0
+                                END
+                                
+                            // === SCENARIO 2 & 3: PRODUCT HAS RANGE ===
+                            WHEN pc.type_donnee = 'numeric_range' THEN
+                                CASE
+                                    // Need: Exact Value -> Inside range = 1.0, Outside = 0
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE
+                                            WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact)
+                                                 AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact)
+                                            THEN 1.0
+                                            ELSE 0.0
+                                        END
+                                        
+                                    // Need: Min Required -> Use P_min (worst case): Score = N_req / P_min
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_min_canonique IS NULL THEN 0.5
+                                            WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                            WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                        END
+                                        
+                                    // Need: Max Authorized -> Use P_max (worst case): Score = P_max / N_lim  
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_max_canonique IS NULL THEN 0.0
+                                            WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                            ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                        END
+                                        
+                                    // Need: Working Range -> Jaccard-style overlap (Overlap / Need Length)
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_min_canonique IS NULL OR pc.valeur_max_canonique IS NULL THEN 0.5
+                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
+                                                 OR pc.valeur_min_canonique > item.conf.target_numeric.max 
+                                            THEN 0.0
+                                            WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
+                                            ELSE toFloat(
+                                                (CASE 
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
+                                                    THEN pc.valeur_max_canonique 
+                                                    ELSE item.conf.target_numeric.max 
+                                                END
+                                                -
+                                                CASE 
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
+                                                    THEN pc.valeur_min_canonique 
+                                                    ELSE item.conf.target_numeric.min 
+                                                END)
+                                                /
+                                                (item.conf.target_numeric.max - item.conf.target_numeric.min)
+                                            )
+                                        END
+                                        
+                                    ELSE 1.0
+                                END
+                                
+                            ELSE 1.0
+                        END]) > 1.0 THEN 1.0
+                        WHEN head([pc IN item.matches WHERE 
+                            item.conf.target_numeric IS NOT NULL 
+                            AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
+                        | CASE
+                            WHEN pc.type_donnee = 'numeric' THEN
+                                CASE
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE 
+                                            WHEN item.conf.target_numeric.exact = 0 THEN 
+                                                CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
+                                            ELSE 
+                                                toFloat(1.0 - abs(pc.valeur_canonique - item.conf.target_numeric.exact) / abs(item.conf.target_numeric.exact))
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique < item.conf.target_numeric.min THEN 0.0
+                                            WHEN pc.valeur_canonique = 0 THEN 0.0
+                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
+                                        END
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique > item.conf.target_numeric.max THEN 0.0
+                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                            ELSE toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
+                                                 AND pc.valeur_canonique <= item.conf.target_numeric.max 
+                                            THEN 1.0
+                                            ELSE 0.0
+                                        END
+                                    ELSE 1.0
+                                END
+                            WHEN pc.type_donnee = 'numeric_range' THEN
+                                CASE
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE
+                                            WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact)
+                                                 AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact)
+                                            THEN 1.0
+                                            ELSE 0.0
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_min_canonique IS NULL THEN 0.5
+                                            WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                            WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                        END
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_max_canonique IS NULL THEN 0.0
+                                            WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                            ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_min_canonique IS NULL OR pc.valeur_max_canonique IS NULL THEN 0.5
+                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
+                                                 OR pc.valeur_min_canonique > item.conf.target_numeric.max 
+                                            THEN 0.0
+                                            WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
+                                            ELSE toFloat(
+                                                (CASE 
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
+                                                    THEN pc.valeur_max_canonique 
+                                                    ELSE item.conf.target_numeric.max 
+                                                END
+                                                -
+                                                CASE 
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
+                                                    THEN pc.valeur_min_canonique 
+                                                    ELSE item.conf.target_numeric.min 
+                                                END)
+                                                /
+                                                (item.conf.target_numeric.max - item.conf.target_numeric.min)
+                                            )
+                                        END
+                                    ELSE 1.0
+                                END
+                            ELSE 1.0
+                        END]) < 0.0 THEN 0.0
+                        ELSE head([pc IN item.matches WHERE 
+                            item.conf.target_numeric IS NOT NULL 
+                            AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
+                        | CASE
+                            WHEN pc.type_donnee = 'numeric' THEN
+                                CASE
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE 
+                                            WHEN item.conf.target_numeric.exact = 0 THEN 
+                                                CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
+                                            ELSE 
+                                                toFloat(1.0 - abs(pc.valeur_canonique - item.conf.target_numeric.exact) / abs(item.conf.target_numeric.exact))
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique < item.conf.target_numeric.min THEN 0.0
+                                            WHEN pc.valeur_canonique = 0 THEN 0.0
+                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
+                                        END
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique > item.conf.target_numeric.max THEN 0.0
+                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                            ELSE toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
+                                                 AND pc.valeur_canonique <= item.conf.target_numeric.max 
+                                            THEN 1.0
+                                            ELSE 0.0
+                                        END
+                                    ELSE 1.0
+                                END
+                            WHEN pc.type_donnee = 'numeric_range' THEN
+                                CASE
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE
+                                            WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact)
+                                                 AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact)
+                                            THEN 1.0
+                                            ELSE 0.0
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_min_canonique IS NULL THEN 0.5
+                                            WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                            WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                        END
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_max_canonique IS NULL THEN 0.0
+                                            WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
+                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
+                                            ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE
+                                            WHEN pc.valeur_min_canonique IS NULL OR pc.valeur_max_canonique IS NULL THEN 0.5
+                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
+                                                 OR pc.valeur_min_canonique > item.conf.target_numeric.max 
+                                            THEN 0.0
+                                            WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
+                                            ELSE toFloat(
+                                                (CASE 
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
+                                                    THEN pc.valeur_max_canonique 
+                                                    ELSE item.conf.target_numeric.max 
+                                                END
+                                                -
+                                                CASE 
+                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
+                                                    THEN pc.valeur_min_canonique 
+                                                    ELSE item.conf.target_numeric.min 
+                                                END)
+                                                /
+                                                (item.conf.target_numeric.max - item.conf.target_numeric.min)
+                                            )
+                                        END
+                                    ELSE 1.0
+                                END
+                            ELSE 1.0
+                        END])
+                    END
+                
                 // Connected Check
                 WHEN size(item.matches) > 0 THEN $different_val
                 // Default
