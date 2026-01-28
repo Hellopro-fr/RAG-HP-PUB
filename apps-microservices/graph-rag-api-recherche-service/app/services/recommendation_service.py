@@ -651,13 +651,32 @@ class RecommendationService:
                                             ELSE 0.0
                                         END
                                         
-                                    // Need: Min Required -> Use P_min (worst case): Score = N_req / P_min
+                                    // Need: Min Required -> Check if product can meet the requirement
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE
-                                            WHEN pc.valeur_min_canonique IS NULL THEN 0.5
-                                            WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                            WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                            // Product has both min and max: use P_min (worst case)
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                                END
+                                            // Product has only max: if max >= need_min, product can handle it
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_max_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
+                                                END
+                                            // Product has only min: use P_min
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                                END
+                                            // Neither min nor max: uncertainty
+                                            ELSE 0.5
                                         END
                                         
                                     // Need: Max Authorized -> Use P_max (worst case): Score = P_max / N_lim  
@@ -744,10 +763,25 @@ class RecommendationService:
                                         END
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE
-                                            WHEN pc.valeur_min_canonique IS NULL THEN 0.5
-                                            WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                            WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                                END
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_max_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
+                                                END
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                                END
+                                            ELSE 0.5
                                         END
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
@@ -828,10 +862,25 @@ class RecommendationService:
                                         END
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE
-                                            WHEN pc.valeur_min_canonique IS NULL THEN 0.5
-                                            WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                            WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                                END
+                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_max_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
+                                                END
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
+                                                CASE
+                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
+                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
+                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                                END
+                                            ELSE 0.5
                                         END
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
