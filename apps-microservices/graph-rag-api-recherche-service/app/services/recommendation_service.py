@@ -1031,29 +1031,7 @@ class RecommendationService:
                 // Default
                 ELSE 0.1
             END,
-            has_pc: size(item.matches) > 0,
-            // DEBUG: Product characteristics for verification
-            product_data: CASE 
-                WHEN size(item.matches) > 0 THEN head([pc IN item.matches | {
-                    type_donnee: pc.type_donnee,
-                    valeur: pc.valeur,
-                    valeur_canonique: pc.valeur_canonique,
-                    valeur_min_canonique: pc.valeur_min_canonique,
-                    valeur_max_canonique: pc.valeur_max_canonique,
-                    unite_canonique: pc.unite_canonique
-                }])
-                ELSE null
-            END,
-            // DEBUG: Requirements from request
-            need_data: {
-                target_min: item.conf.target_numeric.min,
-                target_max: item.conf.target_numeric.max,
-                target_exact: item.conf.target_numeric.exact,
-                target_unit: item.conf.target_numeric.unit,
-                blocking_min: item.conf.blocking_numeric.min,
-                blocking_max: item.conf.blocking_numeric.max,
-                blocking_exact: item.conf.blocking_numeric.exact
-            }
+            has_pc: size(item.matches) > 0
         }] AS char_results
         
         // Aggregate Caracteristique Score and Weights
@@ -1070,14 +1048,7 @@ class RecommendationService:
             cid: cid, 
             score: cid_score, 
             weight: weight,
-            matched: matched,
-            // DEBUG: Include char_results for verification
-            char_data: [res IN char_results | {
-                cid: res.cid,
-                score: res.score,
-                product_data: res.product_data,
-                need_data: res.need_data
-            }]
+            matched: matched
         }) AS details
         
         WITH p, details,
