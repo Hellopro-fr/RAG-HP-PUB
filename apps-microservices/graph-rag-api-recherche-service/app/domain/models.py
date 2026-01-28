@@ -30,6 +30,33 @@ class ComplexFilterRequest(BaseModel):
     different_val: int | float = -0.3
 
 
+class CaracteristiqueConstraint(BaseModel):
+    """Constraint for caracteristique-based filtering with weight included."""
+    q_weight: float = Field(1.0, description="Weight for this caracteristique constraint")
+    unite: Optional[str] = None
+    valeurs_cibles: Optional[Union[List[str], Dict[str, Any]]] = None
+    valeurs_bloquantes: Optional[Union[List[str], Dict[str, Any]]] = None
+
+
+class FilterCaracteristiqueRequest(BaseModel):
+    """Request model for filtering by CaracteristiqueTechnique ID with weights."""
+    ids: Dict[str, List[CaracteristiqueConstraint]] = Field(
+        ...,
+        description="Map of Caracteristique ID to list of Constraints with weights. Example: {'29': [{'q_weight': 1.0, 'valeurs_cibles': ['3']}]}",
+    )
+    output_fields: Optional[List[str]] = Field(
+        None,
+        description="List of fields to return in the product data. If None, returns all fields.",
+    )
+    id_categorie: Optional[str] = Field(
+        None,
+        description="Optional Category ID to filter products.",
+    )
+    top_k: int = 50
+    blocked_val: float = -2.0
+    different_val: float = -0.3
+
+
 class BaseNormalizer(BaseModel):
     @field_validator("*", mode="before")
     def normalize_whitespace(cls, v):
