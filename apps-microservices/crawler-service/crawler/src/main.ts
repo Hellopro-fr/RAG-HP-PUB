@@ -13,7 +13,7 @@ import {
     startCrawler,
     attachFSLogger,
     reclaimFailedRequest,
-    stats,
+    stats as statsFromFunctions, // Renamed to avoid confusion
     dropDataset,
     isStoppedManualy,
     getUrlsCrawledStreaming,
@@ -330,31 +330,112 @@ if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCoun
     process.exit(0); // Success exit
 }
 
-// Case 2: Corrupted/polluted queue (items exist but none are handled or pending)
+// Case 2: Crash Recovery / In-Progress (Updated Logic)
 if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
-    if (breakLimit) {
-        // Bypass mode: Log warning but continue
-        console.warn(`⚠️  WARNING: Corrupted queue detected for ${domain} but breakLimit=true, bypassing check.`);
-        console.warn(`   Total items: ${queueInfo.totalRequestCount}`);
-        console.warn(`   Handled: 0, Pending: 0`);
-        console.warn(`ℹ️  Crawler will attempt to continue despite locked queue state.`);
-    } else {
-        // Normal mode: Exit with error
-        console.error(`❌ CRITICAL: Corrupted queue detected for ${domain}`);
-        console.error(`   Total items: ${queueInfo.totalRequestCount}`);
-        console.error(`   Handled: 0, Pending: 0`);
-        console.error(`ℹ️  All items are locked/stuck in an invalid state.`);
-        console.error(`💡 SOLUTION: Use Monitor Interface > 'Queue Editor' > 'Analyze' then 'Clean Patterns' or 'Drop Queue'.`);
-        console.error(`💡 OR: Set breaklimit=True to force bypass this check (not recommended).`);
-        process.exit(1); // Error exit
-    }
+    console.warn(`⚠️  WARNING: Detected ${queueInfo.totalRequestCount} in-progress items from a previous interrupted run.`);
+    console.warn(`ℹ️  Crawler will resume these requests (they will be reclaimed if timed out).`);
+    // We proceed instead of exiting
 }
 
-// Case 3: Normal operation - items are pending or being processed
+// Case 3: Normal operation
 if (queueInfo) {
     console.log(`📊 Queue status: ${queueInfo.pendingRequestCount} pending, ${queueInfo.handledRequestCount} handled, ${queueInfo.totalRequestCount} total`);
 }
 // --------------------------
+
+/**
+ * Reusable Shutdown Logic
+ * Handles persistence and cleanup on both Success and Signals (SIGTERM/SIGINT)
+ */
+let isShuttingDown = false;
+const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    
+    console.log(`\n🛑 Shutdown initiated: ${reason}`);
+
+    // 1. Stop Crawler if running
+    if (context.crawlerInstance) {
+        console.log('Aborting crawler...');
+        try {
+            await context.crawlerInstance.autoscaledPool?.abort();
+            await context.crawlerInstance.teardown();
+        } catch (e) { 
+            console.error('Error stopping crawler:', e); 
+        }
+    }
+
+    // 2. Determine Final State
+    let isFinished = 0;
+    try {
+        if (requestQueue) isFinished = (await requestQueue.isFinished()) ? 1 : 0;
+    } catch (e) {}
+
+    let isError = context.stopReason;
+    if (isFinished === 0 && !isError) {
+        try {
+            const dataset = await Dataset.open(domain);
+            const info = await dataset.getInfo();
+            if (info && info.itemCount >= 5000) isError = "limitCrawl";
+        } catch (e) {}
+    }
+    if (isStoppedManualy(domain, true)) isError = "stoppedManually";
+
+    // Get stats from instance if available, else usage functions
+    const finalStats = context.crawlerInstance?.stats.state || statsFromFunctions;
+
+    // 3. Write Payloads
+    const payload = {
+        id_domaine: id,
+        success: finalStats?.requestsFinished || 0,
+        failed: finalStats?.requestsFailed || 0,
+        isFinished: isFinished,
+        method: method,
+        isError: isError,
+        storagePath: storagePath
+    };
+
+    try {
+        fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
+        fs.writeFileSync(`${storagePath}/_exit_reason.json`, JSON.stringify({
+            reason: isError || reason,
+            timestamp: new Date().toISOString(),
+            stats: finalStats
+        }, null, 2));
+    } catch (e) {
+        console.error("Failed to write output files", e);
+    }
+
+    // 4. Persist Data (Critical Step)
+    // 1. Persist URLs from Redis to disk (streaming)
+    try {
+        console.log("Persisting crawled URLs history...");
+        const urlIterator = context.dedupManager?.getAllUrlsIterator();
+        if (urlIterator) {
+            await updateUrlsCrawledStreaming(domain, urlIterator);
+        }
+    } catch (e) {
+        console.error("Failed to persist URL history:", e);
+    }
+
+    // 2. Save stats state
+    try {
+        if (context.statsManager) {
+            await context.statsManager.saveStateToDisk();
+            console.log("Stats saved to update_stats.json");
+        }
+    } catch (e) {
+        console.error("Failed to save stats:", e);
+    }
+
+    // 3. Cleanup Redis connections
+    if (context.dedupManager) await context.dedupManager.cleanup();
+    if (context.statsManager) await context.statsManager.cleanup();
+
+    console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
+    process.exit(exitCode);
+};
+
 
 if (typeCrawling == "sitemap") {
     // ...
@@ -368,14 +449,8 @@ if (typeCrawling == "sitemap") {
         console.warn(`⚠️ Warning: Failed to reclaim failed requests for ${domain}. The crawler will continue without them. Error: ${error}`);
     }
 
-    // --- V3 Feature: Update Mode Seeding ---
     if (crawlMode === 'update' && previousCrawlId) {
         console.log(`Running UPDATE mode from ${previousCrawlId}`);
-        // Logic to read previous dataset would go here. 
-        // Since V2 doesn't have the V3 generator logic easily available without more porting,
-        // we'll assume the Python Manager handles data migration or we just skip this advanced feature 
-        // inside the Node process for now, relying on the fact that V2 usually just runs fresh.
-        // However, if strict parity is needed, we'd need to mount the previous volume and read it.
     }
 
     // Launch
@@ -393,83 +468,15 @@ if (typeCrawling == "sitemap") {
         skipdiez
     );
 
-    // CLEANUP HOOKS: Ensure browsers are properly terminated on shutdown
+    // CLEANUP HOOKS: Updated to use gracefulShutdown
     process.on('SIGTERM', async () => {
-        console.log('SIGTERM received, cleaning up browsers...');
-        try {
-            await crawler.teardown();
-        } catch (e) {
-            console.error('Error during teardown:', e);
-        }
-        process.exit(0);
+        await gracefulShutdown('SIGTERM', 0);
     });
 
     process.on('SIGINT', async () => {
-        console.log('SIGINT received, cleaning up browsers...');
-        try {
-            await crawler.teardown();
-        } catch (e) {
-            console.error('Error during teardown:', e);
-        }
-        process.exit(0);
+        await gracefulShutdown('SIGINT', 0);
     });
 }
 
-// --- V3 Feature: Exit Logic & Files ---
-let isFinished = (await requestQueue.isFinished()) ? 1 : 0;
-let isError = context.stopReason; // Populated by routes/functions
-
-// Check logic for counts
-if (isFinished === 0 && !isError) {
-    const dataset = await Dataset.open(domain);
-    const info = await dataset.getInfo();
-    if (info && info.itemCount >= 5000) isError = "limitCrawl";
-}
-if (isStoppedManualy(domain, true)) isError = "stoppedManually";
-
-// Write callback payload
-const payload = {
-    id_domaine: id,
-    success: stats?.requestsFinished || 0,
-    failed: stats?.requestsFailed || 0,
-    isFinished: isFinished,
-    method: method,
-    isError: isError,
-    storagePath: storagePath
-};
-
-try {
-    fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
-    // Also write exit reason
-    fs.writeFileSync(`${storagePath}/_exit_reason.json`, JSON.stringify({
-        reason: isError || "completed",
-        timestamp: new Date().toISOString(),
-        stats: stats
-    }, null, 2));
-} catch (e) {
-    console.error("Failed to write output files", e);
-}
-
-// --- PERSISTENCE & CLEANUP (like Python version) ---
-// 1. Persist URLs from Redis to disk (streaming to avoid OOM)
-try {
-    console.log("Persisting crawled URLs history...");
-    const urlIterator = context.dedupManager.getAllUrlsIterator();
-    await updateUrlsCrawledStreaming(domain, urlIterator);
-} catch (e) {
-    console.error("Failed to persist URL history:", e);
-}
-
-// 2. Save stats state to disk for resumability
-try {
-    await context.statsManager.saveStateToDisk();
-    console.log("Stats saved to update_stats.json");
-} catch (e) {
-    console.error("Failed to save stats:", e);
-}
-
-// 3. Cleanup Redis connections
-await context.dedupManager.cleanup();
-await context.statsManager.cleanup();
-
-process.exit(2);
+// Normal completion
+await gracefulShutdown('COMPLETED', 2);
