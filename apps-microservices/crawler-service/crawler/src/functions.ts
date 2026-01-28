@@ -238,7 +238,7 @@ export const startCrawler = async (
             retireBrowserAfterPageCount: 25, // Prevent memory leaks in Chrome
         },
 
-        maxConcurrency: 1, // V3 default
+        // maxConcurrency: 1, // V3 default
         navigationTimeoutSecs: 90,
         requestHandlerTimeoutSecs: 120,
         maxRequestRetries: 5, // V3 resilience
@@ -472,9 +472,9 @@ export const isStoppedManualy = (name: string, historised: boolean) => {
  * if the file exists, convert the content as array and be the result return
  * if the file doesn't exists, create the directory 'request_urls/{domain}' if it doesn't exists and then create the file named "{domaine}.json" and return []
  * And if historised is true, create a copy of the file as "YYYY-mm-dd-{domaine}.json"  in the same directory and update the the file named "{domaine}.json" as []
- *
+/**
+ * @deprecated Use getUrlsCrawledStreaming() for large history files to avoid OOM.
  */
-
 export const getUrlsCrawled = (
     name: string | undefined,
     historised: boolean,
@@ -525,8 +525,106 @@ export const getUrlsCrawled = (
 };
 
 /**
+ * OOM-safe streaming version of getUrlsCrawled.
+ * Yields URLs one-by-one using incremental JSON parsing.
+ * 
+ * @param {string} name - The name of the domain
+ * @param {boolean} historised - Whether to create a dated backup and clear the file
+ * @param {string | undefined} dropData - If set, delete the file before reading
+ * @returns {AsyncGenerator<string>} Yields URLs one at a time
+ */
+export async function* getUrlsCrawledStreaming(
+    name: string | undefined,
+    historised: boolean,
+    dropData: string | undefined = undefined
+): AsyncGenerator<string> {
+    let folderName = `./storage/request_urls/${name}`;
+    try {
+        if (!fs.existsSync(folderName)) {
+            fs.mkdirSync(folderName, { recursive: true });
+        }
+    } catch (err) {
+        console.error("Couldn't create the folder ");
+        console.error(err);
+        folderName = "./storage/request_urls";
+    }
+
+    const fileUrls = `${folderName}/${name}.json`;
+
+    if (dropData) {
+        console.log("Dropping the file " + fileUrls);
+        if (fs.existsSync(fileUrls)) fs.unlinkSync(fileUrls);
+    }
+
+    if (!fs.existsSync(fileUrls)) {
+        console.log("First creation of the file list urls");
+        fs.writeFileSync(fileUrls, "[]");
+        return;
+    }
+
+    if (historised) {
+        console.log("The list of urls crawled have been historised");
+        const dateString = new Date().toISOString().split("T")[0];
+        const fileHistorised = `${folderName}/${dateString}-${name}.json`;
+        fs.copyFileSync(fileUrls, fileHistorised);
+        fs.writeFileSync(fileUrls, "[]");
+        return;
+    }
+
+    // Stream-parse the JSON array
+    // Read file in chunks and extract strings incrementally
+    const readStream = fs.createReadStream(fileUrls, { encoding: 'utf8' });
+    let buffer = '';
+    let inString = false;
+    let escapeNext = false;
+    let currentString = '';
+
+    for await (const chunk of readStream) {
+        buffer += chunk;
+        
+        for (let i = 0; i < buffer.length; i++) {
+            const char = buffer[i];
+            
+            if (escapeNext) {
+                if (inString) currentString += char;
+                escapeNext = false;
+                continue;
+            }
+            
+            if (char === '\\') {
+                escapeNext = true;
+                if (inString) currentString += char;
+                continue;
+            }
+            
+            if (char === '"') {
+                if (inString) {
+                    // End of string - yield URL
+                    // Decode escape sequences
+                    try {
+                        yield JSON.parse(`"${currentString}"`);
+                    } catch {
+                        yield currentString;
+                    }
+                    currentString = '';
+                }
+                inString = !inString;
+                continue;
+            }
+            
+            if (inString) {
+                currentString += char;
+            }
+        }
+        
+        buffer = '';
+    }
+}
+
+/**
  * Update the content  of the file named "{domaine}.json" in the folder request_urls/{domain}
  *
+ * @deprecated Use updateUrlsCrawledStreaming() for large URL sets to avoid OOM.
  * @param {string} name - The name of the domain
  * @param {Array<string>} listUrls - list of the urls already crawled
  * @returns void
@@ -541,9 +639,60 @@ export const updateUrlsCrawled = (
 ) => {
     var folderName = `./storage/request_urls/${name}`;
     var fileUrls = `${folderName}/${name}.json`;
-    if (fs.existsSync(fileUrls)) {
-        fs.writeFileSync(fileUrls, JSON.stringify(listUrls));
+    
+    // Create folder if it doesn't exist (fix: was missing)
+    if (!fs.existsSync(folderName)) {
+        fs.mkdirSync(folderName, { recursive: true });
     }
+    
+    fs.writeFileSync(fileUrls, JSON.stringify(listUrls));
+};
+
+/**
+ * OOM-safe streaming version of updateUrlsCrawled.
+ * Writes URLs to file one-by-one from an async iterator, avoiding full array in memory.
+ *
+ * @param {string} name - The name of the domain
+ * @param {AsyncGenerator<string>} urlIterator - Async iterator yielding URLs
+ * @returns {Promise<number>} Number of URLs written
+ */
+export const updateUrlsCrawledStreaming = async (
+    name: string | undefined,
+    urlIterator: AsyncGenerator<string>
+): Promise<number> => {
+    const folderName = `./storage/request_urls/${name}`;
+    const fileUrls = `${folderName}/${name}.json`;
+    
+    // Create folder if it doesn't exist
+    if (!fs.existsSync(folderName)) {
+        fs.mkdirSync(folderName, { recursive: true });
+    }
+    
+    // Use streaming write to avoid OOM
+    const stream = fs.createWriteStream(fileUrls);
+    stream.write('[');
+    
+    let isFirst = true;
+    let count = 0;
+    
+    for await (const url of urlIterator) {
+        if (!isFirst) stream.write(',');
+        stream.write(JSON.stringify(url));
+        isFirst = false;
+        count++;
+    }
+    
+    stream.write(']');
+    stream.end();
+    
+    // Wait for stream to finish
+    await new Promise<void>((resolve, reject) => {
+        stream.on('finish', resolve);
+        stream.on('error', reject);
+    });
+    
+    console.log(`Persisted ${count} URLs to ${fileUrls}`);
+    return count;
 };
 
 /**

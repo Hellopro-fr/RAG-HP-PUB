@@ -49,6 +49,10 @@ export class DedupManager {
         }
     }
 
+    /**
+     * @deprecated Use getAllUrlsIterator() for memory-efficient streaming.
+     * This method loads ALL URLs into memory at once, causing OOM on large sets.
+     */
     async getAllUrls(): Promise<string[]> {
         try {
             return await this.redis.sMembers(this.key);
@@ -58,6 +62,28 @@ export class DedupManager {
         }
     }
 
+    /**
+     * Memory-efficient iterator using Redis SSCAN.
+     * Yields URLs in batches without loading entire set into memory.
+     */
+    async *getAllUrlsIterator(): AsyncGenerator<string> {
+        try {
+            let cursor = 0;
+            do {
+                const result = await this.redis.sScan(this.key, cursor, { COUNT: 1000 });
+                cursor = result.cursor;
+                for (const member of result.members) {
+                    yield member;
+                }
+            } while (cursor !== 0);
+        } catch (e) {
+            console.error(`Dedup Scan Error: ${e}`);
+        }
+    }
+
+    /**
+     * @deprecated Use loadFromIterator() for OOM-safe streaming loading.
+     */
     async loadFromList(urls: string[]) {
         if (!urls.length) return;
         
@@ -71,6 +97,35 @@ export class DedupManager {
         }
         await this.ensureTtl();
         console.log(`Loaded ${urls.length} URLs into deduplication set.`);
+    }
+
+    /**
+     * OOM-safe streaming loader using async iterator.
+     * Buffers URLs and flushes to Redis in batches of 1000.
+     */
+    async loadFromIterator(urlIterator: AsyncGenerator<string>): Promise<number> {
+        const chunkSize = 1000;
+        let buffer: string[] = [];
+        let totalCount = 0;
+
+        for await (const url of urlIterator) {
+            buffer.push(url);
+            totalCount++;
+
+            if (buffer.length >= chunkSize) {
+                await this.redis.sAdd(this.key, buffer);
+                buffer = [];
+            }
+        }
+
+        // Flush remaining buffer
+        if (buffer.length > 0) {
+            await this.redis.sAdd(this.key, buffer);
+        }
+
+        await this.ensureTtl();
+        console.log(`Loaded ${totalCount} URLs into deduplication set (streaming).`);
+        return totalCount;
     }
 
     async cleanup() {

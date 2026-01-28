@@ -1,4 +1,4 @@
-import { RequestQueue, RobotsFile } from "crawlee";
+import { RequestQueue, RobotsFile, Dataset } from "crawlee";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import { createClient } from 'redis';
@@ -16,7 +16,8 @@ import {
     stats,
     dropDataset,
     isStoppedManualy,
-    getUrlsCrawled,
+    getUrlsCrawledStreaming,
+    updateUrlsCrawledStreaming,
     getAllRequestQueues,
     parseJsonFiles,
 } from "./functions.js";
@@ -300,13 +301,9 @@ if (dropData) {
 // Load legacy history into Redis Dedup (V3 Logic)
 // In V2 this was `allUrlsCrawled` array. Now we seed Redis.
 // export let allUrlsCrawled = new Set<string>(); // Keep local set for compatibility or fallback
-const history = getUrlsCrawled(domain, isHistorised, dropData ? 'true' : undefined);
-if (history.length > 0) {
-    console.log(`Seeding ${history.length} URLs to Redis Deduplication...`);
-    await context.dedupManager.loadFromList(history);
-    // Also fill local set if needed for V2 logic fallback
-    // history.forEach(u => allUrlsCrawled.add(u));
-}
+console.log(`Starting to seed URLs to Redis Deduplication (Streaming)...`);
+const urlIterator = getUrlsCrawledStreaming(domain, isHistorised, dropData ? 'true' : undefined);
+await context.dedupManager.loadFromIterator(urlIterator);
 
 // Filter queue files on disk (V3 Fix logic included in functions.ts)
 if (skipquestionmark || skipdiez) {
@@ -424,8 +421,9 @@ let isError = context.stopReason; // Populated by routes/functions
 
 // Check logic for counts
 if (isFinished === 0 && !isError) {
-    const data = await getScrapingData(domain);
-    if (data.items.length >= 5000) isError = "limitCrawl";
+    const dataset = await Dataset.open(domain);
+    const info = await dataset.getInfo();
+    if (info && info.itemCount >= 5000) isError = "limitCrawl";
 }
 if (isStoppedManualy(domain, true)) isError = "stoppedManually";
 
@@ -452,7 +450,25 @@ try {
     console.error("Failed to write output files", e);
 }
 
-// Cleanup Redis
+// --- PERSISTENCE & CLEANUP (like Python version) ---
+// 1. Persist URLs from Redis to disk (streaming to avoid OOM)
+try {
+    console.log("Persisting crawled URLs history...");
+    const urlIterator = context.dedupManager.getAllUrlsIterator();
+    await updateUrlsCrawledStreaming(domain, urlIterator);
+} catch (e) {
+    console.error("Failed to persist URL history:", e);
+}
+
+// 2. Save stats state to disk for resumability
+try {
+    await context.statsManager.saveStateToDisk();
+    console.log("Stats saved to update_stats.json");
+} catch (e) {
+    console.error("Failed to save stats:", e);
+}
+
+// 3. Cleanup Redis connections
 await context.dedupManager.cleanup();
 await context.statsManager.cleanup();
 
