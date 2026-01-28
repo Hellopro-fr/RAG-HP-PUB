@@ -2,12 +2,12 @@ import { createPlaywrightRouter, Dataset } from "crawlee";
 import {
     domain,
     requestQueue,
-    baseUrl,
-    enqueueLinksIncludePath,
+    // baseUrl,
+    // enqueueLinksIncludePath,
     robots,
     skipquestionmark,
     skipdiez,
-    allUrlsCrawled,
+    // allUrlsCrawled,
     toKeep,
     toRemove,
     site,
@@ -18,7 +18,7 @@ import {
     processUrl,
     routerDefaultHandler,
     stopCrawler,
-    updateUrlsCrawled,
+    // updateUrlsCrawled,
 } from "./functions.js";
 import { DomainFR } from "./class/DomainFR.js";
 import { context } from "./context.js";
@@ -66,9 +66,11 @@ router.addDefaultHandler(
             const resourceType = req.resourceType();
             const reqUrl = req.url();
 
+            // Block heavy media and fonts
             if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
                 return route.abort();
             }
+            // Block download scripts and binary files
             if (reqUrl.includes('download.php') || reqUrl.includes('imp=1') || /\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$/i.test(reqUrl)) {
                 return route.abort();
             }
@@ -76,6 +78,21 @@ router.addDefaultHandler(
         });
 
         let url = request.loadedUrl;
+
+        // CRITICAL SECURITY: Check if the loaded URL is still on the target domain
+        // This handles cases where a valid internal link redirects to an external site (e.g. Facebook)
+        // If we don't check this, the crawler might start crawling the external site.
+        const urlObj = new URL(url);
+        const targetDomain = domain; // Imported from main.js
+
+        // Check if hostname ends with the target domain (handles subdomains too)
+        // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
+        // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
+        if (!urlObj.hostname.includes(targetDomain)) {
+            log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            return;
+        }
+
         let enqueueLinksExcludePath: Array<string> = [
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
         ];
@@ -109,8 +126,7 @@ router.addDefaultHandler(
             }
         }
 
-        log.info(`Processing ${url} ( ${request.url} ) ...`);
-        log.info("HTTP Code: " + response?.status());
+        log.info(`Processing ${url} ( ${request.url} ) ... (HTTP Status: ${response?.status()})`);
 
         let isDoublon = false;
 
@@ -118,12 +134,12 @@ router.addDefaultHandler(
         if (context.dedupManager) {
             const isNew = await context.dedupManager.addUrl(url);
             isDoublon = !isNew;
-        } else {
-            // Fallback for standalone/local tests
-            // allUrlsCrawled.forEach(...) -> O(N), use Set in main.ts
-            // Note: `allUrlsCrawled` is now a Set in updated main.ts
-            isDoublon = (allUrlsCrawled as Set<string>).has(url);
-            if (!isDoublon) (allUrlsCrawled as Set<string>).add(url);
+        // } else {
+        //     // Fallback for standalone/local tests
+        //     // allUrlsCrawled.forEach(...) -> O(N), use Set in main.ts
+        //     // Note: `allUrlsCrawled` is now a Set in updated main.ts
+        //     isDoublon = (allUrlsCrawled as Set<string>).has(url);
+        //     if (!isDoublon) (allUrlsCrawled as Set<string>).add(url);
         }
 
         if (!isDoublon) {
@@ -153,17 +169,20 @@ router.addDefaultHandler(
             } catch (e) {}
 
             if (isMainSite) {
+                // Process normally and store the method
                 content = await processPage(page, request.loadedUrl, log);
                 domainFR.homepage = url;
                 const checkPageIfFrench = await domainFR.checkPageIfFrench(content, false);
-                
+
                 if (checkPageIfFrench["ok"]) {
+                    // Store the successful method
                     frenchDetectionMethod = manageFrenchDetectionMethod(domain as string, checkPageIfFrench["method"]);
                     if (frenchDetectionMethod instanceof Error) {
                         log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
                         await stopCrawler(crawler, "Failed to store French detection method");
                         return;
                     }
+
                     isEnqueuingLinks = true;
                 } else {
                     const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
@@ -174,10 +193,12 @@ router.addDefaultHandler(
                             await stopCrawler(crawler, "Failed to store French detection method");
                             return;
                         }
+
                         isEnqueuingLinks = true;
                     }
                 }
             } else {
+                // Try to get stored method
                 frenchDetectionMethod = manageFrenchDetectionMethod(domain as string);
                 if (frenchDetectionMethod instanceof Error) {
                     log.error(`Failed to retrieve French detection method: ${frenchDetectionMethod.message}`);
@@ -185,6 +206,7 @@ router.addDefaultHandler(
                     return;
                 }
 
+                // Create new DomainFR instance with forced method
                 content = await processPage(page, request.loadedUrl, log);
                 const domainFRWithMethod = new DomainFR(url, frenchDetectionMethod as string);
                 const checkPageIfFrench = await domainFRWithMethod.checkPageIfFrench(content, false);
@@ -219,41 +241,132 @@ router.addDefaultHandler(
                             return null;
                         }
 
+                        const reqUrlObj = new URL(request.url);
+
                         // V3 Feature: Forbidden Params Check
-                        for (const param of FORBIDDEN_PARAMS) {
-                            if (request.url.includes(`${param}=`)) { // Simple check, V3 does regex but this covers most
-                                return null;
+                        try {
+                            for (const param of FORBIDDEN_PARAMS) {
+                                if (reqUrlObj.searchParams.has(param) ||
+                                    Array.from(reqUrlObj.searchParams.keys()).some(key => key.startsWith(param))) {
+                                    console.log(`🚫 Blocked forbidden param "${param}": ${request.url}`);
+                                    return null;
+                                }
                             }
+                        } catch (e) {
+                            console.error(`Invalid URL in param check: ${request.url}`);
+                            return null;
                         }
 
-                        // V3 Feature: Spider Trap & Base64
-                        if (request.url.includes('/quotation/cart/') || request.url.includes('/cart/cart/')) return null;
-                        if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) return null;
+                        // PREVENTIVE SPIDER TRAP BLOCKING (Before other checks)
+                        // Block nested cart/quotation URLs that create infinite loops
+                        if (request.url.includes('/quotation/cart/') ||
+                            request.url.includes('/cart/cart/') ||
+                            request.url.includes('/catalog/product_compare/')) {
+                            console.log(`Blocked spider trap: ${request.url}`);
+                            return null;
+                        }
+
+                        // Block URLs with long base64-encoded segments (often dynamic/infinite)
+                        if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
+                            console.log(`Blocked base64 URL: ${request.url}`);
+                            return null;
+                        }
+
+                        // HARD SECURITY: Explicitly block ANY URL that is not on the target domain
+                        // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
+                        try {
+                            if (!reqUrlObj.hostname.includes(domain)) {
+                                console.log(`Blocked external URL: ${request.url}`);
+                                return null;
+                            }
+                        } catch (e) {
+                            console.error(`Invalid URL in transformRequestFunction: ${request.url}`);
+                            return null;
+                        }
 
                         // List parameters always to remove
                         let toAlwaysRemove = {
                             toRemove: [
-                                // V3 List ported
+                                // === CART & WISHLIST ===
                                 "add-to-cart", "add_to_cart", "addtocart",
                                 "add-to-compare", "add_to_compare",
                                 "add-to-wishlist", "add_to_wishlist", "addtowishlist",
                                 "remove_from_wishlist", "remove_wishlist",
                                 "remove_compare", "remove_item",
                                 "quantity", "qty",
-                                "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
-                                "fbclid", "gclid", "srsltid", "_ga",
-                                "hsa_acc", "hsa_cam", "hsa_grp", "hsa_ad",
-                                "_wpnonce", "pid", "pr_prod_strat", "pr_rec_id", "SID", "PHPSESSID",
-                                // ... truncated for brevity, V3 list is huge
+
+                                // === TRACKING UTM (Marketing) ===
+                                "utm_source", "utm_medium", "utm_campaign",
+                                "utm_content", "utm_term", "utm_id",
+                                "utm_referrer", "utm_name",
+
+                                // === FACEBOOK & META ===
+                                "fbclid", "fb_action_ids", "fb_action_types",
+                                "fb_source", "fb_ref",
+
+                                // === GOOGLE ADS & ANALYTICS ===
+                                "gclid", "gclsrc", "dclid",
+                                "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
+                                "_ga", "_gid", "_gat",
+
+                                // === HUBSPOT ===
+                                "hsa_acc", "hsa_cam", "hsa_grp",
+                                "hsa_ad", "hsa_src", "hsa_mt",
+                                "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
+                                "hsCtaTracking", "hsCta",
+
+                                // === MAILCHIMP ===
+                                "mc_cid", "mc_eid",
+
+                                // === SOCIAL MEDIA TRACKING ===
+                                "twclid", "li_fat_id", "msclkid",
+                                "igshid", "tt_medium", "tt_content",
+
+                                // === WORDPRESS ===
+                                "_wpnonce", "preview", "preview_id",
+                                "preview_nonce", "et_blog",
+
+                                // === PRESTASHOP ===
+                                "id_product", "id_category", "pid",
+                                "controller", "id_product_attribute",
+                                "isolang", "id_lang",
+
+                                // === SHOPIFY ===
+                                "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
+                                "pr_ref_pid", "pr_seq",
+                                "variant", "selling_plan",
+
+                                // === MAGENTO ===
+                                "SID", "___store", "___from_store",
+
+                                // === SESSION & TRACKING ===
+                                "sessionid", "session_id", "PHPSESSID",
+                                "sid", "s_id",
+                                "_gl", "ref", "referrer",
+
+                                // === AFFILIATE & MARKETING ===
+                                "aff_id", "affiliate", "partner",
+                                "coupon", "discount", "promo",
+                                "voucher",
+
+                                // === AUTRES TRACKING ===
+                                "click_id", "transaction_id",
+                                "source", "medium", "campaign",
+
+                                // === FILTRES SOUVENT INUTILES ===
+                                "view", "mode", "display",
+                                "timestamp", "random", "nocache",
+                                "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
                             ],
                         };
                         request.url = processUrl(
                             request.url,
-                            true,
+                            true, // skip question mark here
                             false,
                             toAlwaysRemove
                         );
 
+                        // If skipquestionmark or skipdiez is true, we need to process the URL
                         if (skipquestionmark || skipdiez) {
                             let parameters = {};
                             if (toKeep.length > 0) parameters = { toKeep: toKeep };

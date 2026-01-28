@@ -25,6 +25,9 @@ CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 async def get_job_or_recover(crawl_id: str) -> dict:
     """
     FastAPI dependency to retrieve a crawl job from Redis.
+    If the job is not found in Redis, it attempts to recover it from
+    the persistent storage and re-index it.
+    Raises a 404 HTTPException if the job cannot be found in Redis or on disk.
     Recover from storage if missing from Redis (V3 Logic).
     """
     job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
@@ -33,6 +36,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
     if job_info:
         return job_info
 
+    # --- Job not in Redis, attempt recovery from disk ---
     logger.warning(f"Job '{crawl_id}' not found in Redis. Attempting recovery from storage.")
     job_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, crawl_id)
 
@@ -72,6 +76,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
     if os.path.exists(log_path):
         try:
             async with aiofiles.open(log_path, 'r', errors='ignore') as f:
+                # Read a limited number of lines to avoid loading huge logs
                 line_count = 0
                 async for line in f:
                     # Logic adapted to match typical Node.js logs or arg dumps
@@ -104,6 +109,10 @@ async def get_job_or_recover(crawl_id: str) -> dict:
 
 @router.post("/reindex-storage", response_model=ReindexResponse)
 async def reindex_storage():
+    """
+    Scans the storage volume for orphaned crawl jobs (present on disk but not in Redis)
+    and re-indexes them. This is a recovery tool.
+    """
     try:
         summary = await crawler_manager.reindex_storage()
         return summary
@@ -113,6 +122,10 @@ async def reindex_storage():
 
 @router.get("/capacity", response_model=CapacityResponse)
 async def get_capacity():
+    """
+    Checks the current global capacity of the crawler service by reading
+    shared values from Redis.
+    """
     try:
         if not cache_service.redis_client:
             raise HTTPException(status_code=503, detail="Redis connection not available.")
@@ -120,7 +133,9 @@ async def get_capacity():
         running_jobs_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
         running_jobs = int(running_jobs_raw) if running_jobs_raw else 0
         
+        # Read the max global jobs value from the central Redis key.
         max_global_raw = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)
+        # If the key is missing, use the configurable fallback from settings.
         max_global = int(max_global_raw) if max_global_raw else settings.DEFAULT_MAX_GLOBAL_CRAWLS
         
         return CapacityResponse(
@@ -135,6 +150,10 @@ async def get_capacity():
 
 @router.post("/start", response_model=CrawlResponse, status_code=status.HTTP_202_ACCEPTED)
 async def start_new_crawl(payload: CrawlRequest):
+    """
+    Starts or resumes a web crawling job. A job is uniquely identified by the `id` field.
+    If a job with the same `id` is already running, an error will be returned.
+    """
     try:
         params = {
             "crawlMode": payload.crawl_mode.value,
@@ -186,6 +205,9 @@ async def start_new_crawl(payload: CrawlRequest):
 
 @router.post("/stop/{crawl_id}", response_model=StopResponse)
 async def stop_existing_crawl(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
+    """
+    Stops a currently running crawl job.
+    """
     success = await crawler_manager.stop_crawl(job_info)
     if not success:
         raise HTTPException(status_code=409, detail=f"Crawl job with ID '{crawl_id}' not found or not in a running state.")
@@ -203,25 +225,46 @@ async def force_finish_crawl(
 
 @router.get("/status", response_model=Dict[str, CrawlStatus])
 async def get_all_crawl_statuses():
+    """
+    Gets the status of all active crawl jobs on this instance.
+    """
     return await crawler_manager.get_all_statuses()
 
 @router.get("/status/{crawl_id}", response_model=CrawlStatus)
 async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):
+    """
+    Gets the detailed status of a specific crawl job. Recovers from storage if missing from Redis.
+    """
     return await crawler_manager.get_status(job_info)
 
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
     background_tasks: BackgroundTasks,
-    include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive."),
+    include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues)."),
     job_info: dict = Depends(get_job_or_recover)
 ):
+    """
+    Downloads a custom archive of a completed crawl job, including only the specified components.
+    Recovers from storage if missing from Redis.
+    """
     try:
         crawl_id = job_info['crawl_id']
         archive_path = await crawler_manager.get_results_archive(job_info, include)
         
+        # Validate that the archive file was actually created before returning
         if not os.path.exists(archive_path):
-            raise HTTPException(status_code=404, detail=f"Could not generate results archive for crawl '{crawl_id}'.")
+            logger.error(
+                f"Archive file was not created at expected path: {archive_path}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Could not generate results archive for crawl '{crawl_id}'. "
+                f"The crawl data may have been cleaned up after archiving to GCS."
+            )
 
+        # Archive is now cached for performance, so we do NOT delete it immediately.
+        # Cleanup should be handled by a separate retention policy/cron if needed.
+        # background_tasks.add_task(lambda path: os.remove(path), archive_path)
+        
         return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
     except HTTPException as e:
         raise e
@@ -231,6 +274,11 @@ async def download_crawl_results(
 
 @router.post("/archive/{crawl_id}", response_model=ArchiveResponse)
 async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
+    """
+    Archives a finished crawl job to Google Cloud Storage.
+    The job must be in 'finished' state.
+    After successful upload, local files are cleaned up (except logs).
+    """
     try:
         gcs_url = await crawler_manager.archive_crawl(job_info)
         return ArchiveResponse(message="Crawl archived successfully.", gcs_url=gcs_url)
@@ -242,6 +290,10 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
 
 @router.get("/archive/{crawl_id}")
 async def get_archived_crawl(crawl_id: str):
+    """
+    Placeholder for retrieving an archived crawl from GCS.
+    Currently returns 501 Not Implemented.
+    """
     return await crawler_manager.retrieve_archived_crawl(crawl_id)
 
 @router.post("/reconcile-jobs")
