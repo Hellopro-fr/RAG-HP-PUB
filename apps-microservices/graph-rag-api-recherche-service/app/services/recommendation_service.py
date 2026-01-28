@@ -595,7 +595,7 @@ class RecommendationService:
                 ) THEN
                     // Calculate continuous score and clamp between 0.0 and 1.0
                     CASE
-                        WHEN head([pc IN item.matches WHERE 
+                        WHEN apoc.coll.max([pc IN item.matches WHERE 
                             item.conf.target_numeric IS NOT NULL 
                             AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
                         | CASE
@@ -754,7 +754,7 @@ class RecommendationService:
                                 
                             ELSE 1.0
                         END]) > 1.0 THEN 1.0
-                        WHEN head([pc IN item.matches WHERE 
+                        WHEN apoc.coll.max([pc IN item.matches WHERE 
                             item.conf.target_numeric IS NOT NULL 
                             AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
                         | CASE
@@ -889,7 +889,7 @@ class RecommendationService:
                                 END
                             ELSE 1.0
                         END]) < 0.0 THEN 0.0
-                        ELSE head([pc IN item.matches WHERE 
+                        ELSE apoc.coll.max([pc IN item.matches WHERE 
                             item.conf.target_numeric IS NOT NULL 
                             AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
                         | CASE
