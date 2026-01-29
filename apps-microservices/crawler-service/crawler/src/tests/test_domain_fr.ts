@@ -1,4 +1,4 @@
-import { DomainFR } from "../src/class/DomainFR.js";
+import { DomainFR } from "../class/DomainFR.js";
 
 const log = (msg: string, success: boolean) => {
     if (success) console.log(`✅ ${msg}`);

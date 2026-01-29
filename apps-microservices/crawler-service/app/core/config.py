@@ -18,13 +18,16 @@ class Settings:
     RECONCILIATION_INTERVAL_SECONDS: int = int(os.getenv("RECONCILIATION_INTERVAL_SECONDS", "300"))
 
     # GCS Configuration
-    GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME")
+    GCS_BUCKET_NAME: Optional[str] = os.getenv("GCS_BUCKET_NAME")
 
     # Base directory for storing all crawl data (logs, datasets, etc.)
     CRAWLER_STORAGE_PATH: str = os.getenv("CRAWLER_STORAGE_PATH", "/app/storage")
 
     # Path to the compiled Node.js crawler entry point
     CRAWLER_EXECUTABLE_PATH: str = "/app/crawler/dist/main.js"
+
+    # Proxy configuration
+    APIFY_PROXY: Optional[str] = os.getenv("APIFY_PROXY", None)
 
 
 settings = Settings()

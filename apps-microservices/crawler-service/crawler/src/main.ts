@@ -1,78 +1,111 @@
-import { RequestQueue, RobotsFile } from "crawlee";
-import axios from "axios";
-import fs from "fs/promises"; // Added for file system operations
+import { RequestQueue, RobotsFile, Dataset } from "crawlee";
+import fs from "fs";
+import fsPromises from "fs/promises";
 import { createClient } from 'redis';
 import os from 'os';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-const execAsync = promisify(exec);
+import { exec } from "child_process";
+import { promisify } from "util";
 import { router } from "./routes.js";
 import {
     getPathAfterDomain,
     getScrapingData,
     rightTrimSlash,
     startCrawler,
-    storeKeyValueStore,
     attachFSLogger,
     reclaimFailedRequest,
-    stats,
+    stats as statsFromFunctions, // Renamed to avoid confusion
     dropDataset,
     isStoppedManualy,
-    getUrlsCrawled,
+    getUrlsCrawledStreaming,
+    updateUrlsCrawledStreaming,
     getAllRequestQueues,
     parseJsonFiles,
 } from "./functions.js";
+import { DedupManager } from "./class/DedupManager.js";
+import { StatsManager } from "./class/StatsManager.js";
+import { context } from "./context.js";
 
-// --- Argument Parsing ---
-const args = process.argv.slice(2).reduce((acc, arg) => {
-    const [key, value] = arg.split('=');
-    acc[key.substring(2)] = value;
-    return acc;
-}, {} as Record<string, string>);
-
+const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
 
-// --- Required arguments ---
-export const domain = args.domain;
-export const site = args.site;
-const id = args.id;
-const storagePath = args.storagePath; // Centralized storage path for this job
-const callbackUrl = args.callbackUrl;
+// --- V3 Feature: Standard CLI Argument Parsing ---
+// Parsing args like --domain=example.com instead of npm_config
+const args: Record<string, string> = {};
+process.argv.slice(2).forEach(arg => {
+    if (arg.startsWith('--')) {
+        const [key, value] = arg.replace(/^--/, '').split('=');
+        args[key] = value || 'true';
+    }
+});
 
-// --- Optional arguments ---
-const typeCrawling = args.typecrawling;
-const method = args.method; // Variable for post-processing logic
-const apifyProxyPassword = args.proxyapify;
-const breakLimit = args.breaklimit === 'True';
-const dropData = args.dropdata === 'True';
-export const skipquestionmark = args.skipquestionmark === 'True';
-export const skipdiez = args.skipdiez === 'True';
-const bypassQuestionMark = args.bypassquestionmark === 'True';
-const bypassDiez = args.bypassdiez === 'True';
+// Fallback to npm_config for backward compat or usage via npm start
+const getArg = (key: string, npmKey: string) => args[key] || process.env[npmKey];
 
-let paramPerCrawl = Number(args.percrawl) ?? 500;
-let paramPerMinute = Number(args.perminute) ?? 100;
-export const toKeep = args.tokeep?.split(';') ?? [];
-export const toRemove = args.toremove?.split(';') ?? [];
+export const domain = getArg('domain', 'npm_config_domain');
+export const site = getArg('site', 'npm_config_site') || process.argv[2];
+const id = getArg('id', 'npm_config_id');
+const storagePath = getArg('storagePath', 'npm_config_storagepath');
+const callbackUrl = getArg('callbackUrl', 'npm_config_callbackurl');
+const typeCrawling = getArg('typecrawling', 'npm_config_typecrawling');
+const method = getArg('method', 'npm_config_method');
+const apifyProxyPassword = getArg('proxyapify', 'npm_config_proxyapify');
 
-if (!domain || !site || !id || !storagePath || !callbackUrl) {
-    console.error('Missing required arguments: --domain, --site, --id, --storagePath, --callbackUrl');
+// Local vars for parsing, stored in context
+const breakLimit = (getArg('breaklimit', 'npm_config_breaklimit') || 'false').toLowerCase() === 'true';
+const dropData = (getArg('dropdata', 'npm_config_dropdata') || 'false').toLowerCase() === 'true';
+const skipquestionmark = (getArg('skipquestionmark', 'npm_config_skipquestionmark') || 'false').toLowerCase() === 'true';
+const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerCase() === 'true';
+const bypassQuestionMark = (getArg('bypassquestionmark', 'npm_config_bypassquestionmark') || 'false').toLowerCase() === 'true';
+const bypassDiez = (getArg('bypassdiez', 'npm_config_bypassdiez') || 'false').toLowerCase() === 'true';
+
+let paramPerCrawl = Number(getArg('percrawl', 'npm_config_percrawl')) || 0;
+let paramPerMinute = Number(getArg('perminute', 'npm_config_perminute')) || 100;
+const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(Boolean);
+const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
+
+// V3 Params
+const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
+const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
+const maxErrors = Number(getArg('maxErrors', 'npm_config_maxerrors')) || 0;
+const maxRedirects = Number(getArg('maxRedirects', 'npm_config_maxredirects')) || 0;
+const maxNewUrls = Number(getArg('maxNewUrls', 'npm_config_maxnewurls')) || 0;
+
+// Setup Context immediately to resolve circular dependencies
+context.config = {
+    maxErrors,
+    maxRedirects,
+    maxNewUrls,
+    domain: domain || "",
+    baseUrl: site || "",
+    crawleeStorageName: domain ? domain.replace('.', '-') : "",
+    // Filtering
+    skipQuestionMark: skipquestionmark,
+    skipDiez: skipdiez,
+    bypassQuestionMark: bypassQuestionMark,
+    bypassDiez: bypassDiez,
+    toKeep: toKeep,
+    toRemove: toRemove,
+    breakLimit: breakLimit
+};
+
+if (!id || !domain || !site || !storagePath || !callbackUrl) {
+    console.log('Missing required parameters.');
     process.exit(1);
 }
 
-// --- Change the current working directory to the unique job storage path ---
-// This ensures that all of Crawlee's default storage locations (datasets, request_queues, etc.)
-// are created inside the job-specific folder, providing perfect isolation.
-try {
-    process.chdir(storagePath);
-    console.info(`Changed working directory to: ${storagePath}`);
-} catch (err) {
-    console.error(`Failed to change directory to ${storagePath}:`, err);
-    process.exit(1);
+// Change CWD if storagePath provided (V3 Logic)
+if (storagePath) {
+    try {
+        if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true });
+        process.chdir(storagePath);
+        console.log(`[stdout] Changed working directory to: ${process.cwd()}`);
+    } catch (err) {
+        console.error("Failed to change CWD:", err);
+    }
 }
 
 const nameLogs = `${domain}-logs-${now}.log`;
-attachFSLogger(nameLogs); // Logs will now be created inside the job's storagePath
+attachFSLogger(nameLogs);
 
 console.info("Crawler starting with arguments:");
 console.info(JSON.stringify(args, null, 2));
@@ -100,8 +133,8 @@ let freeMem: number;
 
 try {
     // Try to read Docker container memory limit from cgroups v2
-    const cgroupMemMax = await fs.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
-    const cgroupMemCurrent = await fs.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
+    const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
+    const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
 
     if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
         // cgroups v2 (Docker with cgroups v2)
@@ -110,8 +143,8 @@ try {
         freeMem = totalMem - usedMem;
     } else {
         // Try cgroups v1 (older Docker versions)
-        const cgroupMemLimitV1 = await fs.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
-        const cgroupMemUsageV1 = await fs.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
+        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
+        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
 
         if (cgroupMemLimitV1 && cgroupMemUsageV1) {
             totalMem = parseInt(cgroupMemLimitV1.trim());
@@ -215,17 +248,15 @@ try {
 
 // --- Main crawler logic (largely the same, but paths are now relative to the new CWD) ---
 
+
+// Robots check
 export let robots = await RobotsFile.find(site);
 if (!robots || Object.keys(robots).length === 0) {
     console.log("robots.txt not found or empty, trying homepage.");
     const homepageUrl = new URL(site).origin;
     robots = await RobotsFile.find(homepageUrl);
-
-    if (!robots || Object.keys(robots).length === 0) {
-        console.log("Could not retrieve robots.txt from homepage.");
-    } else {
-        console.log("robots.txt retrieved from homepage.");
-    }
+    if (!robots || Object.keys(robots).length === 0) console.log("Could not retrieve robots.txt from homepage.");
+    else console.log("robots.txt retrieved from homepage.");
 } else {
     console.log("robots.txt retrieved.");
 }
@@ -239,6 +270,21 @@ if (includePath) {
     enqueueLinksIncludePath.push(`${baseUrl}${includePath}/**/*`);
 }
 
+// --- V3 Feature: Stale Stopper Cleanup ---
+if (fs.existsSync(`stopper/${domain}.txt`)) {
+    try {
+        fs.unlinkSync(`stopper/${domain}.txt`);
+        console.log("Removed stale stopper file.");
+    } catch (e) {}
+}
+
+// Init Managers
+context.dedupManager = new DedupManager(redisUrl, id);
+context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
+
+await context.dedupManager.connect();
+await context.statsManager.connect();
+
 let isHistorised = false;
 // Drop the dataset when we have the parameter --dropdata
 if (dropData) {
@@ -248,15 +294,37 @@ if (dropData) {
     await dropDataset(domain);
     await dropDataset(`error-${domain}`);
     await dropDataset(`nfr-${domain}`);
+    
+    // Also clean managers
+    await context.dedupManager.cleanup();
+    await context.statsManager.cleanup();
+    // Reconnect after cleanup
+    await context.dedupManager.connect();
+    await context.statsManager.connect();
 
     isHistorised = true;
+} else {
+    // Load stats if resuming
+    await context.statsManager.loadStateFromDisk();
 }
 
-// Load all previously crawled URLs for deduplication
-// Note: This loads the full history into RAM, which may cause OOM on large datasets
-export let allUrlsCrawled = new Set(
-    getUrlsCrawled(domain, isHistorised, 'true')
-);
+// Load legacy history into Redis Dedup (V3 Logic)
+// In V2 this was `allUrlsCrawled` array. Now we seed Redis.
+// export let allUrlsCrawled = new Set<string>(); // Keep local set for compatibility or fallback
+console.log(`Starting to seed URLs to Redis Deduplication (Streaming)...`);
+const urlIterator = getUrlsCrawledStreaming(domain, isHistorised, dropData ? 'true' : undefined);
+await context.dedupManager.loadFromIterator(urlIterator);
+
+// Filter queue files on disk (V3 Fix logic included in functions.ts)
+if (skipquestionmark || skipdiez) {
+    const requestQueueList = getAllRequestQueues(domain);
+    if (requestQueueList.length > 0) {
+        let parameters: any = {};
+        if (toKeep.length > 0) parameters.toKeep = toKeep;
+        if (toRemove.length > 0) parameters.toRemove = toRemove;
+        parseJsonFiles(requestQueueList, Boolean(skipquestionmark), Boolean(skipdiez), parameters);
+    }
+}
 
 // Open requestQueue FIRST (before any operations)
 export const requestQueue = await RequestQueue.open(domain);
@@ -272,48 +340,117 @@ if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCoun
     process.exit(0); // Success exit
 }
 
-// Case 2: Corrupted/polluted queue (items exist but none are handled or pending)
+// Case 2: Crash Recovery / In-Progress (Updated Logic)
 if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
-    if (breakLimit) {
-        // Bypass mode: Log warning but continue
-        console.warn(`⚠️  WARNING: Corrupted queue detected for ${domain} but breakLimit=true, bypassing check.`);
-        console.warn(`   Total items: ${queueInfo.totalRequestCount}`);
-        console.warn(`   Handled: 0, Pending: 0`);
-        console.warn(`ℹ️  Crawler will attempt to continue despite locked queue state.`);
-    } else {
-        // Normal mode: Exit with error
-        console.error(`❌ CRITICAL: Corrupted queue detected for ${domain}`);
-        console.error(`   Total items: ${queueInfo.totalRequestCount}`);
-        console.error(`   Handled: 0, Pending: 0`);
-        console.error(`ℹ️  All items are locked/stuck in an invalid state.`);
-        console.error(`💡 SOLUTION: Use Monitor Interface > 'Queue Editor' > 'Analyze' then 'Clean Patterns' or 'Drop Queue'.`);
-        console.error(`💡 OR: Set breaklimit=True to force bypass this check (not recommended).`);
-        process.exit(1); // Error exit
-    }
+    console.warn(`⚠️  WARNING: Detected ${queueInfo.totalRequestCount} in-progress items from a previous interrupted run.`);
+    console.warn(`ℹ️  Crawler will resume these requests (they will be reclaimed if timed out).`);
+    // We proceed instead of exiting
 }
 
-// Case 3: Normal operation - items are pending or being processed
+// Case 3: Normal operation
 if (queueInfo) {
     console.log(`📊 Queue status: ${queueInfo.pendingRequestCount} pending, ${queueInfo.handledRequestCount} handled, ${queueInfo.totalRequestCount} total`);
 }
 // --------------------------
 
-// URL Filtering (AFTER health check, only if queue is healthy)
-if (skipquestionmark || skipdiez) {
-    console.log("Filtering URLs in the queue...");
-    const requestQueueList = getAllRequestQueues(domain);
+/**
+ * Reusable Shutdown Logic
+ * Handles persistence and cleanup on both Success and Signals (SIGTERM/SIGINT)
+ */
+let isShuttingDown = false;
+const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    
+    console.log(`\n🛑 Shutdown initiated: ${reason}`);
 
-    if (requestQueueList.length > 0) {
-        let parameters: any = {};
-        if (toKeep.length > 0) parameters.toKeep = toKeep;
-        if (toRemove.length > 0) parameters.toRemove = toRemove;
-        parseJsonFiles(requestQueueList, skipquestionmark, skipdiez, parameters);
+    // 1. Stop Crawler if running
+    if (context.crawlerInstance) {
+        console.log('Aborting crawler...');
+        try {
+            await context.crawlerInstance.autoscaledPool?.abort();
+            await context.crawlerInstance.teardown();
+        } catch (e) { 
+            console.error('Error stopping crawler:', e); 
+        }
     }
-}
 
-if (typeCrawling === "generate_data") {
-    // This logic might need adjustment in an API context
-    console.log("Data generation mode is not fully supported in API mode. Exiting.");
+    // 2. Determine Final State
+    let isFinished = 0;
+    try {
+        if (requestQueue) isFinished = (await requestQueue.isFinished()) ? 1 : 0;
+    } catch (e) {}
+
+    let isError = context.stopReason;
+    if (isFinished === 0 && !isError) {
+        try {
+            const dataset = await Dataset.open(domain);
+            const info = await dataset.getInfo();
+            if (info && info.itemCount >= 5000) isError = "limitCrawl";
+        } catch (e) {}
+    }
+    if (isStoppedManualy(domain, true)) isError = "stoppedManually";
+
+    // Get stats from instance if available, else usage functions
+    const finalStats = context.crawlerInstance?.stats.state || statsFromFunctions;
+
+    // 3. Write Payloads
+    const payload = {
+        id_domaine: id,
+        success: finalStats?.requestsFinished || 0,
+        failed: finalStats?.requestsFailed || 0,
+        isFinished: isFinished,
+        method: method,
+        isError: isError,
+        storagePath: storagePath
+    };
+
+    try {
+        fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
+        fs.writeFileSync(`${storagePath}/_exit_reason.json`, JSON.stringify({
+            reason: isError || reason,
+            timestamp: new Date().toISOString(),
+            stats: finalStats
+        }, null, 2));
+    } catch (e) {
+        console.error("Failed to write output files", e);
+    }
+
+    // 4. Persist Data (Critical Step)
+    // 1. Persist URLs from Redis to disk (streaming)
+    try {
+        console.log("Persisting crawled URLs history...");
+        const urlIterator = context.dedupManager?.getAllUrlsIterator();
+        if (urlIterator) {
+            await updateUrlsCrawledStreaming(domain, urlIterator);
+        }
+    } catch (e) {
+        console.error("Failed to persist URL history:", e);
+    }
+
+    // 2. Save stats state
+    try {
+        if (context.statsManager) {
+            await context.statsManager.saveStateToDisk();
+            console.log("Stats saved to update_stats.json");
+        }
+    } catch (e) {
+        console.error("Failed to save stats:", e);
+    }
+
+    // 3. Cleanup Redis connections
+    if (context.dedupManager) await context.dedupManager.cleanup();
+    if (context.statsManager) await context.statsManager.cleanup();
+
+    console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
+    process.exit(exitCode);
+};
+
+
+if (typeCrawling == "sitemap") {
+    // ...
+} else if (typeCrawling == "generate_data") {
+    // ... logic for generate data ...
 } else {
     // Reclaim failed request
     try {
@@ -322,7 +459,11 @@ if (typeCrawling === "generate_data") {
         console.warn(`⚠️ Warning: Failed to reclaim failed requests for ${domain}. The crawler will continue without them. Error: ${error}`);
     }
 
-    // Launch the crawler
+    if (crawlMode === 'update' && previousCrawlId) {
+        console.log(`Running UPDATE mode from ${previousCrawlId}`);
+    }
+
+    // Launch
     const crawler = await startCrawler(
         router,
         [site],
@@ -333,139 +474,19 @@ if (typeCrawling === "generate_data") {
         breakLimit,
         bypassQuestionMark,
         bypassDiez,
-        skipquestionmark, // Ensure it's passed as string
+        skipquestionmark,
         skipdiez
     );
 
-    // CLEANUP HOOKS: Ensure browsers are properly terminated on shutdown
+    // CLEANUP HOOKS: Updated to use gracefulShutdown
     process.on('SIGTERM', async () => {
-        console.log('SIGTERM received, cleaning up browsers...');
-        try {
-            await crawler.teardown();
-        } catch (e) {
-            console.error('Error during teardown:', e);
-        }
-        process.exit(0);
+        await gracefulShutdown('SIGTERM', 0);
     });
 
     process.on('SIGINT', async () => {
-        console.log('SIGINT received, cleaning up browsers...');
-        try {
-            await crawler.teardown();
-        } catch (e) {
-            console.error('Error during teardown:', e);
-        }
-        process.exit(0);
+        await gracefulShutdown('SIGINT', 0);
     });
 }
 
-// --- Finalization and Callback ---
-let isFinished = 0;
-// Ajouter un variable callShell pour conditionner sur le fait de lancer la commande shell
-let callShell: boolean = true;
-
-if (await requestQueue.isFinished()) {
-    isFinished = 1;
-}
-
-if (method === "test") {
-    callShell = false;
-}
-
-/**
- * List of possible errors :
- *  take account that the crawler is not finished :
- *      - limitCrawl : limit of 5000 URLs reached
- *      - limitQuestionMarkDiez : limit of 20 URLs reached for question mark and # links if not marked to be skipped
- *
- *  do not take into account that the crawler is finished :
- *  - stoppedManually : the crawler was stopped manually
- */
-let isError = "";
-
-if (isFinished === 0) {
-    // Getting datasets
-    const data = await getScrapingData(domain);
-    const count = data.total;
-
-    // Checking if the case is the question mark/diez limit
-    if (
-        (!bypassQuestionMark && !skipquestionmark) ||
-        (!bypassDiez && !skipdiez)
-    ) {
-        // Need to be in sync with the limit in functions.ts/startCrawler() → limitQuestionMarkDiez
-        const limitQuestionMarkDiez = 50;
-        const patternQuestionMark = new RegExp(
-            `(?:/[^?]*)?\\?.*$`
-        );
-        const patternDiez = new RegExp(
-            `(?:/[^#]*)?#.*$`
-        );
-        let countQuestionMark = 0;
-        let countDiez = 0;
-
-        for (const item of data.items) {
-            if (patternQuestionMark.test(item.url)) {
-                countQuestionMark++;
-            }
-
-            if (patternDiez.test(item.url)) {
-                countDiez++;
-            }
-
-            if (
-                !bypassQuestionMark &&
-                !skipquestionmark &&
-                countQuestionMark >= limitQuestionMarkDiez
-            ) {
-                isError = "limitQuestionMark";
-                break;
-            }
-
-            if (
-                !bypassDiez &&
-                !skipdiez &&
-                countDiez >= limitQuestionMarkDiez
-            ) {
-                isError = "limitDiez";
-                break;
-            }
-        }
-    }
-
-    // Checking if the case is the limit of URLs reached
-    // Need to be in sync with the limit in functions.ts/startCrawler() → limitUrls
-    const limitUrls = 5000;
-    if (count >= limitUrls) {
-        isError = "limitCrawl";
-    }
-}
-
-// Checking if the crawler is stopped manually
-if (isStoppedManualy(domain, true)) {
-    isError = "stoppedManually";
-}
-
-// Instead of calling the webhook directly, write a payload file for the manager.
-if (callShell) {
-    const payload = {
-        id_domaine: id,
-        success: stats?.requestsFinished ?? 0,
-        failed: stats?.requestsFailed ?? 0,
-        isFinished: isFinished,
-        method: method,
-        isError: isError,
-        storagePath: storagePath
-    };
-
-    try {
-        const payloadPath = `${storagePath}/_callback_payload.json`;
-        await fs.writeFile(payloadPath, JSON.stringify(payload, null, 2));
-        console.info(`Callback payload for manager written to ${payloadPath}`);
-    } catch (error: any) {
-        console.error(`Failed to write callback payload file: ${error.message}`);
-    }
-}
-
-// Exit with code 2 to signal graceful completion to the manager
-process.exit(2);
+// Normal completion
+await gracefulShutdown('COMPLETED', 2);
