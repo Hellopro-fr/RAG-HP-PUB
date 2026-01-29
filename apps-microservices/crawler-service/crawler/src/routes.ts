@@ -104,7 +104,7 @@ router.addDefaultHandler(
             }
         }
 
-        // V3 Feature: Circuit Breaker
+        // --- Circuit Breaker Check (Global thresholds) ---
         if (context.statsManager) {
             let breached = false;
             if (context.config.maxErrors && await context.statsManager.checkThreshold("errors", context.config.maxErrors)) breached = true;
@@ -113,7 +113,7 @@ router.addDefaultHandler(
 
             if (breached) {
                 log.warning("🛑 Circuit breaker triggered! Stopping crawler.");
-                context.stopReason = "limitErrors"; // Or dynamic
+                context.stopReason = "limitErrors"; 
                 await stopCrawler(crawler, "Circuit breaker triggered");
                 return;
             }
@@ -121,18 +121,28 @@ router.addDefaultHandler(
 
         log.info(`Processing ${url} ( ${request.url} ) ... (HTTP Status: ${response?.status()})`);
 
+        // --- Deduplication & "Double Check" (Redis) ---
         let isDoublon = false;
+        const isExisting = request.userData.is_existing || false;
 
-        // V3 Feature: Redis Deduplication
-        if (context.dedupManager) {
+        // Skip Redis check for "Existing" URLs to allow re-verification in Update Mode
+        if (context.dedupManager && !isExisting) {
             const isNew = await context.dedupManager.addUrl(url);
             isDoublon = !isNew;
-        // } else {
-        //     // Fallback for standalone/local tests
-        //     // allUrlsCrawled.forEach(...) -> O(N), use Set in main.ts
-        //     // Note: `allUrlsCrawled` is now a Set in updated main.ts
-        //     isDoublon = (allUrlsCrawled as Set<string>).has(url);
-        //     if (!isDoublon) (allUrlsCrawled as Set<string>).add(url);
+        }
+        
+        // Handle "New URL" threshold logic if it's genuinely new
+        if (context.dedupManager && !isDoublon && !isExisting) {
+             if (context.statsManager) {
+                 await context.statsManager.increment("new_urls");
+                 // Re-check threshold immediately to fail fast
+                 if (context.config.maxNewUrls && await context.statsManager.checkThreshold("new_urls", context.config.maxNewUrls)) {
+                     log.warning("🛑 Max new URLs limit reached during processing. Stopping.");
+                     context.stopReason = "limitNewUrls";
+                     await stopCrawler(crawler, "Max new URLs limit reached.");
+                     return;
+                 }
+             }
         }
 
         if (!isDoublon) {
@@ -148,6 +158,27 @@ router.addDefaultHandler(
                     path: "/",
                 },
             ]);
+
+            // --- Update Mode Checks (Redirects) ---
+            if (isExisting && context.statsManager) {
+                // request.loadedUrl is the final URL after redirects
+                // request.url is the queue/original URL
+                // Check if they differ (fuzzy matching to ignore trailing slashes)
+                const finalUrl = rightTrimSlash(request.loadedUrl);
+                const originalUrl = rightTrimSlash(request.url);
+                
+                if (finalUrl !== originalUrl) {
+                    log.info(`Redirect detected: ${request.url} -> ${request.loadedUrl}`);
+                    await context.statsManager.increment("redirects");
+                    
+                    if (context.config.maxRedirects && await context.statsManager.checkThreshold("redirects", context.config.maxRedirects)) {
+                        log.warning("🛑 Max redirects reached. Stopping.");
+                        context.stopReason = "limitRedirects";
+                        await stopCrawler(crawler, "Max redirects limit reached.");
+                        return;
+                    }
+                }
+            }
 
             // Check if this is the main site URL
             const isMainSite = request.url === site;
@@ -366,6 +397,8 @@ router.addDefaultHandler(
                             return null;
                         }
 
+                        // Add user data to new requests
+                        request.userData = { is_existing: false };
                         return request;
                     },
                 });

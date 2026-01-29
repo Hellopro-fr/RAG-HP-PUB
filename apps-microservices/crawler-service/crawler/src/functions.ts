@@ -16,6 +16,7 @@ import {
 } from "crawlee";
 import { Page } from "playwright";
 import fs from "fs";
+import path from "path";
 import {
     QueueJsonContent,
     JsonInnerContent,
@@ -317,7 +318,8 @@ export const startCrawler = async (
             }
 
             // Save rich error info
-            let dataset = await Dataset.open(`error-${domain}`);
+            let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${domain}`;
+            let dataset = await Dataset.open(datasetName);
             await dataset.pushData({
                 id: request.id,
                 url: request.url,
@@ -694,6 +696,65 @@ export const updateUrlsCrawledStreaming = async (
     console.log(`Persisted ${count} URLs to ${fileUrls}`);
     return count;
 };
+
+/**
+ * Generator that efficiently yields URLs from a previous crawl's dataset.
+ * Scans the storage directory structure to find the datasets.
+ * 
+ * @param {string} previousId - The ID of the previous crawl job
+ * @param {string} domain - The domain to load URLs for
+ * @returns {AsyncGenerator<string>} Yields URLs one by one
+ */
+export async function* loadDatasetUrlsGenerator(previousId: string, domain: string): AsyncGenerator<string> {
+    // We assume the process is running in storage/{currentId}
+    // So we access storage/{previousId} via relative path from CWD
+    // CWD is typically set in main.ts to the current job's storage path.
+    // So `..` takes us to the parent `storage` dir, then into `{previousId}`.
+    
+    const previousJobPath = path.resolve('..', previousId);
+    
+    if (!fs.existsSync(previousJobPath)) {
+        console.error(`Previous job storage not found at ${previousJobPath}`);
+        return;
+    }
+
+    const crawleeBase = path.join(previousJobPath, "storage", "datasets");
+    let datasetPath = path.join(crawleeBase, domain);
+    
+    // Check for original domain name folder
+    if (!fs.existsSync(datasetPath)) {
+        // Check for sanitized name (dots replaced by hyphens)
+        const sanitized = domain.replace(/\./g, '-');
+        datasetPath = path.join(crawleeBase, sanitized);
+    }
+    
+    if (!fs.existsSync(datasetPath)) {
+        console.error(`Dataset for domain ${domain} not found in ${previousJobPath}`);
+        return;
+    }
+
+    console.log(`Loading URLs from previous dataset: ${datasetPath}`);
+
+    try {
+        const files = await fs.promises.readdir(datasetPath);
+        for (const file of files) {
+            if (file.endsWith('.json') && !file.startsWith('__')) {
+                try {
+                    const filePath = path.join(datasetPath, file);
+                    const content = await fs.promises.readFile(filePath, 'utf-8');
+                    const data = JSON.parse(content);
+                    if (data && data.url) {
+                        yield data.url;
+                    }
+                } catch (e) {
+                    console.warn(`Error reading dataset file ${file}: ${e}`);
+                }
+            }
+        }
+    } catch (e) {
+        console.error(`Error iterating dataset directory: ${e}`);
+    }
+}
 
 /**
  * Retrieves scraped data from a named dataset with optional pagination

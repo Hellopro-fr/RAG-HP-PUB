@@ -20,6 +20,7 @@ import {
     updateUrlsCrawledStreaming,
     getAllRequestQueues,
     parseJsonFiles,
+    loadDatasetUrlsGenerator,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -329,6 +330,47 @@ if (skipquestionmark || skipdiez) {
 // Open requestQueue FIRST (before any operations)
 export const requestQueue = await RequestQueue.open(domain);
 
+// --- SEEDING LOGIC (Update Mode Support) ---
+if (crawlMode === 'update') {
+    if (!previousCrawlId) {
+        console.error("Update mode requires --previousCrawlId");
+        process.exit(1);
+    }
+    
+    console.log(`Running UPDATE mode. Seeding from previous crawl: ${previousCrawlId}`);
+    
+    const previousDatasetGenerator = loadDatasetUrlsGenerator(previousCrawlId, domain);
+    let count = 0;
+    
+    for await (const url of previousDatasetGenerator) {
+        // 1. Add to Redis (Mark as Known)
+        if (context.dedupManager) {
+            await context.dedupManager.addUrl(url);
+        }
+        
+        // 2. Add to Queue (Mark as Existing for Verification)
+        await requestQueue.addRequest({
+            url: url,
+            userData: { is_existing: true }
+        });
+        
+        count++;
+        if (count % 1000 === 0) {
+            console.log(`Seeded ${count} URLs from previous crawl...`);
+        }
+    }
+    console.log(`Finished seeding ${count} URLs from previous crawl.`);
+
+} else if (await requestQueue.isEmpty()) {
+    console.log("RequestQueueEmpty - Adding standard seed");
+    await requestQueue.addRequest({ 
+        url: site, 
+        userData: { is_existing: false } 
+    });
+} else {
+    console.log("RequestQueueNotEmpty");
+}
+
 // --- QUEUE HEALTH CHECK ---
 // Intelligent queue state detection using handled/pending/total counts
 const queueInfo = await requestQueue.getInfo();
@@ -457,10 +499,6 @@ if (typeCrawling == "sitemap") {
         await reclaimFailedRequest(domain);
     } catch (error) {
         console.warn(`⚠️ Warning: Failed to reclaim failed requests for ${domain}. The crawler will continue without them. Error: ${error}`);
-    }
-
-    if (crawlMode === 'update' && previousCrawlId) {
-        console.log(`Running UPDATE mode from ${previousCrawlId}`);
     }
 
     // Launch
