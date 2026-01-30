@@ -259,24 +259,49 @@ router.addDefaultHandler(
                     }
                 }
             } else {
-                frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string);
-                if (frenchDetectionMethod instanceof Error) {
-                    log.error(`Failed to retrieve French detection method: ${frenchDetectionMethod.message}`);
-                    await stopCrawler(crawler, "No French detection method found");
-                    return;
+                // INTERNAL PAGE LOGIC WITH FALLBACK
+                let methodOrError = manageFrenchDetectionMethod(targetDomain as string);
+                
+                if (methodOrError instanceof Error) {
+                    log.warning(`French detection method not found in storage. Attempting auto-detection on current page.`);
+                    
+                    // Fallback: Detect on current content
+                    if (!content) content = await processPage(page, request.loadedUrl, log);
+                    
+                    // Use global instance (no forced method) to auto-detect
+                    domainFR.homepage = url; 
+                    const autoCheck = await domainFR.checkPageIfFrench(content, false); 
+                    
+                    if (autoCheck.ok) {
+                        methodOrError = manageFrenchDetectionMethod(targetDomain as string, autoCheck.method);
+                        log.info(`Auto-detected and saved method: ${autoCheck.method}`);
+                    } else {
+                        // Try URL check fallback
+                        const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
+                        if (checkUrl.ok) {
+                             methodOrError = manageFrenchDetectionMethod(targetDomain as string, checkUrl.method);
+                             log.info(`Auto-detected (URL) and saved method: ${checkUrl.method}`);
+                        }
+                    }
                 }
 
-                // Create new DomainFR instance with forced method
-                content = await processPage(page, request.loadedUrl, log);
-                const domainFRWithMethod = new DomainFR(url, frenchDetectionMethod as string);
-                const checkPageIfFrench = await domainFRWithMethod.checkPageIfFrench(content, false);
-
-                if (checkPageIfFrench["ok"]) {
-                    isEnqueuingLinks = true;
+                if (methodOrError instanceof Error) {
+                    log.error(`Could not determine French detection method for ${url}. Skipping links.`);
+                    isEnqueuingLinks = false;
                 } else {
-                    const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
-                    if (checkUrl["ok"] && checkUrl["method"] === frenchDetectionMethod as string) {
+                    frenchDetectionMethod = methodOrError as string;
+                    
+                    if (!content) content = await processPage(page, request.loadedUrl, log);
+                    const domainFRWithMethod = new DomainFR(url, frenchDetectionMethod);
+                    const checkPageIfFrench = await domainFRWithMethod.checkPageIfFrench(content, false);
+
+                    if (checkPageIfFrench["ok"]) {
                         isEnqueuingLinks = true;
+                    } else {
+                        const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
+                        if (checkUrl["ok"] && checkUrl["method"] === frenchDetectionMethod) {
+                            isEnqueuingLinks = true;
+                        }
                     }
                 }
             }

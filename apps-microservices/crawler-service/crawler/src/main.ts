@@ -21,6 +21,7 @@ import {
     getAllRequestQueues,
     parseJsonFiles,
     loadDatasetUrlsGenerator,
+    copyPreviousMethod, // Added import
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -360,6 +361,9 @@ if (crawlMode === 'update') {
     
     console.log(`Running UPDATE mode. Seeding from previous crawl: ${previousCrawlId}`);
     
+    // Copy the detection method to avoid race conditions
+    copyPreviousMethod(previousCrawlId, domain);
+
     const previousDatasetGenerator = loadDatasetUrlsGenerator(previousCrawlId, domain);
     let count = 0;
     

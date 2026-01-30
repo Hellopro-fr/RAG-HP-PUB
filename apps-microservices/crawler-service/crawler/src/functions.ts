@@ -757,6 +757,48 @@ export async function* loadDatasetUrlsGenerator(previousId: string, domain: stri
 }
 
 /**
+ * Copies the French detection method file from a previous crawl to the current one.
+ * Used in Update Mode to ensure the method is available before parallel processing starts.
+ * 
+ * @param {string} previousId - The ID of the previous crawl job
+ * @param {string} domain - The domain being crawled
+ * @returns {boolean} True if copy was successful
+ */
+export const copyPreviousMethod = (previousId: string, domain: string): boolean => {
+    try {
+        // Resolve paths. CWD is the current storage root (e.g. storage/update-1)
+        // Previous ID is relative to parent of CWD (../previousId)
+        const previousStoragePath = path.resolve('..', previousId);
+        const previousFile = path.join(previousStoragePath, 'storage', 'miscellaneous', domain, `${domain}.json`);
+
+        const currentStoragePath = process.cwd(); // We are already in the storage folder
+        const currentFolder = path.join(currentStoragePath, 'storage', 'miscellaneous', domain);
+        const currentFile = path.join(currentFolder, `${domain}.json`);
+
+        if (fs.existsSync(previousFile)) {
+            if (!fs.existsSync(currentFolder)) {
+                fs.mkdirSync(currentFolder, { recursive: true });
+            }
+            fs.copyFileSync(previousFile, currentFile);
+            console.log(`Copied French detection method from previous crawl: ${previousId}`);
+            
+            // Pre-load into context to avoid race condition on first reads
+            const content = JSON.parse(fs.readFileSync(currentFile, 'utf-8'));
+            if (content.method) {
+                context.frenchDetectionMethod = content.method;
+                console.log(`Loaded French detection method into memory: ${content.method}`);
+            }
+            return true;
+        } else {
+            console.warn(`Previous French detection method file not found at ${previousFile}`);
+        }
+    } catch (e) {
+        console.error(`Failed to copy previous detection method: ${e}`);
+    }
+    return false;
+}
+
+/**
  * Retrieves scraped data from a named dataset with optional pagination
  *
  * @description
@@ -1290,6 +1332,16 @@ export const manageFrenchDetectionMethod = (
     checkFrenchMethod: string | null = null
 ): string | Error => {
     try {
+        // Sync context if provided
+        if (checkFrenchMethod) {
+            context.frenchDetectionMethod = checkFrenchMethod;
+        }
+
+        // If we have it in context and not writing new one, return it to save disk IO
+        if (!checkFrenchMethod && context.frenchDetectionMethod) {
+            return context.frenchDetectionMethod;
+        }
+
         const storagePath = `./storage/miscellaneous/${name}`;
         const filePath = `${storagePath}/${name}.json`;
 
@@ -1306,6 +1358,7 @@ export const manageFrenchDetectionMethod = (
         // If no checkFrenchMethod provided, try to read existing file
         if (fs.existsSync(filePath)) {
             const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+            context.frenchDetectionMethod = content.method; // Update cache
             return content.method;
         }
 

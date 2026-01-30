@@ -6,6 +6,8 @@ export const context = {
     dedupManager: null as DedupManager | null,
     statsManager: null as StatsManager | null,
     crawlerInstance: null as PlaywrightCrawler | null,
+    // Store detected method in memory to avoid race conditions/disk IO
+    frenchDetectionMethod: null as string | null,
     config: {
         maxErrors: 0,
         maxRedirects: 0,
