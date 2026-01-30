@@ -276,6 +276,11 @@ class UnitNormalizationService:
         if not all([label, value is not None]):
             return {}
 
+        # --- FIX: Sanitize units that Pint misinterprets ---
+        # Specifically, dB(A) is interpreted as decibel * ampere because 'A' = ampere.
+        if unit and unit.strip().lower() == "db(a)":
+            unit = "dBA"
+
         dimension = self._get_dimension(unit, label)
 
         if not dimension:

@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     OUTPUT_EXCHANGE: str = "graph_rag_semantic_check"
     OUTPUT_ROUTING_KEY: str = "graph_rag.semantic.check"
 
+    # Retry DLQ for failed normalizations
+    RETRY_DLQ_EXCHANGE: str = "graph_rag_normalization_retry"
+    RETRY_DLQ_ROUTING_KEY: str = "graph_rag.normalization.retry"
+    RETRY_DLQ_QUEUE: str = "graph_rag_normalization_retry_queue"
+
     # gRPC Services
     NORMALIZATION_SERVICE_URL: str = "localhost:50057"
 

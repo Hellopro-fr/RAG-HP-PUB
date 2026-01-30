@@ -1,0 +1,10 @@
+fastapi[all]
+uvicorn
+python-dotenv
+pydantic
+pydantic-settings
+pika
+aio-pika
+httpx
+prometheus-client
+waitress

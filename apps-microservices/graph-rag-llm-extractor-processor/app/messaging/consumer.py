@@ -111,12 +111,72 @@ class Consumer:
 
                 logging.info(f"Processing LLM extraction for: {graph_id}")
 
+                # Check if this is a validation retry attempt
+                headers = message.headers or {}
+                validation_retry_count = headers.get("x-validation-retry", 0)
+
                 # The heavy lifting (LLM call) happens here
                 output_message = await extract_entities_and_relationships(
                     data, database, origin
                 )
 
-                # Publish result if valid
+                # Check if validation failed (nodes missing id_source_caracteristique)
+                validation_failed = output_message.get("validation_failed", False)
+                missing_nodes = output_message.get("missing_nodes", [])
+
+                if validation_failed:
+                    if validation_retry_count < 1:
+                        # First attempt failed validation - retry one more time
+                        logging.warning(
+                            f"⚠️ Validation retry for {graph_id}: {len(missing_nodes)} nodes missing id_source_caracteristique. Retrying..."
+                        )
+
+                        # Create new message with validation retry header
+                        retry_headers = dict(headers)
+                        retry_headers["x-validation-retry"] = 1
+
+                        retry_exchange = await self.channel.get_exchange(
+                            self.retry_exchange
+                        )
+                        await retry_exchange.publish(
+                            aio_pika.Message(
+                                body=message.body,
+                                headers=retry_headers,
+                                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                            ),
+                            routing_key=self.routing_key,
+                        )
+                        await message.ack()
+                        return
+                    else:
+                        # Already retried once, send to DLQ for manual retry
+                        logging.error(
+                            f"❌ Validation failed after retry for {graph_id}. Missing nodes: {missing_nodes}. Sending to DLQ for manual retry."
+                        )
+
+                        dlq_headers = DLQProperties.create_dlq_headers(
+                            Exception(
+                                f"Validation failed: nodes missing id_source_caracteristique: {missing_nodes}"
+                            ),
+                            "graph-rag-llm-extractor-processor",
+                            1,
+                            message,
+                        )
+                        dlq_headers["x-validation-failed"] = True
+                        dlq_headers["x-missing-nodes"] = json.dumps(missing_nodes)
+
+                        await self.channel.default_exchange.publish(
+                            aio_pika.Message(
+                                body=message.body,
+                                headers=dlq_headers,
+                                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                            ),
+                            routing_key=self.dead_letter_queue_name,
+                        )
+                        await message.ack()
+                        return
+
+                # Validation passed - publish result to next service
                 if output_message.get("data", {}).get("nodes") or output_message.get(
                     "data", {}
                 ).get("relationships"):

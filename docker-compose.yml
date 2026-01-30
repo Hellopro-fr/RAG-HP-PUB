@@ -265,7 +265,28 @@ services:
       - .env
     networks:
       - services-net
-      - graph-rag-net
+      # - graph-rag-net
+    logging: *logging_defaults
+
+  graph-rag-dlq-manager-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/graph-rag-dlq-manager/Dockerfile
+    container_name: graph-rag-dlq-manager-service
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "8520:8520"
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - RABBITMQ_API_URL=${RABBITMQ_API_URL}
+      - RABBITMQ_API_USER=${RABBITMQ_API_USER}
+      - RABBITMQ_API_PASSWORD=${RABBITMQ_API_PASSWORD}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+    env_file:
+      - .env
+    networks:
+      - services-net
     logging: *logging_defaults
 
   api-recherche-service:
@@ -1402,6 +1423,26 @@ services:
     #   - graph-rag-normalize-unite-service
     deploy:
       replicas: 2
+    networks:
+      - services-net
+
+  graph-rag-normalize-unite-retry-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-normalize-unite-retry-processor/Dockerfile
+    profiles: ["graph-rag"]
+    expose:
+      - "8564"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      EMBEDDING_API_URL: ${EMBEDDING_API_URL}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      PROMETHEUS_PORT: 8564
+    deploy:
+      replicas: 1
     networks:
       - services-net
 
