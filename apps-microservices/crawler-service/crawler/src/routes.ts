@@ -10,6 +10,7 @@ import {
     manageFrenchDetectionMethod,
     processPage,
     processUrl,
+    rightTrimSlash,
     routerDefaultHandler,
     stopCrawler,
 } from "./functions.js";
