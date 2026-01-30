@@ -6,12 +6,14 @@ from .read_post import router as read_post_router
 from .update import router as update_router
 from .delete import router as delete_router
 from .check_urls import router as check_urls_router
+from .stats import router as stats_router
 
 api_router = APIRouter()
 
 api_router.include_router(read_router, tags=["GET"])
 api_router.include_router(read_post_router, tags=["POST Search"])
 api_router.include_router(check_urls_router, tags=["URL Verification"])
+api_router.include_router(stats_router, tags=["Statistics"])
 api_router.include_router(create_router, tags=["POST"])
 api_router.include_router(update_router, tags=["PUT"])
 api_router.include_router(delete_router, tags=["DELETE"])  # Désactivé pour sécurité
