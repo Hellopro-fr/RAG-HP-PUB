@@ -653,6 +653,7 @@ export const updateUrlsCrawled = (
 /**
  * OOM-safe streaming version of updateUrlsCrawled.
  * Writes URLs to file one-by-one from an async iterator, avoiding full array in memory.
+ * Uses atomic write pattern (write to .tmp -> rename) to prevent file corruption on crash.
  *
  * @param {string} name - The name of the domain
  * @param {AsyncGenerator<string>} urlIterator - Async iterator yielding URLs
@@ -664,6 +665,7 @@ export const updateUrlsCrawledStreaming = async (
 ): Promise<number> => {
     const folderName = `./storage/request_urls/${name}`;
     const fileUrls = `${folderName}/${name}.json`;
+    const tempFile = `${fileUrls}.tmp`; // Atomic Write Pattern
     
     // Create folder if it doesn't exist
     if (!fs.existsSync(folderName)) {
@@ -671,7 +673,7 @@ export const updateUrlsCrawledStreaming = async (
     }
     
     // Use streaming write to avoid OOM
-    const stream = fs.createWriteStream(fileUrls);
+    const stream = fs.createWriteStream(tempFile);
     stream.write('[');
     
     let isFirst = true;
@@ -687,9 +689,16 @@ export const updateUrlsCrawledStreaming = async (
     stream.write(']');
     stream.end();
     
-    // Wait for stream to finish
+    // Wait for stream to finish then rename atomically
     await new Promise<void>((resolve, reject) => {
-        stream.on('finish', resolve);
+        stream.on('finish', () => {
+            try {
+                fs.renameSync(tempFile, fileUrls);
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        });
         stream.on('error', reject);
     });
     
@@ -753,6 +762,44 @@ export async function* loadDatasetUrlsGenerator(previousId: string, domain: stri
         }
     } catch (e) {
         console.error(`Error iterating dataset directory: ${e}`);
+    }
+}
+
+/**
+ * Scans the current crawl's dataset folder to rehydrate the Deduplication set.
+ * Used when restarting a crashed crawl to ensure previously discovered URLs are known.
+ * 
+ * @param {string} datasetName - The sanitized name of the dataset folder
+ * @returns {AsyncGenerator<string>} Yields URLs found in the dataset
+ */
+export async function* rehydrateDedupFromDataset(datasetName: string): AsyncGenerator<string> {
+    const datasetPath = path.join(process.cwd(), "storage", "datasets", datasetName);
+    
+    if (!fs.existsSync(datasetPath)) {
+        // Folder might not exist if no pages were saved yet
+        return;
+    }
+
+    console.log(`Rehydrating Dedup from current dataset: ${datasetPath}`);
+
+    try {
+        const files = await fs.promises.readdir(datasetPath);
+        for (const file of files) {
+            if (file.endsWith('.json') && !file.startsWith('__')) {
+                try {
+                    const filePath = path.join(datasetPath, file);
+                    const content = await fs.promises.readFile(filePath, 'utf-8');
+                    const data = JSON.parse(content);
+                    if (data && data.url) {
+                        yield data.url;
+                    }
+                } catch (e) {
+                    // Ignore corrupted files from crash
+                }
+            }
+        }
+    } catch (e) {
+        console.error(`Error iterating dataset directory for rehydration: ${e}`);
     }
 }
 

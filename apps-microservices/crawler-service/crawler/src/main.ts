@@ -13,7 +13,7 @@ import {
     startCrawler,
     attachFSLogger,
     reclaimFailedRequest,
-    stats as statsFromFunctions, // Renamed to avoid confusion
+    stats as statsFromFunctions,
     dropDataset,
     isStoppedManualy,
     getUrlsCrawledStreaming,
@@ -21,7 +21,8 @@ import {
     getAllRequestQueues,
     parseJsonFiles,
     loadDatasetUrlsGenerator,
-    copyPreviousMethod, // Added import
+    copyPreviousMethod,
+    rehydrateDedupFromDataset,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -31,7 +32,6 @@ const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
 
 // --- V3 Feature: Standard CLI Argument Parsing ---
-// Parsing args like --domain=example.com instead of npm_config
 const args: Record<string, string> = {};
 process.argv.slice(2).forEach(arg => {
     if (arg.startsWith('--')) {
@@ -40,7 +40,6 @@ process.argv.slice(2).forEach(arg => {
     }
 });
 
-// Fallback to npm_config for backward compat or usage via npm start
 const getArg = (key: string, npmKey: string) => args[key] || process.env[npmKey];
 
 export const domain = getArg('domain', 'npm_config_domain');
@@ -66,7 +65,6 @@ let paramPerMinute = Number(getArg('perminute', 'npm_config_perminute')) || 100;
 const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(Boolean);
 const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
 
-// V3 Params
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
 const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
 const maxErrors = Number(getArg('maxErrors', 'npm_config_maxerrors')) || 0;
@@ -117,7 +115,6 @@ if (!id || !domain || !site || !storagePath || !callbackUrl) {
     process.exit(1);
 }
 
-// Change CWD if storagePath provided (V3 Logic)
 if (storagePath) {
     try {
         if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true });
@@ -254,7 +251,7 @@ try {
                 domain: domain,
                 cpu: Math.min(cpuPercent, 1), // Cap at 100%
                 ram: memoryUsage.rss,
-                totalRam: totalMem, // ADDED: Total RAM limit for dynamic percentage calculation
+                totalRam: totalMem, // Total RAM limit for dynamic percentage calculation
                 topProcesses: topProcesses,
                 timestamp: Date.now(),
                 status: 'running'
@@ -331,14 +328,45 @@ if (dropData) {
     await context.statsManager.loadStateFromDisk();
 }
 
-// Load legacy history into Redis Dedup (V3 Logic)
-// In V2 this was `allUrlsCrawled` array. Now we seed Redis.
-// export let allUrlsCrawled = new Set<string>(); // Keep local set for compatibility or fallback
-console.log(`Starting to seed URLs to Redis Deduplication (Streaming)...`);
-const urlIterator = getUrlsCrawledStreaming(domain, isHistorised, dropData ? 'true' : undefined);
-await context.dedupManager.loadFromIterator(urlIterator);
+// --- HYBRID RESUME STRATEGY ---
+// Check if Redis already has data (Hot Resume)
+const redisCount = await context.dedupManager.getCount();
 
-// Filter queue files on disk (V3 Fix logic included in functions.ts)
+if (redisCount > 0 && !dropData) {
+    console.log(`🔥 Hot Resume detected! Redis has ${redisCount} URLs. Trusting Redis.`);
+    // Sync Redis -> Disk immediately to ensure checkpoint is up to date
+    console.log("Syncing hot state to disk...");
+    const urlIterator = context.dedupManager.getAllUrlsIterator();
+    await updateUrlsCrawledStreaming(domain, urlIterator);
+} else {
+    // Cold Start or Drop Data
+    console.log("❄️ Cold Start detected (Redis empty). Loading from disk...");
+    const urlIterator = getUrlsCrawledStreaming(domain, isHistorised, dropData ? 'true' : undefined);
+    await context.dedupManager.loadFromIterator(urlIterator);
+
+    // Rehydrate from dataset if we crashed before saving to history file
+    if (context.config.crawleeStorageName) {
+        const rehydrateIter = rehydrateDedupFromDataset(context.config.crawleeStorageName);
+        await context.dedupManager.loadFromIterator(rehydrateIter);
+    }
+}
+
+// --- PERIODIC PERSISTENCE (Safety Net) ---
+const PERSIST_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const persistenceInterval = setInterval(async () => {
+    try {
+        // Only run if we have a DedupManager
+        if (context.dedupManager) {
+            // Note: This operation might be heavy on I/O, but it uses streaming/atomic writes
+            const urlIterator = context.dedupManager.getAllUrlsIterator();
+            await updateUrlsCrawledStreaming(domain, urlIterator);
+        }
+    } catch (e) {
+        console.error("Periodic persistence failed:", e);
+    }
+}, PERSIST_INTERVAL_MS);
+
+
 if (skipquestionmark || skipdiez) {
     const requestQueueList = getAllRequestQueues(domain);
     if (requestQueueList.length > 0) {
@@ -444,6 +472,9 @@ let isShuttingDown = false;
 const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
+    
+    // Stop periodic task
+    clearInterval(persistenceInterval);
     
     console.log(`\n🛑 Shutdown initiated: ${reason}`);
 
@@ -557,7 +588,6 @@ if (typeCrawling == "sitemap") {
         skipdiez
     );
 
-    // CLEANUP HOOKS: Updated to use gracefulShutdown
     process.on('SIGTERM', async () => {
         await gracefulShutdown('SIGTERM', 0);
     });

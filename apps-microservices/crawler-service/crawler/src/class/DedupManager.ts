@@ -50,6 +50,18 @@ export class DedupManager {
     }
 
     /**
+     * Returns the number of items currently in the deduplication set.
+     */
+    async getCount(): Promise<number> {
+        try {
+            return await this.redis.sCard(this.key);
+        } catch (e) {
+            console.error(`Dedup Count Error: ${e}`);
+            return 0;
+        }
+    }
+
+    /**
      * @deprecated Use getAllUrlsIterator() for memory-efficient streaming.
      * This method loads ALL URLs into memory at once, causing OOM on large sets.
      */
