@@ -1,0 +1,9 @@
+aio-pika
+grpcio
+grpcio-tools
+protobuf
+pydantic-settings
+httpx
+python-dotenv
+prometheus_client
+waitress

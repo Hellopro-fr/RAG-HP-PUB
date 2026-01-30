@@ -1,109 +1,52 @@
 import { createPlaywrightRouter, Dataset } from "crawlee";
+// Removed circular imports from main.js (domain, skipquestionmark etc)
 import {
-    domain,
+    domain, // Keep basic exports if needed, but prefer context for config
     requestQueue,
-    baseUrl,
-    enqueueLinksIncludePath,
     robots,
-    skipquestionmark,
-    skipdiez,
-    allUrlsCrawled,
-    toKeep,
-    toRemove,
     site,
 } from "./main.js";
 import {
     manageFrenchDetectionMethod,
     processPage,
     processUrl,
+    rightTrimSlash,
     routerDefaultHandler,
     stopCrawler,
-    updateUrlsCrawled,
 } from "./functions.js";
 import { DomainFR } from "./class/DomainFR.js";
+import { context } from "./context.js";
 
 export const router = createPlaywrightRouter();
 
 const ignoredExtensions = [
     // archives
-    "7z",
-    "7zip",
-    "bz2",
-    "rar",
-    "tar",
-    "tar.gz",
-    "xz",
-    "zip",
+    "7z", "7zip", "bz2", "rar", "tar", "tar.gz", "xz", "zip",
     // images
-    "mng",
-    "pct",
-    "bmp",
-    "gif",
-    "jpg",
-    "jpeg",
-    "png",
-    "pst",
-    "psp",
-    "tif",
-    "tiff",
-    "ai",
-    "drw",
-    "dxf",
-    "eps",
-    "ps",
-    "svg",
-    "cdr",
-    "ico",
-    "webp",
+    "mng", "pct", "bmp", "gif", "jpg", "jpeg", "png", "pst", "psp", "tif", "tiff",
+    "ai", "drw", "dxf", "eps", "ps", "svg", "cdr", "ico", "webp",
     // audio
-    "mp3",
-    "wma",
-    "ogg",
-    "wav",
-    "ra",
-    "aac",
-    "mid",
-    "au",
-    "aiff",
+    "mp3", "wma", "ogg", "wav", "ra", "aac", "mid", "au", "aiff",
     // video
-    "3gp",
-    "asf",
-    "asx",
-    "avi",
-    "mov",
-    "mp4",
-    "mpg",
-    "qt",
-    "rm",
-    "swf",
-    "wmv",
-    "m4a",
-    "m4v",
-    "flv",
-    "webm",
+    "3gp", "asf", "asx", "avi", "mov", "mp4", "mpg", "qt", "rm", "swf", "wmv", "m4a", "m4v", "flv", "webm",
     // office suites
-    "xls",
-    "xlsx",
-    "ppt",
-    "pptx",
-    "pps",
-    "doc",
-    "docx",
-    "odt",
-    "ods",
-    "odg",
-    "odp",
+    "xls", "xlsx", "ppt", "pptx", "pps", "doc", "docx", "odt", "ods", "odg", "odp",
     // other
-    "css",
-    "pdf",
-    "exe",
-    "bin",
-    "rss",
-    "dmg",
-    "iso",
-    "apk",
-    "xml",
+    "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml",
 ].join("|");
+
+// Ported Forbidden Params from V3
+const FORBIDDEN_PARAMS = [
+    'order', 'sort', 'dir', 'limit', 'resultsPerPage',
+    'filter', 'price', 'price_min', 'price_max',
+    'id_category', 'categoryId', 'productListView',
+    'q', 'search', 'query', 'offset', 'start',
+    'view', 'mode', 'display', 'per_page', 'items',
+    'year', 'month', 'day', 'date', 'from', 'to',
+    'ref', 'referrer', 'source', 'sort_by',
+    'size_', 'taille_', 'color_', 'couleur_',
+    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
+];
 
 const domainFR = new DomainFR("");
 
@@ -111,22 +54,20 @@ router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
         const proxyUrl = proxyInfo?.url || null;
 
-        // Block resources to save bandwidth and CPU
+        // V3 Feature: Resource Blocking (Images, Fonts, etc.)
         await page.route('**/*', (route) => {
-            const request = route.request();
-            const resourceType = request.resourceType();
-            const url = request.url();
+            const req = route.request();
+            const resourceType = req.resourceType();
+            const reqUrl = req.url();
 
             // Block heavy media and fonts
             if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
                 return route.abort();
             }
-
             // Block download scripts and binary files
-            if (url.includes('download.php') || url.includes('imp=1') || url.match(/\.(pdf|zip|rar|doc|docx|xls|xlsx)$/i)) {
+            if (reqUrl.includes('download.php') || reqUrl.includes('imp=1') || /\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$/i.test(reqUrl)) {
                 return route.abort();
             }
-
             return route.continue();
         });
 
@@ -136,168 +77,158 @@ router.addDefaultHandler(
         // This handles cases where a valid internal link redirects to an external site (e.g. Facebook)
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
-        const targetDomain = domain; // Imported from main.js
+        const targetDomain = context.config.domain; 
 
         // Check if hostname ends with the target domain (handles subdomains too)
         // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
         // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
-        if (!urlObj.hostname.includes(targetDomain)) {
+        if (!targetDomain || !urlObj.hostname.includes(targetDomain)) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
             return;
         }
 
         let enqueueLinksExcludePath: Array<string> = [
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
-
-            // === SPIDER TRAPS E-COMMERCE (QUERY STRING PATTERNS) ===
-            // FIXED: Patterns now match query strings (?param=value) not just paths
-            // Facettes et filtres - Match both ? and & variations
-            '**/?*order=*', '**/*?*order=*', '**/*&order=*',
-            '**/?*sort=*', '**/*?*sort=*', '**/*&sort=*',
-            '**/?*dir=*', '**/*?*dir=*', '**/*&dir=*',
-            '**/?*limit=*', '**/*?*limit=*', '**/*&limit=*',
-            '**/?*resultsPerPage=*', '**/*?*resultsPerPage=*', '**/*&resultsPerPage=*',
-            '**/?*filter=*', '**/*?*filter=*', '**/*&filter=*',
-            '**/?*filters[*', '**/*?*filters[*', '**/*&filters[*',
-            '**/?*price=*', '**/*?*price=*', '**/*&price=*',
-            '**/?*price_min=*', '**/*?*price_min=*', '**/*&price_min=*',
-            '**/?*price_max=*', '**/*?*price_max=*', '**/*&price_max=*',
-            '**/?*id_category=*', '**/*?*id_category=*', '**/*&id_category=*',
-            '**/?*categoryId=*', '**/*?*categoryId=*', '**/*&categoryId=*',
-            '**/?*productListView=*', '**/*?*productListView=*', '**/*&productListView=*',
-
-            // Recherche et pagination avancée
-            '**/?*q=*', '**/*?*q=*', '**/*&q=*',
-            '**/?*search=*', '**/*?*search=*', '**/*&search=*',
-            '**/?*query=*', '**/*?*query=*', '**/*&query=*',
-            '**/*page=*/**/*page=*', // Double pagination
-            '**/?*offset=*', '**/*?*offset=*', '**/*&offset=*',
-            '**/?*start=*', '**/*?*start=*', '**/*&start=*',
-
-            // Tris et affichages multiples
-            '**/?*view=*', '**/*?*view=*', '**/*&view=*',
-            '**/?*mode=*', '**/*?*mode=*', '**/*&mode=*',
-            '**/?*display=*', '**/*?*display=*', '**/*&display=*',
-            '**/?*per_page=*', '**/*?*per_page=*', '**/*&per_page=*',
-            '**/?*items=*', '**/*?*items=*', '**/*&items=*',
-
-            // === AUTHENTIFICATION & COMPTE (CRITICAL FOR OOM) ===
-            '**/connexion**', '**/login**', '**/signin**', '**/log-in**',
-            '**/register**', '**/signup**', '**/inscription**',
-            '**/account**', '**/mon-compte**', '**/my-account**',
-            '**/profile**', '**/profil**',
-            '**/password**', '**/mot-de-passe**', '**/reset-password**',
-            '**/logout**', '**/deconnexion**',
-            '**/forgot-password**', '**/oubli-mot-de-passe**',
-            '**/customer/account/**', '**/customer/**',
-
-            // === PROCESSUS D'ACHAT (CRITICAL FOR OOM) ===
-            '**/panier**', '**/cart**', '**/basket**',
-            '**/checkout**', '**/commande**', '**/order**',
-            '**/add-to-cart**', '**/addtocart**',
-            '**/payment**', '**/paiement**',
-            '**/shipping**', '**/livraison**',
-            '**/confirmation**',
-            '**/quotation/**', '**/devis/**',
-
-            // === ACTIONS UTILISATEUR ===
-            '**/wishlist**', '**/liste-envies**', '**/favoris**',
-            '**/compare**', '**/comparateur**',
-            '**/sendtoafriend**', '**/send-to-friend**',
-
-            // === CALENDRIERS & DATES ===
-            '**/?*year=*', '**/*?*year=*', '**/*&year=*',
-            '**/?*month=*', '**/*?*month=*', '**/*&month=*',
-            '**/?*day=*', '**/*?*day=*', '**/*&day=*',
-            '**/?*date=*', '**/*?*date=*', '**/*&date=*',
-            '**/?*from=*', '**/*?*from=*', '**/*&from=*',
-            '**/?*to=*', '**/*?*to=*', '**/*&to=*',
-            '**/calendrier/**', '**/calendar/**',
-
-            // === RÉSEAUX SOCIAUX & PARTAGE (SCOPE LEAK PREVENTION) ===
-            '**/*facebook*', '**/*twitter*', '**/*linkedin*',
-            '**/*instagram*', '**/*youtube*', '**/*pinterest*',
-            '**/*tiktok*', '**/*whatsapp*',
-            '**/*share*', '**/*partager*',
-            '**/mailto:*', '**/tel:*', '**/*://t.me/*',
-
-            // === TRACKING & ANALYTICS ===
-            '**/*redirect*', '**/*track*', '**/*click*',
-            '**/?*ref=*', '**/*?*ref=*', '**/*&ref=*',
-            '**/?*referrer=*', '**/*?*referrer=*', '**/*&referrer=*',
-            '**/?*source=*', '**/*?*source=*', '**/*&source=*',
-
-            // === APIS & TECHNIQUES ===
-            '**/api/**', '**/wp-json/**', '**/rest/**',
-            '**/feed/**', '**/feeds/**', '**/rss/**',
-
-            // === SPECIFIC SITE EXCLUDES (sellerie-equishop) ===
-            '**/PBCPPlayer.asp**',
-            '**/popup/**',
-
-            // === SPECIFIC SITE EXCLUDES (promodis.fr) ===
-            '**/download.php**',
-            '**/*imp=1*',
-            '**/dhtml/download.php*',
-            '**/*.pdf', '**/*.zip', '**/*.rar', '**/*.doc', '**/*.docx', '**/*.xls', '**/*.xlsx',
-
-            // === SPECIFIC SITE EXCLUDES (SHOPIFY SPIDER TRAPS) ===
-            '**/collections/*/*+*',
-            '**/collections/*/*%2B*',
-            '**/collections/*/*&*',
-            '**/*size_*', '**/*taille_*',
-            '**/*color_*', '**/*couleur_*',
-            '**/*price_*', '**/*prix_*',
-            '**/*brand_*', '**/*marque_*',
-            '**/*type_*', '**/*vendor_*',
-            '**/?*sort_by=*', '**/*?*sort_by=*', '**/*&sort_by=*',
         ];
 
-        // Not useful anymore as we analyze the URL to check which parameters to keep or to remove
-        // if (skipquestionmark) {
-        //     enqueueLinksExcludePath.push(`${baseUrl}/**/*[?]*`);
-        //     enqueueLinksExcludePath.push(`${baseUrl}/**/*[?]*/**`);
-        // }
-        // if (skipdiez) {
-        //     enqueueLinksExcludePath.push(`${baseUrl}/**/*[#]*`);
-        //     enqueueLinksExcludePath.push(`${baseUrl}/**/*[#]*/**`);
-        // }
+        // V3 Feature: Blocked Status Check
+        if (response) {
+            const status = response.status();
+            if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
+                log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
+                // Increment error stats
+                if (context.statsManager) {
+                    await context.statsManager.increment("errors");
+                }
+                // Don't process, let failedRequestHandler handle it
+                throw new Error(`BLOCKED: HTTP ${status}`);
+            }
+        }
+
+        // --- Circuit Breaker Check (Global thresholds) ---
+        if (context.statsManager) {
+            // Track total processed for percentages (Increment for every handled page)
+            // Note: This metric is cumulative across restarts via StatsManager
+            await context.statsManager.increment("processed");
+            
+            const cb = context.config.circuitBreaker;
+            
+            if (cb && cb.enabled) {
+                const errors = await context.statsManager.getValue("errors");
+                const redirects = await context.statsManager.getValue("redirects");
+                const newUrls = await context.statsManager.getValue("new_urls");
+                const processed = await context.statsManager.getValue("processed");
+                
+                let abortReason = "";
+
+                if (cb.isMicroMode) {
+                    // --- MICRO MODE (Absolute Limits) ---
+                    if (errors >= cb.maxAbsErrors) abortReason = `Too many errors for small site (${errors} >= ${cb.maxAbsErrors})`;
+                    else if (redirects >= cb.maxAbsRedirects) abortReason = `Too many redirects for small site (${redirects} >= ${cb.maxAbsRedirects})`;
+                    else if (newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
+                } else {
+                    // --- STANDARD MODE (Rate Limits) ---
+                    if (processed >= cb.minSample) {
+                        const errorRate = errors / processed;
+                        const redirectRate = redirects / processed;
+                        
+                        if (errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
+                        else if (redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
+                        
+                        // Check growth relative to previous total
+                        if (cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
+                            abortReason = `Site growth too fast (> ${(cb.maxGrowthRate*100)}% of previous size)`;
+                        }
+                    }
+                }
+
+                if (abortReason) {
+                    log.warning(`🛑 Circuit breaker triggered: ${abortReason}`);
+                    context.stopReason = "circuitBreaker"; 
+                    await stopCrawler(crawler, `Circuit breaker: ${abortReason}`);
+                    return;
+                }
+            } else {
+                // Fallback to legacy global config checks if V1 breaker is disabled
+                // (Preserves backward compatibility with legacy args like --maxErrors=100)
+                let breached = false;
+                if (context.config.maxErrors && await context.statsManager.checkThreshold("errors", context.config.maxErrors)) breached = true;
+                if (context.config.maxRedirects && await context.statsManager.checkThreshold("redirects", context.config.maxRedirects)) breached = true;
+                if (context.config.maxNewUrls && await context.statsManager.checkThreshold("new_urls", context.config.maxNewUrls)) breached = true;
+
+                if (breached) {
+                    log.warning("🛑 Legacy Circuit breaker triggered! Stopping crawler.");
+                    context.stopReason = "limitErrors"; 
+                    await stopCrawler(crawler, "Legacy Circuit breaker triggered");
+                    return;
+                }
+            }
+        }
+
         log.info(`Processing ${url} ( ${request.url} ) ... (HTTP Status: ${response?.status()})`);
 
-        // Verify if url is already crawled using Set (O(1))
-        const isDoublon = allUrlsCrawled.has(url);
+        // --- Deduplication & "Double Check" (Redis) ---
+        let isDoublon = false;
+        const isExisting = request.userData.is_existing || false;
+
+        // Skip Redis check for "Existing" URLs to allow re-verification in Update Mode
+        if (context.dedupManager && !isExisting) {
+            const isNew = await context.dedupManager.addUrl(url);
+            isDoublon = !isNew;
+        }
+        
+        // Handle "New URL" threshold logic if it's genuinely new
+        if (context.dedupManager && !isDoublon && !isExisting) {
+             if (context.statsManager) {
+                 await context.statsManager.increment("new_urls");
+                 // Re-check threshold immediately to fail fast
+                 if (context.config.maxNewUrls && await context.statsManager.checkThreshold("new_urls", context.config.maxNewUrls)) {
+                     log.warning("🛑 Max new URLs limit reached during processing. Stopping.");
+                     context.stopReason = "limitNewUrls";
+                     await stopCrawler(crawler, "Max new URLs limit reached.");
+                     return;
+                 }
+             }
+        }
 
         if (!isDoublon) {
-            allUrlsCrawled.add(url);
-
-            // SAFETY LIMIT: Prevent unbounded memory growth
-            // Clear Set if it exceeds 100k URLs (prevents OOM on very large sites)
-            // Crawlee's RequestQueue will continue to handle deduplication
-            const MAX_URLS_IN_MEMORY = 100000;
-            if (allUrlsCrawled.size > MAX_URLS_IN_MEMORY) {
-                log.warning(`⚠️  allUrlsCrawled Set exceeded ${MAX_URLS_IN_MEMORY.toLocaleString()} URLs. Clearing to prevent OOM. Crawlee RequestQueue will handle deduplication.`);
-                allUrlsCrawled.clear();
-            }
-
-            // OPTIMIZATION: Removed synchronous disk write on every request (updateUrlsCrawled)
-            // This was causing massive CPU/IO overhead with 250k URLs.
-            // Persistence is now handled by the Dataset and RequestQueue.
+            // Redis update handled in dedupManager
+            // Local file update is heavy, skipped in V3 logic, keeping minimal or periodic in main.ts
 
             // Accept Cookies
             await page.context().addCookies([
                 {
                     name: "cookieConsent",
                     value: "accepted",
-                    domain: domain,
+                    domain: targetDomain,
                     path: "/",
                 },
             ]);
 
-            // Check if this is the main site URL
+            // --- Update Mode Checks (Redirects) ---
+            if (isExisting && context.statsManager) {
+                // request.loadedUrl is the final URL after redirects
+                // request.url is the queue/original URL
+                // Check if they differ (fuzzy matching to ignore trailing slashes)
+                const finalUrl = rightTrimSlash(request.loadedUrl);
+                const originalUrl = rightTrimSlash(request.url);
+                
+                if (finalUrl !== originalUrl) {
+                    log.info(`Redirect detected: ${request.url} -> ${request.loadedUrl}`);
+                    await context.statsManager.increment("redirects");
+                }
+            }
+
             const isMainSite = request.url === site;
             let frenchDetectionMethod: string | Error;
             let isEnqueuingLinks = false;
             let content = "";
+            let title = "";
+
+            try {
+                // Get title (V3 Feature)
+                title = await page.title();
+            } catch (e) {}
 
             if (isMainSite) {
                 // Process normally and store the method
@@ -306,8 +237,7 @@ router.addDefaultHandler(
                 const checkPageIfFrench = await domainFR.checkPageIfFrench(content, false);
 
                 if (checkPageIfFrench["ok"]) {
-                    // Store the successful method
-                    frenchDetectionMethod = manageFrenchDetectionMethod(domain as string, checkPageIfFrench["method"]);
+                    frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkPageIfFrench["method"]);
                     if (frenchDetectionMethod instanceof Error) {
                         log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
                         await stopCrawler(crawler, "Failed to store French detection method");
@@ -318,7 +248,7 @@ router.addDefaultHandler(
                 } else {
                     const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
                     if (checkUrl["ok"]) {
-                        frenchDetectionMethod = manageFrenchDetectionMethod(domain as string, checkUrl["method"]);
+                        frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrl["method"]);
                         if (frenchDetectionMethod instanceof Error) {
                             log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
                             await stopCrawler(crawler, "Failed to store French detection method");
@@ -329,220 +259,216 @@ router.addDefaultHandler(
                     }
                 }
             } else {
-                // Try to get stored method
-                frenchDetectionMethod = manageFrenchDetectionMethod(domain as string);
-                if (frenchDetectionMethod instanceof Error) {
-                    log.error(`Failed to retrieve French detection method: ${frenchDetectionMethod.message}`);
-                    await stopCrawler(crawler, "No French detection method found");
-                    return;
+                // INTERNAL PAGE LOGIC WITH FALLBACK
+                let methodOrError = manageFrenchDetectionMethod(targetDomain as string);
+                
+                if (methodOrError instanceof Error) {
+                    log.warning(`French detection method not found in storage. Attempting auto-detection on current page.`);
+                    
+                    // Fallback: Detect on current content
+                    if (!content) content = await processPage(page, request.loadedUrl, log);
+                    
+                    // Use global instance (no forced method) to auto-detect
+                    domainFR.homepage = url; 
+                    const autoCheck = await domainFR.checkPageIfFrench(content, false); 
+                    
+                    if (autoCheck.ok) {
+                        methodOrError = manageFrenchDetectionMethod(targetDomain as string, autoCheck.method);
+                        log.info(`Auto-detected and saved method: ${autoCheck.method}`);
+                    } else {
+                        // Try URL check fallback
+                        const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
+                        if (checkUrl.ok) {
+                             methodOrError = manageFrenchDetectionMethod(targetDomain as string, checkUrl.method);
+                             log.info(`Auto-detected (URL) and saved method: ${checkUrl.method}`);
+                        }
+                    }
                 }
 
-                // Create new DomainFR instance with forced method
-                content = await processPage(page, request.loadedUrl, log);
-                const domainFRWithMethod = new DomainFR(url, frenchDetectionMethod as string);
-                const checkPageIfFrench = await domainFRWithMethod.checkPageIfFrench(content, false);
-
-                if (checkPageIfFrench["ok"]) {
-                    isEnqueuingLinks = true;
+                if (methodOrError instanceof Error) {
+                    log.error(`Could not determine French detection method for ${url}. Skipping links.`);
+                    isEnqueuingLinks = false;
                 } else {
-                    const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
-                    if (checkUrl["ok"] && checkUrl["method"] === frenchDetectionMethod as string) {
+                    frenchDetectionMethod = methodOrError as string;
+                    
+                    if (!content) content = await processPage(page, request.loadedUrl, log);
+                    const domainFRWithMethod = new DomainFR(url, frenchDetectionMethod);
+                    const checkPageIfFrench = await domainFRWithMethod.checkPageIfFrench(content, false);
+
+                    if (checkPageIfFrench["ok"]) {
                         isEnqueuingLinks = true;
+                    } else {
+                        const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
+                        if (checkUrl["ok"] && checkUrl["method"] === frenchDetectionMethod) {
+                            isEnqueuingLinks = true;
+                        }
                     }
                 }
             }
 
             if (isEnqueuingLinks) {
+                // Pass title to handler
                 await routerDefaultHandler(
                     request,
                     requestQueue,
                     url,
                     content,
-                    domain
+                    targetDomain,
+                    title
                 );
 
                 await enqueueLinks({
                     strategy: "same-domain",
-                    globs: enqueueLinksIncludePath, // FIXED: Uncommented to enable URL restrictions
                     exclude: enqueueLinksExcludePath,
                     transformRequestFunction: (request) => {
-                        if (
-                            robots &&
-                            !robots.isAllowed(request.url, "Googlebot")
-                        ) {
-                            console.log(
-                                `Bloqué par robots.txt : ${request.url}`
-                            );
+                        // 1. Robots Check
+                        if (robots && !robots.isAllowed(request.url, "Googlebot")) {
+                            console.log(`Bloqué par robots.txt : ${request.url}`);
                             return null;
                         }
 
-                        // === NEW: PREVENTIVE PARAMETER FILTERING (BEFORE ENQUEUE) ===
-                        // This blocks URLs with forbidden query parameters BEFORE they enter the queue
-                        // This is MORE RELIABLE than glob patterns for query strings
-                        try {
-                            const urlObj = new URL(request.url);
-                            const forbiddenParams = [
-                                'order', 'sort', 'dir', 'limit', 'resultsPerPage',
-                                'filter', 'price', 'price_min', 'price_max',
-                                'id_category', 'categoryId', 'productListView',
-                                'q', 'search', 'query', 'offset', 'start',
-                                'view', 'mode', 'display', 'per_page', 'items',
-                                'year', 'month', 'day', 'date', 'from', 'to',
-                                'ref', 'referrer', 'source', 'sort_by',
-                                // Shopify specific
-                                'size_', 'taille_', 'color_', 'couleur_',
-                                'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
-                            ];
+                        // 2. Initial CLEANING of the URL (Moved to TOP)
+                        // This ensures we strip parameters BEFORE checking forbidden list
+                        const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
+                        
+                        // List parameters always to remove
+                        const alwaysRemove = [
+                            // === CART & WISHLIST ===
+                            "add-to-cart", "add_to_cart", "addtocart",
+                            "add-to-compare", "add_to_compare",
+                            "add-to-wishlist", "add_to_wishlist", "addtowishlist",
+                            "remove_from_wishlist", "remove_wishlist",
+                            "remove_compare", "remove_item",
+                            "quantity", "qty",
 
-                            for (const param of forbiddenParams) {
-                                if (urlObj.searchParams.has(param) ||
-                                    Array.from(urlObj.searchParams.keys()).some(key => key.startsWith(param))) {
+                            // === TRACKING UTM (Marketing) ===
+                            "utm_source", "utm_medium", "utm_campaign",
+                            "utm_content", "utm_term", "utm_id",
+                            "utm_referrer", "utm_name",
+
+                            // === FACEBOOK & META ===
+                            "fbclid", "fb_action_ids", "fb_action_types",
+                            "fb_source", "fb_ref",
+
+                            // === GOOGLE ADS & ANALYTICS ===
+                            "gclid", "gclsrc", "dclid",
+                            "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
+                            "_ga", "_gid", "_gat",
+
+                            // === HUBSPOT ===
+                            "hsa_acc", "hsa_cam", "hsa_grp",
+                            "hsa_ad", "hsa_src", "hsa_mt",
+                            "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
+                            "hsCtaTracking", "hsCta",
+
+                            // === MAILCHIMP ===
+                            "mc_cid", "mc_eid",
+
+                            // === SOCIAL MEDIA TRACKING ===
+                            "twclid", "li_fat_id", "msclkid",
+                            "igshid", "tt_medium", "tt_content",
+
+                            // === WORDPRESS ===
+                            "_wpnonce", "preview", "preview_id",
+                            "preview_nonce", "et_blog",
+
+                            // === PRESTASHOP ===
+                            "id_product", "id_category", "pid",
+                            "controller", "id_product_attribute",
+                            "isolang", "id_lang",
+
+                            // === SHOPIFY ===
+                            "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
+                            "pr_ref_pid", "pr_seq",
+                            "variant", "selling_plan",
+
+                            // === MAGENTO ===
+                            "SID", "___store", "___from_store",
+
+                            // === SESSION & TRACKING ===
+                            "sessionid", "session_id", "PHPSESSID",
+                            "sid", "s_id",
+                            "_gl", "ref", "referrer",
+
+                            // === AFFILIATE & MARKETING ===
+                            "aff_id", "affiliate", "partner",
+                            "coupon", "discount", "promo",
+                            "voucher",
+
+                            // === AUTRES TRACKING ===
+                            "click_id", "transaction_id",
+                            "source", "medium", "campaign",
+
+                            // === FILTRES SOUVENT INUTILES ===
+                            "view", "mode", "display",
+                            "timestamp", "random", "nocache",
+                            "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
+                        ];
+
+                        // Always strip the "Always Remove" list first
+                        request.url = processUrl(request.url, true, false, { toRemove: alwaysRemove });
+
+                        // Now apply the dynamic config (skipQuestionMark, etc)
+                        if (skipQuestionMark || skipDiez) {
+                            let parameters = {};
+                            if (toKeep && toKeep.length > 0) parameters = { toKeep };
+                            if (toRemove && toRemove.length > 0) parameters = { ...parameters, toRemove };
+                            
+                            request.url = processUrl(
+                                request.url,
+                                skipQuestionMark,
+                                skipDiez,
+                                parameters
+                            );
+                        }
+
+                        // 3. Security Checks & Forbidden Params
+                        // Now that URL is clean, we check if it still contains forbidden stuff
+                        try {
+                            const reqUrlObj = new URL(request.url);
+
+                            // Forbidden Params Check
+                            for (const param of FORBIDDEN_PARAMS) {
+                                if (reqUrlObj.searchParams.has(param) ||
+                                    Array.from(reqUrlObj.searchParams.keys()).some(key => key.startsWith(param))) {
                                     console.log(`🚫 Blocked forbidden param "${param}": ${request.url}`);
                                     return null;
                                 }
                             }
-                        } catch (e) {
-                            console.error(`Invalid URL in param check: ${request.url}`);
-                            return null;
-                        }
 
-                        // PREVENTIVE SPIDER TRAP BLOCKING (Before other checks)
-                        // Block nested cart/quotation URLs that create infinite loops
-                        if (request.url.includes('/quotation/cart/') ||
-                            request.url.includes('/cart/cart/') ||
-                            request.url.includes('/catalog/product_compare/')) {
-                            console.log(`Blocked spider trap: ${request.url}`);
-                            return null;
-                        }
+                            // Spider Trap Checks
+                            if (request.url.includes('/quotation/cart/') ||
+                                request.url.includes('/cart/cart/') ||
+                                request.url.includes('/catalog/product_compare/')) {
+                                console.log(`Blocked spider trap: ${request.url}`);
+                                return null;
+                            }
 
-                        // Block URLs with long base64-encoded segments (often dynamic/infinite)
-                        if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
-                            console.log(`Blocked base64 URL: ${request.url}`);
-                            return null;
-                        }
+                            if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
+                                console.log(`Blocked base64 URL: ${request.url}`);
+                                return null;
+                            }
 
-                        // HARD SECURITY: Explicitly block ANY URL that is not on the target domain
-                        // This acts as a secondary firewall in case "same-domain" strategy fails or redirects occur
-                        try {
-                            const reqUrlObj = new URL(request.url);
-                            if (!reqUrlObj.hostname.includes(domain)) {
+                            // External Domain Check
+                            if (targetDomain && !reqUrlObj.hostname.includes(targetDomain)) {
                                 console.log(`Blocked external URL: ${request.url}`);
                                 return null;
                             }
+
                         } catch (e) {
                             console.error(`Invalid URL in transformRequestFunction: ${request.url}`);
                             return null;
                         }
 
-                        // List parameters always to remove
-                        let toAlwaysRemove = {
-                            toRemove: [
-                                // === CART & WISHLIST ===
-                                "add-to-cart", "add_to_cart", "addtocart",
-                                "add-to-compare", "add_to_compare",
-                                "add-to-wishlist", "add_to_wishlist", "addtowishlist",
-                                "remove_from_wishlist", "remove_wishlist",
-                                "remove_compare", "remove_item",
-                                "quantity", "qty",
-
-                                // === TRACKING UTM (Marketing) ===
-                                "utm_source", "utm_medium", "utm_campaign",
-                                "utm_content", "utm_term", "utm_id",
-                                "utm_referrer", "utm_name",
-
-                                // === FACEBOOK & META ===
-                                "fbclid", "fb_action_ids", "fb_action_types",
-                                "fb_source", "fb_ref",
-
-                                // === GOOGLE ADS & ANALYTICS ===
-                                "gclid", "gclsrc", "dclid",
-                                "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
-                                "_ga", "_gid", "_gat",
-
-                                // === HUBSPOT ===
-                                "hsa_acc", "hsa_cam", "hsa_grp",
-                                "hsa_ad", "hsa_src", "hsa_mt",
-                                "hsa_kw", "hsa_tgt", "hsa_ver", "hsa_net",
-                                "hsCtaTracking", "hsCta",
-
-                                // === MAILCHIMP ===
-                                "mc_cid", "mc_eid",
-
-                                // === SOCIAL MEDIA TRACKING ===
-                                "twclid", "li_fat_id", "msclkid",
-                                "igshid", "tt_medium", "tt_content",
-
-                                // === WORDPRESS ===
-                                "_wpnonce", "preview", "preview_id",
-                                "preview_nonce", "et_blog",
-
-                                // === PRESTASHOP ===
-                                "id_product", "id_category", "pid",
-                                "controller", "id_product_attribute",
-                                "isolang", "id_lang",
-
-                                // === SHOPIFY ===
-                                "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
-                                "pr_ref_pid", "pr_seq",
-                                "variant", "selling_plan",
-
-                                // === MAGENTO ===
-                                "SID", "___store", "___from_store",
-
-                                // === SESSION & TRACKING ===
-                                "sessionid", "session_id", "PHPSESSID",
-                                "sid", "s_id",
-                                "_gl", "ref", "referrer",
-
-                                // === AFFILIATE & MARKETING ===
-                                "aff_id", "affiliate", "partner",
-                                "coupon", "discount", "promo",
-                                "voucher",
-
-                                // === AUTRES TRACKING ===
-                                "click_id", "transaction_id",
-                                "source", "medium", "campaign",
-
-                                // === FILTRES SOUVENT INUTILES ===
-                                "view", "mode", "display",
-                                "timestamp", "random", "nocache",
-                                "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
-                            ],
-                        };
-                        request.url = processUrl(
-                            request.url,
-                            true, // skip question mark here
-                            false,
-                            toAlwaysRemove
-                        );
-
-                        // If skipquestionmark or skipdiez is true, we need to process the URL
-                        if (skipquestionmark || skipdiez) {
-                            let parameters = {};
-                            if (toKeep.length > 0) {
-                                parameters = { toKeep: toKeep };
-                            }
-                            if (toRemove.length > 0) {
-                                parameters = { ...parameters, toRemove: toRemove };
-                            }
-                            request.url = processUrl(
-                                request.url,
-                                skipquestionmark,
-                                skipdiez,
-                                parameters
-                            );
-                        }
-
+                        // Add user data to new requests
+                        request.userData = { is_existing: false };
                         return request;
                     },
                 });
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
-                let dataset = await Dataset.open("nfr-" + domain);
+                let dataset = await Dataset.open("nfr-" + targetDomain);
                 await dataset.pushData({ url, content });
-
-                // CRITICAL FIX: Mark request as handled even for non-French pages
-                // Without this, handledRequestCount stays at 0, triggering false "corrupted queue" errors
                 await requestQueue.markRequestHandled(request);
             }
         } else {

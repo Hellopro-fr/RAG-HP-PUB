@@ -1,6 +1,6 @@
 from enum import Enum
 from typing import Optional, List
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, ConfigDict
 from datetime import datetime
 
 class IncludeInArchive(str, Enum):
@@ -29,6 +29,13 @@ class ReindexResponse(BaseModel):
     already_indexed: int
     errors: int
 
+class PruneResponse(BaseModel):
+    """Response for the archive cleanup operation."""
+    deleted_count: int
+    retained_count: int
+    errors: int
+    message: str
+
 class UpdateThresholds(BaseModel):
     """Thresholds for aborting an update job."""
     max_errors: Optional[int] = Field(None, description="Abort if error count exceeds this value.")
@@ -36,6 +43,8 @@ class UpdateThresholds(BaseModel):
     max_new_urls: Optional[int] = Field(None, description="Abort if new URL discovery count exceeds this value.")
 
 class CrawlRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str = Field(..., description="An identifier for the crawl job, e.g., from a database.", example="domaine_123")
     domain: str = Field(..., description="The domain name being crawled.", example="example.com")
     start_url: HttpUrl = Field(..., description="The initial URL to start crawling from.", example="https://example.com")
@@ -61,6 +70,9 @@ class CrawlRequest(BaseModel):
     break_limit: Optional[bool] = Field(False, description="Enable 5000 URLs limit.", alias="breaklimit")
     per_crawl: Optional[int] = Field(0, description="URLs per job.", example=1000, alias="percrawl")
     per_minute: Optional[int] = Field(100, description="Speed limit.", example=100, alias="perminute")
+    
+    # Camoufox Integration
+    camoufox: Optional[bool] = Field(False, description="Use Camoufox stealth browser.")
 
 class CrawlResponse(BaseModel):
     message: str
@@ -76,7 +88,7 @@ class ArchiveResponse(BaseModel):
 
 class CrawlStatus(BaseModel):
     crawl_id: str
-    id_domaine: str # Legacy ID alias
+    id_domaine: str # Legacy alias
     status: str = Field(..., description="Current status: running, stopping, finished, failed", example="running")
     domain: str
     start_url: HttpUrl

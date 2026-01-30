@@ -33,6 +33,12 @@ class Consumer:
         self.dead_letter_exchange = "dead_letter_exchange"
         self.dead_letter_queue_name = f"{self.queue_name}_dlq"
 
+        # Retry DLQ for failed normalizations (goes to retry processor)
+        self.normalization_retry_exchange_name = settings.RETRY_DLQ_EXCHANGE
+        self.normalization_retry_routing_key = settings.RETRY_DLQ_ROUTING_KEY
+        self.normalization_retry_queue_name = settings.RETRY_DLQ_QUEUE
+        self.normalization_retry_exchange = None
+
     async def connect(self):
         """Establish connection and setup topology."""
         logging.info(f"Connecting to RabbitMQ at {settings.RABBITMQ_URL}")
@@ -88,12 +94,47 @@ class Consumer:
         )
         await self.queue.bind(main_exchange, routing_key=self.routing_key)
 
+        # Normalization Retry DLQ (for failed normalizations -> retry processor)
+        self.normalization_retry_exchange = await self.channel.declare_exchange(
+            self.normalization_retry_exchange_name,
+            aio_pika.ExchangeType.TOPIC,
+            durable=True,
+        )
+        normalization_retry_queue = await self.channel.declare_queue(
+            self.normalization_retry_queue_name, durable=True
+        )
+        await normalization_retry_queue.bind(
+            self.normalization_retry_exchange,
+            routing_key=self.normalization_retry_routing_key,
+        )
+        logging.info(
+            f"✅ Normalization Retry DLQ configured: {self.normalization_retry_queue_name}"
+        )
+
+    async def _publish_to_retry_dlq(self, failed_node_entry: dict):
+        """Publish a failed node to the normalization retry queue."""
+        try:
+            message_body = json.dumps(failed_node_entry).encode("utf-8")
+            message = aio_pika.Message(
+                body=message_body,
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+            )
+            await self.normalization_retry_exchange.publish(
+                message, routing_key=self.normalization_retry_routing_key
+            )
+            logging.info(
+                f"📤 Published failed node to retry DLQ: {failed_node_entry.get('node', {}).get('id')}"
+            )
+        except Exception as e:
+            logging.error(f"Failed to publish to retry DLQ: {e}")
+
     async def _process_batch(self, batch: list):
         """
         Execute a batch of messages:
         1. Process each message through normalization.
-        2. Publish output messages.
-        3. Ack/Nack RabbitMQ messages.
+        2. Publish successful nodes to semantic check queue.
+        3. Publish failed nodes to retry DLQ.
+        4. Ack/Nack RabbitMQ messages.
         """
         if not batch:
             return
@@ -139,10 +180,17 @@ class Consumer:
             for msg, data, database, origin in valid_items:
                 try:
                     # Process normalization for each item
-                    output_message = process_normalization(data, database, origin)
+                    result = process_normalization(data, database, origin)
 
-                    # Publish output
-                    await self.publisher.publish_message(output_message)
+                    # Publish successful nodes to next stage
+                    output_message = result["output_message"]
+                    if output_message["data"].get("nodes"):
+                        await self.publisher.publish_message(output_message)
+
+                    # Publish failed nodes to retry DLQ
+                    for failed_node_entry in result.get("failed_nodes", []):
+                        await self._publish_to_retry_dlq(failed_node_entry)
+
                     await msg.ack()
 
                 except Exception as e:

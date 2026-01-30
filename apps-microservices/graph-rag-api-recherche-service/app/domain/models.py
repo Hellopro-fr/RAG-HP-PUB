@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional, Union, Dict, Any
 from datetime import datetime
 import re
@@ -16,6 +16,10 @@ class ComplexFilterRequest(BaseModel):
         ...,
         description="Map of Reponse ID to list of Constraints. Example: {'q_22_r_1': [{'id_caracteristique': '29', 'valeurs_cibles': ['3']}]}",
     )
+    output_fields: Optional[List[str]] = Field(
+        None,
+        description="List of fields to return in the product data. If None, returns all fields.",
+    )
     id_categorie: Optional[str] = Field(
         None,
         description="Optional Category ID to filter products. If provided, only products belonging to this category will be returned.",
@@ -24,6 +28,33 @@ class ComplexFilterRequest(BaseModel):
     v: int = 4
     blocked_val: int | float = -2
     different_val: int | float = -0.3
+
+
+class CaracteristiqueConstraint(BaseModel):
+    """Constraint for caracteristique-based filtering with weight included."""
+    q_weight: float = Field(1.0, description="Weight for this caracteristique constraint")
+    unite: Optional[str] = None
+    valeurs_cibles: Optional[Union[List[str], Dict[str, Any]]] = None
+    valeurs_bloquantes: Optional[Union[List[str], Dict[str, Any]]] = None
+
+
+class FilterCaracteristiqueRequest(BaseModel):
+    """Request model for filtering by CaracteristiqueTechnique ID with weights."""
+    ids: Dict[str, List[CaracteristiqueConstraint]] = Field(
+        ...,
+        description="Map of Caracteristique ID to list of Constraints with weights. Example: {'29': [{'q_weight': 1.0, 'valeurs_cibles': ['3']}]}",
+    )
+    output_fields: Optional[List[str]] = Field(
+        None,
+        description="List of fields to return in the product data. If None, returns all fields.",
+    )
+    id_categorie: Optional[str] = Field(
+        None,
+        description="Optional Category ID to filter products.",
+    )
+    top_k: int = 50
+    blocked_val: float = -2.0
+    different_val: float = -0.3
 
 
 class BaseNormalizer(BaseModel):
@@ -35,17 +66,23 @@ class BaseNormalizer(BaseModel):
 
 
 class ProduitPayload(BaseNormalizer):
+    model_config = ConfigDict(exclude_none=True)
+
     url: Optional[str] = Field(None, description="URL de la page du produit")
-    nom_produit: str = Field(..., description="Nom commercial du produit")
+    nom_produit: Optional[str] = Field(None, description="Nom commercial du produit")
     domaine: Optional[str] = Field(None, description="Domaine du site web source")
     fournisseur: Optional[str] = Field(
         None, description="Nom du fournisseur proposant le produit"
     )
-    id_fournisseur: str = Field(..., description="ID numérique du fournisseur")
+    id_fournisseur: Optional[str] = Field(
+        None, description="ID numérique du fournisseur"
+    )
     categorie: Optional[str] = Field(
         None, description="Nom de la catégorie principale du produit"
     )
-    id_categorie: str = Field(..., description="ID numérique de la catégorie")
+    id_categorie: Optional[str] = Field(
+        None, description="ID numérique de la catégorie"
+    )
     source: Optional[str] = Field(
         None, description="Origine de la donnée (ex: produits_bo)"
     )
@@ -55,7 +92,9 @@ class ProduitPayload(BaseNormalizer):
     date_ajout: Optional[datetime] = Field(
         None, description="Date d'ajout du produit dans le système"
     )
-    id_produit: str = Field(..., description="ID alphanumérique original du produit")
+    id_produit: Optional[str] = Field(
+        None, description="ID alphanumérique original du produit"
+    )
     sku: Optional[str] = Field(None, description="SKU (Stock Keeping Unit) du produit")
     ean: Optional[str] = Field(
         None, description="Code EAN (European Article Number) du produit"
@@ -75,6 +114,8 @@ class ProduitPayload(BaseNormalizer):
 
 
 class ScoredProduct(ProduitPayload):
+    model_config = ConfigDict(exclude_none=True)
+
     score: float
     details: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -87,8 +128,11 @@ class ScoredProduct(ProduitPayload):
 
 
 class ResultProduct(BaseModel):
+    model_config = ConfigDict(exclude_none=True)
+    
     data: List[ScoredProduct]
     info: Dict[str, Any] = {}
+    top_p: List[ScoredProduct] = []
 
 
 # --- Product Models ---
@@ -151,3 +195,64 @@ class CypherQueryResponse(BaseModel):
     info: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="Execution metadata."
     )
+
+
+
+""" 
+ Modèles pour l'input : Payload d'entrée pour le matching de produits
+ """
+class ScoredProduct(BaseModel):
+    id_produit: str
+    nom_produit: str
+    score: float
+    details: List[Dict[str, Any]] = []
+    info: Dict[str, Any] = {}
+    # Including other product fields as flexible dict to avoid strict schema issues with Neo4j return
+    extra_data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ResultProduct(BaseModel):
+    data: List[ScoredProduct]
+    info: Dict[str, Any] = {}
+
+
+class MetadonneUtilisateurs(BaseModel):
+    pays           : Optional[str] = Field(None, description = "Localisation de l'acheteur")
+    typologie      : Optional[int] = Field(..., description = "Typologie d'entreprise de l'acheteur, 1:professionnel, 2:particulier")
+
+
+class MatchingCaracteristique(BaseModel):
+    id_caracteristique  : int                                        = Field(..., description  = "Id de la caractéristique")
+    unite               : Optional[str]                              = Field(None, description  = "Unité de la caractéristique")
+    valeurs_cibles      : Optional[Union[Dict[str, Any], List[Any]]] = Field(None, description = "Liste des valeurs cibles")
+    valeurs_bloquantes  : Optional[Union[Dict[str, Any], List[Any]]] = Field(None, description = "Liste des valeurs bloquantes")
+
+class MatchingPayload(BaseModel): 
+    id_categorie           : int                           = Field(..., description  = "Identifiant de la catégorie")
+    top_k                  : int                           = Field(15, description   = "Nombre de résultats souhaités")
+    # messages             : str                           = Field(None, description = "Contenu du message de l'acheteuur")
+    metadonnee_utilisateurs: MetadonneUtilisateurs         = Field(default_factory   = list, description = "Métadonnées liées à l'acheteur")
+    liste_caracteristique  : List[MatchingCaracteristique] = Field(..., description  = "Liste des caractéristiques à matcher")
+
+""" 
+Modèles pour le output : Réponse du matching de produits
+ """
+class CaracteristiqueMatching(BaseModel):
+    statut_matching   : int                 = Field(..., description = "statut de la matching, 1: matche, 2: ecart, 3: bloquant, 4: no_renseigne")
+    id_caracteristique: int                 = Field(..., description = "Identifiant de la caractéristique")
+    id_valeur         : Optional[List[int]] = Field(default_factory  = list, description = "Liste des valeurs associées à la caractéristique")
+    poids             : int                 = Field(..., description = "Poids de la caractéristique dans le score")
+
+
+class Produit(BaseModel):
+    rang           : int                           = Field(..., description = "Classement du produit")
+    id_produit     : str                           = Field(..., description = "Identifiant unique du produit")
+    score          : float                         = Field(..., description = "Score de matching")
+    caracteristique: List[CaracteristiqueMatching] = Field(..., description = "Détail du matching par caractéristique")
+    top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
+    # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
+
+class MatchingResponse(BaseModel):
+    liste_produit       : List[Produit] = Field(default_factory  = list, description = "Liste des produits trouvés classés par score")
+    temps_de_traitement : float         = Field(..., description = "Temps pris pour effectuer le matching en secondes")
+    alternative_matching: List[Produit] = Field(default_factory  = list, description = "Liste d'alternatives si applicable")

@@ -12,3 +12,5 @@ fastapi
 uvicorn[standard]
 httpx
 aiofiles
+camoufox[geoip]
+typing-extensions

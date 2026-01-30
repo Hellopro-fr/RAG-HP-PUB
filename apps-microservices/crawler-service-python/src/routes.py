@@ -1,4 +1,4 @@
-from crawlee.crawlers import PlaywrightCrawler, PlaywrightCrawlingContext
+from crawlee.crawlers import BasicCrawlingContext, PlaywrightCrawler, PlaywrightCrawlingContext
 from crawlee.router import Router
 from crawlee import EnqueueStrategy, RequestOptions
 import re
@@ -170,11 +170,59 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
     if response:
         status = response.status
         if status in BLOCKED_STATUS_CODES:
-            log.warning(f"Session retired due to blocked status code: {status}")
+            # Get detailed request info for logging
+            proxy_info = getattr(context, 'proxy_info', None)
+            proxy_url_masked = "No proxy" if not proxy_info else f"Proxy: {proxy_info.url.split('@')[-1] if '@' in proxy_info.url else proxy_info.url}"
+            
+            # Get User-Agent from request headers
+            user_agent = "Unknown"
+            try:
+                headers = await page.evaluate("() => navigator.userAgent")
+                user_agent = headers if headers else "Unknown"
+            except Exception:
+                pass
+            
+            # Definitive block message (not "assuming")
+            log.error(f"🚫 BLOCKED: HTTP {status} on {url}")
+            log.error(f"   → {proxy_url_masked}")
+            log.error(f"   → User-Agent: {user_agent[:80]}...")
+            
+            # Push to error dataset for later analysis
+            try:
+                from crawlee.storages import Dataset
+                from datetime import datetime
+                
+                if CRAWLEE_STORAGE_NAME != '':
+                    error_dataset_name = f"error-{CRAWLEE_STORAGE_NAME}"
+                else:
+                    from urllib.parse import urlparse as url_parse
+                    domain_part = url_parse(url).netloc.replace("www.", "")
+                    safe_domain_name = domain_part.replace('.', '-')
+                    error_dataset_name = f"error-{safe_domain_name}"
+                
+                error_dataset = await Dataset.open(name=error_dataset_name)
+                await error_dataset.push_data({
+                    "id": request.id,
+                    "url": url,
+                    "error_type": "blocked_status",
+                    "status_code": status,
+                    "proxy_used": proxy_url_masked,
+                    "user_agent": user_agent,
+                    "timestamp": datetime.now().isoformat(),
+                    "retry_count": request.retry_count
+                })
+                log.info(f"   → Saved to {error_dataset_name}")
+            except Exception as e:
+                log.warning(f"Failed to save blocked request to error dataset: {e}")
+            
+            # Increment error counter for circuit breaker
+            if stats_manager:
+                await stats_manager.increment("errors")
+            
             if context.session:
                 context.session.retire()
             # Raise an error to trigger Crawlee's retry logic for this request
-            raise Exception(f"Request blocked with status {status}. Retrying with new session.")
+            raise Exception(f"BLOCKED: HTTP {status} on {url}. Session rotated, retrying...")
 
     # --- Check Circuit Breaker (Global thresholds) ---
     if stats_manager:
@@ -191,34 +239,9 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
              return
     # -------------------------------------------------
 
-    # --- Block Resources (Performance & Bandwidth) ---
-    async def route_handler(route):
-        try:
-            req = route.request
-            resource_type = req.resource_type
-            req_url = req.url
-            
-            # Block heavy media and fonts
-            if resource_type in ['image', 'media', 'font', 'stylesheet']:
-                await route.abort()
-                return
-
-            # Block download scripts and binary files
-            if 'download.php' in req_url or 'imp=1' in req_url:
-                await route.abort()
-                return
-            
-            # Block binary extensions
-            if re.search(r'\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$', req_url, re.IGNORECASE):
-                await route.abort()
-                return
-
-            await route.continue_()
-        except Exception:
-            # Ignore route errors (e.g. page closed)
-            pass
-
-    await page.route("**/*", route_handler)
+    # NOTE: Resource blocking (images, fonts, stylesheets, binary files) is now handled
+    # proactively by the pre_navigation_hook in main.py. This ensures resources are
+    # blocked BEFORE navigation starts, which is faster than blocking them reactively.
     # -------------------------------------------------
     
     # Check Manual Stop
@@ -409,57 +432,6 @@ async def request_handler(context: PlaywrightCrawlingContext) -> None:
         
         # Note: We do NOT call enqueue_links here, effectively stopping this branch.
 
-async def error_handler(context: PlaywrightCrawlingContext, error: Exception) -> None:
-    request = context.request
-    log = context.log
-    page = context.page
-    
-    # Accumulate errors in user_data since Request object doesn't have error_messages attribute
-    errors_list = request.user_data.get("error_messages")
-    if not isinstance(errors_list, list):
-        errors_list = []
-    
-    errors_list.append(str(error))
-    request.user_data["error_messages"] = errors_list
-
-    log.error(f"Request {request.url} failed with error messages: {errors_list}")
-    
-    # --- Circuit Breaker: Error Count ---
-    if stats_manager:
-        await stats_manager.increment("errors")
-        if max_errors and await stats_manager.check_threshold("errors", max_errors):
-            log.warning("🛑 Max errors reached. Stopping.")
-            if crawler_instance:
-                crawler_instance.stop()
-    # ------------------------------------
-    
-    if page:
-        try:
-           # Try to get content for analysis
-           content = await process_page(page, request.loaded_url or request.url, log)
-           captcha_detected = await detect_captcha(page, content)
-           
-           if captcha_detected:
-               log.error(f"Captcha detected on {request.url} : {captcha_detected}")
-               
-        except Exception as e:
-           log.error(f"Error processing page for failure analysis: {e}")
-    
-    # Push to error dataset
-    try:
-        from crawlee.storages import Dataset
-        from urllib.parse import urlparse
-        domain_part = urlparse(request.url).netloc.replace("www.", "")
-        safe_domain_name = domain_part.replace('.', '-')
-        
-        error_dataset = await Dataset.open(name=f"error-{safe_domain_name}")
-        await error_dataset.push_data({
-            "id": request.id,
-            "url": request.url,
-            "errors": errors_list
-        })
-    except Exception as e:
-         log.error(f"Failed to push to error dataset: {e}")
 
 def filter_request(request: RequestOptions) -> RequestOptions | Literal['skip']:
     """

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX
 from common_utils.redis import cache_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -44,16 +44,32 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl job not found.")
 
     marker_path = os.path.join(job_storage_path, '_completion_marker.json')
-    final_status = "failed"  # Default for orphans
+    final_status = None  # Will be determined below
 
-    try:
-        if os.path.exists(marker_path):
+    # Check completion marker for finished/failed jobs
+    if os.path.exists(marker_path):
+        try:
             async with aiofiles.open(marker_path, 'r') as f:
                 content = await f.read()
                 marker_data = json.loads(content)
             final_status = marker_data.get("final_status", "failed")
-    except Exception:
-        logger.error(f"Could not parse completion marker for '{crawl_id}'. Defaulting to 'failed'.")
+        except Exception:
+            logger.error(f"Could not parse completion marker for '{crawl_id}'.")
+            final_status = "failed"
+    else:
+        # No completion marker: job may still be running OR crashed without cleanup
+        # Heuristic: if storage was modified recently (< 2 hours), assume running
+        try:
+            storage_mtime = os.path.getmtime(job_storage_path)
+            age_hours = (datetime.now().timestamp() - storage_mtime) / 3600
+            if age_hours < 2:
+                final_status = "running"
+                logger.info(f"No completion marker for '{crawl_id}', but storage modified {age_hours:.1f}h ago. Assuming RUNNING.")
+            else:
+                final_status = "failed"
+                logger.warning(f"No completion marker for '{crawl_id}', storage stale ({age_hours:.1f}h). Assuming FAILED.")
+        except Exception:
+            final_status = "failed"
 
     # Reconstruct metadata by parsing the log file (best effort)
     domain, start_url = "unknown", "http://unknown.com"
@@ -64,13 +80,16 @@ async def get_job_or_recover(crawl_id: str) -> dict:
                 # Read a limited number of lines to avoid loading huge logs
                 line_count = 0
                 async for line in f:
-                    if '"domain":' in line:
-                        match = re.search(r'"domain":\s*"([^"]+)"', line)
+                    # Logic adapted to match typical Node.js logs or arg dumps
+                    if '"domain":' in line or 'domain=' in line:
+                        # Simple extraction attempt
+                        match = re.search(r'domain["=:\s]+"?([^"\s,]+)', line)
                         if match: domain = match.group(1)
-                    if '"site":' in line:
-                        match = re.search(r'"site":\s*"([^"]+)"', line)
+                    if '"site":' in line or 'site=' in line:
+                        match = re.search(r'site["=:\s]+"?([^"\s,]+)', line)
                         if match: start_url = match.group(1)
-                    if (domain != "unknown" and start_url != "http://unknown.com") or line_count > 200:
+                    
+                    if (domain != "unknown" and start_url != "http://unknown.com") or line_count > 300:
                         break
                     line_count += 1
         except Exception as e:
@@ -138,6 +157,7 @@ async def start_new_crawl(payload: CrawlRequest):
     """
     try:
         params = {
+            "crawlMode": payload.crawl_mode.value,
             "typecrawling": payload.type_crawling,
             "method": payload.method,
             "dropdata": payload.drop_data,
@@ -145,13 +165,43 @@ async def start_new_crawl(payload: CrawlRequest):
             "skipdiez": payload.skip_diez,
             "tokeep": ";".join(payload.to_keep) if payload.to_keep else None,
             "toremove": ";".join(payload.to_remove) if payload.to_remove else None,
-            "proxyapify": payload.proxy_apify,
+            "proxyapify": payload.proxy_apify or settings.APIFY_PROXY,
             "bypassquestionmark": payload.bypass_question_mark,
             "bypassdiez": payload.bypass_diez,
             "breaklimit": payload.break_limit,
             "percrawl": payload.per_crawl,
             "perminute": payload.per_minute,
+            "camoufox": payload.camoufox, # Pass Camoufox flag
         }
+
+        # Add update specific params
+        if payload.previous_crawl_id:
+             params["previousCrawlId"] = payload.previous_crawl_id
+        
+        if payload.update_thresholds:
+             if payload.update_thresholds.max_errors is not None:
+                 params["maxErrors"] = payload.update_thresholds.max_errors
+             if payload.update_thresholds.max_redirects is not None:
+                 params["maxRedirects"] = payload.update_thresholds.max_redirects
+             if payload.update_thresholds.max_new_urls is not None:
+                 params["maxNewUrls"] = payload.update_thresholds.max_new_urls
+             
+             # V1 Circuit Breaker Params (Mapped to CLI flags)
+             if payload.update_thresholds.min_sample is not None:
+                 params["minSample"] = payload.update_thresholds.min_sample
+             if payload.update_thresholds.max_error_rate is not None:
+                 params["maxErrorRate"] = payload.update_thresholds.max_error_rate
+             if payload.update_thresholds.max_redirect_rate is not None:
+                 params["maxRedirectRate"] = payload.update_thresholds.max_redirect_rate
+             if payload.update_thresholds.max_growth_rate is not None:
+                 params["maxGrowthRate"] = payload.update_thresholds.max_growth_rate
+             
+             if payload.update_thresholds.max_abs_errors is not None:
+                 params["maxAbsErrors"] = payload.update_thresholds.max_abs_errors
+             if payload.update_thresholds.max_abs_redirects is not None:
+                 params["maxAbsRedirects"] = payload.update_thresholds.max_abs_redirects
+             if payload.update_thresholds.max_abs_new is not None:
+                 params["maxAbsNew"] = payload.update_thresholds.max_abs_new
         
         # The user-provided `id` is now the stable and unique identifier for the crawl job.
         crawl_id = await crawler_manager.start_crawl(
@@ -162,10 +212,12 @@ async def start_new_crawl(payload: CrawlRequest):
             failure_callback_url=str(payload.failure_callback_url) if payload.failure_callback_url else None,
             params=params
         )
+        
         return CrawlResponse(
             message="Crawl job accepted and started.",
             crawl_id=crawl_id
         )
+        
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -181,6 +233,19 @@ async def stop_existing_crawl(crawl_id: str, job_info: dict = Depends(get_job_or
     if not success:
         raise HTTPException(status_code=409, detail=f"Crawl job with ID '{crawl_id}' not found or not in a running state.")
     return StopResponse(message="Stop signal sent to crawl job.", crawl_id=crawl_id)
+
+@router.post("/force-finish/{crawl_id}")
+async def force_finish_crawl(
+    crawl_id: str, 
+    target_status: str = Query("finished", description="Target status: 'finished' or 'failed'"),
+    job_info: dict = Depends(get_job_or_recover)
+):
+    """
+    Force a stuck job to a terminal status.
+    Use this to clean up jobs stuck in 'stopping' or 'running' state without an active process.
+    """
+    result = await crawler_manager.force_finish_crawl(job_info, target_status)
+    return result
 
 @router.get("/status", response_model=Dict[str, CrawlStatus])
 async def get_all_crawl_statuses():
@@ -228,8 +293,7 @@ async def download_crawl_results(
     except HTTPException as e:
         raise e
     except Exception as e:
-        crawl_id = job_info.get('crawl_id', 'unknown')
-        logger.error(f"Error generating results for crawl '{crawl_id}': {e}", exc_info=True)
+        logger.error(f"Error generating results for crawl '{job_info.get('crawl_id')}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate results archive.")
 
 @router.post("/archive/{crawl_id}", response_model=ArchiveResponse)
@@ -258,3 +322,33 @@ async def get_archived_crawl(crawl_id: str):
     Currently returns 501 Not Implemented.
     """
     return await crawler_manager.retrieve_archived_crawl(crawl_id)
+
+@router.post("/reconcile-jobs")
+async def reconcile_jobs():
+    """
+    Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
+    marks them as failed, and corrects the global running jobs counter.
+    Use this to fix counter drift where running_jobs > actual running jobs.
+    """
+    await crawler_manager.reconcile_jobs()
+    return {"status": "reconciliation_complete"}
+
+@router.post("/prune-archives", response_model=PruneResponse)
+async def prune_archives(
+    max_age_hours: int = Query(24, description="Delete archives older than this many hours.")
+):
+    """
+    Manually triggers the cleanup of old archive files from storage.
+    Useful for freeing up disk space on demand.
+    """
+    try:
+        deleted, retained, errors = await crawler_manager.cleanup_archives(max_age_hours)
+        return PruneResponse(
+            deleted_count=deleted,
+            retained_count=retained,
+            errors=errors,
+            message=f"Cleanup complete. Deleted {deleted} files older than {max_age_hours}h."
+        )
+    except Exception as e:
+        logger.error(f"Manual archive prune failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

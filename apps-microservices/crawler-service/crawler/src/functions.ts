@@ -16,22 +16,16 @@ import {
 } from "crawlee";
 import { Page } from "playwright";
 import fs from "fs";
+import path from "path";
 import {
     QueueJsonContent,
     JsonInnerContent,
     UrlParameters,
 } from "./interfaces/queue.js";
+import { context } from "./context.js";
 
 export let stats: StatisticState;
 
-/**
- * Simulates infinite scroll behavior on a page until no new content loads
- * @param page - Playwright Page object
- * @param url - Current page URL for logging
- * @param log - Logger instance
- * @param maxScrolls - Maximum number of scrolls to perform (default: 100)
- * @param timeoutSecs - Maximum time in seconds to spend scrolling (default: 30)
- */
 /**
  * Simulates infinite scroll behavior on a page until no new content loads
  * @param page - Playwright Page object
@@ -49,9 +43,12 @@ export const waitAndScroll = async (
 ) => {
     try {
         // Wait for initial network requests to complete
-        await page.waitForLoadState("networkidle");
+        try {
+            await page.waitForLoadState("networkidle", { timeout: 5000 });
+        } catch (e) {
+            // Ignore timeout on networkidle, proceed to scroll
+        }
 
-        // Track page height to detect when scrolling reaches the bottom
         let previousHeight = await page.evaluate("document.body.scrollHeight");
         let newHeight;
         let scrolls = 0;
@@ -60,19 +57,17 @@ export const waitAndScroll = async (
         do {
             // Check limits
             if (scrolls >= maxScrolls) {
-                log.warning(`Max scrolls (${maxScrolls}) reached for ${url}`);
+                // log.debug(`Max scrolls (${maxScrolls}) reached for ${url}`);
                 break;
             }
 
             if ((Date.now() - startTime) / 1000 > timeoutSecs) {
-                log.warning(`Scroll timeout (${timeoutSecs}s) reached for ${url}`);
+                // log.debug(`Scroll timeout (${timeoutSecs}s) reached for ${url}`);
                 break;
             }
 
             // Scroll to bottom of current page
-            await page.evaluate(
-                "window.scrollTo(0, document.body.scrollHeight)"
-            );
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
 
             // Allow time for new content to load
             await page.waitForTimeout(750);
@@ -114,17 +109,16 @@ export const processPage = async (
     try {
         // First scroll through all content with safety limits
         await waitAndScroll(page, url, log, maxScrolls, timeoutSecs);
-        let content = await page.content();
 
         // Return the complete page HTML after scrolling
-        return content;
+        return await page.content();
     } catch (error) {
         log.error(`Error processPage for ${url}: ${error}`);
         // Return current content even if scrolling failed, to avoid crashing the whole crawl
         try {
             return await page.content();
-        } catch (innerError) {
-            throw new Error(`Critical error processPage : ${error}`);
+        } catch (innerE) {
+            throw new Error(`Critical error processPage : ${innerE}`);
         }
     }
 };
@@ -209,22 +203,19 @@ export const startCrawler = async (
     const PROXY_PASSWORD = apifyProxyPassword;
 
     const proxyUrl = `http://${PROXY_USERNAME}:${PROXY_PASSWORD}@${PROXY_HOST}:${PROXY_HOST_PORT}`;
-    const proxyUrlFR = `http://${PROXY_USERNAME_FR}:${PROXY_PASSWORD}@${PROXY_HOST}:${PROXY_HOST_PORT}`;
-
+    
     let proxyConfiguration: ProxyConfiguration | undefined;
 
-    // CRITICAL MEMORY OPTIMIZATION: Force Crawlee to use disk instead of RAM
-
+    // V3 Optimization: Persist storage to prevent OOM
     let configuration = new Configuration({
-        maxUsedCpuRatio: 0.95,
+        maxUsedCpuRatio: 0.95, // V3 allows more CPU usage
         availableMemoryRatio: 0.95,
-        persistStorage: true         // Force all storage to disk (not just cache)
+        persistStorage: true,
     });
 
     if (PROXY_PASSWORD) {
         proxyConfiguration = new ProxyConfiguration({
             proxyUrls: [proxyUrl],
-            // tieredProxyUrls: [[proxyUrlFR], [proxyUrl]],
         });
     }
 
@@ -234,44 +225,42 @@ export const startCrawler = async (
 
         // RequestQueue
         requestQueue,
-
-        // headless: true,             // Run browser in headless mode
-
-        // Browser fingerprinting configuration to avoid detection
+        
+        // V3 Optimization: Browser Pool settings
         browserPoolOptions: {
-            // useFingerprints: true, // Enable browser fingerprinting (Invalid property in BrowserPoolOptions)
             fingerprintOptions: {
                 fingerprintGeneratorOptions: {
-                    browsers: ["firefox", "chrome", "safari"], // Browser types to rotate
-                    locales: ["fr-FR"], // Use French locale
-                    devices: ["desktop"], // Target device type
-                    operatingSystems: ["windows", "macos", "linux"], // OS to emulate
+                    browsers: ["firefox", "chrome", "safari"],
+                    locales: ["fr-FR"],
+                    devices: ["desktop"],
+                    operatingSystems: ["windows", "macos", "linux"],
                 },
             },
-            retireBrowserAfterPageCount: 5, // Aggressive rotation to prevent memory leaks on unstable sites
+            retireBrowserAfterPageCount: 25, // Prevent memory leaks in Chrome
         },
 
-        // minConcurrency: 1, // Ensure at least one browser is running
-        maxConcurrency: 1, // CRITICAL: Reduced to 2 to prevent OOM on CPU-saturated machines (was 15)
-        navigationTimeoutSecs: 90, // Increased to 90s to tolerate slow sites (was 60s)
-        requestHandlerTimeoutSecs: 120, // Increased to allow for retries and slow processing
+        // maxConcurrency: 1, // V3 default
+        navigationTimeoutSecs: 90,
+        requestHandlerTimeoutSecs: 120,
+        maxRequestRetries: 5, // V3 resilience
 
-        // Session management configuration
-        useSessionPool: true, // Enable session pooling
-        persistCookiesPerSession: true, // Maintain cookies between requests
+        useSessionPool: true,
+        persistCookiesPerSession: true,
         sessionPoolOptions: {
-            blockedStatusCodes: [401, 403, 429, 404, 410, 423, 502, 500, 503], // Status codes to mark session as blocked
+            blockedStatusCodes: [401, 403, 429, 404, 410, 423, 502, 500, 503],
         },
 
-        // Error handling for failed requests
-        failedRequestHandler: async ({ request, log, page }) => {
-            log.error(
-                `Request ${request.url} failed with error : ${String(
-                    request.errorMessages
-                )}`
-            );
+        // V3 Logic: Rich error reporting
+        failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
+            log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
-            // Try getting content for analysis
+            // Accumulate error stats
+            if (context.statsManager) {
+                await context.statsManager.increment("errors");
+            }
+
+            // Detect Captcha
+            let captchaDetected = "";
             try {
                 let content = await processPage(page, request.loadedUrl, log);
 
@@ -286,7 +275,6 @@ export const startCrawler = async (
                  *  Lemin Captcha : Checking if the page contains api.leminnow.com
                  *  DataDome Captcha : Checking if the page contains geo.captcha-delivery.com
                  */
-                let captchaDetected = "";
                 let checkCaptcha = await page.$(".g-recaptcha");
                 if (checkCaptcha) {
                     captchaDetected = "reCAPTCHA V2";
@@ -329,11 +317,17 @@ export const startCrawler = async (
                 );
             }
 
-            let dataset = await Dataset.open(`error-${domain}`);
+            // Save rich error info
+            let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${domain}`;
+            let dataset = await Dataset.open(datasetName);
             await dataset.pushData({
                 id: request.id,
                 url: request.url,
                 errors: request.errorMessages,
+                proxy_used: proxyInfo?.url || "none",
+                status_code: response?.status() || 0,
+                captcha: captchaDetected,
+                timestamp: new Date().toISOString()
             });
         },
 
@@ -346,20 +340,18 @@ export const startCrawler = async (
                         "The crawler has been stopped manually."
                     );
                 }
+                
+                if (context.stopReason) {
+                    await stopCrawler(crawler, `Stopping due to: ${context.stopReason}`);
+                }
 
                 if (!breakLimit) {
-                    // OPTIMIZATION: Use getInfo() to check count without loading data
-                    // This avoids loading the entire dataset into memory on every request
+                    // Optimized check without loading data
                     const dataset = await Dataset.open(domain);
                     const info = await dataset.getInfo();
-                    const count = info ? info.itemCount : 0;
-                    const limitUrls = 5000;
-
-                    if (count >= limitUrls) {
-                        await stopCrawler(
-                            crawler,
-                            `We have reached the limit of ${limitUrls} entries. The crawler will be stopped.`
-                        );
+                    if (info && info.itemCount >= 5000) {
+                        context.stopReason = "limitCrawl";
+                        await stopCrawler(crawler, "Limit of 5000 entries reached.");
                     }
                 }
             },
@@ -367,108 +359,68 @@ export const startCrawler = async (
 
         postNavigationHooks: [
             async () => {
-                const limitQuestionMarkDiez = 50;
-
-                if (
-                    (!bypassQuestionMark && !skipquestionmark) ||
-                    (!bypassDiez && !skipdiez)
-                ) {
-                    // OPTIMIZATION: Load dataset in batches of 1000 instead of loading everything
+                // ... Keep existing logic or optimize if needed. 
+                // V3 uses batch processing here but for now keeping V2 logic slightly modified is safer 
+                // unless we want to do a full rewrite of this hook.
+                // Given the constraints, let's keep it but be aware of memory.
+                
+                // If skipping is enabled, we check counts.
+                if ((!bypassQuestionMark && !skipquestionmark) || (!bypassDiez && !skipdiez)) {
+                    // Use batch processing to check limits (V3 Optimization)
+                    const limitQuestionMarkDiez = 50;
                     const dataset = await Dataset.open(domain);
                     const info = await dataset.getInfo();
-                    const totalItems = info ? info.itemCount : 0;
-
-                    const patternQuestionMark = new RegExp(
-                        `(?:/[^?]*)?\\?.*$`
-                    );
-                    const patternDiez = new RegExp(
-                        `(?:/[^#]*)?#.*$`
-                    );
+                    const total = info?.itemCount || 0;
+                    
                     let countQuestionMark = 0;
                     let countDiez = 0;
                     let offset = 0;
                     const batchSize = 1000;
 
-                    // Iterate through dataset in batches
-                    while (offset < totalItems) {
-                        const batch = await dataset.getData({
-                            offset,
-                            limit: batchSize
-                        });
+                    const patternQuestionMark = new RegExp(`(?:/[^?]*)?\\?.*$`);
+                    const patternDiez = new RegExp(`(?:/[^#]*)?#.*$`);
 
-                        for (const item of batch.items) {
-                            if (patternQuestionMark.test(item.url)) {
-                                countQuestionMark++;
-                            }
-
-                            if (patternDiez.test(item.url)) {
-                                countDiez++;
-                            }
-
-                            // Early exit if limit reached
-                            if (
-                                (!bypassQuestionMark &&
-                                    !skipquestionmark &&
-                                    countQuestionMark >= limitQuestionMarkDiez) ||
-                                (!bypassDiez &&
-                                    !skipdiez &&
-                                    countDiez >= limitQuestionMarkDiez)
-                            ) {
-                                break;
-                            }
+                    while (offset < total) {
+                        const data = await dataset.getData({ offset, limit: batchSize });
+                        for (const item of data.items) {
+                            if (patternQuestionMark.test(item.url)) countQuestionMark++;
+                            if (patternDiez.test(item.url)) countDiez++;
                         }
-
-                        // Check limits after each batch
+                        
                         if (
-                            !bypassQuestionMark &&
-                            !skipquestionmark &&
-                            countQuestionMark >= limitQuestionMarkDiez
-                        ) {
-                            await stopCrawler(
-                                crawler,
-                                `We have reached the limit of ${limitQuestionMarkDiez} entries with a question mark. The crawler will be stopped.`
-                            );
-                            break;
-                        }
-
-                        if (
-                            !bypassDiez &&
-                            !skipdiez &&
-                            countDiez >= limitQuestionMarkDiez
-                        ) {
-                            await stopCrawler(
-                                crawler,
-                                `We have reached the limit of ${limitQuestionMarkDiez} entries with a #. The crawler will be stopped.`
-                            );
-                            break;
-                        }
-
+                            (!bypassQuestionMark &&
+                                !skipquestionmark &&
+                                countQuestionMark >= limitQuestionMarkDiez) ||
+                            (!bypassDiez &&
+                                !skipdiez &&
+                                countDiez >= limitQuestionMarkDiez)
+                        ) break;
                         offset += batchSize;
+                    }
+
+                    if (!bypassQuestionMark && !skipquestionmark && countQuestionMark >= limitQuestionMarkDiez) {
+                        context.stopReason = "limitQuestionMark";
+                        await stopCrawler(crawler, "Limit of 50 question marks reached.");
+                    }
+                    if (!bypassDiez && !skipdiez && countDiez >= limitQuestionMarkDiez) {
+                        context.stopReason = "limitDiez";
+                        await stopCrawler(crawler, "Limit of 50 hashes reached.");
                     }
                 }
             },
         ],
     };
 
-    if (paramPerCrawl > 0) {
-        optionsCrawler.maxRequestsPerCrawl = paramPerCrawl; // Limit total number of requests
-    }
-
-    if (paramPerMinute > 0) {
-        optionsCrawler.maxRequestsPerMinute = paramPerMinute; // Limit requests per minute
-    }
-
-    if (proxyConfiguration) {
-        optionsCrawler.proxyConfiguration = proxyConfiguration;
-    }
+    if (paramPerCrawl > 0) optionsCrawler.maxRequestsPerCrawl = paramPerCrawl;
+    if (paramPerMinute > 0) optionsCrawler.maxRequestsPerMinute = paramPerMinute;
+    if (proxyConfiguration) optionsCrawler.proxyConfiguration = proxyConfiguration;
 
     const crawler = new PlaywrightCrawler(optionsCrawler, configuration);
+    context.crawlerInstance = crawler; // Expose instance for stopping
 
     if (await requestQueue.isEmpty()) {
-        console.log("RequestQueueEmpty");
-        await requestQueue.addRequest({
-            url: startUrl[0],
-        });
+        console.log("RequestQueueEmpty - Adding seed");
+        await requestQueue.addRequest({ url: startUrl[0] });
     } else {
         console.log("RequestQueueNotEmpty");
         const queueInfo = await requestQueue.getInfo();
@@ -478,18 +430,9 @@ export const startCrawler = async (
     await crawler.run();
 
     stats = crawler.stats.state;
-
-    console.log(
-        JSON.stringify(
-            {
-                CrawlingStats: crawler.stats,
-            },
-            null,
-            2
-        )
-    );
-
-    return crawler; // Return crawler instance for cleanup hooks
+    console.log(JSON.stringify({ CrawlingStats: crawler.stats }, null, 2));
+    
+    return crawler;
 };
 
 /**
@@ -510,18 +453,13 @@ export const isStoppedManualy = (name: string, historised: boolean) => {
     if (fs.existsSync(`stopper/${name}.txt`)) {
         if (historised) {
             console.log("The crawler has been stopped manually.");
-            const date = new Date();
-            const dateString = date.toISOString();
-            fs.appendFileSync(
-                `stopper/history-${name}.txt`,
-                `- Date arrêt : ${dateString}\n`
-            );
+            const date = new Date().toISOString();
+            fs.appendFileSync(`stopper/history-${name}.txt`, `- Date arrêt : ${date}\n`);
             fs.unlinkSync(`stopper/${name}.txt`);
         }
         return true;
-    } else {
-        return false;
     }
+    return false;
 };
 
 /**
@@ -536,19 +474,16 @@ export const isStoppedManualy = (name: string, historised: boolean) => {
  * if the file exists, convert the content as array and be the result return
  * if the file doesn't exists, create the directory 'request_urls/{domain}' if it doesn't exists and then create the file named "{domaine}.json" and return []
  * And if historised is true, create a copy of the file as "YYYY-mm-dd-{domaine}.json"  in the same directory and update the the file named "{domaine}.json" as []
- *
+/**
+ * @deprecated Use getUrlsCrawledStreaming() for large history files to avoid OOM.
  */
-
 export const getUrlsCrawled = (
     name: string | undefined,
     historised: boolean,
     dropData: string | undefined = undefined
 ) => {
-    // console.log(`name of domaine ${name}`);
-    // Since process.chdir(storagePath) has been called, we're already in the job directory
-    // So ./request_urls/ will point to /app/storage/{jobId}/request_urls/
-    var folderName = `./request_urls/${name}`;
-    // console.log(`folderName ${folderName}`);
+    // Legacy implementation kept for seeding DedupManager
+    var folderName = `./storage/request_urls/${name}`;
     try {
         if (!fs.existsSync(folderName)) {
             fs.mkdirSync(folderName, { recursive: true });
@@ -556,7 +491,7 @@ export const getUrlsCrawled = (
     } catch (err) {
         console.error("Couldn't create the folder ");
         console.error(err);
-        folderName = "./request_urls";
+        folderName = "./storage/request_urls";
     }
 
     var fileUrls = `${folderName}/${name}.json`;
@@ -564,20 +499,15 @@ export const getUrlsCrawled = (
     if (dropData) {
         // If dropData is set, we want to drop the file
         console.log("Droping the file " + fileUrls);
-        if (fs.existsSync(fileUrls)) {
-            fs.unlinkSync(fileUrls);
-        }
+        if (fs.existsSync(fileUrls)) fs.unlinkSync(fileUrls);
     }
 
     if (fs.existsSync(fileUrls)) {
         let listUrls: Array<string> = [];
         if (historised) {
             console.log("The list of urls crawled have been historised");
-            const date = new Date();
-            const dateString = date.toISOString();
-
-            const fileHistorised = `${folderName}/${dateString.split("T")[0]
-                }-${name}.json`;
+            const dateString = new Date().toISOString().split("T")[0];
+            const fileHistorised = `${folderName}/${dateString}-${name}.json`;
             fs.copyFileSync(fileUrls, fileHistorised);
 
             // update the the file named "{domaine}.json" as []
@@ -586,24 +516,117 @@ export const getUrlsCrawled = (
             // get the content of the file json as array
             const content = fs.readFileSync(fileUrls, "utf8");
             const tempListUrls = JSON.parse(content);
-            if (tempListUrls.length > 0) {
-                listUrls = tempListUrls;
-            }
+            if (tempListUrls.length > 0) listUrls = tempListUrls;
         }
         return listUrls;
     } else {
         console.log("First creation of the file list urls");
-        const fsLog = fs.createWriteStream(fileUrls, {
-            flags: "a", // 'a' means appending
-        });
         fs.writeFileSync(fileUrls, "[]");
         return [];
     }
 };
 
 /**
+ * OOM-safe streaming version of getUrlsCrawled.
+ * Yields URLs one-by-one using incremental JSON parsing.
+ * 
+ * @param {string} name - The name of the domain
+ * @param {boolean} historised - Whether to create a dated backup and clear the file
+ * @param {string | undefined} dropData - If set, delete the file before reading
+ * @returns {AsyncGenerator<string>} Yields URLs one at a time
+ */
+export async function* getUrlsCrawledStreaming(
+    name: string | undefined,
+    historised: boolean,
+    dropData: string | undefined = undefined
+): AsyncGenerator<string> {
+    let folderName = `./storage/request_urls/${name}`;
+    try {
+        if (!fs.existsSync(folderName)) {
+            fs.mkdirSync(folderName, { recursive: true });
+        }
+    } catch (err) {
+        console.error("Couldn't create the folder ");
+        console.error(err);
+        folderName = "./storage/request_urls";
+    }
+
+    const fileUrls = `${folderName}/${name}.json`;
+
+    if (dropData) {
+        console.log("Dropping the file " + fileUrls);
+        if (fs.existsSync(fileUrls)) fs.unlinkSync(fileUrls);
+    }
+
+    if (!fs.existsSync(fileUrls)) {
+        console.log("First creation of the file list urls");
+        fs.writeFileSync(fileUrls, "[]");
+        return;
+    }
+
+    if (historised) {
+        console.log("The list of urls crawled have been historised");
+        const dateString = new Date().toISOString().split("T")[0];
+        const fileHistorised = `${folderName}/${dateString}-${name}.json`;
+        fs.copyFileSync(fileUrls, fileHistorised);
+        fs.writeFileSync(fileUrls, "[]");
+        return;
+    }
+
+    // Stream-parse the JSON array
+    // Read file in chunks and extract strings incrementally
+    const readStream = fs.createReadStream(fileUrls, { encoding: 'utf8' });
+    let buffer = '';
+    let inString = false;
+    let escapeNext = false;
+    let currentString = '';
+
+    for await (const chunk of readStream) {
+        buffer += chunk;
+        
+        for (let i = 0; i < buffer.length; i++) {
+            const char = buffer[i];
+            
+            if (escapeNext) {
+                if (inString) currentString += char;
+                escapeNext = false;
+                continue;
+            }
+            
+            if (char === '\\') {
+                escapeNext = true;
+                if (inString) currentString += char;
+                continue;
+            }
+            
+            if (char === '"') {
+                if (inString) {
+                    // End of string - yield URL
+                    // Decode escape sequences
+                    try {
+                        yield JSON.parse(`"${currentString}"`);
+                    } catch {
+                        yield currentString;
+                    }
+                    currentString = '';
+                }
+                inString = !inString;
+                continue;
+            }
+            
+            if (inString) {
+                currentString += char;
+            }
+        }
+        
+        buffer = '';
+    }
+}
+
+/**
  * Update the content  of the file named "{domaine}.json" in the folder request_urls/{domain}
  *
+ * @deprecated Use updateUrlsCrawledStreaming() for large URL sets to avoid OOM.
  * @param {string} name - The name of the domain
  * @param {Array<string>} listUrls - list of the urls already crawled
  * @returns void
@@ -618,14 +641,209 @@ export const updateUrlsCrawled = (
 ) => {
     var folderName = `./storage/request_urls/${name}`;
     var fileUrls = `${folderName}/${name}.json`;
-    // console.log("listUrls  : ", JSON.stringify(listUrls));
-
-    if (fs.existsSync(fileUrls)) {
-        // console.log("update file ");
-        // update the the file named "{domaine}.json" as listUrls
-        fs.writeFileSync(fileUrls, JSON.stringify(listUrls));
+    
+    // Create folder if it doesn't exist (fix: was missing)
+    if (!fs.existsSync(folderName)) {
+        fs.mkdirSync(folderName, { recursive: true });
     }
+    
+    fs.writeFileSync(fileUrls, JSON.stringify(listUrls));
 };
+
+/**
+ * OOM-safe streaming version of updateUrlsCrawled.
+ * Writes URLs to file one-by-one from an async iterator, avoiding full array in memory.
+ * Uses atomic write pattern (write to .tmp -> rename) to prevent file corruption on crash.
+ *
+ * @param {string} name - The name of the domain
+ * @param {AsyncGenerator<string>} urlIterator - Async iterator yielding URLs
+ * @returns {Promise<number>} Number of URLs written
+ */
+export const updateUrlsCrawledStreaming = async (
+    name: string | undefined,
+    urlIterator: AsyncGenerator<string>
+): Promise<number> => {
+    const folderName = `./storage/request_urls/${name}`;
+    const fileUrls = `${folderName}/${name}.json`;
+    const tempFile = `${fileUrls}.tmp`; // Atomic Write Pattern
+    
+    // Create folder if it doesn't exist
+    if (!fs.existsSync(folderName)) {
+        fs.mkdirSync(folderName, { recursive: true });
+    }
+    
+    // Use streaming write to avoid OOM
+    const stream = fs.createWriteStream(tempFile);
+    stream.write('[');
+    
+    let isFirst = true;
+    let count = 0;
+    
+    for await (const url of urlIterator) {
+        if (!isFirst) stream.write(',');
+        stream.write(JSON.stringify(url));
+        isFirst = false;
+        count++;
+    }
+    
+    stream.write(']');
+    stream.end();
+    
+    // Wait for stream to finish then rename atomically
+    await new Promise<void>((resolve, reject) => {
+        stream.on('finish', () => {
+            try {
+                fs.renameSync(tempFile, fileUrls);
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        });
+        stream.on('error', reject);
+    });
+    
+    console.log(`Persisted ${count} URLs to ${fileUrls}`);
+    return count;
+};
+
+/**
+ * Generator that efficiently yields URLs from a previous crawl's dataset.
+ * Scans the storage directory structure to find the datasets.
+ * 
+ * @param {string} previousId - The ID of the previous crawl job
+ * @param {string} domain - The domain to load URLs for
+ * @returns {AsyncGenerator<string>} Yields URLs one by one
+ */
+export async function* loadDatasetUrlsGenerator(previousId: string, domain: string): AsyncGenerator<string> {
+    // We assume the process is running in storage/{currentId}
+    // So we access storage/{previousId} via relative path from CWD
+    // CWD is typically set in main.ts to the current job's storage path.
+    // So `..` takes us to the parent `storage` dir, then into `{previousId}`.
+    
+    const previousJobPath = path.resolve('..', previousId);
+    
+    if (!fs.existsSync(previousJobPath)) {
+        console.error(`Previous job storage not found at ${previousJobPath}`);
+        return;
+    }
+
+    const crawleeBase = path.join(previousJobPath, "storage", "datasets");
+    let datasetPath = path.join(crawleeBase, domain);
+    
+    // Check for original domain name folder
+    if (!fs.existsSync(datasetPath)) {
+        // Check for sanitized name (dots replaced by hyphens)
+        const sanitized = domain.replace(/\./g, '-');
+        datasetPath = path.join(crawleeBase, sanitized);
+    }
+    
+    if (!fs.existsSync(datasetPath)) {
+        console.error(`Dataset for domain ${domain} not found in ${previousJobPath}`);
+        return;
+    }
+
+    console.log(`Loading URLs from previous dataset: ${datasetPath}`);
+
+    try {
+        const files = await fs.promises.readdir(datasetPath);
+        for (const file of files) {
+            if (file.endsWith('.json') && !file.startsWith('__')) {
+                try {
+                    const filePath = path.join(datasetPath, file);
+                    const content = await fs.promises.readFile(filePath, 'utf-8');
+                    const data = JSON.parse(content);
+                    if (data && data.url) {
+                        yield data.url;
+                    }
+                } catch (e) {
+                    console.warn(`Error reading dataset file ${file}: ${e}`);
+                }
+            }
+        }
+    } catch (e) {
+        console.error(`Error iterating dataset directory: ${e}`);
+    }
+}
+
+/**
+ * Scans the current crawl's dataset folder to rehydrate the Deduplication set.
+ * Used when restarting a crashed crawl to ensure previously discovered URLs are known.
+ * 
+ * @param {string} datasetName - The sanitized name of the dataset folder
+ * @returns {AsyncGenerator<string>} Yields URLs found in the dataset
+ */
+export async function* rehydrateDedupFromDataset(datasetName: string): AsyncGenerator<string> {
+    const datasetPath = path.join(process.cwd(), "storage", "datasets", datasetName);
+    
+    if (!fs.existsSync(datasetPath)) {
+        // Folder might not exist if no pages were saved yet
+        return;
+    }
+
+    console.log(`Rehydrating Dedup from current dataset: ${datasetPath}`);
+
+    try {
+        const files = await fs.promises.readdir(datasetPath);
+        for (const file of files) {
+            if (file.endsWith('.json') && !file.startsWith('__')) {
+                try {
+                    const filePath = path.join(datasetPath, file);
+                    const content = await fs.promises.readFile(filePath, 'utf-8');
+                    const data = JSON.parse(content);
+                    if (data && data.url) {
+                        yield data.url;
+                    }
+                } catch (e) {
+                    // Ignore corrupted files from crash
+                }
+            }
+        }
+    } catch (e) {
+        console.error(`Error iterating dataset directory for rehydration: ${e}`);
+    }
+}
+
+/**
+ * Copies the French detection method file from a previous crawl to the current one.
+ * Used in Update Mode to ensure the method is available before parallel processing starts.
+ * 
+ * @param {string} previousId - The ID of the previous crawl job
+ * @param {string} domain - The domain being crawled
+ * @returns {boolean} True if copy was successful
+ */
+export const copyPreviousMethod = (previousId: string, domain: string): boolean => {
+    try {
+        // Resolve paths. CWD is the current storage root (e.g. storage/update-1)
+        // Previous ID is relative to parent of CWD (../previousId)
+        const previousStoragePath = path.resolve('..', previousId);
+        const previousFile = path.join(previousStoragePath, 'storage', 'miscellaneous', domain, `${domain}.json`);
+
+        const currentStoragePath = process.cwd(); // We are already in the storage folder
+        const currentFolder = path.join(currentStoragePath, 'storage', 'miscellaneous', domain);
+        const currentFile = path.join(currentFolder, `${domain}.json`);
+
+        if (fs.existsSync(previousFile)) {
+            if (!fs.existsSync(currentFolder)) {
+                fs.mkdirSync(currentFolder, { recursive: true });
+            }
+            fs.copyFileSync(previousFile, currentFile);
+            console.log(`Copied French detection method from previous crawl: ${previousId}`);
+            
+            // Pre-load into context to avoid race condition on first reads
+            const content = JSON.parse(fs.readFileSync(currentFile, 'utf-8'));
+            if (content.method) {
+                context.frenchDetectionMethod = content.method;
+                console.log(`Loaded French detection method into memory: ${content.method}`);
+            }
+            return true;
+        } else {
+            console.warn(`Previous French detection method file not found at ${previousFile}`);
+        }
+    } catch (e) {
+        console.error(`Failed to copy previous detection method: ${e}`);
+    }
+    return false;
+}
 
 /**
  * Retrieves scraped data from a named dataset with optional pagination
@@ -668,16 +886,8 @@ export const getScrapingData = async (name: string, countArray: number = 0) => {
         }
 
         let data;
-
-        if (countArray === 0) {
-            data = await dataset.getData();
-        } else {
-            data = await dataset.getData({
-                desc: true,
-                limit: countArray,
-            });
-        }
-
+        if (countArray === 0) data = await dataset.getData();
+        else data = await dataset.getData({ desc: true, limit: countArray });
         return data;
     } catch (error) {
         throw new Error(`Error when getScrapingData : ${error}`);
@@ -718,11 +928,7 @@ export const storeKeyValueStore = async (
 ) => {
     try {
         const data = await getScrapingData(name, countArray);
-
-        if (!domain) {
-            domain = name;
-        }
-
+        if (!domain) domain = name;
         if (data.total) {
             const store = await KeyValueStore.open(domain);
             await store.setValue(name, data.items);
@@ -777,13 +983,9 @@ export const getPathAfterDomain = (
         };
     } catch (error) {
         try {
-            const urlWithProtocol = url.startsWith("http")
-                ? url
-                : `http://${url}`;
+            const urlWithProtocol = url.startsWith("http") ? url : `http://${url}`;
             const urlObject = new URL(urlWithProtocol);
-            const pathWithoutParams = urlObject.pathname
-                .split("?")[0]
-                .split("#")[0];
+            const pathWithoutParams = urlObject.pathname.split("?")[0].split("#")[0];
             return {
                 baseUrl: `${urlObject.protocol}//${urlObject.host}`,
                 path: pathWithoutParams.length > 1 ? pathWithoutParams : "",
@@ -798,9 +1000,7 @@ export const getPathAfterDomain = (
     }
 };
 
-export const rightTrimSlash = (str: string) => {
-    return str.replace(/\/+$/, "");
-};
+export const rightTrimSlash = (str: string) => str.replace(/\/+$/, "");
 
 /**
  * Attaches a file system logger that captures console.log output to both console and file.
@@ -826,8 +1026,7 @@ export const rightTrimSlash = (str: string) => {
  * All subsequent console.log calls will be captured until process ends.
  */
 export const attachFSLogger = (fileName: string) => {
-    // remember the old log method
-    const oldLog = console.log; // remove this line if you only want to log into the file
+    const oldLog = console.log;
     const oldInfo = console.info;
     const oldWarn = console.warn;
     const oldError = console.error;
@@ -836,15 +1035,11 @@ export const attachFSLogger = (fileName: string) => {
     //creer un dossier avec année/mois
     const date = new Date();
     const dateString = date.toISOString().split("T")[0];
-    const folderDate =
-        dateString.split("-")[0] + "/" + dateString.split("-")[1];
-
+    const folderDate = dateString.split("-")[0] + "/" + dateString.split("-")[1];
     let folderName = `./logs/` + folderDate;
 
     try {
-        if (!fs.existsSync(folderName)) {
-            fs.mkdirSync(folderName, { recursive: true });
-        }
+        if (!fs.existsSync(folderName)) fs.mkdirSync(folderName, { recursive: true });
     } catch (err) {
         console.error("Couldn't create the folder " + folderName);
         console.error(err);
@@ -921,10 +1116,7 @@ export const attachFSLogger = (fileName: string) => {
  * stripAnsi({ key: 'value' })               // => '{\n  "key": "value"\n}'
  */
 const stripAnsi = (str: string) => {
-    if (typeof str !== "string") {
-        return JSON.stringify(str, null, 2);
-    }
-
+    if (typeof str !== "string") return JSON.stringify(str, null, 2);
     return str.replace(/\u001b\[\d+m/g, "");
 };
 
@@ -954,9 +1146,8 @@ const stripAnsi = (str: string) => {
  */
 export const reclaimFailedRequest = async (name: string) => {
     const datasError = await getScrapingData(`error-${name}`);
-
-    for await (const data of datasError.items) {
-        const requestID = data["id"];
+    for (const item of datasError.items) {
+        const requestID = item["id"];
         const requestQueue = await RequestQueue.open(name);
         let request = await requestQueue.getRequest(requestID);
 
@@ -972,16 +1163,19 @@ export const reclaimFailedRequest = async (name: string) => {
     await dropDataset(`error-${name}`);
 };
 
+// Updated: Save title
 export const routerDefaultHandler = async (
     request: LoadedRequest<Request<Dictionary>>,
     requestQueue: RequestQueue,
     url: string,
     content: string,
-    domain: string | undefined
+    domain: string | undefined,
+    title: string = ""
 ) => {
     let results = {
         url,
         content,
+        title
     };
 
     let dataset = await Dataset.open(domain);
@@ -993,23 +1187,16 @@ export const routerDefaultHandler = async (
 
 export const stopCrawler = async (crawler: PlaywrightCrawler, message: string) => {
     crawler.log.info(message);
-    crawler.autoscaledPool
-        ?.pause()
-        .then(async () => crawler.autoscaledPool?.abort())
-        .then(() =>
-            crawler.log.info("The crawler has been gracefully stopped.")
-        )
-        .catch((error) => {
-            crawler.log.error(
-                "An error occurred when stopping the crawler : ",
-                error
-            );
-        });
+    try {
+        await crawler.autoscaledPool?.pause();
+        await crawler.autoscaledPool?.abort();
+        crawler.log.info("The crawler has been gracefully stopped.");
+    } catch (error) {
+        crawler.log.error("An error occurred when stopping the crawler : ", { error: error instanceof Error ? error.message : String(error) });
+    }
 };
 
-export const escapeRegExp = (string: string) => {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
-};
+export const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Gets all JSON files from a specific request queue folder in storage/request_queues
@@ -1029,21 +1216,12 @@ export const escapeRegExp = (string: string) => {
 export const getAllRequestQueues = (queueName: string): string[] => {
     try {
         const requestQueuesPath = `storage/request_queues/${queueName}`;
-        if (!fs.existsSync(requestQueuesPath)) {
-            return [];
-        }
-
-        // Get all files and filter for .json files, then map to full paths
-        const queueFiles = fs
-            .readdirSync(requestQueuesPath)
+        if (!fs.existsSync(requestQueuesPath)) return [];
+        return fs.readdirSync(requestQueuesPath)
             .filter((file) => file.endsWith(".json"))
             .map((file) => `${requestQueuesPath}/${file}`);
-
-        return queueFiles;
     } catch (error) {
-        throw new Error(
-            `Error getAllRequestQueues for queue ${queueName}: ${error}`
-        );
+        throw new Error(`Error getAllRequestQueues for queue ${queueName}: ${error}`);
     }
 };
 
@@ -1076,11 +1254,7 @@ export const processUrl = (
 ): string => {
     // Default parameters
     const defaultParametersToKeep = ["page", "id", "lang"];
-
-    // Validate parameters
-    if (parameters.toKeep && parameters.toRemove) {
-        throw new Error("Cannot specify both toKeep and toRemove parameters");
-    }
+    if (parameters.toKeep && parameters.toRemove) throw new Error("Cannot specify both toKeep and toRemove parameters");
 
     let processedUrl = url;
 
@@ -1092,9 +1266,7 @@ export const processUrl = (
         const [base, hash] = processedUrl.split("#");
         baseUrlPart = base;
         hashPart = "#" + hash;
-        if (skipDiez) {
-            hashPart = "";
-        }
+        if (skipDiez) hashPart = "";
     }
 
     // Process URL if it contains ? and skipQuestionMark is true
@@ -1109,28 +1281,21 @@ export const processUrl = (
             if (parameters.toKeep) {
                 // Keep only specified parameters
                 for (const [key, value] of entries) {
-                    if (parameters.toKeep.includes(key)) {
-                        filteredParams.append(key, value);
-                    }
+                    if (parameters.toKeep.includes(key)) filteredParams.append(key, value);
                 }
             } else if (parameters.toRemove) {
                 // Remove specified parameters
                 for (const [key, value] of entries) {
-                    if (!parameters.toRemove.includes(key)) {
-                        filteredParams.append(key, value);
-                    }
+                    if (!parameters.toRemove.includes(key)) filteredParams.append(key, value);
                 }
             }
         } else {
             // Use default parameters
             const entries = Array.from(params.entries());
             for (const [key, value] of entries) {
-                if (defaultParametersToKeep.includes(key)) {
-                    filteredParams.append(key, value);
-                }
+                if (defaultParametersToKeep.includes(key)) filteredParams.append(key, value);
             }
         }
-
         const newQueryString = filteredParams.toString();
         baseUrlPart = newQueryString ? `${baseUrl}?${newQueryString}` : baseUrl;
     }
@@ -1183,21 +1348,13 @@ export const parseJsonFiles = (
             // Skip if orderNo is null
             if (!jsonContent.orderNo) continue;
 
-            const processedUrl = processUrl(
-                jsonContent.url,
-                skipQuestionMark,
-                skipDiez,
-                parameters
-            );
+            const processedUrl = processUrl(jsonContent.url, skipQuestionMark, skipDiez, parameters);
 
             // If URL was modified, update both the root URL and the URL in the nested JSON
             if (processedUrl !== jsonContent.url) {
                 jsonContent.url = processedUrl;
 
-                // Parse and update the nested JSON
-                const innerJson = JSON.parse(
-                    jsonContent.json
-                ) as JsonInnerContent;
+                const innerJson = JSON.parse(jsonContent.json) as JsonInnerContent;
                 innerJson.url = processedUrl;
                 jsonContent.json = JSON.stringify(innerJson);
 
@@ -1222,34 +1379,38 @@ export const manageFrenchDetectionMethod = (
     checkFrenchMethod: string | null = null
 ): string | Error => {
     try {
+        // Sync context if provided
+        if (checkFrenchMethod) {
+            context.frenchDetectionMethod = checkFrenchMethod;
+        }
+
+        // If we have it in context and not writing new one, return it to save disk IO
+        if (!checkFrenchMethod && context.frenchDetectionMethod) {
+            return context.frenchDetectionMethod;
+        }
+
         const storagePath = `./storage/miscellaneous/${name}`;
         const filePath = `${storagePath}/${name}.json`;
 
         // If checkFrenchMethod is provided, we want to store it
         if (checkFrenchMethod) {
             // Create directories if they don't exist
-            if (!fs.existsSync(storagePath)) {
-                fs.mkdirSync(storagePath, { recursive: true });
-            }
+            if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true });
 
             // Store new method (overwrite if exists)
-            fs.writeFileSync(
-                filePath,
-                JSON.stringify({ method: checkFrenchMethod }, null, 2)
-            );
+            fs.writeFileSync(filePath, JSON.stringify({ method: checkFrenchMethod }, null, 2));
             return checkFrenchMethod;
         }
 
         // If no checkFrenchMethod provided, try to read existing file
         if (fs.existsSync(filePath)) {
             const content = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+            context.frenchDetectionMethod = content.method; // Update cache
             return content.method;
         }
 
         // If no file and no method provided, return error
-        return new Error(
-            `No French detection method stored for domain ${name}`
-        );
+        return new Error(`No French detection method stored for domain ${name}`);
     } catch (error) {
         return new Error(`Error managing French detection method: ${error}`);
     }

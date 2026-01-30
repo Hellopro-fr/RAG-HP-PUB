@@ -265,7 +265,28 @@ services:
       - .env
     networks:
       - services-net
-      - graph-rag-net
+      # - graph-rag-net
+    logging: *logging_defaults
+
+  graph-rag-dlq-manager-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/graph-rag-dlq-manager/Dockerfile
+    container_name: graph-rag-dlq-manager-service
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "8520:8520"
+    environment:
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - RABBITMQ_API_URL=${RABBITMQ_API_URL}
+      - RABBITMQ_API_USER=${RABBITMQ_API_USER}
+      - RABBITMQ_API_PASSWORD=${RABBITMQ_API_PASSWORD}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+    env_file:
+      - .env
+    networks:
+      - services-net
     logging: *logging_defaults
 
   api-recherche-service:
@@ -1069,9 +1090,10 @@ services:
 
   crawler-service:
     build:
-      context: ./apps-microservices/crawler-service-python/
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps-microservices/crawler-service/Dockerfile
     profiles: ["crawling"]
+    init: true
     # The 'ports' mapping has been removed to prevent conflicts.
     # We now 'expose' the port, making it accessible to other services
     # on the Docker network (like our reverse-proxy), but NOT to the host.
@@ -1079,7 +1101,7 @@ services:
       - "8503"
     volumes:
       - crawler_data:/app/storage
-      - ./apps-microservices/crawler-service-python/crawler_archives:/app/archives
+      - ./apps-microservices/crawler-service/crawler_archives:/app/archives
     env_file:
       - .env
     environment:
@@ -1143,7 +1165,7 @@ services:
       context: ./apps-microservices/crawler-monitor-backend
       dockerfile: Dockerfile
     container_name: crawler-monitor-backend
-    profiles: ["crawling"]
+    profiles: ["disabled"]
     restart: unless-stopped
     expose:
       - "3001"
@@ -1163,7 +1185,7 @@ services:
       context: ./apps-microservices/crawler-monitor-frontend
       dockerfile: Dockerfile
     container_name: crawler-monitor-frontend
-    profiles: ["crawling"]
+    profiles: ["disabled"]
     restart: unless-stopped
     ports:
       - "3002:8099" # Exposé sur le port 3002
@@ -1404,6 +1426,26 @@ services:
     networks:
       - services-net
 
+  graph-rag-normalize-unite-retry-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-normalize-unite-retry-processor/Dockerfile
+    profiles: ["graph-rag"]
+    expose:
+      - "8564"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      EMBEDDING_API_URL: ${EMBEDDING_API_URL}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      PROMETHEUS_PORT: 8564
+    deploy:
+      replicas: 1
+    networks:
+      - services-net
+
   graph-rag-semantique-vigil-processor:
     build:
       context: .
@@ -1536,6 +1578,38 @@ services:
     ports:
       - "8525:8525"
       - "8565:8565"
+    environment:
+      API_PORT: 8525
+      EMBEDDING_SERVICE_URL: embedding-model-service:50052
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PROMETHEUS_PORT: 8565
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: ${NEO4J_DATABASE}
+    # depends_on:
+    #   # - embedding-model-service
+    #   - graph-rag-milvus-service
+    #   - graph-rag-database-connector-service
+    #   - graph-rag-normalize-unite-service
+    networks:
+      - services-net
+      - services-ext-net
+      - services-global-net
+
+  graph-rag-api-recherche-service-debug:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-api-recherche-service-debug/Dockerfile
+    profiles: ["graph-rag-api"]
+    ports:
+      - "8526:8526"
+      - "8566:8566"
     environment:
       API_PORT: 8525
       EMBEDDING_SERVICE_URL: embedding-model-service:50052

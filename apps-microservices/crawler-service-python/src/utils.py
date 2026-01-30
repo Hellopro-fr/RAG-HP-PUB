@@ -20,11 +20,12 @@ async def wait_and_scroll(
     page: Page,
     url: str,
     log: logging.Logger,
-    max_scrolls: int = 100,
-    timeout_secs: int = 30
+    max_scrolls: int = 15,  # Reduced from 100 - most content loads in first few scrolls
+    timeout_secs: int = 10  # Reduced from 30 - prevents hanging on slow pages
 ) -> None:
     """
     Simulates infinite scroll behavior on a page until no new content loads.
+    Optimized for speed with reduced defaults.
     
     Args:
         page: Playwright Page object
@@ -49,18 +50,18 @@ async def wait_and_scroll(
         while True:
             # Check limits
             if scrolls >= max_scrolls:
-                log.warning(f"Max scrolls ({max_scrolls}) reached for {url}")
+                log.debug(f"Max scrolls ({max_scrolls}) reached for {url}")
                 break
 
             if (time.time() - start_time) > timeout_secs:
-                log.warning(f"Scroll timeout ({timeout_secs}s) reached for {url}")
+                log.debug(f"Scroll timeout ({timeout_secs}s) reached for {url}")
                 break
 
             # Scroll to bottom
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
 
-            # Allow time for new content to load
-            await asyncio.sleep(0.75)
+            # Reduced from 0.75s to 0.3s - faster scrolling
+            await asyncio.sleep(0.3)
 
             # Get new page height
             new_height = await page.evaluate("document.body.scrollHeight")
@@ -175,10 +176,37 @@ async def drop_dataset(name: str):
     """
     Drops (deletes) an existing dataset by its name.
     Useful when you need to start fresh before a new crawling session.
+    It manually deletes the directory if using local storage to ensure
+    both symlinks and real directories are handled.
     """
     try:
-        dataset_to_drop = await Dataset.open(name=name)
-        await dataset_to_drop.drop()
+        # In Crawlee Python, we might need to access storage client directly or just remove the folder.
+        # We will remove the directory manually if it's local storage.
+        storage_path = os.getenv("CRAWLEE_STORAGE_DIR", "storage")
+        
+        # Paths to clean
+        targets = [
+            os.path.join(storage_path, "datasets", name),
+            os.path.join(storage_path, "request_queues", name),
+            os.path.join(storage_path, "key_value_stores", name), # Also clean KVS
+            # Also clean request_urls (check both root and inside storage for safety/consistency)
+            os.path.join("request_urls", name),
+            os.path.join(storage_path, "request_urls", name)
+        ]
+        
+        for target_path in targets:
+            if os.path.exists(target_path) or os.path.islink(target_path):
+                import shutil
+                try:
+                    if os.path.islink(target_path):
+                        os.unlink(target_path)
+                        logger.info(f"Unlinked symlink: {target_path}")
+                    else:
+                        shutil.rmtree(target_path)
+                        logger.info(f"Removed directory: {target_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove {target_path}: {e}")
+            
     except Exception as e:
         logger.error(f"Error dropDataset: {e}")
 
@@ -676,6 +704,8 @@ def sanitize_queue_on_disk(
                         if new_url != original_url:
                             # Update outer URL
                             data['url'] = new_url
+                            # FIX: Update outer UniqueKey
+                            data['uniqueKey'] = new_url
                             
                             # Update nested json string if present (Crawlee internal)
                             if 'json' in data:
@@ -683,8 +713,12 @@ def sanitize_queue_on_disk(
                                     inner = json.loads(data['json'])
                                     if 'url' in inner:
                                         inner['url'] = new_url
-                                        # Re-serialize inner JSON
-                                        data['json'] = json.dumps(inner)
+                                    # FIX: Update inner UniqueKey
+                                    if 'uniqueKey' in inner:
+                                        inner['uniqueKey'] = new_url
+                                    
+                                    # Re-serialize inner JSON
+                                    data['json'] = json.dumps(inner)
                                 except Exception:
                                     pass # Ignore inner parsing errors if format differs
 
