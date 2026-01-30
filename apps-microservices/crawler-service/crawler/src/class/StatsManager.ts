@@ -45,12 +45,21 @@ export class StatsManager {
         }
     }
 
+    async getValue(metric: string): Promise<number> {
+        try {
+            const valStr = await this.redis.hGet(this.key, metric);
+            return valStr ? parseInt(valStr, 10) : 0;
+        } catch (e) {
+            console.error(`Stats GetValue Error: ${e}`);
+            return 0;
+        }
+    }
+
     async checkThreshold(metric: string, limit: number): Promise<boolean> {
         if (!limit || limit <= 0) return false;
         
         try {
-            const valStr = await this.redis.hGet(this.key, metric);
-            const val = valStr ? parseInt(valStr, 10) : 0;
+            const val = await this.getValue(metric);
             
             if (val >= limit) {
                 console.warn(`THRESHOLD BREACHED: ${metric} (${val}) >= limit (${limit})`);

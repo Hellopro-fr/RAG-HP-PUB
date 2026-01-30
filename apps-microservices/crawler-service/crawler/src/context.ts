@@ -13,14 +13,32 @@ export const context = {
         domain: "",
         baseUrl: "",
         crawleeStorageName: "",
-        // Filtering Options
+        // Filtering
         skipQuestionMark: false,
         skipDiez: false,
         bypassQuestionMark: false,
         bypassDiez: false,
         toKeep: [] as string[],
         toRemove: [] as string[],
-        breakLimit: false
+        breakLimit: false,
+        
+        // V1 Update Logic: Dual-Mode Circuit Breaker
+        circuitBreaker: {
+            enabled: false,
+            isMicroMode: false,
+            previousTotal: 0,
+            
+            // Standard Mode Settings (> 50 URLs)
+            minSample: 50,
+            maxErrorRate: 0.15,     // 15%
+            maxRedirectRate: 0.30,  // 30%
+            maxGrowthRate: 0.50,    // 50%
+            
+            // Micro Mode Settings (<= 50 URLs)
+            maxAbsErrors: 5,
+            maxAbsRedirects: 10,
+            maxAbsNew: 20
+        }
     },
     stopReason: ""
 };

@@ -28,7 +28,6 @@ async def get_job_or_recover(crawl_id: str) -> dict:
     If the job is not found in Redis, it attempts to recover it from
     the persistent storage and re-index it.
     Raises a 404 HTTPException if the job cannot be found in Redis or on disk.
-    Recover from storage if missing from Redis (V3 Logic).
     """
     job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
     job_info = await cache_service.get_json(job_key)
@@ -45,8 +44,9 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl job not found.")
 
     marker_path = os.path.join(job_storage_path, '_completion_marker.json')
-    final_status = None 
+    final_status = None  # Will be determined below
 
+    # Check completion marker for finished/failed jobs
     if os.path.exists(marker_path):
         try:
             async with aiofiles.open(marker_path, 'r') as f:
@@ -57,7 +57,8 @@ async def get_job_or_recover(crawl_id: str) -> dict:
             logger.error(f"Could not parse completion marker for '{crawl_id}'.")
             final_status = "failed"
     else:
-        # V3 Heuristic: Check modification time
+        # No completion marker: job may still be running OR crashed without cleanup
+        # Heuristic: if storage was modified recently (< 2 hours), assume running
         try:
             storage_mtime = os.path.getmtime(job_storage_path)
             age_hours = (datetime.now().timestamp() - storage_mtime) / 3600
@@ -70,7 +71,7 @@ async def get_job_or_recover(crawl_id: str) -> dict:
         except Exception:
             final_status = "failed"
 
-    # Reconstruct metadata by parsing the log file (V3 Logic)
+    # Reconstruct metadata by parsing the log file (best effort)
     domain, start_url = "unknown", "http://unknown.com"
     log_path = os.path.join(job_storage_path, 'crawler.log')
     if os.path.exists(log_path):
@@ -170,21 +171,39 @@ async def start_new_crawl(payload: CrawlRequest):
             "breaklimit": payload.break_limit,
             "percrawl": payload.per_crawl,
             "perminute": payload.per_minute,
-            "camoufox": payload.camoufox, # Ported V3 param
+            "camoufox": payload.camoufox, # Pass Camoufox flag
         }
 
-        # Ported V3 Params
+        # Add update specific params
         if payload.previous_crawl_id:
              params["previousCrawlId"] = payload.previous_crawl_id
         
         if payload.update_thresholds:
-             if payload.update_thresholds.max_errors:
+             if payload.update_thresholds.max_errors is not None:
                  params["maxErrors"] = payload.update_thresholds.max_errors
-             if payload.update_thresholds.max_redirects:
+             if payload.update_thresholds.max_redirects is not None:
                  params["maxRedirects"] = payload.update_thresholds.max_redirects
-             if payload.update_thresholds.max_new_urls:
+             if payload.update_thresholds.max_new_urls is not None:
                  params["maxNewUrls"] = payload.update_thresholds.max_new_urls
+             
+             # V1 Circuit Breaker Params (Mapped to CLI flags)
+             if payload.update_thresholds.min_sample is not None:
+                 params["minSample"] = payload.update_thresholds.min_sample
+             if payload.update_thresholds.max_error_rate is not None:
+                 params["maxErrorRate"] = payload.update_thresholds.max_error_rate
+             if payload.update_thresholds.max_redirect_rate is not None:
+                 params["maxRedirectRate"] = payload.update_thresholds.max_redirect_rate
+             if payload.update_thresholds.max_growth_rate is not None:
+                 params["maxGrowthRate"] = payload.update_thresholds.max_growth_rate
+             
+             if payload.update_thresholds.max_abs_errors is not None:
+                 params["maxAbsErrors"] = payload.update_thresholds.max_abs_errors
+             if payload.update_thresholds.max_abs_redirects is not None:
+                 params["maxAbsRedirects"] = payload.update_thresholds.max_abs_redirects
+             if payload.update_thresholds.max_abs_new is not None:
+                 params["maxAbsNew"] = payload.update_thresholds.max_abs_new
         
+        # The user-provided `id` is now the stable and unique identifier for the crawl job.
         crawl_id = await crawler_manager.start_crawl(
             domain=payload.domain,
             start_url=str(payload.start_url),
@@ -193,10 +212,12 @@ async def start_new_crawl(payload: CrawlRequest):
             failure_callback_url=str(payload.failure_callback_url) if payload.failure_callback_url else None,
             params=params
         )
+        
         return CrawlResponse(
             message="Crawl job accepted and started.",
             crawl_id=crawl_id
         )
+        
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -219,7 +240,10 @@ async def force_finish_crawl(
     target_status: str = Query("finished", description="Target status: 'finished' or 'failed'"),
     job_info: dict = Depends(get_job_or_recover)
 ):
-    """Force a stuck job to a terminal status (V3 Feature)."""
+    """
+    Force a stuck job to a terminal status.
+    Use this to clean up jobs stuck in 'stopping' or 'running' state without an active process.
+    """
     result = await crawler_manager.force_finish_crawl(job_info, target_status)
     return result
 
@@ -281,7 +305,10 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
     """
     try:
         gcs_url = await crawler_manager.archive_crawl(job_info)
-        return ArchiveResponse(message="Crawl archived successfully.", gcs_url=gcs_url)
+        return ArchiveResponse(
+            message="Crawl archived successfully.",
+            gcs_url=gcs_url
+        )
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -298,7 +325,11 @@ async def get_archived_crawl(crawl_id: str):
 
 @router.post("/reconcile-jobs")
 async def reconcile_jobs():
-    """Manually trigger the Redis running job counter reconciliation (V3 Feature)."""
+    """
+    Scans all jobs in Redis, identifies stale 'running' jobs (missing heartbeats),
+    marks them as failed, and corrects the global running jobs counter.
+    Use this to fix counter drift where running_jobs > actual running jobs.
+    """
     await crawler_manager.reconcile_jobs()
     return {"status": "reconciliation_complete"}
 
@@ -306,7 +337,10 @@ async def reconcile_jobs():
 async def prune_archives(
     max_age_hours: int = Query(24, description="Delete archives older than this many hours.")
 ):
-    """Manually trigger archive cleanup (V3 Feature)."""
+    """
+    Manually triggers the cleanup of old archive files from storage.
+    Useful for freeing up disk space on demand.
+    """
     try:
         deleted, retained, errors = await crawler_manager.cleanup_archives(max_age_hours)
         return PruneResponse(

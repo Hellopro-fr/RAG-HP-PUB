@@ -106,16 +106,61 @@ router.addDefaultHandler(
 
         // --- Circuit Breaker Check (Global thresholds) ---
         if (context.statsManager) {
-            let breached = false;
-            if (context.config.maxErrors && await context.statsManager.checkThreshold("errors", context.config.maxErrors)) breached = true;
-            if (context.config.maxRedirects && await context.statsManager.checkThreshold("redirects", context.config.maxRedirects)) breached = true;
-            if (context.config.maxNewUrls && await context.statsManager.checkThreshold("new_urls", context.config.maxNewUrls)) breached = true;
+            // Track total processed for percentages (Increment for every handled page)
+            // Note: This metric is cumulative across restarts via StatsManager
+            await context.statsManager.increment("processed");
+            
+            const cb = context.config.circuitBreaker;
+            
+            if (cb && cb.enabled) {
+                const errors = await context.statsManager.getValue("errors");
+                const redirects = await context.statsManager.getValue("redirects");
+                const newUrls = await context.statsManager.getValue("new_urls");
+                const processed = await context.statsManager.getValue("processed");
+                
+                let abortReason = "";
 
-            if (breached) {
-                log.warning("🛑 Circuit breaker triggered! Stopping crawler.");
-                context.stopReason = "limitErrors"; 
-                await stopCrawler(crawler, "Circuit breaker triggered");
-                return;
+                if (cb.isMicroMode) {
+                    // --- MICRO MODE (Absolute Limits) ---
+                    if (errors >= cb.maxAbsErrors) abortReason = `Too many errors for small site (${errors} >= ${cb.maxAbsErrors})`;
+                    else if (redirects >= cb.maxAbsRedirects) abortReason = `Too many redirects for small site (${redirects} >= ${cb.maxAbsRedirects})`;
+                    else if (newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
+                } else {
+                    // --- STANDARD MODE (Rate Limits) ---
+                    if (processed >= cb.minSample) {
+                        const errorRate = errors / processed;
+                        const redirectRate = redirects / processed;
+                        
+                        if (errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
+                        else if (redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
+                        
+                        // Check growth relative to previous total
+                        if (cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
+                            abortReason = `Site growth too fast (> ${(cb.maxGrowthRate*100)}% of previous size)`;
+                        }
+                    }
+                }
+
+                if (abortReason) {
+                    log.warning(`🛑 Circuit breaker triggered: ${abortReason}`);
+                    context.stopReason = "circuitBreaker"; 
+                    await stopCrawler(crawler, `Circuit breaker: ${abortReason}`);
+                    return;
+                }
+            } else {
+                // Fallback to legacy global config checks if V1 breaker is disabled
+                // (Preserves backward compatibility with legacy args like --maxErrors=100)
+                let breached = false;
+                if (context.config.maxErrors && await context.statsManager.checkThreshold("errors", context.config.maxErrors)) breached = true;
+                if (context.config.maxRedirects && await context.statsManager.checkThreshold("redirects", context.config.maxRedirects)) breached = true;
+                if (context.config.maxNewUrls && await context.statsManager.checkThreshold("new_urls", context.config.maxNewUrls)) breached = true;
+
+                if (breached) {
+                    log.warning("🛑 Legacy Circuit breaker triggered! Stopping crawler.");
+                    context.stopReason = "limitErrors"; 
+                    await stopCrawler(crawler, "Legacy Circuit breaker triggered");
+                    return;
+                }
             }
         }
 
@@ -170,17 +215,9 @@ router.addDefaultHandler(
                 if (finalUrl !== originalUrl) {
                     log.info(`Redirect detected: ${request.url} -> ${request.loadedUrl}`);
                     await context.statsManager.increment("redirects");
-                    
-                    if (context.config.maxRedirects && await context.statsManager.checkThreshold("redirects", context.config.maxRedirects)) {
-                        log.warning("🛑 Max redirects reached. Stopping.");
-                        context.stopReason = "limitRedirects";
-                        await stopCrawler(crawler, "Max redirects limit reached.");
-                        return;
-                    }
                 }
             }
 
-            // Check if this is the main site URL
             const isMainSite = request.url === site;
             let frenchDetectionMethod: string | Error;
             let isEnqueuingLinks = false;

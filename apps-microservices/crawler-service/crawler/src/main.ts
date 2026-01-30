@@ -52,7 +52,8 @@ const method = getArg('method', 'npm_config_method');
 const apifyProxyPassword = getArg('proxyapify', 'npm_config_proxyapify');
 
 // Local vars for parsing, stored in context
-const breakLimit = (getArg('breaklimit', 'npm_config_breaklimit') || 'false').toLowerCase() === 'true';
+// const breakLimit = (getArg('breaklimit', 'npm_config_breaklimit') || 'false').toLowerCase() === 'true';
+const breakLimit = true; // TODO: Enforce break limit of 5000 URLs to be crawled. Find a more elegant way to handle this
 const dropData = (getArg('dropdata', 'npm_config_dropdata') || 'false').toLowerCase() === 'true';
 const skipquestionmark = (getArg('skipquestionmark', 'npm_config_skipquestionmark') || 'false').toLowerCase() === 'true';
 const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerCase() === 'true';
@@ -71,7 +72,16 @@ const maxErrors = Number(getArg('maxErrors', 'npm_config_maxerrors')) || 0;
 const maxRedirects = Number(getArg('maxRedirects', 'npm_config_maxredirects')) || 0;
 const maxNewUrls = Number(getArg('maxNewUrls', 'npm_config_maxnewurls')) || 0;
 
-// Setup Context immediately to resolve circular dependencies
+// V1 Circuit Breaker / Update Logic Params (with defaults)
+const minSample = Number(getArg('minSample', 'npm_config_minsample')) || 50;
+const maxErrorRate = Number(getArg('maxErrorRate', 'npm_config_maxerrorrate')) || 0.15;
+const maxRedirectRate = Number(getArg('maxRedirectRate', 'npm_config_maxredirectrate')) || 0.30;
+const maxGrowthRate = Number(getArg('maxGrowthRate', 'npm_config_maxgrowthrate')) || 0.50;
+const maxAbsErrors = Number(getArg('maxAbsErrors', 'npm_config_maxabserrors')) || 5;
+const maxAbsRedirects = Number(getArg('maxAbsRedirects', 'npm_config_maxabsredirects')) || 10;
+const maxAbsNew = Number(getArg('maxAbsNew', 'npm_config_maxabsnew')) || 20;
+
+// Setup Context immediately
 context.config = {
     maxErrors,
     maxRedirects,
@@ -86,7 +96,19 @@ context.config = {
     bypassDiez: bypassDiez,
     toKeep: toKeep,
     toRemove: toRemove,
-    breakLimit: breakLimit
+    breakLimit: breakLimit,
+    circuitBreaker: {
+        enabled: false,
+        isMicroMode: false,
+        previousTotal: 0,
+        minSample: minSample,
+        maxErrorRate: maxErrorRate,
+        maxRedirectRate: maxRedirectRate,
+        maxGrowthRate: maxGrowthRate,
+        maxAbsErrors: maxAbsErrors,
+        maxAbsRedirects: maxAbsRedirects,
+        maxAbsNew: maxAbsNew
+    }
 };
 
 if (!id || !domain || !site || !storagePath || !callbackUrl) {
@@ -138,7 +160,6 @@ try {
     const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
 
     if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
-        // cgroups v2 (Docker with cgroups v2)
         totalMem = parseInt(cgroupMemMax.trim());
         const usedMem = parseInt(cgroupMemCurrent.trim());
         freeMem = totalMem - usedMem;
@@ -361,6 +382,22 @@ if (crawlMode === 'update') {
     }
     console.log(`Finished seeding ${count} URLs from previous crawl.`);
 
+    // --- CONFIGURE CIRCUIT BREAKER ---
+    // This logic determines if we use Micro Mode (<50) or Standard Mode (>=50)
+    context.config.circuitBreaker.enabled = true;
+    context.config.circuitBreaker.previousTotal = count;
+    context.config.circuitBreaker.isMicroMode = count < 50;
+    
+    console.log(`\n🛡️ Circuit Breaker Configured:`);
+    console.log(`   - Previous Total: ${count}`);
+    console.log(`   - Mode: ${context.config.circuitBreaker.isMicroMode ? "MICRO (Absolute Limits)" : "STANDARD (Rate Limits)"}`);
+    if (context.config.circuitBreaker.isMicroMode) {
+        console.log(`   - Limits: MaxErrors=${context.config.circuitBreaker.maxAbsErrors}, MaxRedirects=${context.config.circuitBreaker.maxAbsRedirects}, MaxNew=${context.config.circuitBreaker.maxAbsNew}`);
+    } else {
+        console.log(`   - Limits: MinSample=${context.config.circuitBreaker.minSample}, ErrorRate=${(context.config.circuitBreaker.maxErrorRate * 100).toFixed(1)}%, RedirectRate=${(context.config.circuitBreaker.maxRedirectRate * 100).toFixed(1)}%, GrowthRate=${(context.config.circuitBreaker.maxGrowthRate * 100).toFixed(1)}%`);
+    }
+    console.log(`----------------------------------------\n`);
+
 } else if (await requestQueue.isEmpty()) {
     console.log("RequestQueueEmpty - Adding standard seed");
     await requestQueue.addRequest({ 
@@ -424,7 +461,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     } catch (e) {}
 
     let isError = context.stopReason;
-    if (isFinished === 0 && !isError) {
+    if (isFinished === 0 && !isError && !breakLimit) {
         try {
             const dataset = await Dataset.open(domain);
             const info = await dataset.getInfo();

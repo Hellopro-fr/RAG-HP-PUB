@@ -38,9 +38,19 @@ class PruneResponse(BaseModel):
 
 class UpdateThresholds(BaseModel):
     """Thresholds for aborting an update job."""
-    max_errors: Optional[int] = Field(None, description="Abort if error count exceeds this value.")
-    max_redirects: Optional[int] = Field(None, description="Abort if redirect count exceeds this value.")
-    max_new_urls: Optional[int] = Field(None, description="Abort if new URL discovery count exceeds this value.")
+    max_errors: Optional[int] = Field(None, description="Legacy: Abort if error count exceeds this value.")
+    max_redirects: Optional[int] = Field(None, description="Legacy: Abort if redirect count exceeds this value.")
+    max_new_urls: Optional[int] = Field(None, description="Legacy: Abort if new URL discovery count exceeds this value.")
+    
+    # New V1 Circuit Breaker Params
+    min_sample: Optional[int] = Field(None, description="Standard Mode: Minimum processed URLs before checking percentages (default: 50).")
+    max_error_rate: Optional[float] = Field(None, description="Standard Mode: Abort if error rate exceeds this ratio (e.g. 0.15 for 15%).")
+    max_redirect_rate: Optional[float] = Field(None, description="Standard Mode: Abort if redirect rate exceeds this ratio (e.g. 0.30 for 30%).")
+    max_growth_rate: Optional[float] = Field(None, description="Standard Mode: Abort if new URLs exceed this ratio relative to previous total (e.g. 0.50 for 50%).")
+    
+    max_abs_errors: Optional[int] = Field(None, description="Micro Mode: Abort if absolute error count exceeds this value (default: 5).")
+    max_abs_redirects: Optional[int] = Field(None, description="Micro Mode: Abort if absolute redirect count exceeds this value (default: 10).")
+    max_abs_new: Optional[int] = Field(None, description="Micro Mode: Abort if absolute new URL count exceeds this value (default: 20).")
 
 class CrawlRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -51,12 +61,12 @@ class CrawlRequest(BaseModel):
     callback_url: HttpUrl = Field(..., description="URL to be called when the crawl finishes successfully.", example="https://api.example.com/crawl_finished_hook")
     failure_callback_url: Optional[HttpUrl] = Field(None, description="URL to be called if the crawl job fails.", example="https://api.example.com/crawl_failed_hook")
 
-    # Update Mode Parameters (Ported from V3)
+    # Update Mode Parameters
     crawl_mode: CrawlMode = Field(CrawlMode.STANDARD, description="Mode of operation: 'standard' for fresh crawl, 'update' for diff check.")
     previous_crawl_id: Optional[str] = Field(None, description="ID of the previous crawl to update from (required if mode is 'update').")
     update_thresholds: Optional[UpdateThresholds] = Field(None, description="Circuit breaker thresholds for update mode.")
 
-    # Optional parameters mirroring the old shell script
+    # Optional parameters mirroring the old shell script (with legacy aliases)
     type_crawling: Optional[str] = Field(None, example="default", alias="typecrawling")
     method: Optional[str] = Field(None, description="Optional method flag for post-processing.", example="test")
     drop_data: Optional[bool] = Field(False, description="Whether to drop existing data before starting.", alias="dropdata")
@@ -71,7 +81,7 @@ class CrawlRequest(BaseModel):
     per_crawl: Optional[int] = Field(0, description="Number of URLs to crawl per job. 0 means unlimited.", example=1000, alias="percrawl")
     per_minute: Optional[int] = Field(100, description="Crawling speed in URLs per minute. 0 means unlimited.", example=100, alias="perminute")
     
-    # Camoufox Integration (Ported from V3)
+    # Camoufox Integration
     camoufox: Optional[bool] = Field(False, description="Use Camoufox stealth browser.")
 
 class CrawlResponse(BaseModel):
@@ -88,7 +98,7 @@ class ArchiveResponse(BaseModel):
 
 class CrawlStatus(BaseModel):
     crawl_id: str
-    id_domaine: str = Field(default_factory=lambda: "", description="Legacy alias for crawl_id")
+    id_domaine: str # Legacy alias
     status: str = Field(..., description="Current status: running, stopping, finished, failed", example="running")
     domain: str
     start_url: HttpUrl
