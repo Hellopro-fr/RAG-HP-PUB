@@ -23,6 +23,7 @@ import {
     loadDatasetUrlsGenerator,
     copyPreviousMethod,
     rehydrateDedupFromDataset,
+    generateUpdateReport,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -361,6 +362,11 @@ const persistenceInterval = setInterval(async () => {
             const urlIterator = context.dedupManager.getAllUrlsIterator();
             await updateUrlsCrawledStreaming(domain, urlIterator);
         }
+        
+        // Generate Update Report Periodically
+        if (crawlMode === 'update') {
+            await generateUpdateReport(domain);
+        }
     } catch (e) {
         console.error("Periodic persistence failed:", e);
     }
@@ -530,6 +536,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to write output files", e);
     }
 
+    // Final Update Report for Update Mode
+    if (crawlMode === 'update') {
+        await generateUpdateReport(domain);
+    }
+
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
     try {
@@ -559,7 +570,6 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
     process.exit(exitCode);
 };
-
 
 if (typeCrawling == "sitemap") {
     // ...

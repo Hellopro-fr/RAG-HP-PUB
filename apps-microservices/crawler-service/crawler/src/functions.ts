@@ -254,9 +254,12 @@ export const startCrawler = async (
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
-            // Accumulate error stats
+            // Accumulate error stats ONLY if the URL is from the previous crawl
+            // This prevents new/broken URLs from triggering the circuit breaker for "Broken Site"
             if (context.statsManager) {
-                await context.statsManager.increment("errors");
+                if (request.userData.is_existing) {
+                    await context.statsManager.increment("errors");
+                }
             }
 
             // Detect Captcha
@@ -844,6 +847,89 @@ export const copyPreviousMethod = (previousId: string, domain: string): boolean 
     }
     return false;
 }
+
+/**
+ * Generates a status report for the Update Mode and saves it to disk.
+ * Includes health status, rates, and thresholds used.
+ */
+export const generateUpdateReport = async (domain: string) => {
+    try {
+        if (!context.statsManager) return;
+
+        const processed = await context.statsManager.getValue("processed");
+        const errors = await context.statsManager.getValue("errors");
+        const redirects = await context.statsManager.getValue("redirects");
+        const newUrls = await context.statsManager.getValue("new_urls");
+        
+        const cb = context.config.circuitBreaker;
+        
+        // Calculate rates
+        const errorRate = processed > 0 ? errors / processed : 0;
+        const redirectRate = processed > 0 ? redirects / processed : 0;
+        const growthRate = cb.previousTotal > 0 ? newUrls / cb.previousTotal : 0;
+
+        let status = "HEALTHY";
+        let statusMessage = "Update progressing normally.";
+
+        // Determine Health Status
+        if (cb.isMicroMode) {
+            if (errors >= cb.maxAbsErrors) { status = "CRITICAL"; statusMessage = `Max absolute errors reached (${errors})`; }
+            else if (redirects >= cb.maxAbsRedirects) { status = "CRITICAL"; statusMessage = `Max absolute redirects reached (${redirects})`; }
+            else if (newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
+        } else {
+            if (processed >= cb.minSample) {
+                if (errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
+                else if (redirectRate > cb.maxRedirectRate) { status = "CRITICAL"; statusMessage = `Redirect rate too high (${(redirectRate*100).toFixed(1)}%)`; }
+                else if (growthRate > cb.maxGrowthRate) { status = "WARNING"; statusMessage = `Site growth high (${(growthRate*100).toFixed(1)}%)`; }
+            } else {
+                status = "PENDING_SAMPLE";
+                statusMessage = `Waiting for minimum sample (${processed}/${cb.minSample})`;
+            }
+        }
+
+        if (context.stopReason) {
+            status = "ABORTED";
+            statusMessage = `Crawler stopped: ${context.stopReason}`;
+        }
+
+        const report = {
+            timestamp: new Date().toISOString(),
+            domain: domain,
+            mode: cb.isMicroMode ? "MICRO" : "STANDARD",
+            health: status,
+            message: statusMessage,
+            metrics: {
+                processed,
+                errors,
+                redirects,
+                new_urls: newUrls,
+                previous_total: cb.previousTotal
+            },
+            rates: {
+                error_rate: parseFloat(errorRate.toFixed(4)),
+                redirect_rate: parseFloat(redirectRate.toFixed(4)),
+                growth_rate: parseFloat(growthRate.toFixed(4))
+            },
+            thresholds: {
+                min_sample: cb.minSample,
+                max_error_rate: cb.maxErrorRate,
+                max_redirect_rate: cb.maxRedirectRate,
+                max_growth_rate: cb.maxGrowthRate,
+                max_abs_errors: cb.maxAbsErrors,
+                max_abs_redirects: cb.maxAbsRedirects
+            }
+        };
+
+        const reportPath = path.join(process.cwd(), "_update_report.json");
+        const tempPath = `${reportPath}.tmp`;
+        
+        await fs.promises.writeFile(tempPath, JSON.stringify(report, null, 2));
+        await fs.promises.rename(tempPath, reportPath);
+
+    } catch (e) {
+        console.error("Failed to generate update report:", e);
+    }
+};
 
 /**
  * Retrieves scraped data from a named dataset with optional pagination

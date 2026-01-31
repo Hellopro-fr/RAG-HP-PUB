@@ -54,7 +54,7 @@ router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
         const proxyUrl = proxyInfo?.url || null;
 
-        // V3 Feature: Resource Blocking (Images, Fonts, etc.)
+        // Resource Blocking (Images, Fonts, etc.)
         await page.route('**/*', (route) => {
             const req = route.request();
             const resourceType = req.resourceType();
@@ -91,13 +91,13 @@ router.addDefaultHandler(
             `**/*.@(${ignoredExtensions}){,\?*}{,\#*}`,
         ];
 
-        // V3 Feature: Blocked Status Check
+        // Blocked Status Check
         if (response) {
             const status = response.status();
             if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
                 log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
                 // Increment error stats
-                if (context.statsManager) {
+                if (context.statsManager && request.userData.is_existing) {
                     await context.statsManager.increment("errors");
                 }
                 // Don't process, let failedRequestHandler handle it
@@ -105,7 +105,7 @@ router.addDefaultHandler(
             }
         }
 
-        // --- Circuit Breaker Check (Global thresholds) ---
+        // --- Circuit Breaker Check (Dual-Mode) ---
         if (context.statsManager) {
             // Track total processed for percentages (Increment for every handled page)
             // Note: This metric is cumulative across restarts via StatsManager
@@ -181,13 +181,6 @@ router.addDefaultHandler(
         if (context.dedupManager && !isDoublon && !isExisting) {
              if (context.statsManager) {
                  await context.statsManager.increment("new_urls");
-                 // Re-check threshold immediately to fail fast
-                 if (context.config.maxNewUrls && await context.statsManager.checkThreshold("new_urls", context.config.maxNewUrls)) {
-                     log.warning("🛑 Max new URLs limit reached during processing. Stopping.");
-                     context.stopReason = "limitNewUrls";
-                     await stopCrawler(crawler, "Max new URLs limit reached.");
-                     return;
-                 }
              }
         }
 
@@ -226,7 +219,6 @@ router.addDefaultHandler(
             let title = "";
 
             try {
-                // Get title (V3 Feature)
                 title = await page.title();
             } catch (e) {}
 
@@ -243,7 +235,6 @@ router.addDefaultHandler(
                         await stopCrawler(crawler, "Failed to store French detection method");
                         return;
                     }
-
                     isEnqueuingLinks = true;
                 } else {
                     const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
@@ -254,7 +245,6 @@ router.addDefaultHandler(
                             await stopCrawler(crawler, "Failed to store French detection method");
                             return;
                         }
-
                         isEnqueuingLinks = true;
                     }
                 }
@@ -307,7 +297,6 @@ router.addDefaultHandler(
             }
 
             if (isEnqueuingLinks) {
-                // Pass title to handler
                 await routerDefaultHandler(
                     request,
                     requestQueue,
