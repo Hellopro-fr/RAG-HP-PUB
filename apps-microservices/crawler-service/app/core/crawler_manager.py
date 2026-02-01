@@ -224,7 +224,7 @@ class CrawlerManager:
         # --- END: Add Disk-Based File Count ---
 
         # --- START: Update Mode Report Inclusion ---
-        # If this is an update job, check for the update report and include it in the webhook
+        # If this is an update job, check for the update report and include specific fields in the webhook
         if job_info.get("crawl_mode") == "update":
             try:
                 report_path = os.path.join(job_info["storage_path"], '_update_report.json')
@@ -232,9 +232,15 @@ class CrawlerManager:
                     async with aiofiles.open(report_path, 'r') as f:
                         report_content = await f.read()
                         report_json = json.loads(report_content)
-                        # Add update report data to params
-                        params["update_report"] = report_json
-                        logger.info(f"Included update report for '{crawl_id}' in webhook.")
+                        
+                        # Extract specific fields and merge into top-level params
+                        # Requested fields: mode, health, metrics, rates, thresholds
+                        target_fields = ["mode", "health", "metrics", "rates", "thresholds"]
+                        for field in target_fields:
+                            if field in report_json:
+                                params[field] = report_json[field]
+                                
+                        logger.info(f"Included filtered update report data for '{crawl_id}' in webhook.")
                 else:
                     logger.info(f"Update report not found for '{crawl_id}' (maybe finished before generation).")
             except Exception as e:
