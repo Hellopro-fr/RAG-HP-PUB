@@ -971,9 +971,19 @@ export const getScrapingData = async (name: string, countArray: number = 0) => {
             return { items: [], total: 0, offset: 0, count: 0, limit: 0 };
         }
 
+        // --- Safety Cap for OOM Prevention ---
+        const SAFETY_LIMIT = 100000;
+        let finalLimit = countArray;
+
+        if (countArray === 0 && info.itemCount > SAFETY_LIMIT) {
+            console.warn(`⚠️ Dataset ${name} is too large (${info.itemCount} items). Truncating load to ${SAFETY_LIMIT} to prevent OOM.`);
+            finalLimit = SAFETY_LIMIT;
+        }
+        // -------------------------------------
+
         let data;
-        if (countArray === 0) data = await dataset.getData();
-        else data = await dataset.getData({ desc: true, limit: countArray });
+        if (finalLimit === 0) data = await dataset.getData();
+        else data = await dataset.getData({ desc: true, limit: finalLimit });
         return data;
     } catch (error) {
         throw new Error(`Error when getScrapingData : ${error}`);
@@ -1231,22 +1241,38 @@ const stripAnsi = (str: string) => {
  * // And requeue them in 'products' queue
  */
 export const reclaimFailedRequest = async (name: string) => {
-    const datasError = await getScrapingData(`error-${name}`);
-    for (const item of datasError.items) {
+    const errorDatasetName = `error-${name}`;
+    const dataset = await Dataset.open(errorDatasetName);
+    const info = await dataset.getInfo();
+
+    if (!info || info.itemCount === 0) return;
+
+    console.log(`Checking for failed requests in ${errorDatasetName} (${info.itemCount} items)...`);
+
+    // Open queue once
+    const requestQueue = await RequestQueue.open(name);
+    let reclaimedCount = 0;
+
+    await dataset.forEach(async (item) => {
         const requestID = item["id"];
-        const requestQueue = await RequestQueue.open(name);
-        let request = await requestQueue.getRequest(requestID);
+        if (!requestID) return;
 
-        if (request) {
-            request.retryCount = 0;
-            request.errorMessages = [];
-            request.handledAt = undefined;
-
-            await requestQueue.reclaimRequest(request);
+        try {
+            const request = await requestQueue.getRequest(requestID);
+            if (request) {
+                request.retryCount = 0;
+                request.errorMessages = [];
+                request.handledAt = undefined;
+                await requestQueue.reclaimRequest(request);
+                reclaimedCount++;
+            }
+        } catch (e) {
+            console.error(`Failed to reclaim request ${requestID}: ${e}`);
         }
-    }
+    });
 
-    await dropDataset(`error-${name}`);
+    console.log(`Successfully reclaimed ${reclaimedCount} requests.`);
+    await dropDataset(errorDatasetName);
 };
 
 // Updated: Save title
