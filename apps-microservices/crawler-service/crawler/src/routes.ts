@@ -177,12 +177,8 @@ router.addDefaultHandler(
             isDoublon = !isNew;
         }
         
-        // Handle "New URL" threshold logic if it's genuinely new
-        if (context.dedupManager && !isDoublon && !isExisting) {
-             if (context.statsManager) {
-                 await context.statsManager.increment("new_urls");
-             }
-        }
+        // Removed early increment of "new_urls" here.
+        // It is now handled inside the success block (isEnqueuingLinks) to ensure validity.
 
         if (!isDoublon) {
             // Redis update handled in dedupManager
@@ -297,6 +293,23 @@ router.addDefaultHandler(
             }
 
             if (isEnqueuingLinks) {
+                // === VALIDATED CONTENT BLOCK ===
+                
+                // Count as NEW URL only if it's not existing AND passed validation (isEnqueuingLinks=True)
+                if (context.dedupManager && !isExisting) {
+                    if (context.statsManager) {
+                        await context.statsManager.increment("new_urls");
+                        
+                        // Fail Fast Check for New URLs (moved from early check)
+                        if (context.config.maxNewUrls && await context.statsManager.checkThreshold("new_urls", context.config.maxNewUrls)) {
+                            log.warning("🛑 Max new URLs limit reached during processing. Stopping.");
+                            context.stopReason = "limitNewUrls";
+                            await stopCrawler(crawler, "Max new URLs limit reached.");
+                            return;
+                        }
+                    }
+                }
+
                 await routerDefaultHandler(
                     request,
                     requestQueue,
