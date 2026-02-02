@@ -235,8 +235,8 @@ services:
       context: .
       dockerfile: ./apps-microservices/nextjs-formulaire-hp/Dockerfile
     ports:
-      - "8579:8579"
-    network_mode: host
+      - "8579:3000"
+    # network_mode: host
     environment:
       - NODE_ENV=production
       - HELLOPRO_API_URL=http://dev-api.hellopro.fr
