@@ -7,7 +7,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Copier package.json
-COPY package.json ./
+COPY apps-microservices/nextjs-formulaire-hp/package.json ./
 
 # Installer les dépendances
 RUN npm install
@@ -16,7 +16,7 @@ RUN npm install
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY apps-microservices/nextjs-formulaire-hp/ .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
