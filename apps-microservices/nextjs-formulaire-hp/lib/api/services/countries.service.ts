@@ -1,4 +1,5 @@
 import type { ApiResponse } from '../types';
+import { basePath } from '@/lib/utils';
 
 export interface Country {
   id: number;
@@ -16,15 +17,18 @@ export interface CountriesData {
  */
 export async function fetchCountries(): Promise<ApiResponse<CountriesData>> {
   try {
+    const apiBase = basePath || '';
+    // Côté serveur (Node.js) : URL relative invalide, il faut une URL absolue
+    const isServer = typeof window === 'undefined';
+    const baseUrl = isServer ? `http://localhost:3000${apiBase}` : apiBase;
+
     const response = await fetch(
-      'https://dev-www.hellopro.fr/hellopro_fr/ajax/ajax_get_data.php?t=1',
+      `${baseUrl}/api/geo?t=1`,
       {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
         },
-        // Cache les données pendant 1 heure
-        next: { revalidate: 3600 },
       }
     );
 

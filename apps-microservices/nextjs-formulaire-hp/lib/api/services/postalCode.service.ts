@@ -1,7 +1,9 @@
 /**
  * Service pour récupérer les villes par code postal
- * API: https://dev-www.hellopro.fr/hellopro_fr/ajax/ajax_get_data.php
+ * Proxy via /api/geo
  */
+
+import { basePath } from '@/lib/utils';
 
 export interface PostalCodeCity {
   postalCode: string;
@@ -16,10 +18,9 @@ export async function searchPostalCodeCities(
   }
 
   try {
+    const apiBase = basePath || '';
     const response = await fetch(
-      `https://dev-www.hellopro.fr/hellopro_fr/ajax/ajax_get_data.php?t=2&cp=${encodeURIComponent(
-        postalCode
-      )}`,
+      `${apiBase}/api/geo?t=2&cp=${encodeURIComponent(postalCode)}`,
       {
         method: "GET",
         headers: {
