@@ -230,6 +230,17 @@ services:
       - services-net
     logging: *logging_defaults
 
+  nextjs-formulaire-hp:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/nextjs-formulaire-hp/Dockerfile
+    network_mode: host
+    environment:
+      - NODE_ENV=production
+      - HELLOPRO_API_URL=http://dev-api.hellopro.fr
+    restart: unless-stopped
+    logging: *logging_defaults
+
   api-model-service:
     build:
       context: .
