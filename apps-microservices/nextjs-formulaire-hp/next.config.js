@@ -46,10 +46,12 @@ const nextConfig = {
       {
         source: '/api/siren/:path*',
         destination: `${frontendUrl}/api/siren/:path*`,
+         basePath: false,
       },
       {
         source: '/images/:path*',
         destination: `${frontendUrl}/images/:path*`,
+         basePath: false,
       },
     ];
   },
