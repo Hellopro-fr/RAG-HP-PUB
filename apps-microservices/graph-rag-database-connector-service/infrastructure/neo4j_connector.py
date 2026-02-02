@@ -355,11 +355,13 @@ class Neo4jConnector:
             "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Fournisseur) REQUIRE n.id IS UNIQUE",
             "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Produit) REQUIRE n.id IS UNIQUE",
             "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Categorie) REQUIRE n.id IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Question) REQUIRE n.id IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Reponse) REQUIRE n.id IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Devis) REQUIRE n.id IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (n:PageWeb) REQUIRE n.id IS UNIQUE",
-            "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Acheteur) REQUIRE n.id IS UNIQUE",
+            # "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Question) REQUIRE n.id IS UNIQUE",
+            # "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Reponse) REQUIRE n.id IS UNIQUE",
+            # "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Devis) REQUIRE n.id IS UNIQUE",
+            # "CREATE CONSTRAINT IF NOT EXISTS FOR (n:PageWeb) REQUIRE n.id IS UNIQUE",
+            # "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Acheteur) REQUIRE n.id IS UNIQUE",
+            "CREATE CONSTRAINT IF NOT EXISTS FOR (n:ZoneGeo) REQUIRE n.id IS UNIQUE",
+            "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Pays) REQUIRE n.id IS UNIQUE",
         ]
 
         indexes = [
@@ -377,6 +379,9 @@ class Neo4jConnector:
             "CREATE INDEX char_valeur_canonique_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.valeur_canonique)",
             "CREATE INDEX char_valeur_min_canonique_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.valeur_min_canonique)",
             "CREATE INDEX char_valeur_max_canonique_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.valeur_max_canonique)",
+            # Geographic & Coverage
+            "CREATE INDEX zone_geo_list_dept_index IF NOT EXISTS FOR (n:ZoneGeo) ON (n.list_dept)",
+            "CREATE INDEX couvre_partiel_index IF NOT EXISTS FOR ()-[r:COUVRE]-() ON (r.partiel)",
         ]
 
         logging.info("Applying Neo4j Unique Constraints...")

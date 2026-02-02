@@ -1542,6 +1542,22 @@ services:
     networks:
       - services-net
 
+  graph-rag-fournisseur-processor:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-fournisseur-processor/Dockerfile
+    profiles: ["graph-rag"]
+    expose:
+      - "8572"
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      PROMETHEUS_PORT: 8572
+    deploy:
+      replicas: 3
+    networks:
+      - services-net
+
   graph-rag-question-processor:
     build:
       context: .
@@ -1662,6 +1678,38 @@ services:
       - services-net
       - services-ext-net
       - services-global-net
+
+
+  # db:
+  #   image: mysql:8.0
+  #   container_name: mep-db
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+  #     - MYSQL_DATABASE=${DB_NAME}
+  #     - MYSQL_USER=${DB_USER}
+  #     - MYSQL_PASSWORD=${DB_PASS}
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #     - ./sql/schema.sql:/docker-entrypoint-initdb.d/init.sql
+  #   ports:
+  #     - "3307:3306"
+  #   networks:
+  #     - services-net
+
+  # phpmyadmin:
+  #   image: phpmyadmin:latest
+  #   container_name: mep-phpmyadmin
+  #   environment:
+  #     - PMA_HOST=db
+  #     - UPLOAD_LIMIT=100M
+  #   volumes:
+  #      - ./public/robots.txt:/var/www/html/robots.txt:ro
+  #   ports:
+  #     - "${PHPMYADMIN_PORT:-8082}:80"
+  #   depends_on:
+  #     - db
+  #   networks:
+  #     - services-net
 
 networks:
   services-net:
