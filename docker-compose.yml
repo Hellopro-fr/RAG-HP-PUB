@@ -240,6 +240,8 @@ services:
       - HELLOPRO_API_URL=http://dev-api.hellopro.fr
     restart: unless-stopped
     logging: *logging_defaults
+    ports:
+      - "8578:8578"
 
   api-model-service:
     build:
