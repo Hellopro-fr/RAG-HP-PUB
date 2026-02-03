@@ -217,8 +217,8 @@ class ResultProduct(BaseModel):
 
 
 class MetadonneUtilisateurs(BaseModel):
-    pays           : Optional[str] = Field(None, description = "Localisation de l'acheteur")
-    typologie      : Optional[int] = Field(..., description = "Typologie d'entreprise de l'acheteur, 1:professionnel, 2:particulier")
+    pays      : Optional[str] = Field(None, description = "Localisation de l'acheteur")
+    typologie : Optional[int] = Field(..., description = "Typologie d'entreprise de l'acheteur, 1:professionnel, 2:particulier")
 
 
 class MatchingCaracteristique(BaseModel):
@@ -253,6 +253,7 @@ class Produit(BaseModel):
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 
 class MatchingResponse(BaseModel):
+    top_produit         : List[Produit] = Field(default_factory  = list, description = "Liste des top produits trouvés classés par score")
     liste_produit       : List[Produit] = Field(default_factory  = list, description = "Liste des produits trouvés classés par score")
     temps_de_traitement : float         = Field(..., description = "Temps pris pour effectuer le matching en secondes")
-    alternative_matching: List[Produit] = Field(default_factory  = list, description = "Liste d'alternatives si applicable")
+    # alternative_matching: List[Produit] = Field(default_factory  = list, description = "Liste d'alternatives si applicable")

@@ -192,20 +192,39 @@ async def match_products(payload: MatchingPayload):
                ],
             top_produit=False
             # raison_matching=f"par Pays"
+        ),
+        Produit(
+            rang=1,
+            id_produit="prod_004",
+            score=0.75,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        id_valeur=[],
+                        poids=5
+                    )
+               ],
+            top_produit=True
+            # raison_matching=f"par Pays"
         )
     ]
+    # Identifier le top produit
+    top_produit = [prod for prod in mock_produits if getattr(prod, 'top_produit', False)]
     
     # Tri par rang (ordre croissant: rang 1, 2, 3...)
     mock_produits_sorted = sorted(mock_produits, key=lambda x: x.rang)
     # Appliquer le top_k après le tri
     resultats_finaux = mock_produits_sorted[:payload.top_k]
 
-    alternatives = []
-    if len(mock_produits_sorted) > payload.top_k:
-        alternatives = mock_produits_sorted[payload.top_k:]
+    # alternatives = []
+    # if len(mock_produits_sorted) > payload.top_k:
+    #     alternatives = mock_produits_sorted[payload.top_k:]
 
     return MatchingResponse(
+        top_produit=top_produit,
         liste_produit=resultats_finaux,
         temps_de_traitement=time.time() - start_time,
-        alternative_matching=alternatives
+        # alternative_matching=alternatives
     )
