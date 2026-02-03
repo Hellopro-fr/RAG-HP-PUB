@@ -153,6 +153,8 @@ async def match_products(payload: MatchingPayload):
                         poids=5
                     )
                 ],
+            coeff_geo=1.2,
+            coeff_type_frns=1.1
             # raison_matching=f"par Pays"
         ),
         Produit(
@@ -171,10 +173,13 @@ async def match_products(payload: MatchingPayload):
                         statut_matching=3,
                         id_caracteristique=102,
                         id_valeur=[5],
-                        poids=10
+                        poids=10,
+                        bareme=-2,
+                        poids_question=1
                     )
                 ],
-            top_produit=True
+            coeff_geo=2,
+            coeff_type_frns=1
             # raison_matching=f"par Pays"
         ),
         Produit(
@@ -187,15 +192,18 @@ async def match_products(payload: MatchingPayload):
                         statut_matching=1,
                         id_caracteristique=105,
                         id_valeur=[],
-                        poids=5
+                        poids=5,
+                        bareme=3.0,
+                        poids_question=2
                     )
                ],
-            top_produit=False
+            coeff_geo=1.3,
+            coeff_type_frns=1.5
             # raison_matching=f"par Pays"
         ),
         Produit(
             rang=1,
-            id_produit="prod_004",
+            id_produit="top_prod_001",
             score=0.75,
             caracteristique=
                [
@@ -203,15 +211,78 @@ async def match_products(payload: MatchingPayload):
                         statut_matching=1,
                         id_caracteristique=105,
                         id_valeur=[],
-                        poids=5
+                        poids=5,
+                        bareme=10.0,
+                        poids_question=5
                     )
                ],
-            top_produit=True
+            coeff_geo=1.4,
+            coeff_type_frns=1.6
+            # raison_matching=f"par Pays"
+        ),
+    ]
+
+    mock_top_produits = [
+        Produit(
+            rang=2,
+            id_produit="top_prod_002",
+            score=0.5,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        id_valeur=[],
+                        poids=6,
+                        bareme=11.0,
+                        poids_question=4
+                    )
+               ],
+            coeff_geo=1.2,
+            coeff_type_frns=0.1
+            # raison_matching=f"par Pays"
+        ),
+        Produit(
+            rang=4,
+            id_produit="top_prod_004",
+            score=0.75,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        id_valeur=[],
+                        poids=3,
+                        bareme=12.0,
+                        poids_question=3
+                    )
+               ],
+            coeff_geo=0.2,
+            coeff_type_frns=0.1
+            # raison_matching=f"par Pays"
+        ),
+        Produit(
+            rang=3,
+            id_produit="top_prod_003",
+            score=0.75,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        id_valeur=[],
+                        poids=5,
+                        bareme=10.0,
+                        poids_question=5
+                    )
+               ],
+            coeff_geo=3.2,
+            coeff_type_frns=3.1
             # raison_matching=f"par Pays"
         )
     ]
     # Identifier le top produit
-    top_produit = [prod for prod in mock_produits if getattr(prod, 'top_produit', False)]
+    top_produit = sorted(mock_top_produits, key=lambda x: x.rang)
     
     # Tri par rang (ordre croissant: rang 1, 2, 3...)
     mock_produits_sorted = sorted(mock_produits, key=lambda x: x.rang)

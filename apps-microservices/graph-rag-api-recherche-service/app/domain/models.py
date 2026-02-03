@@ -242,6 +242,8 @@ class CaracteristiqueMatching(BaseModel):
     id_caracteristique: int                 = Field(..., description = "Identifiant de la caractéristique")
     id_valeur         : Optional[List[int]] = Field(default_factory  = list, description = "Liste des valeurs associées à la caractéristique")
     poids             : int                 = Field(..., description = "Poids de la caractéristique dans le score")
+    bareme            : float               = Field(..., description = "Barème de notation pour cette caractéristique")
+    poids_question    : int                 = Field(..., description = "Poids de la question associée à cette caractéristique")
 
 
 class Produit(BaseModel):
@@ -249,7 +251,10 @@ class Produit(BaseModel):
     id_produit     : str                           = Field(..., description = "Identifiant unique du produit")
     score          : float                         = Field(..., description = "Score de matching")
     caracteristique: List[CaracteristiqueMatching] = Field(..., description = "Détail du matching par caractéristique")
-    top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
+    coeff_geo      : float                         = Field(..., description = "Coefficient zone Géographique")
+    coeff_type_frns: float                         = Field(..., description = "Coefficient type de fournisseur")
+    
+    # top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 
 class MatchingResponse(BaseModel):
