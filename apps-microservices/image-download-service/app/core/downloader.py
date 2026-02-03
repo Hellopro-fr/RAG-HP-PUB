@@ -187,8 +187,6 @@ class Downloader:
             result = await self.download_and_process(url, domain, product_id, product_name)
             if result:
                 processed_images.append(result)
-                # Only download first successful image per product
-                break
         
         # Update product data with new structure
         product_data["processed_images"] = processed_images
