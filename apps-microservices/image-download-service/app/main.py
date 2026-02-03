@@ -1,20 +1,16 @@
-import logging
-import threading
+import os
+import asyncio
+import aio_pika
 from typing import List, Optional
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
-from app.messaging.consumer import Consumer
-from app.messaging.publisher import Publisher
-from app.core.archiver import Archiver
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger("image-download-service")
+# Importer les modules locaux
+from image_download_service.messaging.consumer import Consumer
+from image_download_service.messaging.publisher import Publisher
+from image_download_service.core.archiver import Archiver
 
 # Request/Response Models
 class SyncRequest(BaseModel):
@@ -29,47 +25,95 @@ class SyncStatusResponse(BaseModel):
     last_updated: Optional[str] = None
     last_sync: Optional[str] = None
 
+
+async def connect_rabbitmq() -> aio_pika.RobustConnection:
+    """
+    Établit une connexion RobustConnection à RabbitMQ.
+    RobustConnection gère automatiquement les reconnexions.
+    """
+    rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
+    
+    max_retries = 10
+    retry_delay = 5
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Connexion à RabbitMQ (tentative {attempt + 1}/{max_retries})...")
+            connection = await aio_pika.connect_robust(
+                rabbitmq_url,
+                client_properties={"connection_name": "image-download-service"}
+            )
+            print("✅ Connecté à RabbitMQ avec RobustConnection!")
+            return connection
+        except Exception as e:
+            print(f"❌ Échec de connexion: {e}. Nouvelle tentative dans {retry_delay}s...")
+            await asyncio.sleep(retry_delay)
+    
+    raise Exception(f"❌ Impossible de se connecter à RabbitMQ après {max_retries} tentatives.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("🚀 Image-Download-Service: Starting up...")
+    print("🚀 Image-Download-Service: Démarrage...")
     
-    # Initialize Publisher
-    app.state.publisher = Publisher()
-    
-    # Initialize Consumer and start in background thread
-    app.state.consumer = Consumer(app.state.publisher)
-    consumer_thread = threading.Thread(target=app.state.consumer.start_consuming, daemon=True)
-    consumer_thread.start()
+    try:
+        # Établir la connexion RabbitMQ
+        app.state.rabbitmq_connection = await connect_rabbitmq()
+        
+        # Initialiser le Publisher avec la connexion
+        app.state.publisher = Publisher(app.state.rabbitmq_connection)
+        
+        # Initialiser le Consumer avec la connexion et le publisher
+        app.state.consumer = Consumer(app.state.rabbitmq_connection, app.state.publisher)
+        
+        # Démarrer le consumer en tâche de fond
+        app.state.consumer_task = asyncio.create_task(app.state.consumer.start_consuming())
+        print("✅ Consumer démarré en tâche de fond.")
+        
+    except Exception as e:
+        print(f"❌ Erreur lors du démarrage: {e}")
+        # Continue sans RabbitMQ - l'API REST fonctionnera toujours
     
     yield
     
     # Shutdown
-    logger.info("🛑 Image-Download-Service: Shutting down...")
-    if app.state.consumer.connection:
-        app.state.consumer.connection.close()
+    print("🛑 Image-Download-Service: Arrêt...")
+    
+    # Annuler la tâche consumer
+    if hasattr(app.state, 'consumer_task'):
+        app.state.consumer_task.cancel()
+        try:
+            await app.state.consumer_task
+        except asyncio.CancelledError:
+            pass
+    
+    # Fermer la connexion RabbitMQ
+    if hasattr(app.state, 'rabbitmq_connection') and app.state.rabbitmq_connection:
+        await app.state.rabbitmq_connection.close()
+        print("✅ Connexion RabbitMQ fermée.")
 
 app = FastAPI(
     title="Image Download Service",
-    description="Service for downloading, processing, and archiving product images with incremental sync support",
+    description="Service pour télécharger, traiter et archiver les images de produits avec support de synchronisation incrémentale",
     version="2.0.0",
     lifespan=lifespan,
     openapi_tags=[
         {
             "name": "Health",
-            "description": "Service health checks",
+            "description": "Vérifications de santé du service",
         },
         {
             "name": "Archives",
-            "description": "Create and download image archives (full or delta)",
+            "description": "Créer et télécharger des archives d'images (full ou delta)",
         },
         {
             "name": "Sync",
-            "description": "Synchronization status and management",
+            "description": "Statut et gestion de la synchronisation",
         },
         {
             "name": "Domains",
-            "description": "Domain management and listing",
+            "description": "Gestion et listing des domaines",
         }
     ]
 )
@@ -194,7 +238,7 @@ async def create_delta_archive(domain: str):
     except ValueError as e:
         return JSONResponse(status_code=404, content={"status": "error", "message": str(e)})
     except Exception as e:
-        logger.error(f"Delta archive error: {e}")
+        print(f"Delta archive error: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": "Internal server error"})
 
 @app.post("/archive/full/{domain}", tags=["Archives"])
@@ -221,7 +265,7 @@ async def create_full_archive(domain: str):
     except ValueError as e:
         return JSONResponse(status_code=404, content={"status": "error", "message": str(e)})
     except Exception as e:
-        logger.error(f"Full archive error: {e}")
+        print(f"Full archive error: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": "Internal server error"})
 
 @app.get("/archives", tags=["Archives"])
@@ -257,7 +301,7 @@ async def cleanup_archives(domain: str = None, keep_latest: int = 3):
             "kept_latest": keep_latest
         }
     except Exception as e:
-        logger.error(f"Cleanup error: {e}")
+        print(f"Cleanup error: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 # =============================================================================
@@ -296,7 +340,7 @@ async def mark_synced(domain: str, request: SyncRequest = None):
     except ValueError as e:
         return JSONResponse(status_code=404, content={"status": "error", "message": str(e)})
     except Exception as e:
-        logger.error(f"Sync error: {e}")
+        print(f"Sync error: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": "Internal server error"})
 
 @app.get("/sync/{domain}/pending", tags=["Sync"])
@@ -318,7 +362,7 @@ async def get_pending_products(domain: str):
             "products": unsynced
         }
     except Exception as e:
-        logger.error(f"Get pending error: {e}")
+        print(f"Get pending error: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": "Internal server error"})
 
 # =============================================================================

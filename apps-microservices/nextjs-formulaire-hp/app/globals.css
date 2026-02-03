@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 13% 13%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 13% 13%;
+
+    --primary: 231 100% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 13% 13%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 21 80% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 231 100% 60%;
+
+    --radius: 0.5rem;
+
+    /* Custom tokens */
+    --overlay: 220 20% 10%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    /* Supplier card tokens */
+    --recommended-bg: 231 100% 97%;
+    --recommended-border: 231 100% 85%;
+    --match-high: 142 71% 45%;
+    --match-medium: 38 92% 50%;
+    --match-low: 220 9% 46%;
+  }
+
+  .dark {
+    --background: 220 20% 10%;
+    --foreground: 0 0% 98%;
+
+    --card: 220 18% 14%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 220 18% 14%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 231 100% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 20%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 220 15% 20%;
+    --muted-foreground: 220 9% 65%;
+
+    --accent: 21 80% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 15% 25%;
+    --input: 220 15% 25%;
+    --ring: 231 100% 65%;
+
+    --overlay: 220 20% 5%;
+    --recommended-bg: 231 50% 15%;
+    --recommended-border: 231 50% 30%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0) translateX(0); opacity: 0.2; }
+  25% { transform: translateY(-20px) translateX(10px); opacity: 0.5; }
+  50% { transform: translateY(-10px) translateX(-10px); opacity: 0.3; }
+  75% { transform: translateY(-30px) translateX(5px); opacity: 0.4; }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}

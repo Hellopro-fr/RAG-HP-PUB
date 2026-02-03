@@ -21,7 +21,27 @@ class ImageProcessor:
             dict: Paths to the saved main image and thumbnail
         """
         try:
-            image = Image.open(io.BytesIO(content))
+            if not content:
+                raise ValueError("Image content is empty")
+
+            # Create fresh BytesIO stream
+            image_stream = io.BytesIO(content)
+            image_stream.seek(0)
+
+            # Debug: Log first few bytes to check header
+            header_bytes = content[:10]
+            logger.info(f"Processing image {product_id} - Size: {len(content)} bytes - Header: {header_bytes}")
+
+            try:
+                image = Image.open(image_stream)
+                image.load() # Force load to validate
+            except Exception as pil_error:
+                # If SVG, it might start with <svg
+                if b'<svg' in header_bytes or b'<?xml' in header_bytes:
+                     logger.warning(f"SVG detected for {product_id}, skipping (PIL does not support SVG).")
+                     return None
+                raise pil_error
+
             original_format = image.format.upper() if image.format else "JPEG"
             
             # Determine output format and extension based on PHP logic

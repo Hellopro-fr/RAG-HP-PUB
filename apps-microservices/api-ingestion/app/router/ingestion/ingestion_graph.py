@@ -46,9 +46,9 @@ async def publish_to_rabbitmq(
                 message="La connexion à RabbitMQ n'est pas disponible.",
             )
 
-    exchange_name = f"data_exchange_{payload.collection}"
+    exchange_name = f"data_graph_exchange_{payload.collection}"
     # if payload.collection == "produits_2":
-    #     exchange_name = f"data_exchange_produits"
+    #     exchange_name = f"data_graph_exchange_produits"
 
     routing_key = routing_key_collection_graph(payload.collection)
 
@@ -73,7 +73,7 @@ async def publish_to_rabbitmq(
             "routing_key": routing_key,
             "collection": payload.collection,
             "database": payload.database,
-            "date": datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            "date": datetime.now().strftime("%Y-%m-%d-%H-%M-%S"),
         },
     )
 
@@ -114,7 +114,9 @@ async def publish_lot_rabbitmq(
         import asyncio
         from itertools import islice
 
-        semaphore = asyncio.Semaphore(4)  # Limit concurrent connections (Safe limit for 40 max connections)
+        semaphore = asyncio.Semaphore(
+            4
+        )  # Limit concurrent connections (Safe limit for 40 max connections)
         loop = asyncio.get_running_loop()
         batch_size = 20  # Process 20 messages per connection
 
@@ -126,12 +128,16 @@ async def publish_lot_rabbitmq(
                     return
                 yield chunk
 
-        def publish_batch(batch_payloads: list[IngestionRequest]) -> list[BaseIngestionReponseSucces | BaseIngestionReponse]:
+        def publish_batch(
+            batch_payloads: list[IngestionRequest],
+        ) -> list[BaseIngestionReponseSucces | BaseIngestionReponse]:
             batch_responses = []
             # Create a dedicated connection for this thread/batch
             try:
                 # We do not use the shared app state connection here to avoid thread-safety issues
-                connection = RabbitMQConnection().create_connection(max_retries=3, retry_delay=2)
+                connection = RabbitMQConnection().create_connection(
+                    max_retries=3, retry_delay=2
+                )
                 local_channel = connection.channel()
             except Exception as e:
                 # If connection fails, return errors for the whole batch
@@ -140,15 +146,16 @@ async def publish_lot_rabbitmq(
                     BaseIngestionReponse(
                         code=status.HTTP_503_SERVICE_UNAVAILABLE,
                         message="La connexion à RabbitMQ n'est pas disponible pour ce lot.",
-                    ) for _ in batch_payloads
+                    )
+                    for _ in batch_payloads
                 ]
 
             try:
                 for payload in batch_payloads:
                     # Update counter (thread-safe for Counter)
                     collection_counter[str(payload.collection)] += 1
-                    
-                    exchange_name = f"data_exchange_{payload.collection}"
+
+                    exchange_name = f"data_graph_exchange_{payload.collection}"
                     routing_key = routing_key_collection_graph(payload.collection)
                     data = payload.model_dump()
 
@@ -160,7 +167,7 @@ async def publish_lot_rabbitmq(
                             routing_key=routing_key,
                             data=data,
                         )
-                        
+
                         if not success:
                             batch_responses.append(
                                 BaseIngestionReponse(
@@ -178,12 +185,14 @@ async def publish_lot_rabbitmq(
                                         "routing_key": routing_key,
                                         "collection": payload.collection,
                                         "database": payload.database,
-                                        "date": datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+                                        "date": datetime.now().strftime(
+                                            "%Y-%m-%d-%H-%M-%S"
+                                        ),
                                     },
                                 )
                             )
                     except Exception as e:
-                         batch_responses.append(
+                        batch_responses.append(
                             BaseIngestionReponse(
                                 code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                                 message=f"Erreur inattendue: {str(e)}",
@@ -193,7 +202,7 @@ async def publish_lot_rabbitmq(
                 # Ensure connection is closed after batch is done
                 if connection and not connection.is_closed:
                     connection.close()
-            
+
             return batch_responses
 
         async def process_batch_async(batch):
@@ -201,8 +210,10 @@ async def publish_lot_rabbitmq(
                 return await loop.run_in_executor(None, publish_batch, batch)
 
         # Execute batches concurrently
-        results_list = await asyncio.gather(*(process_batch_async(batch) for batch in chunked(payloads, batch_size)))
-        
+        results_list = await asyncio.gather(
+            *(process_batch_async(batch) for batch in chunked(payloads, batch_size))
+        )
+
         # Flatten results
         response = [item for sublist in results_list for item in sublist]
         return response
