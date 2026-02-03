@@ -254,9 +254,12 @@ export const startCrawler = async (
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
-            // Accumulate error stats
+            // Accumulate error stats ONLY if the URL is from the previous crawl
+            // This prevents new/broken URLs from triggering the circuit breaker for "Broken Site"
             if (context.statsManager) {
-                await context.statsManager.increment("errors");
+                if (request.userData.is_existing) {
+                    await context.statsManager.increment("errors");
+                }
             }
 
             // Detect Captcha
@@ -846,6 +849,89 @@ export const copyPreviousMethod = (previousId: string, domain: string): boolean 
 }
 
 /**
+ * Generates a status report for the Update Mode and saves it to disk.
+ * Includes health status, rates, and thresholds used.
+ */
+export const generateUpdateReport = async (domain: string) => {
+    try {
+        if (!context.statsManager) return;
+
+        const processed = await context.statsManager.getValue("processed");
+        const errors = await context.statsManager.getValue("errors");
+        const redirects = await context.statsManager.getValue("redirects");
+        const newUrls = await context.statsManager.getValue("new_urls");
+        
+        const cb = context.config.circuitBreaker;
+        
+        // Calculate rates
+        const errorRate = processed > 0 ? errors / processed : 0;
+        const redirectRate = processed > 0 ? redirects / processed : 0;
+        const growthRate = cb.previousTotal > 0 ? newUrls / cb.previousTotal : 0;
+
+        let status = "HEALTHY";
+        let statusMessage = "Update progressing normally.";
+
+        // Determine Health Status
+        if (cb.isMicroMode) {
+            if (errors >= cb.maxAbsErrors) { status = "CRITICAL"; statusMessage = `Max absolute errors reached (${errors})`; }
+            else if (redirects >= cb.maxAbsRedirects) { status = "CRITICAL"; statusMessage = `Max absolute redirects reached (${redirects})`; }
+            else if (newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
+        } else {
+            if (processed >= cb.minSample) {
+                if (errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
+                else if (redirectRate > cb.maxRedirectRate) { status = "CRITICAL"; statusMessage = `Redirect rate too high (${(redirectRate*100).toFixed(1)}%)`; }
+                else if (growthRate > cb.maxGrowthRate) { status = "WARNING"; statusMessage = `Site growth high (${(growthRate*100).toFixed(1)}%)`; }
+            } else {
+                status = "PENDING_SAMPLE";
+                statusMessage = `Waiting for minimum sample (${processed}/${cb.minSample})`;
+            }
+        }
+
+        if (context.stopReason) {
+            status = "ABORTED";
+            statusMessage = `Crawler stopped: ${context.stopReason}`;
+        }
+
+        const report = {
+            timestamp: new Date().toISOString(),
+            domain: domain,
+            mode: cb.isMicroMode ? "MICRO" : "STANDARD",
+            health: status,
+            message: statusMessage,
+            metrics: {
+                processed,
+                errors,
+                redirects,
+                new_urls: newUrls,
+                previous_total: cb.previousTotal
+            },
+            rates: {
+                error_rate: parseFloat(errorRate.toFixed(4)),
+                redirect_rate: parseFloat(redirectRate.toFixed(4)),
+                growth_rate: parseFloat(growthRate.toFixed(4))
+            },
+            thresholds: {
+                min_sample: cb.minSample,
+                max_error_rate: cb.maxErrorRate,
+                max_redirect_rate: cb.maxRedirectRate,
+                max_growth_rate: cb.maxGrowthRate,
+                max_abs_errors: cb.maxAbsErrors,
+                max_abs_redirects: cb.maxAbsRedirects
+            }
+        };
+
+        const reportPath = path.join(process.cwd(), "_update_report.json");
+        const tempPath = `${reportPath}.tmp`;
+        
+        await fs.promises.writeFile(tempPath, JSON.stringify(report, null, 2));
+        await fs.promises.rename(tempPath, reportPath);
+
+    } catch (e) {
+        console.error("Failed to generate update report:", e);
+    }
+};
+
+/**
  * Retrieves scraped data from a named dataset with optional pagination
  *
  * @description
@@ -885,9 +971,19 @@ export const getScrapingData = async (name: string, countArray: number = 0) => {
             return { items: [], total: 0, offset: 0, count: 0, limit: 0 };
         }
 
+        // --- Safety Cap for OOM Prevention ---
+        const SAFETY_LIMIT = 100000;
+        let finalLimit = countArray;
+
+        if (countArray === 0 && info.itemCount > SAFETY_LIMIT) {
+            console.warn(`⚠️ Dataset ${name} is too large (${info.itemCount} items). Truncating load to ${SAFETY_LIMIT} to prevent OOM.`);
+            finalLimit = SAFETY_LIMIT;
+        }
+        // -------------------------------------
+
         let data;
-        if (countArray === 0) data = await dataset.getData();
-        else data = await dataset.getData({ desc: true, limit: countArray });
+        if (finalLimit === 0) data = await dataset.getData();
+        else data = await dataset.getData({ desc: true, limit: finalLimit });
         return data;
     } catch (error) {
         throw new Error(`Error when getScrapingData : ${error}`);
@@ -1145,22 +1241,38 @@ const stripAnsi = (str: string) => {
  * // And requeue them in 'products' queue
  */
 export const reclaimFailedRequest = async (name: string) => {
-    const datasError = await getScrapingData(`error-${name}`);
-    for (const item of datasError.items) {
+    const errorDatasetName = `error-${name}`;
+    const dataset = await Dataset.open(errorDatasetName);
+    const info = await dataset.getInfo();
+
+    if (!info || info.itemCount === 0) return;
+
+    console.log(`Checking for failed requests in ${errorDatasetName} (${info.itemCount} items)...`);
+
+    // Open queue once
+    const requestQueue = await RequestQueue.open(name);
+    let reclaimedCount = 0;
+
+    await dataset.forEach(async (item) => {
         const requestID = item["id"];
-        const requestQueue = await RequestQueue.open(name);
-        let request = await requestQueue.getRequest(requestID);
+        if (!requestID) return;
 
-        if (request) {
-            request.retryCount = 0;
-            request.errorMessages = [];
-            request.handledAt = undefined;
-
-            await requestQueue.reclaimRequest(request);
+        try {
+            const request = await requestQueue.getRequest(requestID);
+            if (request) {
+                request.retryCount = 0;
+                request.errorMessages = [];
+                request.handledAt = undefined;
+                await requestQueue.reclaimRequest(request);
+                reclaimedCount++;
+            }
+        } catch (e) {
+            console.error(`Failed to reclaim request ${requestID}: ${e}`);
         }
-    }
+    });
 
-    await dropDataset(`error-${name}`);
+    console.log(`Successfully reclaimed ${reclaimedCount} requests.`);
+    await dropDataset(errorDatasetName);
 };
 
 // Updated: Save title

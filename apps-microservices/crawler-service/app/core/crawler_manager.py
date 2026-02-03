@@ -190,12 +190,6 @@ class CrawlerManager:
         callback_url = job_info.get("callback_url")
         crawl_id = job_info["crawl_id"]
 
-        # --- Update Mode Override (V3) ---
-        if job_info.get("crawl_mode") == "update":
-            logger.info(f"Update Mode: Skipping success webhook for '{crawl_id}' to {callback_url}")
-            return
-        # ----------------------------
-
         if not callback_url:
             return
 
@@ -229,6 +223,30 @@ class CrawlerManager:
             logger.error(f"Failed to count stored files for '{crawl_id}': {e}")
         # --- END: Add Disk-Based File Count ---
 
+        # --- START: Update Mode Report Inclusion ---
+        # If this is an update job, check for the update report and include specific fields in the webhook
+        if job_info.get("crawl_mode") == "update":
+            try:
+                report_path = os.path.join(job_info["storage_path"], '_update_report.json')
+                if os.path.exists(report_path):
+                    async with aiofiles.open(report_path, 'r') as f:
+                        report_content = await f.read()
+                        report_json = json.loads(report_content)
+                        
+                        # Extract specific fields and merge into top-level params
+                        # Requested fields: mode, health, metrics, rates, thresholds
+                        target_fields = ["mode", "health", "metrics", "rates", "thresholds"]
+                        for field in target_fields:
+                            if field in report_json:
+                                params[field] = report_json[field]
+                                
+                        logger.info(f"Included filtered update report data for '{crawl_id}' in webhook.")
+                else:
+                    logger.info(f"Update report not found for '{crawl_id}' (maybe finished before generation).")
+            except Exception as e:
+                logger.warning(f"Failed to include update report for '{crawl_id}': {e}")
+        # --- END: Update Mode Report Inclusion ---
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(str(callback_url), params=params, timeout=30.0)
@@ -237,13 +255,9 @@ class CrawlerManager:
             logger.error(f"Failed to send success notification for '{crawl_id}'. Error: {e}")
 
     async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int, crawl_mode: str = "standard"):
-        # --- Update Mode Override (V3) ---
-        if crawl_mode == "update":
-            logger.info(f"Update Mode: Skipping failure webhook for '{crawl_id}' to {url}")
-            return
-        # ----------------------------
-
+        # We process failures for both standard and update modes now
         params = {"crawl_id": crawl_id, "domain": domain, "exit_code": exit_code, "timestamp": datetime.utcnow().isoformat()}
+        
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, params=params, timeout=30.0)
@@ -366,6 +380,7 @@ class CrawlerManager:
         job_info = await cache_service.get_json(job_key)
         if job_info:
             exit_code = process.returncode
+            # Allow exit code 2 (Node.js intentional success/partial success) or 0 (Standard success)
             is_success = (exit_code == 2)
             
             final_status = "finished" if is_success else "failed"

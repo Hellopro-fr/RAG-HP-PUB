@@ -23,6 +23,7 @@ import {
     loadDatasetUrlsGenerator,
     copyPreviousMethod,
     rehydrateDedupFromDataset,
+    generateUpdateReport,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -361,6 +362,11 @@ const persistenceInterval = setInterval(async () => {
             const urlIterator = context.dedupManager.getAllUrlsIterator();
             await updateUrlsCrawledStreaming(domain, urlIterator);
         }
+        
+        // Generate Update Report Periodically
+        if (crawlMode === 'update') {
+            await generateUpdateReport(domain);
+        }
     } catch (e) {
         console.error("Periodic persistence failed:", e);
     }
@@ -394,25 +400,31 @@ if (crawlMode === 'update') {
 
     const previousDatasetGenerator = loadDatasetUrlsGenerator(previousCrawlId, domain);
     let count = 0;
+    let skippedDuplicates = 0;
     
     for await (const url of previousDatasetGenerator) {
-        // 1. Add to Redis (Mark as Known)
+        // 1. Add to Redis (Mark as Known) - Returns true if NEW (unique)
+        // We use context.dedupManager as the source of truth for uniqueness in this session
         if (context.dedupManager) {
-            await context.dedupManager.addUrl(url);
-        }
-        
-        // 2. Add to Queue (Mark as Existing for Verification)
-        await requestQueue.addRequest({
-            url: url,
-            userData: { is_existing: true }
-        });
-        
-        count++;
-        if (count % 1000 === 0) {
-            console.log(`Seeded ${count} URLs from previous crawl...`);
+            const isNewUnique = await context.dedupManager.addUrl(url);
+            
+            if (isNewUnique) {
+                // 2. Add to Queue (Mark as Existing for Verification) ONLY if it's unique
+                await requestQueue.addRequest({
+                    url: url,
+                    userData: { is_existing: true }
+                });
+                
+                count++;
+                if (count % 1000 === 0) {
+                    console.log(`Seeded ${count} unique URLs from previous crawl...`);
+                }
+            } else {
+                skippedDuplicates++;
+            }
         }
     }
-    console.log(`Finished seeding ${count} URLs from previous crawl.`);
+    console.log(`Finished seeding ${count} unique URLs from previous crawl. (Skipped ${skippedDuplicates} duplicates)`);
 
     // --- CONFIGURE CIRCUIT BREAKER ---
     // This logic determines if we use Micro Mode (<50) or Standard Mode (>=50)
@@ -530,6 +542,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to write output files", e);
     }
 
+    // Final Update Report for Update Mode
+    if (crawlMode === 'update') {
+        await generateUpdateReport(domain);
+    }
+
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
     try {
@@ -559,7 +576,6 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
     process.exit(exitCode);
 };
-
 
 if (typeCrawling == "sitemap") {
     // ...
