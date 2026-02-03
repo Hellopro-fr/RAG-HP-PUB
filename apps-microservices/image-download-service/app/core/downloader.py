@@ -3,6 +3,8 @@ import aiofiles
 import os
 import logging
 import asyncio
+import re
+import unicodedata
 from datetime import datetime
 from typing import Optional, List, Dict
 from image_download_service.core.image_processor import ImageProcessor
@@ -38,6 +40,71 @@ class Downloader:
         elif self.proxy_url:
              logger.info(f"Configured generic Proxy: {self.proxy_url}")
 
+    def _normalize_name(self, name: str) -> str:
+        """
+        Simple slugification to match PHP's normaliser_mot_expression roughly.
+        """
+        # Lowercase
+        name = name.lower()
+        
+        # Remove accents
+        nfkd_form = unicodedata.normalize('NFKD', name)
+        name = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+        
+        # Replace non-alphanumeric with -
+        name = re.sub(r'[^a-z0-9]+', '-', name)
+        
+        # Trim dashes
+        name = name.strip('-')
+        
+        return name
+
+    def _get_expected_paths(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage") -> Dict[str, str]:
+        """
+        Calculate expected paths for an image based on product info.
+        Returns dict with main_path and thumb_path for each possible extension.
+        """
+        product_id_str = str(product_id)
+        if len(product_id_str) < 3:
+            product_id_str = product_id_str.zfill(3)
+            
+        rep1 = product_id_str[-1]
+        rep2 = product_id_str[-2]
+        rep3 = product_id_str[-3]
+        
+        normalized_name = self._normalize_name(product_name)
+        
+        # Check all possible extensions
+        extensions = ['.jpg', '.png', '.gif', '.webp']
+        paths = {}
+        
+        for ext in extensions:
+            filename = f"{normalized_name}-{product_id}{ext}"
+            main_dir = os.path.join(storage_base, "images", domain, "produit-2", rep1, rep2, rep3)
+            thumb_dir = os.path.join(storage_base, "images", domain, "produit-3", rep1, rep2, rep3)
+            
+            paths[ext] = {
+                "main_path": os.path.join(main_dir, filename),
+                "thumb_path": os.path.join(thumb_dir, filename),
+                "filename": filename
+            }
+        
+        return paths
+
+    def _image_exists(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage") -> Optional[Dict[str, str]]:
+        """
+        Check if image already exists for this product.
+        Returns the paths if found, None otherwise.
+        """
+        expected_paths = self._get_expected_paths(domain, product_id, product_name, storage_base)
+        
+        for ext, paths in expected_paths.items():
+            if os.path.exists(paths["main_path"]) and os.path.exists(paths["thumb_path"]):
+                logger.info(f"⏭️  Image already exists for product {product_id}: {paths['filename']}")
+                return paths
+        
+        return None
+
     async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage") -> Optional[Dict[str, str]]:
         """
         Downloads image bytes and delegates to ImageProcessor.
@@ -59,11 +126,6 @@ class Downloader:
                         logger.info(f"Download status for {url}: {response.status}")
                         if response.status == 200:
                             content = await response.read()
-                            
-                            # Process image (Synchronous call, but fast enough for threaded consumer or we could offload)
-                            # Since we are in an async method called by a sync wrapper in consumer, we are fine.
-                            # But wait, Consumer calls this in a loop via run_until_complete.
-                            # Image processing is CPU bound. For now, we do it inline.
                             
                             try:
                                 paths = self.image_processor.process_image(
@@ -89,6 +151,7 @@ class Downloader:
     async def process_product(self, product_data: dict) -> dict:
         """
         Downloads and processes images for a product.
+        Checks if image already exists before downloading.
         """
         domain = product_data.get("domaine", "unknown")
         product_id = product_data.get("id_produit", "unknown")
@@ -103,6 +166,14 @@ class Downloader:
         if isinstance(urls, str):
             urls = [urls]
         
+        # Check if image already exists (deduplication)
+        existing_paths = self._image_exists(domain, product_id, product_name)
+        if existing_paths:
+            # Image already downloaded, skip
+            product_data["processed_images"] = [existing_paths]
+            product_data["skipped"] = True
+            return product_data
+        
         processed_images = []
         logger.info(f"Downloading {len(urls)} images for product {product_id} ({domain})")
         
@@ -116,6 +187,8 @@ class Downloader:
             result = await self.download_and_process(url, domain, product_id, product_name)
             if result:
                 processed_images.append(result)
+                # Only download first successful image per product
+                break
         
         # Update product data with new structure
         product_data["processed_images"] = processed_images

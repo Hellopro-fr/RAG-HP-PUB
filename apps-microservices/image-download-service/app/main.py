@@ -1,5 +1,6 @@
 import os
 import asyncio
+import logging
 import aio_pika
 from typing import List, Optional
 from fastapi import FastAPI
@@ -9,8 +10,15 @@ from contextlib import asynccontextmanager
 
 # Importer les modules locaux
 from image_download_service.messaging.consumer import Consumer
-from image_download_service.messaging.publisher import Publisher
 from image_download_service.core.archiver import Archiver
+
+# Configuration du logging uniforme
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # Request/Response Models
 class SyncRequest(BaseModel):
@@ -38,15 +46,15 @@ async def connect_rabbitmq() -> aio_pika.RobustConnection:
     
     for attempt in range(max_retries):
         try:
-            print(f"🔄 Connexion à RabbitMQ (tentative {attempt + 1}/{max_retries})...")
+            logger.info(f"🔄 Connexion à RabbitMQ (tentative {attempt + 1}/{max_retries})...")
             connection = await aio_pika.connect_robust(
                 rabbitmq_url,
                 client_properties={"connection_name": "image-download-service"}
             )
-            print("✅ Connecté à RabbitMQ avec RobustConnection!")
+            logger.info("✅ Connecté à RabbitMQ avec RobustConnection!")
             return connection
         except Exception as e:
-            print(f"❌ Échec de connexion: {e}. Nouvelle tentative dans {retry_delay}s...")
+            logger.warning(f"❌ Échec de connexion: {e}. Nouvelle tentative dans {retry_delay}s...")
             await asyncio.sleep(retry_delay)
     
     raise Exception(f"❌ Impossible de se connecter à RabbitMQ après {max_retries} tentatives.")
@@ -55,30 +63,27 @@ async def connect_rabbitmq() -> aio_pika.RobustConnection:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    print("🚀 Image-Download-Service: Démarrage...")
+    logger.info("🚀 Image-Download-Service: Démarrage...")
     
     try:
         # Établir la connexion RabbitMQ
         app.state.rabbitmq_connection = await connect_rabbitmq()
         
-        # Initialiser le Publisher avec la connexion
-        app.state.publisher = Publisher(app.state.rabbitmq_connection)
-        
-        # Initialiser le Consumer avec la connexion et le publisher
-        app.state.consumer = Consumer(app.state.rabbitmq_connection, app.state.publisher)
+        # Initialiser le Consumer avec la connexion (Publisher supprimé - non utilisé)
+        app.state.consumer = Consumer(app.state.rabbitmq_connection)
         
         # Démarrer le consumer en tâche de fond
         app.state.consumer_task = asyncio.create_task(app.state.consumer.start_consuming())
-        print("✅ Consumer démarré en tâche de fond.")
+        logger.info("✅ Consumer démarré en tâche de fond.")
         
     except Exception as e:
-        print(f"❌ Erreur lors du démarrage: {e}")
+        logger.error(f"❌ Erreur lors du démarrage: {e}")
         # Continue sans RabbitMQ - l'API REST fonctionnera toujours
     
     yield
     
     # Shutdown
-    print("🛑 Image-Download-Service: Arrêt...")
+    logger.info("🛑 Image-Download-Service: Arrêt...")
     
     # Annuler la tâche consumer
     if hasattr(app.state, 'consumer_task'):
@@ -91,7 +96,7 @@ async def lifespan(app: FastAPI):
     # Fermer la connexion RabbitMQ
     if hasattr(app.state, 'rabbitmq_connection') and app.state.rabbitmq_connection:
         await app.state.rabbitmq_connection.close()
-        print("✅ Connexion RabbitMQ fermée.")
+        logger.info("✅ Connexion RabbitMQ fermée.")
 
 app = FastAPI(
     title="Image Download Service",

@@ -1,7 +1,6 @@
 import aio_pika
 import json
 import logging
-from image_download_service.messaging.publisher import Publisher
 from image_download_service.core.downloader import Downloader
 from common_utils.autres.DLQProperties import DLQProperties
 
@@ -12,13 +11,13 @@ RETRY_TTL_MS = 30000
 
 
 class Consumer:
-    def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
+    def __init__(self, connection: aio_pika.RobustConnection):
         """
         Initialise le consumer avec une logique de retry et DLQ.
         Utilise RobustConnection pour une reconnexion automatique.
+        NOTE: Publisher supprimé car les messages ne sont pas consommés.
         """
         self.connection = connection
-        self.publisher = publisher
         self.downloader = Downloader()
         
         # Noms des composants RabbitMQ
@@ -30,7 +29,7 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
-        print("✅ Consumer initialisé (aio_pika RobustConnection).")
+        logger.info("✅ Consumer initialisé (aio_pika RobustConnection).")
 
     async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
         """Déclare toutes les files d'attente et les échanges nécessaires."""
@@ -77,7 +76,7 @@ class Consumer:
         )
         await main_queue.bind(exchange, self.routing_key)
         
-        print(f"✅ Queue '{self.queue_name}' declared and bound to '{self.exchange_name}'.")
+        logger.info(f"✅ Queue '{self.queue_name}' declared and bound to '{self.exchange_name}'.")
         return main_queue
 
     def _get_retry_count(self, message: aio_pika.abc.AbstractIncomingMessage) -> int:
@@ -99,40 +98,41 @@ class Consumer:
                 product_data = data.get("data", data)
                 product_id = product_data.get('id_produit', 'unknown')
                 
-                print(f"\n📥 Image-Download-Service: Message reçu pour le produit '{product_id}'.")
+                logger.info(f"📥 Message reçu pour le produit '{product_id}'.")
                 
                 # --- FILTER: Process only 'SITEWEB' or 'test_web' source ---
                 source = product_data.get("source") or data.get("origin")
                 
                 if source not in ["SITEWEB", "test_web"]:
-                    print(f"   ⏭️ Skipping product {product_id}: Source '{source}' not in allowed list.")
+                    logger.info(f"⏭️ Skipping product {product_id}: Source '{source}' not in allowed list.")
                     return  # ACK automatique via context manager
                 
-                print(f"   🔄 Processing product {product_id} (Source: {source})")
+                logger.info(f"🔄 Processing product {product_id} (Source: {source})")
                 
                 # Appel async natif - pas besoin de wrapper synchrone !
                 result_data = await self.downloader.process_product(product_data)
                 
-                print(f"   ✅ Processing complete for {product_id}")
-                
-                # Publier les résultats si des images ont été traitées
-                if result_data.get("processed_images"):
-                    async with self.connection.channel() as channel:
-                        await self.publisher.publish_message(result_data, channel)
+                # Log si l'image existait déjà (déduplication)
+                if result_data.get("skipped"):
+                    logger.info(f"⏭️ Image already exists for {product_id}, skipped download.")
+                elif result_data.get("processed_images"):
+                    logger.info(f"✅ Downloaded {len(result_data['processed_images'])} image(s) for {product_id}")
+                else:
+                    logger.warning(f"⚠️ No images processed for {product_id}")
 
             except (json.JSONDecodeError, ValueError) as e:
                 # Erreur permanente: le message est invalide.
-                print(f"❌ Erreur permanente pour {product_id}. Message envoyé à la DLQ finale. Erreur: {e}")
+                logger.error(f"❌ Erreur permanente pour {product_id}. Message envoyé à la DLQ finale. Erreur: {e}")
                 await self._send_to_dlq(message, e, 0)
 
             except Exception as e:
                 # Erreur potentiellement transitoire.
                 retry_count = self._get_retry_count(message)
                 if retry_count < MAX_RETRIES:
-                    print(f"❌ Erreur transitoire pour {product_id} (essai {retry_count + 1}/{MAX_RETRIES + 1}). Retrying. Erreur: {e}")
+                    logger.warning(f"❌ Erreur transitoire pour {product_id} (essai {retry_count + 1}/{MAX_RETRIES + 1}). Retrying. Erreur: {e}")
                     await message.nack(requeue=False)  # NACK pour retry via DLX
                 else:
-                    print(f"❌ Échec après {MAX_RETRIES + 1} tentatives pour {product_id}. Envoi à la DLQ. Erreur: {e}")
+                    logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives pour {product_id}. Envoi à la DLQ. Erreur: {e}")
                     await self._send_to_dlq(message, e, MAX_RETRIES)
     
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
@@ -157,9 +157,9 @@ class Consumer:
                     ),
                     routing_key=self.routing_key
                 )
-                print(f"   📤 Message envoyé à la DLQ: {self.dead_letter_queue_name}")
+                logger.info(f"📤 Message envoyé à la DLQ: {self.dead_letter_queue_name}")
         except Exception as dlq_error:
-            print(f"❌ Erreur lors de l'envoi à la DLQ: {dlq_error}")
+            logger.error(f"❌ Erreur lors de l'envoi à la DLQ: {dlq_error}")
 
     async def start_consuming(self):
         """
@@ -173,5 +173,5 @@ class Consumer:
         
         queue = await self._setup_queues(channel)
         
-        print("👂 Image-Download-Service: En attente de messages...")
+        logger.info("👂 Image-Download-Service: En attente de messages...")
         await queue.consume(self._on_message_callback)
