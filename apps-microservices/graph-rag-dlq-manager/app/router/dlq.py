@@ -114,6 +114,10 @@ async def requeue_messages(request: RequeueRequest):
         target_exchange = request.target_exchange or settings.RETRY_EXCHANGE
         target_routing_key = request.target_routing_key or settings.RETRY_ROUTING_KEY
 
+        if request.queue_name == "graph_rag_llm_extraction_queue_dlq":
+            target_exchange = "graph_rag_product_extracted"
+            target_routing_key = "graph_rag.product.extracted"
+
         result = await rabbitmq_client.requeue_messages(
             queue_name=request.queue_name,
             target_exchange=target_exchange,

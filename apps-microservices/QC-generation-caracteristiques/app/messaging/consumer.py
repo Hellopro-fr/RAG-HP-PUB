@@ -1,24 +1,35 @@
-import pika
 import json
+import logging
 import asyncio
-import traceback
+from typing import List
+import aio_pika
+from aio_pika.abc import AbstractIncomingMessage
+
+from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
+from app.core.credentials import settings
 from app.messaging.publisher import Publisher
 from app.core.list_caracteristiques_generator import ListCaracteristiquesGenerator
 from app.core.api_client import HelloProAPIClient
 from app.schemas.question_caracteristique import RequestProcessus
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
-from common_utils.autres.DLQProperties import DLQProperties
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 
+
 class Consumer:
-    """Consumer pour le service QC-generation-caracteristiques (step 3)."""
-    def __init__(self, connection: pika.BlockingConnection, publisher: Publisher):
-        self.connection = connection
-        self.channel = connection.channel()
+    """Async Consumer pour le service QC-generation-caracteristiques (step 3)."""
+
+    def __init__(self, publisher: Publisher):
         self.publisher = publisher
-        
+        self.connection = None
+        self.channel = None
+        self.queue = None
+        self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
+        self._message_queue: asyncio.Queue = asyncio.Queue()
+
         self.exchange_name = 'qc_pipeline_exchange'
         self.routing_key = 'qc.step3.start'
         self.queue_name = 'qc_caracteristiques_queue'
@@ -26,190 +37,176 @@ class Consumer:
         self.retry_queue_name = f'{self.queue_name}_retry'
         self.dead_letter_exchange = 'qc_dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
-        
-        self.rabbitmq_connection = RabbitMQConnection()
-        self.connect()
-        print("✅ QC-Caracteristiques Consumer initialisé.")
-    
-    def connect(self):
-        """Établit la connexion et configure le consumer."""
-        self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-        self.channel = self.connection.channel()
 
-        # Infrastructure DLQ
-        self.channel.exchange_declare(exchange=self.dead_letter_exchange, exchange_type='topic', durable=True)
-        self.channel.queue_declare(queue=self.dead_letter_queue_name, durable=True)
-        self.channel.queue_bind(exchange=self.dead_letter_exchange, queue=self.dead_letter_queue_name, routing_key=self.routing_key)
+    async def connect(self):
+        logger.info(f"Connecting to RabbitMQ at {settings.RABBITMQ_URL}")
+        self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
+        self.channel = await self.connection.channel()
+        await self.channel.set_qos(prefetch_count=settings.MAX_CONCURRENCY)
+        await self.publisher.setup(self.channel)
+        await self._setup_infrastructure()
+        logger.info("✅ QC-Caracteristiques Consumer initialized")
 
-        # Infrastructure Retry
-        self.channel.exchange_declare(exchange=self.retry_exchange, exchange_type='topic', durable=True)
-        retry_queue_args = {
-            'x-message-ttl': RETRY_TTL_MS,
-            'x-dead-letter-exchange': self.exchange_name,
-            'x-dead-letter-routing-key': self.routing_key
-        }
-        self.channel.queue_declare(queue=self.retry_queue_name, durable=True, arguments=retry_queue_args)
-        self.channel.queue_bind(exchange=self.retry_exchange, queue=self.retry_queue_name, routing_key=self.routing_key)
+    async def _setup_infrastructure(self):
+        dlq_exchange = await self.channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
+        dlq_queue = await self.channel.declare_queue(self.dead_letter_queue_name, durable=True)
+        await dlq_queue.bind(dlq_exchange, routing_key=self.routing_key)
 
-        # Queue Principale
-        self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-        main_queue_args = {
-            'x-dead-letter-exchange': self.retry_exchange,
-            'x-dead-letter-routing-key': self.routing_key
-        }
-        self.channel.queue_declare(queue=self.queue_name, durable=True, arguments=main_queue_args)
-        self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
-        
-        # Mettre à jour la connexion du publisher
-        self.publisher.connection = self.connection
-        self.publisher.channel = self.channel
-    
-    def _ensure_channel_open(self, ch):
-        """Vérifie que le channel est ouvert, sinon reconnecte."""
-        try:
-            if ch.is_closed or not ch.connection or ch.connection.is_closed:
-                print("⚠️ Channel/Connection fermé, reconnexion...")
-                self.connect()
-                return self.channel
-            return ch
-        except:
-            print("⚠️ Erreur lors de la vérification du channel, reconnexion...")
-            self.connect()
-            return self.channel
-    
+        retry_exchange = await self.channel.declare_exchange(self.retry_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
+        retry_queue = await self.channel.declare_queue(self.retry_queue_name, durable=True,
+            arguments={"x-message-ttl": RETRY_TTL_MS, "x-dead-letter-exchange": self.exchange_name, "x-dead-letter-routing-key": self.routing_key})
+        await retry_queue.bind(retry_exchange, routing_key=self.routing_key)
+
+        main_exchange = await self.channel.declare_exchange(self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True)
+        self.queue = await self.channel.declare_queue(self.queue_name, durable=True,
+            arguments={"x-dead-letter-exchange": self.retry_exchange, "x-dead-letter-routing-key": self.routing_key})
+        await self.queue.bind(main_exchange, routing_key=self.routing_key)
+
+    def _get_retry_count(self, message: AbstractIncomingMessage) -> int:
+        headers = message.headers
+        if headers and "x-death" in headers:
+            for death in headers["x-death"]:
+                if death.get("queue") == self.retry_queue_name:
+                    return death.get("count", 0)
+        return 0
+
     def _is_transient_error(self, exception: Exception) -> bool:
-        """Détermine si une erreur est transitoire."""
         if isinstance(exception, (
-            pika.exceptions.AMQPConnectionError,
-            pika.exceptions.AMQPChannelError,
-            pika.exceptions.ConnectionClosedByBroker,
-            pika.exceptions.ChannelClosedByBroker,
-            pika.exceptions.StreamLostError,
-            pika.exceptions.ChannelWrongStateError
+            aio_pika.exceptions.AMQPConnectionError,
+            aio_pika.exceptions.AMQPChannelError,
+            aio_pika.exceptions.ChannelClosed,
+            aio_pika.exceptions.ConnectionClosed,
         )):
             return True
-        
         error_msg = str(exception).lower()
-        transient_keywords = [
-            'timeout', 'connection reset', 'connection refused',
-            'temporarily unavailable', 'service unavailable', 'timed out',
-            'network unreachable', 'connection aborted', 'broken pipe',
-            'eof', 'end of file'
-        ]
-        return any(keyword in error_msg for keyword in transient_keywords)
-    
-    def _get_retry_count(self, properties):
-        """Récupère le nombre de tentatives depuis les headers x-death."""
-        if properties.headers and 'x-death' in properties.headers:
-            for death in properties.headers['x-death']:
-                if death.get('queue') == self.retry_queue_name:
-                    return death.get('count', 0)
-        return 0
-    
-    def _send_to_dlq(self, ch, method, body, error: Exception, retry_count: int):
-        """Envoie directement le message vers la DLQ."""
-        print(f"❌ Erreur métier/permanente. Envoi direct à la DLQ. Erreur: {error}")
-        try:
-            dlq_props = DLQProperties.create_dlq_properties(error, 'qc-generation-caracteristiques', retry_count, method)
-            active_ch = self._ensure_channel_open(ch)
-            active_ch.basic_publish(
-                exchange=self.dead_letter_exchange,
-                routing_key=self.routing_key,
-                body=body,
-                properties=dlq_props
-            )
-            active_ch.basic_ack(delivery_tag=method.delivery_tag)
-        except Exception as dlq_error:
-            print(f"❌ Erreur lors de l'envoi DLQ: {dlq_error}")
-            try:
-                self.connect()
-                self.channel.basic_publish(
-                    exchange=self.dead_letter_exchange,
-                    routing_key=self.routing_key,
-                    body=body,
-                    properties=dlq_props
-                )
-                self.channel.basic_ack(delivery_tag=method.delivery_tag)
-                print("✅ Message envoyé à la DLQ après reconnexion")
-            except:
-                print("❌ Impossible d'envoyer à la DLQ même après reconnexion")
-    
-    def _on_message_callback(self, ch, method, properties, body):
-        """Callback qui traite chaque message reçu."""
-        try:
-            print("📥 QC-Caracteristiques: Message reçu.")
-            data = json.loads(body)
-            id_categorie = data.get('id_categorie')
-            is_reset = data.get('is_reset', False)
-            if not id_categorie:
-                raise ValueError("id_categorie manquant.")
-            
-            print(f"\n📥 QC-Caracteristiques: Traitement catégorie '{id_categorie}'.")
-            
-            request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
-            api_client = HelloProAPIClient()
-            generator = ListCaracteristiquesGenerator(api_client)
-            
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(generator.generate_all_caracteristiques(request))
-                loop.run_until_complete(generator.close())
-            finally:
-                pending = asyncio.all_tasks(loop)
-                if pending:
-                    loop.run_until_complete(
-                        asyncio.wait_for(
-                            asyncio.gather(*pending, return_exceptions=True),
-                            timeout=5.0
-                        )
-                    )
-                loop.close()
-            
-            output_message = {
-                'id_categorie': id_categorie,
-                'is_reset': is_reset,
-                'step': 4,
-                'previous_step': 'caracteristiques',
-                'status': result.status
-            }
-            
-            self.publisher.publish_message(output_message)
-            
-            active_ch = self._ensure_channel_open(ch)
-            active_ch.basic_ack(delivery_tag=method.delivery_tag)
-            print(f"✅ QC-Caracteristiques: Catégorie '{id_categorie}' traitée.")
-            
-        except (json.JSONDecodeError, ValueError) as e:
-            self._send_to_dlq(ch, method, body, e, 0)
+        return any(kw in error_msg for kw in ['timeout', 'connection reset', 'connection refused', 'temporarily unavailable', 'service unavailable', 'timed out', 'network unreachable', 'connection aborted', 'broken pipe', 'eof', 'end of file'])
+
+    async def _collect_messages_batch(self) -> List[AbstractIncomingMessage]:
+        """
+        Collecte jusqu'à BATCH_SIZE messages pendant BATCH_TIMEOUT_SECONDS max.
+        Retourne dès qu'on atteint BATCH_SIZE ou que le timeout expire.
+        """
+        messages: List[AbstractIncomingMessage] = []
+        deadline = asyncio.get_event_loop().time() + settings.BATCH_TIMEOUT_SECONDS
         
-        except Exception as e:
-            print(f"❌ ERREUR FATALE: {e}")
-            print(f"📋 Traceback complet:\n{traceback.format_exc()}")
-            
-            if self._is_transient_error(e):
-                retry_count = self._get_retry_count(properties)
-                if retry_count < MAX_RETRIES:
-                    print(f"⚠️ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Erreur: {e}")
-                    try:
-                        active_ch = self._ensure_channel_open(ch)
-                        active_ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-                    except Exception as nack_error:
-                        print(f"⚠️ Erreur lors du NACK: {nack_error}")
-                else:
-                    print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Erreur: {e}")
-                    self._send_to_dlq(ch, method, body, e, MAX_RETRIES)
-            else:
-                self._send_to_dlq(ch, method, body, e, 0)
-    
-    def start_consuming(self):
-        """Démarre la boucle d'écoute des messages."""
-        for i in range(3):
-            try:
-                self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message_callback)
-                print("👂 QC-Caracteristiques: En attente de messages...")
-                self.channel.start_consuming()
+        # logger.info(f"⏳ Début collecte batch (max {settings.BATCH_SIZE} messages, timeout {settings.BATCH_TIMEOUT_SECONDS}s)")
+        
+        while len(messages) < settings.BATCH_SIZE:
+            remaining_time = deadline - asyncio.get_event_loop().time()
+            if remaining_time <= 0:
+                # logger.info(f"⏰ Timeout atteint après {settings.BATCH_TIMEOUT_SECONDS}s")
                 break
-            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker) as e:
-                print(f"⚠️ Connexion perdue: {e}")
-                self.connect()
+            
+            try:
+                message = await asyncio.wait_for(
+                    self._message_queue.get(),
+                    timeout=remaining_time
+                )
+                messages.append(message)
+                logger.info(f"📨 Message reçu ({len(messages)}/{settings.BATCH_SIZE})")
+            except asyncio.TimeoutError:
+                # logger.info(f"⏰ Timeout atteint, {len(messages)} messages collectés")
+                break
+        
+        return messages
+
+    async def _feed_message_queue(self):
+        """Alimente la queue interne avec les messages RabbitMQ."""
+        async with self.queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                await self._message_queue.put(message)
+
+    async def process_message(self, message: AbstractIncomingMessage):
+        """Traite un message avec logs contextualisés par catégorie."""
+        async with message.process(ignore_processed=True):
+            id_categorie = None
+            try:
+                data = json.loads(message.body.decode())
+                id_categorie = data.get('id_categorie')
+                is_reset = data.get('is_reset', False)
+
+                if not id_categorie:
+                    raise ValueError("id_categorie manquant dans le message.")
+
+                # Log contextualisé avec préfixe [CAT-{id}]
+                logger.info(f"[CAT-{id_categorie}] 📥 Début traitement catégorie")
+
+                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
+                api_client = HelloProAPIClient()
+                generator = ListCaracteristiquesGenerator(api_client)
+
+                try:
+                    result = await generator.generate_all_caracteristiques(request)
+                    # Echo du fichier tracking dans les logs
+                    if generator.tracking_file:
+                        logger.info(f"[CAT-{id_categorie}] 📁 Fichier tracking: {generator.tracking_file}")
+                finally:
+                    await generator.close()
+
+                output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 4, 'previous_step': 'caracteristiques', 'status': result.status}
+                await self.publisher.publish_message(output_message)
+                await message.ack()
+                logger.info(f"[CAT-{id_categorie}] ✅ Traitement terminé avec succès")
+
+            except (json.JSONDecodeError, ValueError) as e:
+                cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
+                logger.error(f"{cat_prefix}❌ Erreur permanente: {e}")
+                headers = DLQProperties.create_dlq_headers(e, "qc-generation-caracteristiques", 0, message)
+                await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
+                await message.ack()
+
+            except Exception as e:
+                cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
+                retry_count = self._get_retry_count(message)
+                if self._is_transient_error(e) and retry_count < MAX_RETRIES:
+                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}), retry: {e}")
+                    await message.nack(requeue=False)
+                else:
+                    logger.error(f"{cat_prefix}❌ Échec après {retry_count + 1} tentatives: {e}")
+                    headers = DLQProperties.create_dlq_headers(e, "qc-generation-caracteristiques", retry_count, message)
+                    await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
+                    await message.ack()
+
+    async def start_consuming(self):
+        """Démarre la boucle d'écoute avec batching et contrôle de concurrence."""
+        await self.connect()
+        logger.info(f"👂 QC-Caracteristiques: En attente sur {self.queue_name}")
+        logger.info(f"📦 Configuration: batch_size={settings.BATCH_SIZE}, timeout={settings.BATCH_TIMEOUT_SECONDS}s, concurrence={settings.MAX_CONCURRENCY}")
+
+        # Démarrer le feeder en arrière-plan
+        feeder_task = asyncio.create_task(self._feed_message_queue())
+
+        try:
+            while True:
+                # Collecter un batch de messages
+                messages = await self._collect_messages_batch()
+                
+                if not messages:
+                    # logger.info("📭 Aucun message reçu, attente du prochain batch...")
+                    continue
+                
+                logger.info(f"📦 Batch collecté: {len(messages)} message(s) - Démarrage traitement parallèle")
+                
+                # Traiter les messages en parallèle
+                tasks = []
+                for message in messages:
+                    await self.semaphore.acquire()
+                    task = asyncio.create_task(self._process_with_release(message))
+                    tasks.append(task)
+                
+                # Attendre que tous les messages du batch soient traités
+                await asyncio.gather(*tasks, return_exceptions=True)
+                logger.info(f"✅ Batch de {len(messages)} message(s) traité")
+        finally:
+            feeder_task.cancel()
+
+    async def _process_with_release(self, message: AbstractIncomingMessage):
+        """Wrapper pour process_message qui libère le semaphore après traitement."""
+        try:
+            await self.process_message(message)
+        finally:
+            self.semaphore.release()
+
+    async def close(self):
+        if self.connection:
+            await self.connection.close()

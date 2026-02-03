@@ -130,7 +130,7 @@ def get_result_path(id_categorie: str, base_dir: str = "data") -> str:
 def get_tracking_filepath(
     id_categorie: str, 
     prefix: str = "question",
-    base_dir: str = "script/rag/generation_question/tracking"
+    base_dir: str = "tracking"
 ) -> str:
     """
     Génère le chemin du fichier de tracking

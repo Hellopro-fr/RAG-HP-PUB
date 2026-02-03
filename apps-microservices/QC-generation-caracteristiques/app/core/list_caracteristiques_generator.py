@@ -364,6 +364,7 @@ class ListCaracteristiquesGenerator:
             id_categorie, 
             prefix="caracteristique"
         )
+        self._log(f"Fichier de tracking: {self.tracking_file}")
         
         # Vérifier le stopper manuel
         if utils.check_stopper(id_categorie):

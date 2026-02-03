@@ -416,6 +416,8 @@ class EnrichissementGenerator:
                     del rep_copy['id_reponse']
                 if 'est_champs_libre' in rep_copy:
                     del rep_copy['est_champs_libre']
+                if 'equivalence' in rep_copy:
+                    del rep_copy['equivalence']
                 clean_reponses.append(rep_copy)
             clean_question_for_llm['reponses'] = clean_reponses
         
