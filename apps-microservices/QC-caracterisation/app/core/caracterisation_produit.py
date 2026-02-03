@@ -84,6 +84,32 @@ class CaracterisationProduitGenerator:
                 raise Exception("Impossible de charger le prompt Repasse")
             self._log(f"Prompt Repasse chargé (ID: {self.PROMPT_REPASSE_ID})")
 
+    def _normalize_for_comparison(self, text: str) -> str:
+        """
+        Normalise une chaîne pour comparaison stricte:
+        - Transforme en minuscule
+        - Supprime tous les espaces
+        - Supprime les accents
+        - Supprime les caractères spéciaux
+        Retourne uniquement les lettres alphabétiques
+        
+        Args:
+            text: Chaîne à normaliser
+            
+        Returns:
+            Chaîne normalisée (uniquement alphabet minuscule)
+        """
+        if not text:
+            return ""
+        import unicodedata
+        # Convertir en minuscule
+        text = str(text).lower()
+        # Normaliser pour supprimer les accents
+        nfkd = unicodedata.normalize('NFKD', text)
+        text_clean = ''.join([c for c in nfkd if not unicodedata.combining(c)])
+        # Garder uniquement les lettres alphabétiques (supprimer espaces, chiffres, caractères spéciaux)
+        return re.sub(r'[^a-z]', '', text_clean)
+    
     def _normalize_string(self, text: str) -> str:
         """Normalise une chaîne pour comparaison (minuscule, sans caractères spéciaux)"""
         import unicodedata
@@ -433,6 +459,157 @@ class CaracterisationProduitGenerator:
         
         return json_data
 
+    async def _verify_textual_values(
+        self,
+        produit_caract: List[Dict[str, Any]],
+        jeu_carac_dict: Dict[Any, Dict],
+        id_categorie: str
+    ) -> Tuple[List[Dict[str, Any]], bool]:
+        """
+        Vérifie et corrige les caractéristiques textuelles après la repasse LLM.
+        
+        Cette méthode traite 2 cas:
+        1. Si new-value est non vide ET id_valeur + valeur sont vides:
+           - Vérifie si new-value existe déjà parmi les valeurs possibles
+           - Si oui: copie id_valeur + valeur de l'existant et supprime new-value
+           - Si non: récupère et vérifie dans all_new_value
+        
+        2. Si id_valeur est vide MAIS valeur est non vide:
+           - Recherche l'id_valeur correspondant dans les valeurs possibles
+           - Si non trouvé: supprime la caractéristique
+        
+        Args:
+            produit_caract: Liste des caractéristiques du produit
+            jeu_carac_dict: Dictionnaire des caractéristiques {id: carac avec valeurs}
+            id_categorie: ID de la catégorie pour charger all_new_value si nécessaire
+            
+        Returns:
+            Tuple (liste corrigée, has_changed)
+        """
+        if not produit_caract:
+            return produit_caract, False
+        
+        has_changed = False
+        result = []
+        all_new_value = None  # Sera chargé à la demande
+        
+        for item in produit_caract:
+            id_carac = item.get('id_caracteristique')
+            id_valeur = item.get('id_valeur')
+            valeur = item.get('valeur')
+            new_value = item.get('new-value') or item.get('new_value')
+            
+            # Récupérer les infos de la caractéristique du référentiel
+            carac_ref = jeu_carac_dict.get(id_carac, {})
+            valeurs_possibles = carac_ref.get('valeurs', [])
+            type_carac = carac_ref.get('type', '')
+            
+            # Vérifier si c'est une caractéristique textuelle
+            is_textuelle = re.match(r'.*text.*', str(type_carac), re.IGNORECASE)
+            
+            if not is_textuelle:
+                # Caractéristique non textuelle, on garde tel quel
+                result.append(item)
+                continue
+            
+            item_copy = item.copy()
+            
+            # CAS 1: new-value non vide ET id_valeur + valeur vides
+            if new_value and (not id_valeur and not valeur):
+                new_value_normalized = self._normalize_for_comparison(new_value)
+                found = False
+                
+                # Chercher dans les valeurs possibles de la caractéristique
+                for val in valeurs_possibles:
+                    val_text = val.get('valeur', '')
+                    val_normalized = self._normalize_for_comparison(val_text)
+                    
+                    if val_normalized == new_value_normalized:
+                        # Trouvé! Copier id_valeur et valeur, supprimer new-value
+                        item_copy['id_valeur'] = val.get('id_valeur')
+                        item_copy['valeur'] = val.get('valeur')
+                        item_copy.pop('new-value', None)
+                        item_copy.pop('new_value', None)
+                        found = True
+                        has_changed = True
+                        self._log(f"[VERIF] new-value '{new_value}' trouvé dans valeurs possibles -> id_valeur={val.get('id_valeur')}")
+                        break
+                
+                # Si pas trouvé, récupérer all_new_value et chercher dedans
+                if not found:
+                    # Charger all_new_value une seule fois si nécessaire
+                    if all_new_value is None:
+                        all_new_value = await self.api_client.post(
+                            "caracteristique",
+                            "new-value",
+                            "get",
+                            {"id_categorie": id_categorie}
+                        ) or {}
+                        self._log(f"[VERIF] all_new_value chargé pour vérification")
+                    
+                    if all_new_value:
+                        # Filtrer les new-value de cette caractéristique
+                        new_values_for_carac = all_new_value.get(id_carac, [])
+
+                        if not new_values_for_carac:
+                           for id_carac_base, base_new_value in all_new_value.items():
+                               if self._normalize_for_comparison(id_carac_base) == self._normalize_for_comparison(id_carac):
+                                   new_values_for_carac = base_new_value
+                                   break
+                        
+                        for nv in new_values_for_carac:
+                            nv_text = nv.get('valeur')
+                            nv_normalized = self._normalize_for_comparison(nv_text)
+                            
+                            if nv_normalized == new_value_normalized and nv.get('id_valeur'):
+                                # Trouvé dans all_new_value, copier les valeurs
+                                item_copy['id_valeur'] = nv.get('id_valeur')
+                                item_copy['valeur'] = nv.get('valeur')
+                                item_copy.pop('new-value', None)
+                                item_copy.pop('new_value', None)
+                                found = True
+                                has_changed = True
+                                self._log(f"[VERIF] new-value '{new_value}' trouvé dans all_new_value -> id_valeur={nv.get('id_valeur')}")
+                                break
+                
+                # Si toujours pas trouvé, on garde tel quel
+                if not found:
+                    self._log(f"[VERIF] new-value '{new_value}' non trouvé, conservé tel quel")
+                
+                result.append(item_copy)
+                continue
+            
+            # CAS 2: id_valeur vide MAIS valeur non vide
+            if not id_valeur and valeur:
+                valeur_normalized = self._normalize_for_comparison(valeur)
+                found = False
+                
+                # Chercher l'id_valeur dans les valeurs possibles
+                for val in valeurs_possibles:
+                    val_text = val.get('valeur', '')
+                    val_normalized = self._normalize_for_comparison(val_text)
+                    
+                    if val_normalized == valeur_normalized:
+                        # Trouvé! Mettre à jour l'id_valeur
+                        item_copy['id_valeur'] = val.get('id_valeur')
+                        found = True
+                        has_changed = True
+                        self._log(f"[VERIF] valeur '{valeur}' trouvée -> id_valeur={val.get('id_valeur')}")
+                        break
+                
+                if not found:
+                    # Non trouvé, supprimer cette caractéristique silencieusement
+                    has_changed = True
+                    continue  # Skip, ne pas ajouter au result
+                
+                result.append(item_copy)
+                continue
+            
+            # Cas normal: garder tel quel
+            result.append(item_copy)
+        
+        return result, has_changed
+
     async def generate_all_caracterisations(
         self,
         request: RequestProcessus
@@ -523,7 +700,7 @@ class CaracterisationProduitGenerator:
             "final",
             "get",
             {"id_categorie": id_categorie}
-        )
+        ) 
         
         if not jeu_caracteristique:
             raise Exception("Jeu de caractéristiques non trouvé")
@@ -635,9 +812,19 @@ class CaracterisationProduitGenerator:
                             produit_caract,
                             carac_referentiel
                         )
+                    
+                    # Vérification des caractéristiques textuelles après repasse
+                    produit_caract, verif_changed = await self._verify_textual_values(
+                        produit_caract,
+                        jeu_carac_dict,
+                        id_categorie
+                    )
+                    
+                    if verif_changed:
+                        self._log("Caractéristiques textuelles corrigées après vérification")
                 
                 # Sauvegarder le résultat
-                await self.api_client.post(
+                res_carac_produit = await self.api_client.post(
                     "caracterisation",
                     "produit",
                     "save",
@@ -647,6 +834,9 @@ class CaracterisationProduitGenerator:
                         "caracteristiques": produit_caract
                     }
                 )
+
+                if res_carac_produit == False:
+                    raise Exception("Erreur lors de la sauvegarde du produit")
                 
                 processed_count += 1
                 
