@@ -59,9 +59,9 @@ class Downloader:
         
         return name
 
-    def _get_expected_paths(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage") -> Dict[str, str]:
+    def _get_expected_paths(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 0) -> Dict[str, str]:
         """
-        Calculate expected paths for an image based on product info.
+        Calculate expected paths for an image based on product info and index.
         Returns dict with main_path and thumb_path for each possible extension.
         """
         product_id_str = str(product_id)
@@ -79,7 +79,16 @@ class Downloader:
         paths = {}
         
         for ext in extensions:
-            filename = f"{normalized_name}-{product_id}{ext}"
+            if index > 0:
+                 filename = f"{normalized_name}-{product_id}-{index}{ext}"
+            else:
+                 # Check standard format for index 0 if that's what we decide, but current logic will likely pass index=1, 2, 3..
+                 # If index=1, filename has -1.
+                 if index == 0:
+                      filename = f"{normalized_name}-{product_id}{ext}"
+                 else:
+                      filename = f"{normalized_name}-{product_id}-{index}{ext}"
+
             main_dir = os.path.join(storage_base, "images", domain, "produit-2", rep1, rep2, rep3)
             thumb_dir = os.path.join(storage_base, "images", domain, "produit-3", rep1, rep2, rep3)
             
@@ -91,26 +100,23 @@ class Downloader:
         
         return paths
 
-    def _image_exists(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage") -> Optional[Dict[str, str]]:
+    def _image_exists(self, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 1) -> Optional[Dict[str, str]]:
         """
-        Check if image already exists for this product.
+        Check if image already exists for this product at specific index.
         Returns the paths if found, None otherwise.
         """
-        expected_paths = self._get_expected_paths(domain, product_id, product_name, storage_base)
+        expected_paths = self._get_expected_paths(domain, product_id, product_name, storage_base, index)
         
         for ext, paths in expected_paths.items():
             if os.path.exists(paths["main_path"]) and os.path.exists(paths["thumb_path"]):
-                logger.info(f"⏭️  Image already exists for product {product_id}: {paths['filename']}")
                 return paths
         
         return None
 
-    async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage") -> Optional[Dict[str, str]]:
+    async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 0) -> Optional[Dict[str, str]]:
         """
         Downloads image bytes and delegates to ImageProcessor.
         """
-        # Rate limiting now handled at product level via asyncio.sleep()
-        
         retries = 3
         timeout = aiohttp.ClientTimeout(total=30)
         
@@ -133,7 +139,8 @@ class Downloader:
                                     domain=domain,
                                     product_id=product_id,
                                     product_name=product_name,
-                                    base_storage_dir=storage_base
+                                    base_storage_dir=storage_base,
+                                    index=index 
                                 )
                                 return paths
                             except Exception as e:
@@ -151,7 +158,7 @@ class Downloader:
     async def process_product(self, product_data: dict) -> dict:
         """
         Downloads and processes images for a product.
-        Checks if image already exists before downloading.
+        Checks if individual image already exists before downloading.
         """
         domain = product_data.get("domaine", "unknown")
         product_id = product_data.get("id_produit", "unknown")
@@ -166,30 +173,37 @@ class Downloader:
         if isinstance(urls, str):
             urls = [urls]
         
-        # Check if image already exists (deduplication)
-        existing_paths = self._image_exists(domain, product_id, product_name)
-        if existing_paths:
-            # Image already downloaded, skip
-            product_data["processed_images"] = [existing_paths]
-            product_data["skipped"] = True
-            return product_data
-        
         processed_images = []
+        skipped_count = 0
+        
         logger.info(f"Downloading {len(urls)} images for product {product_id} ({domain})")
         
         for i, url in enumerate(urls):
             if not url: continue
             
+            # Index for file naming (starts at 1)
+            img_index = i + 1
+            
+            # Check if *this specific image* index already exists
+            existing_paths = self._image_exists(domain, product_id, product_name, index=img_index)
+            if existing_paths:
+                logger.info(f"⏭️  Image {img_index} already exists for product {product_id}: {existing_paths['filename']}")
+                processed_images.append(existing_paths)
+                skipped_count += 1
+                continue
+
             # Local rate limiting: 2 req/s (sleep 0.5s between requests)
             if i > 0:
                 await asyncio.sleep(LOCAL_RATE_DELAY)
                 
-            result = await self.download_and_process(url, domain, product_id, product_name)
+            result = await self.download_and_process(url, domain, product_id, product_name, index=img_index)
             if result:
                 processed_images.append(result)
         
         # Update product data with new structure
         product_data["processed_images"] = processed_images
+        product_data["skipped_count"] = skipped_count
+        product_data["total_images"] = len(urls)
         
         # Save to manifest for archive synchronization
         if processed_images:
