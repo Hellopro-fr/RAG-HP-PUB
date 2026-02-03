@@ -12,29 +12,87 @@ class ImageProcessor:
     def process_image(self, content: bytes, domain: str, product_id: str, product_name: str, base_storage_dir: str, index: int = 0):
         """
         Processes the image:
-        ...
+        1. Converts to RGBA/RGB
+        2. Resizes main image (max 800x800)
+        3. Creates thumbnail (110x110)
+        4. Saves both in sharded directory structure
+        
         Returns:
             dict: Paths to the saved main image and thumbnail
         """
         try:
-# ... (omitted lines)
+            if not content:
+                raise ValueError("Image content is empty")
+
+            # Create fresh BytesIO stream
+            image_stream = io.BytesIO(content)
+            image_stream.seek(0)
+
+            # Debug: Log first few bytes to check header
+            header_bytes = content[:10]
+            logger.info(f"Processing image {product_id} - Size: {len(content)} bytes - Header: {header_bytes}")
+
+            try:
+                image = Image.open(image_stream)
+                image.load() # Force load to validate
+            except Exception as pil_error:
+                # If SVG, it might start with <svg
+                if b'<svg' in header_bytes or b'<?xml' in header_bytes:
+                     logger.warning(f"SVG detected for {product_id}, skipping (PIL does not support SVG).")
+                     return None
+                raise pil_error
+
+            original_format = image.format.upper() if image.format else "JPEG"
+            
+            # Determine output format and extension based on PHP logic
+            # Case 1 (GIF) -> .gif
+            # Case 2 (JPEG) -> .jpg
+            # Case 3 (PNG) -> .png
+            # Case 18 (WEBP) -> .png
+            
+            if original_format == 'GIF':
+                output_format = 'GIF'
+                extension = '.gif'
+            elif original_format in ('JPEG', 'JPG'):
+                output_format = 'JPEG'
+                extension = '.jpg'
+                # JPEGs don't support alpha
+                if image.mode in ('RGBA', 'LA', 'P'):
+                    image = image.convert('RGB')
+            elif original_format == 'WEBP':
+                # PHP converts WebP to PNG
+                output_format = 'PNG'
+                extension = '.png'
+            else:
+                # Default to PNG for PNG and others
+                output_format = 'PNG'
+                extension = '.png'
+            
+            # --- 1. Normalization & Conversion for specific cases ---
+            if output_format == 'PNG' and image.mode in ('P', 'CMYK'):
+                 image = image.convert('RGBA')
+
+            # --- 2. Main Image Processing (Max 800x800) ---
+            image_max_size = (800, 800)
+            main_image = image.copy()
+            main_image.thumbnail(image_max_size, Image.Resampling.LANCZOS)
+            
+            # Create sharded path components
+            product_id_str = str(product_id)
+            if len(product_id_str) < 3:
+                product_id_str = product_id_str.zfill(3)
+                
+            rep1 = product_id_str[-1]
+            rep2 = product_id_str[-2]
+            rep3 = product_id_str[-3]
+            
             # Normalize filename
             normalized_name = self._normalize_name(product_name)
             
             # Suffix with index if provided (e.g., product-123-1.jpg)
-            # Index is usually 0-based from enumerate, so we use index+1 for filename if needed?
-            # User requirement: Multi-image support. Convention usually starts at 1.
-            # Let's use index + 1
             if index > 0:
                  filename = f"{normalized_name}-{product_id}-{index}{extension}"
             else:
-                 # Backward compatibility or first image
-                 # But if we have multiple images, even the first one should probably have -1?
-                 # Or keep original format for the first one?
-                 # User accepted "suffixe -1, -2", so let's use it for ALL images if we are in multi-mode.
-                 # Actually, logic in downloader will control 'index'.
-                 # If index=0 (default), maybe no suffix?
-                 # Let's assume passed index logic.
                  if index == 0:
                       filename = f"{normalized_name}-{product_id}{extension}"
                  else:
