@@ -1,21 +1,27 @@
-import pika
+import aio_pika
 import json
 import logging
-import os
-from app.messaging.publisher import Publisher
-from app.core.downloader import Downloader
+from image_download_service.messaging.publisher import Publisher
+from image_download_service.core.downloader import Downloader
+from common_utils.autres.DLQProperties import DLQProperties
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 
+
 class Consumer:
-    def __init__(self, publisher: Publisher):
+    def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
+        """
+        Initialise le consumer avec une logique de retry et DLQ.
+        Utilise RobustConnection pour une reconnexion automatique.
+        """
+        self.connection = connection
         self.publisher = publisher
         self.downloader = Downloader()
         
-        # RabbitMQ components
+        # Noms des composants RabbitMQ
         self.exchange_name = 'data_exchange_produits'
         self.routing_key = 'new_data.product'
         self.queue_name = 'image_download_tasks_queue'
@@ -24,107 +30,148 @@ class Consumer:
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
-        self.connection = None
-        self.channel = None
+        print("✅ Consumer initialisé (aio_pika RobustConnection).")
 
-    def connect(self):
-        """Establish connection and declare all queues/exchanges."""
-        rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
+    async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
+        """Déclare toutes les files d'attente et les échanges nécessaires."""
         
-        max_retries = 10
-        retry_delay = 5
+        # --- 1. Infrastructure pour les échecs FINALS (Dead-Letter Queue) ---
+        dlx = await channel.declare_exchange(
+            self.dead_letter_exchange, 
+            aio_pika.ExchangeType.TOPIC, 
+            durable=True
+        )
+        dlq = await channel.declare_queue(self.dead_letter_queue_name, durable=True)
+        await dlq.bind(dlx, self.routing_key)
+
+        # --- 2. Infrastructure pour les tentatives (Retry Queue) ---
+        retry_exchange = await channel.declare_exchange(
+            self.retry_exchange, 
+            aio_pika.ExchangeType.TOPIC, 
+            durable=True
+        )
+        retry_queue = await channel.declare_queue(
+            self.retry_queue_name,
+            durable=True,
+            arguments={
+                'x-message-ttl': RETRY_TTL_MS,
+                'x-dead-letter-exchange': self.exchange_name,
+                'x-dead-letter-routing-key': self.routing_key
+            }
+        )
+        await retry_queue.bind(retry_exchange, self.routing_key)
+
+        # --- 3. Configuration de la Queue Principale ---
+        exchange = await channel.declare_exchange(
+            self.exchange_name, 
+            aio_pika.ExchangeType.TOPIC, 
+            durable=True
+        )
+        main_queue = await channel.declare_queue(
+            self.queue_name,
+            durable=True,
+            arguments={
+                'x-dead-letter-exchange': self.retry_exchange,
+                'x-dead-letter-routing-key': self.routing_key
+            }
+        )
+        await main_queue.bind(exchange, self.routing_key)
         
-        import time
-        for attempt in range(max_retries):
+        print(f"✅ Queue '{self.queue_name}' declared and bound to '{self.exchange_name}'.")
+        return main_queue
+
+    def _get_retry_count(self, message: aio_pika.abc.AbstractIncomingMessage) -> int:
+        """Récupère le nombre de tentatives depuis les headers x-death."""
+        if message.headers and 'x-death' in message.headers:
+            for death in message.headers['x-death']:
+                if death.get('queue') == self.retry_queue_name:
+                    return death.get('count', 0)
+        return 0
+
+    async def _on_message_callback(self, message: aio_pika.abc.AbstractIncomingMessage):
+        """
+        Callback asynchrone pour traiter un message avec logique de retry/DLQ.
+        """
+        async with message.process():
+            product_id = "unknown"
             try:
-                logger.info(f"🔄 Attempt {attempt+1}/{max_retries} connecting to RabbitMQ...")
-                self.connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-                self.channel = self.connection.channel()
-                logger.info("✅ Connected to RabbitMQ.")
-                break
+                data = json.loads(message.body)
+                product_data = data.get("data", data)
+                product_id = product_data.get('id_produit', 'unknown')
+                
+                print(f"\n📥 Image-Download-Service: Message reçu pour le produit '{product_id}'.")
+                
+                # --- FILTER: Process only 'SITEWEB' or 'test_web' source ---
+                source = product_data.get("source") or data.get("origin")
+                
+                if source not in ["SITEWEB", "test_web"]:
+                    print(f"   ⏭️ Skipping product {product_id}: Source '{source}' not in allowed list.")
+                    return  # ACK automatique via context manager
+                
+                print(f"   🔄 Processing product {product_id} (Source: {source})")
+                
+                # Appel async natif - pas besoin de wrapper synchrone !
+                result_data = await self.downloader.process_product(product_data)
+                
+                print(f"   ✅ Processing complete for {product_id}")
+                
+                # Publier les résultats si des images ont été traitées
+                if result_data.get("processed_images"):
+                    async with self.connection.channel() as channel:
+                        await self.publisher.publish_message(result_data, channel)
+
+            except (json.JSONDecodeError, ValueError) as e:
+                # Erreur permanente: le message est invalide.
+                print(f"❌ Erreur permanente pour {product_id}. Message envoyé à la DLQ finale. Erreur: {e}")
+                await self._send_to_dlq(message, e, 0)
+
             except Exception as e:
-                logger.warning(f"❌ Connection failed ({e}), retrying in {retry_delay}s...")
-                time.sleep(retry_delay)
-        else:
-            raise Exception(f"❌ Could not connect to RabbitMQ after {max_retries} attempts.")
-
-        # --- Main Queue (Simple, no DLQ for now) ---
-        self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-        
-        # --- DLQ Infrastructure ---
-        self.channel.exchange_declare(exchange=self.dead_letter_exchange, exchange_type='topic', durable=True)
-        self.channel.queue_declare(queue=self.dead_letter_queue_name, durable=True)
-        self.channel.queue_bind(exchange=self.dead_letter_exchange, queue=self.dead_letter_queue_name, routing_key=self.routing_key)
-
-        # --- Retry Infrastructure ---
-        self.channel.exchange_declare(exchange=self.retry_exchange, exchange_type='topic', durable=True)
-        retry_queue_args = {
-            'x-message-ttl': RETRY_TTL_MS,
-            'x-dead-letter-exchange': self.exchange_name,
-            'x-dead-letter-routing-key': self.routing_key
-        }
-        self.channel.queue_declare(queue=self.retry_queue_name, durable=True, arguments=retry_queue_args)
-        self.channel.queue_bind(exchange=self.retry_exchange, queue=self.retry_queue_name, routing_key=self.routing_key)
-
-        # --- Main Queue with DLQ ---
-        main_queue_args = {
-            'x-dead-letter-exchange': self.retry_exchange,
-            'x-dead-letter-routing-key': self.routing_key
-        }
-        self.channel.queue_declare(queue=self.queue_name, durable=True, arguments=main_queue_args)
-        self.channel.queue_bind(exchange=self.exchange_name, queue=self.queue_name, routing_key=self.routing_key)
-        
-        logger.info(f"✅ Queue '{self.queue_name}' declared and bound to '{self.exchange_name}'.")
-
-    def start_consuming(self):
-        """Start consuming messages."""
-        self.connect()
-        
-        self.channel.basic_qos(prefetch_count=20)  # Batch processing: 20 messages per replica
-        self.channel.basic_consume(queue=self.queue_name, on_message_callback=self._on_message)
-        
-        logger.info(f"[*] Waiting for messages in {self.queue_name}")
-        self.channel.start_consuming()
-
-    def _on_message(self, channel, method, properties, body):
-        """Process incoming message."""
+                # Erreur potentiellement transitoire.
+                retry_count = self._get_retry_count(message)
+                if retry_count < MAX_RETRIES:
+                    print(f"❌ Erreur transitoire pour {product_id} (essai {retry_count + 1}/{MAX_RETRIES + 1}). Retrying. Erreur: {e}")
+                    await message.nack(requeue=False)  # NACK pour retry via DLX
+                else:
+                    print(f"❌ Échec après {MAX_RETRIES + 1} tentatives pour {product_id}. Envoi à la DLQ. Erreur: {e}")
+                    await self._send_to_dlq(message, e, MAX_RETRIES)
+    
+    async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
+        """Envoie le message à la Dead-Letter Queue avec les métadonnées d'erreur."""
         try:
-            data = json.loads(body.decode())
-            product_data = data.get("data", data)
-            
-            logger.info(f"Received task for product {product_data.get('id_produit')}")
-            
-            # --- FILTER: Process only 'site_web' or 'test_web' source ---
-            # Check 'source' in product_data OR 'origin' in top-level data
-            source = product_data.get("source") or data.get("origin")
+            async with self.connection.channel() as channel:
+                dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+                
+                # Utiliser DLQProperties de common_utils
+                dlq_headers = DLQProperties.create_dlq_headers(
+                    error, 
+                    'image-download-service', 
+                    retry_count, 
+                    message
+                )
+                
+                await dlx.publish(
+                    aio_pika.Message(
+                        body=message.body,
+                        headers=dlq_headers,
+                        delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                    ),
+                    routing_key=self.routing_key
+                )
+                print(f"   📤 Message envoyé à la DLQ: {self.dead_letter_queue_name}")
+        except Exception as dlq_error:
+            print(f"❌ Erreur lors de l'envoi à la DLQ: {dlq_error}")
 
-            if source not in ["SITEWEB", "test_web"]:
-                # Log why we are skipping
-                logger.info(f"Skipping task for product {product_data.get('id_produit')}: Source '{source}' not in allowed list.")
-                channel.basic_ack(delivery_tag=method.delivery_tag)
-                return
-            # ----------------------------------------------
-            
-            # Synchronous wrapper for async download
-            import asyncio
-            logger.info(f"Processing product {product_data.get('id_produit')} (Source: {source})")
-            
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result_data = loop.run_until_complete(self.downloader.process_product(product_data))
-                logger.info(f"Processing complete for {product_data.get('id_produit')}")
-            except Exception as loop_error:
-                logger.error(f"Async processing failed for {product_data.get('id_produit')}: {loop_error}")
-                raise loop_error
-            finally:
-                loop.close()
-            
-            if result_data.get("local_image_paths"):
-                self.publisher.publish_update(result_data)
-            
-            channel.basic_ack(delivery_tag=method.delivery_tag)
-            
-        except Exception as e:
-            logger.error(f"Error processing message: {e}")
-            channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+    async def start_consuming(self):
+        """
+        Démarre la boucle d'écoute des messages.
+        RobustConnection gère automatiquement les reconnexions.
+        """
+        channel = await self.connection.channel()
+        
+        # Traiter 1 message à la fois pour les tâches longues (téléchargement d'images)
+        await channel.set_qos(prefetch_count=1)
+        
+        queue = await self._setup_queues(channel)
+        
+        print("👂 Image-Download-Service: En attente de messages...")
+        await queue.consume(self._on_message_callback)

@@ -5,7 +5,7 @@ import logging
 import asyncio
 from datetime import datetime
 from typing import Optional, List, Dict
-from app.core.image_processor import ImageProcessor
+from image_download_service.core.image_processor import ImageProcessor
 import random
 
 logger = logging.getLogger(__name__)

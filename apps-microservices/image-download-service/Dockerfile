@@ -2,22 +2,29 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies if any (e.g. for potential future image libraries)
+# Définir le PYTHONPATH
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies for Pillow
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    libjpeg-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+# Installer la lib partagée common-utils
+COPY libs/common-utils /app/libs/common-utils
+RUN pip install -e /app/libs/common-utils
+
+# Installer les dépendances du service
+COPY apps-microservices/image-download-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy common utils if needed, though usually we mount/install them. 
-# Assuming standard microservice pattern where we copy everything.
-COPY . .
-
-# Environment variables
-ENV PYTHONUNBUFFERED=1
+# Copier le code source
+COPY apps-microservices/image-download-service/app/ /app/image_download_service
 
 # Expose port
 EXPOSE 8505
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8505"]
+CMD ["uvicorn", "image_download_service.main:app", "--host", "0.0.0.0", "--port", "8505"]
