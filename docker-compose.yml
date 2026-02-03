@@ -1730,7 +1730,7 @@ services:
       - services-net
     logging: *logging_defaults
 
-  qc-generation-question2aN:
+  qc-generation-question2an:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-question2aN/Dockerfile
