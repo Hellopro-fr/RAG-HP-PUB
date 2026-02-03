@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     GEMINI_MODEL_NAME: str = "gemini-3-pro-preview"
     
     # API HelloPro
-    HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M"
+    # HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M" #dev
+    HP_TOKEN: str = "GQr3DiVJGPIxO9o7mp5FNHXsk8Ak4fZ8x8X/732mVcUY9kyOhvo79EpFYM9GplusZO/54dvfTKZF5YNSpFNEGiRvyYZkKplusmftUpAJXoEXq45aVVSKxjpiiMzrrToEYplusziMjI3Megal" #prod
 
     class Config:
         env_file = ".env"
