@@ -1,52 +1,37 @@
-import pika
-import os
-import time
-
+import asyncio
+import logging
 from app.messaging.consumer import Consumer
 from app.messaging.publisher import Publisher
 
-def main():
-    """
-    Point d'entrée principal du service QC-generation-question1.
-    Lance le consumer RabbitMQ pour traiter les messages du pipeline.
-    """
-    rabbitmq_url = os.environ.get("RABBITMQ_URL", "amqp://user:password@localhost:5672/")
-    connection = None
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    force=True,
+)
 
-    print("=" * 60)
-    print("🚀 Démarrage du service QC-GENERATION-QUESTION1")
-    print("=" * 60)
 
-    # Boucle de connexion robuste
-    for i in range(10):
-        try:
-            connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
-            print("✅ QC-Question1: Connecté à RabbitMQ.")
-            break
-        except pika.exceptions.AMQPConnectionError:
-            print(f"⏳ QC-Question1: En attente de RabbitMQ... {i+1}s")
-            time.sleep(1)
+async def main():
+    """Main entry point for the QC-generation-question1 service."""
+    logging.info("=" * 60)
+    logging.info("🚀 Démarrage du service QC-GENERATION-QUESTION1 (async)")
+    logging.info("=" * 60)
 
-    if not connection:
-        print("❌ QC-Question1: Impossible de se connecter à RabbitMQ, arrêt du service.")
-        exit(1)
+    publisher = Publisher()
+    consumer = Consumer(publisher)
 
     try:
-        # 1. Créer une instance du publisher
-        publisher = Publisher(connection)
-        
-        # 2. Créer une instance du consumer et lui passer le publisher
-        consumer = Consumer(connection, publisher)
-        
-        # 3. Lancer l'écoute
-        consumer.start_consuming()
-
-    except KeyboardInterrupt:
-        print("\n🛑 QC-Question1: Arrêt demandé.")
+        await consumer.start_consuming()
+    except asyncio.CancelledError:
+        logging.info("🛑 Task cancelled")
+    except Exception as e:
+        logging.error(f"❌ Unexpected error: {e}", exc_info=True)
     finally:
-        if connection and not connection.is_closed:
-            connection.close()
-            print("✅ QC-Question1: Connexion RabbitMQ fermée.")
+        await consumer.close()
+        logging.info("✅ Shutdown complete")
 
-if __name__ == '__main__':
-    main()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("🛑 Shutdown requested via KeyboardInterrupt")

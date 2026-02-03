@@ -1634,6 +1634,122 @@ services:
       - services-ext-net
       - services-global-net
 
+  # =====================================================================
+  # QC PIPELINE SERVICES (Question-Caractéristique)
+  # Lancez avec: docker-compose --profile qc up -d
+  # =====================================================================
+  qc-generation-question1:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-generation-question1/Dockerfile
+    container_name: qc-generation-question1
+    profiles: ["qc-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    volumes:
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  qc-generation-question2aN:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-generation-question2aN/Dockerfile
+    container_name: qc-generation-question2aN
+    profiles: ["qc-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    volumes:
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  qc-generation-caracteristiques:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-generation-caracteristiques/Dockerfile
+    container_name: qc-generation-caracteristiques
+    profiles: ["qc-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    volumes:
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  qc-generation-valeurs:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-generation-valeurs/Dockerfile
+    container_name: qc-generation-valeurs
+    profiles: ["qc-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    volumes:
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  qc-enrichissement:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-enrichissement/Dockerfile
+    container_name: qc-enrichissement
+    profiles: ["qc-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    volumes:
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  qc-equivalence:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-equivalence/Dockerfile
+    container_name: qc-equivalence
+    profiles: ["qc-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    volumes:
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking
+    networks:
+      - services-net
+    logging: *logging_defaults
+    
+  qc-caracterisation:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-caracterisation/Dockerfile
+    container_name: qc-caracterisation
+    profiles: ["qc-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    volumes:
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking
+    networks:
+      - services-net
+    logging: *logging_defaults
+
 networks:
   services-net:
     driver: bridge
