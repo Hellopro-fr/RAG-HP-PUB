@@ -25,10 +25,10 @@ class InfoCaracteristiquesGenerator:
     """Générateur des informations/valeurs de caractéristiques via LLM"""
     
     # IDs des prompts
-    # PROMPT_CARACTERISTIQUE_TEXTUELLE_ID = "96"
-    # PROMPT_CARACTERISTIQUE_NUM_ID = "104"
-    PROMPT_CARACTERISTIQUE_TEXTUELLE_ID = "104"
-    PROMPT_CARACTERISTIQUE_NUM_ID = "105"
+    PROMPT_CARACTERISTIQUE_TEXTUELLE_ID = "96"
+    PROMPT_CARACTERISTIQUE_NUM_ID = "104"
+    # PROMPT_CARACTERISTIQUE_TEXTUELLE_ID = "104"
+    # PROMPT_CARACTERISTIQUE_NUM_ID = "105"
     ETAPE = "4"
     GEMINI_MODEL = "gemini-3-pro-preview"
     

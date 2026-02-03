@@ -27,8 +27,8 @@ class Question1Generator:
     """Générateur de Question 1 via LLM"""
     
     # IDs des prompts
-    # PROMPT_QUESTION1_ID = "97"
-    PROMPT_QUESTION1_ID = "101"
+    PROMPT_QUESTION1_ID = "97"
+    # PROMPT_QUESTION1_ID = "101"
     ETAPE = "1"
     GEMINI_MODEL = "gemini-3-pro-preview"
     
