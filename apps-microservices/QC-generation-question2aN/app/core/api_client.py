@@ -200,7 +200,7 @@ class GeminiProvider:
 class HelloProAPIClient:
     """Client pour les appels API vers base.hellopro.fr"""
     
-    BASE_URL = "https://dev-api.hellopro.fr/v2/index.php"
+    BASE_URL = "https://api.hellopro.fr/v2/index.php"
     
     def __init__(self, timeout: int = 30):
         self.timeout = timeout
