@@ -25,8 +25,8 @@ class EnrichissementGenerator:
     """Générateur d'enrichissement des caractéristiques via questions"""
     
     # ID du prompt
-    # PROMPT_VERIFICATION_ID = "99"
-    PROMPT_VERIFICATION_ID = "106"
+    PROMPT_VERIFICATION_ID = "99"
+    # PROMPT_VERIFICATION_ID = "106"
     ETAPE = "5"
     GEMINI_MODEL = "gemini-3-pro-preview"
     

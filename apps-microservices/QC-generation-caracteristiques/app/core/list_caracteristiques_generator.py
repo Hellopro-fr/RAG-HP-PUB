@@ -25,8 +25,8 @@ class ListCaracteristiquesGenerator:
     """Générateur de la liste de 25 caractéristiques initiales via LLM"""
     
     # IDs des prompts
-    # PROMPT_CARACTERISTIQUE_INITIAL_ID = "95"
-    PROMPT_CARACTERISTIQUE_INITIAL_ID = "103"
+    PROMPT_CARACTERISTIQUE_INITIAL_ID = "95"
+    # PROMPT_CARACTERISTIQUE_INITIAL_ID = "103"
     ETAPE = "3"
     GEMINI_MODEL = "gemini-3-pro-preview"
     
