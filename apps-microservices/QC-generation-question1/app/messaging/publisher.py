@@ -1,59 +1,40 @@
-import pika
 import json
-from common_utils.rabbitmq.rabbitmq_connection import RabbitMQConnection
+import logging
+import aio_pika
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
 
 class Publisher:
-    """Publisher: QC-generation-question1 → Publie vers QC-generation-question2aN"""
-    def __init__(self, connection: pika.BlockingConnection):
-        self.rabbitmq_connection = RabbitMQConnection()
-        self.connection = connection
-        self.channel = connection.channel()
+    """Async Publisher: QC-generation-question1 → Publie vers QC-generation-question2aN"""
+
+    def __init__(self):
+        self.exchange = None
         self.exchange_name = 'qc_pipeline_exchange'
         self.routing_key = 'qc.step2.start'
 
-        try:
-            self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-        except pika.exceptions.ChannelClosedByBroker:
-            self.channel = connection.channel()
-            self.channel.exchange_declare(exchange=self.exchange_name, passive=True)
-        
-        print("✅ QC-Question1 Publisher initialisé.")
-    
-    def _ensure_channel_open(self):
-        """Vérifie que le channel est ouvert, sinon reconnecte."""
-        try:
-            if self.channel.is_closed or not self.connection or self.connection.is_closed:
-                print("⚠️ Publisher: Channel/Connection fermé, reconnexion...")
-                self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-                self.channel = self.connection.channel()
-                self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-                return self.channel
-            return self.channel
-        except:
-            print("⚠️ Publisher: Erreur lors de la vérification, reconnexion...")
-            self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-            self.channel = self.connection.channel()
-            self.channel.exchange_declare(exchange=self.exchange_name, exchange_type='topic', durable=True)
-            return self.channel
+    async def setup(self, channel: aio_pika.abc.AbstractChannel):
+        """Setup l'exchange sur le channel fourni."""
+        self.exchange = await channel.declare_exchange(
+            self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
+        )
+        logger.info(f"✅ QC-Question1 Publisher initialized: {self.exchange_name}")
 
-    def publish_message(self, message_dict: dict):
+    async def publish_message(self, message_dict: dict):
         """Publie un message vers l'étape suivante du pipeline."""
-        for i in range(3):
-            try:
-                # S'assurer que le channel est ouvert
-                active_ch = self._ensure_channel_open()
-                
-                active_ch.basic_publish(
-                    exchange=self.exchange_name,
-                    routing_key=self.routing_key,
-                    body=json.dumps(message_dict).encode('utf-8'),
-                    properties=pika.BasicProperties(delivery_mode=2)
-                )
-                print(f"   📤 QC-Question1: Message publié vers {self.routing_key}")
-                break
-            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelClosedByBroker, 
-                    pika.exceptions.StreamLostError, pika.exceptions.ChannelWrongStateError) as e:
-                print(f"⚠️ Connexion perdue: {e}")
-                self.connection = self.rabbitmq_connection.create_connection(max_retries=10, retry_delay=5)
-                self.channel = self.connection.channel()
+        if not self.exchange:
+            raise RuntimeError("Publisher not initialized. Call setup() first.")
 
+        try:
+            message_body = json.dumps(message_dict).encode("utf-8")
+            message = aio_pika.Message(
+                body=message_body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+            )
+
+            await self.exchange.publish(message, routing_key=self.routing_key)
+            logger.info(f"📤 QC-Question1: Message publié vers {self.routing_key}")
+
+        except Exception as e:
+            logger.error(f"⚠️ Échec publication message: {e}")
+            raise e

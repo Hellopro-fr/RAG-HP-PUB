@@ -1,67 +1,34 @@
-import os
 from pydantic_settings import BaseSettings
-from typing import Dict, List
+from functools import lru_cache
+from typing import Optional
+
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "API-HP-RAG"
-    PROJECT_VERSION: str = "0.0.1"
-
-    QDRANT_URL: str = ""
-    QDRANT_HOST_URL: str
-    QDRANT_PORT: str
-    QDRANT_API_KEY: str
-    ZILLIZ_URI: str
-    ZILLIZ_PORT: str
-    ZILLIZ_API_KEY: str
-    RABBITMQ_URL: str
-    KEY_WEBHOOK: str
-    OPENAI_API_KEY: str
-    OPENROUTER_API_KEY: str
-    DEEPSEEK_API_KEY: str
-    M_PARAMS: str
-    EF_PARAMS: str
-    MODEL_NAME: str = "Qwen/Qwen3-14B"
-    DEEPSEEK_MODEL_NAME: str = "deepseek-chat"
-    DEEPSEEK_API_URL: str = "https://api.deepseek.com/v1"
-    LLM_PROVIDER: str = "deepseek"
-
+    """Configuration pour QC-generation-caracteristiques"""
+    
+    # RabbitMQ
+    RABBITMQ_URL: str = "amqp://user:password@localhost:5672/"
+    MAX_CONCURRENCY: int = 10  # Nombre de messages traités en parallèle
+    
+    # Batching configuration
+    BATCH_SIZE: int = 10  # Nombre maximum de messages par batch
+    BATCH_TIMEOUT_SECONDS: float = 10.0  # Délai d'attente max pour collecter les messages
+    
+    # LLM - Gemini (utilisé par ce service)
     GEMINI_API_KEY: str
     GEMINI_MODEL_NAME: str = "gemini-3-pro-preview"
-
+    
+    # API HelloPro
     HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M"
-
-    MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
-        "devis_poc": [
-            "chunk_id", "lead_id", "message", "message_hellopro", "categorie", "id_categorie", "effectif",
-            "prof_ou_part", "naf2", "naf5", "departement", "region", "pays", "critere", "societe_acheteur",
-            "siren", "siret", "date_du_lead", "liste_frns", "nb_mec", "appreciation_lead", "source", "page_type",
-            "id_produit", "text"
-        ],
-        "siteweb_poc": [
-            "chunk_id", "source", "url", "page_type", "domaine", "id_categorie", "categorie", "vf_id_categorie",
-            "vf_nom_categorie", "id_fournisseur", "fournisseur", "etat", "affichage", "text"
-        ],
-        "echanges_poc": [
-            "chunk_id", "id_demande", "produit", "id_produit", "categorie", "id_categorie", "fournisseur",
-            "id_fournisseur", "etat", "affichage", "acheteur", "id_acheteur", "text", "conversation_id"
-        ]
-    }
 
     class Config:
         env_file = ".env"
+        case_sensitive = True
 
-model_settings = {
-    "openai": [
-        "gpt-4.1-2025-04-14",
-        "gpt-4o-2024-08-06",
-        "gpt-4o-2024-11-20",
-        "deepseek"
-    ],
-    "or": [
-        "qwen/qwen3-coder:free", 
-        "qwen/qwen3-coder", 
-        "google/gemini-flash-1.5"
-    ]
-}
 
-settings = Settings()
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()
