@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     RABBITMQ_URL: str = "amqp://user:password@localhost:5672/"
 
     # Exchanges and Queues
-    INPUT_EXCHANGE: str = "data_exchange_produits"
+    INPUT_EXCHANGE: str = "data_graph_exchange_produits"
     INPUT_ROUTING_KEY: str = "new_data.product"
     INPUT_QUEUE: str = "graph_rag_product_processing_queue"
 
