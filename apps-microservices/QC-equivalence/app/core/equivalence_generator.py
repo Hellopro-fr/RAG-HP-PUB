@@ -23,8 +23,8 @@ class EquivalenceGenerator:
     """Générateur d'équivalences entre réponses et caractéristiques"""
     
     # ID du prompt
-    # PROMPT_EQUIVALENCE_ID = "101"
-    PROMPT_EQUIVALENCE_ID = "107"
+    PROMPT_EQUIVALENCE_ID = "101"
+    # PROMPT_EQUIVALENCE_ID = "107"
     ETAPE = "6"    
     GEMINI_MODEL = "gemini-3-pro-preview"
     

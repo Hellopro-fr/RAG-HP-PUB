@@ -23,10 +23,10 @@ class CaracterisationProduitGenerator:
     """Générateur de caractérisation des produits via LLM"""
     
     # IDs des prompts
-    # PROMPT_CARACTERISATION_ID = "100"
-    # PROMPT_REPASSE_ID = "103"
-    PROMPT_CARACTERISATION_ID = "108"
-    PROMPT_REPASSE_ID = "109"
+    PROMPT_CARACTERISATION_ID = "100"
+    PROMPT_REPASSE_ID = "103"
+    # PROMPT_CARACTERISATION_ID = "108"
+    # PROMPT_REPASSE_ID = "109"
     DEEPSEEK_MODEL = "deepseek-chat"
     
     ETAPE = "7"
