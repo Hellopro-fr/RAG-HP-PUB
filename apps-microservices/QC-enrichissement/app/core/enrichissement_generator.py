@@ -654,12 +654,13 @@ class EnrichissementGenerator:
             process_data["done"] = []
         
         # Vérifier Question 1
+        question_id = f"Q1_{id_question_1}"
         result = await self.verify_question(
             id_categorie,
             nom_rubrique,
             question_1,
             caracteristiques,
-            "Q1",
+            question_id,
             process_data
         )
         
@@ -673,8 +674,8 @@ class EnrichissementGenerator:
         if "done" not in process_data:
             process_data["done"] = []
         
-        if "Q1" not in process_data["done"]:
-            process_data["done"].append("Q1")
+        if question_id not in process_data["done"]:
+            process_data["done"].append(question_id)
         
         await self.api_client.post(
             "enrichissement",
@@ -712,6 +713,12 @@ class EnrichissementGenerator:
                 self._log(f"ERREUR: réponse non trouvé pour {id_reponse}")
                 raise Exception(f"Réponse {id_reponse} non trouvé")
 
+            # Vérifier si déjà traité
+            unique_reponse = f"R{id_reponse}"
+            if unique_reponse in process_data["done"]:
+                self._log(f"Réponse {id_reponse} déjà traitée")
+                continue
+
             
             # Vérifier chaque question suivante
             for question_suivante in liste_questions:
@@ -721,7 +728,7 @@ class EnrichissementGenerator:
                 
                 id_question_suivante = question_suivante.get('id_question', '')
                 
-                question_unique_id = f"{id_reponse}_{id_question_suivante}"
+                question_unique_id = f"R{id_reponse}_Q{id_question_suivante}"
                 
                 result = await self.verify_question(
                     id_categorie,
@@ -753,7 +760,10 @@ class EnrichissementGenerator:
                     }
                 )
 
-      
+            # Marquer comme traité
+            if unique_reponse not in process_data["done"]:
+                process_data["done"].append(unique_reponse)
+
         self._log("\n" + "=" * 50)
         self._log("ENRICHISSEMENT TERMINÉ")
         self._log(f"Total caractéristiques finales: {len(caracteristiques)}")
