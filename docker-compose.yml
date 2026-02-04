@@ -1285,6 +1285,8 @@ services:
     environment:
       ZILLIZ_URI: ${ZILLIZ_URI}
       ZILLIZ_TOKEN: ${ZILLIZ_TOKEN}
+      ZILLIZ_USER: ${ZILLIZ_USER}
+      ZILLIZ_PASSWORD: ${ZILLIZ_PASSWORD}
       PROMETHEUS_PORT: 8566
     deploy:
       replicas: 10
