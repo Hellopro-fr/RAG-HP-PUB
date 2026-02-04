@@ -250,7 +250,7 @@ class EquivalenceGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
-                    "error_message": "Erreur extraction JSON",
+                    "error_message": "Impossible de récupérer l'ID de la question",
                     "tracking_file": self.tracking_file
                 }
             )
@@ -291,7 +291,7 @@ class EquivalenceGenerator:
         prompt_text = prompt_text.replace("{INFO_QUESTION_REPONSE}", json_question)
         prompt_text = prompt_text.replace("{JEU_CARACTERISTIQUE}", json_caracteristique)
         
-        self._log(f"Prompt: {prompt_text}")
+        # self._log(f"Prompt: {prompt_text}")
         
         # Appeler le LLM Gemini
         gemini = GeminiProvider(
