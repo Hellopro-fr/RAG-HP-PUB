@@ -121,7 +121,8 @@ async def match_products(payload: MatchingPayload):
                     "max": "500"
                 }
             }
-        ]
+        ],
+        "champs_sortie": ["id_produit", "score", "caracteristique", "coeff_geo", "coeff_type_frns"]
     } """
 
     # Ici vous connecterez votre logique métier réelle (IA, Algorithme, etc.)
@@ -169,7 +170,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=1,
-            id_produit="102808",
+            id_produit="102806",
             score=0.88,
             caracteristique=
                [
@@ -198,7 +199,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=2,
-            id_produit="102808",
+            id_produit="227938",
             score=0.75,
             caracteristique=
                [
@@ -218,7 +219,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=1,
-            id_produit="102808",
+            id_produit="102818",
             score=0.75,
             caracteristique=
                [
@@ -241,7 +242,7 @@ async def match_products(payload: MatchingPayload):
     mock_top_produits = [
         Produit(
             rang=2,
-            id_produit="102808",
+            id_produit="102813",
             score=0.5,
             caracteristique=
                [
@@ -261,7 +262,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=4,
-            id_produit="102808",
+            id_produit="102806",
             score=0.75,
             caracteristique=
                [
@@ -281,7 +282,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=3,
-            id_produit="102808",
+            id_produit="91599",
             score=0.75,
             caracteristique=
                [

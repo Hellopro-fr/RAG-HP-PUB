@@ -233,6 +233,8 @@ class MatchingPayload(BaseModel):
     # messages             : str                           = Field(None, description = "Contenu du message de l'acheteuur")
     metadonnee_utilisateurs: MetadonneUtilisateurs         = Field(default_factory   = list, description = "Métadonnées liées à l'acheteur")
     liste_caracteristique  : List[MatchingCaracteristique] = Field(..., description  = "Liste des caractéristiques à matcher")
+    champs_sortie          : Optional[List[str]]           = Field(None, description = "Liste des champs de sortie souhaités")
+    #autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
 
 """ 
 Modèles pour le output : Réponse du matching de produits
