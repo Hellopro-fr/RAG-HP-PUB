@@ -132,7 +132,7 @@ async def match_products(payload: MatchingPayload):
     mock_produits = [
         Produit(
             rang=3,
-            id_produit="102808",
+            id_produit="617565",
             score=0.95,
             caracteristique=
                [
@@ -170,7 +170,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=1,
-            id_produit="102806",
+            id_produit="617564",
             score=0.88,
             caracteristique=
                [
@@ -199,7 +199,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=2,
-            id_produit="227938",
+            id_produit="617563",
             score=0.75,
             caracteristique=
                [
@@ -219,8 +219,88 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=1,
-            id_produit="102818",
+            id_produit="617562",
             score=0.75,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        type_caracteristique=2,
+                        id_valeur=[],
+                        poids=5,
+                        bareme=10.0,
+                        poids_question=5
+                    )
+               ],
+            coeff_geo=1.4,
+            coeff_type_frns=1.6
+            # raison_matching=f"par Pays"
+        ),
+        Produit(
+            rang=6,
+            id_produit="617555",
+            score=0.75,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        type_caracteristique=2,
+                        id_valeur=[],
+                        poids=5,
+                        bareme=10.0,
+                        poids_question=5
+                    )
+               ],
+            coeff_geo=1.4,
+            coeff_type_frns=1.6
+            # raison_matching=f"par Pays"
+        ),
+        Produit(
+            rang=7,
+            id_produit="617554",
+            score=0.5,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        type_caracteristique=2,
+                        id_valeur=[],
+                        poids=5,
+                        bareme=10.0,
+                        poids_question=5
+                    )
+               ],
+            coeff_geo=1.4,
+            coeff_type_frns=1.6
+            # raison_matching=f"par Pays"
+        ),
+        Produit(
+            rang=9,
+            id_produit="617553",
+            score=0.1,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        type_caracteristique=2,
+                        id_valeur=[],
+                        poids=5,
+                        bareme=10.0,
+                        poids_question=5
+                    )
+               ],
+            coeff_geo=1.4,
+            coeff_type_frns=1.6
+            # raison_matching=f"par Pays"
+        ),
+        Produit(
+            rang=8,
+            id_produit="617552",
+            score=0.6,
             caracteristique=
                [
                     CaracteristiqueMatching(
@@ -242,7 +322,7 @@ async def match_products(payload: MatchingPayload):
     mock_top_produits = [
         Produit(
             rang=2,
-            id_produit="102813",
+            id_produit="617561",
             score=0.5,
             caracteristique=
                [
@@ -262,7 +342,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=4,
-            id_produit="102806",
+            id_produit="617559",
             score=0.75,
             caracteristique=
                [
@@ -282,7 +362,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=3,
-            id_produit="91599",
+            id_produit="617557",
             score=0.75,
             caracteristique=
                [
