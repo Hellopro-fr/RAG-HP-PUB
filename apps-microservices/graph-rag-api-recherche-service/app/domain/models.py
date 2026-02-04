@@ -238,12 +238,15 @@ class MatchingPayload(BaseModel):
 Modèles pour le output : Réponse du matching de produits
  """
 class CaracteristiqueMatching(BaseModel):
-    statut_matching   : int                 = Field(..., description = "statut de la matching, 1: matche, 2: ecart, 3: bloquant, 4: no_renseigne")
-    id_caracteristique: int                 = Field(..., description = "Identifiant de la caractéristique")
-    id_valeur         : Optional[List[int]] = Field(default_factory  = list, description = "Liste des valeurs associées à la caractéristique")
-    poids             : int                 = Field(..., description = "Poids de la caractéristique dans le score")
-    bareme            : float               = Field(..., description = "Barème de notation pour cette caractéristique")
-    poids_question    : int                 = Field(..., description = "Poids de la question associée à cette caractéristique")
+    statut_matching     : int                 = Field(..., description  = "statut de la matching, 1     : matche, 2   : ecart, 3: bloquant, 4: no_renseigne")
+    id_caracteristique  : int                 = Field(..., description  = "Identifiant de la caractéristique")
+    type_caracteristique: int                 = Field(..., description  = "Type de la caractéristique, 1: numerique, 2: textuelle")
+    valeur              : Optional[str]       = Field(None, description = "Valeur associée à la caractéristique numérique")
+    unite               : Optional[str]       = Field(None, description = "Unité de la caractéristique numérique")
+    id_valeur           : Optional[List[int]] = Field(default_factory   = list, description             = "Liste des valeurs associées à la caractéristique")
+    poids               : int                 = Field(..., description  = "Poids de la caractéristique dans le score")
+    bareme              : float               = Field(..., description  = "Barème de notation pour cette caractéristique")
+    poids_question      : int                 = Field(..., description  = "Poids de la question associée à cette caractéristique")
 
 
 class Produit(BaseModel):
@@ -252,8 +255,7 @@ class Produit(BaseModel):
     score          : float                         = Field(..., description = "Score de matching")
     caracteristique: List[CaracteristiqueMatching] = Field(..., description = "Détail du matching par caractéristique")
     coeff_geo      : float                         = Field(..., description = "Coefficient zone Géographique")
-    coeff_type_frns: float                         = Field(..., description = "Coefficient type de fournisseur")
-    
+    coeff_type_frns: float                         = Field(..., description = "Coefficient type de fournisseur")    
     # top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 

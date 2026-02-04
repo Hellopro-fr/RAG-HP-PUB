@@ -138,19 +138,29 @@ async def match_products(payload: MatchingPayload):
                     CaracteristiqueMatching(
                         statut_matching=1,
                         id_caracteristique=101,
+                        type_caracteristique=1,
+                        valeur="500",
+                        unite='m',
                         id_valeur=[1, 2],
-                        poids=30
+                        poids=30,
+                        bareme=-2.0,
+                        poids_question=0
                     ),
                     CaracteristiqueMatching(
                         statut_matching=2,
                         id_caracteristique=102,
-                        id_valeur=[5],
-                        poids=10
+                        type_caracteristique=2,
+                        poids=10,
+                        bareme=-2.0,
+                        poids_question=0
                     ),
                     CaracteristiqueMatching(
                         statut_matching=4,
                         id_caracteristique=103,
-                        poids=5
+                        type_caracteristique=2,
+                        poids=5,
+                        bareme=-2.0,
+                        poids_question=0
                     )
                 ],
             coeff_geo=1.2,
@@ -166,12 +176,16 @@ async def match_products(payload: MatchingPayload):
                     CaracteristiqueMatching(
                         statut_matching=1,
                         id_caracteristique=101,
+                        type_caracteristique=2,
                         id_valeur=[1, 2],
-                        poids=30
+                        poids=30,
+                        bareme=-2.0,
+                        poids_question=0
                     ),
                     CaracteristiqueMatching(
                         statut_matching=3,
                         id_caracteristique=102,
+                        type_caracteristique=2,
                         id_valeur=[5],
                         poids=10,
                         bareme=-2,
@@ -191,6 +205,7 @@ async def match_products(payload: MatchingPayload):
                     CaracteristiqueMatching(
                         statut_matching=1,
                         id_caracteristique=105,
+                        type_caracteristique=2,
                         id_valeur=[],
                         poids=5,
                         bareme=3.0,
@@ -210,6 +225,7 @@ async def match_products(payload: MatchingPayload):
                     CaracteristiqueMatching(
                         statut_matching=1,
                         id_caracteristique=105,
+                        type_caracteristique=2,
                         id_valeur=[],
                         poids=5,
                         bareme=10.0,
@@ -232,6 +248,7 @@ async def match_products(payload: MatchingPayload):
                     CaracteristiqueMatching(
                         statut_matching=1,
                         id_caracteristique=105,
+                        type_caracteristique=2,
                         id_valeur=[],
                         poids=6,
                         bareme=11.0,
@@ -251,6 +268,7 @@ async def match_products(payload: MatchingPayload):
                     CaracteristiqueMatching(
                         statut_matching=1,
                         id_caracteristique=105,
+                        type_caracteristique=2,
                         id_valeur=[],
                         poids=3,
                         bareme=12.0,
@@ -270,6 +288,7 @@ async def match_products(payload: MatchingPayload):
                     CaracteristiqueMatching(
                         statut_matching=1,
                         id_caracteristique=105,
+                        type_caracteristique=2,
                         id_valeur=[],
                         poids=5,
                         bareme=10.0,
@@ -278,7 +297,6 @@ async def match_products(payload: MatchingPayload):
                ],
             coeff_geo=3.2,
             coeff_type_frns=3.1
-            # raison_matching=f"par Pays"
         )
     ]
     # Identifier le top produit
