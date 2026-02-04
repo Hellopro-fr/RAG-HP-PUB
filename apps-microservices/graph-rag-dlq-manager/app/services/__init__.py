@@ -1,34 +1,26 @@
 """
-RabbitMQ Management API client for DLQ operations.
-Uses the RabbitMQ Management HTTP API to list and manage queue messages.
+RabbitMQ AMQP client for DLQ operations.
+Uses pure AMQP via aio_pika to list and manage queue messages.
 """
 
 import json
 import logging
-import httpx
 import aio_pika
+from aio_pika.abc import AbstractIncomingMessage
 from typing import List, Optional, Dict, Any
-from urllib.parse import quote
 from app.core.config import settings
 from app.schemas.dlq import DLQMessage, DLQQueue
 
 
-class RabbitMQManagementClient:
-    """Client for interacting with RabbitMQ Management API and AMQP."""
+class RabbitMQAMQPClient:
+    """Client for interacting with RabbitMQ via pure AMQP."""
 
     def __init__(self):
-        self.api_url = settings.get_api_url()
-        self.auth = (settings.get_api_user(), settings.get_api_password())
-        self.vhost = settings.get_vhost()
         self.connection = None
         self.channel = None
 
-    def _get_vhost_encoded(self) -> str:
-        """URL encode the vhost for API calls."""
-        return quote(self.vhost, safe="")
-
-    async def connect_amqp(self):
-        """Establish AMQP connection for publishing."""
+    async def connect(self):
+        """Establish AMQP connection."""
         if not self.connection or self.connection.is_closed:
             self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
             self.channel = await self.connection.channel()
@@ -41,36 +33,53 @@ class RabbitMQManagementClient:
             logging.info("🔒 Closed RabbitMQ AMQP connection")
 
     async def list_dlq_queues(self) -> List[DLQQueue]:
-        """List all queues that contain 'dlq' or 'manual' in their name."""
-        try:
-            vhost = self._get_vhost_encoded()
-            async with httpx.AsyncClient(auth=self.auth, timeout=30.0) as client:
-                response = await client.get(f"{self.api_url}/queues/{vhost}")
-                response.raise_for_status()
-                queues_data = response.json()
+        """
+        List all configured DLQ queues with their message counts.
+        Uses passive queue declaration to get queue info.
+        """
+        await self.connect()
+        dlq_queues = []
 
-            dlq_queues = []
-            for q in queues_data:
-                name = q.get("name", "")
-                # Filter for DLQ-related queues
-                if (
-                    "dlq" in name.lower()
-                    or "manual" in name.lower()
-                    or "retry" in name.lower()
-                ):
-                    dlq_queues.append(
-                        DLQQueue(
-                            name=name,
-                            message_count=q.get("messages", 0),
-                            consumer_count=q.get("consumers", 0),
-                            state=q.get("state", "unknown"),
-                        )
+        for queue_name in settings.get_dlq_queue_list():
+            try:
+                # Passive declare to get queue info without creating it
+                queue = await self.channel.declare_queue(
+                    queue_name,
+                    passive=True,
+                )
+                dlq_queues.append(
+                    DLQQueue(
+                        name=queue_name,
+                        message_count=queue.declaration_result.message_count,
+                        consumer_count=queue.declaration_result.consumer_count,
+                        state="running",
                     )
-            return dlq_queues
+                )
+            except aio_pika.exceptions.ChannelNotFoundEntity:
+                # Queue doesn't exist
+                logging.warning(f"Queue {queue_name} does not exist")
+                dlq_queues.append(
+                    DLQQueue(
+                        name=queue_name,
+                        message_count=0,
+                        consumer_count=0,
+                        state="not_found",
+                    )
+                )
+            except Exception as e:
+                logging.error(f"Failed to get info for queue {queue_name}: {e}")
+                # Reconnect channel if it closed due to error
+                self.channel = await self.connection.channel()
+                dlq_queues.append(
+                    DLQQueue(
+                        name=queue_name,
+                        message_count=0,
+                        consumer_count=0,
+                        state="error",
+                    )
+                )
 
-        except httpx.HTTPError as e:
-            logging.error(f"Failed to list queues: {e}")
-            raise
+        return dlq_queues
 
     async def get_messages(
         self,
@@ -81,86 +90,110 @@ class RabbitMQManagementClient:
         exchange_filter: Optional[str] = None,
     ) -> List[DLQMessage]:
         """
-        Get messages from a queue using the Management API.
+        Get messages from a queue using AMQP.
 
         Args:
             queue_name: Name of the queue to get messages from
             count: Maximum number of messages to retrieve
             ack_mode: How to handle messages:
-                - 'ack_requeue_true': Get messages but leave them in the queue
+                - 'ack_requeue_true': Get messages but leave them in the queue (peek)
                 - 'ack_requeue_false': Get and remove messages from queue
             routing_key_filter: Optional filter by routing key
             exchange_filter: Optional filter by exchange
         """
+        await self.connect()
+
         try:
-            vhost = self._get_vhost_encoded()
-            queue_encoded = quote(queue_name, safe="")
+            # Declare queue passively to ensure it exists
+            queue = await self.channel.declare_queue(queue_name, passive=True)
+        except aio_pika.exceptions.ChannelNotFoundEntity:
+            logging.error(f"Queue {queue_name} does not exist")
+            # Reconnect channel
+            self.channel = await self.connection.channel()
+            return []
+        except Exception as e:
+            logging.error(f"Failed to access queue {queue_name}: {e}")
+            self.channel = await self.connection.channel()
+            return []
 
-            # RabbitMQ Management API payload for getting messages
-            payload = {
-                "count": count,
-                "ackmode": ack_mode,
-                "encoding": "auto",
-                "truncate": 50000,  # Truncate large messages
-            }
+        messages = []
+        fetched_messages: List[AbstractIncomingMessage] = []
 
-            async with httpx.AsyncClient(auth=self.auth, timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.api_url}/queues/{vhost}/{queue_encoded}/get",
-                    json=payload,
-                )
-                response.raise_for_status()
-                messages_data = response.json()
+        # Fetch messages
+        for idx in range(count):
+            try:
+                message = await queue.get(no_ack=False, timeout=1.0)
+                if message is None:
+                    break
+                fetched_messages.append(message)
+            except aio_pika.exceptions.QueueEmpty:
+                break
+            except Exception as e:
+                logging.error(f"Error fetching message: {e}")
+                break
 
-            messages = []
-            for idx, msg in enumerate(messages_data):
-                properties = msg.get("properties", {})
-                headers = properties.get("headers", {})
-
+        # Process fetched messages
+        for idx, msg in enumerate(fetched_messages):
+            try:
                 # Parse payload
-                payload_raw = msg.get("payload", "{}")
+                payload_raw = msg.body.decode("utf-8")
                 try:
-                    if isinstance(payload_raw, str):
-                        payload_parsed = json.loads(payload_raw)
-                    else:
-                        payload_parsed = payload_raw
+                    payload_parsed = json.loads(payload_raw)
                 except json.JSONDecodeError:
                     payload_parsed = {"raw": payload_raw}
 
                 # Get routing key and exchange from message
-                msg_routing_key = msg.get("routing_key", "")
-                msg_exchange = msg.get("exchange", "")
+                msg_routing_key = msg.routing_key or ""
+                msg_exchange = msg.exchange or ""
 
                 # Apply filters if specified
                 if routing_key_filter and routing_key_filter not in msg_routing_key:
+                    # Requeue filtered messages
+                    if ack_mode == "ack_requeue_true":
+                        await msg.nack(requeue=True)
+                    else:
+                        await msg.ack()
                     continue
                 if exchange_filter and exchange_filter not in msg_exchange:
+                    if ack_mode == "ack_requeue_true":
+                        await msg.nack(requeue=True)
+                    else:
+                        await msg.ack()
                     continue
 
-                # Generate a pseudo message ID (RabbitMQ doesn't have built-in message IDs)
-                message_id = (
-                    properties.get("message_id")
-                    or f"{queue_name}_{idx}_{msg.get('message_count', idx)}"
-                )
+                # Generate message ID
+                message_id = msg.message_id or f"{queue_name}_{idx}_{msg.delivery_tag}"
+
+                # Extract headers
+                headers = dict(msg.headers) if msg.headers else {}
 
                 messages.append(
                     DLQMessage(
-                        message_id=message_id,
+                        message_id=str(message_id),
                         queue_name=queue_name,
                         exchange=msg_exchange,
                         routing_key=msg_routing_key,
                         payload=payload_parsed,
                         headers=headers,
-                        timestamp=properties.get("timestamp"),
-                        redelivered=msg.get("redelivered", False),
+                        timestamp=str(msg.timestamp) if msg.timestamp else None,
+                        redelivered=msg.redelivered,
                     )
                 )
 
-            return messages
+                # Handle ack mode
+                if ack_mode == "ack_requeue_true":
+                    # Peek mode - requeue the message
+                    await msg.nack(requeue=True)
+                else:
+                    # Remove from queue
+                    await msg.ack()
 
-        except httpx.HTTPError as e:
-            logging.error(f"Failed to get messages from {queue_name}: {e}")
-            raise
+            except Exception as e:
+                logging.error(f"Error processing message: {e}")
+                # Requeue on error
+                await msg.nack(requeue=True)
+
+        return messages
 
     async def requeue_messages(
         self,
@@ -173,11 +206,11 @@ class RabbitMQManagementClient:
         Requeue messages from a DLQ queue to another exchange.
 
         This function:
-        1. Gets messages from the source queue (with ack_requeue_false to remove them)
+        1. Gets messages from the source queue (with ack to remove them)
         2. Publishes them to the target exchange with the specified routing key
         """
         try:
-            await self.connect_amqp()
+            await self.connect()
 
             # Get messages from source queue (this removes them)
             messages = await self.get_messages(
@@ -245,8 +278,6 @@ class RabbitMQManagementClient:
     ) -> Dict[str, Any]:
         """
         Delete (acknowledge and discard) messages from a queue.
-
-        This uses ack_requeue_false to permanently remove messages.
         """
         try:
             # Get messages with ack_requeue_false to remove them
@@ -275,23 +306,30 @@ class RabbitMQManagementClient:
     async def purge_queue(self, queue_name: str) -> Dict[str, Any]:
         """Purge all messages from a queue."""
         try:
-            vhost = self._get_vhost_encoded()
-            queue_encoded = quote(queue_name, safe="")
+            await self.connect()
 
-            async with httpx.AsyncClient(auth=self.auth, timeout=30.0) as client:
-                response = await client.delete(
-                    f"{self.api_url}/queues/{vhost}/{queue_encoded}/contents"
-                )
-                response.raise_for_status()
+            # Declare queue passively
+            queue = await self.channel.declare_queue(queue_name, passive=True)
+
+            # Purge the queue
+            purged_count = await queue.purge()
 
             return {
                 "success": True,
-                "message": f"Purged all messages from {queue_name}",
-                "processed_count": 0,
+                "message": f"Purged {purged_count} messages from {queue_name}",
+                "processed_count": purged_count,
                 "errors": [],
             }
 
-        except httpx.HTTPError as e:
+        except aio_pika.exceptions.ChannelNotFoundEntity:
+            self.channel = await self.connection.channel()
+            return {
+                "success": False,
+                "message": f"Queue {queue_name} does not exist",
+                "processed_count": 0,
+                "errors": [f"Queue {queue_name} not found"],
+            }
+        except Exception as e:
             logging.error(f"Purge operation failed: {e}")
             return {
                 "success": False,
@@ -302,4 +340,4 @@ class RabbitMQManagementClient:
 
 
 # Singleton instance
-rabbitmq_client = RabbitMQManagementClient()
+rabbitmq_client = RabbitMQAMQPClient()

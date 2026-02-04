@@ -50,8 +50,8 @@ logging.basicConfig(
 @app.on_event("startup")
 async def startup_event():
     logging.info("🚀 DLQ-Manager-API: Démarrage...")
-    # The RabbitMQ Management client uses httpx (no persistent connection needed)
-    # AMQP connection will be established on-demand when requeuing
+    # Establish AMQP connection on startup
+    await rabbitmq_client.connect()
     logging.info("✅ DLQ-Manager-API: Prêt à recevoir des requêtes.")
 
 
