@@ -378,6 +378,25 @@ async def match_products(payload: MatchingPayload):
                ],
             coeff_geo=3.2,
             coeff_type_frns=3.1
+        ),
+        Produit(
+            rang=1,
+            id_produit="102808",
+            score=0.3,
+            caracteristique=
+               [
+                    CaracteristiqueMatching(
+                        statut_matching=1,
+                        id_caracteristique=105,
+                        type_caracteristique=2,
+                        id_valeur=[],
+                        poids=5,
+                        bareme=10.0,
+                        poids_question=5
+                    )
+               ],
+            coeff_geo=3.2,
+            coeff_type_frns=3.1
         )
     ]
     # Identifier le top produit
