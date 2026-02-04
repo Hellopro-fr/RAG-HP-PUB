@@ -131,7 +131,7 @@ async def match_products(payload: MatchingPayload):
     mock_produits = [
         Produit(
             rang=3,
-            id_produit="prod_001",
+            id_produit="102808",
             score=0.95,
             caracteristique=
                [
@@ -169,7 +169,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=1,
-            id_produit="prod_002",
+            id_produit="102808",
             score=0.88,
             caracteristique=
                [
@@ -198,7 +198,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=2,
-            id_produit="prod_003",
+            id_produit="102808",
             score=0.75,
             caracteristique=
                [
@@ -218,7 +218,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=1,
-            id_produit="top_prod_001",
+            id_produit="102808",
             score=0.75,
             caracteristique=
                [
@@ -241,7 +241,7 @@ async def match_products(payload: MatchingPayload):
     mock_top_produits = [
         Produit(
             rang=2,
-            id_produit="top_prod_002",
+            id_produit="102808",
             score=0.5,
             caracteristique=
                [
@@ -261,7 +261,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=4,
-            id_produit="top_prod_004",
+            id_produit="102808",
             score=0.75,
             caracteristique=
                [
@@ -281,7 +281,7 @@ async def match_products(payload: MatchingPayload):
         ),
         Produit(
             rang=3,
-            id_produit="top_prod_003",
+            id_produit="102808",
             score=0.75,
             caracteristique=
                [
