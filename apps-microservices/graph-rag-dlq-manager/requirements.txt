@@ -5,6 +5,5 @@ pydantic
 pydantic-settings
 pika
 aio-pika
-httpx
 prometheus-client
 waitress
