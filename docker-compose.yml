@@ -1714,3 +1714,4 @@ volumes:
   image_download_data:
   prometheus_data:
   gr_neo4j_data:
+  gr_neo4j_logs:
