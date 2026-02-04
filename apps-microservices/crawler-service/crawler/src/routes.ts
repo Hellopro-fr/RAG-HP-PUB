@@ -194,7 +194,15 @@ router.addDefaultHandler(
                 },
             ]);
 
-            // --- Update Mode Checks (Redirects) ---
+            // --- REDIRECT LOOP CLOSURE (Important Fix) ---
+            // If we ended up at a different URL than requested (redirect), make sure the 
+            // final URL is also marked as known in Redis to prevent future re-crawling.
+            if (context.dedupManager && request.url !== request.loadedUrl) {
+                const finalUrlClean = rightTrimSlash(request.loadedUrl);
+                // We add it to Redis. We don't care if it returns true/false here, just ensuring it's known.
+                await context.dedupManager.addUrl(finalUrlClean);
+            }
+
             if (isExisting && context.statsManager) {
                 // request.loadedUrl is the final URL after redirects
                 // request.url is the queue/original URL
@@ -322,7 +330,7 @@ router.addDefaultHandler(
                 await enqueueLinks({
                     strategy: "same-domain",
                     exclude: enqueueLinksExcludePath,
-                    transformRequestFunction: (request) => {
+                    transformRequestFunction: async (request) => {
                         // 1. Robots Check
                         if (robots && !robots.isAllowed(request.url, "Googlebot")) {
                             console.log(`Bloqué par robots.txt : ${request.url}`);
@@ -462,7 +470,20 @@ router.addDefaultHandler(
                             return null;
                         }
 
-                        // Add user data to new requests
+                        // 4. Pre-Crawl Deduplication
+                        // Crucial Optimization: Stop the request HERE if we already know about it.
+                        // We check against Redis before even creating the Request object fully.
+                        // NOTE: In update mode, existing URLs are skipped by this logic implicitly
+                        // because we are discovering NEW links here. We assume existing URLs
+                        // were already added to Redis during seeding.
+                        if (context.dedupManager) {
+                            const isNew = await context.dedupManager.addUrl(request.url);
+                            if (!isNew) {
+                                // Already known, skip it immediately
+                                return null;
+                            }
+                        }
+
                         request.userData = { is_existing: false };
                         return request;
                     },

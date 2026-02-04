@@ -24,6 +24,7 @@ import {
     copyPreviousMethod,
     rehydrateDedupFromDataset,
     generateUpdateReport,
+    processUrl,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -403,15 +404,25 @@ if (crawlMode === 'update') {
     let skippedDuplicates = 0;
     
     for await (const url of previousDatasetGenerator) {
+        // Ensure even seed URLs are cleaned before processing
+        // This handles cases where old data had dirty URLs (e.g. ?order=xxx)
+        // We reuse the same config logic passed via CLI
+        const cleanUrl = processUrl(
+            url, 
+            skipquestionmark, 
+            skipdiez, 
+            { toKeep, toRemove }
+        );
+
         // 1. Add to Redis (Mark as Known) - Returns true if NEW (unique)
         // We use context.dedupManager as the source of truth for uniqueness in this session
         if (context.dedupManager) {
-            const isNewUnique = await context.dedupManager.addUrl(url);
+            const isNewUnique = await context.dedupManager.addUrl(cleanUrl);
             
             if (isNewUnique) {
                 // 2. Add to Queue (Mark as Existing for Verification) ONLY if it's unique
                 await requestQueue.addRequest({
-                    url: url,
+                    url: cleanUrl,
                     userData: { is_existing: true }
                 });
                 
@@ -444,8 +455,22 @@ if (crawlMode === 'update') {
 
 } else if (await requestQueue.isEmpty()) {
     console.log("RequestQueueEmpty - Adding standard seed");
+    
+    // Ensure Start URL is also cleaned using the same logic
+    const cleanSite = processUrl(
+        site, 
+        skipquestionmark, 
+        skipdiez, 
+        { toKeep, toRemove }
+    );
+
+    // Note: We also add start URL to dedup to prevent re-crawling if found again immediately
+    if (context.dedupManager) {
+        await context.dedupManager.addUrl(cleanSite);
+    }
+
     await requestQueue.addRequest({ 
-        url: site, 
+        url: cleanSite, 
         userData: { is_existing: false } 
     });
 } else {
