@@ -558,6 +558,8 @@ services:
     env_file:
       - .env
     logging: *logging_defaults
+    networks:
+      - services-net
 
   api-gateway-service:
     build:
