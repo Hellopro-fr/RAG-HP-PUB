@@ -1415,7 +1415,7 @@ services:
       MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
       PROMETHEUS_PORT: 8563
     deploy:
-      replicas: 2
+      replicas: 3
     networks:
       - services-net
 
