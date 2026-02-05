@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import os
 from typing import List, Dict, Any, Tuple, Optional
 
 from pymilvus import (
@@ -12,6 +13,12 @@ from pymilvus import (
 )
 
 from app.config import settings
+
+
+MILVUS_HOST = os.getenv("ZILLIZ_URI")
+MILVUS_PORT = os.getenv("ZILLIZ_PORT", "19530")
+MILVUS_USER = os.getenv("ZILLIZ_USER")
+MILVUS_PASSWORD = os.getenv("ZILLIZ_PASSWORD")
 
 
 class MilvusConnector:
@@ -35,10 +42,17 @@ class MilvusConnector:
             return
         try:
             logging.info("Connecting to Milvus...")
+            # connections.connect(
+            #     "default",
+            #     uri=settings.ZILLIZ_URI,
+            #     token=settings.ZILLIZ_TOKEN if settings.ZILLIZ_TOKEN else None,
+            # )
             connections.connect(
                 "default",
-                uri=settings.ZILLIZ_URI,
-                token=settings.ZILLIZ_TOKEN if settings.ZILLIZ_TOKEN else None,
+                host=MILVUS_HOST,
+                port=MILVUS_PORT,
+                user=MILVUS_USER,
+                password=MILVUS_PASSWORD,
             )
             self._connected = True
             logging.info("Successfully connected to Milvus.")

@@ -1,0 +1,10 @@
+fastapi>=0.109.0
+uvicorn>=0.27.0
+httpx>=0.26.0
+beautifulsoup4>=4.12.0
+lxml>=5.1.0
+langdetect>=1.0.9
+langid>=1.1.6
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+pydantic-settings
