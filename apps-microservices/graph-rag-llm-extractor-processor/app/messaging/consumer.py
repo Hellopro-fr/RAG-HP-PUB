@@ -169,7 +169,7 @@ class Consumer:
                         )
                         dlq_headers["x-validation-failed"] = True
                         dlq_headers["x-missing-nodes"] = json.dumps(missing_nodes)
-                        dlq_headers["x-extracted-nodes"] = json.dumps(extracted_nodes)
+                        dlq_headers["x-extracted-nodes"] = extracted_nodes
 
                         await self.channel.default_exchange.publish(
                             aio_pika.Message(
