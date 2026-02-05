@@ -293,6 +293,10 @@ class DomainFR:
             if lang_check and lang_check.get('method') == self.forced_method and lang_check.get('value') == 'fr':
                 # Confirmation NLP obligatoire même avec méthode forcée
                 nlp_result = self.language_detector.detect_from_text_content(content)
+
+                print("\n======== NLP RESULT ========\n")
+                print(nlp_result)
+
                 if nlp_result and nlp_result.get('lang') == 'fr':
                     return DetectionResponse(
                         ok=True,

@@ -111,6 +111,9 @@ class LanguageDetector:
             
             # Limiter le texte analysé (performance)
             text = text[:5000]
+
+            print("============== TEXT ============== \n")
+            print(text)
             
             # Détection avec langdetect
             langdetect_result = None
