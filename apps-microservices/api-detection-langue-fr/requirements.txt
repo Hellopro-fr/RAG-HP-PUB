@@ -7,3 +7,4 @@ langdetect>=1.0.9
 langid>=1.1.6
 pydantic>=2.5.0
 python-dotenv>=1.0.0
+pydantic-settings
