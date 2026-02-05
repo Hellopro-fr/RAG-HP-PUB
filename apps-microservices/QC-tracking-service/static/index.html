@@ -397,6 +397,9 @@
     </div>
 
     <script>
+        // Base URL for API - auto-detect based on current location
+        const API_BASE = window.location.pathname.replace(/\/$/, '');
+        
         let currentPath = '';
         let currentFile = null;
         let searchTimeout = null;
@@ -419,7 +422,7 @@
             document.getElementById('fileList').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
             
             try {
-                const response = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+                const response = await fetch(`${API_BASE}/api/browse?path=${encodeURIComponent(path)}`);
                 const data = await response.json();
                 
                 if (!response.ok) throw new Error(data.detail);
@@ -511,7 +514,7 @@
             document.querySelector(`.file-item[data-path="${path}"]`)?.classList.add('active');
             
             try {
-                const response = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+                const response = await fetch(`${API_BASE}/api/file?path=${encodeURIComponent(path)}`);
                 const data = await response.json();
                 
                 if (!response.ok) throw new Error(data.detail);
@@ -525,7 +528,7 @@
         // Download file
         function downloadFile() {
             if (currentFile) {
-                window.location.href = `/api/download?path=${encodeURIComponent(currentFile)}`;
+                window.location.href = `${API_BASE}/api/download?path=${encodeURIComponent(currentFile)}`;
             }
         }
 
@@ -542,7 +545,7 @@
             resultsContainer.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
             
             try {
-                const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
+                const response = await fetch(`${API_BASE}/api/search?query=${encodeURIComponent(query)}`);
                 const results = await response.json();
                 
                 if (!response.ok) throw new Error(results.detail);
