@@ -1,7 +1,6 @@
 import json
 import logging
 import asyncio
-import time
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
@@ -12,7 +11,7 @@ from app.core.processor import process_normalization
 
 
 class Consumer:
-    """Async Consumer with Batch Processing for normalization."""
+    """Async Consumer with Semaphore-based concurrency for normalization."""
 
     def __init__(self, publisher: Publisher):
         self.publisher = publisher
@@ -20,9 +19,8 @@ class Consumer:
         self.channel = None
         self.queue = None
 
-        # Batching state
-        self.batch_queue = asyncio.Queue()
-        self.batch_worker_task = None
+        # Concurrency control
+        self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
 
         # Queue configuration
         self.exchange_name = settings.INPUT_EXCHANGE
@@ -45,8 +43,8 @@ class Consumer:
         self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
         self.channel = await self.connection.channel()
 
-        # Prefetch slightly more than batch size to keep buffer full
-        await self.channel.set_qos(prefetch_count=settings.BATCH_SIZE * 2)
+        # Set prefetch count to match concurrency limit
+        await self.channel.set_qos(prefetch_count=settings.MAX_CONCURRENCY)
 
         # Setup Publisher
         await self.publisher.setup(self.channel)
@@ -128,23 +126,11 @@ class Consumer:
         except Exception as e:
             logging.error(f"Failed to publish to retry DLQ: {e}")
 
-    async def _process_batch(self, batch: list):
-        """
-        Execute a batch of messages:
-        1. Process each message through normalization.
-        2. Publish successful nodes to semantic check queue.
-        3. Publish failed nodes to retry DLQ.
-        4. Ack/Nack RabbitMQ messages.
-        """
-        if not batch:
-            return
-
-        valid_items = []  # (message, data, database, origin)
-
-        # 1. Parse and validate messages
-        for msg in batch:
+    async def process_message(self, message: AbstractIncomingMessage):
+        """Process a single message with semaphore control."""
+        async with message.process(ignore_processed=True):
             try:
-                body = msg.body.decode()
+                body = message.body.decode()
                 data_json = json.loads(body)
                 data = data_json.get("data", {})
                 database = data_json.get("database", "neo4j")
@@ -152,117 +138,60 @@ class Consumer:
 
                 if not data:
                     logging.warning("Empty data, skipping")
-                    asyncio.create_task(msg.ack())
-                    continue
+                    await message.ack()
+                    return
 
-                valid_items.append((msg, data, database, origin))
+                # Process normalization
+                result = process_normalization(data, database, origin)
 
-            except Exception as e:
-                logging.error(f"Error preparing message: {e}")
+                # Publish successful nodes to next stage
+                output_message = result["output_message"]
+                if output_message["data"].get("nodes"):
+                    await self.publisher.publish_message(output_message)
+
+                # Publish failed nodes to retry DLQ
+                for failed_node_entry in result.get("failed_nodes", []):
+                    await self._publish_to_retry_dlq(failed_node_entry)
+
+                await message.ack()
+
+            except (json.JSONDecodeError, ValueError) as e:
+                logging.error(f"❌ Permanent error: {e}")
                 headers = DLQProperties.create_dlq_headers(
-                    e, "graph-rag-normalize-unite-processor", 0, msg
+                    e, "graph-rag-normalize-unite-processor", 0, message
                 )
                 await self.channel.default_exchange.publish(
                     aio_pika.Message(
-                        body=msg.body,
+                        body=message.body,
                         headers=headers,
                         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
                     ),
                     routing_key=self.dead_letter_queue_name,
                 )
-                asyncio.create_task(msg.ack())
+                await message.ack()
 
-        if not valid_items:
-            return
-
-        # 2. Process batch
-        try:
-            for msg, data, database, origin in valid_items:
-                try:
-                    # Process normalization for each item
-                    result = process_normalization(data, database, origin)
-
-                    # Publish successful nodes to next stage
-                    output_message = result["output_message"]
-                    if output_message["data"].get("nodes"):
-                        await self.publisher.publish_message(output_message)
-
-                    # Publish failed nodes to retry DLQ
-                    for failed_node_entry in result.get("failed_nodes", []):
-                        await self._publish_to_retry_dlq(failed_node_entry)
-
-                    await msg.ack()
-
-                except Exception as e:
-                    logging.error(f"Error processing message: {e}")
-                    await msg.nack(requeue=False)
-
-            logging.info(f"✅ Batch processed successfully ({len(valid_items)} items)")
-
-        except Exception as e:
-            logging.error(f"❌ Critical batch error: {e}")
-            for msg, _, _, _ in valid_items:
-                await msg.nack(requeue=False)
-
-    async def _batch_worker(self):
-        """Background task to flush batches."""
-        batch = []
-        while True:
-            try:
-                # Wait for first item
-                item = await self.batch_queue.get()
-                batch.append(item)
-
-                # Collect more items up to batch size or timeout
-                start_time = time.time()
-                while len(batch) < settings.BATCH_SIZE:
-                    timeout = settings.BATCH_TIMEOUT_SECONDS - (
-                        time.time() - start_time
-                    )
-                    if timeout <= 0:
-                        break
-                    try:
-                        item = await asyncio.wait_for(
-                            self.batch_queue.get(), timeout=timeout
-                        )
-                        batch.append(item)
-                    except asyncio.TimeoutError:
-                        break
-
-                # Process the collected batch
-                await self._process_batch(batch)
-
-                # Mark tasks as done
-                for _ in batch:
-                    self.batch_queue.task_done()
-                batch = []
-
-            except asyncio.CancelledError:
-                break
             except Exception as e:
-                logging.error(f"Batch worker error: {e}")
-                batch = []
+                logging.error(f"❌ Error processing message: {e}")
+                await message.nack(requeue=False)
 
     async def start_consuming(self):
-        """Start consumer and batch worker."""
+        """Start the consumer loop with concurrency control."""
         await self.connect()
-
-        # Start background worker
-        self.batch_worker_task = asyncio.create_task(self._batch_worker())
-
-        logging.info(f"👂 Normalization Consumer listening on: {self.queue_name}")
+        logging.info(
+            f"👂 Normalization Consumer listening on: {self.queue_name} with concurrency {settings.MAX_CONCURRENCY}"
+        )
 
         async with self.queue.iterator() as queue_iter:
             async for message in queue_iter:
-                # Put message in queue. The iterator handles flow control via prefetch.
-                await self.batch_queue.put(message)
+                # Acquire semaphore before spawning task
+                await self.semaphore.acquire()
+
+                # Create background task
+                task = asyncio.create_task(self.process_message(message))
+
+                # Release semaphore when task is done
+                task.add_done_callback(lambda t: self.semaphore.release())
 
     async def close(self):
-        if self.batch_worker_task:
-            self.batch_worker_task.cancel()
-            try:
-                await self.batch_worker_task
-            except asyncio.CancelledError:
-                pass
         if self.connection:
             await self.connection.close()

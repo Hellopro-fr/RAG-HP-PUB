@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     BATCH_SIZE: int = 10
     BATCH_TIMEOUT_SECONDS: float = 2.0
 
+    # Concurrency Control (number of parallel batch workers)
+    MAX_CONCURRENCY: int = 3
+
     class Config:
         env_file = ".env"
         case_sensitive = True

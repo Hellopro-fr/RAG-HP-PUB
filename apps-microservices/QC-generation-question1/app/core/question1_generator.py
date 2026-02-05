@@ -211,6 +211,8 @@ class Question1Generator:
         self, 
         id_categorie: str, 
         nom_rubrique: str,
+        fil_d_ariane: str,
+        descriptif_rubrique: str,
         process_data: Dict[str, Any]
     ) -> Optional[str]:
         """
@@ -233,8 +235,10 @@ class Question1Generator:
         # Préparer le prompt
         prompt_text = prompt_config["contenu_prompt"]
         prompt_text = prompt_text.replace("{CATEGORIE}", nom_rubrique)
+        prompt_text = prompt_text.replace("{FIL_D_ARIANE}", fil_d_ariane)
+        # prompt_text = prompt_text.replace("{DESCRIPTIF_CATEGORIE}", descriptif_rubrique)
         
-        self._log(f"Prompt: {prompt_text[:200]}...")
+        self._log(f"Prompt: {prompt_text}")
         
         # Appeler le LLM gemini
         gemini = GeminiProvider(
@@ -355,6 +359,8 @@ class Question1Generator:
             raise ValueError(f"Catégorie {id_categorie} non trouvée")
                     
         nom_rubrique = category_info.get("nom_rubrique", "")
+        fil_d_ariane = category_info.get("barre_chainage", "")
+        descriptif_rubrique = category_info.get("description", "")
         
         # Initialiser le fichier de tracking
         self.tracking_file = utils.get_tracking_filepath(id_categorie)
@@ -409,7 +415,7 @@ class Question1Generator:
         processed_count = 0
 
         # Générer Question 1
-        res_insert = await self.generate_question1(id_categorie, nom_rubrique, process_data)
+        res_insert = await self.generate_question1(id_categorie, nom_rubrique, fil_d_ariane, descriptif_rubrique, process_data)
         
         if res_insert == "already_done":
             self._log("Question 1 déjà générée")

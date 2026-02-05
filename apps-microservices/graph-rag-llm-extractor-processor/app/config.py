@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_MODEL: str = "deepseek-chat"
 
-    LLM_TEMPERATURE: float = 0.0
+    LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 8192
 
     # Prometheus Metrics
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # Concurrency Control
     # Controls how many LLM requests can run in parallel per container
-    MAX_CONCURRENCY: int = 10 
+    MAX_CONCURRENCY: int = 10
 
     class Config:
         env_file = ".env"
