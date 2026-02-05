@@ -294,9 +294,6 @@ class DomainFR:
                 # Confirmation NLP obligatoire même avec méthode forcée
                 nlp_result = self.language_detector.detect_from_text_content(content)
 
-                print("\n======== NLP RESULT ========\n")
-                print(nlp_result)
-
                 if nlp_result and nlp_result.get('lang') == 'fr':
                     return DetectionResponse(
                         ok=True,
@@ -317,6 +314,10 @@ class DomainFR:
         
         # Étape 4 : Vérification NLP OBLIGATOIRE pour confirmation
         nlp_result = self.language_detector.detect_from_text_content(content)
+
+        print("\n======== NLP RESULT ========\n")
+        print(nlp_result)
+
         nlp_confirms_french = False
         nlp_confidence = 0.0
         
