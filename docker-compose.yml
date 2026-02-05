@@ -547,7 +547,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-detection-langue-fr/Dockerfile
-    container_name: api-detection-langue-fr
+    container_name: api-detection-langue-fr-service
     profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     # TODO: à supprimer en PROD
