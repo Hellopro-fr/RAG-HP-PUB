@@ -42,18 +42,18 @@ class MilvusConnector:
             return
         try:
             logging.info("Connecting to Milvus...")
-            connections.connect(
-                "default",
-                uri=settings.ZILLIZ_URI,
-                token=settings.ZILLIZ_TOKEN if settings.ZILLIZ_TOKEN else None,
-            )
             # connections.connect(
             #     "default",
-            #     host=MILVUS_HOST,
-            #     port=MILVUS_PORT,
-            #     user=MILVUS_USER,
-            #     password=MILVUS_PASSWORD,
+            #     uri=settings.ZILLIZ_URI,
+            #     token=settings.ZILLIZ_TOKEN if settings.ZILLIZ_TOKEN else None,
             # )
+            connections.connect(
+                "default",
+                host=MILVUS_HOST,
+                port=MILVUS_PORT,
+                user=MILVUS_USER,
+                password=MILVUS_PASSWORD,
+            )
             self._connected = True
             logging.info("Successfully connected to Milvus.")
         except Exception as e:
