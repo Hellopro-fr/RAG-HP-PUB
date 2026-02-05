@@ -75,7 +75,7 @@ async def list_dlq_messages(
         messages = await rabbitmq_client.get_messages(
             queue_name=target_queue,
             count=limit,
-            ack_mode="reject_requeue_true",  # Peek mode - using reject to ensure requeue
+            ack_mode="ack_requeue_true",  # Peek mode - nack with requeue=True
             routing_key_filter=routing_key,
             exchange_filter=exchange,
         )

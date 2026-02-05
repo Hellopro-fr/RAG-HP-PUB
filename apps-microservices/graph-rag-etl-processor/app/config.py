@@ -20,7 +20,13 @@ class Settings(BaseSettings):
     # Retry Configuration
     MAX_RETRIES: int = 3
     RETRY_TTL_MS: int = 30000
+
+    # Batching Configuration
     BATCH_SIZE: int = 5
+    BATCH_TIMEOUT_SECONDS: float = 2.0
+
+    # Concurrency Control (number of parallel batch workers)
+    MAX_CONCURRENCY: int = 3
 
     class Config:
         env_file = ".env"

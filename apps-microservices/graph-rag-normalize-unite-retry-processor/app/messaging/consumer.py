@@ -1,7 +1,6 @@
 import json
 import logging
 import asyncio
-import time
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
@@ -11,16 +10,15 @@ from app.core.processor import process_retry_normalization
 
 
 class Consumer:
-    """Async Consumer with Batch Processing for normalization retry."""
+    """Async Consumer with Semaphore-based concurrency for normalization retry."""
 
     def __init__(self):
         self.connection = None
         self.channel = None
         self.queue = None
 
-        # Batching state
-        self.batch_queue = asyncio.Queue()
-        self.batch_worker_task = None
+        # Concurrency control
+        self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
 
         # Queue configuration
         self.exchange_name = settings.INPUT_EXCHANGE
@@ -39,8 +37,8 @@ class Consumer:
         self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
         self.channel = await self.connection.channel()
 
-        # Prefetch slightly more than batch size to keep buffer full
-        await self.channel.set_qos(prefetch_count=settings.BATCH_SIZE * 2)
+        # Set prefetch count to match concurrency limit
+        await self.channel.set_qos(prefetch_count=settings.MAX_CONCURRENCY)
 
         await self._setup_infrastructure()
         logging.info("✅ Normalization Retry Consumer initialized")
@@ -91,23 +89,11 @@ class Consumer:
         except Exception as e:
             logging.error(f"Failed to publish to manual DLQ: {e}")
 
-    async def _process_batch(self, batch: list):
-        """
-        Execute a batch of messages:
-        1. Process each failed node through retry normalization.
-        2. If successful: node is written to Neo4j.
-        3. If failed: publish to manual DLQ.
-        4. Ack RabbitMQ messages.
-        """
-        if not batch:
-            return
-
-        valid_items = []  # (message, failed_node_entry)
-
-        # 1. Parse and validate messages
-        for msg in batch:
+    async def process_message(self, message: AbstractIncomingMessage):
+        """Process a single message with semaphore control."""
+        async with message.process(ignore_processed=True):
             try:
-                body = msg.body.decode()
+                body = message.body.decode()
                 payload = json.loads(body)
 
                 # Check if this is a requeued message from Manual DLQ (wrapped)
@@ -118,111 +104,54 @@ class Consumer:
 
                 if not failed_node_entry.get("node"):
                     logging.warning("Empty node data, skipping")
-                    asyncio.create_task(msg.ack())
-                    continue
+                    await message.ack()
+                    return
 
-                valid_items.append((msg, failed_node_entry))
-
-            except Exception as e:
-                logging.error(f"Error parsing message: {e}")
-                asyncio.create_task(msg.ack())
-
-        if not valid_items:
-            return
-
-        # 2. Process batch
-        success_count = 0
-        failure_count = 0
-
-        for msg, failed_node_entry in valid_items:
-            try:
                 # Process retry normalization
                 result = process_retry_normalization(failed_node_entry)
 
                 if result["success"]:
-                    success_count += 1
+                    logging.info(
+                        f"✅ Retry normalization success: {failed_node_entry.get('node', {}).get('id')}"
+                    )
                 else:
                     # Normalization still failed - send to manual DLQ
                     await self._publish_to_manual_dlq(
                         failed_node_entry, result.get("error", {})
                     )
-                    failure_count += 1
 
-                await msg.ack()
+                await message.ack()
 
             except Exception as e:
-                logging.error(f"Error processing message: {e}")
+                logging.error(f"❌ Error processing message: {e}")
                 # On exception, send to manual DLQ
-                await self._publish_to_manual_dlq(
-                    failed_node_entry,
-                    {"reason": "processing_exception", "message": str(e)},
-                )
-                await msg.ack()
-                failure_count += 1
-
-        logging.info(
-            f"✅ Batch processed: {success_count} success, {failure_count} to manual DLQ"
-        )
-
-    async def _batch_worker(self):
-        """Background task to flush batches."""
-        batch = []
-        while True:
-            try:
-                # Wait for first item
-                item = await self.batch_queue.get()
-                batch.append(item)
-
-                # Collect more items up to batch size or timeout
-                start_time = time.time()
-                while len(batch) < settings.BATCH_SIZE:
-                    timeout = settings.BATCH_TIMEOUT_SECONDS - (
-                        time.time() - start_time
+                try:
+                    await self._publish_to_manual_dlq(
+                        failed_node_entry if "failed_node_entry" in locals() else {},
+                        {"reason": "processing_exception", "message": str(e)},
                     )
-                    if timeout <= 0:
-                        break
-                    try:
-                        item = await asyncio.wait_for(
-                            self.batch_queue.get(), timeout=timeout
-                        )
-                        batch.append(item)
-                    except asyncio.TimeoutError:
-                        break
-
-                # Process the collected batch
-                await self._process_batch(batch)
-
-                # Mark tasks as done
-                for _ in batch:
-                    self.batch_queue.task_done()
-                batch = []
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logging.error(f"Batch worker error: {e}")
-                batch = []
+                except Exception:
+                    pass
+                await message.ack()
 
     async def start_consuming(self):
-        """Start consumer and batch worker."""
+        """Start the consumer loop with concurrency control."""
         await self.connect()
-
-        # Start background worker
-        self.batch_worker_task = asyncio.create_task(self._batch_worker())
-
-        logging.info(f"👂 Normalization Retry Consumer listening on: {self.queue_name}")
+        logging.info(
+            f"👂 Normalization Retry Consumer listening on: {self.queue_name} with concurrency {settings.MAX_CONCURRENCY}"
+        )
 
         async with self.queue.iterator() as queue_iter:
             async for message in queue_iter:
-                # Put message in queue. The iterator handles flow control via prefetch.
-                await self.batch_queue.put(message)
+                # Acquire semaphore before spawning task
+                await self.semaphore.acquire()
+
+                # Create background task
+                task = asyncio.create_task(self.process_message(message))
+
+                # Release semaphore when task is done
+                task.add_done_callback(lambda t: self.semaphore.release())
 
     async def close(self):
-        if self.batch_worker_task:
-            self.batch_worker_task.cancel()
-            try:
-                await self.batch_worker_task
-            except asyncio.CancelledError:
-                pass
         if self.connection:
             await self.connection.close()

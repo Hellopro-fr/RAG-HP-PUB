@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # Prometheus Metrics
     PROMETHEUS_PORT: int = 8570
 
+    # Concurrency Control
+    MAX_CONCURRENCY: int = 5
+
     class Config:
         env_file = ".env"
         case_sensitive = True

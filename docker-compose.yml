@@ -147,7 +147,7 @@ services:
       replicas: 10
       resources:
         limits:
-          cpus: '1.00'
+          cpus: '1.0'
           memory: 1G
     # ports:
     #   - "8505:8000" # Removed to allow scaling (avoid port conflict). Access via API Gateway.
@@ -542,6 +542,24 @@ services:
     env_file:
       - .env
     logging: *logging_defaults
+  
+  api-detection-langue-fr-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-detection-langue-fr/Dockerfile
+    container_name: api-detection-langue-fr-service
+    profiles: ["app"] # Profile for the main application stack
+    restart: unless-stopped
+    # TODO: à supprimer en PROD
+    volumes:
+      - ./apps-microservices/api-detection-langue-fr:/app:rw
+    ports:
+      - "8999:8999"
+    env_file:
+      - .env
+    logging: *logging_defaults
+    networks:
+      - services-net
 
   api-gateway-service:
     build:
@@ -1285,6 +1303,8 @@ services:
     environment:
       ZILLIZ_URI: ${ZILLIZ_URI}
       ZILLIZ_TOKEN: ${ZILLIZ_TOKEN}
+      ZILLIZ_USER: ${ZILLIZ_USER}
+      ZILLIZ_PASSWORD: ${ZILLIZ_PASSWORD}
       PROMETHEUS_PORT: 8566
     deploy:
       replicas: 10
@@ -1395,7 +1415,7 @@ services:
       MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
       PROMETHEUS_PORT: 8563
     deploy:
-      replicas: 2
+      replicas: 3
     networks:
       - services-net
 
@@ -1578,6 +1598,35 @@ services:
   #     - db
   #   networks:
   #     - services-net
+
+    # =====================================================================
+  # QC TRACKING SERVICE - Interface de visualisation des fichiers tracking
+  # Lancez avec: docker compose up -d --build qc-tracking-service
+  # =====================================================================
+
+  qc-tracking-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-tracking-service/Dockerfile
+    container_name: qc-tracking-service
+    profiles: ["qc"]
+    restart: unless-stopped
+    ports:
+      - "8590:8590"
+    environment:
+      - TRACKING_BASE_PATH=/app/tracking
+    volumes:
+      # Monte tous les dossiers tracking des services QC (paths VM)
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking/question1:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking/question2aN:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking/caracteristiques:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking/valeurs:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking/enrichissement:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking/equivalence:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking/caracterisation:ro
+    networks:
+      - services-net
+    logging: *logging_defaults
   
   # =====================================================================
   # QC PIPELINE SERVICES (Question-Caractéristique)
@@ -1587,14 +1636,15 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-question1/Dockerfile
-    container_name: qc-generation-question1
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking    
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1603,7 +1653,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-question2aN/Dockerfile
-    container_name: qc-generation-question2aN
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1611,6 +1660,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1619,7 +1670,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-caracteristiques/Dockerfile
-    container_name: qc-generation-caracteristiques
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1627,6 +1677,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1635,7 +1687,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-valeurs/Dockerfile
-    container_name: qc-generation-valeurs
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1643,6 +1694,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1651,7 +1704,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-enrichissement/Dockerfile
-    container_name: qc-enrichissement
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1659,6 +1711,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1667,7 +1721,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-equivalence/Dockerfile
-    container_name: qc-equivalence
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1675,6 +1728,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1683,7 +1738,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-caracterisation/Dockerfile
-    container_name: qc-caracterisation
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1691,6 +1745,8 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults

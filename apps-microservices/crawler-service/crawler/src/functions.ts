@@ -1364,56 +1364,59 @@ export const processUrl = (
     skipDiez: boolean,
     parameters: UrlParameters = {}
 ): string => {
-    // Default parameters
-    const defaultParametersToKeep = ["page", "id", "lang"];
-    if (parameters.toKeep && parameters.toRemove) throw new Error("Cannot specify both toKeep and toRemove parameters");
+    try {
+        // Fix: Use native URL API for robust parsing
+        const urlObj = new URL(url);
+        
+        // 1. Always remove hash if skipDiez is true
+        if (skipDiez) {
+            urlObj.hash = '';
+        }
 
-    let processedUrl = url;
+        // 2. Handle Query Parameters if skipQuestionMark is true OR if we have toRemove params (alwaysRemove)
+        if (skipQuestionMark || (parameters.toRemove && parameters.toRemove.length > 0)) {
+            const params = urlObj.searchParams;
+            const keys = Array.from(params.keys());
 
-    // First handle hash if needed
-    let baseUrlPart = processedUrl;
-    let hashPart = "";
-
-    if (processedUrl.includes("#")) {
-        const [base, hash] = processedUrl.split("#");
-        baseUrlPart = base;
-        hashPart = "#" + hash;
-        if (skipDiez) hashPart = "";
-    }
-
-    // Process URL if it contains ? and skipQuestionMark is true
-    if (skipQuestionMark && baseUrlPart.includes("?")) {
-        const [baseUrl, queryString] = baseUrlPart.split("?");
-        const params = new URLSearchParams(queryString);
-        const filteredParams = new URLSearchParams();
-
-        if (parameters.toKeep || parameters.toRemove) {
-            const entries = Array.from(params.entries());
-
-            if (parameters.toKeep) {
-                // Keep only specified parameters
-                for (const [key, value] of entries) {
-                    if (parameters.toKeep.includes(key)) filteredParams.append(key, value);
-                }
-            } else if (parameters.toRemove) {
-                // Remove specified parameters
-                for (const [key, value] of entries) {
-                    if (!parameters.toRemove.includes(key)) filteredParams.append(key, value);
+            // --- Logic: "Always Remove" takes precedence ---
+            if (parameters.toRemove) {
+                const toRemoveLower = parameters.toRemove.map(p => p.toLowerCase());
+                for (const key of keys) {
+                    if (toRemoveLower.includes(key.toLowerCase())) {
+                        params.delete(key);
+                    }
                 }
             }
-        } else {
-            // Use default parameters
-            const entries = Array.from(params.entries());
-            for (const [key, value] of entries) {
-                if (defaultParametersToKeep.includes(key)) filteredParams.append(key, value);
+
+            // --- Logic: "Skip Question Mark" (Whitelist Strategy) ---
+            if (skipQuestionMark) {
+                // If we are skipping question marks, we generally remove everything...
+                // UNLESS there is a 'toKeep' list.
+                // If 'toKeep' is provided, we keep ONLY those.
+                // If 'toKeep' is NOT provided, we fall back to defaults ["page", "id", "lang"]
+                
+                const defaultKeep = ["page", "id", "lang"];
+                const keepList = parameters.toKeep 
+                    ? parameters.toKeep.map(p => p.toLowerCase()) 
+                    : defaultKeep;
+
+                // Re-scan keys (some might have been deleted by toRemove already)
+                const remainingKeys = Array.from(params.keys());
+                
+                for (const key of remainingKeys) {
+                    if (!keepList.includes(key.toLowerCase())) {
+                        params.delete(key);
+                    }
+                }
             }
         }
-        const newQueryString = filteredParams.toString();
-        baseUrlPart = newQueryString ? `${baseUrl}?${newQueryString}` : baseUrl;
-    }
 
-    // Combine the parts
-    return baseUrlPart + hashPart;
+        return urlObj.toString();
+
+    } catch (e) {
+        // Fallback for invalid URLs
+        return url;
+    }
 };
 
 /**

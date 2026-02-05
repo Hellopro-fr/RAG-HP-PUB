@@ -154,6 +154,11 @@ class Consumer:
                             f"❌ Validation failed after retry for {graph_id}. Missing nodes: {missing_nodes}. Sending to DLQ for manual retry."
                         )
 
+                        # Get all extracted nodes from the output message
+                        extracted_nodes = output_message.get("data", {}).get(
+                            "nodes", []
+                        )
+
                         dlq_headers = DLQProperties.create_dlq_headers(
                             Exception(
                                 f"Validation failed: nodes missing id_source_caracteristique: {missing_nodes}"
@@ -164,6 +169,7 @@ class Consumer:
                         )
                         dlq_headers["x-validation-failed"] = True
                         dlq_headers["x-missing-nodes"] = json.dumps(missing_nodes)
+                        dlq_headers["x-extracted-nodes"] = extracted_nodes
 
                         await self.channel.default_exchange.publish(
                             aio_pika.Message(
