@@ -52,12 +52,6 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
             use_nlp_detection=request.use_nlp_detection
         )
         
-        # Logging live du contenu HTML (premiers 5000 caractères)
-        print(f"--- HTML Content for {request.url} ---")
-        print(html_content[:5000] if html_content else "Empty content")
-        print("---------------------------------------")
-        
-
         # Lancer la détection
         result = await detector.check_page_if_french(html_content, request.mode)
         

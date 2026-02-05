@@ -20,7 +20,7 @@ class LanguageDetector:
         'au', 'aux', 'qui', 'que', 'dont', 'où'
     }
     
-    
+
     def __init__(self):
         # Configuration langid pour optimiser la détection français
         langid.set_languages(['fr', 'en', 'de', 'es', 'it', 'pt', 'nl'])
@@ -141,9 +141,6 @@ class LanguageDetector:
             
             # Limiter le texte analysé (performance)
             text = text[:5000]
-
-            print("============== TEXT ============== \n")
-            print(text)
             
             # Détection avec langdetect
             langdetect_result = None
