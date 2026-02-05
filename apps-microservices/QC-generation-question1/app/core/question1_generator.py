@@ -236,7 +236,7 @@ class Question1Generator:
         prompt_text = prompt_config["contenu_prompt"]
         prompt_text = prompt_text.replace("{CATEGORIE}", nom_rubrique)
         prompt_text = prompt_text.replace("{FIL_D_ARIANE}", fil_d_ariane)
-        prompt_text = prompt_text.replace("{DESCRIPTIF_CATEGORIE}", descriptif_rubrique)
+        # prompt_text = prompt_text.replace("{DESCRIPTIF_CATEGORIE}", descriptif_rubrique)
         
         self._log(f"Prompt: {prompt_text}")
         
