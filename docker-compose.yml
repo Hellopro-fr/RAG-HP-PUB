@@ -1727,14 +1727,14 @@ services:
     environment:
       - TRACKING_BASE_PATH=/app/tracking
     volumes:
-      # Monte tous les dossiers tracking des services QC
-      - ./apps-microservices/QC-generation-question1/tracking:/app/tracking/question1:ro
-      - ./apps-microservices/QC-generation-question2aN/tracking:/app/tracking/question2aN:ro
-      - ./apps-microservices/QC-generation-caracteristiques/tracking:/app/tracking/caracteristiques:ro
-      - ./apps-microservices/QC-generation-valeurs/tracking:/app/tracking/valeurs:ro
-      - ./apps-microservices/QC-enrichissement/tracking:/app/tracking/enrichissement:ro
-      - ./apps-microservices/QC-equivalence/tracking:/app/tracking/equivalence:ro
-      - ./apps-microservices/QC-caracterisation/tracking:/app/tracking/caracterisation:ro
+      # Monte tous les dossiers tracking des services QC (paths VM)
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking/question1:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking/question2aN:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking/caracteristiques:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking/valeurs:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking/enrichissement:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking/equivalence:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking/caracterisation:ro
     networks:
       - services-net
     logging: *logging_defaults
@@ -1747,7 +1747,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-question1/Dockerfile
-    container_name: qc-generation-question1
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1765,7 +1764,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-question2aN/Dockerfile
-    container_name: qc-generation-question2aN
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1783,7 +1781,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-caracteristiques/Dockerfile
-    container_name: qc-generation-caracteristiques
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1801,7 +1798,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-valeurs/Dockerfile
-    container_name: qc-generation-valeurs
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1819,7 +1815,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-enrichissement/Dockerfile
-    container_name: qc-enrichissement
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1837,7 +1832,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-equivalence/Dockerfile
-    container_name: qc-equivalence
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1855,7 +1849,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-caracterisation/Dockerfile
-    container_name: qc-caracterisation
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
