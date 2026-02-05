@@ -39,22 +39,22 @@ class ImageProcessor:
                 image = Image.open(image_stream)
                 
                 # --- SAFETY CHECK: OOM Protection ---
-                # 80 Million pixels ~ 240MB RAM (RGB) - Safe for 512MB/1GB container
-                MAX_PIXELS = 80_000_000 
+                # Increased limit to 200 Million pixels (~600MB) since container has 1GB RAM
+                MAX_PIXELS = 200_000_000 
                 
                 width, height = image.size
                 total_pixels = width * height
                 
                 if total_pixels > MAX_PIXELS:
-                    # OPTIMIZATION: For JPEGs, we can load a draft (thumbnail) directly
-                    # This avoids decoding the full 100MP image into RAM
-                    if image.format == 'JPEG':
-                         logger.info(f"⚠️ Large JPEG detected ({width}x{height}). Using draft mode to save RAM.")
-                         image.draft('RGB', (800, 800))
-                    else:
-                         # For WebP/PNG, Pillow loads full image. Dangerous for RAM.
-                         logger.warning(f"⛔ Skipping image {product_id}: Too large ({width}x{height} = {total_pixels} px). Limit: {MAX_PIXELS} px. Format: {image.format}")
-                         return None
+                    logger.warning(f"⛔ Skipping image {product_id}: Too large ({width}x{height} = {total_pixels} px). Limit: {MAX_PIXELS} px.")
+                    return None
+
+                # OPTIMIZATION: For JPEGs, we can load a draft (thumbnail) directly
+                if total_pixels > 50_000_000 and image.format == 'JPEG':
+                     logger.info(f"⚠️ Large JPEG detected ({width}x{height}). Using draft mode to save RAM.")
+                     image.draft('RGB', (800, 800))
+                elif total_pixels > 50_000_000:
+                     logger.info(f"⚠️ Large {image.format} detected ({width}x{height}). Processing with caution (High RAM usage).")
 
                 image.load() # Force load (or load draft)
             except Exception as pil_error:
