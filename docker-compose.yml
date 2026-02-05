@@ -542,6 +542,22 @@ services:
     env_file:
       - .env
     logging: *logging_defaults
+  
+  api-detection-langue-fr-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-detection-langue-fr/Dockerfile
+    container_name: api-detection-langue-fr
+    profiles: ["app"] # Profile for the main application stack
+    restart: unless-stopped
+    # TODO: à supprimer en PROD
+    volumes:
+      - ./apps-microservices/api-detection-langue-fr:/app:rw
+    ports:
+      - "8999:8999"
+    env_file:
+      - .env
+    logging: *logging_defaults
 
   api-gateway-service:
     build:
