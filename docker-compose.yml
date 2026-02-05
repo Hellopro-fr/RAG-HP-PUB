@@ -1598,6 +1598,35 @@ services:
   #     - db
   #   networks:
   #     - services-net
+
+    # =====================================================================
+  # QC TRACKING SERVICE - Interface de visualisation des fichiers tracking
+  # Lancez avec: docker compose up -d --build qc-tracking-service
+  # =====================================================================
+
+  qc-tracking-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-tracking-service/Dockerfile
+    container_name: qc-tracking-service
+    profiles: ["qc"]
+    restart: unless-stopped
+    ports:
+      - "8590:8590"
+    environment:
+      - TRACKING_BASE_PATH=/app/tracking
+    volumes:
+      # Monte tous les dossiers tracking des services QC
+      - ./apps-microservices/QC-generation-question1/tracking:/app/tracking/question1:ro
+      - ./apps-microservices/QC-generation-question2aN/tracking:/app/tracking/question2aN:ro
+      - ./apps-microservices/QC-generation-caracteristiques/tracking:/app/tracking/caracteristiques:ro
+      - ./apps-microservices/QC-generation-valeurs/tracking:/app/tracking/valeurs:ro
+      - ./apps-microservices/QC-enrichissement/tracking:/app/tracking/enrichissement:ro
+      - ./apps-microservices/QC-equivalence/tracking:/app/tracking/equivalence:ro
+      - ./apps-microservices/QC-caracterisation/tracking:/app/tracking/caracterisation:ro
+    networks:
+      - services-net
+    logging: *logging_defaults
   
   # =====================================================================
   # QC PIPELINE SERVICES (Question-Caractéristique)
@@ -1614,7 +1643,9 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
-      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking    
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1631,6 +1662,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1647,6 +1680,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1663,6 +1698,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1679,6 +1716,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1695,6 +1734,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1711,6 +1752,8 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
