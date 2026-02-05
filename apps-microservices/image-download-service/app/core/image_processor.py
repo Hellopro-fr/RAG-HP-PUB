@@ -33,8 +33,30 @@ class ImageProcessor:
             logger.info(f"Processing image {product_id} - Size: {len(content)} bytes - Header: {header_bytes}")
 
             try:
+                # Suppress DecompressionBombWarning as we handle it manually
+                Image.MAX_IMAGE_PIXELS = None 
+                
                 image = Image.open(image_stream)
-                image.load() # Force load to validate
+                
+                # --- SAFETY CHECK: OOM Protection ---
+                # 80 Million pixels ~ 240MB RAM (RGB) - Safe for 512MB/1GB container
+                MAX_PIXELS = 80_000_000 
+                
+                width, height = image.size
+                total_pixels = width * height
+                
+                if total_pixels > MAX_PIXELS:
+                    # OPTIMIZATION: For JPEGs, we can load a draft (thumbnail) directly
+                    # This avoids decoding the full 100MP image into RAM
+                    if image.format == 'JPEG':
+                         logger.info(f"⚠️ Large JPEG detected ({width}x{height}). Using draft mode to save RAM.")
+                         image.draft('RGB', (800, 800))
+                    else:
+                         # For WebP/PNG, Pillow loads full image. Dangerous for RAM.
+                         logger.warning(f"⛔ Skipping image {product_id}: Too large ({width}x{height} = {total_pixels} px). Limit: {MAX_PIXELS} px. Format: {image.format}")
+                         return None
+
+                image.load() # Force load (or load draft)
             except Exception as pil_error:
                 # If SVG, it might start with <svg
                 if b'<svg' in header_bytes or b'<?xml' in header_bytes:
