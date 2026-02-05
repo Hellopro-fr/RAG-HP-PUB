@@ -10,6 +10,6 @@ sentence-transformers
 sentencepiece
 numpy
 langchain-text-splitters
-transformers<5.0.0
+transformers<=5.0.0
 prometheus-client
 waitress
