@@ -1,7 +1,6 @@
 import json
 import logging
 import asyncio
-import time
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
@@ -9,11 +8,13 @@ from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProp
 from app.config import settings
 from app.messaging.publisher import Publisher
 from app.core.processor import prepare_product_cypher, create_output_message
-from app.infrastructure.graph_database_client import graph_database_client
+
+# Import centralized client for Neo4j operations
+from common_utils.grpc_clients import graph_database_client
 
 
 class Consumer:
-    """Async Consumer with Batch Processing for Neo4j writes."""
+    """Async Consumer with Semaphore-based concurrency for product processing."""
 
     def __init__(self, publisher: Publisher):
         self.publisher = publisher
@@ -21,9 +22,8 @@ class Consumer:
         self.channel = None
         self.queue = None
 
-        # Batching state
-        self.batch_queue = asyncio.Queue()
-        self.batch_worker_task = None
+        # Concurrency control
+        self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
 
         # Queue configuration
         self.exchange_name = settings.INPUT_EXCHANGE
@@ -40,8 +40,8 @@ class Consumer:
         self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
         self.channel = await self.connection.channel()
 
-        # Prefetch slightly more than batch size to keep buffer full
-        await self.channel.set_qos(prefetch_count=settings.BATCH_SIZE * 2)
+        # Set prefetch count to match concurrency limit
+        await self.channel.set_qos(prefetch_count=settings.MAX_CONCURRENCY)
 
         # Setup Publisher
         await self.publisher.setup(self.channel)
@@ -89,24 +89,11 @@ class Consumer:
         )
         await self.queue.bind(main_exchange, routing_key=self.routing_key)
 
-    async def _process_batch(self, batch: list):
-        """
-        Execute a batch of messages:
-        1. Prepare Cypher statements.
-        2. Execute batch against Neo4j.
-        3. Publish output messages.
-        4. Ack/Nack RabbitMQ messages.
-        """
-        if not batch:
-            return
-
-        statements = []
-        valid_items = []  # (message, product_data, graph_id, database, origin)
-
-        # 1. Prepare Statements
-        for msg in batch:
+    async def process_message(self, message: AbstractIncomingMessage):
+        """Process a single product message with semaphore control."""
+        async with message.process(ignore_processed=True):
             try:
-                body = msg.body.decode()
+                body = message.body.decode()
                 data_json = json.loads(body)
                 product_data = data_json.get("data", {})
                 database = data_json.get("database", "neo4j")
@@ -114,140 +101,71 @@ class Consumer:
 
                 if not product_data:
                     logging.warning("Empty product data, skipping")
-                    asyncio.create_task(msg.ack())  # Ack invalid immediately
-                    continue
+                    await message.ack()
+                    return
 
+                # Prepare Cypher statement
                 cypher, params, graph_id = prepare_product_cypher(product_data)
-                statements.append({"query": cypher, "parameters": params})
-                valid_items.append((msg, product_data, graph_id, database, origin))
 
-            except Exception as e:
-                logging.error(f"Error preparing message: {e}")
-                # Send to DLQ immediately
+                # Execute against Neo4j (single statement)
+                success, results, records_affected = (
+                    await graph_database_client.execute_cypher(
+                        query=cypher, parameters=params
+                    )
+                )
+
+                if success:
+                    logging.debug(f"✅ Product {graph_id} written to Neo4j")
+
+                    # Prepare and publish output message
+                    out_msg = create_output_message(
+                        product_data, graph_id, True, database, origin
+                    )
+                    if out_msg["data"].get("text_for_extraction"):
+                        await self.publisher.publish_message(out_msg)
+
+                    await message.ack()
+                else:
+                    logging.error(f"❌ Neo4j write failed for {graph_id}")
+                    await message.nack(requeue=False)
+
+            except (json.JSONDecodeError, ValueError) as e:
+                logging.error(f"❌ Permanent error: {e}")
                 headers = DLQProperties.create_dlq_headers(
-                    e, "graph-rag-produit-processor", 0, msg
+                    e, "graph-rag-produit-processor", 0, message
                 )
                 await self.channel.default_exchange.publish(
                     aio_pika.Message(
-                        body=msg.body,
+                        body=message.body,
                         headers=headers,
                         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
                     ),
                     routing_key=self.dead_letter_queue_name,
                 )
-                asyncio.create_task(msg.ack())
+                await message.ack()
 
-        if not statements:
-            return
-
-        # 2. Execute Batch
-        try:
-            # Note: execute_cypher_async in client calls centralized_db_client.execute_cypher (single)
-            # We need to call execute_batch_cypher from the centralized client directly or update the wrapper.
-            # Assuming the wrapper has been updated or we access the centralized client.
-            # Let's use the centralized client directly for batching to be safe,
-            # or assume graph_database_client has execute_batch_cypher (it should).
-
-            # Since we didn't update graph_database_client.py in this plan, we import the centralized one here
-            from common_utils.grpc_clients import (
-                graph_database_client as centralized_client,
-            )
-
-            success, error_msg, results = await centralized_client.execute_batch_cypher(
-                statements=statements, transactional=True
-            )
-
-            if success:
-                logging.info(
-                    f"✅ Batch executed successfully ({len(statements)} items)"
-                )
-
-                # 3. Publish Outputs & 4. Ack
-                for i, (msg, p_data, g_id, db, orig) in enumerate(valid_items):
-                    # Prepare output message
-                    out_msg = create_output_message(p_data, g_id, True, db, orig)
-
-                    # Publish if text exists
-                    if out_msg["data"].get("text_for_extraction"):
-                        await self.publisher.publish_message(out_msg)
-
-                    await msg.ack()
-            else:
-                logging.error(f"❌ Batch failed: {error_msg}. Retrying individually...")
-                # Fallback: Nack all to retry individually (or implement complex partial retry logic)
-                # Simple strategy: Nack all, they go to retry queue (or back to main if no DLQ set on nack)
-                # Since we configured DLQ on queue, nack(requeue=False) goes to DLQ/Retry.
-                # Let's requeue=True to try again in next batch? No, that might loop.
-                # Let's Nack with requeue=False so they go to Retry Queue (via DLX)
-                for msg, _, _, _, _ in valid_items:
-                    await msg.nack(requeue=False)
-
-        except Exception as e:
-            logging.error(f"❌ Critical batch error: {e}")
-            for msg, _, _, _, _ in valid_items:
-                await msg.nack(requeue=False)
-
-    async def _batch_worker(self):
-        """Background task to flush batches."""
-        batch = []
-        while True:
-            try:
-                # Wait for first item
-                item = await self.batch_queue.get()
-                batch.append(item)
-
-                # Collect more items up to batch size or timeout
-                start_time = time.time()
-                while len(batch) < settings.BATCH_SIZE:
-                    timeout = settings.BATCH_TIMEOUT_SECONDS - (
-                        time.time() - start_time
-                    )
-                    if timeout <= 0:
-                        break
-                    try:
-                        item = await asyncio.wait_for(
-                            self.batch_queue.get(), timeout=timeout
-                        )
-                        batch.append(item)
-                    except asyncio.TimeoutError:
-                        break
-
-                # Process the collected batch
-                await self._process_batch(batch)
-
-                # Mark tasks as done
-                for _ in batch:
-                    self.batch_queue.task_done()
-                batch = []
-
-            except asyncio.CancelledError:
-                break
             except Exception as e:
-                logging.error(f"Batch worker error: {e}")
-                batch = (
-                    []
-                )  # Drop batch on critical error to prevent loop? Or handle better.
+                logging.error(f"❌ Error processing message: {e}")
+                await message.nack(requeue=False)
 
     async def start_consuming(self):
-        """Start consumer and batch worker."""
+        """Start the consumer loop with concurrency control."""
         await self.connect()
-
-        # Start background worker
-        self.batch_worker_task = asyncio.create_task(self._batch_worker())
-
-        logging.info(f"👂 Product Consumer listening on: {self.queue_name}")
+        logging.info(
+            f"👂 Product Consumer listening on: {self.queue_name} with concurrency {settings.MAX_CONCURRENCY}"
+        )
 
         async with self.queue.iterator() as queue_iter:
             async for message in queue_iter:
-                # Put message in queue. The iterator handles flow control via prefetch.
-                await self.batch_queue.put(message)
+                # Acquire semaphore before spawning task
+                await self.semaphore.acquire()
+
+                # Create background task
+                task = asyncio.create_task(self.process_message(message))
+
+                # Release semaphore when task is done
+                task.add_done_callback(lambda t: self.semaphore.release())
 
     async def close(self):
-        if self.batch_worker_task:
-            self.batch_worker_task.cancel()
-            try:
-                await self.batch_worker_task
-            except asyncio.CancelledError:
-                pass
         if self.connection:
             await self.connection.close()
