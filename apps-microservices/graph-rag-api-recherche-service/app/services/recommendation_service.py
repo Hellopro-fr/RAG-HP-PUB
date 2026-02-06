@@ -1019,6 +1019,19 @@ class RecommendationService:
                             valeur = (
                                 str(node.get("valeur", ""))
                                 if node.get("valeur")
+                                and node.get("type_donnee") != "text"
+                                else None
+                            )
+                            valeur_min = (
+                                str(node.get("valeur_min", ""))
+                                if node.get("valeur_min")
+                                and node.get("type_donnee") != "text"
+                                else None
+                            )
+                            valeur_max = (
+                                str(node.get("valeur_max", ""))
+                                if node.get("valeur_max")
+                                and node.get("type_donnee") != "text"
                                 else None
                             )
                             unite = node.get("unite") or node.get("unite_canonique")
@@ -1037,7 +1050,9 @@ class RecommendationService:
                                 statut_matching=statut,
                                 id_caracteristique=int(cid) if cid.isdigit() else 0,
                                 type_caracteristique=type_carac,
-                                # valeur=valeur,
+                                valeur=valeur,
+                                valeur_min=valeur_min,
+                                valeur_max=valeur_max,
                                 unite=unite,
                                 id_valeur=id_valeurs,
                                 poids=int(c_weight),
