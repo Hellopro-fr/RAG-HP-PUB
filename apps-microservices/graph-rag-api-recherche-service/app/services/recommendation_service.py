@@ -1006,7 +1006,7 @@ class RecommendationService:
                         elif len(matched_nodes) == 0:
                             statut = 4  # Non renseigné
                         else:
-                            statut = 4  # Non renseigné
+                            statut = 2  # Ecart
 
                         # Extract value and unit from matched nodes if available
                         valeur = None
