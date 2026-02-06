@@ -50,22 +50,22 @@ export default function FlowStorageReset() {
     reset();
     resetTrackingState();
 
-    // Le questionnaire est sur la racine "/" (avec basePath /formulaire → /formulaire/)
-    const isQuestionnairePage = pathname === '/' || pathname === '';
+    // Le questionnaire est sur la racine "/" ou une URL tokenisee "/questionnaire/TOKEN"
+    // Dans les deux cas, le middleware redirige vers "/" donc pas besoin de rediriger
+    const isQuestionnairePage = pathname === '/' || pathname === '' || pathname.startsWith('/questionnaire');
 
-    // Construire l'URL de redirection avec les paramètres GET conservés
-    const buildRedirectUrl = () => {
-      const params = searchParams.toString();
-      return params ? `/?${params}` : '/';
-    };
-
-    // Rediriger vers questionnaire si pas déjà dessus
-    if (!isQuestionnairePage) {
-      console.log('[FlowStorageReset] Redirecting to questionnaire from', pathname);
-      router.replace(buildRedirectUrl());
-    } else {
-      console.log('[FlowStorageReset] Already on questionnaire, no redirect needed');
+    // Si on est deja sur le questionnaire (avec ou sans token), pas de redirection
+    // Le middleware gere deja le token et passe les params necessaires
+    if (isQuestionnairePage) {
+      console.log('[FlowStorageReset] Already on questionnaire page, no redirect needed');
+      return;
     }
+
+    // Pour les autres pages (selection, profile, etc.), rediriger vers /
+    // Note: Cela va perdre le contexte, l'utilisateur devra recommencer
+    console.log('[FlowStorageReset] Redirecting to questionnaire from', pathname);
+    const params = searchParams.toString();
+    router.replace(params ? `/?${params}` : '/');
   }, [reset, router, pathname, searchParams]);
 
   return null;
