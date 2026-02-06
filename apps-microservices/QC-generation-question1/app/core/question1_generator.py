@@ -224,9 +224,9 @@ class Question1Generator:
         
         # Vérifier si déjà généré
         done_responses = process_data.get("done", [])
-        if "Q1" in done_responses:
-            self._log("Déjà traité")
-            return "already_done"
+        # if "Q1" in done_responses:
+        #     self._log("Déjà traité")
+        #     return "already_done"
         
         #récupération du prompt (copie du prompt chargé au début)
         prompt_config = self.prompt_question1.copy()
