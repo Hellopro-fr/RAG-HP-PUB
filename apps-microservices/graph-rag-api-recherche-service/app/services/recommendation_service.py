@@ -1001,12 +1001,12 @@ class RecommendationService:
                             statut = 1  # Matche
                         elif c_score == blocked_val:
                             statut = 3  # Bloquant
-                        elif c_score > 0:
+                        elif c_score == different_val:
                             statut = 2  # Ecart
                         elif len(matched_nodes) == 0:
                             statut = 4  # Non renseigné
                         else:
-                            statut = 2  # Ecart
+                            statut = 4  # Non renseigné
 
                         # Extract value and unit from matched nodes if available
                         valeur = None
