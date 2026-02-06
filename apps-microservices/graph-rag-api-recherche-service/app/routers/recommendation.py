@@ -35,11 +35,12 @@ async def complex_filter_products(request: ComplexFilterRequest):
         )
 
 
-@router.post("/filter-by-caracteristique", response_model=MatchingResponse)
-async def filter_by_caracteristique(
-    request: MatchingPayload,
+@router.post(
+    "/filter-by-caracteristique",
+    response_model=MatchingResponse,
     response_model_exclude_none=True,
-):
+)
+async def filter_by_caracteristique(request: MatchingPayload):
     """
     Filter products based on CaracteristiqueTechnique constraints.
     Uses MatchingPayload schema with MatchingOptions.Score for caracteristique weights.
