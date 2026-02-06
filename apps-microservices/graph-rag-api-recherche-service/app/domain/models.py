@@ -241,6 +241,24 @@ class MatchingCaracteristique(BaseModel):
     valeurs_bloquantes: Optional[Union[Dict[str, Any], List[Any]]] = Field(
         None, description="Liste des valeurs bloquantes"
     )
+    poids_question: Optional[int] = Field(
+        1, description="Poids de la question associée à cette caractéristique"
+    )
+    poids_caracteristique: Optional[str] = Field(
+        "critique", description="Poids de la caractéristique"
+    )
+
+
+class MatchingOptionsScore(BaseModel):
+    critique: int = Field(5, description="Poids des caractéristiques critiques")
+    secondaire: int = Field(1, description="Poids des caractéristiques secondaires")
+
+
+class MatchingOptions(BaseModel):
+    score: MatchingOptionsScore = Field(
+        MatchingOptionsScore(critique=5, secondaire=1),
+        description="Options pour le matching",
+    )
 
 
 class MatchingPayload(BaseModel):
@@ -255,6 +273,10 @@ class MatchingPayload(BaseModel):
     )
     champs_sortie: Optional[List[str]] = Field(
         None, description="Liste des champs de sortie souhaités"
+    )
+    options: Optional[MatchingOptions] = Field(
+        MatchingOptions(score=MatchingOptionsScore(critique=5, secondaire=1)),
+        description="Options pour le matching",
     )
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
 

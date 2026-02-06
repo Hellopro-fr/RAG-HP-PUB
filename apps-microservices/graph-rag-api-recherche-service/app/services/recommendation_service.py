@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
+    MatchingPayload,
     ResultProduct,
     ScoredProduct,
 )
@@ -415,28 +416,45 @@ class RecommendationService:
             return ResultProduct(data=[], info={"error": str(e)})
 
     async def _normalize_constraints_for_caracteristique(
-        self, request: FilterCaracteristiqueRequest
+        self, request: MatchingPayload
     ) -> List[Dict[str, Any]]:
         """
         Pre-processes constraints for caracteristique-based filtering.
-        Groups by caracteristique ID with weights from request.
+        Uses MatchingPayload schema with MatchingOptions.Score for weights.
         """
-        all_char_ids = list(request.ids.keys())
+        # Extract caracteristique IDs from the list
+        all_char_ids = [
+            str(c.id_caracteristique) for c in request.liste_caracteristique
+        ]
         label_map = await self._get_characteristic_labels(all_char_ids)
+
+        # Get score weights from options
+        score_options = request.options.score if request.options else None
+        critique_weight = score_options.critique if score_options else 5
+        secondaire_weight = score_options.secondaire if score_options else 1
 
         flat_filters = []
         normalization_tasks = []
-        task_metadata = []  # Track (cid, constraint_index) for each task
+        task_metadata = []  # Track (cid, q_weight, c_weight) for each task
 
         # First pass: Create tasks
-        for cid, constraints in request.ids.items():
-            for idx, c in enumerate(constraints):
-                label = label_map.get(cid, "dimensionless")
-                normalization_tasks.append(
-                    self._normalize_single_constraint_for_caracteristique(c, cid, label)
-                )
-                # Track cid, index, q_weight, and c_weight
-                task_metadata.append((cid, idx, c.q_weight, c.c_weight))
+        for c in request.liste_caracteristique:
+            cid = str(c.id_caracteristique)
+            label = label_map.get(cid, "dimensionless")
+            normalization_tasks.append(
+                self._normalize_single_constraint_for_matching_payload(c, cid, label)
+            )
+            # Resolve c_weight from poids_caracteristique using MatchingOptions.Score
+            poids_carac = c.poids_caracteristique or "critique"
+            if poids_carac == "critique":
+                c_weight = critique_weight
+            elif poids_carac == "secondaire":
+                c_weight = secondaire_weight
+            else:
+                c_weight = critique_weight  # Default to critique
+
+            q_weight = c.poids_question or 1
+            task_metadata.append((cid, q_weight, c_weight))
 
         # Execute all normalization tasks
         processed_constraints_flat = await asyncio.gather(*normalization_tasks)
@@ -444,7 +462,7 @@ class RecommendationService:
         # Second pass: Re-group by caracteristique ID with hierarchical weights
         grouped = {}
         for i, processed in enumerate(processed_constraints_flat):
-            cid, idx, q_weight, c_weight = task_metadata[i]
+            cid, q_weight, c_weight = task_metadata[i]
             if cid not in grouped:
                 grouped[cid] = {"cid": cid, "q_weight": q_weight, "constraints": []}
             # Add c_weight to the processed constraint
@@ -454,11 +472,11 @@ class RecommendationService:
         flat_filters = list(grouped.values())
         return flat_filters
 
-    async def _normalize_single_constraint_for_caracteristique(
+    async def _normalize_single_constraint_for_matching_payload(
         self, c: Any, char_id: str, label: str
     ) -> Dict[str, Any]:
         """
-        Helper to normalize a single constraint for caracteristique-based filtering.
+        Helper to normalize a single constraint from MatchingCaracteristique.
         """
         c_dict = c.model_dump()
         unit = c_dict.get("unite")
@@ -535,12 +553,12 @@ class RecommendationService:
 
     async def get_products_by_caracteristique_filters(
         self,
-        request: FilterCaracteristiqueRequest,
+        request: MatchingPayload,
         target_product_id: Optional[str] = None,
     ) -> ResultProduct:
         """
         Get products filtered and scored by CaracteristiqueTechnique constraints.
-        Same scoring logic as get_products_by_complex_filters but keyed by caracteristique ID.
+        Uses MatchingPayload schema with MatchingOptions.Score for caracteristique weights.
         """
         start_time = time.perf_counter()
 
@@ -551,8 +569,9 @@ class RecommendationService:
         # Build weights map from request (cid -> q_weight)
         weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
 
-        blocked_val = float(request.blocked_val)
-        different_val = float(request.different_val)
+        # Use default values for blocked_val and different_val
+        blocked_val = -2.0
+        different_val = -0.3
 
         # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
@@ -926,7 +945,9 @@ class RecommendationService:
         params = {
             "filters": flat_filters,
             "weights": weights_map,
-            "id_categorie": str(request.id_categorie) if request.id_categorie else None,
+            "id_categorie": (
+                str(request.id_categorie) if request.id_categorie is not None else None
+            ),
             "top_k": int(request.top_k),
             "target_product_id": target_product_id,
             "blocked_val": blocked_val,
