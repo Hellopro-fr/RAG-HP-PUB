@@ -299,21 +299,16 @@ class Question1Generator:
             raise Exception("Impossible d'extraire le JSON de la réponse")
         
         # Sauvegarder le résultat        
-        # res_insert = await self.api_client.post(
-        #     "question",
-        #     "question1",
-        #     "save",
-        #     {
-        #         "id_categorie": id_categorie,
-        #         "etape": self.ETAPE,
-        #         "data": self._normalize_llm_response(json_data)
-        #     }
-        # )
-
-        #test seulement
-        res_insert = {
-            "id_question": [1, 2, 3]
-        }
+        res_insert = await self.api_client.post(
+            "question",
+            "question1",
+            "save",
+            {
+                "id_categorie": id_categorie,
+                "etape": self.ETAPE,
+                "data": self._normalize_llm_response(json_data)
+            }
+        )
 
         if not res_insert:
             raise Exception("Échec de la sauvegarde Question 1")
