@@ -872,7 +872,7 @@ class RecommendationService:
         
         // Final score: Σ(score_q) / Σ(q_weight)
         WITH p, q_weight_groups,
-             reduce(s = 0.0, g IN q_weight_groups | s + g.group_score) AS numerator,
+             reduce(s = 0.0, g IN q_weight_groups | s + (g.group_score * g.q_weight)) AS numerator,
              reduce(w = 0.0, g IN q_weight_groups | w + g.q_weight) AS denominator
         
         WITH p, q_weight_groups AS details, 
