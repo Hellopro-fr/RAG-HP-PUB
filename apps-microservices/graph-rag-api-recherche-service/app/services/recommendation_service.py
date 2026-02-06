@@ -626,27 +626,26 @@ class RecommendationService:
                                             ELSE
                                                 // min_score: N/P if P >= N, else 0
                                                 // max_score: P/N if P <= N, else 0
-                                                (
-                                                    CASE 
-                                                        WHEN pc.valeur_canonique >= item.conf.target_numeric.exact 
-                                                        THEN CASE 
-                                                            WHEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) >= 0.8 
-                                                            THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique)
+                                                    apoc.coll.max([
+                                                        CASE 
+                                                            WHEN pc.valeur_canonique >= item.conf.target_numeric.exact 
+                                                            THEN CASE 
+                                                                WHEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) >= 0.8 
+                                                                THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique)
+                                                                ELSE 0.0 
+                                                            END
+                                                            ELSE 0.0 
+                                                        END,
+                                                        CASE 
+                                                            WHEN pc.valeur_canonique <= item.conf.target_numeric.exact 
+                                                            THEN CASE 
+                                                                WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) >= 0.8 
+                                                                THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact)
+                                                                ELSE 0.0 
+                                                            END
                                                             ELSE 0.0 
                                                         END
-                                                        ELSE 0.0 
-                                                    END
-                                                    +
-                                                    CASE 
-                                                        WHEN pc.valeur_canonique <= item.conf.target_numeric.exact 
-                                                        THEN CASE 
-                                                            WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) >= 0.8 
-                                                            THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact)
-                                                            ELSE 0.0 
-                                                        END
-                                                        ELSE 0.0 
-                                                    END
-                                                ) / 2.0
+                                                    ])
                                         END
                                         
                                     // === MIN ONLY: Direct=min score, Inverted=max score ===
@@ -656,7 +655,7 @@ class RecommendationService:
                                             ELSE
                                                 // direct_score: N_min / P_val (if P >= N_min)
                                                 // inverted_score: P_val / N_min (if P <= N_min, treat as max)
-                                                (
+                                                apoc.coll.max([
                                                     CASE 
                                                         WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
                                                         THEN CASE 
@@ -665,8 +664,7 @@ class RecommendationService:
                                                             ELSE 0.0 
                                                         END
                                                         ELSE 0.0 
-                                                    END
-                                                    +
+                                                    END,
                                                     CASE 
                                                         WHEN pc.valeur_canonique <= item.conf.target_numeric.min 
                                                         THEN CASE 
@@ -676,7 +674,7 @@ class RecommendationService:
                                                         END
                                                         ELSE 0.0 
                                                     END
-                                                ) / 2.0
+                                                ])
                                         END
                                         
                                     // === MAX ONLY: Direct=max score, Inverted=min score ===
@@ -686,7 +684,7 @@ class RecommendationService:
                                             ELSE
                                                 // direct_score: P_val / N_max (if P <= N_max)
                                                 // inverted_score: N_max / P_val (if P >= N_max, treat as min)
-                                                (
+                                                apoc.coll.max([
                                                     CASE 
                                                         WHEN pc.valeur_canonique <= item.conf.target_numeric.max 
                                                         THEN CASE 
@@ -695,8 +693,7 @@ class RecommendationService:
                                                             ELSE 0.0 
                                                         END
                                                         ELSE 0.0 
-                                                    END
-                                                    +
+                                                    END,
                                                     CASE 
                                                         WHEN pc.valeur_canonique >= item.conf.target_numeric.max 
                                                         THEN CASE 
@@ -706,7 +703,7 @@ class RecommendationService:
                                                         END
                                                         ELSE 0.0 
                                                     END
-                                                ) / 2.0
+                                                ])
                                         END
                                         
                                     // === RANGE (min+max): Keep existing logic ===
