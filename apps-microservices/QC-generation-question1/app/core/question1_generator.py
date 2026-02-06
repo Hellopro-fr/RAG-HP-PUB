@@ -406,13 +406,13 @@ class Question1Generator:
         # Reset si demandé
         if request.is_reset:
             self._log("RESET DU PROCESSUS")
-            await self.api_client.post(
-                "question",
-                "process",
-                "reset",
-                {"etape": self.ETAPE, "id_categorie": id_categorie}
-            )
-            process_data = {}
+            # await self.api_client.post(
+            #     "question",
+            #     "process",
+            #     "reset",
+            #     {"etape": self.ETAPE, "id_categorie": id_categorie}
+            # )
+            # process_data = {}
 
         self._log(f"Process data: {process_data}")
         
