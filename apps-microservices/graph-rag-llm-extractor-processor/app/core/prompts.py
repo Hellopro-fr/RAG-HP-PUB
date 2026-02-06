@@ -220,13 +220,7 @@ def get_base_prompt(node_types: list, relationship_types: list) -> str:
     )
 
 
-# --- PRODUCT PROMPT ---
-PRODUCT_NODES = ["CaracteristiqueTechnique", "Fournisseur", "Categorie"]
-PRODUCT_RELS = ["A_POUR_CARACTERISTIQUE", "EST_PROPOSE_PAR", "APPARTIENT_A"]
-
-PRODUCT_PROMPT = (
-    get_base_prompt(PRODUCT_NODES, PRODUCT_RELS)
-    + """
+EXEMPLE = """
 ### EXEMPLE 1 (Sans balises META)
     **Input**: "Grue de levage mobile, capacité de charge de 2 à 5 tonnes. Dimensions: 1200x800x1500mm. Fabriquée en acier renforcé. Le châssis est équipé de : 2 roues avant fixes et 1 timon de direction. Livrée avec plusieurs accessoires : télécommande, élingues."
     **Output**:
@@ -347,8 +341,16 @@ PRODUCT_PROMPT = (
     ]
     }}
     ```
+"""
 
-### EXEMPLE 2 (Avec balises META - OBLIGATOIRE d'inclure id_source_caracteristique et id_source_valeur)
+# --- PRODUCT PROMPT ---
+PRODUCT_NODES = ["CaracteristiqueTechnique", "Fournisseur", "Categorie"]
+PRODUCT_RELS = ["A_POUR_CARACTERISTIQUE", "EST_PROPOSE_PAR", "APPARTIENT_A"]
+
+PRODUCT_PROMPT = (
+    get_base_prompt(PRODUCT_NODES, PRODUCT_RELS)
+    + """
+### EXEMPLE
     **Input**: "Grue de levage mobile, capacité de charge de 2 à 5 tonnes [META id_c='10' id_v='25']. Dimensions: 1200x800x1500mm [META id_c='12' id_v='30']. Fabriquée en acier renforcé [META id_c='15' id_v='N/A']. Le châssis est équipé de : 2 roues avant fixes et 1 timon de direction [META id_c='18' id_v='45']. Livrée avec plusieurs accessoires : télécommande, élingues [META id_c='20' id_v='50']."
     **Output**:
     ```json
