@@ -799,15 +799,15 @@ class RecommendationService:
             END,
             has_pc: size(item.matches) > 0,
             c_weight: item.conf.c_weight,
-            // Match details: id_valeur for textual, valeur for numeric, valeur_min/valeur_max for range
-            match_details: [pc IN item.matches | {
-                type: pc.type_donnee,
-                id_valeur: CASE WHEN pc.type_donnee = 'textuelle' THEN toString(pc.id_source_valeur) ELSE null END,
-                valeur: CASE WHEN pc.type_donnee = 'numeric' THEN pc.valeur_canonique ELSE null END,
-                valeur_min: CASE WHEN pc.type_donnee = 'numeric_range' THEN pc.valeur_min_canonique ELSE null END,
-                valeur_max: CASE WHEN pc.type_donnee = 'numeric_range' THEN pc.valeur_max_canonique ELSE null END,
-                unite: pc.unite_canonique
-            }]
+            // User requirements from the constraint
+            user_requirements: {
+                target_list: item.conf.target_list,
+                blocking_list: item.conf.blocking_list,
+                target_numeric: item.conf.target_numeric,
+                blocking_numeric: item.conf.blocking_numeric
+            },
+            // Complete matched nodes (product data)
+            matched_nodes: [pc IN item.matches | properties(pc)]
         }] AS char_results
         
         // --- HIERARCHICAL SCORING ---
@@ -836,8 +836,10 @@ class RecommendationService:
              END AS cid_score,
              c_weight_sum,
              matched,
-             // Flatten match details from all char_results
-             apoc.coll.flatten([res IN char_results | res.match_details]) AS match_details
+             // Flatten matched nodes from all char_results
+             apoc.coll.flatten([res IN char_results | res.matched_nodes]) AS matched_nodes,
+             // Keep first user_requirements (they should all be the same for same cid)
+             head([res IN char_results | res.user_requirements]) AS user_requirements
         
         // Collect all cid scores grouped by q_weight
         WITH p, collect({
@@ -846,7 +848,8 @@ class RecommendationService:
             c_weight_sum: c_weight_sum,
             q_weight: q_weight,
             matched: matched,
-            match_details: match_details
+            user_requirements: user_requirements,
+            matched_nodes: matched_nodes
         }) AS all_constraints
         
         // Group by q_weight and calculate score per q_weight group
