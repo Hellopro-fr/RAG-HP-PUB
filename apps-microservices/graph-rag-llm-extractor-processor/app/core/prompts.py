@@ -349,67 +349,139 @@ PRODUCT_PROMPT = (
     ```
 
 ### EXEMPLE 2 (Avec balises META - OBLIGATOIRE d'inclure id_source_caracteristique et id_source_valeur)
-    **Input**: "Chariot élévateur électrique. Hauteur de levage max : 3500mm [META id_c='15' id_v='42']. Capacité de charge : 2000kg [META id_c='18' id_v='55']. Type de batterie : Lithium-Ion [META id_c='22' id_v='N/A']. Poids à vide : 850kg."
+    **Input**: "Grue de levage mobile, capacité de charge de 2 à 5 tonnes [META id_c='10' id_v='25']. Dimensions: 1200x800x1500mm [META id_c='12' id_v='30']. Fabriquée en acier renforcé [META id_c='15' id_v='N/A']. Le châssis est équipé de : 2 roues avant fixes et 1 timon de direction [META id_c='18' id_v='45']. Livrée avec plusieurs accessoires : télécommande, élingues [META id_c='20' id_v='50']."
     **Output**:
     ```json
     {{
     "nodes": [
         {{
-        "id": "hauteur_de_levage_na_max3500_mm",
+        "id": "capacite_de_charge_min2_max5_tonnes",
         "type": "CaracteristiqueTechnique",
         "properties": {{
-            "nom": "Hauteur de levage : 3500mm",
-            "label": "Hauteur de levage",
-            "valeur_min": null,
-            "valeur_max": 3500,
-            "type_donnee": "numeric_range",
-            "unite": "mm",
-            "id_source_caracteristique": "15",
-            "id_source_valeur": "42"
-        }}
-        }},
-        {{
-        "id": "capacite_de_charge_2000_kg",
-        "type": "CaracteristiqueTechnique",
-        "properties": {{
-            "nom": "Capacité de charge : 2000kg",
+            "nom": "Capacité de charge : 2 à 5 tonnes",
             "label": "Capacité de charge",
-            "valeur": 2000,
-            "type_donnee": "numeric",
-            "unite": "kg",
-            "id_source_caracteristique": "18",
-            "id_source_valeur": "55"
+            "valeur_min": 2,
+            "valeur_max": 5,
+            "type_donnee": "numeric_range",
+            "unite": "tonnes",
+            "id_source_caracteristique": "10",
+            "id_source_valeur": "25"
         }}
         }},
         {{
-        "id": "type_de_batterie_lithium_ion",
+        "id": "longueur_1200_mm",
         "type": "CaracteristiqueTechnique",
         "properties": {{
-            "nom": "Type de batterie : Lithium-Ion",
-            "label": "Type de batterie",
-            "valeur": "Lithium-Ion",
+            "nom": "Longueur : 1200mm",
+            "label": "Longueur",
+            "valeur": 1200,
+            "type_donnee": "numeric",
+            "unite": "mm",
+            "id_source_caracteristique": "12",
+            "id_source_valeur": "30"
+        }}
+        }},
+        {{
+        "id": "largeur_800_mm",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Largeur : 800mm",
+            "label": "Largeur",
+            "valeur": 800,
+            "type_donnee": "numeric",
+            "unite": "mm",
+            "id_source_caracteristique": "12",
+            "id_source_valeur": "30"
+        }}
+        }},
+        {{
+        "id": "hauteur_1500_mm",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Hauteur : 1500mm",
+            "label": "Hauteur",
+            "valeur": 1500,
+            "type_donnee": "numeric",
+            "unite": "mm",
+            "id_source_caracteristique": "12",
+            "id_source_valeur": "30"
+        }}
+        }},
+        {{
+        "id": "materiau_acier_renforce",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Matériau : Acier renforcé",
+            "label": "Materiaux",
+            "valeur": "Acier renforcé",
             "type_donnee": "text",
             "unite": null,
-            "id_source_caracteristique": "22"
+            "id_source_caracteristique": "15"
         }}
         }},
         {{
-        "id": "poids_a_vide_850_kg",
+        "id": "equipement_2_roues_avant_fixes",
         "type": "CaracteristiqueTechnique",
         "properties": {{
-            "nom": "Poids à vide : 850kg",
-            "label": "Poids à vide",
-            "valeur": 850,
-            "type_donnee": "numeric",
-            "unite": "kg"
+            "nom": "Équipement : 2 roues avant fixes",
+            "label": "Équipement",
+            "valeur": "2 roues avant fixes",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "18",
+            "id_source_valeur": "45"
+        }}
+        }},
+        {{
+        "id": "equipement_1_timon_de_direction",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Équipement : 1 timon de direction",
+            "label": "Équipement",
+            "valeur": "1 timon de direction",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "18",
+            "id_source_valeur": "45"
+        }}
+        }},
+        {{
+        "id": "accessoire_telecommande",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Accessoire : Télécommande",
+            "label": "Accessoire",
+            "valeur": "Télécommande",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "20",
+            "id_source_valeur": "50"
+        }}
+        }},
+        {{
+        "id": "accessoire_elingues",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Accessoire : Élingues",
+            "label": "Accessoire",
+            "valeur": "Élingues",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "20",
+            "id_source_valeur": "50"
         }}
         }}
     ],
     "relationships": [
-        {{ "source": "{source_placeholder}", "target": "hauteur_de_levage_na_max3500_mm", "type": "A_POUR_CARACTERISTIQUE" }},
-        {{ "source": "{source_placeholder}", "target": "capacite_de_charge_2000_kg", "type": "A_POUR_CARACTERISTIQUE" }},
-        {{ "source": "{source_placeholder}", "target": "type_de_batterie_lithium_ion", "type": "A_POUR_CARACTERISTIQUE" }},
-        {{ "source": "{source_placeholder}", "target": "poids_a_vide_850_kg", "type": "A_POUR_CARACTERISTIQUE" }}
+        {{ "source": "{source_placeholder}", "target": "capacite_de_charge_min2_max5_tonnes", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "longueur_1200_mm", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "largeur_800_mm", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "hauteur_1500_mm", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "materiau_acier_renforce", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "equipement_2_roues_avant_fixes", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "equipement_1_timon_de_direction", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "accessoire_telecommande", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "accessoire_elingues", "type": "A_POUR_CARACTERISTIQUE" }}
     ]
     }}
     ```
