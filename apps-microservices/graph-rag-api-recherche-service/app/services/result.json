@@ -1,0 +1,3351 @@
+{
+  "data": [
+    {
+      "id_produit": "313657",
+      "nom_produit": "Container de bureau  Location /Achat",
+      "score": 0.5961229946524065,
+      "details": [
+        {
+          "group_score": 0.5909090909090909,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 9,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_usage_principal_bureau",
+                  "valeur": "Bureau",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Usage principal",
+                  "label_lemma": "usage principal",
+                  "id_source_valeur": "76",
+                  "label_id": "categorie_2016431_Usage principal",
+                  "id_source_caracteristique": "29",
+                  "label": "Usage principal",
+                  "nom": "Usage principal : Bureau"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 9,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_configuration_interieure_espace_ouvert",
+                  "valeur": "Espace ouvert",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Configuration intérieure",
+                  "label_lemma": "configuration intérieur",
+                  "id_source_valeur": "234",
+                  "id_source_caracteristique": "45",
+                  "label_id": "categorie_2016431_Configuration intérieure",
+                  "label": "Configuration intérieure",
+                  "nom": "Configuration intérieure : Espace ouvert"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 8,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_niveau_disolation_isolation_renforcee",
+                  "valeur": "Isolation Renforcée",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Niveau d'Isolation et Performance Thermique",
+                  "label_lemma": "niveau de isolation",
+                  "id_source_valeur": "381",
+                  "id_source_caracteristique": "83",
+                  "label_id": "categorie_2016431_Niveau d'Isolation",
+                  "label": "Niveau d'Isolation",
+                  "nom": "Niveau d'Isolation : Isolation Renforcée"
+                },
+                {
+                  "id": "categorie_2016431_performance_thermique_usage_a_lannee_confort",
+                  "valeur": "Usage à l'année / Confort",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Performance Thermique",
+                  "label_lemma": "performance thermique",
+                  "id_source_valeur": "381",
+                  "id_source_caracteristique": "83",
+                  "label_id": "categorie_2016431_Performance Thermique",
+                  "label": "Performance Thermique",
+                  "nom": "Performance Thermique : Usage à l'année / Confort"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.85,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_format_coupe_specifique",
+                  "valeur": "Coupe spécifique",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Format",
+                  "label_lemma": "format",
+                  "id_source_valeur": "324",
+                  "label_id": "categorie_2016431_Format",
+                  "id_source_caracteristique": "26",
+                  "label": "Format",
+                  "nom": "Format : Coupe spécifique"
+                },
+                {
+                  "id": "categorie_2016431_taille_du_conteneur_sur_mesure",
+                  "valeur": "Sur mesure",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Taille du conteneur / Format",
+                  "label_lemma": "taille de conteneur",
+                  "id_source_valeur": "324",
+                  "id_source_caracteristique": "26",
+                  "label_id": "categorie_2016431_Taille du conteneur",
+                  "label": "Taille du conteneur",
+                  "nom": "Taille du conteneur : Sur mesure"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 7,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 5,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 2,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "65160",
+      "nom_produit": "Easy Work 20 pieds - Containerbureau",
+      "score": 0.4950534759358289,
+      "details": [
+        {
+          "group_score": 0.509090909090909,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 9,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_usage_principal_bureau",
+                  "valeur": "Bureau",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Usage principal",
+                  "label_lemma": "usage principal",
+                  "id_source_valeur": "76",
+                  "label_id": "categorie_2016431_Usage principal",
+                  "id_source_caracteristique": "29",
+                  "label": "Usage principal",
+                  "nom": "Usage principal : Bureau"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.85,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille du conteneur / Format",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "id_source_caracteristique": "26",
+                  "label_id": "categorie_2016431_Taille du conteneur",
+                  "label": "Taille du conteneur",
+                  "nom": "Taille du conteneur : 20 pieds",
+                  "id": "categorie_2016431_taille_du_conteneur_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille de conteneur",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 7,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 5,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_normes_daccueil_et_reglementation_erp_conforme_erp_etablissement_recevant_du_public",
+                  "valeur": "Conforme ERP (Établissement Recevant du Public)",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Normes d'accueil et Réglementation (ERP)",
+                  "label_lemma": "norme de accueil et réglementation ( erp )",
+                  "id_source_valeur": "307",
+                  "label_id": "categorie_2016431_Normes d'accueil et Réglementation (ERP)",
+                  "id_source_caracteristique": "82",
+                  "label": "Normes d'accueil et Réglementation (ERP)",
+                  "nom": "Normes d'accueil et Réglementation (ERP) : Conforme ERP (Établissement Recevant du Public)"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 2,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "365872",
+      "nom_produit": "Container 20' modifié en bureau Lyon",
+      "score": 0.4709893048128343,
+      "details": [
+        {
+          "group_score": 0.9181818181818181,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 9,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_usage_principal_bureau",
+                  "valeur": "Bureau",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Usage principal",
+                  "label_lemma": "usage principal",
+                  "id_source_valeur": "76",
+                  "label_id": "categorie_2016431_Usage principal",
+                  "id_source_caracteristique": "29",
+                  "label": "Usage principal",
+                  "nom": "Usage principal : Bureau"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 9,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_materiau_isolation_panneaux_sandwich_polyurethane",
+                  "valeur": "Panneaux sandwich Polyuréthane (PU)",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Épaisseur de l'isolation",
+                  "label_lemma": "matériau de isolation",
+                  "id_source_valeur": "84",
+                  "id_source_caracteristique": "30",
+                  "label_id": "categorie_2016431_Matériau d'isolation",
+                  "label": "Matériau d'isolation",
+                  "nom": "Matériau d'isolation : Panneaux sandwich Polyuréthane (PU)"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.85,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Taille",
+                  "id_source_caracteristique": "26",
+                  "label": "Taille",
+                  "nom": "Taille : 20 pieds",
+                  "id": "categorie_2016431_taille_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 7,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 5,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 2,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "365831",
+      "nom_produit": "Techno",
+      "score": 0.4613636363636364,
+      "details": [
+        {
+          "group_score": 0.18181818181818182,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 9,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_configuration_interieure_open_space",
+                  "valeur": "Open space",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Configuration intérieure",
+                  "label_lemma": "configuration intérieur",
+                  "id_source_valeur": "234",
+                  "id_source_caracteristique": "45",
+                  "label_id": "categorie_2016431_Configuration intérieure",
+                  "label": "Configuration intérieure",
+                  "nom": "Configuration intérieure : Open space"
+                },
+                {
+                  "id": "categorie_2016431_configuration_interieure_espace_ouvert",
+                  "valeur": "Espace ouvert",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Configuration intérieure",
+                  "label_lemma": "configuration intérieur",
+                  "id_source_valeur": "234",
+                  "id_source_caracteristique": "45",
+                  "label_id": "categorie_2016431_Configuration intérieure",
+                  "label": "Configuration intérieure",
+                  "nom": "Configuration intérieure : Espace ouvert"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.85,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Format",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Format",
+                  "id_source_caracteristique": "26",
+                  "label": "Format",
+                  "nom": "Format : 20 pieds",
+                  "id": "categorie_2016431_format_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "format",
+                  "id_source_valeur": "56"
+                },
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Taille",
+                  "id_source_caracteristique": "26",
+                  "label": "Taille",
+                  "nom": "Taille : 20 pieds",
+                  "id": "categorie_2016431_taille_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 7,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 5,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_norme_erp_conforme",
+                  "valeur": "Conforme",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Norme ERP",
+                  "label_lemma": "norm erp",
+                  "id_source_valeur": "307",
+                  "label_id": "categorie_2016431_Norme ERP",
+                  "id_source_caracteristique": "82",
+                  "label": "Norme ERP",
+                  "nom": "Norme ERP : Conforme"
+                },
+                {
+                  "id": "categorie_2016431_norme_erp_etablissement_recevant_du_public",
+                  "valeur": "Établissement Recevant du Public",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Norme ERP",
+                  "label_lemma": "norm erp",
+                  "id_source_valeur": "307",
+                  "label_id": "categorie_2016431_Norme ERP",
+                  "id_source_caracteristique": "82",
+                  "label": "Norme ERP",
+                  "nom": "Norme ERP : Établissement Recevant du Public"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 2,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_revetement_exterieur_peinture_ral",
+                  "valeur": "Peinture RAL",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Revêtement extérieur",
+                  "label_lemma": "revêtement extérieur",
+                  "id_source_valeur": "188",
+                  "id_source_caracteristique": "41",
+                  "label_id": "categorie_2016431_Revêtement extérieur",
+                  "label": "Revêtement extérieur",
+                  "nom": "Revêtement extérieur : Peinture RAL"
+                },
+                {
+                  "id": "categorie_2016431_revetement_exterieur_acier_peint",
+                  "valeur": "Acier peint",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Revêtement extérieur",
+                  "label_lemma": "revêtement extérieur",
+                  "id_source_valeur": "188",
+                  "id_source_caracteristique": "41",
+                  "label_id": "categorie_2016431_Revêtement extérieur",
+                  "label": "Revêtement extérieur",
+                  "nom": "Revêtement extérieur : Acier peint"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "65258",
+      "nom_produit": "Location Escalier Box 20 pieds (normes ERP) – Container aménagé escalier",
+      "score": 0.38676470588235295,
+      "details": [
+        {
+          "group_score": 0.1,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.85,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Format",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Format",
+                  "id_source_caracteristique": "26",
+                  "label": "Format",
+                  "nom": "Format : 20 pieds",
+                  "id": "categorie_2016431_format_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "format",
+                  "id_source_valeur": "56"
+                },
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Taille",
+                  "id_source_caracteristique": "26",
+                  "label": "Taille",
+                  "nom": "Taille : 20 pieds",
+                  "id": "categorie_2016431_taille_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 7,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 5,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_normes_daccueil_conforme_erp",
+                  "valeur": "Conforme ERP",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Normes d'accueil",
+                  "label_lemma": "norme de accueil",
+                  "id_source_valeur": "307",
+                  "id_source_caracteristique": "82",
+                  "label_id": "categorie_2016431_Normes d'accueil",
+                  "label": "Normes d'accueil",
+                  "nom": "Normes d'accueil : Conforme ERP"
+                },
+                {
+                  "id": "categorie_2016431_reglementation_erp_etablissement_recevant_du_public",
+                  "valeur": "Établissement Recevant du Public",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Réglementation (ERP)",
+                  "label_lemma": "réglementation ( erp )",
+                  "id_source_valeur": "307",
+                  "id_source_caracteristique": "82",
+                  "label_id": "categorie_2016431_Réglementation (ERP)",
+                  "label": "Réglementation (ERP)",
+                  "nom": "Réglementation (ERP) : Établissement Recevant du Public"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 2,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "65363",
+      "nom_produit": "Escalier Box 20 pieds (normes ERP) – Container aménagé escalier",
+      "score": 0.38676470588235295,
+      "details": [
+        {
+          "group_score": 0.1,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.85,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Taille",
+                  "id_source_caracteristique": "26",
+                  "label": "Taille",
+                  "nom": "Taille : 20 pieds",
+                  "id": "categorie_2016431_taille_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 7,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 5,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_normes_daccueil_et_reglementation_erp_etablissement_recevant_du_public",
+                  "valeur": "Établissement Recevant du Public",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Normes d'accueil et Réglementation (ERP)",
+                  "label_lemma": "norme de accueil et réglementation ( erp )",
+                  "id_source_valeur": "307",
+                  "label_id": "categorie_2016431_Normes d'accueil et Réglementation (ERP)",
+                  "id_source_caracteristique": "82",
+                  "label": "Normes d'accueil et Réglementation (ERP)",
+                  "nom": "Normes d'accueil et Réglementation (ERP) : Établissement Recevant du Public"
+                },
+                {
+                  "id": "categorie_2016431_normes_daccueil_et_reglementation_erp_conforme_erp",
+                  "valeur": "Conforme ERP",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Normes d'accueil et Réglementation (ERP)",
+                  "label_lemma": "norme de accueil et réglementation ( erp )",
+                  "id_source_valeur": "307",
+                  "label_id": "categorie_2016431_Normes d'accueil et Réglementation (ERP)",
+                  "id_source_caracteristique": "82",
+                  "label": "Normes d'accueil et Réglementation (ERP)",
+                  "nom": "Normes d'accueil et Réglementation (ERP) : Conforme ERP"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 2,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "313592",
+      "nom_produit": "Containers bureaux CA BC 3625-11 CAMP  Location /Achat",
+      "score": 0.34358288770053474,
+      "details": [
+        {
+          "group_score": 0.509090909090909,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 9,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_materiau_d_isolation_mousse_polyurethane_projetee",
+                  "valeur": "Mousse polyuréthane projetée",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Épaisseur de l'isolation",
+                  "label_lemma": "matériau de isolation",
+                  "id_source_valeur": "89",
+                  "id_source_caracteristique": "30",
+                  "label_id": "categorie_2016431_Matériau d'isolation",
+                  "label": "Matériau d'isolation",
+                  "nom": "Matériau d'isolation : Mousse polyuréthane projetée"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.5,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_format_coupe_specifique",
+                  "valeur": "Coupe spécifique",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Format",
+                  "label_lemma": "format",
+                  "id_source_valeur": "324",
+                  "label_id": "categorie_2016431_Format",
+                  "id_source_caracteristique": "26",
+                  "label": "Format",
+                  "nom": "Format : Coupe spécifique"
+                },
+                {
+                  "id": "categorie_2016431_taille_du_conteneur_sur_mesure",
+                  "valeur": "Sur mesure",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Taille du conteneur / Format",
+                  "label_lemma": "taille de conteneur",
+                  "id_source_valeur": "324",
+                  "id_source_caracteristique": "26",
+                  "label_id": "categorie_2016431_Taille du conteneur",
+                  "label": "Taille du conteneur",
+                  "nom": "Taille du conteneur : Sur mesure"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 7,
+              "score": -2,
+              "matched_nodes": [
+                {
+                  "unite": "m²",
+                  "id": "categorie_2016431_surface_utile_interieure_9_25_m2",
+                  "valeur": 9.25,
+                  "unite_canonique": "meter ** 2",
+                  "label_canonique": "categorie_2016431_Surface utile intérieure",
+                  "type_donnee": "numeric",
+                  "label_lemma": "surface utile intérieure",
+                  "valeur_canonique": 9.25,
+                  "id_source_caracteristique": "33",
+                  "label_id": "categorie_2016431_Surface utile intérieure",
+                  "label": "Surface utile intérieure",
+                  "nom": "Surface utile intérieure : 9.25 m²"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 5,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 2,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_revetement_exterieur_acier_peint",
+                  "valeur": "Acier peint",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Revêtement extérieur",
+                  "label_lemma": "revêtement extérieur",
+                  "id_source_valeur": "188",
+                  "id_source_caracteristique": "41",
+                  "label_id": "categorie_2016431_Revêtement extérieur",
+                  "label": "Revêtement extérieur",
+                  "nom": "Revêtement extérieur : Acier peint"
+                },
+                {
+                  "id": "categorie_2016431_revetement_exterieur_peinture_ral",
+                  "valeur": "Peinture RAL",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Revêtement extérieur",
+                  "label_lemma": "revêtement extérieur",
+                  "id_source_valeur": "188",
+                  "id_source_caracteristique": "41",
+                  "label_id": "categorie_2016431_Revêtement extérieur",
+                  "label": "Revêtement extérieur",
+                  "nom": "Revêtement extérieur : Peinture RAL"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "65170",
+      "nom_produit": "Terrasse - Container20 pieds",
+      "score": 0.2852941176470588,
+      "details": [
+        {
+          "group_score": 0.1,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Format",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Format",
+                  "id_source_caracteristique": "26",
+                  "label": "Format",
+                  "nom": "Format : 20 pieds",
+                  "id": "categorie_2016431_format_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "format",
+                  "id_source_valeur": "56"
+                },
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Taille",
+                  "id_source_caracteristique": "26",
+                  "label": "Taille",
+                  "nom": "Taille : 20 pieds",
+                  "id": "categorie_2016431_taille_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "m²",
+                  "id": "categorie_2016431_surface_utile_interieure_13_m2",
+                  "valeur": 13,
+                  "unite_canonique": "meter ** 2",
+                  "label_canonique": "categorie_2016431_Surface utile intérieure",
+                  "type_donnee": "numeric",
+                  "label_lemma": "surface utile intérieure",
+                  "valeur_canonique": 13,
+                  "id_source_caracteristique": "33",
+                  "label_id": "categorie_2016431_Surface utile intérieure",
+                  "label": "Surface utile intérieure",
+                  "nom": "Surface utile intérieure : 13 m²"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 5,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 2,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "365837",
+      "nom_produit": "Starter 02",
+      "score": 0.28088235294117647,
+      "details": [
+        {
+          "group_score": 0,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 9,
+              "score": -0.3,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_usage_principal_bar_debit_de_boissons",
+                  "valeur": "Bar / Débit de boissons",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Usage principal",
+                  "label_lemma": "usage principal",
+                  "id_source_valeur": "361",
+                  "label_id": "categorie_2016431_Usage principal",
+                  "id_source_caracteristique": "29",
+                  "label": "Usage principal",
+                  "nom": "Usage principal : Bar / Débit de boissons"
+                },
+                {
+                  "id": "categorie_2016431_usage_principal_evenementiel",
+                  "valeur": "Événementiel",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Usage principal",
+                  "label_lemma": "usage principal",
+                  "id_source_valeur": "83",
+                  "label_id": "categorie_2016431_Usage principal",
+                  "id_source_caracteristique": "29",
+                  "label": "Usage principal",
+                  "nom": "Usage principal : Événementiel"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 9,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_configuration_interieure_mixte_bureau_stockage",
+                  "valeur": "Mixte Bureau / Stockage",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Configuration intérieure",
+                  "label_lemma": "configuration intérieur",
+                  "id_source_valeur": "237",
+                  "id_source_caracteristique": "45",
+                  "label_id": "categorie_2016431_Configuration intérieure",
+                  "label": "Configuration intérieure",
+                  "nom": "Configuration intérieure : Mixte Bureau / Stockage"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.85,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille du conteneur / Format",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "id_source_caracteristique": "26",
+                  "label_id": "categorie_2016431_Taille du conteneur",
+                  "label": "Taille du conteneur",
+                  "nom": "Taille du conteneur : 20 pieds",
+                  "id": "categorie_2016431_taille_du_conteneur_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille de conteneur",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 7,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 5,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 2,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_revetement_exterieur_peinture_ral_acier_peint",
+                  "valeur": "Peinture RAL (Acier peint)",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Revêtement extérieur",
+                  "label_lemma": "revêtement extérieur",
+                  "id_source_valeur": "188",
+                  "id_source_caracteristique": "41",
+                  "label_id": "categorie_2016431_Revêtement extérieur",
+                  "label": "Revêtement extérieur",
+                  "nom": "Revêtement extérieur : Peinture RAL (Acier peint)"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "434604",
+      "nom_produit": "Conteneur Bar Démontable 8×2 mètres Bleu RAL 5012",
+      "score": 0.2700086002301726,
+      "details": [
+        {
+          "group_score": -0.08181818181818182,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 9,
+              "score": -0.3,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_usage_principal_bar",
+                  "valeur": "Bar",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Usage principal",
+                  "label_lemma": "usage principal",
+                  "id_source_valeur": "361",
+                  "label_id": "categorie_2016431_Usage principal",
+                  "id_source_caracteristique": "29",
+                  "label": "Usage principal",
+                  "nom": "Usage principal : Bar"
+                },
+                {
+                  "id": "categorie_2016431_usage_principal_debit_de_boissons",
+                  "valeur": "Débit de boissons",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Usage principal",
+                  "label_lemma": "usage principal",
+                  "id_source_valeur": "361",
+                  "label_id": "categorie_2016431_Usage principal",
+                  "id_source_caracteristique": "29",
+                  "label": "Usage principal",
+                  "nom": "Usage principal : Débit de boissons"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.902379434884215,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_taille_du_conteneur_sur_mesure",
+                  "valeur": "Sur mesure",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Taille du conteneur / Format",
+                  "label_lemma": "taille de conteneur",
+                  "id_source_valeur": "324",
+                  "id_source_caracteristique": "26",
+                  "label_id": "categorie_2016431_Taille du conteneur",
+                  "label": "Taille du conteneur",
+                  "nom": "Taille du conteneur : Sur mesure"
+                },
+                {
+                  "id": "categorie_2016431_format_coupe_specifique",
+                  "valeur": "Coupe spécifique",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Format",
+                  "label_lemma": "format",
+                  "id_source_valeur": "324",
+                  "label_id": "categorie_2016431_Format",
+                  "id_source_caracteristique": "26",
+                  "label": "Format",
+                  "nom": "Format : Coupe spécifique"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 7,
+              "score": 0.41427660930529003,
+              "matched_nodes": [
+                {
+                  "unite": "m²",
+                  "id": "categorie_2016431_surface_utile_interieure_15_69_m2",
+                  "valeur": 15.69,
+                  "unite_canonique": "meter ** 2",
+                  "label_canonique": "categorie_2016431_Surface utile intérieure",
+                  "type_donnee": "numeric",
+                  "label_lemma": "surface utile intérieure",
+                  "valeur_canonique": 15.69,
+                  "id_source_caracteristique": "33",
+                  "label_id": "categorie_2016431_Surface utile intérieure",
+                  "label": "Surface utile intérieure",
+                  "nom": "Surface utile intérieure : 15.69 m²"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 5,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 2,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "id": "categorie_2016431_materiau_acier_peint",
+                  "valeur": "Acier peint",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Materiaux",
+                  "label_lemma": "material",
+                  "id_source_valeur": "188",
+                  "id_source_caracteristique": "41",
+                  "label_id": "categorie_2016431_Materiaux",
+                  "label": "Materiaux",
+                  "nom": "Matériau : Acier peint"
+                },
+                {
+                  "id": "categorie_2016431_revetement_exterieur_peinture_ral",
+                  "valeur": "Peinture RAL",
+                  "type_donnee": "text",
+                  "label_canonique": "categorie_2016431_Revêtement extérieur",
+                  "label_lemma": "revêtement extérieur",
+                  "id_source_valeur": "188",
+                  "id_source_caracteristique": "41",
+                  "label_id": "categorie_2016431_Revêtement extérieur",
+                  "label": "Revêtement extérieur",
+                  "nom": "Revêtement extérieur : Peinture RAL"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "84772",
+      "nom_produit": "Pool House avec Terrasse Couverte 20 Pieds – 13,55m²",
+      "score": 0.2674408508790971,
+      "details": [
+        {
+          "group_score": 0.1,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.9132841328413285,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Format",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Format",
+                  "id_source_caracteristique": "26",
+                  "label": "Format",
+                  "nom": "Format : 20 pieds",
+                  "id": "categorie_2016431_format_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "format",
+                  "id_source_valeur": "56"
+                },
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Taille",
+                  "id_source_caracteristique": "26",
+                  "label": "Taille",
+                  "nom": "Taille : 20 pieds",
+                  "id": "categorie_2016431_taille_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 7,
+              "score": 0.4797047970479705,
+              "matched_nodes": [
+                {
+                  "unite": "m²",
+                  "id": "categorie_2016431_surface_utile_interieure_13.55_m2",
+                  "valeur": 13.55,
+                  "unite_canonique": "meter ** 2",
+                  "label_canonique": "categorie_2016431_Surface utile intérieure",
+                  "type_donnee": "numeric",
+                  "label_lemma": "surface utile intérieure",
+                  "valeur_canonique": 13.55,
+                  "id_source_caracteristique": "33",
+                  "label_id": "categorie_2016431_Surface utile intérieure",
+                  "label": "Surface utile intérieure",
+                  "nom": "Surface utile intérieure : 13.55 m²"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 5,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 2,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    },
+    {
+      "id_produit": "65370",
+      "nom_produit": "Car Box 20 pieds – Container aménagé automobile",
+      "score": 0.26691176470588235,
+      "details": [
+        {
+          "group_score": 0.1,
+          "q_weight": 9,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["76", "300", "391", "240"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "78",
+                  "79",
+                  "323",
+                  "359",
+                  "363",
+                  "343",
+                  "80",
+                  "81",
+                  "82",
+                  "299",
+                  "388"
+                ]
+              },
+              "cid": "29"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["84", "85", "86", "89"],
+                "blocking_numeric": null,
+                "blocking_list": ["91", "383"]
+              },
+              "cid": "30"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 9,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["234", "235", "237", "240"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "45"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 8,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 8,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["314", "381", "380"],
+                "blocking_numeric": null,
+                "blocking_list": ["313", "383"]
+              },
+              "cid": "83"
+            }
+          ]
+        },
+        {
+          "group_score": 0.9107142857142857,
+          "q_weight": 7,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": true,
+              "q_weight": 7,
+              "score": 1,
+              "matched_nodes": [
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Taille",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Taille",
+                  "id_source_caracteristique": "26",
+                  "label": "Taille",
+                  "nom": "Taille : 20 pieds",
+                  "id": "categorie_2016431_taille_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "taille",
+                  "id_source_valeur": "56"
+                },
+                {
+                  "unite": "pieds",
+                  "valeur": 20,
+                  "label_canonique": "categorie_2016431_Format",
+                  "type_donnee": "numeric",
+                  "valeur_canonique": 6.096,
+                  "label_id": "categorie_2016431_Format",
+                  "id_source_caracteristique": "26",
+                  "label": "Format",
+                  "nom": "Format : 20 pieds",
+                  "id": "categorie_2016431_format_20_pieds",
+                  "unite_canonique": "meter",
+                  "label_lemma": "format",
+                  "id_source_valeur": "56"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["56", "57", "305", "324"],
+                "blocking_numeric": null,
+                "blocking_list": ["53", "54", "55"]
+              },
+              "cid": "26"
+            },
+            {
+              "c_weight_sum": 1,
+              "matched": true,
+              "q_weight": 7,
+              "score": 0.4642857142857143,
+              "matched_nodes": [
+                {
+                  "unite": "m²",
+                  "id": "categorie_2016431_surface_utile_interieure_14_m2",
+                  "valeur": 14,
+                  "unite_canonique": "meter ** 2",
+                  "label_canonique": "categorie_2016431_Surface utile intérieure",
+                  "type_donnee": "numeric",
+                  "label_lemma": "surface utile intérieure",
+                  "valeur_canonique": 14,
+                  "id_source_caracteristique": "33",
+                  "label_id": "categorie_2016431_Surface utile intérieure",
+                  "label": "Surface utile intérieure",
+                  "nom": "Surface utile intérieure : 14 m²"
+                }
+              ],
+              "user_requirements": {
+                "target_numeric": {
+                  "min": 13,
+                  "unit": "meter ** 2",
+                  "max": null,
+                  "exact": null
+                },
+                "target_list": [],
+                "blocking_numeric": {
+                  "min": null,
+                  "unit": "meter ** 2",
+                  "max": 12,
+                  "exact": null
+                },
+                "blocking_list": []
+              },
+              "cid": "33"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 5,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 5,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["307"],
+                "blocking_numeric": null,
+                "blocking_list": ["306"]
+              },
+              "cid": "82"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 3,
+          "constraints": [
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["158", "161", "159", "162", "163", "318"],
+                "blocking_numeric": null,
+                "blocking_list": ["157", "160"]
+              },
+              "cid": "39"
+            },
+            {
+              "c_weight_sum": 5,
+              "matched": false,
+              "q_weight": 3,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["341", "346"],
+                "blocking_numeric": null,
+                "blocking_list": []
+              },
+              "cid": "87"
+            }
+          ]
+        },
+        {
+          "group_score": 0.1,
+          "q_weight": 2,
+          "constraints": [
+            {
+              "c_weight_sum": 1,
+              "matched": false,
+              "q_weight": 2,
+              "score": 0.1,
+              "matched_nodes": [],
+              "user_requirements": {
+                "target_numeric": null,
+                "target_list": ["188"],
+                "blocking_numeric": null,
+                "blocking_list": [
+                  "187",
+                  "189",
+                  "190",
+                  "191",
+                  "192",
+                  "193",
+                  "194",
+                  "384"
+                ]
+              },
+              "cid": "41"
+            }
+          ]
+        }
+      ],
+      "info": {},
+      "extra_data": {}
+    }
+  ],
+  "info": {
+    "query_time": 1.317751342896372,
+    "normalization_time": 0.05175857408903539,
+    "total_time": 1.3706675879657269,
+    "count": 12,
+    "version": "v4_caracteristique",
+    "weights": {
+      "26": 7,
+      "29": 9,
+      "30": 9,
+      "33": 7,
+      "39": 3,
+      "41": 2,
+      "45": 9,
+      "82": 5,
+      "83": 8,
+      "87": 3
+    }
+  }
+}
