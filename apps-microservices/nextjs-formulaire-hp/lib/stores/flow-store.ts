@@ -1,8 +1,110 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { useEffect, useState } from 'react';
-import type { ContactFormData, ProfileData, UserAnswers } from '@/types';
+import type { ContactFormData, ProfileData, UserAnswers, Supplier } from '@/types';
 import type { CharacteristicsMap } from '@/types/characteristics';
+
+// =============================================================================
+// STORAGE WRAPPER - Gère le reset sur reload (F5) et changement manuel d'URL
+// =============================================================================
+
+// Clé de sessionStorage pour le flag de redirection
+const NEEDS_REDIRECT_KEY = 'flow-needs-redirect';
+
+// Exporter la clé pour FlowStorageReset
+export const FLOW_NEEDS_REDIRECT_KEY = NEEDS_REDIRECT_KEY;
+
+// =============================================================================
+// EXÉCUTION IMMÉDIATE - Doit s'exécuter AVANT que Zustand hydrate
+// =============================================================================
+// NOTE: Ce bloc ne s'exécute que lors d'un FULL page load (F5, nav manuelle,
+// premier accès, back/forward). La navigation SPA ne ré-exécute jamais le
+// code module-level car le module est déjà chargé en mémoire.
+// =============================================================================
+if (typeof window !== 'undefined') {
+  try {
+    const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    const navType = navEntries.length > 0 ? navEntries[0].type : 'navigate';
+
+    // Flag pour savoir si une session flow était déjà active
+    const SESSION_ACTIVE_KEY = 'flow-session-active';
+    const wasSessionActive = sessionStorage.getItem(SESSION_ACTIVE_KEY) === 'true';
+
+    let shouldClear = false;
+    let needsRedirect = false;
+    let reason = 'unknown';
+
+    if (navType === 'reload') {
+      // F5 / Actualiser
+      shouldClear = true;
+      needsRedirect = true;
+      reason = 'reload';
+    } else if (navType === 'back_forward') {
+      // Bouton retour/avancer du navigateur
+      shouldClear = true;
+      needsRedirect = true;
+      reason = 'back-forward';
+    } else if (navType === 'navigate' && wasSessionActive) {
+      // Changement manuel d'URL (la session existait déjà)
+      shouldClear = true;
+      needsRedirect = true;
+      reason = 'manual-url-change';
+    } else if (navType === 'navigate' && !wasSessionActive) {
+      // Première visite → partir propre, pas de redirect
+      shouldClear = true;
+      needsRedirect = false;
+      reason = 'first-visit';
+    }
+
+    if (shouldClear) {
+      sessionStorage.removeItem('flow-storage');
+      console.log('[FlowStore] Storage cleared -', reason);
+    }
+
+    if (needsRedirect) {
+      sessionStorage.setItem(NEEDS_REDIRECT_KEY, 'true');
+      console.log('[FlowStore] Redirect flag set');
+    }
+
+    // Marquer la session comme active
+    sessionStorage.setItem(SESSION_ACTIVE_KEY, 'true');
+
+  } catch (e) {
+    console.error('[FlowStore] Error in navigation detection:', e);
+  }
+}
+
+/**
+ * Storage wrapper simple pour sessionStorage
+ */
+const createSessionStorage = (): StateStorage => {
+  return {
+    getItem: (name: string): string | null => {
+      if (typeof window === 'undefined') return null;
+      try {
+        return sessionStorage.getItem(name);
+      } catch {
+        return null;
+      }
+    },
+    setItem: (name: string, value: string): void => {
+      if (typeof window === 'undefined') return;
+      try {
+        sessionStorage.setItem(name, value);
+      } catch {
+        // Ignore les erreurs de quota
+      }
+    },
+    removeItem: (name: string): void => {
+      if (typeof window === 'undefined') return;
+      try {
+        sessionStorage.removeItem(name);
+      } catch {
+        // Ignore
+      }
+    },
+  };
+};
 
 // Types de parcours pour le tracking GTM
 export type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | null;
@@ -47,8 +149,16 @@ export interface FlowState {
   // Map des caractéristiques (lookup table pour ID -> label/valeurs)
   characteristicsMap: CharacteristicsMap;
 
+  // Produits orphelins (sélectionnés mais plus dans les nouveaux résultats après modification critères)
+  orphanedSelectedSuppliers: Supplier[];
+
+  // Flag pour indiquer que les critères ont été modifiés
+  criteriaHaveChanged: boolean;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
   setCharacteristicsMap: (characteristics: CharacteristicsMap) => void;
+  setOrphanedSelectedSuppliers: (suppliers: Supplier[]) => void;
+  setCriteriaHaveChanged: (changed: boolean) => void;
 
   setFilesStore: (files: File[]) => void;
   addFilesStore: (newFiles: File[]) => void;
@@ -96,6 +206,8 @@ const initialState = {
   equivalenceCaracteristique: [],
   matchingResults: null,
   characteristicsMap: {},
+  orphanedSelectedSuppliers: [],
+  criteriaHaveChanged: false,
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -190,10 +302,15 @@ export const useFlowStore = create<FlowState>()(
 
       setCharacteristicsMap: (characteristics) => set({ characteristicsMap: characteristics }),
 
+      setOrphanedSelectedSuppliers: (suppliers) => set({ orphanedSelectedSuppliers: suppliers }),
+
+      setCriteriaHaveChanged: (changed) => set({ criteriaHaveChanged: changed }),
+
     }),
     {
       name: 'flow-storage',
-      storage: createJSONStorage(() => sessionStorage),
+      // Utiliser notre storage wrapper qui clear automatiquement lors d'un F5
+      storage: createJSONStorage(createSessionStorage),
       // ✅ AJOUT IMPORTANT : partialize
       // On exclut 'files' de la persistance car un objet File ne se JSON.stringify pas.
       partialize: (state) => {

@@ -22,3 +22,4 @@ export { default as ContactFormSimple } from './ContactFormSimple';
 export { default as SearchResultChoice } from './SearchResultChoice';
 export { default as SelectionFeedback } from './SelectionFeedback';
 export { default as SomethingToAddForm } from './SomethingToAddForm';
+export { CountriesPrefetcher } from './CountriesPrefetcher';

@@ -27,22 +27,26 @@ export type UserAnswers = Record<number, string[]>;
 export type ProfileType = "pro_france" | "creation" | "pro_foreign" | "particulier" | null;
 
 export interface CompanyResult {
-  siren: string;
-  name: string;
-  address: string;
+  siren      : string;
+  name       : string;
+  address    : string;
   postalCode?: string;
-  city?: string;
+  city      ?: string;
+  naf       ?: string;
+  siret     ?: string;
 }
 
 export interface ProfileData {
-  type: ProfileType;
-  company?: CompanyResult;
+  type        : ProfileType;
+  company    ?: CompanyResult;
   companyName?: string;
-  postalCode?: string;
-  city?: string;
-  country?: string;
-  siren?: string;
-  countryID?: number;
+  postalCode ?: string;
+  city       ?: string;
+  country    ?: string;
+  siren      ?: string;
+  siret      ?: string;
+  countryID  ?: number;
+  naf        ?: string;
 }
 
 export interface PostalCodeCity {
@@ -102,6 +106,15 @@ export interface Supplier {
   specs: ProductSpec[];
   supplier: SupplierInfo;
   price?: PriceInfo;
+  debugInfo?: {
+    coeff_geo: number;
+    coeff_type_frns: number;
+    characteristics_debug: Array<{
+      id_caracteristique: number;
+      bareme: number;
+      poids_question: number;
+    }>;
+  };
 }
 
 // ========================================
@@ -110,10 +123,12 @@ export interface Supplier {
 export interface ContactFormData {
   email: string;
   isKnown: boolean;
+  civility: string;
   firstName: string;
   lastName: string;
   company?: string;
   countryCode?: string;
+  id_pays_tel?: number;  // ID du pays pour le téléphone
   phone: string;
   message?: string;
 }
@@ -125,6 +140,7 @@ export interface LeadSubmission {
   selectedSupplierIds: string[];
   submittedAt: string;
   userKnownStatus: 'known' | 'unknown';
+  categoryId?: string;
 }
 
 export interface LeadResponse {

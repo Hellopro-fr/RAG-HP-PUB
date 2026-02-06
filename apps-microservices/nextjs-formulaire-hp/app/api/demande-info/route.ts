@@ -8,20 +8,33 @@ import { NextRequest, NextResponse } from 'next/server';
  * URL du endpoint PHP pour l'insertion des demandes
  */
 const DEMANDE_INFO_ENDPOINT = process.env.DEMANDE_INFO_URL
-  || 'https://dev-www.hellopro.fr/include/demande_information/demande_info_insertion.php';
+  || 'https://dev-www.hellopro.fr/hellopro_fr/include/demande_information/demande_info_insertion.php';
 
 /**
  * Convertit un objet en URLSearchParams pour FormData
  */
-function objectToFormData(obj: Record<string, unknown>): URLSearchParams {
-  const params = new URLSearchParams();
+/**
+ * Convertit un objet complexe (avec objets et tableaux) en URLSearchParams
+ */
+function objectToFormData(obj: any, params = new URLSearchParams(), prefix = ''): URLSearchParams {
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      const value = obj[key];
+      const fullKey = prefix ? `${prefix}[${key}]` : key;
 
-  Object.entries(obj).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      params.append(key, String(value));
+      if (value === null || value === undefined || value === '') {
+        continue;
+      }
+
+      if (typeof value === 'object' && !(value instanceof Date)) {
+        // Si c'est un objet ou un tableau, on descend d'un niveau
+        objectToFormData(value, params, fullKey);
+      } else {
+        // Si c'est une valeur primitive, on l'ajoute
+        params.append(fullKey, String(value));
+      }
     }
-  });
-
+  }
   return params;
 }
 
@@ -35,6 +48,9 @@ export async function POST(request: NextRequest) {
 
     // Convertir en FormData pour le PHP
     const formData = objectToFormData(payload);
+
+    console.log('Envoi demande-info avec payload:', payload);
+    console.log('Envoi demande-info avec formedata:', formData.toString());
 
     // Envoyer au PHP
     const response = await fetch(DEMANDE_INFO_ENDPOINT, {

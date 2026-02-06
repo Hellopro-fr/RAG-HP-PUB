@@ -10,7 +10,7 @@ export function cn(...inputs: ClassValue[]) {
  * - En local: utilise le chemin relatif avec basePath
  * - En production: utilise l'URL complète du domaine
  */
-export const basePath = process.env.NEXT_PUBLIC_BASE_PATH || process.env.__NEXT_ROUTER_BASEPATH || '/formulaire';
+export const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
 export const assetBaseUrl = process.env.NEXT_PUBLIC_ASSET_BASE_URL || '';
 
 export function getAssetPath(path: string): string {

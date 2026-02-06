@@ -1,9 +1,10 @@
 'use client';
 
-import { X, GripVertical, Sparkles, Target, Gift, Check } from "lucide-react";
+import { X, GripVertical, Sparkles, Target, Gift, Check, Loader2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { trackModifyCriteriaModalView, trackCriteriaModified } from "@/lib/analytics";
 import { useFlowStore } from "@/lib/stores/flow-store";
+import { useProcessMatchingLogic } from "@/hooks/api/useProcessMatchingLogic";
 import type {
   ConsolidatedCharacteristic,
   PoidsCaracteristique,
@@ -44,98 +45,6 @@ interface CriterionFormState {
 }
 
 // =============================================================================
-// TODO: SUPPRIMER CETTE SECTION UNE FOIS LE DYNAMIQUE IMPLÉMENTÉ
-// Données statiques en attendant l'API caractéristiques
-// =============================================================================
-
-const STATIC_CRITIQUE_CRITERIA: CriterionFormState[] = [
-  {
-    id_caracteristique: 1,
-    label: "Type de pont",
-    type: 'textuelle',
-    poids_question: 5,
-    poids_caracteristique: 'critique',
-    valeurs_cibles_ids: [1],
-    valeurs_bloquantes_ids: [],
-    options_disponibles: [
-      { id: 1, label: "2 colonnes" },
-      { id: 2, label: "4 colonnes" },
-      { id: 3, label: "Ciseaux" },
-      { id: 4, label: "Fosse" },
-    ],
-    isMulti: false,
-  },
-  {
-    id_caracteristique: 2,
-    label: "Capacité",
-    type: 'textuelle',
-    poids_question: 4,
-    poids_caracteristique: 'critique',
-    valeurs_cibles_ids: [4],
-    valeurs_bloquantes_ids: [],
-    options_disponibles: [
-      { id: 1, label: "2,5 tonnes" },
-      { id: 2, label: "3 tonnes" },
-      { id: 3, label: "3,5 tonnes" },
-      { id: 4, label: "4 tonnes" },
-      { id: 5, label: "5 tonnes" },
-      { id: 6, label: "6 tonnes" },
-    ],
-    isMulti: false,
-  },
-  {
-    id_caracteristique: 3,
-    label: "Alimentation",
-    type: 'textuelle',
-    poids_question: 3,
-    poids_caracteristique: 'critique',
-    valeurs_cibles_ids: [2],
-    valeurs_bloquantes_ids: [],
-    options_disponibles: [
-      { id: 1, label: "230V monophasé" },
-      { id: 2, label: "400V triphasé" },
-    ],
-    isMulti: true,
-  },
-];
-
-const STATIC_SECONDAIRE_CRITERIA: CriterionFormState[] = [
-  {
-    id_caracteristique: 4,
-    label: "Hauteur de levage maximale",
-    type: 'numerique',
-    poids_question: 2,
-    poids_caracteristique: 'secondaire',
-    valeurs_cibles_ids: [],
-    valeurs_bloquantes_ids: [],
-    options_disponibles: [],
-    isMulti: false,
-    unite: 'mm',
-    valeur_numerique_min: 1800,
-    valeur_numerique_max: 2200,
-  },
-  {
-    id_caracteristique: 5,
-    label: "Zone géographique",
-    type: 'textuelle',
-    poids_question: 1,
-    poids_caracteristique: 'secondaire',
-    valeurs_cibles_ids: [1],
-    valeurs_bloquantes_ids: [],
-    options_disponibles: [
-      { id: 1, label: "Île-de-France" },
-      { id: 2, label: "Paris (75)" },
-      { id: 3, label: "Nord" },
-      { id: 4, label: "Est" },
-      { id: 5, label: "Ouest" },
-      { id: 6, label: "Sud" },
-      { id: 7, label: "France entière" },
-    ],
-    isMulti: false,
-  },
-];
-
-// =============================================================================
 // HELPERS : ConsolidatedCharacteristic <-> CriterionFormState
 // =============================================================================
 
@@ -171,7 +80,9 @@ function characteristicToFormState(
     state.valeurs_cibles_ids = Array.isArray(c.valeurs_cibles)
       ? [...(c.valeurs_cibles as number[])]
       : [];
-    state.valeurs_bloquantes_ids = [...c.valeurs_bloquantes];
+    state.valeurs_bloquantes_ids = Array.isArray(c.valeurs_bloquantes)
+      ? [...c.valeurs_bloquantes]
+      : [];
 
     // Si pas d'options depuis l'API, fallback sur les IDs connus
     if (state.options_disponibles.length === 0) {
@@ -182,8 +93,8 @@ function characteristicToFormState(
       }));
     }
 
-    // Multi-select si plus d'une valeur cible OU si l'API a plus de 2 options
-    state.isMulti = state.valeurs_cibles_ids.length > 1;
+    // Toujours autoriser la sélection multiple pour les caractéristiques textuelles
+    state.isMulti = true;
   } else {
     // Numérique : inputs min/max ou exact
     const val = c.valeurs_cibles;
@@ -235,6 +146,7 @@ function formStateToCharacteristic(s: CriterionFormState): ConsolidatedCharacter
 
 const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
   const { equivalenceCaracteristique, characteristicsMap } = useFlowStore();
+  const { refetchMatchingWithUpdatedCriteria, showLoader } = useProcessMatchingLogic();
 
   const [critiqueCriteria, setCritiqueCriteria] = useState<CriterionFormState[]>([]);
   const [secondaireCriteria, setSecondaireCriteria] = useState<CriterionFormState[]>([]);
@@ -243,18 +155,12 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
   const hasInitialized = useRef(false);
 
   // Initialiser les critères depuis le store
-  // TODO: Supprimer le fallback statique une fois le dynamique implémenté
   useEffect(() => {
     const consolidated = equivalenceCaracteristique as ConsolidatedCharacteristic[];
     const hasCharacteristicsData = Object.keys(characteristicsMap).length > 0;
 
-    // Si pas de données dynamiques, utiliser les données statiques
+    // Si pas de données dynamiques, ne rien faire
     if (!consolidated || consolidated.length === 0) {
-      if (!hasInitialized.current) {
-        hasInitialized.current = true;
-        setCritiqueCriteria([...STATIC_CRITIQUE_CRITERIA]);
-        setSecondaireCriteria([...STATIC_SECONDAIRE_CRITERIA]);
-      }
       return;
     }
 
@@ -270,7 +176,9 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
     for (const c of consolidated) {
       const formState = characteristicToFormState(c, characteristicsMap);
-      if (c.poids_caracteristique === 'critique') {
+      // Normaliser en minuscule pour éviter les problèmes de casse ('Critique' vs 'critique')
+      const poids = c.poids_caracteristique?.toLowerCase();
+      if (poids === 'critique') {
         critiques.push(formState);
       } else {
         secondaires.push(formState);
@@ -350,7 +258,7 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
     else setSecondaireCriteria(updateFn);
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     const allCriteria = [
       ...critiqueCriteria.map(formStateToCharacteristic),
       ...secondaireCriteria.map(formStateToCharacteristic),
@@ -359,7 +267,13 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
     const modifiedFields = [...critiqueCriteria, ...secondaireCriteria].map(c => String(c.id_caracteristique));
     trackCriteriaModified(critiqueCriteria.length + secondaireCriteria.length, modifiedFields);
 
-    onApply(allCriteria);
+    // Relancer le matching avec les nouvelles caractéristiques
+    const success = await refetchMatchingWithUpdatedCriteria(allCriteria);
+
+    if (success) {
+      // Appeler onApply pour fermer le modal et mettre à jour l'UI
+      onApply(allCriteria);
+    }
   };
 
   // =========================================================================
@@ -587,11 +501,20 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
             </button>
             <button
               onClick={handleApply}
-              disabled={!hasCriteria}
+              disabled={!hasCriteria || showLoader}
               className="order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg bg-accent px-8 py-2.5 text-base font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Sparkles className="h-5 w-5" />
-              Affiner mes recommandations
+              {showLoader ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Recherche en cours...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-5 w-5" />
+                  Affiner mes recommandations
+                </>
+              )}
             </button>
           </div>
         </div>

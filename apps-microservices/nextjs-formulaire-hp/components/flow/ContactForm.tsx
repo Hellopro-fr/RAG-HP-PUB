@@ -10,6 +10,9 @@ import { useFlowStore } from "@/lib/stores/flow-store";
 import type { Supplier, ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
 import { validatePhoneNumber } from "@/lib/utils/phone-validation";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { toast } from "@/hooks/use-toast";
 
 // Analytics imports
 import { trackContactFormView, trackFormValidationErrors } from "@/lib/analytics";
@@ -39,10 +42,12 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
   const [formData, setFormData] = useState<ContactFormData>({
     email: "",
     isKnown: false,
+    civility: "",
     firstName: "",
     lastName: "",
     company: profileData?.company?.name || profileData?.companyName || "",
     countryCode: "+33",
+    id_pays_tel: 1, // France par défaut
     phone: "",
     message: "",
   });
@@ -93,18 +98,19 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
         firstName: info.prenom || "",
         lastName : info.nom || "",
         phone    : info.tel || "",
-      
+        civility: info.cv || "",
       };
             
     }else{
       updatedData = {
-        ...formData, 
+        ...formData,
         email      : formData.email,
         isKnown    : false,
         firstName  : "",
         lastName   : "",
         phone      : "",
-        countryCode: "",
+        countryCode: formData.countryCode || "+33",
+        id_pays_tel: formData.id_pays_tel || 1,
       };
     }
 
@@ -154,6 +160,9 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
     if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Email invalide";
     }
+    if (!formData.civility) {
+      newErrors.civility = "Civilité requise";
+    }
     if (!formData.firstName.trim()) {
       newErrors.firstName = "Prénom requis";
     }
@@ -177,6 +186,15 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
         message: message || '',
       }));
       trackFormValidationErrors(errorList.length, errorList);
+
+      // Toast pour les erreurs non visibles (ex: civilité en haut du formulaire)
+      if (newErrors.civility) {
+        toast({
+          variant: "destructive",
+          title: "Champ requis",
+          description: newErrors.civility,
+        });
+      }
     }
 
     return Object.keys(newErrors).length === 0;
@@ -215,6 +233,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
       selectedSupplierIds: selectedSupplierIds,
       submittedAt: new Date().toISOString(),
       userKnownStatus,
+      categoryId: categoryId?.toString(),
     });
   };
 
@@ -361,6 +380,27 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
 
           {showAdditionalFields && (
           <>
+          {/* Civilité */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">
+              Civilité *
+            </label>
+            <RadioGroup
+              value={formData.civility}
+              onValueChange={(value) => setFormData({ ...formData, civility: value })}
+              className="flex gap-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="1" id="civility-mr-cf" />
+                <Label htmlFor="civility-mr-cf">Monsieur</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="2" id="civility-mme-cf" />
+                <Label htmlFor="civility-mme-cf">Madame</Label>
+              </div>
+            </RadioGroup>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label
@@ -410,8 +450,10 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
             <PhoneInput
               value={formData.phone}
               countryCode={formData.countryCode || "+33"}
-              onValueChange={(phone) => setFormData({ ...formData, phone })}
-              onCountryCodeChange={(code) => setFormData({ ...formData, countryCode: code })}
+              countryId={formData.id_pays_tel}
+              onValueChange={(phone) => setFormData((prev) => ({ ...prev, phone }))}
+              onCountryCodeChange={(code) => setFormData((prev) => ({ ...prev, countryCode: code }))}
+              onCountryIdChange={(id) => setFormData((prev) => ({ ...prev, id_pays_tel: id }))}
               error={errors.phone}
               required
             />

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-//const BASE_URL = process.env.HELLOPRO_FRONTEND_URL || 'https://dev-www.hellopro.fr';
-const BASE_URL = 'https://www.hellopro.fr';
+const BASE_URL = process.env.HELLOPRO_FRONTEND_URL || 'https://dev-www.hellopro.fr';
 
 /**
  * Proxy pour ajax_get_data.php

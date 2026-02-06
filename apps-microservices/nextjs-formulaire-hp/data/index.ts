@@ -2,7 +2,7 @@
 // DATA - BARREL EXPORT
 // ========================================
 
-export * from './questions';
+// questions.ts removed - use dynamic API only
 export * from './companies';
 export * from './location';
 export * from './suppliers';

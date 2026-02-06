@@ -220,6 +220,8 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
           data.postalCode  = selectedCompany?.postalCode;
           data.city        = selectedCompany?.city;
           data.siren       = selectedCompany?.siren;
+          data.siret       = selectedCompany?.siret;
+          data.naf         = selectedCompany?.naf;
         }
         info_datalayer = 'pro_france';
         break;
@@ -269,6 +271,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
       address: company.address,
       postalCode: company.postalCode,
       city: company.city,
+      naf: company.naf,
     };
     setSelectedCompany(companyResult);
     setSearchQuery(company.name);
