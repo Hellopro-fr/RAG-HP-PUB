@@ -224,9 +224,9 @@ class Question1Generator:
         
         # Vérifier si déjà généré
         done_responses = process_data.get("done", [])
-        # if "Q1" in done_responses:
-        #     self._log("Déjà traité")
-        #     return "already_done"
+        if "Q1" in done_responses:
+            self._log("Déjà traité")
+            return "already_done"
         
         #récupération du prompt (copie du prompt chargé au début)
         prompt_config = self.prompt_question1.copy()
@@ -412,13 +412,13 @@ class Question1Generator:
         # Reset si demandé
         if request.is_reset:
             self._log("RESET DU PROCESSUS")
-            # await self.api_client.post(
-            #     "question",
-            #     "process",
-            #     "reset",
-            #     {"etape": self.ETAPE, "id_categorie": id_categorie}
-            # )
-            # process_data = {}
+            await self.api_client.post(
+                "question",
+                "process",
+                "reset",
+                {"etape": self.ETAPE, "id_categorie": id_categorie}
+            )
+            process_data = {}
 
         self._log(f"Process data: {process_data}")
         
