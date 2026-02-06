@@ -7,6 +7,9 @@ from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
     MatchingPayload,
+    MatchingResponse,
+    Produit,
+    CaracteristiqueMatching,
     ResultProduct,
     ScoredProduct,
 )
@@ -555,7 +558,7 @@ class RecommendationService:
         self,
         request: MatchingPayload,
         target_product_id: Optional[str] = None,
-    ) -> ResultProduct:
+    ) -> MatchingResponse:
         """
         Get products filtered and scored by CaracteristiqueTechnique constraints.
         Uses MatchingPayload schema with MatchingOptions.Score for caracteristique weights.
@@ -969,65 +972,134 @@ class RecommendationService:
             results = await clients.execute_cypher(cypher_query, params)
             query_time = time.perf_counter() - query_start
 
-            # Parse results
-            scored_products = []
-            top_p = []
+            # Parse results and convert to MatchingResponse format
+            liste_produit = []
+            top_produit = []
+
+            def convert_to_caracteristique_matching(
+                details: List[Dict[str, Any]], score: float
+            ) -> List[CaracteristiqueMatching]:
+                """Convert Cypher details to CaracteristiqueMatching list."""
+                caracteristiques = []
+                for detail in details:
+                    # Each detail is a q_weight group containing constraints
+                    q_weight = detail.get("q_weight", 1)
+                    constraints = detail.get("constraints", [])
+
+                    for constraint in constraints:
+                        cid = constraint.get("cid", "0")
+                        c_score = constraint.get("score", 0.0)
+                        c_weight = constraint.get("c_weight_sum", 1)
+                        matched_nodes = constraint.get("matched_nodes", [])
+
+                        # Determine statut_matching based on score
+                        # 1: matche (score >= 0.8), 2: ecart (0 < score < 0.8), 3: bloquant (score < 0), 4: non_renseigne (no match)
+                        if c_score >= 0.8:
+                            statut = 1  # Matche
+                        elif c_score == blocked_val:
+                            statut = 3  # Bloquant
+                        elif c_score > 0:
+                            statut = 2  # Ecart
+                        elif len(matched_nodes) == 0:
+                            statut = 4  # Non renseigné
+                        else:
+                            statut = 2  # Ecart
+
+                        # Extract value and unit from matched nodes if available
+                        valeur = None
+                        unite = None
+                        type_carac = 2  # Default to textuelle
+                        id_valeurs = []
+
+                        if matched_nodes:
+                            node = matched_nodes[0]  # Take first matched node
+                            valeur = (
+                                str(node.get("valeur", ""))
+                                if node.get("valeur")
+                                else None
+                            )
+                            unite = node.get("unite") or node.get("unite_canonique")
+                            type_donnee = node.get("type_donnee", "")
+                            type_carac = (
+                                1 if type_donnee in ["numeric", "numeric_range"] else 2
+                            )
+                            if node.get("id_source_valeur"):
+                                try:
+                                    id_valeurs = [int(node.get("id_source_valeur"))]
+                                except (ValueError, TypeError):
+                                    id_valeurs = []
+
+                        caracteristiques.append(
+                            CaracteristiqueMatching(
+                                statut_matching=statut,
+                                id_caracteristique=int(cid) if cid.isdigit() else 0,
+                                type_caracteristique=type_carac,
+                                valeur=valeur,
+                                unite=unite,
+                                id_valeur=id_valeurs,
+                                poids=int(c_weight),
+                                bareme=float(c_score),
+                                poids_question=int(q_weight),
+                            )
+                        )
+
+                return caracteristiques
+
+            def build_produit(rec: Dict[str, Any], rang: int) -> Produit:
+                """Convert a result record to Produit."""
+                product_data = rec.get("product_data", {})
+                details = rec.get("details", [])
+                global_score = rec.get("global_score", 0.0)
+
+                caracteristiques = convert_to_caracteristique_matching(
+                    details, global_score
+                )
+
+                return Produit(
+                    rang=rang,
+                    id_produit=str(product_data.get("id_produit", "")),
+                    score=float(global_score),
+                    caracteristique=caracteristiques,
+                    coeff_geo=1.0,  # Default, can be computed from zone matching
+                    coeff_type_frns=1.0,  # Default, can be computed from fournisseur type
+                )
 
             if results:
-                # Extract top_p and scored_products in parallel using list comprehensions
+                # Extract top_p from first result
                 raw_top_p = results[0].get("top_p", [])
 
-                def build_top_p_product(entry):
+                # Build top_produit list
+                for idx, entry in enumerate(raw_top_p):
                     if isinstance(entry, dict) and "product_data" in entry:
-                        return ScoredProduct(
-                            **entry["product_data"],
-                            score=entry.get("score", 0.0),
-                            details=entry.get("details", []),
+                        produit = Produit(
+                            rang=idx + 1,
+                            id_produit=str(entry["product_data"].get("id_produit", "")),
+                            score=float(entry.get("score", 0.0)),
+                            caracteristique=convert_to_caracteristique_matching(
+                                entry.get("details", []), entry.get("score", 0.0)
+                            ),
+                            coeff_geo=1.0,
+                            coeff_type_frns=1.0,
                         )
-                    return None
+                        top_produit.append(produit)
 
-                def build_scored_product(rec):
-                    return ScoredProduct(
-                        **rec["product_data"],
-                        score=rec.get("global_score", 0.0),
-                        details=rec.get("details", []),
-                    )
-
-                # Use ThreadPoolExecutor for parallel processing
-                from concurrent.futures import ThreadPoolExecutor
-
-                with ThreadPoolExecutor() as executor:
-                    # Process both lists in parallel
-                    top_p_future = executor.submit(
-                        lambda: [
-                            p
-                            for p in map(build_top_p_product, raw_top_p)
-                            if p is not None
-                        ]
-                    )
-                    scored_future = executor.submit(
-                        lambda: list(map(build_scored_product, results))
-                    )
-
-                    top_p = top_p_future.result()
-                    scored_products = scored_future.result()
+                # Build liste_produit
+                for idx, rec in enumerate(results):
+                    liste_produit.append(build_produit(rec, idx + 1))
 
             total_time = time.perf_counter() - start_time
-            return ResultProduct(
-                data=scored_products,
-                top_p=top_p,
-                info={
-                    "query_time": query_time,
-                    "normalization_time": norm_time,
-                    "total_time": total_time,
-                    "count": len(scored_products),
-                    "version": "v4_caracteristique",
-                    "weights": weights_map,
-                },
+            return MatchingResponse(
+                top_produit=top_produit,
+                liste_produit=liste_produit,
+                temps_de_traitement=total_time,
             )
         except Exception as e:
             logging.error(f"Caracteristique Filter Error: {e}", exc_info=True)
-            return ResultProduct(data=[], info={"error": str(e)})
+            return MatchingResponse(
+                top_produit=[],
+                liste_produit=[],
+                temps_de_traitement=0.0,
+            )
 
 
 recommendation_service = RecommendationService()

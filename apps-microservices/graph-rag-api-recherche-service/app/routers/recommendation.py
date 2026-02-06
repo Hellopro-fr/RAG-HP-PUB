@@ -35,20 +35,24 @@ async def complex_filter_products(request: ComplexFilterRequest):
         )
 
 
-@router.post(
-    "/filter-by-caracteristique",
-    response_model=ResultProduct,
+@router.post("/filter-by-caracteristique", response_model=MatchingResponse)
+async def filter_by_caracteristique(
+    request: MatchingPayload,
     response_model_exclude_none=True,
-)
-async def filter_by_caracteristique(request: MatchingPayload):
+):
     """
     Filter products based on CaracteristiqueTechnique constraints.
     Uses MatchingPayload schema with MatchingOptions.Score for caracteristique weights.
     Weights are determined by poids_caracteristique ("critique" or "secondaire") mapped to options.score values.
+    Returns MatchingResponse with liste_produit, top_produit, and temps_de_traitement.
     """
     try:
         if not request.liste_caracteristique:
-            return ResultProduct(data=[], info={"message": "No filters provided"})
+            return MatchingResponse(
+                top_produit=[],
+                liste_produit=[],
+                temps_de_traitement=0.0,
+            )
 
         results = await recommendation_service.get_products_by_caracteristique_filters(
             request
