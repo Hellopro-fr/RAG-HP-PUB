@@ -26,13 +26,16 @@ export function getCharacteristicUnit(
 }
 
 /**
- * Récupère le type d'une caractéristique
+ * Récupère le type d'une caractéristique (normalisé en minuscule)
+ * L'API peut retourner 'Textuelle'/'Numérique' ou 'textuelle'/'numerique'
  */
 export function getCharacteristicType(
   map: CharacteristicsMap,
   characteristicId: number
-): 'Textuelle' | 'Numérique' | null {
-  return map[characteristicId]?.type || null;
+): 'textuelle' | 'numerique' | null {
+  const type = map[characteristicId]?.type;
+  if (!type) return null;
+  return type.toLowerCase() as 'textuelle' | 'numerique';
 }
 
 /**

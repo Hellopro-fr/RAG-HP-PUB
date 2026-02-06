@@ -8,6 +8,8 @@ import { useBuyerCheck } from "@/hooks/api";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { trackCustomNeedPageView, trackCustomNeedContactView, setFlowType } from "@/lib/analytics";
 
 // Mock list of existing buyers in database
@@ -46,9 +48,11 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
   const [formData, setFormData] = useState<ContactFormData>({
     email: "",
     isKnown: false,
+    civility: "",
     firstName: "",
     lastName: "",
     countryCode: "+33",
+    id_pays_tel: 1, // France par défaut
     phone: "",
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,13 +125,14 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
               
       }else{
         updatedData = {
-          ...formData, 
+          ...formData,
           email      : formData.email,
           isKnown    : false,
           firstName  : "",
           lastName   : "",
           phone      : "",
-          countryCode: "",
+          countryCode: formData.countryCode || "+33",
+          id_pays_tel: formData.id_pays_tel || 1,
         };
       }
   
@@ -140,6 +145,9 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
 
   // Show additional fields only if email is valid and not an existing buyer
   const showAdditionalFields = isEmailValid && !isKnownBuyer;
+
+  // Form is valid only if civility is selected when additional fields are shown
+  const isFormValid = !showAdditionalFields || !!formData.civility;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -161,7 +169,8 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (!isFormValid) return;
+
     console.log("Form submitted:", { description, fileName, ...formData });
 
      const finalData = { 
@@ -445,6 +454,27 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                   {/* Additional fields - only shown if email is valid and not existing buyer */}
                   {showAdditionalFields && (
                     <>
+                      {/* Civilité */}
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-2">
+                          Civilité *
+                        </label>
+                        <RadioGroup
+                          value={formData.civility}
+                          onValueChange={(value) => setFormData({ ...formData, civility: value })}
+                          className="flex gap-6"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="mr" id="civility-mr-staf" />
+                            <Label htmlFor="civility-mr-staf" className="cursor-pointer">Mr</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="mme" id="civility-mme-staf" />
+                            <Label htmlFor="civility-mme-staf" className="cursor-pointer">Mme</Label>
+                          </div>
+                        </RadioGroup>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label
@@ -492,9 +522,10 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                         <PhoneInput
                           value={formData.phone}
                           countryCode={formData.countryCode || "+33"}
-                          onValueChange={(phone) => setFormData({ ...formData, phone })}
-                          onCountryCodeChange={(code) => setFormData({ ...formData, countryCode: code })}
-                          // error={errors.phone}
+                          countryId={formData.id_pays_tel}
+                          onValueChange={(phone) => setFormData((prev) => ({ ...prev, phone }))}
+                          onCountryCodeChange={(code) => setFormData((prev) => ({ ...prev, countryCode: code }))}
+                          onCountryIdChange={(id) => setFormData((prev) => ({ ...prev, id_pays_tel: id }))}
                           required
                         />
                       </div>
@@ -516,7 +547,8 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                   {/* Submit button */}
                   <button
                     type="submit"
-                    className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2"
+                    disabled={!isFormValid}
+                    className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Send className="h-5 w-5" />
                     Envoyer ma demande

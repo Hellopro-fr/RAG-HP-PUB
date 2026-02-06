@@ -224,19 +224,18 @@ class Question1Generator:
         
         # Vérifier si déjà généré
         done_responses = process_data.get("done", [])
-        if "Q1" in done_responses:
-            self._log("Déjà traité")
-            return "already_done"
+        # if "Q1" in done_responses:
+        #     self._log("Déjà traité")
+        #     return "already_done"
         
         #récupération du prompt (copie du prompt chargé au début)
         prompt_config = self.prompt_question1.copy()
 
-        
         # Préparer le prompt
         prompt_text = prompt_config["contenu_prompt"]
         prompt_text = prompt_text.replace("{CATEGORIE}", nom_rubrique)
         prompt_text = prompt_text.replace("{FIL_D_ARIANE}", fil_d_ariane)
-        # prompt_text = prompt_text.replace("{DESCRIPTIF_CATEGORIE}", descriptif_rubrique)
+        prompt_text = prompt_text.replace("{DESCRIPTIF_CATEGORIE}", descriptif_rubrique)
         
         self._log(f"Prompt: {prompt_text}")
         
@@ -281,6 +280,8 @@ class Question1Generator:
         # Extraire le JSON
         response_text = result.get("message", "")
         self._log(f"Réponse LLM: {response_text}...")
+
+        raise Exception("Test")
         
         json_data = utils.extract_json_from_text(response_text)
         if not json_data:
@@ -399,6 +400,12 @@ class Question1Generator:
             {"etape": self.ETAPE, "id_categorie": id_categorie}
         ) or {}
         
+        # verification si on peut commencer le processus
+        can_start = process_data.get("can_start", False)
+        if not can_start:
+            self._log("Processus peut pas commencer")
+            raise Exception("Processus peut pas commencer")
+            
         # Reset si demandé
         if request.is_reset:
             self._log("RESET DU PROCESSUS")

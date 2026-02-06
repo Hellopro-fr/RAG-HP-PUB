@@ -8,11 +8,13 @@ const getApiBasePath = () => {
 };
 
 export interface SirenCompanyData {
-  siren: string;
-  name: string;
-  address: string;
+  siren     : string;
+  siret     : string;
+  name      : string;
+  address   : string;
   postalCode: string;
-  city: string;
+  city      : string;
+  naf       : string;
 }
 
 export interface SirenSearchParams {
@@ -24,15 +26,15 @@ export interface SirenSearchParams {
  */
 interface InseeV2Response {
   status: string;
-  nb: number;
-  max: number;
+  nb    : number;
+  max   : number;
   result: Array<{
-    naf: string;
-    siret: string;
-    nomen: string;
-    cp: string;
+    naf    : string;
+    siret  : string;
+    nomen  : string;
+    cp     : string;
     adresse: string;
-    ville: string;
+    ville  : string;
   }>;
 }
 
@@ -53,10 +55,12 @@ function parseInseeV2Response(data: InseeV2Response): SirenCompanyData[] {
 
       companies.push({
         siren,
+        siret: company.siret,
         name: company.nomen,
         address: company.adresse,
         postalCode: company.cp,
         city: company.ville,
+        naf: company.naf,
       });
     });
 
@@ -135,6 +139,8 @@ export async function searchCompanyBySiren(
  */
 export interface SelectCompanyParams {
   siren: string;
+  siret: string;
+  naf: string;
   name: string;
   address: string;
   postalCode: string;
@@ -157,10 +163,12 @@ export async function selectCompany(
     return {
       data: {
         siren: params.siren,
+        siret: params.siret,
         name: params.name,
         address: params.address,
         postalCode: params.postalCode,
         city: params.city,
+        naf: params.naf || '',
       },
       error: null,
     };

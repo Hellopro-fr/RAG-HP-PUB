@@ -171,7 +171,11 @@ class Downloader:
             return product_data
 
         if isinstance(urls, str):
-            urls = [urls]
+            # Handle comma-separated strings (common issue)
+            if "," in urls:
+                 urls = [u.strip() for u in urls.split(",")]
+            else:
+                 urls = [urls]
         
         processed_images = []
         skipped_count = 0

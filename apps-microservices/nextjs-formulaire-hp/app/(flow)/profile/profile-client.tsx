@@ -20,9 +20,11 @@ export default function ProfileClient({
   otherCountries,
 }: ProfileClientProps) {
   const { goToSelection, goToQuestionnaire } = useFlowNavigation();
-  const { showLoader, submitProfile } = useProcessMatchingLogic();
+  const { showLoader, submitProfile, resetLoader } = useProcessMatchingLogic();
 
   const handleLoaderComplete = () => {
+    // Reset loader state before navigation
+    resetLoader();
     // Navigate to selection step after loader finishes (with GET params preserved)
     goToSelection();
   };

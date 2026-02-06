@@ -220,14 +220,8 @@ def get_base_prompt(node_types: list, relationship_types: list) -> str:
     )
 
 
-# --- PRODUCT PROMPT ---
-PRODUCT_NODES = ["CaracteristiqueTechnique", "Fournisseur", "Categorie"]
-PRODUCT_RELS = ["A_POUR_CARACTERISTIQUE", "EST_PROPOSE_PAR", "APPARTIENT_A"]
-
-PRODUCT_PROMPT = (
-    get_base_prompt(PRODUCT_NODES, PRODUCT_RELS)
-    + """
-### EXEMPLE
+EXEMPLE = """
+### EXEMPLE 1 (Sans balises META)
     **Input**: "Grue de levage mobile, capacité de charge de 2 à 5 tonnes. Dimensions: 1200x800x1500mm. Fabriquée en acier renforcé. Le châssis est équipé de : 2 roues avant fixes et 1 timon de direction. Livrée avec plusieurs accessoires : télécommande, élingues."
     **Output**:
     ```json
@@ -331,6 +325,152 @@ PRODUCT_PROMPT = (
             "valeur": "Élingues",
             "type_donnee": "text",
             "unite": null
+        }}
+        }}
+    ],
+    "relationships": [
+        {{ "source": "{source_placeholder}", "target": "capacite_de_charge_min2_max5_tonnes", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "longueur_1200_mm", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "largeur_800_mm", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "hauteur_1500_mm", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "materiau_acier_renforce", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "equipement_2_roues_avant_fixes", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "equipement_1_timon_de_direction", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "accessoire_telecommande", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "accessoire_elingues", "type": "A_POUR_CARACTERISTIQUE" }}
+    ]
+    }}
+    ```
+"""
+
+# --- PRODUCT PROMPT ---
+PRODUCT_NODES = ["CaracteristiqueTechnique", "Fournisseur", "Categorie"]
+PRODUCT_RELS = ["A_POUR_CARACTERISTIQUE", "EST_PROPOSE_PAR", "APPARTIENT_A"]
+
+PRODUCT_PROMPT = (
+    get_base_prompt(PRODUCT_NODES, PRODUCT_RELS)
+    + """
+### EXEMPLE
+    **Input**: "Grue de levage mobile, capacité de charge de 2 à 5 tonnes [META id_c='10' id_v='25']. Dimensions: 1200x800x1500mm [META id_c='12' id_v='30']. Fabriquée en acier renforcé [META id_c='15' id_v='N/A']. Le châssis est équipé de : 2 roues avant fixes et 1 timon de direction [META id_c='18' id_v='45']. Livrée avec plusieurs accessoires : télécommande, élingues [META id_c='20' id_v='50']."
+    **Output**:
+    ```json
+    {{
+    "nodes": [
+        {{
+        "id": "capacite_de_charge_min2_max5_tonnes",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Capacité de charge : 2 à 5 tonnes",
+            "label": "Capacité de charge",
+            "valeur_min": 2,
+            "valeur_max": 5,
+            "type_donnee": "numeric_range",
+            "unite": "tonnes",
+            "id_source_caracteristique": "10",
+            "id_source_valeur": "25"
+        }}
+        }},
+        {{
+        "id": "longueur_1200_mm",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Longueur : 1200mm",
+            "label": "Longueur",
+            "valeur": 1200,
+            "type_donnee": "numeric",
+            "unite": "mm",
+            "id_source_caracteristique": "12",
+            "id_source_valeur": "30"
+        }}
+        }},
+        {{
+        "id": "largeur_800_mm",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Largeur : 800mm",
+            "label": "Largeur",
+            "valeur": 800,
+            "type_donnee": "numeric",
+            "unite": "mm",
+            "id_source_caracteristique": "12",
+            "id_source_valeur": "30"
+        }}
+        }},
+        {{
+        "id": "hauteur_1500_mm",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Hauteur : 1500mm",
+            "label": "Hauteur",
+            "valeur": 1500,
+            "type_donnee": "numeric",
+            "unite": "mm",
+            "id_source_caracteristique": "12",
+            "id_source_valeur": "30"
+        }}
+        }},
+        {{
+        "id": "materiau_acier_renforce",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Matériau : Acier renforcé",
+            "label": "Materiaux",
+            "valeur": "Acier renforcé",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "15"
+        }}
+        }},
+        {{
+        "id": "equipement_2_roues_avant_fixes",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Équipement : 2 roues avant fixes",
+            "label": "Équipement",
+            "valeur": "2 roues avant fixes",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "18",
+            "id_source_valeur": "45"
+        }}
+        }},
+        {{
+        "id": "equipement_1_timon_de_direction",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Équipement : 1 timon de direction",
+            "label": "Équipement",
+            "valeur": "1 timon de direction",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "18",
+            "id_source_valeur": "45"
+        }}
+        }},
+        {{
+        "id": "accessoire_telecommande",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Accessoire : Télécommande",
+            "label": "Accessoire",
+            "valeur": "Télécommande",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "20",
+            "id_source_valeur": "50"
+        }}
+        }},
+        {{
+        "id": "accessoire_elingues",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Accessoire : Élingues",
+            "label": "Accessoire",
+            "valeur": "Élingues",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "20",
+            "id_source_valeur": "50"
         }}
         }}
     ],

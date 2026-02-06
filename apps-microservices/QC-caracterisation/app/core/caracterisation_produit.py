@@ -634,6 +634,7 @@ class CaracterisationProduitGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
                     "error_message": f"Catégorie {id_categorie} non trouvée",
                     "tracking_file": self.tracking_file
                 }
@@ -658,6 +659,7 @@ class CaracterisationProduitGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
                     "error_message": "Le processus a été arrêté manuellement",
                     "tracking_file": self.tracking_file
                 }
@@ -681,6 +683,12 @@ class CaracterisationProduitGenerator:
             {"id_categorie": id_categorie, "etape": self.ETAPE}
         ) or {}
         
+        # verification si on peut commencer le processus
+        can_start = process_data.get("can_start", False)
+        if not can_start:
+            self._log("Processus peut pas commencer")
+            raise Exception("Processus peut pas commencer")
+            
         # Reset si demandé
         if request.is_reset:
             self._log("RESET DU PROCESSUS")
@@ -849,6 +857,7 @@ class CaracterisationProduitGenerator:
                     {
                         "id_categorie": id_categorie,
                         "id_produit": id_produit,
+                        "etape": self.ETAPE,
                         "error_message": str(e),
                         "tracking_file": self.tracking_file
                     }

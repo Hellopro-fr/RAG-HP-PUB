@@ -2,7 +2,9 @@
 
 import { ArrowLeft, Send, Shield, Clock, CheckCircle } from "lucide-react";
 import { useState, useMemo } from "react";
-import CountryCodeSelect from "./CountryCodeSelect";
+import PhoneInput from "./PhoneInput";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import ProgressHeader from "./ProgressHeader";
 
 // Mock list of existing buyers in database
@@ -26,9 +28,11 @@ const STEPS = [
 const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
   const [formData, setFormData] = useState({
     email: "",
+    civility: "",
     firstName: "",
     lastName: "",
     countryCode: "+33",
+    id_pays_tel: 1, // France par défaut
     phone: "",
     message: "",
   });
@@ -53,14 +57,17 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Show additional fields only if email is valid and not an existing buyer
+  const showAdditionalFields = isEmailValid && !isExistingBuyer;
+
+  const isFormValid = !showAdditionalFields || !!formData.civility;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFormValid) return;
     // Handle form submission
     console.log("Form submitted:", formData);
   };
-
-  // Show additional fields only if email is valid and not an existing buyer
-  const showAdditionalFields = isEmailValid && !isExistingBuyer;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -129,6 +136,27 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
               {/* Additional fields - only shown if email is valid and not existing buyer */}
               {showAdditionalFields && (
                 <>
+                  {/* Civilité */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
+                      Civilité *
+                    </label>
+                    <RadioGroup
+                      value={formData.civility}
+                      onValueChange={(value) => setFormData({ ...formData, civility: value })}
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="mr" id="civility-mr-cfs" />
+                        <Label htmlFor="civility-mr-cfs">Monsieur</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="mme" id="civility-mme-cfs" />
+                        <Label htmlFor="civility-mme-cfs">Madame</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label
@@ -167,28 +195,18 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
                   </div>
 
                   <div>
-                    <label
-                      htmlFor="phone"
-                      className="block text-sm font-medium text-foreground mb-1.5"
-                    >
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
                       Téléphone *
                     </label>
-                    <div className="flex gap-2">
-                      <CountryCodeSelect
-                        value={formData.countryCode}
-                        onChange={(value) => setFormData({ ...formData, countryCode: value })}
-                      />
-                      <input
-                        type="tel"
-                        id="phone"
-                        name="phone"
-                        required
-                        value={formData.phone}
-                        onChange={handleChange}
-                        className="flex-1 rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                        placeholder="6 12 34 56 78"
-                      />
-                    </div>
+                    <PhoneInput
+                      value={formData.phone}
+                      countryCode={formData.countryCode}
+                      countryId={formData.id_pays_tel}
+                      onValueChange={(value) => setFormData((prev) => ({ ...prev, phone: value }))}
+                      onCountryCodeChange={(code) => setFormData((prev) => ({ ...prev, countryCode: code }))}
+                      onCountryIdChange={(id) => setFormData((prev) => ({ ...prev, id_pays_tel: id }))}
+                      required
+                    />
                   </div>
                 </>
               )}
@@ -208,7 +226,8 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
               {/* Submit button */}
               <button
                 type="submit"
-                className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2"
+                disabled={!isFormValid}
+                className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send className="h-5 w-5" />
                 Envoyer ma demande

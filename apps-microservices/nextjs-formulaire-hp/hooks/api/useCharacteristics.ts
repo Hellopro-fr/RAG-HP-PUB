@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { basePath } from '@/lib/utils';
-import type { CharacteristicDefinition, CharacteristicsMap } from '@/types/characteristics';
+import type { CharacteristicsMap } from '@/types/characteristics';
 
 const getApiBasePath = () => basePath || '';
 
@@ -29,16 +29,29 @@ async function fetchCharacteristics(categoryId: number): Promise<Characteristics
   const data = await response.json();
 
   // Transformer le tableau en Map indexée par ID pour accès O(1)
-  const characteristicsArray: CharacteristicDefinition[] = data.response || [];
+  // L'API peut retourner 'id' ou 'id_caracteristique' pour l'ID de la caractéristique
+  // et 'id' ou 'id_valeur' pour l'ID des valeurs
+  const characteristicsArray = data.response || [];
   const characteristicsMap: CharacteristicsMap = {};
 
   for (const char of characteristicsArray) {
-    characteristicsMap[Number(char.id)] = {
-      ...char,
-      id: Number(char.id),
-      valeurs: char.valeurs.map(v => ({
-        ...v,
-        id: Number(v.id),
+    // Récupérer l'ID depuis 'id' ou 'id_caracteristique'
+    const charId = Number((char as any).id_caracteristique || char.id);
+
+    if (isNaN(charId)) {
+      console.warn('Invalid characteristic ID:', char);
+      continue;
+    }
+
+    characteristicsMap[charId] = {
+      id: charId,
+      nom: char.nom,
+      unite: char.unite,
+      type: char.type,
+      valeurs: (char.valeurs || []).map((v: any) => ({
+        // Récupérer l'ID depuis 'id' ou 'id_valeur'
+        id: Number(v.id_valeur || v.id),
+        valeur: v.valeur,
       })),
     };
   }

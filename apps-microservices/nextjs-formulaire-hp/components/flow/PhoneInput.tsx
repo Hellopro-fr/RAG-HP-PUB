@@ -12,8 +12,10 @@ import {
 interface PhoneInputProps {
   value: string;
   countryCode: string;
+  countryId?: number;
   onValueChange: (value: string) => void;
   onCountryCodeChange: (code: string) => void;
+  onCountryIdChange?: (id: number) => void;
   error?: string;
   required?: boolean;
   disabled?: boolean;
@@ -23,8 +25,10 @@ interface PhoneInputProps {
 const PhoneInput = ({
   value,
   countryCode,
+  countryId,
   onValueChange,
   onCountryCodeChange,
+  onCountryIdChange,
   error,
   required = false,
   disabled = false,
@@ -34,7 +38,7 @@ const PhoneInput = ({
   const [touched, setTouched] = useState(false);
 
   const config = getCountryConfig(countryCode);
-  const placeholder = config?.placeholder || '123 456 789';
+  const placeholder = config?.placeholder || '';
 
   // Valider le numéro quand il change ou quand le pays change
   useEffect(() => {
@@ -58,13 +62,27 @@ const PhoneInput = ({
     }
   };
 
-  const handleCountryChange = (newCode: string) => {
+  const handleCountryChange = (newCode: string, newCountryId: number) => {
     onCountryCodeChange(newCode);
-    // Reformater le numéro avec le nouveau pays
+    onCountryIdChange?.(newCountryId);
+
+    // Réinitialiser l'erreur lors du changement de pays
+    setInternalError(undefined);
+    setTouched(false);
+
+    // Vérifier si le nouveau pays a un masque défini
+    const newConfig = getCountryConfig(newCode);
+
     if (value) {
       const cleaned = value.replace(/\D/g, '');
-      const formatted = formatPhoneNumber(cleaned, newCode);
-      onValueChange(formatted);
+      if (newConfig) {
+        // Pays avec masque : reformater avec le nouveau masque
+        const formatted = formatPhoneNumber(cleaned, newCode);
+        onValueChange(formatted);
+      } else {
+        // Pays sans masque : garder les chiffres bruts ou vider si trop différent
+        onValueChange(cleaned);
+      }
     }
   };
 
@@ -74,7 +92,11 @@ const PhoneInput = ({
   return (
     <div className={className}>
       <div className="flex gap-2">
-        <CountryCodeSelect value={countryCode} onChange={handleCountryChange} />
+        <CountryCodeSelect
+          value={countryCode}
+          countryId={countryId}
+          onChange={handleCountryChange}
+        />
         <div className="flex-1">
           <input
             type="tel"

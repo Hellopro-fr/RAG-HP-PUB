@@ -18,6 +18,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps-microservices/nextjs-formulaire-hp/ .
 
+# IMPORTANT: NODE_ENV=production permet à Next.js de charger .env.production
+ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
