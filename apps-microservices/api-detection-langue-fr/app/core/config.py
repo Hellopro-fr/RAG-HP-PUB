@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     
     # NLP Detection
     NLP_MIN_CONFIDENCE: float = 0.5
-    NLP_MIN_TEXT_LENGTH: int = 50  # caractères minimum pour NLP
+    NLP_MIN_TEXT_LENGTH: int = 200  # caractères minimum pour NLP
     
     # Batch Processing
     BATCH_MAX_URLS: int = 100

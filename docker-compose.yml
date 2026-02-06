@@ -553,6 +553,7 @@ services:
     # TODO: à supprimer en PROD
     volumes:
       - ./apps-microservices/api-detection-langue-fr:/app:rw
+      - /mnt/data/models/fasttext:/app/models
     ports:
       - "8999:8999"
     env_file:
