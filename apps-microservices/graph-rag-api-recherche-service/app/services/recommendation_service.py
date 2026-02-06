@@ -1010,6 +1010,8 @@ class RecommendationService:
 
                         # Extract value and unit from matched nodes if available
                         valeur = None
+                        valeur_min = None
+                        valeur_max = None
                         unite = None
                         type_carac = 2  # Default to textuelle
                         id_valeurs = []
