@@ -898,7 +898,7 @@ class RecommendationService:
              CASE WHEN denominator = 0 THEN 0.0 ELSE (numerator / denominator) END AS global_score
         
         ORDER BY global_score DESC
-        LIMIT $top_k
+        LIMIT $top_k + 4
         
         // Collect all scored products
         WITH collect({node: p, details: details, global_score: global_score}) AS all_products
@@ -918,14 +918,17 @@ class RecommendationService:
         
         // First alias the node, then project the node data
         WITH all_products, p_top.node AS top_node, p_top.global_score AS top_score, p_top.details AS top_details
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details
+        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id
         WITH all_products, collect({
             product_data: top_product_data,
             score: top_score,
             details: top_details
-        }) AS top_p
+        }) AS top_p, collect(top_id) AS top_p_ids
         
-        UNWIND all_products AS prod
+        // Filter out top_p products from all_products and limit to top_k
+        WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
+        
+        UNWIND filtered_products AS prod
         WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
         RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
         """
