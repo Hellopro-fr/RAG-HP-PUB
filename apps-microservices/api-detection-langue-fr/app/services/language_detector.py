@@ -12,7 +12,15 @@ class LanguageDetector:
     - Analyse des balises HTML (lang, meta)
     - Détection NLP par contenu textuel (langdetect + langid)
     """
+    # Mots fonctionnels français très fréquents (impossible à confondre)
+    FRENCH_STOPWORDS = {
+        'le', 'la', 'les', 'de', 'des', 'un', 'une', 'du', 'pour', 
+        'sur', 'avec', 'dans', 'par', 'sans', 'est', 'sont', 'et',
+        'ou', 'mais', 'si', 'ce', 'cette', 'ces', 'leur', 'leurs',
+        'au', 'aux', 'qui', 'que', 'dont', 'où'
+    }
     
+
     def __init__(self):
         # Configuration langid pour optimiser la détection français
         langid.set_languages(['fr', 'en', 'de', 'es', 'it', 'pt', 'nl'])
@@ -86,11 +94,33 @@ class LanguageDetector:
         
         return None
     
+    
+    def _compute_french_signal(self, text: str) -> float:
+        """
+        Calcule un score basé sur la présence de mots fonctionnels français.
+        Retourne un score entre 0 et 1.
+        """
+        text_lower = text.lower()
+        words = re.findall(r'\b\w+\b', text_lower)
+        
+        if len(words) < 10:
+            return 0.0
+        
+        # Compter les mots fonctionnels français
+        french_word_count = sum(1 for word in words if word in self.FRENCH_STOPWORDS)
+        
+        # Ratio de mots français
+        french_ratio = french_word_count / len(words)
+        
+        # Normaliser avec une sigmoid pour avoir un score plus exploitable
+        # Si >5% de mots français → signal fort
+        return min(1.0, french_ratio * 20)
+    
     def detect_from_text_content(self, html: str) -> Optional[dict]:
         """
         Détecte la langue par analyse NLP du contenu textuel visible.
         
-        Utilise langdetect (Google) et langid (ML) avec vote majoritaire.
+        Utilise langdetect (Google) et langid (ML) avec vote majoritaire amélioré.
         """
         if not html:
             return None
@@ -106,7 +136,7 @@ class LanguageDetector:
             text = soup.get_text(separator=' ', strip=True)
             
             # Vérifier longueur minimale
-            if len(text) < settings.NLP_MIN_TEXT_LENGTH:
+            if len(text) < 200:
                 return None
             
             # Limiter le texte analysé (performance)
@@ -124,35 +154,60 @@ class LanguageDetector:
                 pass
             
             # Détection avec langid
-            langid_result, langid_confidence = langid.classify(text)
-            # Normaliser le score langid (il retourne un score négatif)
-            langid_confidence = 1 / (1 + abs(langid_confidence))
+            langid_result, langid_score = langid.classify(text)
+            # Normaliser le score langid (transformation plus douce)
+            # langid retourne des scores négatifs, plus le score est proche de 0, plus c'est confiant
+            langid_confidence = max(0.0, 1 - abs(langid_score) / 100)
             
-            # Vote majoritaire avec pondération
+            # Signal français par analyse lexicale
+            french_signal = self._compute_french_signal(text)
+            
+            print(f"French signal: {french_signal:.3f}")
+            print(f"Langdetect: {langdetect_result} ({langdetect_confidence:.3f})")
+            print(f"Langid: {langid_result} ({langid_confidence:.3f})")
+            
+            # Vote pondéré amélioré
             results = {}
+            
+            # Langdetect avec poids modéré (peut être trompé par mots techniques)
             if langdetect_result:
-                results[langdetect_result] = results.get(langdetect_result, 0) + langdetect_confidence
+                results[langdetect_result] = results.get(langdetect_result, 0) + (langdetect_confidence * 0.4)
+            
+            # Langid avec poids renforcé (meilleur sur textes techniques)
             if langid_result:
-                results[langid_result] = results.get(langid_result, 0) + langid_confidence
+                results[langid_result] = results.get(langid_result, 0) + (langid_confidence * 0.6)
+            
+            # Bonus français si signal lexical fort
+            if french_signal > 0.3:
+                results['fr'] = results.get('fr', 0) + (french_signal * 0.5)
             
             if not results:
                 return None
             
             # Trouver la langue dominante
             best_lang = max(results, key=results.get)
-            avg_confidence = results[best_lang] / (2 if langdetect_result and langid_result else 1)
+            
+            # Calculer la confiance finale
+            total_weight = sum(results.values())
+            confidence = results[best_lang] / total_weight if total_weight > 0 else 0
+            
+            # Détails pour debugging
+            details = {
+                'langdetect': {'lang': langdetect_result, 'confidence': round(langdetect_confidence, 3)} if langdetect_result else None,
+                'langid': {'lang': langid_result, 'confidence': round(langid_confidence, 3)} if langid_result else None,
+                'french_signal': round(french_signal, 3),
+                'weighted_scores': {k: round(v, 3) for k, v in results.items()}
+            }
             
             return {
                 'method': 'nlp_detection',
                 'lang': best_lang,
-                'confidence': round(avg_confidence, 3),
-                'details': {
-                    'langdetect': {'lang': langdetect_result, 'confidence': round(langdetect_confidence, 3)} if langdetect_result else None,
-                    'langid': {'lang': langid_result, 'confidence': round(langid_confidence, 3)} if langid_result else None
-                }
+                'confidence': round(confidence, 3),
+                'details': details
             }
             
         except Exception as e:
+            print(f"Erreur détection langue: {e}")
             return None
     
     def detect_combined(self, html: str, use_nlp: bool = True) -> dict:

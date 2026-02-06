@@ -211,6 +211,8 @@ class Question1Generator:
         self, 
         id_categorie: str, 
         nom_rubrique: str,
+        fil_d_ariane: str,
+        descriptif_rubrique: str,
         process_data: Dict[str, Any]
     ) -> Optional[str]:
         """
@@ -229,12 +231,14 @@ class Question1Generator:
         #récupération du prompt (copie du prompt chargé au début)
         prompt_config = self.prompt_question1.copy()
 
-        
+        descriptif_rubrique = "**Définition de la catégorie \"Chambre froide\" :** Une chambre froide est une enceinte isolée et réfrigérée, conçue pour le stockage et la conservation professionnelle de produits à température contrôlée, positive (généralement entre 0°C et +10°C) ou négative (généralement entre -18°C et -26°C). Elle se distingue des équipements domestiques par sa capacité, sa modularité et ses performances adaptées aux exigences B2B. Principales caractéristiques pour la classification : * **Fonction** : Conservation d'aliments (secteur agroalimentaire, restauration), de produits pharmaceutiques, de spécimens ou d'autres marchandises sensibles. * **Technologie** : Système frigorifique composé d'un compresseur, d'un condenseur, d'un détendeur et d'un évaporateur. Peut être autonome (groupe intégré) ou split (groupe déporté). * **Construction** : Structure modulaire et démontable en panneaux sandwich isolés (polyuréthane), permettant une installation flexible et l'ajustement du volume. Existe aussi en versions compactes fixes ou mobiles. * **Applications clés** : Maintien de la chaîne du froid, prolongation de la durée de vie des denrées, stockage industriel, laboratoires, morgues. Cette catégorie regroupe donc les solutions de froid stationnaire de capacité moyenne à importante, destinées à un usage professionnel intensif."
         # Préparer le prompt
         prompt_text = prompt_config["contenu_prompt"]
         prompt_text = prompt_text.replace("{CATEGORIE}", nom_rubrique)
+        prompt_text = prompt_text.replace("{FIL_D_ARIANE}", fil_d_ariane)
+        prompt_text = prompt_text.replace("{DESCRIPTIF_CATEGORIE}", descriptif_rubrique)
         
-        self._log(f"Prompt: {prompt_text[:200]}...")
+        self._log(f"Prompt: {prompt_text}")
         
         # Appeler le LLM gemini
         gemini = GeminiProvider(
@@ -355,6 +359,8 @@ class Question1Generator:
             raise ValueError(f"Catégorie {id_categorie} non trouvée")
                     
         nom_rubrique = category_info.get("nom_rubrique", "")
+        fil_d_ariane = category_info.get("barre_chainage", "")
+        descriptif_rubrique = category_info.get("description", "")
         
         # Initialiser le fichier de tracking
         self.tracking_file = utils.get_tracking_filepath(id_categorie)
@@ -409,7 +415,7 @@ class Question1Generator:
         processed_count = 0
 
         # Générer Question 1
-        res_insert = await self.generate_question1(id_categorie, nom_rubrique, process_data)
+        res_insert = await self.generate_question1(id_categorie, nom_rubrique, fil_d_ariane, descriptif_rubrique, process_data)
         
         if res_insert == "already_done":
             self._log("Question 1 déjà générée")

@@ -32,6 +32,7 @@ export interface AcheteurData {
   mail: string;
   telephone: string;
   indicatif_tel?: string;
+  isKnown?: string;
 
   // Entreprise
   societe: string;
@@ -43,7 +44,7 @@ export interface AcheteurData {
   adresse?: string;
   code_postal: string;
   ville: string;
-  pays: string;
+  pays: number;
 
   // Profil
   statut: StatutAcheteur;
@@ -55,6 +56,7 @@ export interface AcheteurData {
   // Options
   website?: string;
   reception_alerte?: boolean;
+  naf?: string;
 }
 
 /**
@@ -99,6 +101,10 @@ export interface DemandeInfoPayload {
 
   // Demande IA
   demande_ia?: boolean;
+
+  id_rubrique?: number | string;
+
+  tab_matching_acheteur?: string;
 }
 
 /**
@@ -141,7 +147,7 @@ export interface DemandeInfoPHPPayload {
   'adresse-acheteur': string;
   'code-postal-acheteur': string;
   'ville-acheteur': string;
-  'pays-acheteur': string;
+  'pays-acheteur': number;
 
   // Fonction/Service
   fonction?: string;
@@ -150,10 +156,6 @@ export interface DemandeInfoPHPPayload {
 
   // Message
   'message-acheteur': string;
-
-  // Produit/Société
-  soc: string;
-  [key: `check_id_prod_soc_${string}`]: string;
 
   // Options
   souhait_devis_prod_sim?: string;
@@ -165,6 +167,8 @@ export interface DemandeInfoPHPPayload {
   abtest?: string;
   origine?: string;
   provenance_di?: string;
+
+  produits?: ProduitSelection[];
 
   // Anti-robot
   ddc_is_i?: string;

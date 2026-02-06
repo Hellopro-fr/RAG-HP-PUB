@@ -12,14 +12,6 @@ interface ProductComparisonModalProps {
   onClose: () => void;
 }
 
-const SPEC_LABELS = [
-  "Capacité",
-  "Type",
-  "Traverse",
-  "Alimentation",
-  "Hauteur de levée",
-];
-
 const ProductComparisonModal = ({
   products,
   selectedIds,
@@ -27,6 +19,15 @@ const ProductComparisonModal = ({
   onClose,
 }: ProductComparisonModalProps) => {
   const [currentProductIndex, setCurrentProductIndex] = useState(0);
+
+  // Collecter tous les labels uniques des critères demandés (isRequested: true)
+  const allSpecLabels = Array.from(
+    new Set(
+      products.flatMap((p) =>
+        p.specs.filter((s) => s.isRequested).map((s) => s.label)
+      )
+    )
+  );
 
   const getSpecValue = (product: Supplier, label: string) => {
     const spec = product.specs.find((s) => s.label === label);
@@ -100,11 +101,6 @@ const ProductComparisonModal = ({
           <h3 className="font-semibold text-foreground text-sm">Caractéristiques</h3>
         </div>
         <div className="divide-y divide-border">
-          {/* Distance */}
-          <div className="flex justify-between items-center px-4 py-3">
-            <span className="text-sm text-muted-foreground">Distance</span>
-            <span className="text-sm font-medium text-foreground">{product.distance} km</span>
-          </div>
           {/* Certified */}
           <div className="flex justify-between items-center px-4 py-3">
             <span className="text-sm text-muted-foreground">Fournisseur certifié</span>
@@ -117,7 +113,7 @@ const ProductComparisonModal = ({
             </span>
           </div>
           {/* Specs */}
-          {SPEC_LABELS.map((label) => {
+          {allSpecLabels.map((label) => {
             const spec = getSpecValue(product, label);
             return (
               <div key={label} className="flex justify-between items-start px-4 py-3">
@@ -129,7 +125,11 @@ const ProductComparisonModal = ({
                         <span
                           className={cn(
                             "text-sm font-medium",
-                            spec.matches === false ? "text-amber-700" : "text-foreground"
+                            spec.matches === true
+                              ? "text-foreground"
+                              : spec.matches === false
+                              ? "text-amber-700"
+                              : "text-muted-foreground"
                           )}
                         >
                           {spec.value}
@@ -298,23 +298,6 @@ const ProductComparisonModal = ({
               </tr>
             </thead>
             <tbody>
-              {/* Distance row */}
-              <tr className="border-b border-border">
-                <td className="sticky left-0 z-10 bg-card border-r border-border p-4 text-sm font-medium text-foreground">
-                  Distance
-                </td>
-                {products.map((product) => (
-                  <td
-                    key={product.id}
-                    className={cn(
-                      "p-4 text-center text-sm",
-                      selectedIds.has(product.id) && "bg-primary/5"
-                    )}
-                  >
-                    {product.distance} km
-                  </td>
-                ))}
-              </tr>
               {/* Certified row */}
               <tr className="border-b border-border">
                 <td className="sticky left-0 z-10 bg-card border-r border-border p-4 text-sm font-medium text-foreground">
@@ -337,7 +320,7 @@ const ProductComparisonModal = ({
                 ))}
               </tr>
               {/* Spec rows */}
-              {SPEC_LABELS.map((label) => (
+              {allSpecLabels.map((label) => (
                 <tr key={label} className="border-b border-border">
                   <td className="sticky left-0 z-10 bg-card border-r border-border p-4 text-sm font-medium text-foreground">
                     {label}
@@ -356,7 +339,11 @@ const ProductComparisonModal = ({
                           <div className="flex flex-col items-center gap-1">
                             <span
                               className={cn(
-                                spec.matches === false && "text-amber-700"
+                                spec.matches === true
+                                  ? "text-foreground"
+                                  : spec.matches === false
+                                  ? "text-amber-700"
+                                  : "text-muted-foreground"
                               )}
                             >
                               {spec.value}

@@ -39,7 +39,7 @@ services:
       timeout: 5s
       retries: 24 # Wait up to 4 minutes for the model to load
       start_period: 30s
-    shm_size: '16g'
+    shm_size: "16g"
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
     restart: unless-stopped
@@ -67,7 +67,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['1']
+              device_ids: ["1"]
               # count: all
               capabilities: [gpu]
     volumes:
@@ -109,7 +109,15 @@ services:
       init-elasticsearch:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "-u", "elastic:${ELASTIC_PASSWORD}", "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s"]
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "-u",
+          "elastic:${ELASTIC_PASSWORD}",
+          "http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s",
+        ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -147,7 +155,7 @@ services:
       replicas: 10
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 1G
     # ports:
     #   - "8505:8000" # Removed to allow scaling (avoid port conflict). Access via API Gateway.
@@ -187,7 +195,7 @@ services:
       dockerfile: ./apps-microservices/embedding-model-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
     # Le GPU n'est plus nécessaire ici, Triton s'en charge !
-      # - TRITON_URL=triton-server:8001
+    # - TRITON_URL=triton-server:8001
     env_file:
       - .env
     environment:
@@ -201,7 +209,8 @@ services:
     #     condition: service_healthy
     networks:
       - services-net
-      - graph-rag-net
+      - services-ext-net
+      - services-global-net
     logging: *logging_defaults
 
   reranking-model-service:
@@ -412,7 +421,6 @@ services:
       - services-net
     logging: *logging_defaults
 
-
   api-classification-service:
     build:
       context: .
@@ -525,7 +533,7 @@ services:
     networks:
       - services-net
     logging: *logging_defaults
-  
+
   api-html-recherche-service:
     build:
       context: .
@@ -542,12 +550,12 @@ services:
     env_file:
       - .env
     logging: *logging_defaults
-  
+
   api-detection-langue-fr-service:
     build:
       context: .
       dockerfile: ./apps-microservices/api-detection-langue-fr/Dockerfile
-    container_name: api-detection-langue-fr
+    container_name: api-detection-langue-fr-service
     profiles: ["app"] # Profile for the main application stack
     restart: unless-stopped
     # TODO: à supprimer en PROD
@@ -558,6 +566,8 @@ services:
     env_file:
       - .env
     logging: *logging_defaults
+    networks:
+      - services-net
 
   api-gateway-service:
     build:
@@ -689,12 +699,12 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']
+              device_ids: ["0"]
               capabilities: [gpu]
     logging: *logging_defaults
 
   deepseek-ocr:
-    build: 
+    build:
       context: .
       dockerfile: ./apps-microservices/DeepSeek-OCR/Dockerfile
     container_name: deepseek-ocr-vllm
@@ -702,13 +712,13 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - /mnt/data/models:/app/models  # Mount directory for model weights
-      - ./apps-microservices/DeepSeek-OCR/outputs:/app/outputs  # Mount directory for output files
+      - /mnt/data/models:/app/models # Mount directory for model weights
+      - ./apps-microservices/DeepSeek-OCR/outputs:/app/outputs # Mount directory for output files
     environment:
       - CUDA_VISIBLE_DEVICES=0
-      - MODEL_PATH=/app/models/deepseek-ocr  # Update with your model path
-      - MAX_CONCURRENCY=50  # Adjust based on your GPU memory
-      - GPU_MEMORY_UTILIZATION=0.85  # Adjust based on your GPU memory
+      - MODEL_PATH=/app/models/deepseek-ocr # Update with your model path
+      - MAX_CONCURRENCY=50 # Adjust based on your GPU memory
+      - GPU_MEMORY_UTILIZATION=0.85 # Adjust based on your GPU memory
     deploy:
       resources:
         reservations:
@@ -768,7 +778,7 @@ services:
     networks:
       - services-net
     logging: *logging_defaults
-  
+
   template-llm-service:
     build:
       context: .
@@ -802,7 +812,7 @@ services:
     networks:
       - services-net
     logging: *logging_defaults
-              
+
   embedding-service:
     build:
       context: .
@@ -887,7 +897,7 @@ services:
     networks:
       - services-net
     logging: *logging_defaults
-  
+
   product-database-qdrant-service:
     build:
       context: .
@@ -930,7 +940,7 @@ services:
     deploy:
       replicas: 4
     logging: *logging_defaults
-  
+
   document-database-qdrant-service:
     build:
       context: .
@@ -1083,7 +1093,7 @@ services:
     networks:
       - services-net
     logging: *logging_defaults
-  
+
   dlq-requeuer-tool:
     build:
       context: .
@@ -1124,7 +1134,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - grafana-storage:/var/lib/grafana  # Persist Grafana data
+      - grafana-storage:/var/lib/grafana # Persist Grafana data
       - ./grafana/provisioning:/etc/grafana/provisioning
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN}
@@ -1161,8 +1171,8 @@ services:
       replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
       resources:
         limits:
-          cpus: '1.0' # Limit to 1 CPU core
-          memory: 6G   # Limit to 6GB of RAM
+          cpus: "1.0" # Limit to 1 CPU core
+          memory: 6G # Limit to 6GB of RAM
     networks:
       - services-net
     logging: *logging_defaults
@@ -1226,7 +1236,7 @@ services:
     networks:
       - services-net
     logging: *logging_defaults
-    
+
   crawler-monitor-frontend:
     build:
       context: ./apps-microservices/crawler-monitor-frontend
@@ -1265,7 +1275,11 @@ services:
       - services-ext-net
       - services-global-net
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1",
+        ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -1413,7 +1427,7 @@ services:
       MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
       PROMETHEUS_PORT: 8563
     deploy:
-      replicas: 2
+      replicas: 3
     networks:
       - services-net
 
@@ -1565,7 +1579,7 @@ services:
       - services-net
       - services-ext-net
       - services-global-net
-      
+
   # db:
   #   image: mysql:8.0
   #   container_name: mep-db
@@ -1596,7 +1610,36 @@ services:
   #     - db
   #   networks:
   #     - services-net
-  
+
+  # =====================================================================
+  # QC TRACKING SERVICE - Interface de visualisation des fichiers tracking
+  # Lancez avec: docker compose up -d --build qc-tracking-service
+  # =====================================================================
+
+  qc-tracking-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-tracking-service/Dockerfile
+    container_name: qc-tracking-service
+    profiles: ["qc"]
+    restart: unless-stopped
+    ports:
+      - "8590:8590"
+    environment:
+      - TRACKING_BASE_PATH=/app/tracking
+    volumes:
+      # Monte tous les dossiers tracking des services QC (paths VM)
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking/question1:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking/question2aN:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking/caracteristiques:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking/valeurs:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking/enrichissement:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking/equivalence:ro
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking/caracterisation:ro
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # =====================================================================
   # QC PIPELINE SERVICES (Question-Caractéristique)
   # Lancez avec: docker-compose --profile qc up -d
@@ -1605,7 +1648,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-question1/Dockerfile
-    container_name: qc-generation-question1
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1613,6 +1655,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1621,7 +1665,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-question2aN/Dockerfile
-    container_name: qc-generation-question2aN
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1629,6 +1672,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1637,7 +1682,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-caracteristiques/Dockerfile
-    container_name: qc-generation-caracteristiques
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1645,6 +1689,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1653,7 +1699,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-generation-valeurs/Dockerfile
-    container_name: qc-generation-valeurs
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1661,6 +1706,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1669,7 +1716,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-enrichissement/Dockerfile
-    container_name: qc-enrichissement
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1677,6 +1723,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
@@ -1685,7 +1733,6 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-equivalence/Dockerfile
-    container_name: qc-equivalence
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1693,15 +1740,16 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
-    
+
   qc-caracterisation:
     build:
       context: .
       dockerfile: ./apps-microservices/QC-caracterisation/Dockerfile
-    container_name: qc-caracterisation
     profiles: ["qc-service"]
     restart: unless-stopped
     environment:
@@ -1709,10 +1757,11 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking
+    deploy:
+      replicas: 2
     networks:
       - services-net
     logging: *logging_defaults
-    
 
 networks:
   services-net:

@@ -36,12 +36,24 @@ async function prefetchCharacteristics(
     const characteristicsMap: CharacteristicsMap = {};
 
     for (const char of characteristicsArray) {
-      characteristicsMap[Number(char.id)] = {
+      // L'API retourne id_caracteristique, pas id
+      const charId = Number((char as any).id_caracteristique || char.id);
+
+      if (isNaN(charId)) {
+        console.warn('Invalid characteristic ID:', char);
+        continue;
+      }
+
+      characteristicsMap[charId] = {
         ...char,
-        id: Number(char.id),
-        valeurs: char.valeurs.map((v: { id: string | number; valeur: string }) => ({
-          ...v,
-          id: Number(v.id),
+        id: charId,
+        nom: char.nom,
+        unite: char.unite,
+        type: char.type,
+        valeurs: char.valeurs.map((v: any) => ({
+          // L'API retourne id_valeur, pas id
+          id: Number(v.id_valeur || v.id),
+          valeur: v.valeur,
         })),
       };
     }
@@ -253,17 +265,16 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     if (!currentQuestion) return;
     const questionCode = currentQuestion.code || `Q${currentIndex + 1}`;
 
-    // Log de debug pour voir ce qui arrive
-    console.log("SubmitAnswer - Selected Codes:", answerCodes);
-    console.log("SubmitAnswer - Current Question Answers:", currentQuestion.answers);
+    // Trouver les réponses sélectionnées
+    const matchedAnswers = currentQuestion.answers
+      .filter((a) => answerCodes.includes(a.code));
 
-    const selectedEquivalences = currentQuestion.answers
-      .filter((a) => answerCodes.includes(a.code)) // On compare code à code
-      .flatMap((a) => a.equivalence || []);
-
-    console.log("Extracted Equivalences:", selectedEquivalences);
+    // Extraire les équivalences de manière robuste
+    const selectedEquivalences = matchedAnswers
+      .flatMap((a) => Array.isArray(a.equivalence) ? a.equivalence : []);
 
     setDynamicAnswer(questionCode, answerCodes, selectedEquivalences);
+
     setCurrentIndex((prev) => prev + 1);
   };
 

@@ -84,36 +84,62 @@ async def get_cached_category_by_id(category_id: str):
     """Récupère le résumé d'une catégorie spécifique en cache Redis par son ID"""
     import hashlib
     try:
+        request_start = time.time()
+
         # Générer le hash court de la catégorie (même logique que dans classifier.py)
         data_hash = hashlib.md5(category_id.encode()).hexdigest()[:12]
         cache_key_prefix = f"cache:cat_summary:{data_hash}"
 
         # Chercher toutes les clés qui commencent par ce préfixe
+        scan_start = time.time()
         cache_keys = await scan_keys_by_prefix(cache_key_prefix)
+        scan_duration = (time.time() - scan_start) * 1000  # en ms
+        logger.info(f"[Redis] scan_keys_by_prefix('{cache_key_prefix}') - {len(cache_keys) if cache_keys else 0} clés trouvées en {scan_duration:.2f}ms")
 
         if not cache_keys:
+            total_duration = (time.time() - request_start) * 1000
+            logger.info(f"[Redis] Requête cache catégorie {category_id} - Aucun cache trouvé - Durée totale: {total_duration:.2f}ms")
             return {
                 "success": False,
                 "category_id": category_id,
                 "cache_key_prefix": cache_key_prefix,
                 "message": f"Aucun cache trouvé pour la catégorie {category_id}",
-                "data": None
+                "data": None,
+                "timing_ms": {
+                    "scan": round(scan_duration, 2),
+                    "total": round(total_duration, 2)
+                }
             }
 
         cached_data = []
+        get_json_times = []
         for key in cache_keys:
+            get_start = time.time()
             data = await get_json(key)
+            get_duration = (time.time() - get_start) * 1000
+            get_json_times.append(get_duration)
+            logger.info(f"[Redis] get_json('{key}') - {'données trouvées' if data else 'aucune donnée'} en {get_duration:.2f}ms")
             if data:
                 cached_data.append({
                     "cache_key": key,
                     "data": data
                 })
 
+        total_duration = (time.time() - request_start) * 1000
+        avg_get_time = sum(get_json_times) / len(get_json_times) if get_json_times else 0
+        logger.info(f"[Redis] Requête cache catégorie {category_id} - {len(cached_data)} résultats - Durée totale: {total_duration:.2f}ms (scan: {scan_duration:.2f}ms, get_json avg: {avg_get_time:.2f}ms)")
+
         return {
             "success": True,
             "category_id": category_id,
             "total_keys": len(cached_data),
-            "cached_data": cached_data
+            "cached_data": cached_data,
+            "timing_ms": {
+                "scan": round(scan_duration, 2),
+                "get_json_total": round(sum(get_json_times), 2),
+                "get_json_avg": round(avg_get_time, 2),
+                "total": round(total_duration, 2)
+            }
         }
     except Exception as e:
         logger.error(f"Erreur récupération cache catégorie {category_id}: {e}")

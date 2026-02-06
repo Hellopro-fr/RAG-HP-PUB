@@ -34,7 +34,8 @@ function profileTypeToStatut(profileType: ProfileType): StatutAcheteur {
  */
 function suppliersToProduitsSelection(
   selectedSupplierIds: string[],
-  suppliers: Supplier[]
+  suppliers: Supplier[],
+  data: LeadSubmission
 ): ProduitSelection[] {
   return selectedSupplierIds.map(id => {
     const supplier = suppliers.find(s => s.id === id);
@@ -45,8 +46,49 @@ function suppliersToProduitsSelection(
       id_societe: supplier?.id || id,
       nom_produit: supplier?.productName,
       nom_fournisseur: supplier?.supplierName,
+      info_acheteur_matching: construireTabMatchingAcheteur({  values: data, id_produit: supplier?.id || id , id_societe: supplier?.id || id  }),
     };
   });
+}
+
+
+function construireTabMatchingAcheteur({
+  values,
+  id_produit, id_societe
+}: {
+  values: LeadSubmission;
+  id_produit?: number | string;
+  id_societe?: number | string;
+}) {
+  let typologie = 1;
+
+  const {
+    contact,
+    profile,
+    answers,
+    selectedSupplierIds,
+    submittedAt,
+    userKnownStatus,
+    categoryId } = values;
+
+  const type_lead = id_produit ? "exclusif" : "apo";
+
+  const objectInfoAcheteur = {
+    id_acheteur     : '',
+    type_lead       : type_lead,
+    mail            : contact.email,
+    cp              : profile.postalCode || '',
+    pays            : profile.countryID || 1,
+    typologie       : profileTypeToStatut(profile.type),
+    id_rubrique     : categoryId || '0',
+    id_produit      : id_produit || '',
+    naf_acheteur    : profile.naf || '',
+    societe_originel: id_societe,
+  };
+
+  const infoAcheteur = JSON.stringify(objectInfoAcheteur);
+
+  return infoAcheteur;
 }
 
 interface UseLeadSubmissionOptions {
@@ -61,27 +103,30 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
     mutationFn: async (data: LeadSubmission) => {
       // Transformer les données vers le format DemandeInfoPayload
       const payload: DemandeInfoPayload = {
-        form_ab: 'form_ux_matching',
+        form_ab : 'form_ux_matching',
         acheteur: {
-          civilite: '',
-          nom: data.contact.lastName,
-          prenom: data.contact.firstName,
-          mail: data.contact.email,
-          telephone: data.contact.phone,
-          indicatif_tel: data.contact.countryCode || '+33',
-          societe: data.contact.company || data.profile.company?.name || data.profile.companyName || '',
-          id_siret_insee: data.profile.company?.siren,
-          code_postal: data.profile.postalCode || '',
-          ville: data.profile.city || '',
-          pays: data.profile.country || '1', // 1 = France par défaut
-          statut: profileTypeToStatut(data.profile.type),
+          civilite      : '',
+          nom           : data.contact.lastName,
+          prenom        : data.contact.firstName,
+          mail          : data.contact.email,
+          isKnown       : data.contact.isKnown ? '1'                                                          : '0',
+          telephone     : data.contact.phone,
+          indicatif_tel : data.contact.countryCode || '+33',
+          societe       : data.contact.company || data.profile.company?.name || data.profile.companyName || '',
+          id_siret_insee: data.profile.siret || '',
+          code_postal   : data.profile.postalCode || '',
+          ville         : data.profile.city || '',
+          pays          : data.profile.countryID || 1,                                                                // 1 = France par défaut
+          statut        : profileTypeToStatut(data.profile.type),
+          naf           : data.profile.naf || '',
         },
-        message: data.contact.message || 'Demande de devis via UX Matching',
-        produits: suppliersToProduitsSelection(data.selectedSupplierIds, suppliers),
-        criteres: data.answers,
+        message      : data.contact.message || 'Demande de devis via UX Matching',
+        produits     : suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data),
+        criteres     : data.answers,
         souhait_devis: true,
-        demande_ia: true,
+        demande_ia   : true,
         provenance_di: 'ux_matching',
+        id_rubrique  : data.categoryId || '0'
       };
 
       // Envoyer les demandes au PHP

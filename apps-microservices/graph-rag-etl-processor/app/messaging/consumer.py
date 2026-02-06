@@ -24,16 +24,16 @@ from datetime import datetime
 
 
 class Consumer:
-    """Async Consumer for Final ETL with Batch Processing and Deadlock Prevention."""
+    """Async Consumer for Final ETL with Parallel Batch Workers and Deadlock Prevention."""
 
     def __init__(self, connection: aio_pika.RobustConnection):
         self.connection = connection
         self.channel = None
         self.queue = None
 
-        # Batching state
+        # Batching state - shared queue for all workers
         self.batch_queue = asyncio.Queue()
-        self.batch_worker_task = None
+        self.batch_worker_tasks = []
 
         # Queue configuration
         self.exchange_name = settings.INPUT_EXCHANGE
@@ -48,11 +48,9 @@ class Consumer:
         """Setup channel and topology."""
         self.channel = await self.connection.channel()
 
-        # Prefetch slightly more than batch size
+        # Prefetch enough for all workers
         await self.channel.set_qos(
-            prefetch_count=(
-                settings.BATCH_SIZE * 2 if hasattr(settings, "BATCH_SIZE") else 50
-            )
+            prefetch_count=settings.BATCH_SIZE * settings.MAX_CONCURRENCY * 2
         )
 
         await self._setup_infrastructure()
@@ -194,7 +192,7 @@ class Consumer:
                 logging.error(f"❌ Error processing sequential item {g_id}: {e}")
                 await msg.nack(requeue=True)
 
-    async def _process_batch(self, batch: list):
+    async def _process_batch(self, batch: list, worker_id: int):
         """
         Execute a batch of ETL messages with Deadlock Prevention.
 
@@ -211,7 +209,7 @@ class Consumer:
         valid_items = []  # (message, statements_for_this_msg, graph_id)
 
         # 1. Prepare Statements
-        logging.info("Start processing batch")
+        logging.info(f"Worker {worker_id}: Start processing batch")
         for msg in batch:
             try:
                 body = msg.body.decode()
@@ -276,7 +274,7 @@ class Consumer:
 
             if batch_success:
                 logging.info(
-                    f"✅ ETL Batch executed successfully ({len(batch_statements)} statements, {len(no_deadlock_items)} items)"
+                    f"✅ Worker {worker_id}: ETL Batch executed successfully ({len(batch_statements)} statements, {len(no_deadlock_items)} items)"
                 )
                 logging.info(
                     "🕒 Write time : " + datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -287,29 +285,34 @@ class Consumer:
             else:
                 # Batch failed - fall back to sequential for all batch items
                 logging.warning(
-                    "⚠️ Batch failed. Switching to sequential processing for batch items."
+                    f"⚠️ Worker {worker_id}: Batch failed. Switching to sequential processing for batch items."
                 )
                 await self._process_items_sequentially(no_deadlock_items)
 
         # 4. Process potential deadlock items sequentially
         if deadlock_items:
             logging.info(
-                f"🔄 Processing {len(deadlock_items)} potential deadlock items sequentially..."
+                f"🔄 Worker {worker_id}: Processing {len(deadlock_items)} potential deadlock items sequentially..."
             )
             await self._process_items_sequentially(deadlock_items)
 
-    async def _batch_worker(self):
-        """Background task to flush batches."""
+    async def _batch_worker(self, worker_id: int):
+        """Background task to flush batches. Each worker operates independently."""
         batch = []
-        # Default batch settings if not in config
         batch_size = getattr(settings, "BATCH_SIZE", 50)
         batch_timeout = getattr(settings, "BATCH_TIMEOUT_SECONDS", 2.0)
 
+        logging.info(f"🚀 Batch worker {worker_id} started")
+
         while True:
             try:
-                # Wait for first item
-                item = await self.batch_queue.get()
-                batch.append(item)
+                # Wait for first item with a timeout to allow graceful shutdown
+                try:
+                    item = await asyncio.wait_for(self.batch_queue.get(), timeout=5.0)
+                    batch.append(item)
+                except asyncio.TimeoutError:
+                    # No items available, continue loop
+                    continue
 
                 # Collect more items
                 start_time = time.time()
@@ -326,7 +329,7 @@ class Consumer:
                         break
 
                 # Process
-                await self._process_batch(batch)
+                await self._process_batch(batch, worker_id)
 
                 # Mark done
                 for _ in batch:
@@ -334,29 +337,34 @@ class Consumer:
                 batch = []
 
             except asyncio.CancelledError:
+                logging.info(f"🛑 Batch worker {worker_id} cancelled")
                 break
             except Exception as e:
-                logging.error(f"Batch worker error: {e}")
+                logging.error(f"Batch worker {worker_id} error: {e}")
                 batch = []
 
     async def start_consuming(self):
-        """Start consumer and batch worker."""
+        """Start consumer and batch workers."""
         await self.setup()
 
-        # Start background worker
-        self.batch_worker_task = asyncio.create_task(self._batch_worker())
+        # Start multiple background workers
+        for i in range(settings.MAX_CONCURRENCY):
+            task = asyncio.create_task(self._batch_worker(i))
+            self.batch_worker_tasks.append(task)
 
-        logging.info(f"👂 ETL Consumer listening on: {self.queue_name}")
+        logging.info(
+            f"👂 ETL Consumer listening on: {self.queue_name} with {settings.MAX_CONCURRENCY} parallel batch workers"
+        )
 
         async with self.queue.iterator() as queue_iter:
             async for message in queue_iter:
                 await self.batch_queue.put(message)
 
     async def close(self):
-        if self.batch_worker_task:
-            self.batch_worker_task.cancel()
+        for task in self.batch_worker_tasks:
+            task.cancel()
             try:
-                await self.batch_worker_task
+                await task
             except asyncio.CancelledError:
                 pass
         if self.connection:

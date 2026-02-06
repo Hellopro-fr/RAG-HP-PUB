@@ -2,7 +2,9 @@
 
 import { ArrowLeft, ArrowRight, Paperclip, Send, UserCheck, X, Mic, MicOff, Shield, Clock, CheckCircle } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
-import CountryCodeSelect from "./CountryCodeSelect";
+import PhoneInput from "./PhoneInput";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { trackCustomNeedPageView, trackCustomNeedContactView } from "@/lib/analytics";
 
 // Mock list of existing buyers in database
@@ -24,9 +26,11 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
   const [isListening, setIsListening] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
+    civility: "",
     firstName: "",
     lastName: "",
     countryCode: "+33",
+    id_pays_tel: 1, // France par défaut
     phone: "",
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,8 +65,11 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const isFormValid = !showAdditionalFields || !!formData.civility;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFormValid) return;
     console.log("Form submitted:", { description, fileName, ...formData });
     onBack();
   };
@@ -183,11 +190,10 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                   <button
                     type="button"
                     onClick={toggleListening}
-                    className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all shadow-sm ${
-                      isListening
-                        ? "bg-red-500 text-white animate-pulse shadow-red-200"
-                        : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20"
-                    }`}
+                    className={`hidden flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all shadow-sm ${isListening
+                      ? "bg-red-500 text-white animate-pulse shadow-red-200"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20"
+                      }`}
                   >
                     {isListening ? (
                       <>
@@ -208,9 +214,8 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                     rows={5}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className={`w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none ${
-                      isListening ? "border-red-400 ring-2 ring-red-100" : "border-input"
-                    }`}
+                    className={`w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none ${isListening ? "border-red-400 ring-2 ring-red-100" : "border-input"
+                      }`}
                     placeholder="Ex: Je cherche un pont élévateur pour véhicules utilitaires longs, avec hauteur de levée 2m minimum..."
                   />
                   {isListening && (
@@ -267,11 +272,10 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                 <button
                   onClick={goToNextStep}
                   disabled={!description.trim()}
-                  className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${
-                    description.trim()
-                      ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
-                      : "bg-muted text-muted-foreground cursor-not-allowed"
-                  }`}
+                  className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${description.trim()
+                    ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                    }`}
                 >
                   Suivant
                   <ArrowRight className="h-5 w-5" />
@@ -336,6 +340,27 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
               {/* Additional fields - only shown if email is valid and not existing buyer */}
               {showAdditionalFields && (
                 <>
+                  {/* Civilité */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
+                      Civilité *
+                    </label>
+                    <RadioGroup
+                      value={formData.civility}
+                      onValueChange={(value) => setFormData({ ...formData, civility: value })}
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="mr" id="civility-mr-cnf" />
+                        <Label htmlFor="civility-mr-cnf">Monsieur</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="mme" id="civility-mme-cnf" />
+                        <Label htmlFor="civility-mme-cnf">Madame</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label
@@ -374,28 +399,18 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                   </div>
 
                   <div>
-                    <label
-                      htmlFor="phone"
-                      className="block text-sm font-medium text-foreground mb-1.5"
-                    >
+                    <label className="block text-sm font-medium text-foreground mb-1.5">
                       Téléphone *
                     </label>
-                    <div className="flex gap-2">
-                      <CountryCodeSelect
-                        value={formData.countryCode}
-                        onChange={(value) => setFormData({ ...formData, countryCode: value })}
-                      />
-                      <input
-                        type="tel"
-                        id="phone"
-                        name="phone"
-                        required
-                        value={formData.phone}
-                        onChange={handleChange}
-                        className="flex-1 rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                        placeholder="6 12 34 56 78"
-                      />
-                    </div>
+                    <PhoneInput
+                      value={formData.phone}
+                      countryCode={formData.countryCode}
+                      countryId={formData.id_pays_tel}
+                      onValueChange={(phone) => setFormData((prev) => ({ ...prev, phone }))}
+                      onCountryCodeChange={(countryCode) => setFormData((prev) => ({ ...prev, countryCode }))}
+                      onCountryIdChange={(id_pays_tel) => setFormData((prev) => ({ ...prev, id_pays_tel }))}
+                      required
+                    />
                   </div>
                 </>
               )}
@@ -415,7 +430,8 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
               {/* Submit button */}
               <button
                 type="submit"
-                className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2"
+                disabled={!isFormValid}
+                className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Send className="h-5 w-5" />
                 Envoyer ma demande

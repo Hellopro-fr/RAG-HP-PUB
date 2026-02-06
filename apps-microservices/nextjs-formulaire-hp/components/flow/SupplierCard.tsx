@@ -141,9 +141,9 @@ const SupplierCard = ({
               {matchScore}%
             </span>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {matchingSpecs.length > 0 && (
-                <span className="text-match-high">{matchingSpecs.length} ✓</span>
-              )}
+              <span className={matchingSpecs.length > 0 ? "text-match-high" : "text-muted-foreground"}>
+                {matchingSpecs.length}/{specs.length} ✓
+              </span>
               {totalGaps > 0 && (
                 <span className="text-amber-600">{totalGaps} écart{totalGaps > 1 ? 's' : ''}</span>
               )}
@@ -248,14 +248,27 @@ const SupplierCard = ({
 
         {/* Criteria Match - Prominent display */}
         <div className="h-8 mb-2 flex items-center">
-          {matchingSpecs.length > 0 && (
-            <div className="flex items-center gap-2 bg-match-high/10 rounded-lg px-2.5 py-1.5">
-              <CheckCircle className="h-4 w-4 text-match-high" />
-              <span className="text-sm font-medium text-match-high">
-                {matchingSpecs.length}/{specs.length} critères OK
-              </span>
-            </div>
-          )}
+          <div className={cn(
+            "flex items-center gap-2 rounded-lg px-2.5 py-1.5",
+            matchingSpecs.length > 0
+              ? "bg-match-high/10"
+              : "bg-muted"
+          )}>
+            <CheckCircle className={cn(
+              "h-4 w-4",
+              matchingSpecs.length > 0
+                ? "text-match-high"
+                : "text-muted-foreground"
+            )} />
+            <span className={cn(
+              "text-sm font-medium",
+              matchingSpecs.length > 0
+                ? "text-match-high"
+                : "text-muted-foreground"
+            )}>
+              {matchingSpecs.length}/{specs.length} critères OK
+            </span>
+          </div>
         </div>
 
         {/* Gaps + Unknown - More discrete */}

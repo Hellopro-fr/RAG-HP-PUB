@@ -33,9 +33,9 @@ export async function searchPostalCodeCities(
       console.error(`Erreur API: ${response.status}`);
       return [];
     }
-    console.log("Postal code search response status:", response);
+    // console.log("Postal code search response status:", response);
     const data = await response.json();
-    console.log("Raw postal code search data:", data);
+    // console.log("Raw postal code search data:", data);
     // Transformer les données de l'API au format attendu
     if (Array.isArray(data)) {
       return data.map((item: any) => ({
@@ -43,7 +43,7 @@ export async function searchPostalCodeCities(
         city: item.ville || item.city || "",
       }));
     }
-    console.log("AFTER MAP postal code search data:", data);
+    // console.log("AFTER MAP postal code search data:", data);
 
 
     return data.data || [];
