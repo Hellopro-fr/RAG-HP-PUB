@@ -798,7 +798,16 @@ class RecommendationService:
                 ELSE 0.1
             END,
             has_pc: size(item.matches) > 0,
-            c_weight: item.conf.c_weight
+            c_weight: item.conf.c_weight,
+            // Match details: id_valeur for textual, valeur for numeric, valeur_min/valeur_max for range
+            match_details: [pc IN item.matches | {
+                type: pc.type_donnee,
+                id_valeur: CASE WHEN pc.type_donnee = 'textuelle' THEN toString(pc.id_source_valeur) ELSE null END,
+                valeur: CASE WHEN pc.type_donnee = 'numeric' THEN pc.valeur_canonique ELSE null END,
+                valeur_min: CASE WHEN pc.type_donnee = 'numeric_range' THEN pc.valeur_min_canonique ELSE null END,
+                valeur_max: CASE WHEN pc.type_donnee = 'numeric_range' THEN pc.valeur_max_canonique ELSE null END,
+                unite: pc.unite_canonique
+            }]
         }] AS char_results
         
         // --- HIERARCHICAL SCORING ---
@@ -826,7 +835,9 @@ class RecommendationService:
                  ELSE weighted_score_sum / c_weight_sum
              END AS cid_score,
              c_weight_sum,
-             matched
+             matched,
+             // Flatten match details from all char_results
+             apoc.coll.flatten([res IN char_results | res.match_details]) AS match_details
         
         // Collect all cid scores grouped by q_weight
         WITH p, collect({
@@ -834,7 +845,8 @@ class RecommendationService:
             score: cid_score,
             c_weight_sum: c_weight_sum,
             q_weight: q_weight,
-            matched: matched
+            matched: matched,
+            match_details: match_details
         }) AS all_constraints
         
         // Group by q_weight and calculate score per q_weight group
