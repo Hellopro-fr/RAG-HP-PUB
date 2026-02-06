@@ -1034,7 +1034,7 @@ class RecommendationService:
                                 statut_matching=statut,
                                 id_caracteristique=int(cid) if cid.isdigit() else 0,
                                 type_caracteristique=type_carac,
-                                valeur=valeur,
+                                # valeur=valeur,
                                 unite=unite,
                                 id_valeur=id_valeurs,
                                 poids=int(c_weight),

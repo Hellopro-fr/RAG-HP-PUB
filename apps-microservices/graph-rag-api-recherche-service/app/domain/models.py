@@ -297,9 +297,9 @@ class CaracteristiqueMatching(BaseModel):
     type_caracteristique: int = Field(
         ..., description="Type de la caractéristique, 1: numerique, 2: textuelle"
     )
-    valeur: Optional[str] = Field(
-        None, description="Valeur associée à la caractéristique numérique"
-    )
+    # valeur: Optional[str] = Field(
+    #     None, description="Valeur associée à la caractéristique numérique"
+    # )
     unite: Optional[str] = Field(
         None, description="Unité de la caractéristique numérique"
     )
