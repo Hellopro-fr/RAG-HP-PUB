@@ -475,6 +475,12 @@ class EquivalenceGenerator:
             {"id_categorie": id_categorie, "etape": self.ETAPE}
         ) or {}
         
+        # verification si on peut commencer le processus
+        can_start = process_data.get("can_start", False)
+        if not can_start:
+            self._log("Processus peut pas commencer")
+            raise Exception("Processus peut pas commencer")
+            
         # Reset si demandé
         if request.is_reset:
             self._log("RESET DU PROCESSUS")

@@ -1,7 +1,7 @@
 import json
 import logging
 import asyncio
-from typing import List
+from typing import Set
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
@@ -20,7 +20,7 @@ RETRY_TTL_MS = 30000
 
 
 class Consumer:
-    """Async Consumer pour le service QC-enrichissement (step 5)."""
+    """Async Consumer en mode streaming pour le service QC-enrichissement (step 5)."""
 
     def __init__(self, publisher: Publisher):
         self.publisher = publisher
@@ -28,7 +28,9 @@ class Consumer:
         self.channel = None
         self.queue = None
         self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
-        self._message_queue: asyncio.Queue = asyncio.Queue()
+        self._active_tasks: Set[asyncio.Task] = set()
+        self._processing_categories: Set[str] = set()
+        self._categories_lock = asyncio.Lock()
 
         self.exchange_name = 'qc_pipeline_exchange'
         self.routing_key = 'qc.step5.start'
@@ -45,7 +47,7 @@ class Consumer:
         await self.channel.set_qos(prefetch_count=settings.MAX_CONCURRENCY)
         await self.publisher.setup(self.channel)
         await self._setup_infrastructure()
-        logger.info("✅ QC-Enrichissement Consumer initialized")
+        logger.info("✅ QC-Enrichissement Consumer initialized (streaming mode)")
 
     async def _setup_infrastructure(self):
         dlq_exchange = await self.channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
@@ -81,43 +83,18 @@ class Consumer:
         error_msg = str(exception).lower()
         return any(kw in error_msg for kw in ['timeout', 'connection reset', 'connection refused', 'temporarily unavailable', 'service unavailable', 'timed out', 'network unreachable', 'connection aborted', 'broken pipe', 'eof', 'end of file'])
 
-    async def _collect_messages_batch(self) -> List[AbstractIncomingMessage]:
-        """
-        Collecte jusqu'à BATCH_SIZE messages pendant BATCH_TIMEOUT_SECONDS max.
-        Retourne dès qu'on atteint BATCH_SIZE ou que le timeout expire.
-        """
-        messages: List[AbstractIncomingMessage] = []
-        deadline = asyncio.get_event_loop().time() + settings.BATCH_TIMEOUT_SECONDS
-        
-        # logger.info(f"⏳ Début collecte batch (max {settings.BATCH_SIZE} messages, timeout {settings.BATCH_TIMEOUT_SECONDS}s)")
-        
-        while len(messages) < settings.BATCH_SIZE:
-            remaining_time = deadline - asyncio.get_event_loop().time()
-            if remaining_time <= 0:
-                # logger.info(f"⏰ Timeout atteint après {settings.BATCH_TIMEOUT_SECONDS}s")
-                break
-            
-            try:
-                message = await asyncio.wait_for(
-                    self._message_queue.get(),
-                    timeout=remaining_time
-                )
-                messages.append(message)
-                logger.info(f"📨 Message reçu ({len(messages)}/{settings.BATCH_SIZE})")
-            except asyncio.TimeoutError:
-                # logger.info(f"⏰ Timeout atteint, {len(messages)} messages collectés")
-                break
-        
-        return messages
+    async def _is_duplicate_category(self, cat_id: str) -> bool:
+        async with self._categories_lock:
+            if cat_id in self._processing_categories:
+                return True
+            self._processing_categories.add(cat_id)
+            return False
 
-    async def _feed_message_queue(self):
-        """Alimente la queue interne avec les messages RabbitMQ."""
-        async with self.queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                await self._message_queue.put(message)
+    async def _release_category(self, cat_id: str):
+        async with self._categories_lock:
+            self._processing_categories.discard(cat_id)
 
     async def process_message(self, message: AbstractIncomingMessage):
-        """Traite un message avec logs contextualisés par catégorie."""
         async with message.process(ignore_processed=True):
             id_categorie = None
             try:
@@ -128,25 +105,31 @@ class Consumer:
                 if not id_categorie:
                     raise ValueError("id_categorie manquant dans le message.")
 
-                # Log contextualisé avec préfixe [CAT-{id}]
-                logger.info(f"[CAT-{id_categorie}] 📥 Début traitement catégorie")
-
-                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
-                api_client = HelloProAPIClient()
-                generator = EnrichissementGenerator(api_client)
+                if await self._is_duplicate_category(str(id_categorie)):
+                    logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie déjà en cours de traitement - message ignoré")
+                    await message.ack()
+                    return
 
                 try:
-                    result = await generator.generate_enrichissement(request)
-                    # Echo du fichier tracking dans les logs
-                    if generator.tracking_file:
-                        logger.info(f"[CAT-{id_categorie}] 📁 Fichier tracking: {generator.tracking_file}")
-                finally:
-                    await generator.close()
+                    logger.info(f"[CAT-{id_categorie}] 📥 Début traitement catégorie")
 
-                output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 6, 'previous_step': 'enrichissement', 'status': result.status}
-                await self.publisher.publish_message(output_message)
-                await message.ack()
-                logger.info(f"[CAT-{id_categorie}] ✅ Traitement terminé avec succès")
+                    request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
+                    api_client = HelloProAPIClient()
+                    generator = EnrichissementGenerator(api_client)
+
+                    try:
+                        result = await generator.generate_all_enrichissements(request)
+                        if generator.tracking_file:
+                            logger.info(f"[CAT-{id_categorie}] 📁 Fichier tracking: {generator.tracking_file}")
+                    finally:
+                        await generator.close()
+
+                    output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 6, 'previous_step': 'enrichissement', 'status': result.status}
+                    await self.publisher.publish_message(output_message)
+                    await message.ack()
+                    logger.info(f"[CAT-{id_categorie}] ✅ Traitement terminé avec succès")
+                finally:
+                    await self._release_category(str(id_categorie))
 
             except (json.JSONDecodeError, ValueError) as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
@@ -167,77 +150,28 @@ class Consumer:
                     await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
                     await message.ack()
 
+    async def _process_with_semaphore(self, message: AbstractIncomingMessage):
+        task = asyncio.current_task()
+        self._active_tasks.add(task)
+        try:
+            async with self.semaphore:
+                await self.process_message(message)
+        finally:
+            self._active_tasks.discard(task)
+
     async def start_consuming(self):
-        """Démarre la boucle d'écoute avec batching et contrôle de concurrence."""
         await self.connect()
-        logger.info(f"👂 QC-Enrichissement: En attente sur {self.queue_name}")
-        logger.info(f"📦 Configuration: batch_size={settings.BATCH_SIZE}, timeout={settings.BATCH_TIMEOUT_SECONDS}s, concurrence={settings.MAX_CONCURRENCY}")
+        logger.info(f"👂 QC-Enrichissement: En attente sur {self.queue_name} (mode streaming)")
+        logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
 
-        # Démarrer le feeder en arrière-plan
-        feeder_task = asyncio.create_task(self._feed_message_queue())
-
-        try:
-            while True:
-                # Collecter un batch de messages
-                messages = await self._collect_messages_batch()
-                
-                if not messages:
-                    # logger.info("📭 Aucun message reçu, attente du prochain batch...")
-                    continue
-                
-                logger.info(f"📦 Batch collecté: {len(messages)} message(s) - Démarrage traitement parallèle")
-                
-                # Dédupliquer les messages par catégorie
-                unique_messages = await self._deduplicate_messages(messages)
-                
-                if not unique_messages:
-                    continue
-                
-                # Traiter les messages en parallèle
-                tasks = []
-                for message in unique_messages:
-                    await self.semaphore.acquire()
-                    task = asyncio.create_task(self._process_with_release(message))
-                    tasks.append(task)
-                
-                # Attendre que tous les messages du batch soient traités
-                await asyncio.gather(*tasks, return_exceptions=True)
-                logger.info(f"✅ Batch de {len(unique_messages)} message(s) traité")
-        finally:
-            feeder_task.cancel()
-
-    async def _deduplicate_messages(self, messages: List[AbstractIncomingMessage]) -> List[AbstractIncomingMessage]:
-        """Déduplique les messages par id_categorie, ACK les doublons sans traitement."""
-        seen_categories = set()
-        unique_messages = []
-        
-        for message in messages:
-            try:
-                data = json.loads(message.body.decode())
-                cat_id = data.get('id_categorie')
-                
-                if cat_id in seen_categories:
-                    logger.warning(f"[CAT-{cat_id}] ⚠️ Message dupliqué dans le batch - ignoré")
-                    await message.ack()
-                else:
-                    seen_categories.add(cat_id)
-                    unique_messages.append(message)
-            except Exception as e:
-                # En cas d'erreur de parsing, on garde le message pour traitement normal
-                unique_messages.append(message)
-        
-        if len(messages) != len(unique_messages):
-            logger.info(f"📊 Déduplication: {len(messages)} -> {len(unique_messages)} messages uniques")
-        
-        return unique_messages
-
-    async def _process_with_release(self, message: AbstractIncomingMessage):
-        """Wrapper pour process_message qui libère le semaphore après traitement."""
-        try:
-            await self.process_message(message)
-        finally:
-            self.semaphore.release()
+        async with self.queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                asyncio.create_task(self._process_with_semaphore(message))
+                logger.info(f"📨 Message reçu - Tâches actives: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
 
     async def close(self):
+        if self._active_tasks:
+            logger.info(f"⏳ Attente de {len(self._active_tasks)} tâches en cours...")
+            await asyncio.gather(*self._active_tasks, return_exceptions=True)
         if self.connection:
             await self.connection.close()
