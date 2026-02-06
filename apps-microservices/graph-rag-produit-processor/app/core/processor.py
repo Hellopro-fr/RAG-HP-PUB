@@ -103,9 +103,7 @@ def _format_characteristics_to_text(characteristics: List[Dict[str, Any]]) -> st
 
         id_car_str = str(id_car).replace("'", "") if id_car else "N/A"
         id_val_str = str(id_val).replace("'", "") if id_val else "N/A"
-        meta_tag = f"[META id_c='{id_car_str}']"
-        if id_val_str != "N/A":
-            meta_tag = f"[META id_c='{id_car_str}' id_v='{id_val_str}']"
+        meta_tag = f"[META id_c='{id_car_str}' id_v='{id_val_str}']"
 
         val_str = str(valeur)
         if unite:

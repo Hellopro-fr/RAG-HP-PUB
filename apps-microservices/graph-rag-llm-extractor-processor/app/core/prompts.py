@@ -227,7 +227,7 @@ PRODUCT_RELS = ["A_POUR_CARACTERISTIQUE", "EST_PROPOSE_PAR", "APPARTIENT_A"]
 PRODUCT_PROMPT = (
     get_base_prompt(PRODUCT_NODES, PRODUCT_RELS)
     + """
-### EXEMPLE
+### EXEMPLE 1 (Sans balises META)
     **Input**: "Grue de levage mobile, capacité de charge de 2 à 5 tonnes. Dimensions: 1200x800x1500mm. Fabriquée en acier renforcé. Le châssis est équipé de : 2 roues avant fixes et 1 timon de direction. Livrée avec plusieurs accessoires : télécommande, élingues."
     **Output**:
     ```json
@@ -344,6 +344,72 @@ PRODUCT_PROMPT = (
         {{ "source": "{source_placeholder}", "target": "equipement_1_timon_de_direction", "type": "A_POUR_CARACTERISTIQUE" }},
         {{ "source": "{source_placeholder}", "target": "accessoire_telecommande", "type": "A_POUR_CARACTERISTIQUE" }},
         {{ "source": "{source_placeholder}", "target": "accessoire_elingues", "type": "A_POUR_CARACTERISTIQUE" }}
+    ]
+    }}
+    ```
+
+### EXEMPLE 2 (Avec balises META - OBLIGATOIRE d'inclure id_source_caracteristique et id_source_valeur)
+    **Input**: "Chariot élévateur électrique. Hauteur de levage max : 3500mm [META id_c='15' id_v='42']. Capacité de charge : 2000kg [META id_c='18' id_v='55']. Type de batterie : Lithium-Ion [META id_c='22' id_v='N/A']. Poids à vide : 850kg."
+    **Output**:
+    ```json
+    {{
+    "nodes": [
+        {{
+        "id": "hauteur_de_levage_na_max3500_mm",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Hauteur de levage : 3500mm",
+            "label": "Hauteur de levage",
+            "valeur_min": null,
+            "valeur_max": 3500,
+            "type_donnee": "numeric_range",
+            "unite": "mm",
+            "id_source_caracteristique": "15",
+            "id_source_valeur": "42"
+        }}
+        }},
+        {{
+        "id": "capacite_de_charge_2000_kg",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Capacité de charge : 2000kg",
+            "label": "Capacité de charge",
+            "valeur": 2000,
+            "type_donnee": "numeric",
+            "unite": "kg",
+            "id_source_caracteristique": "18",
+            "id_source_valeur": "55"
+        }}
+        }},
+        {{
+        "id": "type_de_batterie_lithium_ion",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Type de batterie : Lithium-Ion",
+            "label": "Type de batterie",
+            "valeur": "Lithium-Ion",
+            "type_donnee": "text",
+            "unite": null,
+            "id_source_caracteristique": "22"
+        }}
+        }},
+        {{
+        "id": "poids_a_vide_850_kg",
+        "type": "CaracteristiqueTechnique",
+        "properties": {{
+            "nom": "Poids à vide : 850kg",
+            "label": "Poids à vide",
+            "valeur": 850,
+            "type_donnee": "numeric",
+            "unite": "kg"
+        }}
+        }}
+    ],
+    "relationships": [
+        {{ "source": "{source_placeholder}", "target": "hauteur_de_levage_na_max3500_mm", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "capacite_de_charge_2000_kg", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "type_de_batterie_lithium_ion", "type": "A_POUR_CARACTERISTIQUE" }},
+        {{ "source": "{source_placeholder}", "target": "poids_a_vide_850_kg", "type": "A_POUR_CARACTERISTIQUE" }}
     ]
     }}
     ```
