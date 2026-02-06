@@ -928,10 +928,10 @@ class RecommendationService:
         """
 
         # Determine projection
-        if request.output_fields:
+        if request.champs_sortie:
             fields = (
-                [f".{f}" for f in request.output_fields]
-                if len(request.output_fields) > 0
+                [f".{f}" for f in request.champs_sortie]
+                if len(request.champs_sortie) > 0
                 else [".*"]
             )
             projection = f"{{ {', '.join(fields)} }}"
