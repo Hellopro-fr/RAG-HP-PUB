@@ -248,8 +248,6 @@ services:
       - "3000"
     environment:
       - NODE_ENV=production
-      - HELLOPRO_API_URL=http://dev-api.hellopro.fr
-      - HELLOPRO_FRONTEND_URL=https://dev-www.hellopro.fr
     restart: unless-stopped
     env_file:
       - ./apps-microservices/nextjs-formulaire-hp/.env.production
