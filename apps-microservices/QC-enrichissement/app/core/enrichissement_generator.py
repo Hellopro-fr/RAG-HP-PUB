@@ -465,6 +465,7 @@ class EnrichissementGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
                     "question": question_identifier,
                     "error_message": f"Erreur API: {result}",
                     "tracking_file": self.tracking_file
@@ -491,6 +492,7 @@ class EnrichissementGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
                     "question": question_identifier,
                     "error_message": "Erreur extraction JSON",
                     "error_detail": result,
@@ -554,6 +556,7 @@ class EnrichissementGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
                     "error_message": f"Catégorie {id_categorie} non trouvée",
                     "tracking_file": self.tracking_file
                 }
@@ -577,6 +580,7 @@ class EnrichissementGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
                     "error_message": "Le processus a été arrêté manuellement",
                     "tracking_file": self.tracking_file
                 }

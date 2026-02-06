@@ -634,6 +634,7 @@ class CaracterisationProduitGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
                     "error_message": f"Catégorie {id_categorie} non trouvée",
                     "tracking_file": self.tracking_file
                 }
@@ -658,6 +659,7 @@ class CaracterisationProduitGenerator:
                 "error",
                 {
                     "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
                     "error_message": "Le processus a été arrêté manuellement",
                     "tracking_file": self.tracking_file
                 }
@@ -855,6 +857,7 @@ class CaracterisationProduitGenerator:
                     {
                         "id_categorie": id_categorie,
                         "id_produit": id_produit,
+                        "etape": self.ETAPE,
                         "error_message": str(e),
                         "tracking_file": self.tracking_file
                     }

@@ -197,6 +197,54 @@ class GeminiProvider:
         return {"message": response.text, "api_response": safe_api_response}
 
 
+class DeepSeek:
+    def __init__(self, temperature=0.1, config=None):
+        config = config or {}
+        self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
+        self.BASE_URL = "https://api.deepseek.com"
+        self.MODEL = "deepseek-chat"
+        self.TEMPERATURE = temperature
+        self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+        self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+
+    def chat(self, message, stream=False):
+        response = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Tu es un assistant intelligent et serviable.",
+                },
+                {"role": "user", "content": message},
+            ],
+            temperature=self.TEMPERATURE,
+            stream=stream,
+        )
+        if stream:
+            return response
+        return {"content": response.choices[0].message.content, "response": response}
+
+    def set_temperature(self, temperature):
+        self.TEMPERATURE = float(temperature)
+
+    async def stream(self, message):
+        response_stream = await self.async_client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful and intelligent assistant.",
+                },
+                {"role": "user", "content": message},
+            ],
+            temperature=self.TEMPERATURE,
+            stream=True,
+        )
+        async for chunk in response_stream:
+            yield chunk
+
+        
+        
 class HelloProAPIClient:
     """Client pour les appels API vers base.hellopro.fr
     
