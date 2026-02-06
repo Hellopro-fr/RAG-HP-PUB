@@ -3,7 +3,12 @@ import time
 import asyncio
 from typing import List, Dict, Any, Optional
 
-from app.domain.models import ComplexFilterRequest, FilterCaracteristiqueRequest, ResultProduct, ScoredProduct
+from app.domain.models import (
+    ComplexFilterRequest,
+    FilterCaracteristiqueRequest,
+    ResultProduct,
+    ScoredProduct,
+)
 from app.infrastructure.clients import clients
 
 # from app.services.unit_normalizer import unit_normalizer
@@ -69,9 +74,7 @@ class RecommendationService:
             for k in ["min", "max", "exact"]:
                 if raw_blocking.get(k) is not None:
                     val = self._extract_scalar(raw_blocking[k])
-                    tasks.append(
-                        clients.normalize_quantity(val, unit, label)
-                    )
+                    tasks.append(clients.normalize_quantity(val, unit, label))
                 else:
                     tasks.append(asyncio.sleep(0))
 
@@ -325,12 +328,16 @@ class RecommendationService:
 
         # Determine projection
         if request.output_fields:
-             # Ensure we don't have empty list behavior if user sends []
-             fields = [f".{f}" for f in request.output_fields] if len(request.output_fields) > 0 else [".*"]
-             projection = f"{{ {', '.join(fields)} }}"
+            # Ensure we don't have empty list behavior if user sends []
+            fields = (
+                [f".{f}" for f in request.output_fields]
+                if len(request.output_fields) > 0
+                else [".*"]
+            )
+            projection = f"{{ {', '.join(fields)} }}"
         else:
-             projection = "{.*}"
-             
+            projection = "{.*}"
+
         # Inject projection - both placeholders use the same projection format
         cypher_query = cypher_query.replace("TOP_P_PROJECTION_PLACEHOLDER", projection)
         cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
@@ -390,7 +397,7 @@ class RecommendationService:
                             info={"weights": weights_map},
                         )
                     )
-            
+
             total_time = time.perf_counter() - start_time
             return ResultProduct(
                 data=scored_products,
@@ -425,18 +432,23 @@ class RecommendationService:
         for cid, constraints in request.ids.items():
             for idx, c in enumerate(constraints):
                 label = label_map.get(cid, "dimensionless")
-                normalization_tasks.append(self._normalize_single_constraint_for_caracteristique(c, cid, label))
-                task_metadata.append((cid, idx, c.q_weight))
+                normalization_tasks.append(
+                    self._normalize_single_constraint_for_caracteristique(c, cid, label)
+                )
+                # Track cid, index, q_weight, and c_weight
+                task_metadata.append((cid, idx, c.q_weight, c.c_weight))
 
         # Execute all normalization tasks
         processed_constraints_flat = await asyncio.gather(*normalization_tasks)
 
-        # Second pass: Re-group by caracteristique ID
+        # Second pass: Re-group by caracteristique ID with hierarchical weights
         grouped = {}
         for i, processed in enumerate(processed_constraints_flat):
-            cid, idx, weight = task_metadata[i]
+            cid, idx, q_weight, c_weight = task_metadata[i]
             if cid not in grouped:
-                grouped[cid] = {"cid": cid, "weight": weight, "constraints": []}
+                grouped[cid] = {"cid": cid, "q_weight": q_weight, "constraints": []}
+            # Add c_weight to the processed constraint
+            processed["c_weight"] = c_weight
             grouped[cid]["constraints"].append(processed)
 
         flat_filters = list(grouped.values())
@@ -522,7 +534,9 @@ class RecommendationService:
         }
 
     async def get_products_by_caracteristique_filters(
-        self, request: FilterCaracteristiqueRequest, target_product_id: Optional[str] = None
+        self,
+        request: FilterCaracteristiqueRequest,
+        target_product_id: Optional[str] = None,
     ) -> ResultProduct:
         """
         Get products filtered and scored by CaracteristiqueTechnique constraints.
@@ -534,8 +548,8 @@ class RecommendationService:
         flat_filters = await self._normalize_constraints_for_caracteristique(request)
         norm_time = time.perf_counter() - norm_start
 
-        # Build weights map from request (cid -> weight)
-        weights_map = {f["cid"]: f["weight"] for f in flat_filters}
+        # Build weights map from request (cid -> q_weight)
+        weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
 
         blocked_val = float(request.blocked_val)
         different_val = float(request.different_val)
@@ -588,46 +602,114 @@ class RecommendationService:
                     size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
                 ) THEN 1.0
                 
-                // ============== CONTINUOUS NUMERIC SCORING ==============
+                // ============== CONTINUOUS NUMERIC SCORING WITH THRESHOLD ==============
+                // New logic: Calculate direct score + inverted score, apply 0.8 threshold each
                 WHEN ANY(pc IN item.matches WHERE 
                     item.conf.target_numeric IS NOT NULL 
                     AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
                 ) THEN
-                    // Calculate continuous score and clamp between 0.0 and 1.0
-                    CASE
-                        WHEN apoc.coll.max([pc IN item.matches WHERE 
-                            item.conf.target_numeric IS NOT NULL 
-                            AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
-                        | CASE
-                            // === SCENARIO 1: PRODUCT HAS EXACT VALUE (SingleValue) ===
+                    apoc.coll.max([pc IN item.matches WHERE 
+                        item.conf.target_numeric IS NOT NULL 
+                        AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
+                    | 
+                        // Get the target value (use exact, or min, or max as the reference)
+                        CASE
                             WHEN pc.type_donnee = 'numeric' THEN
                                 CASE
-                                    // Need: Exact Value -> Score = 1 - |P_val - N_val| / N_val
+                                    // === EXACT: Calculate as min=X AND max=X with threshold ===
                                     WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        // Direct: Check if product >= exact (min check)
+                                        // Inverted: Check if product <= exact (max check)
                                         CASE 
                                             WHEN item.conf.target_numeric.exact = 0 THEN 
                                                 CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
-                                            ELSE 
-                                                toFloat(1.0 - abs(pc.valeur_canonique - item.conf.target_numeric.exact) / abs(item.conf.target_numeric.exact))
+                                            ELSE
+                                                // min_score: N/P if P >= N, else 0
+                                                // max_score: P/N if P <= N, else 0
+                                                (
+                                                    CASE 
+                                                        WHEN pc.valeur_canonique >= item.conf.target_numeric.exact 
+                                                        THEN CASE 
+                                                            WHEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) >= 0.8 
+                                                            THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique)
+                                                            ELSE 0.0 
+                                                        END
+                                                        ELSE 0.0 
+                                                    END
+                                                    +
+                                                    CASE 
+                                                        WHEN pc.valeur_canonique <= item.conf.target_numeric.exact 
+                                                        THEN CASE 
+                                                            WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) >= 0.8 
+                                                            THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact)
+                                                            ELSE 0.0 
+                                                        END
+                                                        ELSE 0.0 
+                                                    END
+                                                ) / 2.0
                                         END
                                         
-                                    // Need: Min Required -> If P < N: 0, else N_req / P_val (Efficiency Penalty)
+                                    // === MIN ONLY: Direct=min score, Inverted=max score ===
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE
-                                            WHEN pc.valeur_canonique < item.conf.target_numeric.min THEN 0.0
-                                            WHEN pc.valeur_canonique = 0 THEN 0.0
-                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
+                                            WHEN pc.valeur_canonique = 0 OR item.conf.target_numeric.min = 0 THEN 0.0
+                                            ELSE
+                                                // direct_score: N_min / P_val (if P >= N_min)
+                                                // inverted_score: P_val / N_min (if P <= N_min, treat as max)
+                                                (
+                                                    CASE 
+                                                        WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
+                                                        THEN CASE 
+                                                            WHEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique) >= 0.8 
+                                                            THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
+                                                            ELSE 0.0 
+                                                        END
+                                                        ELSE 0.0 
+                                                    END
+                                                    +
+                                                    CASE 
+                                                        WHEN pc.valeur_canonique <= item.conf.target_numeric.min 
+                                                        THEN CASE 
+                                                            WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.min) >= 0.8 
+                                                            THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.min)
+                                                            ELSE 0.0 
+                                                        END
+                                                        ELSE 0.0 
+                                                    END
+                                                ) / 2.0
                                         END
                                         
-                                    // Need: Max Authorized -> If P > N: 0, else P_val / N_lim (Proximity Reward)
+                                    // === MAX ONLY: Direct=max score, Inverted=min score ===
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
-                                            WHEN pc.valeur_canonique > item.conf.target_numeric.max THEN 0.0
-                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                            ELSE toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
+                                            WHEN pc.valeur_canonique = 0 OR item.conf.target_numeric.max = 0 THEN 0.0
+                                            ELSE
+                                                // direct_score: P_val / N_max (if P <= N_max)
+                                                // inverted_score: N_max / P_val (if P >= N_max, treat as min)
+                                                (
+                                                    CASE 
+                                                        WHEN pc.valeur_canonique <= item.conf.target_numeric.max 
+                                                        THEN CASE 
+                                                            WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max) >= 0.8 
+                                                            THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
+                                                            ELSE 0.0 
+                                                        END
+                                                        ELSE 0.0 
+                                                    END
+                                                    +
+                                                    CASE 
+                                                        WHEN pc.valeur_canonique >= item.conf.target_numeric.max 
+                                                        THEN CASE 
+                                                            WHEN toFloat(item.conf.target_numeric.max / pc.valeur_canonique) >= 0.8 
+                                                            THEN toFloat(item.conf.target_numeric.max / pc.valeur_canonique)
+                                                            ELSE 0.0 
+                                                        END
+                                                        ELSE 0.0 
+                                                    END
+                                                ) / 2.0
                                         END
                                         
-                                    // Need: Working Range -> Inside = 1.0, Outside = 0
+                                    // === RANGE (min+max): Keep existing logic ===
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
                                         CASE
                                             WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
@@ -639,10 +721,10 @@ class RecommendationService:
                                     ELSE 1.0
                                 END
                                 
-                            // === SCENARIO 2 & 3: PRODUCT HAS RANGE ===
+                            // === PRODUCT HAS RANGE ===
                             WHEN pc.type_donnee = 'numeric_range' THEN
                                 CASE
-                                    // Need: Exact Value -> Inside range = 1.0, Outside = 0
+                                    // EXACT: Check if exact value is within product range
                                     WHEN item.conf.target_numeric.exact IS NOT NULL THEN
                                         CASE
                                             WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact)
@@ -651,66 +733,33 @@ class RecommendationService:
                                             ELSE 0.0
                                         END
                                         
-                                    // Need: Min Required -> Check if product can meet the requirement
+                                    // MIN ONLY: Use product's max capability with threshold
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE
-                                            // Product has both min and max: use P_min (worst case)
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
+                                            WHEN pc.valeur_max_canonique IS NOT NULL AND pc.valeur_max_canonique >= item.conf.target_numeric.min THEN
+                                                CASE 
+                                                    WHEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique) >= 0.8 
+                                                    THEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
+                                                    ELSE 0.0 
                                                 END
-                                            // Product has only max: if max >= need_min, product can handle it
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_max_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
-                                                END
-                                            // Product has only min: use P_min
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
-                                                END
-                                            // Neither min nor max: uncertainty
-                                            ELSE 0.5
+                                            ELSE 0.0
                                         END
                                         
-                                    // Need: Max Authorized -> Check all product range scenarios
+                                    // MAX ONLY: Use product's min capability with threshold
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
-                                            // R1: Product has both min and max -> use P_max (worst case)
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
+                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_min_canonique <= item.conf.target_numeric.max THEN
+                                                CASE 
+                                                    WHEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max) >= 0.8 
+                                                    THEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
+                                                    ELSE 0.0 
                                                 END
-                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
-                                                END
-                                            // R3: Product has only max -> use P_max
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
-                                                END
-                                            // R4: Neither known -> uncertainty
-                                            ELSE 0.5
+                                            ELSE 0.0
                                         END
                                         
-                                    // Need: Working Range -> Check all product range scenarios
+                                    // RANGE: Jaccard-style overlap
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
                                         CASE
-                                            // R1: Product has both min and max -> Jaccard-style overlap
                                             WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
                                                 CASE
                                                     WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
@@ -733,19 +782,6 @@ class RecommendationService:
                                                         (item.conf.target_numeric.max - item.conf.target_numeric.min)
                                                     )
                                                 END
-                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    ELSE 1.0
-                                                END
-                                            // R3: Product has only max -> if P_max >= target_min, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    ELSE 1.0
-                                                END
-                                            // R4: Neither known -> uncertainty
                                             ELSE 0.5
                                         END
                                         
@@ -753,309 +789,79 @@ class RecommendationService:
                                 END
                                 
                             ELSE 1.0
-                        END]) > 1.0 THEN 1.0
-                        WHEN apoc.coll.max([pc IN item.matches WHERE 
-                            item.conf.target_numeric IS NOT NULL 
-                            AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
-                        | CASE
-                            WHEN pc.type_donnee = 'numeric' THEN
-                                CASE
-                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
-                                        CASE 
-                                            WHEN item.conf.target_numeric.exact = 0 THEN 
-                                                CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
-                                            ELSE 
-                                                toFloat(1.0 - abs(pc.valeur_canonique - item.conf.target_numeric.exact) / abs(item.conf.target_numeric.exact))
-                                        END
-                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
-                                        CASE
-                                            WHEN pc.valeur_canonique < item.conf.target_numeric.min THEN 0.0
-                                            WHEN pc.valeur_canonique = 0 THEN 0.0
-                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
-                                        END
-                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
-                                        CASE
-                                            WHEN pc.valeur_canonique > item.conf.target_numeric.max THEN 0.0
-                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                            ELSE toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
-                                        END
-                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
-                                        CASE
-                                            WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
-                                                 AND pc.valeur_canonique <= item.conf.target_numeric.max 
-                                            THEN 1.0
-                                            ELSE 0.0
-                                        END
-                                    ELSE 1.0
-                                END
-                            WHEN pc.type_donnee = 'numeric_range' THEN
-                                CASE
-                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
-                                        CASE
-                                            WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact)
-                                                 AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact)
-                                            THEN 1.0
-                                            ELSE 0.0
-                                        END
-                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
-                                        CASE
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
-                                                END
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_max_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
-                                                END
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
-                                                END
-                                            ELSE 0.5
-                                        END
-                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
-                                        CASE
-                                            // R1: Product has both min and max -> use P_max (worst case)
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
-                                                END
-                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
-                                                END
-                                            // R3: Product has only max -> use P_max
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
-                                                END
-                                            // R4: Neither known -> uncertainty
-                                            ELSE 0.5
-                                        END
-                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
-                                        CASE
-                                            // R1: Product has both min and max -> Jaccard-style overlap
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
-                                                         OR pc.valeur_min_canonique > item.conf.target_numeric.max 
-                                                    THEN 0.0
-                                                    WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
-                                                    ELSE toFloat(
-                                                        (CASE 
-                                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
-                                                            THEN pc.valeur_max_canonique 
-                                                            ELSE item.conf.target_numeric.max 
-                                                        END
-                                                        -
-                                                        CASE 
-                                                            WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
-                                                            THEN pc.valeur_min_canonique 
-                                                            ELSE item.conf.target_numeric.min 
-                                                        END)
-                                                        /
-                                                        (item.conf.target_numeric.max - item.conf.target_numeric.min)
-                                                    )
-                                                END
-                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    ELSE 1.0
-                                                END
-                                            // R3: Product has only max -> if P_max >= target_min, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    ELSE 1.0
-                                                END
-                                            // R4: Neither known -> uncertainty
-                                            ELSE 0.5
-                                        END
-                                    ELSE 1.0
-                                END
-                            ELSE 1.0
-                        END]) < 0.0 THEN 0.0
-                        ELSE apoc.coll.max([pc IN item.matches WHERE 
-                            item.conf.target_numeric IS NOT NULL 
-                            AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
-                        | CASE
-                            WHEN pc.type_donnee = 'numeric' THEN
-                                CASE
-                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
-                                        CASE 
-                                            WHEN item.conf.target_numeric.exact = 0 THEN 
-                                                CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
-                                            ELSE 
-                                                toFloat(1.0 - abs(pc.valeur_canonique - item.conf.target_numeric.exact) / abs(item.conf.target_numeric.exact))
-                                        END
-                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
-                                        CASE
-                                            WHEN pc.valeur_canonique < item.conf.target_numeric.min THEN 0.0
-                                            WHEN pc.valeur_canonique = 0 THEN 0.0
-                                            ELSE toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
-                                        END
-                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
-                                        CASE
-                                            WHEN pc.valeur_canonique > item.conf.target_numeric.max THEN 0.0
-                                            WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                            ELSE toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
-                                        END
-                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
-                                        CASE
-                                            WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
-                                                 AND pc.valeur_canonique <= item.conf.target_numeric.max 
-                                            THEN 1.0
-                                            ELSE 0.0
-                                        END
-                                    ELSE 1.0
-                                END
-                            WHEN pc.type_donnee = 'numeric_range' THEN
-                                CASE
-                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
-                                        CASE
-                                            WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact)
-                                                 AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact)
-                                            THEN 1.0
-                                            ELSE 0.0
-                                        END
-                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
-                                        CASE
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
-                                                END
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_max_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
-                                                END
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    WHEN pc.valeur_min_canonique = 0 THEN 0.0
-                                                    ELSE toFloat(item.conf.target_numeric.min / pc.valeur_min_canonique)
-                                                END
-                                            ELSE 0.5
-                                        END
-                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
-                                        CASE
-                                            // R1: Product has both min and max -> use P_max (worst case)
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
-                                                END
-                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
-                                                END
-                                            // R3: Product has only max -> use P_max
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    WHEN item.conf.target_numeric.max = 0 THEN 0.0
-                                                    ELSE toFloat(pc.valeur_max_canonique / item.conf.target_numeric.max)
-                                                END
-                                            // R4: Neither known -> uncertainty
-                                            ELSE 0.5
-                                        END
-                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
-                                        CASE
-                                            // R1: Product has both min and max -> Jaccard-style overlap
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min 
-                                                         OR pc.valeur_min_canonique > item.conf.target_numeric.max 
-                                                    THEN 0.0
-                                                    WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
-                                                    ELSE toFloat(
-                                                        (CASE 
-                                                            WHEN pc.valeur_max_canonique < item.conf.target_numeric.max 
-                                                            THEN pc.valeur_max_canonique 
-                                                            ELSE item.conf.target_numeric.max 
-                                                        END
-                                                        -
-                                                        CASE 
-                                                            WHEN pc.valeur_min_canonique > item.conf.target_numeric.min 
-                                                            THEN pc.valeur_min_canonique 
-                                                            ELSE item.conf.target_numeric.min 
-                                                        END)
-                                                        /
-                                                        (item.conf.target_numeric.max - item.conf.target_numeric.min)
-                                                    )
-                                                END
-                                            // R2: Product has only min -> if P_min <= target_max, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
-                                                    ELSE 1.0
-                                                END
-                                            // R3: Product has only max -> if P_max >= target_min, product CAN satisfy
-                                            WHEN pc.valeur_min_canonique IS NULL AND pc.valeur_max_canonique IS NOT NULL THEN
-                                                CASE
-                                                    WHEN pc.valeur_max_canonique < item.conf.target_numeric.min THEN 0.0
-                                                    ELSE 1.0
-                                                END
-                                            // R4: Neither known -> uncertainty
-                                            ELSE 0.5
-                                        END
-                                    ELSE 1.0
-                                END
-                            ELSE 1.0
-                        END])
-                    END
+                        END
+                    ])
                 
                 // Connected Check
                 WHEN size(item.matches) > 0 THEN $different_val
                 // Default
                 ELSE 0.1
             END,
-            has_pc: size(item.matches) > 0
+            has_pc: size(item.matches) > 0,
+            c_weight: item.conf.c_weight
         }] AS char_results
         
-        // Aggregate Caracteristique Score and Weights
-        WITH p, f.cid AS cid, char_results,
-             [res IN char_results | res.score] AS raw_scores
+        // --- HIERARCHICAL SCORING ---
+        // Formula:
+        //   score_char = matching_score × c_weight
+        //   score_q = Σ(score_char) / Σ(c_weight) for same q_weight group
+        //   score_final = Σ(score_q) / Σ(q_weight)
         
-        WITH p, cid, char_results, raw_scores,
-             CASE WHEN $blocked_val IN raw_scores THEN $blocked_val ELSE apoc.coll.max(raw_scores) END AS cid_score,
-             ANY(res IN char_results WHERE res.has_pc) AS matched,
-             coalesce($weights[cid], 1.0) as weight
+        // Aggregate per caracteristique with c_weight weighted scores
+        WITH p, f.cid AS cid, f.q_weight AS q_weight, char_results,
+             // Calculate weighted score: matching_score × c_weight
+             reduce(s = 0.0, res IN char_results | s + (
+                 CASE WHEN res.score = $blocked_val THEN $blocked_val * res.c_weight
+                 ELSE res.score * res.c_weight END
+             )) AS weighted_score_sum,
+             reduce(w = 0.0, res IN char_results | w + res.c_weight) AS c_weight_sum,
+             ANY(res IN char_results WHERE res.score = $blocked_val) AS has_blocking,
+             ANY(res IN char_results WHERE res.has_pc) AS matched
         
-        // Global Product Scoring and Detail Construction with DEBUG info
+        // Calculate score per q_weight group: Σ(score × c_weight) / Σ(c_weight)
+        WITH p, q_weight, cid, char_results,
+             CASE 
+                 WHEN has_blocking THEN $blocked_val
+                 WHEN c_weight_sum = 0 THEN 0.0
+                 ELSE weighted_score_sum / c_weight_sum
+             END AS cid_score,
+             c_weight_sum,
+             matched
+        
+        // Collect all cid scores grouped by q_weight
         WITH p, collect({
             cid: cid, 
-            score: cid_score, 
-            weight: weight,
+            score: cid_score,
+            c_weight_sum: c_weight_sum,
+            q_weight: q_weight,
             matched: matched
-        }) AS details
+        }) AS all_constraints
         
-        WITH p, details,
-             reduce(s = 0.0, d IN details | s + (d.score * d.weight)) AS numerator,
-             reduce(w = 0.0, d IN details | w + d.weight) AS denominator
+        // Group by q_weight and calculate score per q_weight group
+        WITH p, all_constraints,
+             apoc.coll.toSet([c IN all_constraints | c.q_weight]) AS unique_q_weights
         
-        WITH p, details, (numerator / denominator) AS global_score
+        WITH p, all_constraints, [qw IN unique_q_weights | {
+            q_weight: qw,
+            constraints: [c IN all_constraints WHERE c.q_weight = qw],
+            // score_q = Σ(cid_score × c_weight_sum) / Σ(c_weight_sum) for this q_weight
+            // Actually per formula: score_q = Σ(score_char) / Σ(c_weight) = cid_score (already computed)
+            // Since each cid has one cid_score, score_q = average of cid_scores in group weighted by c_weight_sum
+            group_score: CASE 
+                WHEN reduce(w = 0.0, c IN [c IN all_constraints WHERE c.q_weight = qw] | w + c.c_weight_sum) = 0 
+                THEN 0.0
+                ELSE reduce(s = 0.0, c IN [c IN all_constraints WHERE c.q_weight = qw] | s + (c.score * c.c_weight_sum)) 
+                     / reduce(w = 0.0, c IN [c IN all_constraints WHERE c.q_weight = qw] | w + c.c_weight_sum)
+            END
+        }] AS q_weight_groups
+        
+        // Final score: Σ(score_q) / Σ(q_weight)
+        WITH p, q_weight_groups,
+             reduce(s = 0.0, g IN q_weight_groups | s + g.group_score) AS numerator,
+             reduce(w = 0.0, g IN q_weight_groups | w + g.q_weight) AS denominator
+        
+        WITH p, q_weight_groups AS details, 
+             CASE WHEN denominator = 0 THEN 0.0 ELSE (numerator / denominator) END AS global_score
         
         ORDER BY global_score DESC
         LIMIT $top_k
@@ -1092,11 +898,15 @@ class RecommendationService:
 
         # Determine projection
         if request.output_fields:
-            fields = [f".{f}" for f in request.output_fields] if len(request.output_fields) > 0 else [".*"]
+            fields = (
+                [f".{f}" for f in request.output_fields]
+                if len(request.output_fields) > 0
+                else [".*"]
+            )
             projection = f"{{ {', '.join(fields)} }}"
         else:
             projection = "{.*}"
-             
+
         # Inject projection
         cypher_query = cypher_query.replace("TOP_P_PROJECTION_PLACEHOLDER", projection)
         cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
@@ -1117,7 +927,9 @@ class RecommendationService:
             if key not in ["filters", "weights"]:
                 logging.info(f"   {key}: {value} (type: {type(value).__name__})")
             else:
-                logging.info(f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>")
+                logging.info(
+                    f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>"
+                )
 
         try:
             query_start = time.perf_counter()
@@ -1131,7 +943,7 @@ class RecommendationService:
             if results:
                 # Extract top_p and scored_products in parallel using list comprehensions
                 raw_top_p = results[0].get("top_p", [])
-                
+
                 def build_top_p_product(entry):
                     if isinstance(entry, dict) and "product_data" in entry:
                         return ScoredProduct(
@@ -1140,28 +952,33 @@ class RecommendationService:
                             details=entry.get("details", []),
                         )
                     return None
-                
+
                 def build_scored_product(rec):
                     return ScoredProduct(
                         **rec["product_data"],
                         score=rec.get("global_score", 0.0),
                         details=rec.get("details", []),
                     )
-                
+
                 # Use ThreadPoolExecutor for parallel processing
                 from concurrent.futures import ThreadPoolExecutor
+
                 with ThreadPoolExecutor() as executor:
                     # Process both lists in parallel
                     top_p_future = executor.submit(
-                        lambda: [p for p in map(build_top_p_product, raw_top_p) if p is not None]
+                        lambda: [
+                            p
+                            for p in map(build_top_p_product, raw_top_p)
+                            if p is not None
+                        ]
                     )
                     scored_future = executor.submit(
                         lambda: list(map(build_scored_product, results))
                     )
-                    
+
                     top_p = top_p_future.result()
                     scored_products = scored_future.result()
-            
+
             total_time = time.perf_counter() - start_time
             return ResultProduct(
                 data=scored_products,

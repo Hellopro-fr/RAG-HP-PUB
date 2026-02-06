@@ -32,14 +32,21 @@ class ComplexFilterRequest(BaseModel):
 
 class CaracteristiqueConstraint(BaseModel):
     """Constraint for caracteristique-based filtering with weight included."""
-    q_weight: float = Field(1.0, description="Weight for this caracteristique constraint")
+
+    q_weight: float = Field(
+        1.0, description="Weight for this caracteristique constraint"
+    )
     unite: Optional[str] = None
     valeurs_cibles: Optional[Union[List[str], Dict[str, Any]]] = None
     valeurs_bloquantes: Optional[Union[List[str], Dict[str, Any]]] = None
+    c_weight: float = Field(
+        1.0, description="Weight for this caracteristique constraint"
+    )
 
 
 class FilterCaracteristiqueRequest(BaseModel):
     """Request model for filtering by CaracteristiqueTechnique ID with weights."""
+
     ids: Dict[str, List[CaracteristiqueConstraint]] = Field(
         ...,
         description="Map of Caracteristique ID to list of Constraints with weights. Example: {'29': [{'q_weight': 1.0, 'valeurs_cibles': ['3']}]}",
@@ -129,7 +136,7 @@ class ScoredProduct(ProduitPayload):
 
 class ResultProduct(BaseModel):
     model_config = ConfigDict(exclude_none=True)
-    
+
     data: List[ScoredProduct]
     info: Dict[str, Any] = {}
     top_p: List[ScoredProduct] = []
@@ -197,10 +204,11 @@ class CypherQueryResponse(BaseModel):
     )
 
 
-
 """ 
  Modèles pour l'input : Payload d'entrée pour le matching de produits
  """
+
+
 class ScoredProduct(BaseModel):
     id_produit: str
     nom_produit: str
@@ -217,52 +225,97 @@ class ResultProduct(BaseModel):
 
 
 class MetadonneUtilisateurs(BaseModel):
-    pays      : Optional[str] = Field(None, description = "Localisation de l'acheteur")
-    typologie : Optional[int] = Field(..., description = "Typologie d'entreprise de l'acheteur, 1:professionnel, 2:particulier")
+    pays: Optional[str] = Field(None, description="Localisation de l'acheteur")
+    typologie: Optional[int] = Field(
+        ...,
+        description="Typologie d'entreprise de l'acheteur, 1:professionnel, 2:particulier",
+    )
 
 
 class MatchingCaracteristique(BaseModel):
-    id_caracteristique  : int                                        = Field(..., description  = "Id de la caractéristique")
-    unite               : Optional[str]                              = Field(None, description  = "Unité de la caractéristique")
-    valeurs_cibles      : Optional[Union[Dict[str, Any], List[Any]]] = Field(None, description = "Liste des valeurs cibles")
-    valeurs_bloquantes  : Optional[Union[Dict[str, Any], List[Any]]] = Field(None, description = "Liste des valeurs bloquantes")
+    id_caracteristique: int = Field(..., description="Id de la caractéristique")
+    unite: Optional[str] = Field(None, description="Unité de la caractéristique")
+    valeurs_cibles: Optional[Union[Dict[str, Any], List[Any]]] = Field(
+        None, description="Liste des valeurs cibles"
+    )
+    valeurs_bloquantes: Optional[Union[Dict[str, Any], List[Any]]] = Field(
+        None, description="Liste des valeurs bloquantes"
+    )
 
-class MatchingPayload(BaseModel): 
-    id_categorie           : int                           = Field(..., description  = "Identifiant de la catégorie")
-    top_k                  : int                           = Field(15, description   = "Nombre de résultats souhaités")
+
+class MatchingPayload(BaseModel):
+    id_categorie: int = Field(..., description="Identifiant de la catégorie")
+    top_k: int = Field(15, description="Nombre de résultats souhaités")
     # messages             : str                           = Field(None, description = "Contenu du message de l'acheteuur")
-    metadonnee_utilisateurs: MetadonneUtilisateurs         = Field(default_factory   = list, description = "Métadonnées liées à l'acheteur")
-    liste_caracteristique  : List[MatchingCaracteristique] = Field(..., description  = "Liste des caractéristiques à matcher")
-    champs_sortie          : Optional[List[str]]           = Field(None, description = "Liste des champs de sortie souhaités")
-    #autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
+    metadonnee_utilisateurs: MetadonneUtilisateurs = Field(
+        default_factory=list, description="Métadonnées liées à l'acheteur"
+    )
+    liste_caracteristique: List[MatchingCaracteristique] = Field(
+        ..., description="Liste des caractéristiques à matcher"
+    )
+    champs_sortie: Optional[List[str]] = Field(
+        None, description="Liste des champs de sortie souhaités"
+    )
+    # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
+
 
 """ 
 Modèles pour le output : Réponse du matching de produits
  """
+
+
 class CaracteristiqueMatching(BaseModel):
-    statut_matching     : int                 = Field(..., description  = "statut de la matching, 1     : matche, 2   : ecart, 3: bloquant, 4: no_renseigne")
-    id_caracteristique  : int                 = Field(..., description  = "Identifiant de la caractéristique")
-    type_caracteristique: int                 = Field(..., description  = "Type de la caractéristique, 1: numerique, 2: textuelle")
-    valeur              : Optional[str]       = Field(None, description = "Valeur associée à la caractéristique numérique")
-    unite               : Optional[str]       = Field(None, description = "Unité de la caractéristique numérique")
-    id_valeur           : Optional[List[int]] = Field(default_factory   = list, description             = "Liste des valeurs associées à la caractéristique")
-    poids               : int                 = Field(..., description  = "Poids de la caractéristique dans le score")
-    bareme              : float               = Field(..., description  = "Barème de notation pour cette caractéristique")
-    poids_question      : int                 = Field(..., description  = "Poids de la question associée à cette caractéristique")
+    statut_matching: int = Field(
+        ...,
+        description="statut de la matching, 1     : matche, 2   : ecart, 3: bloquant, 4: no_renseigne",
+    )
+    id_caracteristique: int = Field(
+        ..., description="Identifiant de la caractéristique"
+    )
+    type_caracteristique: int = Field(
+        ..., description="Type de la caractéristique, 1: numerique, 2: textuelle"
+    )
+    valeur: Optional[str] = Field(
+        None, description="Valeur associée à la caractéristique numérique"
+    )
+    unite: Optional[str] = Field(
+        None, description="Unité de la caractéristique numérique"
+    )
+    id_valeur: Optional[List[int]] = Field(
+        default_factory=list,
+        description="Liste des valeurs associées à la caractéristique",
+    )
+    poids: int = Field(..., description="Poids de la caractéristique dans le score")
+    bareme: float = Field(
+        ..., description="Barème de notation pour cette caractéristique"
+    )
+    poids_question: int = Field(
+        ..., description="Poids de la question associée à cette caractéristique"
+    )
 
 
 class Produit(BaseModel):
-    rang           : int                           = Field(..., description = "Classement du produit")
-    id_produit     : str                           = Field(..., description = "Identifiant unique du produit")
-    score          : float                         = Field(..., description = "Score de matching")
-    caracteristique: List[CaracteristiqueMatching] = Field(..., description = "Détail du matching par caractéristique")
-    coeff_geo      : float                         = Field(..., description = "Coefficient zone Géographique")
-    coeff_type_frns: float                         = Field(..., description = "Coefficient type de fournisseur")    
+    rang: int = Field(..., description="Classement du produit")
+    id_produit: str = Field(..., description="Identifiant unique du produit")
+    score: float = Field(..., description="Score de matching")
+    caracteristique: List[CaracteristiqueMatching] = Field(
+        ..., description="Détail du matching par caractéristique"
+    )
+    coeff_geo: float = Field(..., description="Coefficient zone Géographique")
+    coeff_type_frns: float = Field(..., description="Coefficient type de fournisseur")
     # top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 
+
 class MatchingResponse(BaseModel):
-    top_produit         : List[Produit] = Field(default_factory  = list, description = "Liste des top produits trouvés classés par score")
-    liste_produit       : List[Produit] = Field(default_factory  = list, description = "Liste des produits trouvés classés par score")
-    temps_de_traitement : float         = Field(..., description = "Temps pris pour effectuer le matching en secondes")
+    top_produit: List[Produit] = Field(
+        default_factory=list,
+        description="Liste des top produits trouvés classés par score",
+    )
+    liste_produit: List[Produit] = Field(
+        default_factory=list, description="Liste des produits trouvés classés par score"
+    )
+    temps_de_traitement: float = Field(
+        ..., description="Temps pris pour effectuer le matching en secondes"
+    )
     # alternative_matching: List[Produit] = Field(default_factory  = list, description = "Liste d'alternatives si applicable")
