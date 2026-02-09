@@ -41,6 +41,30 @@ export class DedupManager {
         }
     }
 
+    /**
+     * Efficiently adds a batch of URLs to the set and returns ONLY the new ones.
+     * Uses Redis pipeline to minimize round-trips.
+     */
+    async addUrlsBatch(urls: string[]): Promise<string[]> {
+        if (!urls.length) return [];
+        try {
+            const multi = this.redis.multi();
+            for (const url of urls) {
+                multi.sAdd(this.key, url);
+            }
+            // Execute batch
+            const results = await multi.exec();
+            await this.ensureTtl();
+
+            // Filter the original list based on results (1 = new, 0 = existing)
+            return urls.filter((_, index) => results[index] === 1);
+        } catch (e) {
+            console.error(`Dedup Add Batch Error: ${e}`);
+            // Fail open: return all URLs so they get processed (better than missing valid links)
+            return urls;
+        }
+    }
+
     async isKnown(url: string): Promise<boolean> {
         try {
             return await this.redis.sIsMember(this.key, url);
