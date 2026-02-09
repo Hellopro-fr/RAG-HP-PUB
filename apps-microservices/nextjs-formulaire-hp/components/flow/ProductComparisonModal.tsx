@@ -2,7 +2,7 @@
 
 import { X, Check, Plus, Minus, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { ProductSpec, Supplier } from "@/types";
 
 interface ProductComparisonModalProps {
@@ -36,13 +36,13 @@ const ProductComparisonModal = ({
 
   const currentProduct = products[currentProductIndex];
 
-  const goToPrevious = () => {
+  const goToPrevious = useCallback(() => {
     setCurrentProductIndex((prev) => (prev > 0 ? prev - 1 : products.length - 1));
-  };
+  }, [products.length]);
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     setCurrentProductIndex((prev) => (prev < products.length - 1 ? prev + 1 : 0));
-  };
+  }, [products.length]);
 
   // Mobile card view for a single product
   const MobileProductCard = ({ product }: { product: Supplier }) => (
@@ -180,33 +180,38 @@ const ProductComparisonModal = ({
       {/* Mobile view - Card carousel */}
       <div className="flex-1 overflow-auto p-4 md:hidden">
         {/* Navigation indicators */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 mb-4">
           <button
+            type="button"
             onClick={goToPrevious}
-            className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+            className="flex-shrink-0 flex items-center gap-0.5 rounded-lg bg-muted px-2 py-2 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
-            Précédent
+            Préc.
           </button>
-          <div className="flex items-center gap-2">
-            {products.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentProductIndex(idx)}
-                className={cn(
-                  "h-2.5 w-2.5 rounded-full transition-colors",
-                  idx === currentProductIndex
-                    ? "bg-primary"
-                    : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
-                )}
-              />
-            ))}
+          <div className="flex-1 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center justify-center gap-1.5 min-w-max px-1">
+              {products.map((_, idx) => (
+                <button
+                  type="button"
+                  key={idx}
+                  onClick={() => setCurrentProductIndex(idx)}
+                  className={cn(
+                    "h-2 w-2 flex-shrink-0 rounded-full transition-colors",
+                    idx === currentProductIndex
+                      ? "bg-primary"
+                      : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                  )}
+                />
+              ))}
+            </div>
           </div>
           <button
+            type="button"
             onClick={goToNext}
-            className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+            className="flex-shrink-0 flex items-center gap-0.5 rounded-lg bg-muted px-2 py-2 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
           >
-            Suivant
+            Suiv.
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
