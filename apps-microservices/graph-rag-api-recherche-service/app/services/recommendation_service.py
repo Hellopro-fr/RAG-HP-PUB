@@ -584,6 +584,7 @@ class RecommendationService:
         user_id_pays = user_meta.id_pays if user_meta else None
 
         z_unmatched = 0.2
+        e_unmatched = 0.8
 
         # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
@@ -960,10 +961,17 @@ class RecommendationService:
                  // Case 3: Neither exists
                  ELSE 0.5
              END AS zone_score
+
+        // Calculate score by Etat and affichage fournisseur
+        WITH p, f, details, global_score, zone_score,
+             CASE
+                WHEN (f.id_etat = 1 OR (f.id_etat = 2 AND f.id_affichage = 1)) THEN 1.0
+                ELSE $e_unmatched
+             END AS etat_score
         
-        // Calculate final_score = global_score * zone_score
-        WITH p, details, global_score, zone_score,
-             global_score * zone_score AS final_score
+        // Calculate final_score = global_score * zone_score * etat_score
+        WITH p, details, global_score, zone_score, etat_score,
+             global_score * zone_score * etat_score AS final_score
         
         ORDER BY final_score DESC
         LIMIT $top_k + 4
@@ -1031,6 +1039,7 @@ class RecommendationService:
             "user_dept": user_dept,
             "user_id_pays": user_id_pays,
             "z_unmatched": z_unmatched,
+            "e_unmatched": e_unmatched,
         }
 
         # Debug: Log parameters
