@@ -130,6 +130,7 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Si utilisateur connu (reconnu localement), on skip la validation; sinon on valide le formulaire
     if (!isExistingBuyer) {
       const isValid = validateForm();
       if (!isValid) return;
@@ -146,10 +147,15 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
     console.log("Submitting contact form data:", { finalData, profileData, userAnswers, selectedSupplierIds, userKnownStatus });
 
     // Tracking DB - Contact form submission (simple)
+    // On enrichit le payload de tracking comme dans SomethingToAddForm (flags message / fichiers)
     trackDbEvent('contact', 'form_submit_simple', {
       email: finalData.email,
-      is_known_buyer: isExistingBuyer
+      is_known_buyer: isExistingBuyer,
+      has_message: !!finalData.message,
+      has_files: false,
+      files_count: 0,
     }, categoryId, 1);
+
     leadSubmission.mutate({
       contact: finalData,
       profile: profileData!,

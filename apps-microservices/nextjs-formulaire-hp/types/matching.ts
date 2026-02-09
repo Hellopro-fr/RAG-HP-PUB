@@ -105,9 +105,27 @@ export interface ProductCategoryInfo {
  * Informations vendeur du produit
  */
 export interface ProductVendorInfo {
+  id: string;
+  nom: string;
+  adresse: string;
+  logo?: string;
+  localisation?: {
+    lat: number;
+    lng: number;
+    addr_md5: string;
+  };
+  annee_creation?: string;
+  temps_reponse?: string;
+  short_description?: string;
+  affichage_complet?: boolean;
+  fiche?: string;
+  annee_hellopro?: number;
+  desc_cutted?: number;
+  neuf_occasion_location?: string;
+  garantie?: string;
+  etat_societe?: string;
+  id_type_societe_contrat?: string;
   domaine: string;
-  etat_societe: string | null;
-  id_type_contrat: string | null;
 }
 
 /**
