@@ -335,19 +335,23 @@ async def reconcile_jobs():
 
 @router.post("/prune-archives", response_model=PruneResponse)
 async def prune_archives(
-    max_age_hours: int = Query(24, description="Delete archives older than this many hours.")
+    max_age_hours: int = Query(24, description="Delete archives older than this many hours."),
+    delete_all: bool = Query(False, description="If true, ignores max_age_hours and deletes ALL archives.")
 ):
     """
     Manually triggers the cleanup of old archive files from storage.
     Useful for freeing up disk space on demand.
     """
     try:
-        deleted, retained, errors = await crawler_manager.cleanup_archives(max_age_hours)
+        deleted, retained, errors = await crawler_manager.cleanup_archives(max_age_hours, delete_all=delete_all)
+        
+        msg_suffix = "ALL archives deleted." if delete_all else f"Deleted {deleted} files older than {max_age_hours}h."
+        
         return PruneResponse(
             deleted_count=deleted,
             retained_count=retained,
             errors=errors,
-            message=f"Cleanup complete. Deleted {deleted} files older than {max_age_hours}h."
+            message=f"Cleanup complete. {msg_suffix}"
         )
     except Exception as e:
         logger.error(f"Manual archive prune failed: {e}", exc_info=True)
