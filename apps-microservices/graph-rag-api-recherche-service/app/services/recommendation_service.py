@@ -1079,6 +1079,7 @@ class RecommendationService:
             "user_id_pays": user_id_pays,
             "z_unmatched": z_unmatched,
             "e_unmatched": e_unmatched,
+            "unknown_score": unknown_score,
         }
 
         # Debug: Log parameters
