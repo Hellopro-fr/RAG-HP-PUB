@@ -197,10 +197,11 @@ router.addDefaultHandler(
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
             // If we ended up at a different URL than requested (redirect), make sure the 
             // final URL is also marked as known in Redis to prevent future re-crawling.
+            // Note: Do NOT use rightTrimSlash here — the trailing slash can be significant
+            // (e.g., /path/ returns 200 but /path returns 404 on some servers).
             if (context.dedupManager && request.url !== request.loadedUrl) {
-                const finalUrlClean = rightTrimSlash(request.loadedUrl);
                 // We add it to Redis. We don't care if it returns true/false here, just ensuring it's known.
-                await context.dedupManager.addUrl(finalUrlClean);
+                await context.dedupManager.addUrl(request.loadedUrl);
             }
 
             if (isExisting && context.statsManager) {
@@ -485,7 +486,7 @@ router.addDefaultHandler(
 
                             // External Domain Check
                             if (targetDomain && !reqUrlObj.hostname.includes(targetDomain)) {
-                                console.log(`Blocked external URL: ${request.url}`);
+                                // console.log(`Blocked external URL: ${request.url}`);
                                 return false;
                             }
 
