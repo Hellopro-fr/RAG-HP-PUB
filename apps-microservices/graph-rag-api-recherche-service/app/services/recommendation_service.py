@@ -1192,7 +1192,7 @@ class RecommendationService:
                             coeff_geo=float(top_zone_score),
                             coeff_type_frns=1.0,
                             coeff_etat_score=float(top_etat_score),
-                            coeff_caracteristique=float(top_carac_score),
+                            coeff_caracteristique=float(carac_score),
                         )
                         top_produit.append(produit)
 
