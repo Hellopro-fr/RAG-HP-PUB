@@ -334,6 +334,7 @@ class Produit(BaseModel):
     coeff_geo: float = Field(..., description="Coefficient zone Géographique")
     coeff_type_frns: float = Field(..., description="Coefficient type de fournisseur")
     coeff_etat_score: float = Field(..., description="Coefficient etat score")
+    coeff_caracteristique: float = Field(..., description="Coefficient caractéristique")
     # top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 

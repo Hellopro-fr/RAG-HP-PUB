@@ -118,7 +118,7 @@ class Consumer:
                     generator = EnrichissementGenerator(api_client)
 
                     try:
-                        result = await generator.generate_all_enrichissements(request)
+                        result = await generator.generate_enrichissement(request)
                         if generator.tracking_file:
                             logger.info(f"[CAT-{id_categorie}] 📁 Fichier tracking: {generator.tracking_file}")
                     finally:
