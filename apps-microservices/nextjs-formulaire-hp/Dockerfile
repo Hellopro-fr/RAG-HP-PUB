@@ -1,5 +1,5 @@
 # Étape 1: Base avec Node.js
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Étape 2: Installation des dépendances
 FROM base AS deps

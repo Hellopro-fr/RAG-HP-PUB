@@ -499,7 +499,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   setFlowType('pas_trouve_recherchez');
                   setViewState("custom-need");
                 }}
-                className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-4 text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
+                className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-2 sm:px-4 text-[10px] sm:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center text-center leading-tight"
               >
                 Pas trouvé ce que vous cherchez ?
               </button>

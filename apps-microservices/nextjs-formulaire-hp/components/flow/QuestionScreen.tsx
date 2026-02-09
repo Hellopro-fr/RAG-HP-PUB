@@ -291,7 +291,7 @@ const QuestionScreen = ({
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
           >
-            {isLast ? "Voir ma sélection" : "Suivant"}
+            {isLast && totalQuestions > 1 ? "Voir ma sélection" : "Suivant"}
             <ArrowRight className="h-5 w-5" />
           </button>
         </div>

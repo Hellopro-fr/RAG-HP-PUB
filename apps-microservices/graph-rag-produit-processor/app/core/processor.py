@@ -18,10 +18,12 @@ def prepare_product_cypher(
     id_produit = product_data.get("id_produit", "unknown")
     graph_id = f"id_produit_{id_produit}"
 
-    # Prepare props: exclude 'caracteristics' and ensure 'id' is set
+    # Prepare props: exclude 'caracteristics', 'dept', 'pays' and ensure 'id' is set
     props = product_data.copy()
     props["id"] = graph_id
     props.pop("caracteristics", None)
+    props.pop("dept", None)  # Exclude nested dept objects
+    props.pop("pays", None)  # Exclude nested pays objects
 
     # Prepare IDs for relationships
     id_fournisseur_raw = str(props.get("id_fournisseur", "unknown"))
