@@ -330,7 +330,7 @@ router.addDefaultHandler(
                 await enqueueLinks({
                     strategy: "same-domain",
                     exclude: enqueueLinksExcludePath,
-                    transformRequestFunction: ((async (request) => {
+                    transformRequestFunction: ((async (request: any) => {
                         // 1. Robots Check
                         if (robots && !robots.isAllowed(request.url, "Googlebot")) {
                             console.log(`Bloqué par robots.txt : ${request.url}`);
