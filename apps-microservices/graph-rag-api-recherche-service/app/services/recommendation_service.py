@@ -977,7 +977,7 @@ class RecommendationService:
         LIMIT $top_k + 4
         
         // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, final_score: final_score}) AS all_products
+        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, final_score: final_score}) AS all_products
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
@@ -1000,15 +1000,16 @@ class RecommendationService:
             score: top_score,
             details: top_details,
             zone_score: top_zone_score,
-            global_score: top_global_score
+            global_score: top_global_score,
+            etat_score: top_etat_score,
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
         WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
         
         UNWIND filtered_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.final_score AS final_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, final_score, top_p
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.final_score AS final_score, top_p
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, final_score, top_p
         """
 
         # Determine projection
@@ -1153,6 +1154,7 @@ class RecommendationService:
                 details = rec.get("details", [])
                 final_score = rec.get("final_score", 0.0)
                 zone_score = rec.get("zone_score", 1.0)
+                etat_score = rec.get("etat_score", 1.0)
 
                 caracteristiques = convert_to_caracteristique_matching(
                     details, final_score
@@ -1165,6 +1167,7 @@ class RecommendationService:
                     caracteristique=caracteristiques,
                     coeff_geo=float(zone_score),
                     coeff_type_frns=1.0,  # Default, can be computed from fournisseur type
+                    coeff_etat_score=float(etat_score),
                 )
 
             if results:
@@ -1176,6 +1179,7 @@ class RecommendationService:
                     if isinstance(entry, dict) and "product_data" in entry:
                         top_zone_score = entry.get("zone_score", 1.0)
                         top_final_score = entry.get("score", 0.0)
+                        top_etat_score = entry.get("etat_score", 1.0)
                         produit = Produit(
                             rang=idx + 1,
                             id_produit=str(entry["product_data"].get("id_produit", "")),
@@ -1185,6 +1189,7 @@ class RecommendationService:
                             ),
                             coeff_geo=float(top_zone_score),
                             coeff_type_frns=1.0,
+                            coeff_etat_score=float(top_etat_score),
                         )
                         top_produit.append(produit)
 
