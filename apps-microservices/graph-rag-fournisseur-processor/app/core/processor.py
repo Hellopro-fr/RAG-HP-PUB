@@ -25,8 +25,12 @@ def prepare_fournisseur_statements(
     # Prepare props: exclude 'dept' and 'pays' from main properties
     props = fournisseur_data.copy()
     props["id"] = graph_id
+
     dept_data = props.pop("dept", [])
     pays_data = props.pop("pays", [])
+
+    props.pop("dept", None)  # Exclude nested dept objects
+    props.pop("pays", None)  # Exclude nested pays objects
 
     # 1. Create/Merge Fournisseur node
     fournisseur_query = """
