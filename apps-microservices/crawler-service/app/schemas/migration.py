@@ -33,6 +33,7 @@ class MigrationUploadResponse(BaseModel):
     success: bool
     message: str
     domain_id: str
+    domain_name: Optional[str] = Field(None, description="The domain name (e.g., example.com) used for directory structure.")
     storage_path: str
     content_type: ArchiveContentType = Field(
         ...,
