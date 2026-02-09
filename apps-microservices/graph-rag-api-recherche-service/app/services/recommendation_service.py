@@ -1001,7 +1001,7 @@ class RecommendationService:
             details: top_details,
             zone_score: top_zone_score,
             global_score: top_global_score,
-            etat_score: top_etat_score,
+            etat_score: top_etat_score
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
