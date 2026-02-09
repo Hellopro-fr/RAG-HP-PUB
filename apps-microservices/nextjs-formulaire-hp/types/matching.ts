@@ -46,6 +46,10 @@ export interface MatchingProduct {
   coeff_geo: number;
   /** Coefficient type fournisseur (debug uniquement) */
   coeff_type_frns: number;
+  /** Coefficient caractéristique (debug uniquement) */
+  coeff_caracteristique?: number;
+  /** Coefficient état score (debug uniquement) */
+  coeff_etat_score?: number;
 }
 
 /**
