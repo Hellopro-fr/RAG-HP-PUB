@@ -182,7 +182,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!isExistingBuyer) {
+    if (!(isKnownBuyer && buyerCheckResult?.infoBuyer)) {
       const isValid = validateForm();
       if (!isValid) return;
     }
