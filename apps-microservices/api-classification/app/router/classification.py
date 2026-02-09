@@ -312,6 +312,125 @@ async def classify_batch_products(batch_input: BatchProductsInput):
                 for _ in range(num_products - 1):
                     metric.observe(0)
 
+# =============================================================================
+# CLASSIFY-PROVIDER ENDPOINTS (using prompt_id=110)
+# These endpoints are identical to /classify and /classify/batch but use a
+# different prompt template (ID 110) designed for provider classification.
+# =============================================================================
+
+@router.post("/classify-provider", response_model=ClassificationResult)
+@measure_processing_time(service_name="api-classification-service", payload_arg_name="product", collection_field_name="llm")
+async def classify_single_product_provider(product: ProductInput):
+    """Classifie un seul produit avec le prompt fournisseur (prompt_id=110)"""
+    try:
+        # Déterminer le LLM à utiliser : celui spécifié dans la requête ou DeepSeek par défaut
+        llm_to_use = product.llm if product.llm else "DeepSeek"
+        enable_thinking = product.enable_thinking if product.enable_thinking is not None else False
+        optimize = product.optimize if product.optimize is not None else False
+
+        if not classifier.is_llm_configured():
+            raise HTTPException(status_code=503, detail="LLM non configuré")
+
+        # Conversion du modèle Pydantic en dict
+        product_dict = {
+            'id_produit': product.id_produit,
+            'nom_produit': product.nom_produit,
+            'description': product.description,
+            'id_categorie_attendue': product.id_categorie_attendue
+        }
+
+        # Utilisation du prompt_id=110 pour la classification fournisseur
+        result = await classifier.classify_single(product_dict, llm_override=llm_to_use, enable_thinking=enable_thinking, optimize=optimize, prompt_id=110)
+
+        # Conversion en modèle de réponse
+        return ClassificationResult(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur classification single provider: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/classify-provider/batch", response_model=BatchClassificationResponse)
+async def classify_batch_products_provider(batch_input: BatchProductsInput):
+    """Classifie plusieurs produits en lot avec le prompt fournisseur (prompt_id=110)"""
+    # --- MANUAL INSTRUMENTATION START ---
+    start_time_manual = time.monotonic()
+    metric_status = 'success'
+    llm_to_use = None
+    # --- END MANUAL INSTRUMENTATION START ---
+    try:
+        # Déterminer le LLM à utiliser : celui spécifié dans la requête ou DeepSeek par défaut
+        llm_to_use = batch_input.llm if batch_input.llm else "DeepSeek"
+        enable_thinking = batch_input.enable_thinking if batch_input.enable_thinking is not None else False
+        optimize = batch_input.optimize if batch_input.optimize is not None else False
+
+        if not classifier.is_llm_configured():
+            raise HTTPException(status_code=503, detail="LLM non configuré")
+
+        if len(batch_input.produits) == 0:
+            raise HTTPException(status_code=400, detail="Liste de produits vide")
+
+        if len(batch_input.produits) > 1200:  # Limite de sécurité
+            raise HTTPException(status_code=400, detail="Trop de produits (max 1200)")
+
+        # Conversion des modèles Pydantic en dicts
+        products_dict = []
+        for product in batch_input.produits:
+            products_dict.append({
+                'id_produit': product.id_produit,
+                'nom_produit': product.nom_produit,
+                'description': product.description,
+                'id_categorie_attendue': product.id_categorie_attendue
+            })
+
+        # Utilisation du prompt_id=110 pour la classification fournisseur
+        result = await classifier.classify_batch(products_dict, llm_override=llm_to_use, enable_thinking=enable_thinking, optimize=optimize, prompt_id=110)
+
+        # Conversion en modèle de réponse
+        classification_results = [ClassificationResult(**res) for res in result['resultats']]
+
+        return BatchClassificationResponse(
+            total_produits=result['total_produits'],
+            success_count=result['success_count'],
+            error_count=result['error_count'],
+            resultats=classification_results,
+            llm_type=result.get('llm_type'),
+            processing_time_total=result['processing_time_total']
+        )
+
+    except HTTPException:
+        metric_status = 'failure'
+        raise
+    except Exception as e:
+        metric_status = 'failure'
+        logger.error(f"Erreur classification batch provider: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # --- MANUAL INSTRUMENTATION FINALIZATION ---
+        duration = time.monotonic() - start_time_manual
+        num_products = len(batch_input.produits)
+        collection_type = str(llm_to_use or "Default")
+
+        if num_products == 0:
+             PROCESSING_TIME_SECONDS.labels(
+                service_name="api-classification-service",
+                status=metric_status,
+                collection_type='empty_batch'
+            ).observe(duration)
+        else:
+            metric = PROCESSING_TIME_SECONDS.labels(
+                service_name="api-classification-service",
+                status=metric_status,
+                collection_type=collection_type
+            )
+            # Observe the full duration once to increment the sum correctly
+            metric.observe(duration)
+            # Observe a zero duration for the rest of the items to increment the count correctly
+            if num_products > 1:
+                for _ in range(num_products - 1):
+                    metric.observe(0)
+
 # @router.post("/classify/batch/async")
 # async def classify_batch_products_async(
 #     batch_input: BatchProductsInput,
