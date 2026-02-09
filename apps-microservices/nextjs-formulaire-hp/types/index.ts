@@ -79,6 +79,7 @@ export interface PriceInfo {
 }
 
 export interface SupplierInfo {
+  id?: string;
   name: string;
   description: string;
   location: string;

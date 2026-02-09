@@ -375,6 +375,7 @@ export function enrichSuppliersWithProductInfo(
       images: image !== PLACEHOLDER_IMAGE ? [image] : supplier.images,
       logo: vendeur.logo || undefined,
       supplier: {
+        id: vendeur.id,
         name: supplierName,
         description: vendeur.short_description || '',
         location: vendeur.adresse || '',
