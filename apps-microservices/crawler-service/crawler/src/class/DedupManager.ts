@@ -41,36 +41,39 @@ export class DedupManager {
         }
     }
 
-    /**
-     * Efficiently adds a batch of URLs to the set and returns ONLY the new ones.
-     * Uses Redis pipeline to minimize round-trips.
-     */
-    async addUrlsBatch(urls: string[]): Promise<string[]> {
-        if (!urls.length) return [];
-        try {
-            const multi = this.redis.multi();
-            for (const url of urls) {
-                multi.sAdd(this.key, url);
-            }
-            // Execute batch
-            const results = await multi.exec();
-            await this.ensureTtl();
-
-            // Filter the original list based on results (1 = new, 0 = existing)
-            return urls.filter((_, index) => results[index] === 1);
-        } catch (e) {
-            console.error(`Dedup Add Batch Error: ${e}`);
-            // Fail open: return all URLs so they get processed (better than missing valid links)
-            return urls;
-        }
-    }
-
     async isKnown(url: string): Promise<boolean> {
         try {
             return await this.redis.sIsMember(this.key, url);
         } catch (e) {
             return false;
         }
+    }
+
+    /**
+     * Batch-checks multiple URLs against the deduplication set in a single Redis round-trip.
+     * Uses SMISMEMBER for O(N) efficiency instead of N individual SISMEMBER calls.
+     *
+     * @param urls - Array of URLs to check
+     * @returns Set of URLs that are already known (exist in Redis)
+     */
+    async isKnownBatch(urls: string[]): Promise<Set<string>> {
+        const knownSet = new Set<string>();
+        if (urls.length === 0) return knownSet;
+
+        try {
+            // SMISMEMBER returns an array of 0/1 for each member
+            const results = await this.redis.smIsMember(this.key, urls);
+            for (let i = 0; i < urls.length; i++) {
+                if (results[i]) {
+                    knownSet.add(urls[i]);
+                }
+            }
+        } catch (e) {
+            console.error(`Dedup Batch Check Error: ${e}`);
+            // On error, return empty set (process all URLs to be safe)
+        }
+
+        return knownSet;
     }
 
     /**
