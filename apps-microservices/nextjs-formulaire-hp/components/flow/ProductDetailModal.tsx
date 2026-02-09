@@ -324,17 +324,17 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                           borderClass
                         )}
                       >
-                        <div className="flex items-center gap-2 min-w-0 shrink-0">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
                           {/* Status icon */}
-                          {isKO && <X className="h-4 w-4 text-warning shrink-0" />}
-                          {isOK && isRequested && <Check className="h-4 w-4 text-match-high shrink-0" />}
-                          {isUnknown && isRequested && <HelpCircle className="h-4 w-4 text-muted-foreground shrink-0" />}
-                          {isExtraInfo && <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40 shrink-0" />}
+                          {isKO && <X className="h-4 w-4 text-warning shrink-0 mt-0.5" />}
+                          {isOK && isRequested && <Check className="h-4 w-4 text-match-high shrink-0 mt-0.5" />}
+                          {isUnknown && isRequested && <HelpCircle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />}
+                          {isExtraInfo && <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40 shrink-0 mt-0.5" />}
 
-                          <span className="text-muted-foreground">{spec.label}</span>
+                          <span className="text-muted-foreground break-words">{spec.label}</span>
                         </div>
 
-                        <div className="flex flex-col items-end text-right">
+                        <div className="flex flex-col items-end text-right shrink-0 max-w-[45%]">
                           {isUnknown ? (
                             <span className="font-medium text-muted-foreground italic">
                               Non renseigné
