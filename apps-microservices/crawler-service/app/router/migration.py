@@ -15,30 +15,30 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
 from app.schemas.migration import ArchiveContentType, FileFormat, MigrationUploadResponse
 
+from app.core.config import settings
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Base path for crawler storage - matches the PHP script configuration
-MIGRATION_BASE_PATH = "/mnt/data/docker/volumes/rag-hp-pub_crawler_data/_data"
 
-
-def get_storage_subpath(content_type: ArchiveContentType, domain_id: str) -> str:
+def get_storage_subpath(content_type: ArchiveContentType, domain_name: str) -> str:
     """
     Returns the correct storage subdirectory based on content type.
     Matches the directory structure used by the crawler and PHP scripts.
+    Uses domain_name (e.g. 'example.com') for subdirectories.
     """
     if content_type == ArchiveContentType.DATASET:
-        return os.path.join("storage", "datasets", domain_id)
+        return os.path.join("storage", "datasets", domain_name)
     elif content_type == ArchiveContentType.DATASET_NFR:
-        return os.path.join("storage", "datasets", f"nfr-{domain_id}")
+        return os.path.join("storage", "datasets", f"nfr-{domain_name}")
     elif content_type == ArchiveContentType.DATASET_ERROR:
-        return os.path.join("storage", "datasets", f"error-{domain_id}")
+        return os.path.join("storage", "datasets", f"error-{domain_name}")
     elif content_type == ArchiveContentType.REQUEST_QUEUES:
-        return os.path.join("storage", "request_queues", domain_id)
+        return os.path.join("storage", "request_queues", domain_name)
     elif content_type == ArchiveContentType.REQUEST_URLS:
-        return os.path.join("storage", "requests_urls", domain_id)
+        return os.path.join("storage", "requests_urls", domain_name)
     elif content_type == ArchiveContentType.MISCELLANEOUS:
-        return os.path.join("storage", "miscellaneous", domain_id)
+        return os.path.join("storage", "miscellaneous", domain_name)
     else:
         raise ValueError(f"Unknown content type: {content_type}")
 
@@ -91,6 +91,7 @@ async def upload_migration_archive(
     archive: UploadFile = File(..., description="The archive file to upload and extract."),
     content_type: ArchiveContentType = Form(..., description="Type of content: dataset, dataset_nfr, dataset_error, request_queues, request_urls, miscellaneous."),
     is_crawl_finished: bool = Form(..., description="Indicates if the crawl is complete."),
+    domain_name: Optional[str] = Form(None, description="The domain name (e.g. example.com). Used for directory structure. If not provided, domain_id is used."),
     end_date: Optional[str] = Form(None, description="End date of the crawl (ISO format). Uses current time if empty and crawl is finished."),
     file_format: Optional[FileFormat] = Form(None, description="File format (auto-detected from filename if not provided).")
 ):
@@ -101,16 +102,14 @@ async def upload_migration_archive(
     - **archive**: The archive file (tar.gz, zip, or tar)
     - **content_type**: Type of content being uploaded (dataset, request_queues, etc.)
     - **is_crawl_finished**: Whether the crawl is complete
+    - **domain_name**: Domain name for subdirectory structure (e.g. storage/datasets/example.com). Defaults to domain_id if missing.
     - **end_date**: Optional end date (defaults to now if crawl is finished and this is empty)
     - **file_format**: Optional file format (auto-detected if not provided)
     
     Based on content_type, the archive will be extracted to:
-    - dataset: `/mnt/data/.../storage/datasets/{domain_id}`
-    - dataset_nfr: `/mnt/data/.../storage/datasets/nfr-{domain_id}`
-    - dataset_error: `/mnt/data/.../storage/datasets/error-{domain_id}`
-    - request_queues: `/mnt/data/.../storage/request_queues/{domain_id}`
-    - request_urls: `/mnt/data/.../storage/requests_urls/{domain_id}`
-    - miscellaneous: `/mnt/data/.../storage/miscellaneous/{domain_id}`
+    - dataset: `/mnt/data/.../storage/datasets/{domain_name}`
+    - dataset_nfr: `/mnt/data/.../storage/datasets/nfr-{domain_name}`
+    - etc.
     
     If `is_crawl_finished=true` and no `_completion_marker.json` exists in the domain's
     base storage directory, one will be created.
@@ -118,13 +117,16 @@ async def upload_migration_archive(
     # Determine file format
     actual_format = file_format or detect_file_format(archive.filename or "archive.tar.gz")
     
-    # Construct storage paths
-    subpath = get_storage_subpath(content_type, domain_id)
-    storage_path = os.path.join(MIGRATION_BASE_PATH, domain_id, subpath)
-    # Base storage for completion marker
-    base_storage_path = os.path.join(MIGRATION_BASE_PATH, domain_id, "storage")
+    # Use domain_name for subdirectories, fallback to domain_id if not provided
+    eff_domain_name = domain_name if domain_name else domain_id
     
-    logger.info(f"Migration upload started for domain_id={domain_id}, content_type={content_type}, format={actual_format}, is_crawl_finished={is_crawl_finished}")
+    # Construct storage paths using settings.CRAWLER_STORAGE_PATH (internal container path)
+    subpath = get_storage_subpath(content_type, eff_domain_name)
+    storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, domain_id, subpath)
+    # Base storage for completion marker (root of domain_id)
+    base_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, domain_id)
+    
+    logger.info(f"Migration upload started for domain_id={domain_id}, domain_name={eff_domain_name}, content_type={content_type}, format={actual_format}")
     
     try:
         # Create storage directory if it doesn't exist
@@ -183,6 +185,7 @@ async def upload_migration_archive(
             success=True,
             message="Archive uploaded and extracted successfully.",
             domain_id=domain_id,
+            domain_name=eff_domain_name,
             storage_path=storage_path,
             content_type=content_type,
             completion_marker_created=completion_marker_created,
