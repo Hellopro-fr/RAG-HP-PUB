@@ -562,6 +562,7 @@ class RecommendationService:
         """
         Get products filtered and scored by CaracteristiqueTechnique constraints.
         Uses MatchingPayload schema with MatchingOptions.Score for caracteristique weights.
+        Includes geographic zone scoring based on MetadonneUtilisateurs.
         """
         start_time = time.perf_counter()
 
@@ -575,6 +576,15 @@ class RecommendationService:
         # Use default values for blocked_val and different_val
         blocked_val = -2.0
         different_val = -0.3
+
+        # Extract user location data from metadonnee_utilisateurs
+        user_meta = request.metadonnee_utilisateurs
+        user_cp = user_meta.cp if user_meta else None
+        user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
+        user_id_pays = user_meta.id_pays if user_meta else None
+
+        z_unmatched = 0.2
+        e_unmatched = 0.8
 
         # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
@@ -897,11 +907,77 @@ class RecommendationService:
         WITH p, q_weight_groups AS details, 
              CASE WHEN denominator = 0 THEN 0.0 ELSE (numerator / denominator) END AS global_score
         
-        ORDER BY global_score DESC
+        // --- STEP 2.5: ZONE SCORING based on MetadonneUtilisateurs ---
+        // Get the product's fournisseur
+        OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
+        
+        // Check for COUVRE_PAYS relationships with partiel property
+        OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
+        
+        // Check for COUVRE_ZONE relationships
+        OPTIONAL MATCH (f)-[:COUVRE_ZONE]->(zone:ZoneGeo)
+        
+        WITH p, details, global_score, f,
+             collect(DISTINCT {pays: pays, partiel: r_pays.partiel, id_pays: pays.id_pays}) AS pays_rels,
+             collect(DISTINCT zone.list_dept) AS zone_depts
+        
+        // Flatten zone_depts (it's a list of lists)
+        WITH p, details, global_score, f, pays_rels,
+             apoc.coll.flatten(zone_depts) AS all_depts
+        
+        // Calculate zone_score based on the algorithm:
+        // 1. If has pays relation:
+        //    - If partiel=true: check if user_dept is in ZoneGeo.list_dept -> match=1, no match=z_unmatched
+        //    - If partiel=false: check if user_id_pays matches Pays.id_pays -> match=1, no match=z_unmatched
+        // 2. If no pays relation but has zone relation: check if user_dept is in list_dept -> match=1, no match=z_unmatched
+        // 3. If neither exists: score=0.5
+        WITH p, f, details, global_score,
+             CASE
+                 // Case 1: Has pays relations
+                 WHEN size(pays_rels) > 0 AND pays_rels[0].pays IS NOT NULL THEN
+                     CASE
+                         // Case 1a: Any pays with partiel=true exists -> check ZoneGeo
+                         WHEN ANY(pr IN pays_rels WHERE pr.partiel = true) THEN
+                             CASE
+                                 WHEN $user_dept IS NULL THEN 0.5
+                                 WHEN $user_dept IN all_depts THEN 1.0
+                                 ELSE $z_unmatched
+                             END
+                         // Case 1b: All pays with partiel=false -> check Pays.id_pays match
+                         ELSE
+                             CASE
+                                 WHEN $user_id_pays IS NULL THEN 0.5
+                                 WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN 1.0
+                                 ELSE $z_unmatched
+                             END
+                     END
+                 // Case 2: No pays relation but has zone relation
+                 WHEN size(all_depts) > 0 THEN
+                     CASE
+                         WHEN $user_dept IS NULL THEN 0.5
+                         WHEN $user_dept IN all_depts THEN 1.0
+                         ELSE $z_unmatched
+                     END
+                 // Case 3: Neither exists
+                 ELSE 0.5
+             END AS zone_score
+
+        // Calculate score by Etat and affichage fournisseur
+        WITH p, f, details, global_score, zone_score,
+             CASE
+                WHEN (f.id_etat = 1 OR (f.id_etat = 2 AND f.id_affichage = 1)) THEN 1.0
+                ELSE $e_unmatched
+             END AS etat_score
+        
+        // Calculate final_score = global_score * zone_score * etat_score
+        WITH p, details, global_score, zone_score, etat_score,
+             global_score * zone_score * etat_score AS final_score
+        
+        ORDER BY final_score DESC
         LIMIT $top_k + 4
         
         // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score}) AS all_products
+        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, final_score: final_score}) AS all_products
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
@@ -909,28 +985,31 @@ class RecommendationService:
                  head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
              ] AS top_per_fournisseur
         
-        // Sort top_per_fournisseur by global_score descending and limit to 4
+        // Sort top_per_fournisseur by final_score descending and limit to 4
         WITH all_products, top_per_fournisseur
         UNWIND top_per_fournisseur AS p_top
         WITH all_products, p_top 
-        ORDER BY p_top.global_score DESC 
+        ORDER BY p_top.final_score DESC 
         LIMIT 4
         
         // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.global_score AS top_score, p_top.details AS top_details
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id
+        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score
+        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score
         WITH all_products, collect({
             product_data: top_product_data,
             score: top_score,
-            details: top_details
+            details: top_details,
+            zone_score: top_zone_score,
+            global_score: top_global_score,
+            etat_score: top_etat_score
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
         WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
         
         UNWIND filtered_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.final_score AS final_score, top_p
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, final_score, top_p
         """
 
         # Determine projection
@@ -958,10 +1037,14 @@ class RecommendationService:
             "target_product_id": target_product_id,
             "blocked_val": blocked_val,
             "different_val": different_val,
+            "user_dept": user_dept,
+            "user_id_pays": user_id_pays,
+            "z_unmatched": z_unmatched,
+            "e_unmatched": e_unmatched,
         }
 
         # Debug: Log parameters
-        logging.info(f"📝 Caracteristique filter params:")
+        logging.info("📝 Caracteristique filter params:")
         for key, value in params.items():
             if key not in ["filters", "weights"]:
                 logging.info(f"   {key}: {value} (type: {type(value).__name__})")
@@ -1069,19 +1152,22 @@ class RecommendationService:
                 """Convert a result record to Produit."""
                 product_data = rec.get("product_data", {})
                 details = rec.get("details", [])
-                global_score = rec.get("global_score", 0.0)
+                final_score = rec.get("final_score", 0.0)
+                zone_score = rec.get("zone_score", 1.0)
+                etat_score = rec.get("etat_score", 1.0)
 
                 caracteristiques = convert_to_caracteristique_matching(
-                    details, global_score
+                    details, final_score
                 )
 
                 return Produit(
                     rang=rang,
                     id_produit=str(product_data.get("id_produit", "")),
-                    score=float(global_score),
+                    score=float(final_score),
                     caracteristique=caracteristiques,
-                    coeff_geo=1.0,  # Default, can be computed from zone matching
+                    coeff_geo=float(zone_score),
                     coeff_type_frns=1.0,  # Default, can be computed from fournisseur type
+                    coeff_etat_score=float(etat_score),
                 )
 
             if results:
@@ -1091,15 +1177,19 @@ class RecommendationService:
                 # Build top_produit list
                 for idx, entry in enumerate(raw_top_p):
                     if isinstance(entry, dict) and "product_data" in entry:
+                        top_zone_score = entry.get("zone_score", 1.0)
+                        top_final_score = entry.get("score", 0.0)
+                        top_etat_score = entry.get("etat_score", 1.0)
                         produit = Produit(
                             rang=idx + 1,
                             id_produit=str(entry["product_data"].get("id_produit", "")),
-                            score=float(entry.get("score", 0.0)),
+                            score=float(top_final_score),
                             caracteristique=convert_to_caracteristique_matching(
-                                entry.get("details", []), entry.get("score", 0.0)
+                                entry.get("details", []), top_final_score
                             ),
-                            coeff_geo=1.0,
+                            coeff_geo=float(top_zone_score),
                             coeff_type_frns=1.0,
+                            coeff_etat_score=float(top_etat_score),
                         )
                         top_produit.append(produit)
 
