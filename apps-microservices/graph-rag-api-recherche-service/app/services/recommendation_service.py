@@ -931,7 +931,7 @@ class RecommendationService:
         //    - If partiel=false: check if user_id_pays matches Pays.id_pays -> match=1, no match=z_unmatched
         // 2. If no pays relation but has zone relation: check if user_dept is in list_dept -> match=1, no match=z_unmatched
         // 3. If neither exists: score=0.5
-        WITH p, details, global_score,
+        WITH p, f, details, global_score,
              CASE
                  // Case 1: Has pays relations
                  WHEN size(pays_rels) > 0 AND pays_rels[0].pays IS NOT NULL THEN
