@@ -230,6 +230,8 @@ class MetadonneUtilisateurs(BaseModel):
         ...,
         description="Typologie d'entreprise de l'acheteur, 1:professionnel, 2:particulier",
     )
+    id_pays: Optional[int] = Field(None, description="ID du pays")
+    cp: Optional[str] = Field(None, description="Code postal de l'acheteur")
 
 
 class MatchingCaracteristique(BaseModel):
