@@ -330,7 +330,7 @@ router.addDefaultHandler(
                 await enqueueLinks({
                     strategy: "same-domain",
                     exclude: enqueueLinksExcludePath,
-                    transformRequestFunction: async (request) => {
+                    transformRequestFunction: ((async (request) => {
                         // 1. Robots Check
                         if (robots && !robots.isAllowed(request.url, "Googlebot")) {
                             console.log(`Bloqué par robots.txt : ${request.url}`);
@@ -486,7 +486,7 @@ router.addDefaultHandler(
 
                         request.userData = { is_existing: false };
                         return request;
-                    },
+                    }) as any),
                 });
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
