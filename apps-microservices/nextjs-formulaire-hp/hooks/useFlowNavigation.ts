@@ -1,16 +1,21 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
+
+// Base path configuré dans next.config.js (pour le proxy Apache)
+const BASE_PATH = '/formulaire';
 
 /**
  * Hook pour la navigation dans le flow avec conservation des paramètres GET.
  *
  * Les paramètres comme id_categorie ou token sont conservés lors des navigations
  * entre les étapes du funnel (/questionnaire -> /profile -> /selection).
+ *
+ * NOTE: On utilise window.location.href au lieu de router.push() pour que
+ * les navigations passent par le proxy Apache et que l'URL reste sur www.hellopro.fr
  */
 export function useFlowNavigation() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   /**
@@ -22,11 +27,15 @@ export function useFlowNavigation() {
   }, [searchParams]);
 
   /**
-   * Navigation vers une page du flow en conservant les paramètres GET
+   * Navigation vers une page du flow en conservant les paramètres GET.
+   * Utilise window.location.href pour passer par le proxy Apache.
    */
   const navigateTo = useCallback((path: string) => {
-    router.push(buildUrl(path));
-  }, [router, buildUrl]);
+    const url = buildUrl(path);
+    // Navigation "hard" pour passer par le proxy Apache
+    // Cela garantit que l'URL reste sur le domaine du proxy (www.hellopro.fr)
+    window.location.href = `${BASE_PATH}${url}`;
+  }, [buildUrl]);
 
   /**
    * Navigation vers le questionnaire

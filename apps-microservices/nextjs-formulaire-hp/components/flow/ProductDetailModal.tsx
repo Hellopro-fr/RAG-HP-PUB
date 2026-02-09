@@ -389,13 +389,13 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                   </h4>
 
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1 text-match-high">
+                    {/* <span className="flex items-center gap-1 text-match-high">
                       <Truck className="h-4 w-4" />
                       Livre dans votre zone
-                    </span>
+                    </span> */}
                     <span className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />
-                      Répond en {product.supplier.responseTime}
+                      {product.supplier.responseTime}
                     </span>
                   </div>
                 </div>

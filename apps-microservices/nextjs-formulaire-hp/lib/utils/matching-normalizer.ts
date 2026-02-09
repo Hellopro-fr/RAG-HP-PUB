@@ -354,14 +354,17 @@ export function enrichSuppliersWithProductInfo(
 
     const { produit, vendeur } = info;
 
-    // Extraire le nom du fournisseur depuis le domaine
-    const supplierName = vendeur.domaine
-      ? vendeur.domaine.replace(/^www\./, '').split('.')[0].toUpperCase()
-      : PLACEHOLDER_SUPPLIER;
+    // Utiliser le nom réel du vendeur (fallback sur domaine si absent)
+    const supplierName = vendeur.nom || 
+      (vendeur.domaine
+        ? vendeur.domaine.replace(/^www\./, '').split('.')[0].toUpperCase()
+        : PLACEHOLDER_SUPPLIER);
 
     // Image du produit (peut être vide)
     const image = produit.image_produit || PLACEHOLDER_IMAGE;
 
+    const responseTime = vendeur.temps_reponse || 'Répond en < 48h';
+        
     return {
       ...supplier,
       productName: produit.titre_produit || supplier.productName,
@@ -370,10 +373,13 @@ export function enrichSuppliersWithProductInfo(
       descriptionHtml: produit.description_produit || undefined,
       image,
       images: image !== PLACEHOLDER_IMAGE ? [image] : supplier.images,
+      logo: vendeur.logo || undefined,
       supplier: {
-        ...supplier.supplier,
         name: supplierName,
-        description: '',
+        description: vendeur.short_description || '',
+        location: vendeur.adresse || '',
+        responseTime,
+        logo: vendeur.logo,
       },
     };
   });

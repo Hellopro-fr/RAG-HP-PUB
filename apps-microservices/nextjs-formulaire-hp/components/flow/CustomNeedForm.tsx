@@ -5,7 +5,12 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { trackCustomNeedPageView, trackCustomNeedContactView } from "@/lib/analytics";
+import { trackCustomNeedPageView, trackCustomNeedContactView, trackFormValidationErrors } from "@/lib/analytics";
+import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
+import { validatePhoneNumber } from "@/lib/utils/phone-validation";
+import { toast } from "@/hooks/use-toast";
+import { useFlowStore } from "@/lib/stores/flow-store";
+import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 
 // Mock list of existing buyers in database
 const EXISTING_BUYERS = [
@@ -33,6 +38,13 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
     id_pays_tel: 1, // France par défaut
     phone: "",
   });
+
+  const [errors, setErrors] = useState<Partial<Record<keyof typeof formData, string>>>({});
+  const [files, setFiles] = useState<File[]>([]);
+
+  const { setContactData, files: filesStore, addFilesStore, flowType, profileData, userAnswers, selectedSupplierIds, categoryId } = useFlowStore();
+  const leadSubmission = useLeadSubmission();
+  const { trackDbEvent } = useDbTracking();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
@@ -54,8 +66,13 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
   const showAdditionalFields = isEmailValid && !isExistingBuyer;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFileName(e.target.files[0].name);
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files);
+      setFiles(prev => [...prev, ...newFiles]);
+      setFileName(newFiles[0].name);
+      // Update store if helper available
+      if (addFilesStore) addFilesStore(newFiles);
+      e.target.value = '';
     }
   };
 
@@ -67,11 +84,99 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
 
   const isFormValid = !showAdditionalFields || !!formData.civility;
 
+  const validateForm = (): boolean => {
+    const newErrors: Partial<Record<keyof typeof formData, string>> = {};
+
+    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Email invalide";
+    }
+    if (!formData.civility) {
+      newErrors.civility = "Civilité requise";
+    }
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = "Prénom requis";
+    }
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = "Nom requis";
+    }
+
+    const phoneValidation = validatePhoneNumber(formData.phone, formData.countryCode || "+33");
+    if (!phoneValidation.isValid) {
+      newErrors.phone = phoneValidation.error || "Téléphone invalide";
+    }
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      const errorList = Object.entries(newErrors).map(([field, message]) => ({
+        field,
+        type: field === 'email' || field === 'phone' ? 'invalid_format' : 'required',
+        message: message || '',
+      }));
+      trackFormValidationErrors(errorList.length, errorList);
+
+      if (newErrors.civility) {
+        toast({
+          variant: "destructive",
+          title: "Champ requis",
+          description: newErrors.civility,
+        });
+      }
+    }
+
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFormValid) return;
-    console.log("Form submitted:", { description, fileName, ...formData });
-    onBack();
+
+    if (!isExistingBuyer) {
+      const isValid = validateForm();
+      if (!isValid) return;
+    }
+
+    const userKnownStatus = isExistingBuyer ? 'known' as const : 'unknown' as const;
+
+    const finalData: any = {
+      ...formData,
+      files: filesStore || files,
+      message: description
+    };
+
+    finalData.files = finalData.files || files;
+
+    finalData.files.forEach((file: File, index: number) => {
+      console.log(`Fichier ${index}:`, {
+        nom: file.name,
+        taille: file.size,
+        type: file.type
+      });
+    });
+
+    setContactData(finalData);
+
+    // Tracking DB - Something to add form submission
+    trackDbEvent('contact', 'form_submit_custom_need', {
+      email: finalData.email,
+      is_known_buyer: isExistingBuyer,
+      has_description: !!description,
+      has_files: (finalData.files?.length || 0) > 0,
+      files_count: finalData.files?.length || 0,
+      flow_type: flowType
+    }, categoryId, 1);
+
+    leadSubmission.mutate({
+      contact: finalData,
+      profile: profileData!,
+      answers: userAnswers,
+      selectedSupplierIds: selectedSupplierIds,
+      submittedAt: new Date().toISOString(),
+      userKnownStatus,
+      categoryId: categoryId?.toString(),
+      source: 1, // AO
+    });
+
+    // onBack();
   };
 
   // Ref pour éviter les doubles appels en StrictMode
@@ -329,6 +434,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                   className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                   placeholder="vous@entreprise.com"
                 />
+                {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email}</p>}
                 {isExistingBuyer && (
                   <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
                     <CheckCircle className="h-4 w-4" />
@@ -378,6 +484,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                         onChange={handleChange}
                         className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                       />
+                      {errors.firstName && <p className="mt-1 text-sm text-destructive">{errors.firstName}</p>}
                     </div>
                     <div>
                       <label
@@ -395,6 +502,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                         onChange={handleChange}
                         className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                       />
+                      {errors.lastName && <p className="mt-1 text-sm text-destructive">{errors.lastName}</p>}
                     </div>
                   </div>
 
@@ -409,6 +517,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                       onValueChange={(phone) => setFormData((prev) => ({ ...prev, phone }))}
                       onCountryCodeChange={(countryCode) => setFormData((prev) => ({ ...prev, countryCode }))}
                       onCountryIdChange={(id_pays_tel) => setFormData((prev) => ({ ...prev, id_pays_tel }))}
+                      error={errors.phone}
                       required
                     />
                   </div>

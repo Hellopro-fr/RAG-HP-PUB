@@ -123,7 +123,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
           id_pays_tel   : data.contact.id_pays_tel || 1,
         },
         message               : data.contact.message || 'Demande de devis via UX Matching',
-        produits              : suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data),
+        produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data) : [],
         criteres              : data.answers,
         souhait_devis         : data.source === 2, 
         demande_ia            : true,
