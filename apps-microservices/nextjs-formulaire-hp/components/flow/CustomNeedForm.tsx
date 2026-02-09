@@ -11,50 +11,53 @@ import { validatePhoneNumber } from "@/lib/utils/phone-validation";
 import { toast } from "@/hooks/use-toast";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
+import { ContactFormData } from "@/types";
+import { useBuyerCheck } from "@/hooks/api";
 
-// Mock list of existing buyers in database
-const EXISTING_BUYERS = [
-  "jean.dupont@entreprise.fr",
-  "marie.martin@societe.com",
-  "contact@hellopro.fr",
-  "acheteur@garage-martin.fr",
-];
 
 interface CustomNeedFormProps {
   onBack: () => void;
 }
 
 const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
+  const {
+    setContactData,
+    flowType,
+    profileData,
+    userAnswers,
+    selectedSupplierIds,
+    categoryId,
+    files: filesStore,
+    setFilesStore,
+    addFilesStore
+  } = useFlowStore();
+
   const [currentStep, setCurrentStep] = useState(1);
   const [description, setDescription] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
-  const [formData, setFormData] = useState({
+
+  const [formData, setFormData] = useState<ContactFormData>({
     email: "",
+    isKnown: false,
     civility: "",
     firstName: "",
     lastName: "",
+    company: profileData?.company?.name || profileData?.companyName || "",
     countryCode: "+33",
     id_pays_tel: 1, // France par défaut
     phone: "",
+    message: "",
   });
 
-  const [errors, setErrors] = useState<Partial<Record<keyof typeof formData, string>>>({});
-  const [files, setFiles] = useState<File[]>([]);
 
-  const { setContactData, files: filesStore, addFilesStore, flowType, profileData, userAnswers, selectedSupplierIds, categoryId } = useFlowStore();
+  const [errors, setErrors] = useState<Partial<Record<keyof typeof formData, string>>>({});
+  const [files, setFiles] = useState<File[]>([]);   
+
   const leadSubmission = useLeadSubmission();
   const { trackDbEvent } = useDbTracking();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
-
-  // Check if email is from an existing buyer
-  const isExistingBuyer = useMemo(() => {
-    if (!formData.email || formData.email.length < 5) return false;
-    return EXISTING_BUYERS.some(
-      (email) => email.toLowerCase() === formData.email.toLowerCase()
-    );
-  }, [formData.email]);
 
   // Check if email is valid format
   const isEmailValid = useMemo(() => {
@@ -62,8 +65,57 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
     return emailRegex.test(formData.email);
   }, [formData.email]);
 
+  const { data: buyerCheckResult } = useBuyerCheck(
+    {
+      email: formData.email,
+      rubriqueId: categoryId?.toString(),
+    },
+    isEmailValid
+  );
+
+  const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
+  const isKnownBuyer = buyerCheckResult?.isKnown || false;
+
+  useEffect(() => {
+    let updatedData: ContactFormData | null = null;
+
+    // 1. On vérifie si l'acheteur est reconnu et si on a les données
+    if (isKnownBuyer && buyerCheckResult?.infoBuyer) {
+      const info = buyerCheckResult.infoBuyer as any;
+
+      // 2. On prépare l'objet complet avec les clés de votre interface ContactFormData
+      updatedData = {
+        ...formData,                   // On garde le message et les autres champs
+        email: formData.email,      // L'email déjà saisi
+        isKnown: true,
+        firstName: info.prenom || "",
+        lastName: info.nom || "",
+        phone: info.tel || "",
+        civility: info.cv || "",
+      };
+
+    } else {
+      updatedData = {
+        ...formData,
+        email: formData.email,
+        isKnown: false,
+        firstName: "",
+        lastName: "",
+        phone: "",
+        countryCode: formData.countryCode || "+33",
+        id_pays_tel: formData.id_pays_tel || 1,
+      };
+    }
+
+    if (updatedData) {
+      setFormData(updatedData);
+    }
+
+    // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
+  }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);
+
   // Show additional fields only if email is valid and not an existing buyer
-  const showAdditionalFields = isEmailValid && !isExistingBuyer;
+  const showAdditionalFields = isEmailValid && !isKnownBuyer;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -435,10 +487,16 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                   placeholder="vous@entreprise.com"
                 />
                 {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email}</p>}
-                {isExistingBuyer && (
+                {isKnownBuyer && (
                   <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
                     <CheckCircle className="h-4 w-4" />
                     <span>Nous vous avons reconnu ! Vos informations sont pré-enregistrées.</span>
+                  </div>
+                )}
+                {isExistingBuyer && buyerCheckResult?.message && (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-orange-600">
+                    <Shield className="h-4 w-4" />
+                    <span>{buyerCheckResult.message}</span>
                   </div>
                 )}
               </div>
@@ -457,11 +515,11 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                       className="flex gap-4"
                     >
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="mr" id="civility-mr-cnf" />
+                        <RadioGroupItem value="1" id="civility-mr-cnf" />
                         <Label htmlFor="civility-mr-cnf">Monsieur</Label>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="mme" id="civility-mme-cnf" />
+                        <RadioGroupItem value="2" id="civility-mme-cnf" />
                         <Label htmlFor="civility-mme-cnf">Madame</Label>
                       </div>
                     </RadioGroup>
@@ -512,7 +570,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                     </label>
                     <PhoneInput
                       value={formData.phone}
-                      countryCode={formData.countryCode}
+                      countryCode={formData.countryCode || "+33"}
                       countryId={formData.id_pays_tel}
                       onValueChange={(phone) => setFormData((prev) => ({ ...prev, phone }))}
                       onCountryCodeChange={(countryCode) => setFormData((prev) => ({ ...prev, countryCode }))}

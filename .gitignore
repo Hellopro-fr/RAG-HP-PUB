@@ -122,3 +122,5 @@ docker-compose.override.yml
 ./logs/
 .claude/settings.local.json
 .gitignore
+
+.next
