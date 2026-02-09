@@ -11,12 +11,8 @@ import type { CharacteristicsMap } from '@/types/characteristics';
 // Clé de sessionStorage pour le flag de redirection
 const NEEDS_REDIRECT_KEY = 'flow-needs-redirect';
 
-// Clé de sessionStorage pour le token original (ne pas effacer au reload)
-const ORIGINAL_TOKEN_KEY = 'flow-original-token';
-
-// Exporter les clés pour FlowStorageReset et questionnaire-client
+// Exporter la clé pour FlowStorageReset
 export const FLOW_NEEDS_REDIRECT_KEY = NEEDS_REDIRECT_KEY;
-export const FLOW_ORIGINAL_TOKEN_KEY = ORIGINAL_TOKEN_KEY;
 
 // =============================================================================
 // EXÉCUTION IMMÉDIATE - Doit s'exécuter AVANT que Zustand hydrate

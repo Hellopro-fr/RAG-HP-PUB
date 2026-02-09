@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { basePath } from '@/lib/utils';
 import type { CharacteristicDefinition, CharacteristicsMap } from '@/types/characteristics';
-import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 
 // Toujours utiliser le proxy Next.js pour éviter les problèmes CORS
 const getApiBasePath = () => {
@@ -141,16 +140,12 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     setCharacteristicsMap,
   } = useFlowStore();
 
-  const { trackDbEvent } = useDbTracking();
-
   // Restaurer l'index à partir des réponses déjà enregistrées dans le store.
-  // Si l'utilisateur revient (ex: retour depuis /profile), on affiche la question suivante.
-  // Si Q1 est pré-remplie via l'URL, on démarre directement à Q2.
+  // Si l'utilisateur revient (ex: retour depuis /profile), on affiche la dernière
+  // question répondue au lieu de repartir à Q1.
   const [currentIndex, setCurrentIndex] = useState(() => {
     const answeredCount = Object.keys(dynamicAnswers).length;
-    // answeredCount = nombre de questions déjà répondues
-    // On veut afficher la question suivante (index = answeredCount)
-    return answeredCount;
+    return answeredCount > 0 ? answeredCount - 1 : 0;
   });
 
   // Appel A : Charger Q1
@@ -279,14 +274,6 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       .flatMap((a) => Array.isArray(a.equivalence) ? a.equivalence : []);
 
     setDynamicAnswer(questionCode, answerCodes, selectedEquivalences);
-
-    // Tracking DB
-    trackDbEvent('questionnaire', 'question_answer', {
-      question_id: currentQuestion.id,
-      question_code: questionCode,
-      answer_ids: answerCodes,
-      equivalences: selectedEquivalences
-    }, categoryId, currentIndex + 1); // step_index = numéro de la question (1-based)
 
     setCurrentIndex((prev) => prev + 1);
   };

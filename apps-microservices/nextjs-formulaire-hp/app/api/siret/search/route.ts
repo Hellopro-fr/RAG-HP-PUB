@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Force dynamic rendering (uses searchParams)
+export const dynamic = 'force-dynamic';
+
 const BASE_URL = 'https://www.hellopro.fr';
 
 export async function GET(request: NextRequest) {

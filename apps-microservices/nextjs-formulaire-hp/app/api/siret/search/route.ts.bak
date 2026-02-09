@@ -1,43 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Force dynamic rendering (uses searchParams)
-export const dynamic = 'force-dynamic';
-
 const BASE_URL = 'https://www.hellopro.fr';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const soc = searchParams.get('soc');
+    const cp = searchParams.get('cp');
     const p = searchParams.get('p') || 'demande_information_v2';
 
     // Validation
-    if (!soc) {
+    if (!soc || !cp) {
       return NextResponse.json(
-        { error: 'Paramètre soc requis' },
+        { error: 'Paramètres soc et cp requis' },
         { status: 400 }
       );
     }
 
-    if (soc.trim().length < 2) {
+    // Validation code postal (5 chiffres)
+    if (!/^[0-9]{5}$/.test(cp.trim())) {
       return NextResponse.json(
-        { error: 'Veuillez saisir au moins 2 caractères' },
+        { error: 'Le code postal doit contenir 5 chiffres' },
         { status: 400 }
       );
     }
 
-    // Construction URL pour API INSEE v2 (retourne du JSON)
-    const url = new URL(`${BASE_URL}/api_insee/_ag_web_service_insee_v2.php`);
+    // Construction URL pour API INSEE
+    const url = new URL(`${BASE_URL}/api_insee/_ag_web_service_insee.php`);
     url.searchParams.append('soc', soc.trim());
+    url.searchParams.append('cp', cp.trim());
     url.searchParams.append('p', p);
 
-    console.log('Calling Legacy SIREN API v2:', url.toString());
+    console.log('Calling Legacy SIRET API:', url.toString());
 
-    // Appel vers l'API Legacy v2
+    // Appel vers l'API Legacy
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
-        Accept: 'application/json',
+        Accept: 'text/html,application/json',
       },
     });
 
@@ -48,14 +48,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const jsonData = await response.json();
+    const htmlContent = await response.text();
 
-    console.log('SIREN API v2 response:', jsonData);
+    console.log('SIRET API response length:', htmlContent.length);
 
-    // Retourne le JSON (structure: { status, nb, max, result: [...] })
-    return NextResponse.json(jsonData, { status: 200 });
+    // Retourne le HTML brut (le frontend devra le parser)
+    return new NextResponse(htmlContent, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+      },
+    });
   } catch (error) {
-    console.error('SIREN search proxy error:', error);
+    console.error('SIRET search proxy error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

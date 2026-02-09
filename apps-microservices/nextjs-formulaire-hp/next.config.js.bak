@@ -34,6 +34,28 @@ const nextConfig = {
     ],
   },
 
+  
+  // Rewrites pour VM externe : proxy les URLs vers le domaine hellopro
+  // Sur dev-www.hellopro.fr : pas besoin (même domaine), HELLOPRO_FRONTEND_URL n'est pas défini
+  // Sur VM externe : HELLOPRO_FRONTEND_URL=https://dev-www.hellopro.fr
+  async rewrites() {
+    const frontendUrl = process.env.HELLOPRO_FRONTEND_URL;
+    if (!frontendUrl) return [];
+
+    return [
+      {
+        source: '/api/siren/:path*',
+        destination: `${frontendUrl}/api/siren/:path*`,
+         basePath: false,
+      },
+      {
+        source: '/images/:path*',
+        destination: `${frontendUrl}/images/:path*`,
+         basePath: false,
+      },
+    ];
+  },
+
   // Redirection optionnelle de la racine vers le questionnaire
   async redirects() {
     return [

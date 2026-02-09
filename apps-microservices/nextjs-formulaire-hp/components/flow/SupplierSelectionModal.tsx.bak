@@ -26,7 +26,6 @@ import {
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
-import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 
 type ViewState = "selection" | "contact" | "modify-criteria" | "custom-need";
 
@@ -103,11 +102,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     setFlowType: setStoreFlowType,
     setEquivalenceCaracteristique,
     setOrphanedSelectedSuppliers,
-    setCriteriaHaveChanged,
-    categoryId
+    setCriteriaHaveChanged
   } = useFlowStore();
-
-  const { trackDbEvent } = useDbTracking();
 
   // Convertir le tableau en Set pour les opérations
   const selectedIds = useMemo(() => new Set(selectedSupplierIds), [selectedSupplierIds]);
@@ -123,11 +119,9 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   }, [matchingResults]);
 
   // Séparer les produits en fonction de leur sélection
-  // Note: ALL_SUPPLIERS doit être dans les dépendances pour que les listes se recalculent
-  // quand matchingResults change (ex: après modification des critères)
   const selectedSuppliersList = useMemo(() => {
     return ALL_SUPPLIERS.filter((s) => selectedIds.has(s.id));
-  }, [ALL_SUPPLIERS, selectedIds]);
+  }, [selectedIds]);
 
   const unselectedSuppliersList = useMemo(() => {
     const unselected = ALL_SUPPLIERS.filter((s) => !selectedIds.has(s.id));
@@ -139,7 +133,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
         s.supplierName.toLowerCase().includes(query) ||
         s.description.toLowerCase().includes(query)
     );
-  }, [ALL_SUPPLIERS, selectedIds, searchQuery]);
+  }, [selectedIds, searchQuery]);
 
   const initialSelectedIds = useMemo(
     () => new Set(RECOMMENDED.map((s) => s.id)),
@@ -164,15 +158,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     setSelectedSupplierIds(newIds);
     setAnimatingCount(true);
 
-    // Track add/remove selection (GTM)
+    // Track add/remove selection
     trackProductSelectionChange(id, isRemoving ? 'retirer' : 'ajouter', newIds.length);
-
-    // Track DB
-    trackDbEvent('selection', isRemoving ? 'deselect' : 'select', {
-      product_id: id,
-      action: isRemoving ? 'retirer' : 'ajouter',
-      total_selected: newIds.length
-    }, categoryId);
   };
 
   const resetSelection = () => {
@@ -266,16 +253,12 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
               {criteriaHaveChanged && selectedSupplierIds.length > 0 && (
                 <CriteriaChangedBanner
                   onNewSelection={() => {
-                    // Récupérer les IDs des nouveaux top_produits (recommandés)
-                    const newRecommendedIds = RECOMMENDED.map((s) => s.id);
-
-                    // Mise à jour atomique de tous les états en un seul batch
-                    // pour éviter les problèmes de synchronisation
-                    useFlowStore.setState({
-                      orphanedSelectedSuppliers: [],
-                      selectedSupplierIds: newRecommendedIds,
-                      criteriaHaveChanged: false
-                    });
+                    // Reset les orphelins
+                    setOrphanedSelectedSuppliers([]);
+                    // Clear les anciennes sélections et sélectionner les nouveaux top_produits
+                    setSelectedSupplierIds(RECOMMENDED.map((s) => s.id));
+                    // Reset le flag
+                    setCriteriaHaveChanged(false);
                   }}
                   onDismiss={() => {
                     // Garder la sélection actuelle, juste cacher la bannière

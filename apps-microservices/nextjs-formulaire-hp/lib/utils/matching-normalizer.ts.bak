@@ -41,37 +41,20 @@ function getCharacteristicLabel(
 
 /**
  * Récupère les labels des valeurs pour une caractéristique
- * Gère les types numériques (valeur exacte ou plage min/max + unite) et textuels (id_valeur[])
+ * Gère les types numériques (valeur + unite) et textuels (id_valeur[])
  */
 function getValueLabels(
   characteristicsMap: CharacteristicsMap,
   characteristic: MatchingCharacteristic
 ): string {
-  const { id_caracteristique, type_caracteristique, valeur, valeur_min, valeur_max, unite, id_valeur } = characteristic;
+  const { id_caracteristique, type_caracteristique, valeur, unite, id_valeur } = characteristic;
 
   // Type numérique (1)
   if (type_caracteristique === 1) {
-    const uniteStr = unite ? ` ${unite}` : '';
-
-    // Cas 1: Valeur exacte
-    if (valeur !== null && valeur !== undefined) {
+    if (valeur !== null) {
+      const uniteStr = unite ? ` ${unite}` : '';
       return `${valeur}${uniteStr}`;
     }
-
-    // Cas 2: Plage min/max
-    const hasMin = valeur_min !== null && valeur_min !== undefined;
-    const hasMax = valeur_max !== null && valeur_max !== undefined;
-
-    if (hasMin && hasMax) {
-      return `${valeur_min} - ${valeur_max}${uniteStr}`;
-    }
-    if (hasMin) {
-      return `>= ${valeur_min}${uniteStr}`;
-    }
-    if (hasMax) {
-      return `<= ${valeur_max}${uniteStr}`;
-    }
-
     return '-';
   }
 
@@ -157,16 +140,15 @@ function buildProductSpecs(
     const label = getCharacteristicLabel(characteristicsMap, equivalence.id_caracteristique);
 
     if (matchingChar) {
-      // Si statut_matching === 4, traiter comme "non renseigné"
+      // Si statut_matching === 4, traiter comme "non renseigné" même si présent
       if (matchingChar.statut_matching === 4) {
         const expected = getExpectedValue(characteristicsMap, equivalences, equivalence.id_caracteristique);
         return {
           label,
-          value: 'Non renseigné',
-          matches: undefined, // ni true ni false pour non renseigné
+          value: '-',
+          matches: false,
           expected,
           isRequested: true,
-          matchingStatus: 4 as const,
         };
       }
 
@@ -185,7 +167,6 @@ function buildProductSpecs(
         matches,
         expected,
         isRequested: true,
-        matchingStatus: matchingChar.statut_matching,
       };
     } else {
       // Caractéristique absente du produit → statut "non renseigné"
@@ -193,11 +174,10 @@ function buildProductSpecs(
 
       return {
         label,
-        value: 'Non renseigné',
-        matches: undefined, // ni true ni false pour non renseigné
+        value: '-',
+        matches: false,
         expected,
         isRequested: true,
-        matchingStatus: 4 as const,
       };
     }
   });
@@ -206,7 +186,6 @@ function buildProductSpecs(
 /**
  * Construit les matchGaps (écarts de matching) pour un produit
  * Statuts 2 (écart) et 3 (bloquant) sont traités comme des écarts dans l'UI
- * Statut 4 (non renseigné) n'est PAS un écart, il est géré séparément
  */
 function buildMatchGaps(
   matchingCharacteristics: MatchingCharacteristic[],
@@ -216,18 +195,23 @@ function buildMatchGaps(
   const gaps: string[] = [];
 
   for (const mc of matchingCharacteristics) {
-    // Ignorer les matchs parfaits (statut 1) et les non-renseignés (statut 4)
-    if (mc.statut_matching === 1 || mc.statut_matching === 4) continue;
+    // Ignorer les matchs parfaits (statut 1)
+    if (mc.statut_matching === 1) continue;
 
     const label = getCharacteristicLabel(characteristicsMap, mc.id_caracteristique);
     const value = getValueLabels(characteristicsMap, mc);
     const expected = getExpectedValue(characteristicsMap, equivalences, mc.id_caracteristique);
 
-    // Écart (2) ou Bloquant (3) - traités de la même façon dans l'UI
-    if (expected) {
-      gaps.push(`${label} : ${value} (demandé ${expected})`);
-    } else {
-      gaps.push(`${label} : ${value}`);
+    if (mc.statut_matching === 4) {
+      // Caractéristique non renseignée
+      gaps.push(`${label} : non disponible`);
+    } else if (mc.statut_matching === 2 || mc.statut_matching === 3) {
+      // Écart (2) ou Bloquant (3) - traités de la même façon dans l'UI
+      if (expected) {
+        gaps.push(`${label} : ${value} (demandé ${expected})`);
+      } else {
+        gaps.push(`${label} : ${value}`);
+      }
     }
   }
 
