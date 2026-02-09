@@ -583,6 +583,8 @@ class RecommendationService:
         user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
         user_id_pays = user_meta.id_pays if user_meta else None
 
+        z_unmatched = 0.2
+
         # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
         // --- STEP 1: ANCHOR TRAVERSAL by CaracteristiqueTechnique ---
@@ -924,9 +926,9 @@ class RecommendationService:
         
         // Calculate zone_score based on the algorithm:
         // 1. If has pays relation:
-        //    - If partiel=true: check if user_dept is in ZoneGeo.list_dept -> match=1, no match=0.1
-        //    - If partiel=false: check if user_id_pays matches Pays.id_pays -> match=1, no match=0.1
-        // 2. If no pays relation but has zone relation: check if user_dept is in list_dept -> match=1, no match=0.1
+        //    - If partiel=true: check if user_dept is in ZoneGeo.list_dept -> match=1, no match=z_unmatched
+        //    - If partiel=false: check if user_id_pays matches Pays.id_pays -> match=1, no match=z_unmatched
+        // 2. If no pays relation but has zone relation: check if user_dept is in list_dept -> match=1, no match=z_unmatched
         // 3. If neither exists: score=0.5
         WITH p, details, global_score,
              CASE
@@ -938,14 +940,14 @@ class RecommendationService:
                              CASE
                                  WHEN $user_dept IS NULL THEN 0.5
                                  WHEN $user_dept IN all_depts THEN 1.0
-                                 ELSE 0.1
+                                 ELSE $z_unmatched
                              END
                          // Case 1b: All pays with partiel=false -> check Pays.id_pays match
                          ELSE
                              CASE
                                  WHEN $user_id_pays IS NULL THEN 0.5
                                  WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN 1.0
-                                 ELSE 0.1
+                                 ELSE $z_unmatched
                              END
                      END
                  // Case 2: No pays relation but has zone relation
@@ -953,7 +955,7 @@ class RecommendationService:
                      CASE
                          WHEN $user_dept IS NULL THEN 0.5
                          WHEN $user_dept IN all_depts THEN 1.0
-                         ELSE 0.1
+                         ELSE $z_unmatched
                      END
                  // Case 3: Neither exists
                  ELSE 0.5
@@ -1028,10 +1030,11 @@ class RecommendationService:
             "different_val": different_val,
             "user_dept": user_dept,
             "user_id_pays": user_id_pays,
+            "z_unmatched": z_unmatched,
         }
 
         # Debug: Log parameters
-        logging.info(f"📝 Caracteristique filter params:")
+        logging.info("📝 Caracteristique filter params:")
         for key, value in params.items():
             if key not in ["filters", "weights"]:
                 logging.info(f"   {key}: {value} (type: {type(value).__name__})")
