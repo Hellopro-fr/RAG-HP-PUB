@@ -1155,6 +1155,7 @@ class RecommendationService:
                 final_score = rec.get("final_score", 0.0)
                 zone_score = rec.get("zone_score", 1.0)
                 etat_score = rec.get("etat_score", 1.0)
+                carac_score = rec.get("global_score", 0.0)
 
                 caracteristiques = convert_to_caracteristique_matching(
                     details, final_score
@@ -1168,6 +1169,7 @@ class RecommendationService:
                     coeff_geo=float(zone_score),
                     coeff_type_frns=1.0,  # Default, can be computed from fournisseur type
                     coeff_etat_score=float(etat_score),
+                    coeff_caracteristique=float(carac_score),
                 )
 
             if results:
@@ -1190,6 +1192,7 @@ class RecommendationService:
                             coeff_geo=float(top_zone_score),
                             coeff_type_frns=1.0,
                             coeff_etat_score=float(top_etat_score),
+                            coeff_caracteristique=float(top_carac_score),
                         )
                         top_produit.append(produit)
 
