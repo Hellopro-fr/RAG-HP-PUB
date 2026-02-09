@@ -1173,7 +1173,7 @@ services:
       resources:
         limits:
           cpus: "1.0" # Limit to 1 CPU core
-          memory: 6G # Limit to 6GB of RAM
+          memory: 4G # Limit to 6GB of RAM
     networks:
       - services-net
     logging: *logging_defaults
