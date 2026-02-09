@@ -77,7 +77,7 @@ def prepare_fournisseur_statements(
             # Create Departement node and COUVRE_ZONE relationship with properties
             dept_query = """
             MATCH (f:Fournisseur {id: $fournisseur_id})
-            MERGE (d:Departement {id: $dept_id})
+            MERGE (d:ZoneGeo {id: $dept_id})
             SET d.id_dept = $raw_dept_id, d.nom_dept = $nom_dept
             MERGE (f)-[r:COUVRE_ZONE]->(d)
             SET r += $rel_props
