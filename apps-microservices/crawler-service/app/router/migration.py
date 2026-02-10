@@ -85,37 +85,55 @@ def extract_archive(archive_path: str, file_format: FileFormat, destination: str
     return count_files_in_directory(destination)
 
 
+def reassemble_chunks(chunk_dir: str, output_path: str) -> None:
+    """
+    Reassemble split chunks into a single file.
+    Chunks are expected to be named lexicographically (e.g. .partaa, .partab).
+    """
+    chunks = sorted(os.listdir(chunk_dir))
+    with open(output_path, 'wb') as outfile:
+        for chunk in chunks:
+            chunk_path = os.path.join(chunk_dir, chunk)
+            with open(chunk_path, 'rb') as infile:
+                shutil.copyfileobj(infile, outfile)
+    logger.info(f"Reassembled {len(chunks)} chunks from {chunk_dir} to {output_path}")
+
+
 @router.post("/upload/{domain_id}", response_model=MigrationUploadResponse)
 async def upload_migration_archive(
     domain_id: str,
-    archive: UploadFile = File(..., description="The archive file to upload and extract."),
+    archive: UploadFile = File(..., description="The archive file or chunk to upload."),
     content_type: ArchiveContentType = Form(..., description="Type of content: dataset, dataset_nfr, dataset_error, request_queues, request_urls, miscellaneous."),
     is_crawl_finished: bool = Form(..., description="Indicates if the crawl is complete."),
     domain_name: Optional[str] = Form(None, description="The domain name (e.g. example.com). Used for directory structure. If not provided, domain_id is used."),
     end_date: Optional[str] = Form(None, description="End date of the crawl (ISO format). Uses current time if empty and crawl is finished."),
-    file_format: Optional[FileFormat] = Form(None, description="File format (auto-detected from filename if not provided).")
+    file_format: Optional[FileFormat] = Form(None, description="File format (auto-detected from filename if not provided)."),
+    total_parts: int = Form(1, description="Total number of parts if the upload is chunked (default 1)."),
+    original_filename: Optional[str] = Form(None, description="Original filename for chunked uploads (e.g. dataset.tar.gz).")
 ):
     """
-    Temporary endpoint for migration: Upload and extract an archive to the domain's storage.
+    Temporary endpoint for migration: Upload and extract an archive (or chunk) to the domain's storage.
     
     - **domain_id**: The ID of the domain (used as directory name)
-    - **archive**: The archive file (tar.gz, zip, or tar)
-    - **content_type**: Type of content being uploaded (dataset, request_queues, etc.)
+    - **archive**: The archive file or chunk
+    - **content_type**: Type of content being uploaded
     - **is_crawl_finished**: Whether the crawl is complete
-    - **domain_name**: Domain name for subdirectory structure (e.g. storage/datasets/example.com). Defaults to domain_id if missing.
-    - **end_date**: Optional end date (defaults to now if crawl is finished and this is empty)
-    - **file_format**: Optional file format (auto-detected if not provided)
+    - **domain_name**: Domain name for subdirectory structure
+    - **total_parts**: Total number of chunks (default 1)
+    - **original_filename**: Original filename if chunked
     
-    Based on content_type, the archive will be extracted to:
-    - dataset: `/mnt/data/.../storage/datasets/{domain_name}`
-    - dataset_nfr: `/mnt/data/.../storage/datasets/nfr-{domain_name}`
-    - etc.
+    The archive will be extracted to:
+    `/app/storage/{domain_id}/storage/{content_type_folder}/`
     
-    If `is_crawl_finished=true` and no `_completion_marker.json` exists in the domain's
-    base storage directory, one will be created.
+    If `total_parts > 1`, chunks are stored in:
+    `/app/storage/temp_chunks/{domain_id}/{original_filename}/`
+    until all parts are received, then reassembled and extracted.
+    
+    If `is_crawl_finished=true`, a `_completion_marker.json` is created.
     """
-    # Determine file format
-    actual_format = file_format or detect_file_format(archive.filename or "archive.tar.gz")
+    # Determine file format and effective filename
+    filename_to_use = original_filename or archive.filename or "archive.tar.gz"
+    actual_format = file_format or detect_file_format(filename_to_use)
     
     # Use domain_name for subdirectories, fallback to domain_id if not provided
     eff_domain_name = domain_name if domain_name else domain_id
@@ -123,46 +141,86 @@ async def upload_migration_archive(
     # Construct storage paths using settings.CRAWLER_STORAGE_PATH (internal container path)
     subpath = get_storage_subpath(content_type, eff_domain_name)
     storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, domain_id, subpath)
+    
     # Base storage for completion marker (root of domain_id)
     base_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, domain_id)
     
-    logger.info(f"Migration upload started for domain_id={domain_id}, domain_name={eff_domain_name}, content_type={content_type}, format={actual_format}")
+    logger.info(f"Migration upload started for domain_id={domain_id}, domain_name={eff_domain_name}, content_type={content_type}, format={actual_format}, parts={total_parts}")
     
     try:
-        # Create storage directory if it doesn't exist
+        # Create storage directory if it doesn't exist (needed for final extraction)
         os.makedirs(storage_path, exist_ok=True)
+        # Also ensure base path exists for marker
+        os.makedirs(base_storage_path, exist_ok=True)
+        
         logger.info(f"Storage directory ensured: {storage_path}")
         
-        # Save uploaded archive to a temporary file
-        suffix = f".{actual_format.value}" if '.' not in actual_format.value else actual_format.value
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-            tmp_path = tmp_file.name
-            # Stream the file to disk to handle large files
-            shutil.copyfileobj(archive.file, tmp_file)
+        tmp_path = None
+        extracted_count = 0
         
-        logger.info(f"Archive saved to temporary file: {tmp_path}")
-        
+        if total_parts > 1:
+            # Chunked upload logic
+            chunk_dir = os.path.join(settings.CRAWLER_STORAGE_PATH, "temp_chunks", domain_id, filename_to_use)
+            os.makedirs(chunk_dir, exist_ok=True)
+            
+            # Save the chunk
+            chunk_path = os.path.join(chunk_dir, archive.filename)
+            with open(chunk_path, "wb") as f:
+                shutil.copyfileobj(archive.file, f)
+            
+            logger.info(f"Saved chunk {archive.filename} to {chunk_dir}")
+            
+            # Check if all chunks are present
+            current_chunks = len(os.listdir(chunk_dir))
+            if current_chunks < total_parts:
+                return MigrationUploadResponse(
+                    success=True,
+                    message=f"Chunk {archive.filename} received. {current_chunks}/{total_parts} parts.",
+                    domain_id=domain_id,
+                    domain_name=eff_domain_name,
+                    storage_path=storage_path,
+                    content_type=content_type,
+                    completion_marker_created=False,
+                    extracted_files_count=0
+                )
+            
+            # All chunks present, reassemble
+            logger.info(f"All {total_parts} chunks received. Reassembling...")
+            suffix = f".{actual_format.value}" if '.' not in actual_format.value else actual_format.value
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+                tmp_path = tmp_file.name
+            
+            reassemble_chunks(chunk_dir, tmp_path)
+            
+            # Cleanup chunks directory
+            shutil.rmtree(chunk_dir)
+            logger.info("Chunks reassembled and temp directory cleaned.")
+            
+        else:
+            # Standard single file upload
+            suffix = f".{actual_format.value}" if '.' not in actual_format.value else actual_format.value
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+                tmp_path = tmp_file.name
+                shutil.copyfileobj(archive.file, tmp_file)
+            logger.info(f"Archive saved to temporary file: {tmp_path}")
+
+        # Extract the archive (whether reassembled or single)
         try:
-            # Extract the archive
-            files_count = extract_archive(tmp_path, actual_format, storage_path)
-            logger.info(f"Archive extracted to {storage_path}, {files_count} files")
+            extracted_count = extract_archive(tmp_path, actual_format, storage_path)
+            logger.info(f"Archive extracted to {storage_path}, {extracted_count} files")
         finally:
-            # Clean up temporary file
-            if os.path.exists(tmp_path):
+            if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
         
-        # Handle completion marker (in base storage directory)
+        # Handle completion marker
         completion_marker_created = False
-        os.makedirs(base_storage_path, exist_ok=True)
         marker_path = os.path.join(base_storage_path, "_completion_marker.json")
         
         if is_crawl_finished and not os.path.exists(marker_path):
-            # Parse end_date or use current time
             if end_date:
                 try:
                     parsed_end_date = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
                 except ValueError:
-                    # Fallback to current time if parsing fails
                     logger.warning(f"Could not parse end_date '{end_date}', using current time")
                     parsed_end_date = datetime.utcnow()
             else:
@@ -171,7 +229,7 @@ async def upload_migration_archive(
             # Create completion marker - format matches crawler_manager.py
             marker_data = {
                 "final_status": "finished",
-                "exit_code": 2,  # Node.js success exit code
+                "exit_code": 2,
                 "end_timestamp": parsed_end_date.isoformat()
             }
             
@@ -189,7 +247,7 @@ async def upload_migration_archive(
             storage_path=storage_path,
             content_type=content_type,
             completion_marker_created=completion_marker_created,
-            extracted_files_count=files_count
+            extracted_files_count=extracted_count
         )
         
     except Exception as e:
