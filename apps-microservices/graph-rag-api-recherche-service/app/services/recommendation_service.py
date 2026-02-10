@@ -585,7 +585,8 @@ class RecommendationService:
 
         z_unmatched = 0.2
         e_unmatched = 0.8
-        unknown_score = 0.8
+        g_unknown_score = 0.8
+        c_unknown_score = 0.7
 
         # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
@@ -828,7 +829,7 @@ class RecommendationService:
                 // Connected Check
                 WHEN size(item.matches) > 0 THEN $different_val
                 // Default
-                ELSE 0.1
+                ELSE $c_unknown_score
             END,
             has_pc: size(item.matches) > 0,
             c_weight: item.conf.c_weight,
@@ -939,10 +940,10 @@ class RecommendationService:
         
         // Calculate zone_score based on the algorithm:
         // 1. If has pays relation:
-        //    - If couvre_tous=false: check if id_categorie is in couvre[], then check id_dept match -> 1, if in ne_couvre_pas -> 0.2, else -> unknown_score
+        //    - If couvre_tous=false: check if id_categorie is in couvre[], then check id_dept match -> 1, if in ne_couvre_pas -> 0.2, else -> g_unknown_score
         //    - If couvre_tous=true: check if user_id_pays matches Pays.id_pays -> match=1, no match=z_unmatched
         // 2. If no pays relation but has zonegeographique relation: same logic as above
-        // 3. If neither exists: score=unknown_score
+        // 3. If neither exists: score=g_unknown_score
         WITH p, f, details, global_score, pays_rels, zone_rels,
              CASE
                  // Case 1: Has pays relations
@@ -955,19 +956,19 @@ class RecommendationService:
                                  WHEN ANY(pr IN pays_rels WHERE pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN
                                      // Now check if user_dept matches any zone id_dept
                                      CASE
-                                         WHEN $user_dept IS NULL THEN $unknown_score
+                                         WHEN $user_dept IS NULL THEN $g_unknown_score
                                          WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN 1.0
-                                         ELSE $unknown_score
+                                         ELSE $g_unknown_score
                                      END
                                  // Check if id_categorie is in ne_couvre_pas list
                                  WHEN ANY(pr IN pays_rels WHERE pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
                                  // id_categorie not in either list
-                                 ELSE $unknown_score
+                                 ELSE $g_unknown_score
                              END
                          // Case 1b: couvre_tous=true -> check only pays match
                          ELSE
                              CASE
-                                 WHEN $user_id_pays IS NULL THEN $unknown_score
+                                 WHEN $user_id_pays IS NULL THEN $g_unknown_score
                                  WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN 1.0
                                  ELSE $z_unmatched
                              END
@@ -982,25 +983,25 @@ class RecommendationService:
                                  WHEN ANY(zr IN zone_rels WHERE zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN
                                      // Now check if user_dept matches zone id_dept
                                      CASE
-                                         WHEN $user_dept IS NULL THEN $unknown_score
+                                         WHEN $user_dept IS NULL THEN $g_unknown_score
                                          WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN 1.0
-                                         ELSE $unknown_score
+                                         ELSE $g_unknown_score
                                      END
                                  // Check if id_categorie is in ne_couvre_pas list
                                  WHEN ANY(zr IN zone_rels WHERE zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
                                  // id_categorie not in either list
-                                 ELSE $unknown_score
+                                 ELSE $g_unknown_score
                              END
                          // Case 2b: couvre_tous=true -> check only dept match
                          ELSE
                              CASE
-                                 WHEN $user_dept IS NULL THEN $unknown_score
+                                 WHEN $user_dept IS NULL THEN $g_unknown_score
                                  WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept)) THEN 1.0
                                  ELSE $z_unmatched
                              END
                      END
                  // Case 3: Neither exists
-                 ELSE $unknown_score
+                 ELSE $g_unknown_score
              END AS zone_score
 
         // Calculate score by Etat and affichage fournisseur
@@ -1084,7 +1085,8 @@ class RecommendationService:
             "user_id_pays": user_id_pays,
             "z_unmatched": z_unmatched,
             "e_unmatched": e_unmatched,
-            "unknown_score": unknown_score,
+            "g_unknown_score": g_unknown_score,
+            "c_unknown_score": c_unknown_score,
         }
 
         # Debug: Log parameters
