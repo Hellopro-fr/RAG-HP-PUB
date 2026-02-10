@@ -198,6 +198,60 @@ if (memPercent > 80) {
 console.log('✅ Pre-flight checks passed. Starting crawler...');
 // --- END PRE-FLIGHT CHECKS ---
 
+// --- MEMORY WATCHDOG ---
+// Reads container memory from cgroups (same source as pre-flight check) and logs warnings.
+// Does NOT stop the crawl — purely diagnostic to capture OOM evidence in log files.
+const containerMemoryMb = Math.floor(totalMem / 1024 / 1024);
+
+const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: number } | null> => {
+    try {
+        const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
+        const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
+
+        if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
+            return {
+                totalMem: parseInt(cgroupMemMax.trim()),
+                usedMem: parseInt(cgroupMemCurrent.trim())
+            };
+        }
+
+        // Fallback to cgroups v1
+        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
+        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
+
+        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
+            return {
+                totalMem: parseInt(cgroupMemLimitV1.trim()),
+                usedMem: parseInt(cgroupMemUsageV1.trim())
+            };
+        }
+
+        // Fallback to OS-level
+        return {
+            totalMem: os.totalmem(),
+            usedMem: os.totalmem() - os.freemem()
+        };
+    } catch (e) {
+        return null;
+    }
+};
+
+setInterval(async () => {
+    const memInfo = await readContainerMemory();
+    if (!memInfo) return;
+
+    const memPercent = (memInfo.usedMem / memInfo.totalMem) * 100;
+    const usedMB = Math.floor(memInfo.usedMem / 1024 / 1024);
+    const totalMB = Math.floor(memInfo.totalMem / 1024 / 1024);
+
+    if (memPercent > 92) {
+        console.error(`❌ CRITICAL: Out of Memory imminent (${memPercent.toFixed(1)}% used — ${usedMB} MB / ${totalMB} MB)`);
+    } else if (memPercent > 85) {
+        console.warn(`⚠️  WARNING: Memory high (${memPercent.toFixed(1)}% used — ${usedMB} MB / ${totalMB} MB)`);
+    }
+}, 5000);
+// --- END MEMORY WATCHDOG ---
+
 // --- Heartbeat Mechanism ---
 const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
 const redisClient = createClient({ url: redisUrl });
@@ -625,7 +679,8 @@ if (typeCrawling == "sitemap") {
         bypassQuestionMark,
         bypassDiez,
         skipquestionmark,
-        skipdiez
+        skipdiez,
+        containerMemoryMb
     );
 
     process.on('SIGTERM', async () => {

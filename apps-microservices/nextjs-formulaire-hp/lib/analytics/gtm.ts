@@ -365,9 +365,10 @@ export function trackProductSelectionChange(
  * Track l'ouverture du modal de comparaison
  */
 export function trackComparisonModalView(supplierIds: string[]) {
+  currentStepIndex++;
   const isFirstViewForSession = isFirstView('comparison_modal');
 
-  trackQuoteFunnel(currentStepIndex, 'comparison-modal', 'selection', {
+  trackQuoteFunnel(currentStepIndex, 'vue-comparaison', 'selection', {
     suppliers_compared: supplierIds,
     suppliers_count: supplierIds.length,
     is_first_view: isFirstViewForSession,
@@ -432,22 +433,18 @@ export function trackLeadSubmissionError(errorType: string, errorMessage: string
 }
 
 // =============================================================================
-// ÉVÉNEMENTS SECONDAIRES (hors funnel principal)
+// ÉVÉNEMENTS SECONDAIRES (intégrés dans devis_funnel_formulaire)
 // =============================================================================
 
 /**
  * Track l'ouverture du modal de modification de critères
  */
 export function trackModifyCriteriaModalView() {
-  const userId = getUserId();
-  const sessionId = getSessionId();
+  currentStepIndex++;
   const isFirstViewForSession = isFirstView('modify_criteria_modal');
 
-  pushToDataLayer('page_vue_critere', {
-    user_id: userId,
-    session_id: sessionId,
+  trackQuoteFunnel(currentStepIndex, 'vue-criteres', 'selection', {
     is_first_view: isFirstViewForSession,
-    timestamp: new Date().toISOString(),
   });
 }
 
@@ -455,13 +452,11 @@ export function trackModifyCriteriaModalView() {
  * Track la modification effective de critères
  */
 export function trackCriteriaModified(criteriaCount: number, modifiedFields: string[]) {
-  const userId = getUserId();
+  currentStepIndex++;
 
-  pushToDataLayer('critere_modifie', {
-    user_id: userId,
+  trackQuoteFunnel(currentStepIndex, 'criteres-modifies', 'selection', {
     criteria_count: criteriaCount,
     modified_fields: modifiedFields,
-    timestamp: new Date().toISOString(),
   });
 }
 
@@ -491,19 +486,15 @@ export function trackCustomNeedContactView() {
  * Track l'ouverture du modal fiche produit
  */
 export function trackProductModalView(productId: string, productName: string, supplierId: string) {
-  const userId = getUserId();
-  const sessionId = getSessionId();
+  currentStepIndex++;
   const modalKey = `product_modal_${productId}`;
   const isFirstViewForSession = isFirstView(modalKey);
 
-  pushToDataLayer('vue_modal_produit', {
-    user_id: userId,
-    session_id: sessionId,
-    is_first_view: isFirstViewForSession,
+  trackQuoteFunnel(currentStepIndex, 'vue-produit', 'selection', {
     product_id: productId,
     product_name: productName,
     supplier_id: supplierId,
-    timestamp: new Date().toISOString(),
+    is_first_view: isFirstViewForSession,
   });
 }
 
