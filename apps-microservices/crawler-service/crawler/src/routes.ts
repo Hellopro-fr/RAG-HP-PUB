@@ -19,6 +19,26 @@ import { context } from "./context.js";
 
 export const router = createPlaywrightRouter();
 
+// --- Blocked URL Log Deduplication ---
+// Logs each blocked URL only ONCE per crawl launch to reduce log pollution.
+// Capped at 10,000 entries (~1MB) as a memory safety valve.
+const MAX_LOGGED_BLOCKED = 10_000;
+const loggedBlockedUrls = new Set<string>();
+
+const logBlockedOnce = (reason: string, url: string): void => {
+    const key = `${reason}:${url}`;
+    if (loggedBlockedUrls.size >= MAX_LOGGED_BLOCKED) {
+        // Safety valve: stop deduplicating to avoid unbounded memory growth
+        console.log(`🚫 [${reason}] ${url}`);
+        return;
+    }
+    if (!loggedBlockedUrls.has(key)) {
+        loggedBlockedUrls.add(key);
+        console.log(`🚫 [${reason}] ${url}`);
+    }
+};
+// --- END Blocked URL Log Deduplication ---
+
 const ignoredExtensions = [
     // archives
     "7z", "7zip", "bz2", "rar", "tar", "tar.gz", "xz", "zip",
@@ -358,7 +378,7 @@ router.addDefaultHandler(
                     transformRequestFunction: (request) => {
                         // 1. Robots Check
                         if (robots && !robots.isAllowed(request.url, "Googlebot")) {
-                            console.log(`Bloqué par robots.txt : ${request.url}`);
+                            logBlockedOnce('robots.txt', request.url);
                             return false;
                         }
 
@@ -466,7 +486,7 @@ router.addDefaultHandler(
                             for (const param of FORBIDDEN_PARAMS) {
                                 if (reqUrlObj.searchParams.has(param) ||
                                     Array.from(reqUrlObj.searchParams.keys()).some(key => key.startsWith(param))) {
-                                    console.log(`🚫 Blocked forbidden param "${param}": ${request.url}`);
+                                    logBlockedOnce('forbidden-param', `"${param}": ${request.url}`);
                                     return false;
                                 }
                             }
@@ -475,18 +495,18 @@ router.addDefaultHandler(
                             if (request.url.includes('/quotation/cart/') ||
                                 request.url.includes('/cart/cart/') ||
                                 request.url.includes('/catalog/product_compare/')) {
-                                console.log(`Blocked spider trap: ${request.url}`);
+                                logBlockedOnce('spider-trap', request.url);
                                 return false;
                             }
 
                             if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
-                                console.log(`Blocked base64 URL: ${request.url}`);
+                                logBlockedOnce('base64-url', request.url);
                                 return false;
                             }
 
                             // External Domain Check
                             if (targetDomain && !reqUrlObj.hostname.includes(targetDomain)) {
-                                // console.log(`Blocked external URL: ${request.url}`);
+                                logBlockedOnce('external-domain', request.url);
                                 return false;
                             }
 
