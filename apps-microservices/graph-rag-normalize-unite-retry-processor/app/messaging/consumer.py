@@ -69,29 +69,30 @@ class Consumer:
 
     async def _publish_to_manual_dlq(self, failed_node_entry: dict, error: dict):
         """Publish a permanently failed node to the manual DLQ."""
-        try:
-            message_data = {
-                "failed_node_entry": failed_node_entry,
-                "error": error,
-                "processor": "graph-rag-normalize-unite-retry-processor",
-            }
-            message_body = json.dumps(message_data).encode("utf-8")
-            message = aio_pika.Message(
-                body=message_body,
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-            )
-            await self.manual_dlq_exchange.publish(
-                message, routing_key=self.manual_dlq_routing_key
-            )
-            logging.info(
-                f"📤 Published to manual DLQ: {failed_node_entry.get('node', {}).get('id')}"
-            )
-        except Exception as e:
-            logging.error(f"Failed to publish to manual DLQ: {e}")
+        # Don't catch exceptions here, let call site handle it
+        message_data = {
+            "failed_node_entry": failed_node_entry,
+            "error": error,
+            "processor": "graph-rag-normalize-unite-retry-processor",
+        }
+        # Use default=str to handle non-serializable objects (like sets, datetimes)
+        message_body = json.dumps(message_data, default=str).encode("utf-8")
+
+        message = aio_pika.Message(
+            body=message_body,
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+        )
+        await self.manual_dlq_exchange.publish(
+            message, routing_key=self.manual_dlq_routing_key
+        )
+        logging.info(
+            f"📤 Published to manual DLQ: {failed_node_entry.get('node', {}).get('id')}"
+        )
 
     async def process_message(self, message: AbstractIncomingMessage):
         """Process a single message with semaphore control."""
         async with message.process(ignore_processed=True):
+            failed_node_entry = {}
             try:
                 body = message.body.decode()
                 payload = json.loads(body)
@@ -114,25 +115,37 @@ class Consumer:
                     logging.info(
                         f"✅ Retry normalization success: {failed_node_entry.get('node', {}).get('id')}"
                     )
+                    await message.ack()
                 else:
                     # Normalization still failed - send to manual DLQ
-                    await self._publish_to_manual_dlq(
-                        failed_node_entry, result.get("error", {})
-                    )
-
-                await message.ack()
+                    try:
+                        await self._publish_to_manual_dlq(
+                            failed_node_entry, result.get("error", {})
+                        )
+                        await message.ack()
+                    except Exception as exc:
+                        logging.critical(
+                            f"🔥 Failed to publish to Manual DLQ! Message will be NACKed. Error: {exc}"
+                        )
+                        # Nack with requeue=True so we retry later (connection issue?)
+                        # WARNING: If it's a serialization error, this will loop forever.
+                        # But we added default=str to json.dumps, so serialization error is unlikely.
+                        await message.nack(requeue=True)
 
             except Exception as e:
                 logging.error(f"❌ Error processing message: {e}")
-                # On exception, send to manual DLQ
+                # On exception, try to send to manual DLQ
                 try:
                     await self._publish_to_manual_dlq(
-                        failed_node_entry if "failed_node_entry" in locals() else {},
+                        failed_node_entry,
                         {"reason": "processing_exception", "message": str(e)},
                     )
-                except Exception:
-                    pass
-                await message.ack()
+                    await message.ack()
+                except Exception as dlq_exc:
+                    logging.critical(
+                        f"🔥 DOUBLE FAULT: Failed to process AND failed to DLQ. NACKing. Error: {dlq_exc}"
+                    )
+                    await message.nack(requeue=True)
 
     async def start_consuming(self):
         """Start the consumer loop with concurrency control."""

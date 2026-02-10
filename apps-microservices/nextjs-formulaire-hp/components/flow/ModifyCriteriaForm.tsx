@@ -448,8 +448,7 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
       ...secondaireCriteria.map(formStateToCharacteristic),
     ];
 
-    const modifiedFields = [...critiqueCriteria, ...secondaireCriteria].map(c => String(c.id_caracteristique));
-    trackCriteriaModified(critiqueCriteria.length + secondaireCriteria.length, modifiedFields);
+    trackCriteriaModified(critiqueCriteria.length + secondaireCriteria.length);
 
     // Relancer le matching avec les nouvelles caractéristiques
     const success = await refetchMatchingWithUpdatedCriteria(allCriteria);

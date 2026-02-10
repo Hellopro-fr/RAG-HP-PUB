@@ -49,8 +49,8 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
 
   // Track modal view on mount + Check if descriptions are truncated
   useEffect(() => {
-    // Track product modal view (only once per product per session)
-    trackProductModalView(product.id, product.name, product.supplier.name);
+    // Track product modal view (is_first_view = première ouverture de modal produit quelconque)
+    trackProductModalView(product.id);
 
     if (descriptionRef.current) {
       const element = descriptionRef.current;

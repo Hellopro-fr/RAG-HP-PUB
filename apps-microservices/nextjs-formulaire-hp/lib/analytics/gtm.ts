@@ -364,13 +364,11 @@ export function trackProductSelectionChange(
 /**
  * Track l'ouverture du modal de comparaison
  */
-export function trackComparisonModalView(supplierIds: string[]) {
+export function trackComparisonModalView() {
   currentStepIndex++;
   const isFirstViewForSession = isFirstView('comparison_modal');
 
   trackQuoteFunnel(currentStepIndex, 'vue-comparaison', 'selection', {
-    suppliers_compared: supplierIds,
-    suppliers_count: supplierIds.length,
     is_first_view: isFirstViewForSession,
   });
 }
@@ -451,12 +449,11 @@ export function trackModifyCriteriaModalView() {
 /**
  * Track la modification effective de critères
  */
-export function trackCriteriaModified(criteriaCount: number, modifiedFields: string[]) {
+export function trackCriteriaModified(criteriaCount: number) {
   currentStepIndex++;
 
   trackQuoteFunnel(currentStepIndex, 'criteres-modifies', 'selection', {
     criteria_count: criteriaCount,
-    modified_fields: modifiedFields,
   });
 }
 
@@ -485,15 +482,12 @@ export function trackCustomNeedContactView() {
 /**
  * Track l'ouverture du modal fiche produit
  */
-export function trackProductModalView(productId: string, productName: string, supplierId: string) {
+export function trackProductModalView(productId: string) {
   currentStepIndex++;
-  const modalKey = `product_modal_${productId}`;
-  const isFirstViewForSession = isFirstView(modalKey);
+  const isFirstViewForSession = isFirstView('product_modal');
 
   trackQuoteFunnel(currentStepIndex, 'vue-produit', 'selection', {
     product_id: productId,
-    product_name: productName,
-    supplier_id: supplierId,
     is_first_view: isFirstViewForSession,
   });
 }
@@ -588,8 +582,8 @@ export function trackQuestionNavigation(
 }
 
 /** @deprecated Utiliser trackComparisonModalView à la place */
-export function trackComparisonModalOpen(supplierIds: string[]) {
-  trackComparisonModalView(supplierIds);
+export function trackComparisonModalOpen() {
+  trackComparisonModalView();
 }
 
 /** @deprecated Utiliser trackFormValidationErrors à la place */

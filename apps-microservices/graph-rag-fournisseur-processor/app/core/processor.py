@@ -45,6 +45,18 @@ def prepare_fournisseur_statements(
         {"query": fournisseur_query, "parameters": fournisseur_params}
     )
 
+    # 2. Delete existing COUVRE_ZONE and COUVRE_PAYS relationships
+    # This ensures that only the relationships present in the current message will exist
+    delete_rels_query = """
+    MATCH (f:Fournisseur {id: $fournisseur_id})
+    OPTIONAL MATCH (f)-[r:COUVRE_ZONE|COUVRE_PAYS]->()
+    DELETE r
+    """
+    delete_rels_params = {"fournisseur_id": graph_id}
+    all_statements.append(
+        {"query": delete_rels_query, "parameters": delete_rels_params}
+    )
+
     logging.debug(
         f"Preparing Fournisseur ingestion for graph_id: {graph_id} with {len(dept_data)} dept entries"
     )
@@ -104,6 +116,7 @@ def prepare_fournisseur_statements(
             id_pays = pays.get("id_pays", "")
             nom_pays = pays.get("nom_pays", "")
             code_iso = pays.get("code_iso", "")
+            partiel = pays.get("partiel", False)
             couvre_tous = pays.get("couvre_tous", True)
             couvre_categorie = pays.get("couvre_categorie", [])
             ne_couvre_pas_categorie = pays.get("ne_couvre_pas_categorie", [])
@@ -112,7 +125,7 @@ def prepare_fournisseur_statements(
                 logging.warning(f"Skipping pays without id_pays: {pays}")
                 continue
 
-            rel_props = {"couvre_tous": couvre_tous}
+            rel_props = {"couvre_tous": couvre_tous, "partiel": partiel}
             if not couvre_tous:
                 if couvre_categorie and isinstance(couvre_categorie, list):
                     rel_props["couvre"] = couvre_categorie
