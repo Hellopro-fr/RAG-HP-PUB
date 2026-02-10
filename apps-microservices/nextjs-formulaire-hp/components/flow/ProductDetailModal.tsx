@@ -49,8 +49,8 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
 
   // Track modal view on mount + Check if descriptions are truncated
   useEffect(() => {
-    // Track product modal view (only once per product per session)
-    trackProductModalView(product.id, product.name, product.supplier.name);
+    // Track product modal view (is_first_view = première ouverture de modal produit quelconque)
+    trackProductModalView(product.id);
 
     if (descriptionRef.current) {
       const element = descriptionRef.current;
@@ -397,10 +397,10 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                   </h4>
 
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                    {/* <span className="flex items-center gap-1 text-match-high">
+                    {<span className="flex items-center gap-1 text-match-high">
                       <Truck className="h-4 w-4" />
                       Livre dans votre zone
-                    </span> */}
+                    </span>}
                     <span className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />
                       {product.supplier.responseTime}
