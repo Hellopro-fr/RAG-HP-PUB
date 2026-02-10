@@ -25,7 +25,7 @@ export default function QuestionnaireClient({
   initialToken
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers } = useFlowStore();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer } = useFlowStore();
   const { goToProfile } = useFlowNavigation();
   const hasProcessedUrlData = useRef(false);
   const isHydrated = useFlowStoreHydration();
@@ -111,6 +111,18 @@ export default function QuestionnaireClient({
         const equivalence = Array.isArray(urlData.equivalence) ? urlData.equivalence : [];
 
         setDynamicAnswer('Q1', [answerCode], equivalence);
+
+        // Enregistrer aussi dans userQuestionAnswers pour debug
+        addUserQuestionAnswer({
+          questionId: urlData.id_question,
+          questionCode: 'Q1',
+          questionLabel: 'Q1 (pre-remplie via URL)',
+          answerId: [answerCode],
+          answerLabel: [`Reponse ID: ${answerCode}`],
+          equivalences: equivalence,
+          timestamp: Date.now(),
+        });
+
         console.log('[QuestionnaireClient] URL data applied - Q1 pre-filled:', answerCode);
       }
     } catch (error) {

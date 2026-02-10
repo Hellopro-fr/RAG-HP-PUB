@@ -139,6 +139,7 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     categoryId,
     characteristicsMap,
     setCharacteristicsMap,
+    addUserQuestionAnswer,
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
@@ -279,6 +280,18 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       .flatMap((a) => Array.isArray(a.equivalence) ? a.equivalence : []);
 
     setDynamicAnswer(questionCode, answerCodes, selectedEquivalences);
+
+    // Stocker question/réponse pour debug et tracking
+    const answerLabels = matchedAnswers.map(a => a.mainText);
+    addUserQuestionAnswer({
+      questionId: currentQuestion.id,
+      questionCode: questionCode,
+      questionLabel: currentQuestion.title,
+      answerId: answerCodes,
+      answerLabel: answerLabels,
+      equivalences: selectedEquivalences,
+      timestamp: Date.now(),
+    });
 
     // Tracking DB
     trackDbEvent('questionnaire', 'question_answer', {
