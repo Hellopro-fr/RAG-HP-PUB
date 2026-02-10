@@ -109,6 +109,8 @@ export interface DemandeInfoPayload {
   tab_matching_acheteur?: string;
 
   info_acheteur_matching?: string;
+  
+  question_reponse_acheteur?: string;
 }
 
 /**
