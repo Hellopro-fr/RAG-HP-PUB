@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, ArrowRight, Info, Check, Package, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Question } from "@/types";
+import { useFlowStore } from "@/lib/stores/flow-store";
 
 interface QuestionScreenProps {
   question: Question;
@@ -32,6 +33,7 @@ const QuestionScreen = ({
   isFirst,
   isLast,
 }: QuestionScreenProps) => {
+  const { categoryName } = useFlowStore();
   const [showJustification, setShowJustification] = useState(false);
 
   const showOtherOption = question.id === 3;
@@ -237,7 +239,7 @@ const QuestionScreen = ({
               <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5">
                 <Package className="h-4 w-4 text-primary" />
                 <span className="text-foreground">
-                  <span className="font-semibold text-primary">Ponts élévateurs</span>
+                  <span className="font-semibold text-primary">{categoryName || ""}</span>
                   <span className="text-muted-foreground"> : 347 produits analysés • 24 fournisseurs</span>
                 </span>
               </div>
@@ -256,7 +258,7 @@ const QuestionScreen = ({
         <div className="flex flex-col items-center gap-1.5 px-4 py-2 border-b border-border/50 bg-primary/5">
           <div className="inline-flex items-center gap-1.5 text-xs">
             <Package className="h-3.5 w-3.5 text-primary" />
-            <span className="font-semibold text-primary">Ponts élévateurs</span>
+            <span className="font-semibold text-primary">{categoryName || ""}</span>
             <span className="text-muted-foreground">: 347 produits analysés • 24 fournisseurs</span>
           </div>
           <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

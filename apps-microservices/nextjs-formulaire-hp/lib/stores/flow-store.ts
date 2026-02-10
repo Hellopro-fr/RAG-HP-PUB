@@ -128,6 +128,9 @@ export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
 
+  // Nom de la catégorie (depuis l'API questionnaire)
+  categoryName: string | null;
+
   // Type de parcours (pour tracking GTM)
   flowType: FlowType;
 
@@ -187,6 +190,7 @@ export interface FlowState {
 
   // Actions
   setCategoryId: (id: number) => void;
+  setCategoryName: (name: string | null) => void;
   setUserAnswers: (answers: Record<number, string[]>) => void;
   setOtherTexts: (texts: Record<number, string>) => void;
   setAnswer: (questionId: number, answerIds: string[]) => void;
@@ -214,6 +218,7 @@ export interface FlowState {
 
 const initialState = {
   categoryId: null,
+  categoryName: null,
   flowType: null as FlowType,
   userAnswers: {},
   otherTexts: {},
@@ -239,6 +244,8 @@ export const useFlowStore = create<FlowState>()(
       ...initialState,
 
       setCategoryId: (id) => set({ categoryId: id }),
+
+      setCategoryName: (name) => set({ categoryName: name }),
 
       setUserAnswers: (answers) => set({ userAnswers: answers }),
 
