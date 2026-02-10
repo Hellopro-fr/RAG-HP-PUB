@@ -5,6 +5,7 @@ import { useEffect, Suspense, type ReactNode, useState } from 'react';
 import { trackPageView } from '@/lib/analytics/ga4';
 import { hotjarStateChange } from '@/lib/analytics/hotjar';
 import { trackDeviceInfo, trackTrafficSource } from '@/lib/analytics';
+import { initDebugMatching } from '@/lib/utils/debug-matching';
 
 function AnalyticsTrackerInner() {
   const pathname = usePathname();
@@ -16,6 +17,7 @@ function AnalyticsTrackerInner() {
     if (!initialTracked) {
       trackDeviceInfo();
       trackTrafficSource();
+      initDebugMatching();
       setInitialTracked(true);
     }
   }, [initialTracked]);
