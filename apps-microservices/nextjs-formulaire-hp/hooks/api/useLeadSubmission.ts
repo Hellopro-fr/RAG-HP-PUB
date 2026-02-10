@@ -3,6 +3,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { envoyerDemandes } from '@/lib/api/demande-info';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
+import { useFlowStore } from '@/lib/stores/flow-store';
 import type { LeadSubmission, Supplier, ProfileType } from '@/types';
 import type { DemandeInfoPayload, StatutAcheteur, ProduitSelection } from '@/types/demande';
 
@@ -102,6 +103,9 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
   const { navigateTo } = useFlowNavigation();
   const { suppliers = [] } = options;
 
+  // Récupérer les réponses Q/R de l'utilisateur depuis le flow store
+  const userQuestionAnswers = useFlowStore.getState().userQuestionAnswers || [];
+
   return useMutation({
     mutationFn: async (data: LeadSubmission) => {
       // Transformer les données vers le format DemandeInfoPayload
@@ -132,6 +136,8 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
         provenance_di         : 'ux_matching',
         id_rubrique           : data.categoryId || '0',
         info_acheteur_matching: construireTabMatchingAcheteur({ values: data }),
+        // JSON stringifié des questions/réponses utilisateur (debug / tracking)
+        question_reponse_acheteur : userQuestionAnswers.length > 0 ? JSON.stringify(userQuestionAnswers) : undefined,
       };
 
       // Envoyer les demandes au PHP

@@ -484,6 +484,17 @@ class EquivalenceGenerator:
         can_start = process_data.get("can_start", False)
         if not can_start:
             self._log("Processus peut pas commencer")
+            await self.api_client.post(
+                "equivalence",
+                "mail",
+                "error",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
+                    "error_message": f"Processus peut pas commencer",
+                    "tracking_file": self.tracking_file
+                }
+            )
             raise Exception("Processus peut pas commencer")
             
         # Reset si demandé

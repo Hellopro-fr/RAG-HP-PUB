@@ -45,6 +45,18 @@ def prepare_fournisseur_statements(
         {"query": fournisseur_query, "parameters": fournisseur_params}
     )
 
+    # 2. Delete existing COUVRE_ZONE and COUVRE_PAYS relationships
+    # This ensures that only the relationships present in the current message will exist
+    delete_rels_query = """
+    MATCH (f:Fournisseur {id: $fournisseur_id})
+    OPTIONAL MATCH (f)-[r:COUVRE_ZONE|COUVRE_PAYS]->()
+    DELETE r
+    """
+    delete_rels_params = {"fournisseur_id": graph_id}
+    all_statements.append(
+        {"query": delete_rels_query, "parameters": delete_rels_params}
+    )
+
     logging.debug(
         f"Preparing Fournisseur ingestion for graph_id: {graph_id} with {len(dept_data)} dept entries"
     )

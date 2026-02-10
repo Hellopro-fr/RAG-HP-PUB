@@ -191,7 +191,8 @@ export const startCrawler = async (
     bypassQuestionMark?: boolean,
     bypassDiez?: boolean,
     skipquestionmark?: boolean,
-    skipdiez?: boolean
+    skipdiez?: boolean,
+    containerMemoryMb?: number
 ) => {
     const requestQueue = await RequestQueue.open(domain);
 
@@ -207,11 +208,19 @@ export const startCrawler = async (
     let proxyConfiguration: ProxyConfiguration | undefined;
 
     // V3 Optimization: Persist storage to prevent OOM
-    let configuration = new Configuration({
+    // memoryMbytes: Tells Crawlee the real container memory limit (from cgroups).
+    // Without this, Crawlee defaults to os.totalmem() which returns the HOST memory,
+    // causing the autoscaler to report memInfo.actualRatio: 0 and never throttle concurrency.
+    let configOptions: Record<string, any> = {
         maxUsedCpuRatio: 0.95, // V3 allows more CPU usage
         availableMemoryRatio: 0.95,
         persistStorage: true,
-    });
+    };
+    if (containerMemoryMb && containerMemoryMb > 0) {
+        configOptions.memoryMbytes = containerMemoryMb;
+        console.log(`💾 Crawlee Configuration: memoryMbytes set to ${containerMemoryMb} MB (from container cgroups)`);
+    }
+    let configuration = new Configuration(configOptions);
 
     if (PROXY_PASSWORD) {
         proxyConfiguration = new ProxyConfiguration({
