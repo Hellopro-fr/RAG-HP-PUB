@@ -619,7 +619,15 @@ class RecommendationService:
         WITH p, f, [item IN constraint_data | {
             cid: item.cid,
             score: CASE 
-                // ============== BLOCKING CHECK (Fatal Mismatch = 0) ==============
+                // ============== TARGET LIST CHECK (Priority for text type) ==============
+                // If ANY node matches a target value, prioritize it over blocking
+                // This handles products with multiple text nodes for the same characteristic
+                WHEN ANY(pc IN item.matches WHERE 
+                    size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
+                ) THEN 1.0
+                
+                // ============== BLOCKING CHECK (Fatal Mismatch) ==============
+                // Only reached if no target list match was found above
                 WHEN ANY(pc IN item.matches WHERE 
                     (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
                     OR
@@ -629,11 +637,6 @@ class RecommendationService:
                         (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
                     ))
                 ) THEN $blocked_val
-                
-                // ============== TARGET LIST CHECK (Binary 1.0) ==============
-                WHEN ANY(pc IN item.matches WHERE 
-                    size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
-                ) THEN 1.0
                 
                 // ============== CONTINUOUS NUMERIC SCORING WITH THRESHOLD ==============
                 // New logic: Calculate direct score + inverted score, apply 0.8 threshold each
