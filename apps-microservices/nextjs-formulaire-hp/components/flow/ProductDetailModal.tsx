@@ -41,10 +41,13 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [vendorDescriptionExpanded, setVendorDescriptionExpanded] = useState(false);
   const [isDescriptionTruncated, setIsDescriptionTruncated] = useState(false);
+  const [isVendorTruncated, setIsVendorTruncated] = useState(false);
   const descriptionRef = useRef<HTMLDivElement>(null);
+  const vendorRef = useRef<HTMLDivElement>(null);
 
-  // Track modal view on mount + Check if description is truncated
+  // Track modal view on mount + Check if descriptions are truncated
   useEffect(() => {
     // Track product modal view (only once per product per session)
     trackProductModalView(product.id, product.name, product.supplier.name);
@@ -53,7 +56,12 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
       const element = descriptionRef.current;
       setIsDescriptionTruncated(element.scrollHeight > element.clientHeight);
     }
-  }, [product.id, product.name, product.supplier.name, product.descriptionHtml, product.description]);
+
+    if (vendorRef.current) {
+      const element = vendorRef.current;
+      setIsVendorTruncated(element.scrollHeight > element.clientHeight);
+    }
+  }, [product.id, product.name, product.supplier.name, product.descriptionHtml, product.description, product.supplier.description]);
 
   // Build media array from images or media prop
   const mediaItems: MediaItem[] = product.media || product.images.map(url => ({ type: "image" as const, url }));
@@ -401,9 +409,44 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                 </div>
               </div>
 
-              <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-                {product.supplier.description}
-              </p>
+              <div className="relative mt-4">
+                <div
+                  ref={vendorRef}
+                  className={cn(
+                    "text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none",
+                    "prose-strong:text-foreground prose-strong:font-semibold",
+                    "prose-ul:list-disc prose-ul:pl-4 prose-ul:space-y-1",
+                    "prose-li:text-muted-foreground",
+                    !vendorDescriptionExpanded && "max-h-[8rem] overflow-hidden"
+                  )}
+                  dangerouslySetInnerHTML={{ __html: product.supplier.description }}
+                />
+
+                {/* Gradient overlay when truncated */}
+                {!vendorDescriptionExpanded && isVendorTruncated && (
+                  <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+                )}
+              </div>
+
+              {/* Show more/less button */}
+              {isVendorTruncated && (
+                <button
+                  onClick={() => setVendorDescriptionExpanded(!vendorDescriptionExpanded)}
+                  className="mt-2 flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  {vendorDescriptionExpanded ? (
+                    <>
+                      <ChevronUp className="h-4 w-4" />
+                      Voir moins
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4" />
+                      Voir plus
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
