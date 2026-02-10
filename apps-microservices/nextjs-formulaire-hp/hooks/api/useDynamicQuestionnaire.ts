@@ -139,6 +139,8 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     categoryId,
     characteristicsMap,
     setCharacteristicsMap,
+    addUserQuestionAnswer,
+    setCategoryName,
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
@@ -176,19 +178,18 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       if (!res.ok) throw new Error('Failed to fetch Q1');
 
       let apiData = await res.json();
+      const nom_categorie = apiData.nom_categorie || null;
       apiData = apiData.response;
 
-      console.log("apiData RAW", apiData);
+      if (nom_categorie) {
+        setCategoryName(nom_categorie);
+      }
       
       const apiDataAPI : ApiQuestion = apiData;
-
-      console.log("apiData", apiDataAPI);
 
       const dataReturn = {
         entryQuestion: normalizeQuestion(apiDataAPI, 0),
       };
-
-      console.log("dataReturn waaaaaa", dataReturn);
 
       // Transformer vers le format frontend
       return dataReturn;
@@ -221,7 +222,12 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       
       if (!res.ok) throw new Error('Failed to fetch path questions');
       let apiData = await res.json();
+      const nom_categorie = apiData.nom_categorie || null;
       apiData = apiData.response;
+
+      if (nom_categorie) {
+        setCategoryName(nom_categorie);
+      }
       // L'API retourne un tableau imbriqué [[...questions]], on aplatit
       const apiDataAPI: ApiQuestion[] = Array.isArray(apiData?.[0]) ? apiData.flat() : apiData;
 
@@ -279,6 +285,18 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       .flatMap((a) => Array.isArray(a.equivalence) ? a.equivalence : []);
 
     setDynamicAnswer(questionCode, answerCodes, selectedEquivalences);
+
+    // Stocker question/réponse pour debug et tracking
+    const answerLabels = matchedAnswers.map(a => a.mainText);
+    addUserQuestionAnswer({
+      questionId: currentQuestion.id,
+      questionCode: questionCode,
+      questionLabel: currentQuestion.title,
+      answerId: answerCodes,
+      answerLabel: answerLabels,
+      equivalences: selectedEquivalences,
+      timestamp: Date.now(),
+    });
 
     // Tracking DB
     trackDbEvent('questionnaire', 'question_answer', {

@@ -217,13 +217,13 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
       files: filesStore // On s'assure que les fichiers du store sont inclus
     };
 
-    finalData.files.forEach((file, index) => {
-      console.log(`Fichier ${index}:`, {
-        nom: file.name,
-        taille: file.size,
-        type: file.type
-      });
-    });
+    // finalData.files.forEach((file, index) => {
+    //   console.log(`Fichier ${index}:`, {
+    //     nom: file.name,
+    //     taille: file.size,
+    //     type: file.type
+    //   });
+    // });
 
     setContactData(finalData);
 

@@ -169,6 +169,8 @@ class UnitNormalizationService:
                 "charge admissible au sol": "area_density",
                 "nombre": "count",
                 "quantité": "count",
+                "segment": "count",
+                "segments": "count",
                 "sonore": "sound_level",
                 "acoustique": "sound_level",
                 "bruit": "sound_level",

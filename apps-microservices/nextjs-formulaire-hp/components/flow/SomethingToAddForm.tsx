@@ -245,13 +245,13 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
       message: description
     };
 
-    finalData.files.forEach((file: File, index: number) => {
-      console.log(`Fichier ${index}:`, {
-        nom: file.name,
-        taille: file.size,
-        type: file.type
-      });
-    });
+    // finalData.files.forEach((file: File, index: number) => {
+    //   console.log(`Fichier ${index}:`, {
+    //     nom: file.name,
+    //     taille: file.size,
+    //     type: file.type
+    //   });
+    // });
 
     setContactData(finalData);
 

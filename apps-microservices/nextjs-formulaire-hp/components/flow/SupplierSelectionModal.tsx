@@ -22,7 +22,6 @@ import CriteriaChangedBanner from "./CriteriaChangedBanner";
 import {
   trackComparisonModalView,
   trackProductSelectionChange,
-  trackProductModalView,
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
@@ -182,12 +181,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
   const handleViewDetails = (id: string) => {
     setSelectedProductId(id);
-
-    // Track product modal view
-    const product = ALL_SUPPLIERS.find((s) => s.id === id);
-    if (product) {
-      trackProductModalView(id, product.productName, product.supplier?.name || product.supplierName);
-    }
+    // Note: Le tracking est fait dans ProductDetailModal au montage
   };
 
   const selectedProduct = selectedProductId
@@ -475,8 +469,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
             <div className="order-2 sm:order-1 flex items-center gap-2 sm:gap-3">
               <button
                 onClick={() => {
-                  const selectedSupplierIds = Array.from(selectedIds);
-                  trackComparisonModalView(selectedSupplierIds);
+                  trackComparisonModalView();
                   setShowComparison(true);
                 }}
                 className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-4 text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-2"

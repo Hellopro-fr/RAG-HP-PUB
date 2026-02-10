@@ -20,16 +20,14 @@ export default function ProfileClient({
   otherCountries,
 }: ProfileClientProps) {
   const { goToSelection, goToQuestionnaire, goToSomethingToAdd } = useFlowNavigation();
-  const { showLoader, submitProfile, resetLoader, redirectGoToSomethingToAdd } = useProcessMatchingLogic();
+  const { showLoader, submitProfile, redirectGoToSomethingToAdd } = useProcessMatchingLogic();
 
   const handleLoaderComplete = () => {
-    // Reset loader state before navigation
-    resetLoader();
-    // Navigate to selection step after loader finishes (with GET params preserved)
-    if(redirectGoToSomethingToAdd) {
+    // Navigate directly - no need to reset loader state
+    // The component will unmount and state will be cleaned up automatically
+    if (redirectGoToSomethingToAdd) {
       goToSomethingToAdd();
-    }
-    else{
+    } else {
       goToSelection();
     }
   };

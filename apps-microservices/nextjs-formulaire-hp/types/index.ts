@@ -79,6 +79,7 @@ export interface PriceInfo {
 }
 
 export interface SupplierInfo {
+  id?: string;
   name: string;
   description: string;
   location: string;
@@ -111,10 +112,14 @@ export interface Supplier {
   debugInfo?: {
     coeff_geo: number;
     coeff_type_frns: number;
+    coeff_caracteristique?: number;
+    coeff_etat_score?: number;
+    score?: number;
     characteristics_debug: Array<{
       id_caracteristique: number;
       bareme: number;
       poids_question: number;
+      poids?: number;
     }>;
   };
 }

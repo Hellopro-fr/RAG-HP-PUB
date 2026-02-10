@@ -53,12 +53,10 @@ class Consumer:
         dlq_exchange = await self.channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
         dlq_queue = await self.channel.declare_queue(self.dead_letter_queue_name, durable=True)
         await dlq_queue.bind(dlq_exchange, routing_key=self.routing_key)
-
         retry_exchange = await self.channel.declare_exchange(self.retry_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
         retry_queue = await self.channel.declare_queue(self.retry_queue_name, durable=True,
             arguments={"x-message-ttl": RETRY_TTL_MS, "x-dead-letter-exchange": self.exchange_name, "x-dead-letter-routing-key": self.routing_key})
         await retry_queue.bind(retry_exchange, routing_key=self.routing_key)
-
         main_exchange = await self.channel.declare_exchange(self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True)
         self.queue = await self.channel.declare_queue(self.queue_name, durable=True,
             arguments={"x-dead-letter-exchange": self.retry_exchange, "x-dead-letter-routing-key": self.routing_key})
@@ -73,12 +71,7 @@ class Consumer:
         return 0
 
     def _is_transient_error(self, exception: Exception) -> bool:
-        if isinstance(exception, (
-            aio_pika.exceptions.AMQPConnectionError,
-            aio_pika.exceptions.AMQPChannelError,
-            aio_pika.exceptions.ChannelClosed,
-            aio_pika.exceptions.ConnectionClosed,
-        )):
+        if isinstance(exception, (aio_pika.exceptions.AMQPConnectionError, aio_pika.exceptions.AMQPChannelError, aio_pika.exceptions.ChannelClosed, aio_pika.exceptions.ConnectionClosed)):
             return True
         error_msg = str(exception).lower()
         return any(kw in error_msg for kw in ['timeout', 'connection reset', 'connection refused', 'temporarily unavailable', 'service unavailable', 'timed out', 'network unreachable', 'connection aborted', 'broken pipe', 'eof', 'end of file'])
@@ -93,62 +86,69 @@ class Consumer:
     async def _release_category(self, cat_id: str):
         async with self._categories_lock:
             self._processing_categories.discard(cat_id)
+            logger.debug(f"[CAT-{cat_id}] Catégorie libérée")
 
     async def process_message(self, message: AbstractIncomingMessage):
         async with message.process(ignore_processed=True):
             id_categorie = None
+            category_locked = False
+            
             try:
                 data = json.loads(message.body.decode())
                 id_categorie = data.get('id_categorie')
                 is_reset = data.get('is_reset', False)
-
+                
                 if not id_categorie:
                     raise ValueError("id_categorie manquant dans le message.")
-
+                
                 if await self._is_duplicate_category(str(id_categorie)):
-                    logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie déjà en cours de traitement - message ignoré")
+                    logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie déjà en cours - ignoré")
                     await message.ack()
                     return
-
+                
+                category_locked = True
+                logger.info(f"[CAT-{id_categorie}] 📥 Début traitement")
+                
+                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
+                api_client = HelloProAPIClient()
+                generator = Question2aNGenerator(api_client)
+                
                 try:
-                    logger.info(f"[CAT-{id_categorie}] 📥 Début traitement catégorie")
-
-                    request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
-                    api_client = HelloProAPIClient()
-                    generator = Question2aNGenerator(api_client)
-
-                    try:
-                        result = await generator.generate_all_questions(request)
-                        if generator.tracking_file:
-                            logger.info(f"[CAT-{id_categorie}] 📁 Fichier tracking: {generator.tracking_file}")
-                    finally:
-                        await generator.close()
-
-                    output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 3, 'previous_step': 'question2aN', 'status': result.status}
-                    await self.publisher.publish_message(output_message)
-                    await message.ack()
-                    logger.info(f"[CAT-{id_categorie}] ✅ Traitement terminé avec succès")
+                    result = await generator.generate_all_questions(request)
+                    if generator.tracking_file:
+                        logger.info(f"[CAT-{id_categorie}] 📁 Tracking: {generator.tracking_file}")
                 finally:
-                    await self._release_category(str(id_categorie))
-
+                    await generator.close()
+                
+                output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 3, 'previous_step': 'question2aN', 'status': result.status}
+                await self.publisher.publish_message(output_message)
+                await message.ack()
+                logger.info(f"[CAT-{id_categorie}] ✅ Terminé")
+                
             except (json.JSONDecodeError, ValueError) as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
                 logger.error(f"{cat_prefix}❌ Erreur permanente: {e}")
                 headers = DLQProperties.create_dlq_headers(e, "qc-generation-question2aN", 0, message)
                 await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
                 await message.ack()
-
+                
             except Exception as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
                 retry_count = self._get_retry_count(message)
+                logger.error(f"{cat_prefix}❌ Exception: {e}")
+                
                 if self._is_transient_error(e) and retry_count < MAX_RETRIES:
-                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}), retry: {e}")
+                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}), retry")
                     await message.nack(requeue=False)
                 else:
-                    logger.error(f"{cat_prefix}❌ Échec après {retry_count + 1} tentatives: {e}")
+                    logger.error(f"{cat_prefix}❌ Échec définitif après {retry_count + 1} tentative(s)")
                     headers = DLQProperties.create_dlq_headers(e, "qc-generation-question2aN", retry_count, message)
                     await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
                     await message.ack()
+                    
+            finally:
+                if category_locked and id_categorie:
+                    await self._release_category(str(id_categorie))
 
     async def _process_with_semaphore(self, message: AbstractIncomingMessage):
         task = asyncio.current_task()
@@ -161,17 +161,16 @@ class Consumer:
 
     async def start_consuming(self):
         await self.connect()
-        logger.info(f"👂 QC-Question2aN: En attente sur {self.queue_name} (mode streaming)")
+        logger.info(f"👂 QC-Question2aN: En attente sur {self.queue_name} (streaming)")
         logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
-
         async with self.queue.iterator() as queue_iter:
             async for message in queue_iter:
                 asyncio.create_task(self._process_with_semaphore(message))
-                logger.info(f"📨 Message reçu - Tâches actives: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
+                logger.info(f"📨 Message reçu - Tâches: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
 
     async def close(self):
         if self._active_tasks:
-            logger.info(f"⏳ Attente de {len(self._active_tasks)} tâches en cours...")
+            logger.info(f"⏳ Attente de {len(self._active_tasks)} tâches...")
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
         if self.connection:
             await self.connection.close()

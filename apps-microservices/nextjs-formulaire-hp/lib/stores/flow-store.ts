@@ -113,9 +113,23 @@ const createSessionStorage = (): StateStorage => {
 // Types de parcours pour le tracking GTM
 export type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | null;
 
+// Structure pour stocker les questions et réponses de l'utilisateur
+export interface UserQuestionAnswer {
+  questionId: number | string;
+  questionCode?: string;
+  questionLabel?: string;
+  answerId: string | string[];
+  answerLabel?: string | string[];
+  equivalences?: any[];
+  timestamp: number;
+}
+
 export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
+
+  // Nom de la catégorie (depuis l'API questionnaire)
+  categoryName: string | null;
 
   // Type de parcours (pour tracking GTM)
   flowType: FlowType;
@@ -159,16 +173,24 @@ export interface FlowState {
   // Flag pour indiquer que les critères ont été modifiés
   criteriaHaveChanged: boolean;
 
+  // Historique des questions/réponses de l'utilisateur (pour tracking et debug)
+  userQuestionAnswers: UserQuestionAnswer[];
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
   setCharacteristicsMap: (characteristics: CharacteristicsMap) => void;
   setOrphanedSelectedSuppliers: (suppliers: Supplier[]) => void;
   setCriteriaHaveChanged: (changed: boolean) => void;
+
+  setUserQuestionAnswers: (answers: UserQuestionAnswer[]) => void;
+  addUserQuestionAnswer: (answer: UserQuestionAnswer) => void;
+  clearUserQuestionAnswers: () => void;
 
   setFilesStore: (files: File[]) => void;
   addFilesStore: (newFiles: File[]) => void;
 
   // Actions
   setCategoryId: (id: number) => void;
+  setCategoryName: (name: string | null) => void;
   setUserAnswers: (answers: Record<number, string[]>) => void;
   setOtherTexts: (texts: Record<number, string>) => void;
   setAnswer: (questionId: number, answerIds: string[]) => void;
@@ -196,6 +218,7 @@ export interface FlowState {
 
 const initialState = {
   categoryId: null,
+  categoryName: null,
   flowType: null as FlowType,
   userAnswers: {},
   otherTexts: {},
@@ -212,6 +235,7 @@ const initialState = {
   characteristicsMap: {},
   orphanedSelectedSuppliers: [],
   criteriaHaveChanged: false,
+  userQuestionAnswers: [],
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -220,6 +244,8 @@ export const useFlowStore = create<FlowState>()(
       ...initialState,
 
       setCategoryId: (id) => set({ categoryId: id }),
+
+      setCategoryName: (name) => set({ categoryName: name }),
 
       setUserAnswers: (answers) => set({ userAnswers: answers }),
 
@@ -309,6 +335,15 @@ export const useFlowStore = create<FlowState>()(
       setOrphanedSelectedSuppliers: (suppliers) => set({ orphanedSelectedSuppliers: suppliers }),
 
       setCriteriaHaveChanged: (changed) => set({ criteriaHaveChanged: changed }),
+
+      setUserQuestionAnswers: (answers) => set({ userQuestionAnswers: answers }),
+
+      addUserQuestionAnswer: (answer) =>
+        set((state) => ({
+          userQuestionAnswers: [...state.userQuestionAnswers, answer],
+        })),
+
+      clearUserQuestionAnswers: () => set({ userQuestionAnswers: [] }),
 
     }),
     {

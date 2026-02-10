@@ -286,10 +286,14 @@ function normalizeProduct(
     debugInfo: {
       coeff_geo: product.coeff_geo,
       coeff_type_frns: product.coeff_type_frns,
+      coeff_caracteristique: product.coeff_caracteristique,
+      coeff_etat_score: product.coeff_etat_score,
+      score: product.score,
       characteristics_debug: product.caracteristique.map(c => ({
         id_caracteristique: c.id_caracteristique,
         bareme: c.bareme,
         poids_question: c.poids_question,
+        poids: c.poids,
       })),
     },
   };
@@ -375,6 +379,7 @@ export function enrichSuppliersWithProductInfo(
       images: image !== PLACEHOLDER_IMAGE ? [image] : supplier.images,
       logo: vendeur.logo || undefined,
       supplier: {
+        id: vendeur.id,
         name: supplierName,
         description: vendeur.short_description || '',
         location: vendeur.adresse || '',
