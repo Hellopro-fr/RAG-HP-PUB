@@ -116,6 +116,7 @@ def prepare_fournisseur_statements(
             id_pays = pays.get("id_pays", "")
             nom_pays = pays.get("nom_pays", "")
             code_iso = pays.get("code_iso", "")
+            partiel = pays.get("partiel", False)
             couvre_tous = pays.get("couvre_tous", True)
             couvre_categorie = pays.get("couvre_categorie", [])
             ne_couvre_pas_categorie = pays.get("ne_couvre_pas_categorie", [])
@@ -124,7 +125,7 @@ def prepare_fournisseur_statements(
                 logging.warning(f"Skipping pays without id_pays: {pays}")
                 continue
 
-            rel_props = {"couvre_tous": couvre_tous}
+            rel_props = {"couvre_tous": couvre_tous, "partiel": partiel}
             if not couvre_tous:
                 if couvre_categorie and isinstance(couvre_categorie, list):
                     rel_props["couvre"] = couvre_categorie
