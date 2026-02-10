@@ -72,7 +72,7 @@ function debugInfo(): void {
       Reponse: Array.isArray(qa.answerLabel) ? qa.answerLabel.join(', ') : qa.answerLabel || qa.answerId,
     })));
 
-    // Créer un panel fixe pour afficher les Q/R
+    // Créer un panel fixe draggable pour afficher les Q/R
     document.querySelectorAll('.debug-qa-panel').forEach(el => el.remove());
 
     const qaPanel = document.createElement('div');
@@ -80,10 +80,11 @@ function debugInfo(): void {
     qaPanel.style.cssText = `
       position: fixed; top: 10px; right: 10px; z-index: 99999;
       background: #1a1a2e; color: #0f0; font-size: 11px;
-      padding: 12px; font-family: monospace;
+      font-family: monospace;
       border: 2px solid #0f0; border-radius: 8px;
-      max-width: 400px; max-height: 300px; overflow-y: auto;
+      max-width: 400px; max-height: 350px;
       box-shadow: 0 4px 20px rgba(0,255,0,0.3);
+      display: flex; flex-direction: column;
     `;
 
     const qaRows = userQuestionAnswers.map(qa => {
@@ -100,15 +101,46 @@ function debugInfo(): void {
     }).join('');
 
     qaPanel.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #0f0">
-        <span style="color:#fff;font-weight:bold;font-size:12px">Questions / Reponses (${userQuestionAnswers.length})</span>
-        <button onclick="this.parentElement.parentElement.remove()" style="background:#f00;color:#fff;border:none;padding:2px 8px;cursor:pointer;border-radius:4px">X</button>
+      <div class="debug-qa-header" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#0f0;border-radius:6px 6px 0 0;cursor:move;user-select:none">
+        <span style="color:#000;font-weight:bold;font-size:12px">Q/R (${userQuestionAnswers.length}) - Glisser pour deplacer</span>
+        <button onclick="this.closest('.debug-qa-panel').remove()" style="background:#f00;color:#fff;border:none;padding:2px 8px;cursor:pointer;border-radius:4px;font-weight:bold">X</button>
       </div>
-      ${qaRows}
+      <div style="padding:12px;overflow-y:auto;flex:1">
+        ${qaRows}
+      </div>
     `;
 
     document.body.appendChild(qaPanel);
-    console.log('Panel Q/R affiche en haut a droite');
+
+    // Rendre le panel draggable
+    const header = qaPanel.querySelector('.debug-qa-header') as HTMLElement;
+    let isDragging = false;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    header.addEventListener('mousedown', (e: MouseEvent) => {
+      isDragging = true;
+      offsetX = e.clientX - qaPanel.getBoundingClientRect().left;
+      offsetY = e.clientY - qaPanel.getBoundingClientRect().top;
+      qaPanel.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      const x = e.clientX - offsetX;
+      const y = e.clientY - offsetY;
+      qaPanel.style.left = `${x}px`;
+      qaPanel.style.top = `${y}px`;
+      qaPanel.style.right = 'auto';
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+      qaPanel.style.cursor = '';
+    });
+
+    console.log('Panel Q/R affiche (draggable) - Glisser la barre verte pour deplacer');
   } else {
     console.log('Pas de userQuestionAnswers enregistrees');
   }
