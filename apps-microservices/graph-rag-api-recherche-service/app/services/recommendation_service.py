@@ -1008,9 +1008,11 @@ class RecommendationService:
              END AS etat_score
         
         // Calculate final_score = global_score * zone_score * etat_score
+        // Filter out products with negative final_score
         WITH p, details, global_score, zone_score, etat_score,
              global_score * zone_score * etat_score AS final_score
-        
+        WHERE final_score >= 0
+        WITH p, details, global_score, zone_score, etat_score, final_score
         ORDER BY final_score DESC
         LIMIT $top_k + 4
         

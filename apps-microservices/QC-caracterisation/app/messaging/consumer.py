@@ -86,54 +86,69 @@ class Consumer:
     async def _release_category(self, cat_id: str):
         async with self._categories_lock:
             self._processing_categories.discard(cat_id)
+            logger.debug(f"[CAT-{cat_id}] Catégorie libérée")
 
     async def process_message(self, message: AbstractIncomingMessage):
         async with message.process(ignore_processed=True):
             id_categorie = None
+            category_locked = False
+            
             try:
                 data = json.loads(message.body.decode())
                 id_categorie = data.get('id_categorie')
                 is_reset = data.get('is_reset', False)
+                
                 if not id_categorie:
                     raise ValueError("id_categorie manquant dans le message.")
+                
                 if await self._is_duplicate_category(str(id_categorie)):
                     logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie déjà en cours - ignoré")
                     await message.ack()
                     return
+                
+                category_locked = True
+                logger.info(f"[CAT-{id_categorie}] 📥 Début traitement")
+                
+                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
+                api_client = HelloProAPIClient()
+                generator = CaracterisationProduitGenerator(api_client)
+                
                 try:
-                    logger.info(f"[CAT-{id_categorie}] 📥 Début traitement")
-                    request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
-                    api_client = HelloProAPIClient()
-                    generator = CaracterisationProduitGenerator(api_client)
-                    try:
-                        result = await generator.generate_all_caracterisations(request)
-                        if generator.tracking_file:
-                            logger.info(f"[CAT-{id_categorie}] 📁 Tracking: {generator.tracking_file}")
-                    finally:
-                        await generator.close()
-                    output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 'complete', 'previous_step': 'caracterisation', 'status': result.status}
-                    await self.publisher.publish_message(output_message)
-                    await message.ack()
-                    logger.info(f"[CAT-{id_categorie}] ✅ Pipeline terminé!")
+                    result = await generator.generate_all_caracterisations(request)
+                    if generator.tracking_file:
+                        logger.info(f"[CAT-{id_categorie}] 📁 Tracking: {generator.tracking_file}")
                 finally:
-                    await self._release_category(str(id_categorie))
+                    await generator.close()
+                
+                output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 'complete', 'previous_step': 'caracterisation', 'status': result.status}
+                await self.publisher.publish_message(output_message)
+                await message.ack()
+                logger.info(f"[CAT-{id_categorie}] ✅ Pipeline terminé!")
+                
             except (json.JSONDecodeError, ValueError) as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
                 logger.error(f"{cat_prefix}❌ Erreur permanente: {e}")
                 headers = DLQProperties.create_dlq_headers(e, "qc-caracterisation", 0, message)
                 await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
                 await message.ack()
+                
             except Exception as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
                 retry_count = self._get_retry_count(message)
+                logger.error(f"{cat_prefix}❌ Exception: {e}")
+                
                 if self._is_transient_error(e) and retry_count < MAX_RETRIES:
-                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}), retry: {e}")
+                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}), retry")
                     await message.nack(requeue=False)
                 else:
-                    logger.error(f"{cat_prefix}❌ Échec après {retry_count + 1} tentatives: {e}")
+                    logger.error(f"{cat_prefix}❌ Échec définitif après {retry_count + 1} tentative(s)")
                     headers = DLQProperties.create_dlq_headers(e, "qc-caracterisation", retry_count, message)
                     await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
                     await message.ack()
+                    
+            finally:
+                if category_locked and id_categorie:
+                    await self._release_category(str(id_categorie))
 
     async def _process_with_semaphore(self, message: AbstractIncomingMessage):
         task = asyncio.current_task()

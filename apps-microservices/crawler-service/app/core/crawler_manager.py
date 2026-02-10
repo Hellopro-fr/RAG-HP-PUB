@@ -1028,22 +1028,27 @@ class CrawlerManager:
         else:
             logger.info(f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
 
-    async def cleanup_archives(self, max_age_hours: int) -> Tuple[int, int, int]:
+    async def cleanup_archives(self, max_age_hours: int, delete_all: bool = False) -> Tuple[int, int, int]:
         """
         Deletes archive files that are older than `max_age_hours`.
+        If `delete_all` is True, ignores age and deletes EVERYTHING.
         """
         archives_dir = os.path.join(settings.CRAWLER_STORAGE_PATH, "archives")
         if not os.path.exists(archives_dir):
             return 0, 0, 0
 
-        logger.info(f"Starting archive cleanup. Removing files older than {max_age_hours} hours.")
+        logger.info(f"Starting archive cleanup. Max age: {max_age_hours}h. Delete all: {delete_all}")
         
         def _cleanup_sync():
             deleted_count = 0
             retained_count = 0
             errors = 0
             now = datetime.now().timestamp()
-            max_age_seconds = max_age_hours * 3600
+            
+            # If delete_all is True, we set max_age_seconds to -1 so that (age > -1) is always True
+            # (since age is always >= 0)
+            max_age_seconds = -1 if delete_all else (max_age_hours * 3600)
+            
             
             try:
                 for filename in os.listdir(archives_dir):

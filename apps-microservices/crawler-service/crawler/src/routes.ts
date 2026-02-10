@@ -197,10 +197,11 @@ router.addDefaultHandler(
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
             // If we ended up at a different URL than requested (redirect), make sure the 
             // final URL is also marked as known in Redis to prevent future re-crawling.
+            // Note: Do NOT use rightTrimSlash here — the trailing slash can be significant
+            // (e.g., /path/ returns 200 but /path returns 404 on some servers).
             if (context.dedupManager && request.url !== request.loadedUrl) {
-                const finalUrlClean = rightTrimSlash(request.loadedUrl);
                 // We add it to Redis. We don't care if it returns true/false here, just ensuring it's known.
-                await context.dedupManager.addUrl(finalUrlClean);
+                await context.dedupManager.addUrl(request.loadedUrl);
             }
 
             if (isExisting && context.statsManager) {
@@ -327,14 +328,38 @@ router.addDefaultHandler(
                     title
                 );
 
+                // --- PRE-BATCH DEDUP: Extract links, batch-check Redis, build local Set ---
+                // CRITICAL: transformRequestFunction MUST be synchronous (Crawlee API contract).
+                // An async version causes minimatch to receive a Promise instead of a Request,
+                // crashing with "Cannot read properties of undefined (reading 'split')".
+                let knownUrlsOnPage = new Set<string>();
+
+                if (context.dedupManager) {
+                    try {
+                        // 1. Extract all <a href> links from the page
+                        const rawLinks = await page.$$eval('a[href]', (anchors: HTMLAnchorElement[]) =>
+                            anchors.map(a => a.href).filter(href => href && href.startsWith('http'))
+                        );
+
+                        if (rawLinks.length > 0) {
+                            // 2. Batch-check against Redis in a single round-trip
+                            knownUrlsOnPage = await context.dedupManager.isKnownBatch(rawLinks);
+                        }
+                    } catch (e) {
+                        // Non-fatal: if link extraction fails, we proceed without pre-filtering
+                        // The handler-level dedup (line ~176) will still catch duplicates
+                        console.warn(`Pre-batch link extraction failed: ${e}`);
+                    }
+                }
+
                 await enqueueLinks({
                     strategy: "same-domain",
                     exclude: enqueueLinksExcludePath,
-                    transformRequestFunction: ((async (request: any) => {
+                    transformRequestFunction: (request) => {
                         // 1. Robots Check
                         if (robots && !robots.isAllowed(request.url, "Googlebot")) {
                             console.log(`Bloqué par robots.txt : ${request.url}`);
-                            return null;
+                            return false;
                         }
 
                         // 2. Initial CLEANING of the URL (Moved to TOP)
@@ -442,7 +467,7 @@ router.addDefaultHandler(
                                 if (reqUrlObj.searchParams.has(param) ||
                                     Array.from(reqUrlObj.searchParams.keys()).some(key => key.startsWith(param))) {
                                     console.log(`🚫 Blocked forbidden param "${param}": ${request.url}`);
-                                    return null;
+                                    return false;
                                 }
                             }
 
@@ -451,42 +476,35 @@ router.addDefaultHandler(
                                 request.url.includes('/cart/cart/') ||
                                 request.url.includes('/catalog/product_compare/')) {
                                 console.log(`Blocked spider trap: ${request.url}`);
-                                return null;
+                                return false;
                             }
 
                             if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
                                 console.log(`Blocked base64 URL: ${request.url}`);
-                                return null;
+                                return false;
                             }
 
                             // External Domain Check
                             if (targetDomain && !reqUrlObj.hostname.includes(targetDomain)) {
-                                console.log(`Blocked external URL: ${request.url}`);
-                                return null;
+                                // console.log(`Blocked external URL: ${request.url}`);
+                                return false;
                             }
 
                         } catch (e) {
                             console.error(`Invalid URL in transformRequestFunction: ${request.url}`);
-                            return null;
+                            return false;
                         }
 
-                        // 4. Pre-Crawl Deduplication
-                        // Crucial Optimization: Stop the request HERE if we already know about it.
-                        // We check against Redis before even creating the Request object fully.
-                        // NOTE: In update mode, existing URLs are skipped by this logic implicitly
-                        // because we are discovering NEW links here. We assume existing URLs
-                        // were already added to Redis during seeding.
-                        if (context.dedupManager) {
-                            const isNew = await context.dedupManager.addUrl(request.url);
-                            if (!isNew) {
-                                // Already known, skip it immediately
-                                return null;
-                            }
+                        // 4. Pre-Crawl Deduplication (SYNCHRONOUS via pre-built Set)
+                        // The Set was populated before enqueueLinks by batch-checking Redis.
+                        // This avoids the async trap while still leveraging Redis dedup.
+                        if (knownUrlsOnPage.has(request.url)) {
+                            return false;
                         }
 
                         request.userData = { is_existing: false };
                         return request;
-                    }) as any),
+                    },
                 });
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);

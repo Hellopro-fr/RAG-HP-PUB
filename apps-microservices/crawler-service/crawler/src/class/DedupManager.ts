@@ -50,6 +50,33 @@ export class DedupManager {
     }
 
     /**
+     * Batch-checks multiple URLs against the deduplication set in a single Redis round-trip.
+     * Uses SMISMEMBER for O(N) efficiency instead of N individual SISMEMBER calls.
+     *
+     * @param urls - Array of URLs to check
+     * @returns Set of URLs that are already known (exist in Redis)
+     */
+    async isKnownBatch(urls: string[]): Promise<Set<string>> {
+        const knownSet = new Set<string>();
+        if (urls.length === 0) return knownSet;
+
+        try {
+            // SMISMEMBER returns an array of 0/1 for each member
+            const results = await this.redis.smIsMember(this.key, urls);
+            for (let i = 0; i < urls.length; i++) {
+                if (results[i]) {
+                    knownSet.add(urls[i]);
+                }
+            }
+        } catch (e) {
+            console.error(`Dedup Batch Check Error: ${e}`);
+            // On error, return empty set (process all URLs to be safe)
+        }
+
+        return knownSet;
+    }
+
+    /**
      * Returns the number of items currently in the deduplication set.
      */
     async getCount(): Promise<number> {

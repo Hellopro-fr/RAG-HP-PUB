@@ -20,7 +20,11 @@ RETRY_TTL_MS = 30000
 
 
 class Consumer:
-    """Async Consumer en mode streaming pour le service QC-equivalence (step 6)."""
+    """Async Consumer en mode streaming pour le service QC-equivalence (step 6).
+    
+    IMPORTANT: La déduplication par catégorie ne fonctionne qu'au sein d'un même réplica.
+    Pour éviter les doublons entre réplicas, le backend doit gérer via "can_start" dans process_data.
+    """
 
     def __init__(self, publisher: Publisher):
         self.publisher = publisher
@@ -77,6 +81,7 @@ class Consumer:
         return any(kw in error_msg for kw in ['timeout', 'connection reset', 'connection refused', 'temporarily unavailable', 'service unavailable', 'timed out', 'network unreachable', 'connection aborted', 'broken pipe', 'eof', 'end of file'])
 
     async def _is_duplicate_category(self, cat_id: str) -> bool:
+        """Vérifie si une catégorie est déjà en cours de traitement sur CE réplica."""
         async with self._categories_lock:
             if cat_id in self._processing_categories:
                 return True
@@ -84,58 +89,102 @@ class Consumer:
             return False
 
     async def _release_category(self, cat_id: str):
+        """Libère une catégorie après traitement (succès ou erreur)."""
         async with self._categories_lock:
             self._processing_categories.discard(cat_id)
+            logger.debug(f"[CAT-{cat_id}] Catégorie libérée du set local")
 
     async def process_message(self, message: AbstractIncomingMessage):
+        """Traite un message avec gestion robuste des erreurs et libération catégorie."""
         async with message.process(ignore_processed=True):
             id_categorie = None
+            category_locked = False  # Flag pour savoir si on a verrouillé la catégorie
+            
             try:
+                # 1. Parser le message
                 data = json.loads(message.body.decode())
                 id_categorie = data.get('id_categorie')
                 is_reset = data.get('is_reset', False)
+                
                 if not id_categorie:
                     raise ValueError("id_categorie manquant dans le message.")
+                
+                # 2. Vérifier déduplication locale (par réplica uniquement)
                 if await self._is_duplicate_category(str(id_categorie)):
-                    logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie déjà en cours - ignoré")
+                    logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie déjà en cours sur ce réplica - message ignoré")
                     await message.ack()
                     return
+                
+                # On a verrouillé la catégorie
+                category_locked = True
+                
+                # 3. Traitement principal
+                logger.info(f"[CAT-{id_categorie}] 📥 Début traitement")
+                
+                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
+                api_client = HelloProAPIClient()
+                generator = EquivalenceGenerator(api_client)
+                
                 try:
-                    logger.info(f"[CAT-{id_categorie}] 📥 Début traitement")
-                    request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
-                    api_client = HelloProAPIClient()
-                    generator = EquivalenceGenerator(api_client)
-                    try:
-                        result = await generator.generate_all_equivalences(request)
-                        if generator.tracking_file:
-                            logger.info(f"[CAT-{id_categorie}] 📁 Tracking: {generator.tracking_file}")
-                    finally:
-                        await generator.close()
-                    output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 7, 'previous_step': 'equivalence', 'status': result.status}
-                    await self.publisher.publish_message(output_message)
-                    await message.ack()
-                    logger.info(f"[CAT-{id_categorie}] ✅ Terminé")
+                    result = await generator.generate_all_equivalences(request)
+                    if generator.tracking_file:
+                        logger.info(f"[CAT-{id_categorie}] 📁 Tracking: {generator.tracking_file}")
                 finally:
-                    await self._release_category(str(id_categorie))
-            except (json.JSONDecodeError, ValueError) as e:
-                cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
-                logger.error(f"{cat_prefix}❌ Erreur permanente: {e}")
-                headers = DLQProperties.create_dlq_headers(e, "qc-equivalence", 0, message)
-                await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
+                    await generator.close()
+                
+                # 4. Succès - publier et ACK
+                output_message = {
+                    'id_categorie': id_categorie, 
+                    'is_reset': is_reset, 
+                    'step': 7, 
+                    'previous_step': 'equivalence', 
+                    'status': result.status
+                }
+                await self.publisher.publish_message(output_message)
                 await message.ack()
+                logger.info(f"[CAT-{id_categorie}] ✅ Terminé avec succès")
+                
+            except (json.JSONDecodeError, ValueError) as e:
+                # Erreur de parsing - pas de retry
+                cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
+                logger.error(f"{cat_prefix}❌ Erreur permanente (parsing): {e}")
+                headers = DLQProperties.create_dlq_headers(e, "qc-equivalence", 0, message)
+                await self.channel.default_exchange.publish(
+                    aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), 
+                    routing_key=self.dead_letter_queue_name
+                )
+                await message.ack()
+                
             except Exception as e:
+                # Autres erreurs
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
                 retry_count = self._get_retry_count(message)
+                error_str = str(e)
+                
+                # Log détaillé de l'erreur
+                logger.error(f"{cat_prefix}❌ Exception: {error_str}")
+                
+                # Vérifier si c'est une erreur transitoire (retry possible)
                 if self._is_transient_error(e) and retry_count < MAX_RETRIES:
-                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}), retry: {e}")
+                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES}), retry prévu")
                     await message.nack(requeue=False)
                 else:
-                    logger.error(f"{cat_prefix}❌ Échec après {retry_count + 1} tentatives: {e}")
+                    # Erreur permanente - envoyer en DLQ
+                    logger.error(f"{cat_prefix}❌ Échec définitif après {retry_count + 1} tentative(s): {error_str}")
                     headers = DLQProperties.create_dlq_headers(e, "qc-equivalence", retry_count, message)
-                    await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
+                    await self.channel.default_exchange.publish(
+                        aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), 
+                        routing_key=self.dead_letter_queue_name
+                    )
                     await message.ack()
+                    
+            finally:
+                # TOUJOURS libérer la catégorie si elle a été verrouillée
+                if category_locked and id_categorie:
+                    await self._release_category(str(id_categorie))
 
     async def _process_with_semaphore(self, message: AbstractIncomingMessage):
+        """Wrapper qui gère le semaphore et le tracking des tâches actives."""
         task = asyncio.current_task()
         self._active_tasks.add(task)
         try:
@@ -145,17 +194,20 @@ class Consumer:
             self._active_tasks.discard(task)
 
     async def start_consuming(self):
+        """Mode streaming: traite les messages immédiatement dès leur arrivée."""
         await self.connect()
         logger.info(f"👂 QC-Equivalence: En attente sur {self.queue_name} (streaming)")
         logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
+        
         async with self.queue.iterator() as queue_iter:
             async for message in queue_iter:
                 asyncio.create_task(self._process_with_semaphore(message))
-                logger.info(f"📨 Message reçu - Tâches: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
+                logger.info(f"📨 Message reçu - Tâches actives: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
 
     async def close(self):
+        """Ferme proprement le consumer en attendant les tâches en cours."""
         if self._active_tasks:
-            logger.info(f"⏳ Attente de {len(self._active_tasks)} tâches...")
+            logger.info(f"⏳ Attente de {len(self._active_tasks)} tâches en cours...")
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
         if self.connection:
             await self.connection.close()

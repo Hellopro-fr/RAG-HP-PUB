@@ -464,10 +464,9 @@ if (crawlMode === 'update') {
         { toKeep, toRemove }
     );
 
-    // Note: We also add start URL to dedup to prevent re-crawling if found again immediately
-    if (context.dedupManager) {
-        await context.dedupManager.addUrl(cleanSite);
-    }
+    // Note: Do NOT add the seed URL to Redis dedup here.
+    // The handler will add it when processing the page.
+    // Pre-adding it causes the homepage to be treated as "Doublon" and skipped entirely.
 
     await requestQueue.addRequest({ 
         url: cleanSite, 
