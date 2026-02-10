@@ -40,14 +40,15 @@ function suppliersToProduitsSelection(
   return selectedSupplierIds.map(id => {
     const supplier = suppliers.find(s => s.id === id);
     console.log(supplier?.supplier);
+    const supplierId = supplier?.supplier.id ? String(supplier.supplier.id) : '0';
     return {
       // Pour l'instant, on utilise l'id comme id_produit et id_societe
       // À terme, ces IDs viendront de l'API HelloPro
       id_produit: supplier?.id || id,
-      id_societe: supplier?.supplier.id || 0,
+      id_societe: supplierId,
       nom_produit: supplier?.productName,
       nom_fournisseur: supplier?.supplierName,
-      info_acheteur_matching: construireTabMatchingAcheteur({  values: data, id_produit: supplier?.id || id , id_societe: supplier?.supplier.id || 0  }),
+      info_acheteur_matching: construireTabMatchingAcheteur({ values: data, id_produit: supplier?.id || id, id_societe: supplierId }),
     };
   });
 }
