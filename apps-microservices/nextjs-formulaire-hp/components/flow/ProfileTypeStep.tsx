@@ -267,6 +267,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
     // Convertir SirenCompanyData en CompanyResult
     const companyResult: CompanyResult = {
       siren: company.siren,
+      siret: company.siret,
       name: company.name,
       address: company.address,
       postalCode: company.postalCode,

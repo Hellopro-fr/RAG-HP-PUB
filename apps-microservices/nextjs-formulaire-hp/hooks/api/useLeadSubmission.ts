@@ -78,15 +78,15 @@ function construireTabMatchingAcheteur({
   const type_lead = source == 2 ? "exclusif" : "apo";
 
   const objectInfoAcheteur = {
-    id_acheteur     : '',
-    type_lead       : type_lead,
-    mail            : contact.email,
-    cp              : profile.postalCode || '',
-    pays            : profile.countryID || 1,
-    typologie       : profileTypeToStatut(profile.type),
-    id_rubrique     : categoryId || '0',
-    id_produit      : id_produit || '',
-    naf_acheteur    : profile.naf || '',
+    id_acheteur: '',
+    type_lead: type_lead,
+    mail: contact.email,
+    cp: profile.postalCode || '',
+    pays: profile.countryID || 1,
+    typologie: profileTypeToStatut(profile.type),
+    id_rubrique: categoryId || '0',
+    id_produit: id_produit || '',
+    naf_acheteur: profile.naf || '',
     societe_originel: id_societe,
   };
 
@@ -105,12 +105,13 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
 
   // Récupérer les réponses Q/R de l'utilisateur depuis le flow store
   const userQuestionAnswers = useFlowStore.getState().userQuestionAnswers || [];
+  const equivalenceCaracteristique = useFlowStore.getState().equivalenceCaracteristique || [];
 
   return useMutation({
     mutationFn: async (data: LeadSubmission) => {
       // Transformer les données vers le format DemandeInfoPayload
       const payload: DemandeInfoPayload = {
-        form_ab : 'form_ux_matching',
+        form_ab: 'form_ux_matching',
         acheteur: {
           civilite      : data.contact.civility || '',
           nom           : data.contact.lastName,
@@ -129,15 +130,22 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
           id_pays_tel   : data.contact.id_pays_tel || 1,
         },
         message               : data.contact.message || 'Demande de devis via UX Matching',
-        produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data) : [],
+        produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data): [],
         criteres              : data.answers,
-        souhait_devis         : data.source === 2, 
+        souhait_devis         : data.source === 2,
         demande_ia            : true,
         provenance_di         : 'ux_matching',
         id_rubrique           : data.categoryId || '0',
         info_acheteur_matching: construireTabMatchingAcheteur({ values: data }),
         // JSON stringifié des questions/réponses utilisateur (debug / tracking)
-        question_reponse_acheteur : userQuestionAnswers.length > 0 ? JSON.stringify(userQuestionAnswers) : undefined,
+        question_reponse_acheteur: userQuestionAnswers.length > 0 ? JSON.stringify(userQuestionAnswers) : undefined,
+        caracteristiques: equivalenceCaracteristique.length > 0 ? JSON.stringify(equivalenceCaracteristique.map(
+          function (o) {
+            return {
+              "id": o.id_caracteristique,
+              "cible": o.valeurs_cibles
+            }
+          })) : undefined,
       };
 
       // Envoyer les demandes au PHP
