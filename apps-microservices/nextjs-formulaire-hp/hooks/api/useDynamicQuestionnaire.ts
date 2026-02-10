@@ -184,18 +184,12 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       if (nom_categorie) {
         setCategoryName(nom_categorie);
       }
-
-      console.log("apiData RAW", apiData);
       
       const apiDataAPI : ApiQuestion = apiData;
-
-      console.log("apiData", apiDataAPI);
 
       const dataReturn = {
         entryQuestion: normalizeQuestion(apiDataAPI, 0),
       };
-
-      console.log("dataReturn waaaaaa", dataReturn);
 
       // Transformer vers le format frontend
       return dataReturn;

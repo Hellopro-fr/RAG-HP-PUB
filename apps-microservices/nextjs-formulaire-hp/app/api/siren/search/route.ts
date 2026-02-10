@@ -29,9 +29,7 @@ export async function GET(request: NextRequest) {
     // Construction URL pour API INSEE v2 (retourne du JSON)
     const url = new URL(`${BASE_URL}/api_insee/_ag_web_service_insee_v2.php`);
     url.searchParams.append('soc', soc.trim());
-    url.searchParams.append('p', p);
-
-    console.log('Calling Legacy SIREN API v2:', url.toString());
+    url.searchParams.append('p', p);    
 
     // Appel vers l'API Legacy v2
     const response = await fetch(url.toString(), {

@@ -34,8 +34,6 @@ export async function GET(request: NextRequest) {
     url.searchParams.append('cp', cp.trim());
     url.searchParams.append('p', p);
 
-    console.log('Calling Legacy SIRET API:', url.toString());
-
     // Appel vers l'API Legacy
     const response = await fetch(url.toString(), {
       method: 'GET',
@@ -52,8 +50,6 @@ export async function GET(request: NextRequest) {
     }
 
     const htmlContent = await response.text();
-
-    console.log('SIRET API response length:', htmlContent.length);
 
     // Retourne le HTML brut (le frontend devra le parser)
     return new NextResponse(htmlContent, {

@@ -40,7 +40,6 @@ function suppliersToProduitsSelection(
 ): ProduitSelection[] {
   return selectedSupplierIds.map(id => {
     const supplier = suppliers.find(s => s.id === id);
-    console.log(supplier?.supplier);
     const supplierId = supplier?.supplier.id ? String(supplier.supplier.id) : '0';
     return {
       // Pour l'instant, on utilise l'id comme id_produit et id_societe

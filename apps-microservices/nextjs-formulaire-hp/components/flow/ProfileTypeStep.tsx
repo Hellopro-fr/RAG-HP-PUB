@@ -648,8 +648,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
                                 const newPostalCode = e.target.value.replace(/\D/g, "").slice(0, 5);
                                 setPostalCode(newPostalCode);
                                 setCity("");
-                                setShowPostalCodeSuggestions(newPostalCode.length >= 1);
-                              console.log("New postal code:", showPostalCodeSuggestions);
+                                setShowPostalCodeSuggestions(newPostalCode.length >= 1);                              
                               }}
                               onFocus={() => postalCode.length >= 2 && setShowPostalCodeSuggestions(true)}
                               onBlur={() => {setTimeout(() => setShowPostalCodeSuggestions(false), 200);}}

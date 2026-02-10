@@ -56,9 +56,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = JSON.parse(jsonMatch[0]);
-
-    console.log('get_info_produit response:', Object.keys(data.items || {}));
+    const data = JSON.parse(jsonMatch[0]);    
 
     return NextResponse.json(data, { status: 200 });
   } catch (error) {

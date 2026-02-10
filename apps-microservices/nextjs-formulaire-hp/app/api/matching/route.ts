@@ -53,8 +53,6 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
 
-    console.log("API_MATCHING", data);
-
     return NextResponse.json(data, { status: 200 });
   } catch (error) {
     console.error('API_MATCHING proxy error:', error);
