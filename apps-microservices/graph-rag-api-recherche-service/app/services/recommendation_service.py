@@ -585,7 +585,7 @@ class RecommendationService:
 
         z_unmatched = 0.2
         e_unmatched = 0.8
-        unknown_score = 0.7
+        unknown_score = 0.8
 
         # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
