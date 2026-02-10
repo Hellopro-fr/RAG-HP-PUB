@@ -124,3 +124,5 @@ docker-compose.override.yml
 .gitignore
 
 .next
+package-lock.json
+.gitignore
