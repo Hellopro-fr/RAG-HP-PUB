@@ -22,7 +22,6 @@ import CriteriaChangedBanner from "./CriteriaChangedBanner";
 import {
   trackComparisonModalView,
   trackProductSelectionChange,
-  trackProductModalView,
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
@@ -182,12 +181,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
   const handleViewDetails = (id: string) => {
     setSelectedProductId(id);
-
-    // Track product modal view
-    const product = ALL_SUPPLIERS.find((s) => s.id === id);
-    if (product) {
-      trackProductModalView(id, product.productName, product.supplier?.name || product.supplierName);
-    }
+    // Note: Le tracking est fait dans ProductDetailModal au montage
   };
 
   const selectedProduct = selectedProductId
