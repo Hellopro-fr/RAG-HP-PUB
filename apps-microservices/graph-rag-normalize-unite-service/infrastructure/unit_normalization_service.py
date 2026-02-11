@@ -20,7 +20,7 @@ class UnitNormalizationService:
             cls._instance.ureg = UnitRegistry()
 
             # --- FIX 1: Define missing units found in logs ---
-            cls._instance.ureg.define("unité = count = unite")
+            cls._instance.ureg.define("unité = count = unite = Nb = nb")
             cls._instance.ureg.define("pieds = foot = pied")
 
             # --- FIX 2: Define Sound/Acoustic Units ---
@@ -79,6 +79,7 @@ class UnitNormalizationService:
                 # Count / Dimensionless
                 "unité": "count",
                 "unite": "count",
+                "nb": "count",
                 # Sound
                 "db": "sound_level",
                 "dba": "sound_level",
