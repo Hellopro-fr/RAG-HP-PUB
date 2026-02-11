@@ -6,10 +6,13 @@ export class DedupManager {
     private ttl: number;
     private ttlSet: boolean = false;
 
+    private blockedKey: string;
+
     constructor(redisUrl: string, crawlId: string, ttlSeconds: number = 7 * 24 * 3600) {
         this.redis = createClient({ url: redisUrl });
         this.redis.on('error', (err) => console.error('Redis Dedup Error:', err));
         this.key = `dedup:${crawlId}`;
+        this.blockedKey = `blocked_log:${crawlId}`;
         this.ttl = ttlSeconds;
     }
 
@@ -26,6 +29,7 @@ export class DedupManager {
     private async ensureTtl() {
         if (!this.ttlSet) {
             await this.redis.expire(this.key, this.ttl);
+            await this.redis.expire(this.blockedKey, this.ttl);
             this.ttlSet = true;
         }
     }
@@ -77,6 +81,43 @@ export class DedupManager {
     }
 
     /**
+     * Filter a batch of blocked URLs returning only those NOT yet logged.
+     * Adds the new ones to the blocked set atomically.
+     * @param urls Array of blocked URLs to check
+     * @returns Array of URLs that should be logged (were new)
+     */
+    async filterNewBlockedBatch(urls: string[]): Promise<string[]> {
+        if (urls.length === 0) return [];
+        const uniqueUrls = [...new Set(urls)]; // Local dedup first logic
+        const newToLog: string[] = [];
+
+        try {
+            // 1. Check existing
+            const results = await this.redis.smIsMember(this.blockedKey, uniqueUrls);
+            const toAdd: string[] = [];
+
+            for (let i = 0; i < uniqueUrls.length; i++) {
+                if (results[i] === 0) { // 0 means NOT member (new)
+                     newToLog.push(uniqueUrls[i]);
+                     toAdd.push(uniqueUrls[i]);
+                }
+            }
+
+            // 2. Add new ones
+            if (toAdd.length > 0) {
+                 await this.redis.sAdd(this.blockedKey, toAdd);
+                 await this.ensureTtl();
+            }
+
+        } catch (e) {
+            console.error(`Blocked Log Batch Error: ${e}`);
+            // On error, log everything to be safe
+            return uniqueUrls;
+        }
+        return newToLog;
+    }
+
+    /**
      * Returns the number of items currently in the deduplication set.
      */
     async getCount(): Promise<number> {
@@ -109,7 +150,9 @@ export class DedupManager {
         try {
             let cursor = 0;
             do {
-                const result = await this.redis.sScan(this.key, cursor, { COUNT: 1000 });
+                // Reduced batch size to preventing OOM during persistence
+                // Node Redis client buffers the response, so 1000 items might be too large for 100s of simultaneous writes
+                const result = await this.redis.sScan(this.key, cursor, { COUNT: 200 });
                 cursor = result.cursor;
                 for (const member of result.members) {
                     yield member;
@@ -170,6 +213,7 @@ export class DedupManager {
     async cleanup() {
         try {
             await this.redis.del(this.key);
+            await this.redis.del(this.blockedKey);
             await this.disconnect();
             console.log(`Cleaned up deduplication set for ${this.key}`);
         } catch (e) {

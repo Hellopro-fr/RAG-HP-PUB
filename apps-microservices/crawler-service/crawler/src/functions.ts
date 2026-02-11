@@ -221,7 +221,7 @@ export const startCrawler = async (
     // causing the autoscaler to report memInfo.actualRatio: 0 and never throttle concurrency.
     let configOptions: Record<string, any> = {
         maxUsedCpuRatio: 0.95, // V3 allows more CPU usage
-        availableMemoryRatio: 0.95,
+        availableMemoryRatio: 0.8, // Reduced from 0.95 to throttle earlier
         persistStorage: true,
     };
     if (containerMemoryMb && containerMemoryMb > 0) {
@@ -700,8 +700,11 @@ export const updateUrlsCrawledStreaming = async (
     let count = 0;
     
     for await (const url of urlIterator) {
-        if (!isFirst) stream.write(',');
-        stream.write(JSON.stringify(url));
+        if (!isFirst) {
+             if (!stream.write(',')) await new Promise(r => stream.once('drain', r));
+        }
+        if (!stream.write(JSON.stringify(url))) await new Promise(r => stream.once('drain', r));
+        
         isFirst = false;
         count++;
     }

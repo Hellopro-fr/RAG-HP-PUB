@@ -21,22 +21,8 @@ export const router = createPlaywrightRouter();
 
 // --- Blocked URL Log Deduplication ---
 // Logs each blocked URL only ONCE per crawl launch to reduce log pollution.
-// Capped at 10,000 entries (~1MB) as a memory safety valve.
-const MAX_LOGGED_BLOCKED = 10_000;
-const loggedBlockedUrls = new Set<string>();
-
-const logBlockedOnce = (reason: string, url: string): void => {
-    const key = `${reason}:${url}`;
-    if (loggedBlockedUrls.size >= MAX_LOGGED_BLOCKED) {
-        // Safety valve: stop deduplicating to avoid unbounded memory growth
-        console.log(`🚫 [${reason}] ${url}`);
-        return;
-    }
-    if (!loggedBlockedUrls.has(key)) {
-        loggedBlockedUrls.add(key);
-        console.log(`🚫 [${reason}] ${url}`);
-    }
-};
+// Uses Redis (via DedupManager) to track blocked URLs across all instances.
+// Local buffering ensures async Redis calls don't block synchronous transformRequestFunction.
 // --- END Blocked URL Log Deduplication ---
 
 const ignoredExtensions = [
@@ -93,11 +79,15 @@ router.addDefaultHandler(
 
         let url = request.loadedUrl;
 
-        // CRITICAL SECURITY: Check if the loaded URL is still on the target domain
-        // This handles cases where a valid internal link redirects to an external site (e.g. Facebook)
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
         const targetDomain = context.config.domain; 
+
+        // Local buffer for blocked URLs to handle async Redis logging
+        const blockedBuffer: { reason: string, url: string }[] = [];
+        const logBlocked = (reason: string, url: string) => {
+            blockedBuffer.push({ reason, url });
+        }; 
 
         // Check if hostname ends with the target domain (handles subdomains too)
         // e.g. target="myshop.com", loaded="facebook.com" -> BLOCKED
@@ -378,7 +368,7 @@ router.addDefaultHandler(
                     transformRequestFunction: (request) => {
                         // 1. Robots Check
                         if (robots && !robots.isAllowed(request.url, "Googlebot")) {
-                            logBlockedOnce('robots.txt', request.url);
+                            logBlocked('robots.txt', request.url);
                             return false;
                         }
 
@@ -486,7 +476,7 @@ router.addDefaultHandler(
                             for (const param of FORBIDDEN_PARAMS) {
                                 if (reqUrlObj.searchParams.has(param) ||
                                     Array.from(reqUrlObj.searchParams.keys()).some(key => key.startsWith(param))) {
-                                    logBlockedOnce('forbidden-param', `"${param}": ${request.url}`);
+                                    logBlocked('forbidden-param', `"${param}": ${request.url}`);
                                     return false;
                                 }
                             }
@@ -495,18 +485,18 @@ router.addDefaultHandler(
                             if (request.url.includes('/quotation/cart/') ||
                                 request.url.includes('/cart/cart/') ||
                                 request.url.includes('/catalog/product_compare/')) {
-                                logBlockedOnce('spider-trap', request.url);
+                                logBlocked('spider-trap', request.url);
                                 return false;
                             }
 
                             if (/\/url\/[a-zA-Z0-9]{20,}/.test(request.url)) {
-                                logBlockedOnce('base64-url', request.url);
+                                logBlocked('base64-url', request.url);
                                 return false;
                             }
 
                             // External Domain Check
                             if (targetDomain && !reqUrlObj.hostname.includes(targetDomain)) {
-                                logBlockedOnce('external-domain', request.url);
+                                logBlocked('external-domain', request.url);
                                 return false;
                             }
 
@@ -526,6 +516,25 @@ router.addDefaultHandler(
                         return request;
                     },
                 });
+
+                // Post-process blocked URLs for logging (Async Dedup)
+                if (context.dedupManager && blockedBuffer.length > 0) {
+                     try {
+                         const allUrls = blockedBuffer.map(b => b.url);
+                         const newUrls = await context.dedupManager.filterNewBlockedBatch(allUrls);
+                         const newUrlsSet = new Set(newUrls);
+                         
+                         const loggedLocal = new Set<string>();
+                         for(const item of blockedBuffer) {
+                             if(newUrlsSet.has(item.url) && !loggedLocal.has(item.url)) {
+                                 console.log(`🚫 [${item.reason}] ${item.url}`);
+                                 loggedLocal.add(item.url);
+                             }
+                         }
+                     } catch (e) {
+                         console.warn("Failed to log blocked URLs via Redis:", e);
+                     }
+                }
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
                 let dataset = await Dataset.open("nfr-" + targetDomain);

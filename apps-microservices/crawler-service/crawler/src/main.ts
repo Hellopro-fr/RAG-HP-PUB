@@ -1,4 +1,4 @@
-import { RequestQueue, RobotsFile, Dataset } from "crawlee";
+import { RequestQueue, RobotsFile, Dataset, Configuration } from "crawlee";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import { createClient } from 'redis';
@@ -239,6 +239,7 @@ const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: numbe
 
 // --- Tier 1 Recovery Handler (85-92%) ---
 let lastWarningActionTime = 0;
+let lastMemPercent = 0; // Track global memory state for persistence guard
 const handleWarningMemory = async (memPercent: number) => {
     const now = Date.now();
     if (now - lastWarningActionTime < 30000) return; // Debounce 30s
@@ -265,12 +266,10 @@ const handleWarningMemory = async (memPercent: number) => {
         setTimeout(() => context.crawlerInstance?.autoscaledPool?.resume(), 5000);
     }
 
-    // 4. Flush Persistence (Free up memory buffers)
-    if (context.dedupManager) {
-        console.log("   -> Flushing persistence early");
-        const urlIterator = context.dedupManager.getAllUrlsIterator();
-        await updateUrlsCrawledStreaming(domain, urlIterator);
-    }
+    // 4. Flush Persistence (REMOVED)
+    // We removed emergency persistence here because persistence itself consumes significant memory
+    // (Redis streaming -> JSON write). Triggering it during high memory often causes OOM.
+    // We rely on the periodic persistence (with logic to skip if mem > 85%) or Phase A emergency.
 
     // 6. Diagnostics
     const memoryUsage = process.memoryUsage();
@@ -321,6 +320,8 @@ setInterval(async () => {
     if (!memInfo) return;
 
     const memPercent = (memInfo.usedMem / memInfo.totalMem) * 100;
+    lastMemPercent = memPercent; // Update global tracker
+
     const usedMB = Math.floor(memInfo.usedMem / 1024 / 1024);
     const totalMB = Math.floor(memInfo.totalMem / 1024 / 1024);
 
@@ -510,9 +511,15 @@ if (redisCount > 0 && !dropData) {
 }
 
 // --- PERIODIC PERSISTENCE (Safety Net) ---
-const PERSIST_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const PERSIST_INTERVAL_MS = 10 * 60 * 1000; // Increased to 10 minutes (from 5)
 const persistenceInterval = setInterval(async () => {
     try {
+        // Guard: Skip persistence if memory is already high (>85%) to prevent OOM
+        if (lastMemPercent > 85) {
+            console.warn(`⚠️ Skipping periodic persistence due to high memory (${lastMemPercent.toFixed(1)}%)`);
+            return;
+        }
+
         // Only run if we have a DedupManager
         if (context.dedupManager) {
             // Note: This operation might be heavy on I/O, but it uses streaming/atomic writes
@@ -771,6 +778,16 @@ if (typeCrawling == "sitemap") {
         await reclaimFailedRequest(domain);
     } catch (error) {
         console.warn(`⚠️ Warning: Failed to reclaim failed requests for ${domain}. The crawler will continue without them. Error: ${error}`);
+    }
+
+    // Pre-flight: Configure Global Crawlee Memory Limit
+    // This ensures AutoscaledPool sees the REAL container limit, not host memory
+    const memInfoPreFlight = await readContainerMemory();
+    if (memInfoPreFlight) {
+        const containerMb = Math.floor(memInfoPreFlight.totalMem / 1024 / 1024);
+        console.log(`🚀 Configuring Global Crawlee Memory Limit: ${containerMb} MB (Environment + Config)`);
+        process.env.CRAWLEE_MEMORY_MBYTES = String(containerMb);
+        Configuration.getGlobalConfig().set('memoryMbytes', containerMb);
     }
 
     // Launch
