@@ -237,6 +237,85 @@ const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: numbe
     }
 };
 
+// --- Tier 1 Recovery Handler (85-92%) ---
+let lastWarningActionTime = 0;
+const handleWarningMemory = async (memPercent: number) => {
+    const now = Date.now();
+    if (now - lastWarningActionTime < 30000) return; // Debounce 30s
+    lastWarningActionTime = now;
+
+    console.warn(`⚠️  [Tier 1] Memory Warning (${memPercent.toFixed(1)}%). executing proactive recovery...`);
+
+    // 1. Force GC
+    if ((global as any).gc) {
+        console.log("   -> Forcing V8 GC");
+        (global as any).gc();
+    }
+
+    // 2. Retire Browsers (Clear memory leaks in Chrome)
+    if (context.crawlerInstance?.browserPool) {
+        console.log("   -> Retiring all browsers");
+        await context.crawlerInstance.browserPool.retireAllBrowsers();
+    }
+
+    // 3. Pause Queue (Cooldown)
+    if (context.crawlerInstance?.autoscaledPool) {
+        console.log("   -> Pausing request queue for 5s");
+        await context.crawlerInstance.autoscaledPool.pause();
+        setTimeout(() => context.crawlerInstance?.autoscaledPool?.resume(), 5000);
+    }
+
+    // 4. Flush Persistence (Free up memory buffers)
+    if (context.dedupManager) {
+        console.log("   -> Flushing persistence early");
+        const urlIterator = context.dedupManager.getAllUrlsIterator();
+        await updateUrlsCrawledStreaming(domain, urlIterator);
+    }
+
+    // 6. Diagnostics
+    const memoryUsage = process.memoryUsage();
+    console.log(`   -> RSS: ${(memoryUsage.rss / 1024 / 1024).toFixed(1)}MB, HeapUsed: ${(memoryUsage.heapUsed / 1024 / 1024).toFixed(1)}MB`);
+};
+
+// --- Tier 2 Recovery Handler (> 92%) ---
+let criticalRecoveryAttempted = false;
+
+const handleCriticalMemory = async (memPercent: number) => {
+    if (!criticalRecoveryAttempted) {
+        // Phase A: Aggressive Recovery
+        console.error(`❌ [Tier 2] Memory CRITICAL (${memPercent.toFixed(1)}%). Initiating Phase A Recovery...`);
+        criticalRecoveryAttempted = true;
+
+        // 1. Kill Chrome processes (Forcefully release external memory)
+        try {
+            console.log("   -> [Phase A] Killing all Chrome/Playwright processes");
+            await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true');
+        } catch (e) { /* ignore */ }
+
+        // 2. Emergency Persist (Save data before potential crash)
+        console.log("   -> [Phase A] Emergency state persistence");
+        if (context.dedupManager) {
+            const urlIterator = context.dedupManager.getAllUrlsIterator();
+            await updateUrlsCrawledStreaming(domain, urlIterator);
+        }
+        if (context.statsManager) await context.statsManager.saveStateToDisk();
+
+        // 3. Double GC
+        if ((global as any).gc) {
+            console.log("   -> [Phase A] Double GC");
+            (global as any).gc();
+            await new Promise(r => setTimeout(r, 200));
+            (global as any).gc();
+        }
+        
+        return; // Return and wait for next poll to see if it helped
+    }
+
+    // Phase B: Graceful Shutdown (Recovery failed)
+    console.error(`❌ [Tier 2] Memory STILL CRITICAL (${memPercent.toFixed(1)}%) after recovery. Initiating Phase B: Auto-Relaunch...`);
+    await gracefulShutdown('OOM_RELAUNCH', 3); // Exit code 3 triggers auto-relaunch in Python
+};
+
 setInterval(async () => {
     const memInfo = await readContainerMemory();
     if (!memInfo) return;
@@ -246,11 +325,19 @@ setInterval(async () => {
     const totalMB = Math.floor(memInfo.totalMem / 1024 / 1024);
 
     if (memPercent > 92) {
-        console.error(`❌ CRITICAL: Out of Memory imminent (${memPercent.toFixed(1)}% used — ${usedMB} MB / ${totalMB} MB)`);
-    } else if (memPercent > 85) {
-        console.warn(`⚠️  WARNING: Memory high (${memPercent.toFixed(1)}% used — ${usedMB} MB / ${totalMB} MB)`);
+        await handleCriticalMemory(memPercent);
+    } else {
+        // Reset Phase A flag if we dropped below critical
+        if (criticalRecoveryAttempted) {
+             console.log(`✅ Memory recovered to ${memPercent.toFixed(1)}%. Resetting Tier 2 Phase A flag.`);
+             criticalRecoveryAttempted = false;
+        }
+
+        if (memPercent > 85) {
+            await handleWarningMemory(memPercent);
+        }
     }
-}, 5000);
+}, 2000); // Poll every 2s (Optimized from 5s)
 // --- END MEMORY WATCHDOG ---
 
 // --- Heartbeat Mechanism ---
@@ -613,6 +700,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // Get stats from instance if available, else usage functions
     const finalStats = context.crawlerInstance?.stats.state || statsFromFunctions;
 
+
     // 3. Write Payloads
     const payload = {
         id_domaine: id,
@@ -624,10 +712,13 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         storagePath: storagePath
     };
 
+    const isOomRelaunch = (reason === 'OOM_RELAUNCH');
+    const exitReason = isOomRelaunch ? 'OOM_RELAUNCH' : (isError || reason);
+
     try {
         fs.writeFileSync(`${storagePath}/_callback_payload.json`, JSON.stringify(payload, null, 2));
         fs.writeFileSync(`${storagePath}/_exit_reason.json`, JSON.stringify({
-            reason: isError || reason,
+            reason: exitReason,
             timestamp: new Date().toISOString(),
             stats: finalStats
         }, null, 2));

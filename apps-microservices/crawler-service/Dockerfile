@@ -52,7 +52,7 @@ EXPOSE 8503
 
 # Set Node.js heap size to ~83% of Docker container limit (6GB)
 # Must be LESS than container memory to leave room for browser processes and prevent OOM-kill
-ENV NODE_OPTIONS="--max-old-space-size=5000"
+ENV NODE_OPTIONS="--max-old-space-size=5000 --expose-gc"
 
 # Command to run the FastAPI server. Uvicorn will be found in the venv's PATH.
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8503"]
