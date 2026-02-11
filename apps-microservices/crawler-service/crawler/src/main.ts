@@ -25,6 +25,7 @@ import {
     rehydrateDedupFromDataset,
     generateUpdateReport,
     processUrl,
+    getApifyProxyUrl,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
@@ -326,15 +327,29 @@ try {
 
 
 // Robots check
-export let robots = await RobotsFile.find(site);
-if (!robots || Object.keys(robots).length === 0) {
-    console.log("robots.txt not found or empty, trying homepage.");
-    const homepageUrl = new URL(site).origin;
-    robots = await RobotsFile.find(homepageUrl);
-    if (!robots || Object.keys(robots).length === 0) console.log("Could not retrieve robots.txt from homepage.");
-    else console.log("robots.txt retrieved from homepage.");
-} else {
-    console.log("robots.txt retrieved.");
+export let robots: RobotsFile | undefined;
+const hasApifyProxyPassword = Boolean(apifyProxyPassword);
+
+try {
+    // Attempt to fetch robots.txt, but don't crash if it fails (e.g. timeout)
+    console.log(`Attempting to fetch robots.txt from ${site}...`);
+    robots = (hasApifyProxyPassword) ? await RobotsFile.find(site, getApifyProxyUrl(apifyProxyPassword)) : await RobotsFile.find(site);
+    
+    if (!robots || Object.keys(robots).length === 0) {
+        console.log("robots.txt not found or empty, trying homepage.");
+        const homepageUrl = new URL(site).origin;
+        try {
+            robots = (hasApifyProxyPassword) ? await RobotsFile.find(homepageUrl, getApifyProxyUrl(apifyProxyPassword)) : await RobotsFile.find(homepageUrl);
+             if (!robots || Object.keys(robots).length === 0) console.log("Could not retrieve robots.txt from homepage.");
+             else console.log("robots.txt retrieved from homepage.");
+        } catch (e) {
+             console.log("Could not retrieve robots.txt from homepage (error).");
+        }
+    } else {
+        console.log("robots.txt retrieved.");
+    }
+} catch (e: any) {
+    console.warn(`⚠️ Warning: Failed to retrieve robots.txt (likely timeout or block). Proceeding without it. Error: ${e.message}`);
 }
 
 // Declare the Glob of URL to include
