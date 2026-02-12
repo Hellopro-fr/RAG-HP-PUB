@@ -1111,14 +1111,14 @@ class RecommendationService:
         // Calculate score by Etat and affichage fournisseur
         WITH p, info_soc, details, global_score, zone_score,
              CASE
-                WHEN (info_soc.id_etat = 1 OR (info_soc.id_etat = 2 AND info_soc.id_affichage = 1)) THEN 1.0
+                WHEN ((info_soc.id_etat = 1) OR ((info_soc.id_etat = 2) AND (info_soc.id_affichage = 1))) THEN 1.0
                 ELSE $e_unmatched
              END AS etat_score
         
         // Calculate typologie score
         WITH p, details, global_score, zone_score, etat_score, info_soc,
              CASE
-                WHEN (info_soc.id_etat = 1 OR (info_soc.id_etat = 2 AND info_soc.id_affichage = 1)) THEN
+                WHEN ((info_soc.id_etat = 1) OR ((info_soc.id_etat = 2) AND (info_soc.id_affichage = 1))) THEN
                     CASE
                         WHEN $user_typologie IS NOT NULL AND ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
                         ELSE 0.2
