@@ -598,19 +598,28 @@ class RecommendationService:
             logging.info(f"Target product ID: {target_product_id}")
             logging.info(f"Filters: {flat_filters}")
 
-        # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
-        cypher_query = """
-        // --- STEP 1: ANCHOR TRAVERSAL by CaracteristiqueTechnique ---
-        UNWIND $filters AS f
-        MATCH (pc:CaracteristiqueTechnique)
-        WHERE toString(pc.id_source_caracteristique) = f.cid
-        MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
-        
-        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
-          AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
-        
-        WITH DISTINCT p, $filters AS active_filters
-        
+        # Build Cypher Query Step 1 (Dynamic)
+        if target_product_id:
+            query_step_1 = """
+             MATCH (p:Produit)
+             WHERE p.id_produit = $target_product_id
+               AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+             WITH p, $filters AS active_filters
+             """
+        else:
+            query_step_1 = """
+             UNWIND $filters AS f
+             MATCH (pc:CaracteristiqueTechnique)
+             WHERE toString(pc.id_source_caracteristique) = f.cid
+             MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
+             
+             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+             
+             WITH DISTINCT p, $filters AS active_filters
+             """
+
+        # --- STEP 2: SCORING ---
+        query_step_2 = """
         // --- STEP 2: SCORING by CaracteristiqueTechnique with CONTINUOUS SCORING ---
         UNWIND active_filters AS f
         
@@ -1174,6 +1183,8 @@ class RecommendationService:
         WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
         RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
         """
+
+        cypher_query = query_step_1 + query_step_2
 
         # Determine projection
         if request.champs_sortie:
