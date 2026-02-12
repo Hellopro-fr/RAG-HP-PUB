@@ -68,6 +68,7 @@ class FournisseurService:
             # Parse Departements
             dept_data = []
             for d in record.get("dept_list", []):
+                logging.warning(f"Departement : {d}")
                 if d.get("id_dept"):  # Filter out nulls
                     dept_data.append(
                         DepartementCouverture(
