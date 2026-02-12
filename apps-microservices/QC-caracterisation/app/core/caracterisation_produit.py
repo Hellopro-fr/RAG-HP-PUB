@@ -901,6 +901,7 @@ class CaracterisationProduitGenerator:
             "success",
             {
                 "id_categorie": id_categorie,
+                "etape": self.ETAPE,
                 "tracking_file": self.tracking_file,
                 "total_processed": processed_count
             }
