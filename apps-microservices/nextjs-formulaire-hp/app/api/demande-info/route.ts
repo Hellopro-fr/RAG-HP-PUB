@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * URL du endpoint PHP pour l'insertion des demandes
  */
 const DEMANDE_INFO_ENDPOINT = process.env.DEMANDE_INFO_URL
-  || 'https://dev-www.hellopro.fr/hellopro_fr/include/demande_information/demande_info_insertion.php';
+  || 'https://www.hellopro.fr/hellopro_fr/include/demande_information/demande_info_insertion.php';
 
 /**
  * Convertit un objet en URLSearchParams pour FormData
