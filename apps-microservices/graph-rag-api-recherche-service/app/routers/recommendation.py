@@ -5,6 +5,7 @@ from app.domain.models import (
     FilterCaracteristiqueRequest,
     ResultProduct,
     MatchingPayload,
+    MatchingPayloadIdProduit,
     MatchingResponse,
     Produit,
     CaracteristiqueMatching,
@@ -109,7 +110,7 @@ async def score_specific_product(product_id: str, request: ComplexFilterRequest)
     response_model=MatchingResponse,
     response_model_exclude_none=True,
 )
-async def match_products(request: MatchingPayload):
+async def match_products(request: MatchingPayloadIdProduit):
     """
     Endpoint pour effectuer le matching de produits.
     Recoit un contexte utilisateur et des critères, retourne une liste de produits scorés.
