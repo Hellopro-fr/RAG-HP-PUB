@@ -30,8 +30,7 @@ Cet événement unique track toute la progression de l'utilisateur dans le funne
   funnel_devisplus: boolean, // true si funnel devis+
   funnel_context: string,    // 'direct', 'dynamic', 'static'
   rubrique_id: number,       // ID de la rubrique
-  rubrique_name: string,     // Nom de la rubrique
-  page_location_uri: string, // URL de la page
+  'product.category5': string, // Nom de la catégorie (réutilise dimension GA4 existante)
   abtest1: string,           // Variante A/B test
 
   // Type de parcours (voir section "Parcours utilisateur")
@@ -212,7 +211,7 @@ submit-success            ▼
 ```javascript
 {
   lead_id: string,            // ID du lead créé
-  suppliers_count: number,    // Nombre de fournisseurs
+  nombre_fournisseur: number, // Nombre de fournisseurs
   profile_type: string,       // Type de profil
   conversion: boolean,        // true si succès
   error_type: string,         // Type d'erreur (si erreur)

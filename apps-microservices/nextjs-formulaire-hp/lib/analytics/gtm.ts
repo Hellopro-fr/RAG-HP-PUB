@@ -10,15 +10,12 @@ type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | n
 
 interface FunnelContext {
   rubrique_id?: number;
-  rubrique_name?: string;
-  page_location_uri?: string;
+  'product.category5'?: string;
 }
 
 interface QuestionData {
   question_id?: number;
   question_title?: string;
-  answer_ids?: string[];
-  is_multiselect?: boolean;
   total_questions?: number;
 }
 
@@ -145,14 +142,6 @@ function getDeviceInfo() {
   };
 }
 
-/**
- * Obtenir le page_location_uri actuel
- */
-function getPageLocationUri(): string {
-  if (typeof window === 'undefined') return '';
-  return window.location.pathname;
-}
-
 // =============================================================================
 // CONTEXTE FUNNEL (stocké en session)
 // =============================================================================
@@ -213,8 +202,7 @@ export function trackQuoteFunnel(
 
     // Contexte funnel
     rubrique_id: funnelContext.rubrique_id,
-    rubrique_name: funnelContext.rubrique_name,
-    page_location_uri: getPageLocationUri(),
+    'product.category5': funnelContext['product.category5'],
 
     // Type de parcours (null si pas encore déterminé)
     flow_type: currentFlowType,
@@ -263,27 +251,6 @@ export function trackQuestionView(
 }
 
 /**
- * Track une question répondue
- */
-export function trackQuestionAnswered(
-  questionIndex: number,
-  questionId: number,
-  questionTitle: string,
-  answerIds: string[],
-  isMultiSelect: boolean
-) {
-  currentStepIndex = questionIndex + 1;
-  const stepName = questionIndex === 0 ? '1ere-question-answered' : `${questionIndex + 1}eme-question-answered`;
-
-  trackQuoteFunnel(currentStepIndex, stepName, 'question', {
-    question_id: questionId,
-    question_title: questionTitle,
-    answer_ids: answerIds,
-    is_multiselect: isMultiSelect,
-  });
-}
-
-/**
  * Track la fin du questionnaire
  */
 export function trackQuestionnaireComplete(totalQuestions: number, timeSpentSeconds: number) {
@@ -320,23 +287,6 @@ export function trackSelectionPageView(recommendedCount: number, totalCount: num
   trackQuoteFunnel(currentStepIndex, 'selection-produits', 'selection', {
     recommended_count: recommendedCount,
     total_count: totalCount,
-  });
-}
-
-/**
- * Track le clic sur une carte produit
- */
-export function trackProductCardClick(
-  productId: string,
-  productName: string,
-  matchScore: number,
-  action: 'view_details' | 'toggle_select'
-) {
-  trackQuoteFunnel(currentStepIndex, 'product-click', 'selection', {
-    product_id: productId,
-    product_name: productName,
-    match_score: matchScore,
-    action,
   });
 }
 
@@ -384,16 +334,6 @@ export function trackContactFormView(selectedSuppliersCount: number) {
 }
 
 /**
- * Track le remplissage d'un champ du formulaire
- */
-export function trackContactFieldFilled(fieldName: string, fieldIndex: number) {
-  trackQuoteFunnel(currentStepIndex, `champ-coordonnees-${fieldIndex + 1}`, 'contact', {
-    field_name: fieldName,
-    field_index: fieldIndex,
-  });
-}
-
-/**
  * Track les erreurs de validation
  */
 export function trackFormValidationErrors(
@@ -412,7 +352,7 @@ export function trackFormValidationErrors(
 export function trackLeadSubmitted(suppliersCount: number, profileType: string, userKnownStatus: 'known' | 'unknown') {
   currentStepIndex++;
   trackQuoteFunnel(currentStepIndex, 'submit-success', 'conversion', {
-    suppliers_count: suppliersCount,
+    nombre_fournisseur: suppliersCount,
     profile_type: profileType,
     user_known_status: userKnownStatus,
     conversion: true,
@@ -468,7 +408,7 @@ export function trackCustomNeedPageView() {
 
   trackQuoteFunnel(currentStepIndex, 'description-besoin', 'contact', {
     is_first_view: isFirstViewForSession,
-  });
+  }); 
 }
 
 /**
