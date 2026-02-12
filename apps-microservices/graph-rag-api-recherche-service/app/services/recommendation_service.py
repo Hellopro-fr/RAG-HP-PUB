@@ -606,7 +606,7 @@ class RecommendationService:
         WHERE toString(pc.id_source_caracteristique) = f.cid
         MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
         
-        WHERE ($target_product_id IS NULL OR toString(p.id_produit) = "$target_product_id")
+        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
           AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
         
         WITH DISTINCT p, $filters AS active_filters
@@ -1195,7 +1195,9 @@ class RecommendationService:
                 str(request.id_categorie) if request.id_categorie is not None else None
             ),
             "top_k": int(request.top_k),
-            "target_product_id": target_product_id,
+            "target_product_id": (
+                str(request.id_produit) if request.id_produit is not None else None
+            ),
             "blocked_val": blocked_val,
             "different_val": different_val,
             "user_dept": user_dept,
