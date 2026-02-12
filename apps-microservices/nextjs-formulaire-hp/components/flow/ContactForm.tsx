@@ -276,13 +276,18 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
             Votre demande sera envoyée à :
           </p>
           <div className="flex flex-wrap gap-2">
-            {selectedSuppliers.map((supplier) => (
-              <span
-                key={supplier.id}
-                className="inline-flex items-center rounded-full bg-card border border-border px-3 py-1 text-sm font-medium text-foreground"
-              >
-                {supplier.supplierName}
-              </span>
+            {/* Deduplicate suppliers by name to avoid showing the same supplier multiple times */}
+            {selectedSuppliers
+              .filter((supplier, index, self) => 
+                index === self.findIndex((s) => s.supplierName === supplier.supplierName)
+              )
+              .map((supplier) => (
+                <span
+                  key={supplier.id} // Using the ID of the first product found for this supplier as key
+                  className="inline-flex items-center rounded-full bg-card border border-border px-3 py-1 text-sm font-medium text-foreground"
+                >
+                  {supplier.supplierName}
+                </span>
             ))}
           </div>
         </div>
