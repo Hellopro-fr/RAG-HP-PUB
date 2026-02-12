@@ -216,8 +216,8 @@ class RecommendationService:
         MATCH (r:Reponse {id_reponse: f.rid})
         MATCH (r)<-[:EQUIVAUT_A|COUVRE]-(intermediate)<-[:A_POUR_CARACTERISTIQUE|EST_PROPOSE_PAR]-(p:Produit)
         
-        WHERE ($target_product_id IS NULL OR toString(p.id_produit) = $target_product_id)
-          AND ($id_categorie IS NULL OR toString(p.id_categorie) = $id_categorie)
+        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
+          AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
         
         WITH DISTINCT p, $filters AS active_filters
         
@@ -606,8 +606,8 @@ class RecommendationService:
         WHERE toString(pc.id_source_caracteristique) = f.cid
         MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
         
-        WHERE ($target_product_id IS NULL OR toString(p.id_produit) = $target_product_id)
-          AND ($id_categorie IS NULL OR toString(p.id_categorie) = $id_categorie)
+        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
+          AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
         
         WITH DISTINCT p, $filters AS active_filters
         
