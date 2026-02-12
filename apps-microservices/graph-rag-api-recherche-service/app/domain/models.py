@@ -284,7 +284,7 @@ class MatchingPayload(BaseModel):
 
 
 class MatchingPayloadIdProduit(MatchingPayload):
-    id_produit: int = Field(..., description="Identifiant du produit")
+    id_produit: Optional[int] = Field(None, description="Identifiant du produit")
 
 
 """ 
