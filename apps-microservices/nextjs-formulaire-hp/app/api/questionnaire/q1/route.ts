@@ -47,8 +47,6 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
 
-    console.log("API Q1", data);
-
     return NextResponse.json(data, { status: 200 });
   } catch (error) {
     console.error('Questionnaire Q1 proxy error:', error);
