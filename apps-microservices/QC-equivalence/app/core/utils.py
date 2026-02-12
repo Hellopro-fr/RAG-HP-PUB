@@ -14,6 +14,55 @@ from app.core.api_client import HelloProAPIClient
 logger = logging.getLogger(__name__)
 
 
+def _fix_unescaped_quotes(text: str) -> str:
+    """
+    Répare les guillemets non-échappés à l'intérieur des valeurs JSON.
+    Ex: "justification": "texte avec ("mot") dedans"
+    Devient: "justification": "texte avec (\"mot\") dedans"
+    """
+    result = []
+    i = 0
+    in_string = False
+    string_start = -1
+    
+    while i < len(text):
+        char = text[i]
+        
+        if char == '\\' and in_string:
+            # Caractère échappé, on saute le suivant
+            result.append(char)
+            i += 1
+            if i < len(text):
+                result.append(text[i])
+            i += 1
+            continue
+            
+        if char == '"':
+            if not in_string:
+                # Début d'une chaîne
+                in_string = True
+                string_start = i
+                result.append(char)
+            else:
+                # On est dans une chaîne, est-ce la vraie fin ?
+                # Regarder ce qui suit (en ignorant les espaces)
+                rest = text[i+1:].lstrip()
+                if not rest or rest[0] in (',', '}', ']', ':'):
+                    # C'est la vraie fin de la chaîne
+                    in_string = False
+                    result.append(char)
+                else:
+                    # C'est un guillemet au milieu de la valeur → échapper
+                    result.append('\\"')
+            i += 1
+            continue
+        
+        result.append(char)
+        i += 1
+    
+    return ''.join(result)
+
+
 def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
     """
     Extrait et parse JSON d'une chaîne de texte
@@ -40,15 +89,24 @@ def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
             try:
                 return json.loads(matches.group(0))
             except json.JSONDecodeError:
-                continue
+                # Tentative avec réparation des guillemets non-échappés
+                try:
+                    fixed = _fix_unescaped_quotes(matches.group(0))
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    continue
     
     # Dernière tentative: nettoyer le début et la fin
     trimmed = re.sub(r'^[^{]*|[^}]*$', '', text)
     try:
         return json.loads(trimmed)
     except json.JSONDecodeError:
-        logger.error(f"Impossible d'extraire JSON de: {text[:200]}")
-        return None
+        try:
+            fixed = _fix_unescaped_quotes(trimmed)
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            logger.error(f"Impossible d'extraire JSON de: {text[:200]}")
+            return None
 
 
 def ensure_directory(path: str) -> bool:
