@@ -603,7 +603,7 @@ class RecommendationService:
             logging.warning(f"Target product ID: {target_product_id}")
             query_step_1 = """
              MATCH (p:Produit)
-             WHERE p.id_produit = $target_product_id
+             WHERE toString(p.id_produit) = $target_product_id
              WITH p, $filters AS active_filters
              """
         else:
