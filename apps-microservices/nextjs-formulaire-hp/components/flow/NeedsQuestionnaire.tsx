@@ -67,16 +67,24 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     // Track funnel start (une seule fois)
     if (!hasTrackedStart.current) {
       hasTrackedStart.current = true;
-      // Initialiser le contexte avec rubrique_id et product.category5
+      // Initialiser le contexte avec rubrique_id
       if (rubriqueId) {
         setFunnelContext({
           rubrique_id: parseInt(rubriqueId, 10),
-          'product.category5': categoryName || undefined,
         });
       }
       trackGTMFunnelStart();
     }
   }, [startTime, setStartTime, rubriqueId]);
+
+  // Mettre à jour le contexte quand categoryName devient disponible (chargé via API)
+  useEffect(() => {
+    if (categoryName) {
+      setFunnelContext({
+        'product.category5': categoryName,
+      });
+    }
+  }, [categoryName]);
 
   // Quand le questionnaire dynamique est terminé
   useEffect(() => {
