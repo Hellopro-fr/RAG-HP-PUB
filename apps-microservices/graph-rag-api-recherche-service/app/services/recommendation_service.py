@@ -1120,15 +1120,15 @@ class RecommendationService:
         
         // Calculate final_score = global_score * zone_score * etat_score * typo_score
         // Filter out products with negative final_score
-        WITH p, details, global_score, zone_score, etat_score, typo_score,
+        WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
              global_score * zone_score * etat_score * typo_score AS final_score
         WHERE final_score >= 0
-        WITH p, details, global_score, zone_score, etat_score, typo_score, final_score
+        WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         LIMIT $top_k + 4
         
         // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score}) AS all_products
+        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_products
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
@@ -1144,8 +1144,8 @@ class RecommendationService:
         LIMIT 4
         
         // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score
+        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
+        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
         WITH all_products, collect({
             product_data: top_product_data,
             score: top_score,
@@ -1153,15 +1153,16 @@ class RecommendationService:
             zone_score: top_zone_score,
             global_score: top_global_score,
             etat_score: top_etat_score,
-            typo_score: top_typo_score
+            typo_score: top_typo_score,
+            info_soc: top_info_soc
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
         WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
         
         UNWIND filtered_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, top_p
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
         """
 
         # Determine projection
@@ -1317,7 +1318,14 @@ class RecommendationService:
                 zone_score = rec.get("zone_score", 1.0)
                 etat_score = rec.get("etat_score", 1.0)
                 typo_score = rec.get("typo_score", 1.0)
+                info_soc = rec.get("info_soc", {})
                 carac_score = rec.get("global_score", 0.0)
+
+                if etat_score < 1.0:
+                    logging.warning(
+                        f"⚠️ [DEBUG] Low etat_score ({etat_score}) for product {product_data.get('id_produit')}. "
+                        f"Fournisseur info: {info_soc}"
+                    )
 
                 caracteristiques = convert_to_caracteristique_matching(
                     details, final_score
