@@ -569,6 +569,7 @@ class RecommendationService:
 
         if request.id_produit is not None:
             target_product_id = str(request.id_produit)
+            logging.info(f"Target product ID: {target_product_id}")
 
         norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_caracteristique(request)
