@@ -14,8 +14,7 @@ export async function submitLead(data: LeadSubmission): Promise<ApiResponse<Lead
     const response = await post<LeadResponse>(ENDPOINTS.leads.submit(), data);
 
     // For now, if API is not available, simulate success
-    if (response.error) {
-      console.log('[Mock] Lead submitted:', data);
+    if (response.error) {      
       return {
         data: {
           success: true,

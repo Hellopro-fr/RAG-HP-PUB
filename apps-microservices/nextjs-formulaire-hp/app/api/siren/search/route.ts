@@ -46,9 +46,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const jsonData = await response.json();
-
-    console.log('SIREN API v2 response:', jsonData);
+    const jsonData = await response.json();    
 
     // Retourne le JSON (structure: { status, nb, max, result: [...] })
     return NextResponse.json(jsonData, { status: 200 });

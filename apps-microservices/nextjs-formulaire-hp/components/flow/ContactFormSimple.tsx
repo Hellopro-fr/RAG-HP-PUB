@@ -143,8 +143,7 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
       isKnown: isExistingBuyer,
     };
 
-    setContactData(finalData);
-    console.log("Submitting contact form data:", { finalData, profileData, userAnswers, selectedSupplierIds, userKnownStatus });
+    setContactData(finalData);    
 
     // Tracking DB - Contact form submission (simple)
     // On enrichit le payload de tracking comme dans SomethingToAddForm (flags message / fichiers)

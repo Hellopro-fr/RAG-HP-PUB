@@ -117,9 +117,7 @@ function objectToFormData(obj: Record<string, unknown>): FormData {
 async function envoyerDemandeUnique(
   payload: DemandeInfoPayload
 ): Promise<DemandeInfoResponse> {
-  const phpPayload = JSON.stringify(payload);
-  console.log("PHP PAYLOAD:");
-  console.log(phpPayload);
+  const phpPayload = JSON.stringify(payload);  
   try {
     const response = await fetch(`${getApiBasePath()}/api/demande-info`, {
       method: 'POST',
