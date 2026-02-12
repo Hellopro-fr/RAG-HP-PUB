@@ -13,11 +13,6 @@ interface FunnelContext {
   'product.category5'?: string;
 }
 
-interface QuestionData {
-  question_id?: number;
-  question_title?: string;
-  total_questions?: number;
-}
 
 
 // =============================================================================
@@ -237,17 +232,11 @@ export function trackFunnelStart(context?: FunnelContext) {
 /**
  * Track l'affichage d'une question
  */
-export function trackQuestionView(
-  questionIndex: number,
-  data?: QuestionData
-) {
+export function trackQuestionView(questionIndex: number) {
   currentStepIndex = questionIndex + 1; // +1 car funnel-start est à 0
   const stepName = questionIndex === 0 ? '1ere-question' : `${questionIndex + 1}eme-question`;
 
-  trackQuoteFunnel(currentStepIndex, stepName, 'question', {
-    question_id: data?.question_id,
-    question_title: data?.question_title,
-  });
+  trackQuoteFunnel(currentStepIndex, stepName, 'question');
 }
 
 /**
