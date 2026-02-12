@@ -124,6 +124,13 @@ export function useProcessMatchingLogic() {
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
 
+      console.log('Payload MATCHING :', {
+        id_categorie: categoryId,
+        top_k: 12,
+        metadonnee_utilisateurs,
+        liste_caracteristique: consolidatedEquivalences
+      });
+
       const apiBase = getApiBasePath();
       const apiUrl = `${apiBase}/api/matching`;
       
@@ -273,6 +280,13 @@ export function useProcessMatchingLogic() {
       formData.append('top_k', '12');
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(updatedEquivalences));
+
+      console.log('Payload MATCHING (client - refetch):', {
+        id_categorie: categoryId,
+        top_k: 12,
+        metadonnee_utilisateurs,
+        liste_caracteristique: updatedEquivalences
+      });
 
       const apiBase = getApiBasePath();
       const apiUrl = `${apiBase}/api/matching`;

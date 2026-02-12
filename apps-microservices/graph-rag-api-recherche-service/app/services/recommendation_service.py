@@ -833,15 +833,87 @@ class RecommendationService:
             END,
             has_pc: size(item.matches) > 0,
             c_weight: item.conf.c_weight,
-            // User requirements from the constraint
-            user_requirements: {
-                target_list: item.conf.target_list,
-                blocking_list: item.conf.blocking_list,
-                target_numeric: item.conf.target_numeric,
-                blocking_numeric: item.conf.blocking_numeric
-            },
-            // Complete matched nodes (product data)
-            matched_nodes: [pc IN item.matches | properties(pc)]
+            // Matched nodes with per-node score for best-node selection
+            matched_nodes: [pc IN item.matches | apoc.map.merge(properties(pc), {
+                node_score: CASE
+                    // Text target match
+                    WHEN size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
+                    THEN 1.0
+                    // Text blocking match
+                    WHEN (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
+                        OR
+                        (item.conf.blocking_numeric IS NOT NULL AND (item.conf.blocking_numeric.unit IS NULL OR pc.unite_canonique = item.conf.blocking_numeric.unit) AND (
+                            (item.conf.blocking_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.blocking_numeric.min) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique >= item.conf.blocking_numeric.min))) OR
+                            (item.conf.blocking_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.blocking_numeric.max) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_max_canonique <= item.conf.blocking_numeric.max))) OR
+                            (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
+                        ))
+                    THEN $blocked_val
+                    // Numeric target scoring (same formulas as the score field above)
+                    WHEN item.conf.target_numeric IS NOT NULL AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
+                    THEN
+                        CASE
+                            WHEN pc.type_donnee = 'numeric' THEN
+                                CASE
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE 
+                                            WHEN item.conf.target_numeric.exact = 0 THEN 
+                                                CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
+                                            ELSE
+                                                apoc.coll.max([
+                                                    CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.exact AND toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) ELSE 0.0 END,
+                                                    CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.exact AND toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) >= 0.8 THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) ELSE 0.0 END
+                                                ])
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE WHEN pc.valeur_canonique = 0 OR item.conf.target_numeric.min = 0 THEN 0.0 ELSE
+                                            apoc.coll.max([
+                                                CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.min AND toFloat(item.conf.target_numeric.min / pc.valeur_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique) ELSE 0.0 END,
+                                                CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.min AND toFloat(pc.valeur_canonique / item.conf.target_numeric.min) >= 0.8 THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.min) ELSE 0.0 END
+                                            ])
+                                        END
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE WHEN pc.valeur_canonique = 0 OR item.conf.target_numeric.max = 0 THEN 0.0 ELSE
+                                            apoc.coll.max([
+                                                CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.max AND toFloat(pc.valeur_canonique / item.conf.target_numeric.max) >= 0.8 THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max) ELSE 0.0 END,
+                                                CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.max AND toFloat(item.conf.target_numeric.max / pc.valeur_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.max / pc.valeur_canonique) ELSE 0.0 END
+                                            ])
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.min AND pc.valeur_canonique <= item.conf.target_numeric.max THEN 1.0 ELSE 0.0 END
+                                    ELSE 1.0
+                                END
+                            WHEN pc.type_donnee = 'numeric_range' THEN
+                                CASE
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact) AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact) THEN 1.0 ELSE 0.0 END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE WHEN pc.valeur_max_canonique IS NOT NULL AND pc.valeur_max_canonique >= item.conf.target_numeric.min THEN
+                                            CASE WHEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique) ELSE 0.0 END
+                                        ELSE 0.0 END
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_min_canonique <= item.conf.target_numeric.max THEN
+                                            CASE WHEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max) >= 0.8 THEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max) ELSE 0.0 END
+                                        ELSE 0.0 END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                            CASE
+                                                WHEN pc.valeur_max_canonique < item.conf.target_numeric.min OR pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
+                                                WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
+                                                ELSE toFloat(
+                                                    (CASE WHEN pc.valeur_max_canonique < item.conf.target_numeric.max THEN pc.valeur_max_canonique ELSE item.conf.target_numeric.max END
+                                                     - CASE WHEN pc.valeur_min_canonique > item.conf.target_numeric.min THEN pc.valeur_min_canonique ELSE item.conf.target_numeric.min END)
+                                                    / (item.conf.target_numeric.max - item.conf.target_numeric.min)
+                                                )
+                                            END
+                                        ELSE 0.5 END
+                                    ELSE 1.0
+                                END
+                            ELSE 0.0
+                        END
+                    // Connected but no specific match
+                    ELSE 0.0
+                END
+            })]
         }] AS char_results
         
         // --- HIERARCHICAL SCORING ---
@@ -871,9 +943,7 @@ class RecommendationService:
              c_weight_sum,
              matched,
              // Flatten matched nodes from all char_results
-             apoc.coll.flatten([res IN char_results | res.matched_nodes]) AS matched_nodes,
-             // Keep first user_requirements (they should all be the same for same cid)
-             head([res IN char_results | res.user_requirements]) AS user_requirements
+             apoc.coll.flatten([res IN char_results | res.matched_nodes]) AS matched_nodes
         
         // Collect all cid scores grouped by q_weight
         WITH p, collect({
@@ -882,7 +952,6 @@ class RecommendationService:
             c_weight_sum: c_weight_sum,
             q_weight: q_weight,
             matched: matched,
-            user_requirements: user_requirements,
             matched_nodes: matched_nodes
         }) AS all_constraints
         
@@ -1161,7 +1230,7 @@ class RecommendationService:
                         else:
                             statut = 2  # Ecart
 
-                        # Extract value and unit from matched nodes if available
+                        # Extract value and unit from the best-scoring matched node
                         valeur = None
                         valeur_min = None
                         valeur_max = None
@@ -1170,7 +1239,10 @@ class RecommendationService:
                         id_valeurs = []
 
                         if matched_nodes:
-                            node = matched_nodes[0]  # Take first matched node
+                            # Pick the node with the highest node_score (computed in Cypher)
+                            node = max(
+                                matched_nodes, key=lambda n: n.get("node_score", 0)
+                            )
                             valeur = (
                                 str(node.get("valeur", ""))
                                 if node.get("valeur")
