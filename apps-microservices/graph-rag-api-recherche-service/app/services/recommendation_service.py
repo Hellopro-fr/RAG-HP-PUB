@@ -600,6 +600,7 @@ class RecommendationService:
 
         # Build Cypher Query Step 1 (Dynamic)
         if target_product_id:
+            logging.warning(f"Target product ID: {target_product_id}")
             query_step_1 = """
              MATCH (p:Produit)
              WHERE p.id_produit = $target_product_id
