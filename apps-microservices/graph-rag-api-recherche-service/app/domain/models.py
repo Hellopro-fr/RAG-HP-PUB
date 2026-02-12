@@ -283,6 +283,10 @@ class MatchingPayload(BaseModel):
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
 
 
+class MatchingPayloadIdProduit(MatchingPayload):
+    id_produit: int = Field(..., description="Identifiant du produit")
+
+
 """ 
 Modèles pour le output : Réponse du matching de produits
  """

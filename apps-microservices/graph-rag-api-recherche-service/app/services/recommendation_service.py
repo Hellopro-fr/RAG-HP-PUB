@@ -7,6 +7,7 @@ from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
     MatchingPayload,
+    MatchingPayloadIdProduit,
     MatchingResponse,
     Produit,
     CaracteristiqueMatching,
@@ -556,7 +557,7 @@ class RecommendationService:
 
     async def get_products_by_caracteristique_filters(
         self,
-        request: MatchingPayload,
+        request: MatchingPayloadIdProduit,
         target_product_id: Optional[str] = None,
     ) -> MatchingResponse:
         """
@@ -1196,6 +1197,9 @@ class RecommendationService:
             "c_unknown_score": c_unknown_score,
             "user_typologie": user_typologie,
         }
+
+        if request.id_produit is not None:
+            params["id_produit"] = request.id_produit
 
         # Debug: Log parameters
         logging.info("📝 Caracteristique filter params:")
