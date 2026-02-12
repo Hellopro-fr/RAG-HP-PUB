@@ -46,10 +46,10 @@ const getApiBasePath = () => {
 };
 
 const type_typologie = {
-  "pro_france": "1",
-  "pro_foreign": "2",
-  "particulier": "3",
-  "creation": "4",
+  "pro_france": "1",      // Professionnel
+  "pro_foreign": "1",     // Professionnel
+  "particulier": "2",     // Particulier
+  "creation": "1",        // Professionnel
 };
 
 export function useProcessMatchingLogic() {

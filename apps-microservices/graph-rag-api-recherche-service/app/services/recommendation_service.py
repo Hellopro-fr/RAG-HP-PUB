@@ -7,6 +7,7 @@ from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
     MatchingPayload,
+    MatchingPayloadIdProduit,
     MatchingResponse,
     Produit,
     CaracteristiqueMatching,
@@ -556,7 +557,7 @@ class RecommendationService:
 
     async def get_products_by_caracteristique_filters(
         self,
-        request: MatchingPayload,
+        request: MatchingPayloadIdProduit,
         target_product_id: Optional[str] = None,
     ) -> MatchingResponse:
         """
@@ -566,6 +567,8 @@ class RecommendationService:
         """
         start_time = time.perf_counter()
 
+        if request.id_produit:
+            target_product_id = request.id_produit
         norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_caracteristique(request)
         norm_time = time.perf_counter() - norm_start
@@ -582,11 +585,16 @@ class RecommendationService:
         user_cp = user_meta.cp if user_meta else None
         user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
         user_id_pays = user_meta.id_pays if user_meta else None
+        user_typologie = user_meta.typologie if user_meta else None
 
         z_unmatched = 0.2
         e_unmatched = 0.8
         g_unknown_score = 0.8
         c_unknown_score = 0.5
+
+        if target_product_id:
+            logging.info(f"Target product ID: {target_product_id}")
+            logging.info(f"Filters: {flat_filters}")
 
         # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
@@ -1006,7 +1014,8 @@ class RecommendationService:
                  couvre_tous: r_zone.couvre_tous,
                  couvre: r_zone.couvre,
                  ne_couvre_pas: r_zone.ne_couvre_pas
-             }) AS zone_rels
+             }) AS zone_rels,
+             { id_etat: toInteger(f.id_etat), id_affichage: toInteger(f.id_affichage), typologie: f.typologie } AS info_soc
         
         // Calculate zone_score based on the algorithm:
         // 1. If has pays relation:
@@ -1015,7 +1024,7 @@ class RecommendationService:
         //       - If partiel=false: only check couvre_tous + categorie (no dept drill-down)
         // 2. If no pays relation but has zonegeographique relation: same logic as above
         // 3. If neither exists: score=g_unknown_score
-        WITH p, f, details, global_score, pays_rels, zone_rels,
+        WITH p, info_soc, details, global_score, pays_rels, zone_rels,
              CASE
                  // Case 1: Has pays relations
                  WHEN size(pays_rels) > 0 AND pays_rels[0].pays IS NOT NULL THEN
@@ -1098,23 +1107,34 @@ class RecommendationService:
              END AS zone_score
 
         // Calculate score by Etat and affichage fournisseur
-        WITH p, f, details, global_score, zone_score,
+        WITH p, info_soc, details, global_score, zone_score,
              CASE
-                WHEN (f.id_etat = 1 OR (f.id_etat = 2 AND f.id_affichage = 1)) THEN 1.0
+                WHEN (info_soc.id_etat = 1 OR (info_soc.id_etat = 2 AND info_soc.id_affichage = 1)) THEN 1.0
                 ELSE $e_unmatched
              END AS etat_score
         
-        // Calculate final_score = global_score * zone_score * etat_score
+        // Calculate typologie score
+        WITH p, details, global_score, zone_score, etat_score, info_soc,
+             CASE
+                WHEN (info_soc.id_etat = 1 OR (info_soc.id_etat = 2 AND info_soc.id_affichage = 1)) THEN
+                    CASE
+                        WHEN $user_typologie IS NOT NULL AND ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
+                        ELSE 0.2
+                    END
+                ELSE 1.0
+             END AS typo_score
+        
+        // Calculate final_score = global_score * zone_score * etat_score * typo_score
         // Filter out products with negative final_score
-        WITH p, details, global_score, zone_score, etat_score,
-             global_score * zone_score * etat_score AS final_score
+        WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
+             global_score * zone_score * etat_score * typo_score AS final_score
         WHERE final_score >= 0
-        WITH p, details, global_score, zone_score, etat_score, final_score
+        WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         LIMIT $top_k + 4
         
         // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, final_score: final_score}) AS all_products
+        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_products
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
@@ -1130,23 +1150,25 @@ class RecommendationService:
         LIMIT 4
         
         // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score
+        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
+        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
         WITH all_products, collect({
             product_data: top_product_data,
             score: top_score,
             details: top_details,
             zone_score: top_zone_score,
             global_score: top_global_score,
-            etat_score: top_etat_score
+            etat_score: top_etat_score,
+            typo_score: top_typo_score,
+            info_soc: top_info_soc
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
         WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
         
         UNWIND filtered_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.final_score AS final_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, final_score, top_p
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
         """
 
         # Determine projection
@@ -1180,6 +1202,7 @@ class RecommendationService:
             "e_unmatched": e_unmatched,
             "g_unknown_score": g_unknown_score,
             "c_unknown_score": c_unknown_score,
+            "user_typologie": user_typologie,
         }
 
         # Debug: Log parameters
@@ -1297,7 +1320,15 @@ class RecommendationService:
                 final_score = rec.get("final_score", 0.0)
                 zone_score = rec.get("zone_score", 1.0)
                 etat_score = rec.get("etat_score", 1.0)
+                typo_score = rec.get("typo_score", 1.0)
+                info_soc = rec.get("info_soc", {})
                 carac_score = rec.get("global_score", 0.0)
+
+                if etat_score < 1.0:
+                    logging.warning(
+                        f"⚠️ [DEBUG] Low etat_score ({etat_score}) for product {product_data.get('id_produit')}. "
+                        f"Fournisseur info: {info_soc}"
+                    )
 
                 caracteristiques = convert_to_caracteristique_matching(
                     details, final_score
@@ -1309,7 +1340,7 @@ class RecommendationService:
                     score=float(final_score),
                     caracteristique=caracteristiques,
                     coeff_geo=float(zone_score),
-                    coeff_type_frns=1.0,  # Default, can be computed from fournisseur type
+                    coeff_type_frns=float(typo_score),
                     coeff_etat_score=float(etat_score),
                     coeff_caracteristique=float(carac_score),
                 )
@@ -1324,6 +1355,7 @@ class RecommendationService:
                         top_zone_score = entry.get("zone_score", 1.0)
                         top_final_score = entry.get("score", 0.0)
                         top_etat_score = entry.get("etat_score", 1.0)
+                        top_typo_score = entry.get("typo_score", 1.0)
                         top_carac_score = entry.get("global_score", 0.0)
                         produit = Produit(
                             rang=idx + 1,
@@ -1333,7 +1365,7 @@ class RecommendationService:
                                 entry.get("details", []), top_final_score
                             ),
                             coeff_geo=float(top_zone_score),
-                            coeff_type_frns=1.0,
+                            coeff_type_frns=float(top_typo_score),
                             coeff_etat_score=float(top_etat_score),
                             coeff_caracteristique=float(top_carac_score),
                         )

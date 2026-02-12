@@ -287,7 +287,7 @@ export function trackProductSelectionChange(
   action: 'ajouter' | 'retirer',
   totalSelected: number
 ) {
-  // Vérifier si c'est la première action de chaque type pour cet utilisateur dans la session
+  // Vérifier si c'est la première action de ce type pour cet utilisateur dans la session
   const isFirstAdd = action === 'ajouter' && isFirstView('product_selection_ajouter');
   const isFirstRemove = action === 'retirer' && isFirstView('product_selection_retirer');
 
@@ -295,8 +295,10 @@ export function trackProductSelectionChange(
     product_id: productId,
     action,
     total_selected: totalSelected,
-    is_first_add: isFirstAdd,
-    is_first_remove: isFirstRemove,
+    // Envoyer is_first_add uniquement si true (premier ajout)
+    ...(isFirstAdd && { is_first_add: true }),
+    // Envoyer is_first_remove uniquement si true (premier retrait)
+    ...(isFirstRemove && { is_first_remove: true }),
   });
 }
 

@@ -282,20 +282,93 @@ function debugInfo(): void {
       border: 2px solid #0f0;
     `;
 
-    const modalCharRows = chars.map(c => {
-      const charInfo = charsMap[c.id_caracteristique];
-      const nom = charInfo?.nom || '?';
-      const barColor = c.bareme >= 80 ? '#0f0' : c.bareme >= 50 ? '#ff0' : '#f80';
-      return `
-        <tr style="border-bottom:1px solid #1a1a1a">
-          <td style="padding:4px;color:#0ff">${c.id_caracteristique}</td>
-          <td style="padding:4px;color:#fff;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nom}">${nom}</td>
-          <td style="text-align:center;padding:4px;color:${barColor};font-weight:bold">${c.bareme}</td>
-          <td style="text-align:center;padding:4px">${c.poids ?? '-'}</td>
-          <td style="text-align:center;padding:4px">${c.poids_question ?? '-'}</td>
+    // Calculs des scores
+    const totalPoids = chars.reduce((total, c) => total + (c.poids ?? 0), 0);
+    const tousLesPoidsQuestion = chars.map(c => c.poids_question).filter((pq): pq is number => pq !== undefined);
+    const totalPoidsQuestion = [...new Set(tousLesPoidsQuestion)].reduce((a, b) => a + b, 0);
+
+    // Map bareme * poids par caracteristique
+    const tabProduiBaremePoids: Record<number, number> = {};
+    chars.forEach(c => {
+      tabProduiBaremePoids[c.id_caracteristique] = (c.bareme ?? 0) * (c.poids ?? 0);
+    });
+
+    // Grouper les caracteristiques par poids_question
+    const groupedByPoidsQuestion: Record<number, CharacteristicDebug[]> = chars.reduce((acc, c) => {
+      const pq = c.poids_question ?? 0;
+      if (!acc[pq]) acc[pq] = [];
+      acc[pq].push(c);
+      return acc;
+    }, {} as Record<number, CharacteristicDebug[]>);
+
+    // Calculer les scores par poids question
+    const scoresParPoidsQuestion: Record<number, number> = {};
+    const calculDetailsScoreTechnique: string[] = [];
+    let sommeNumerateur = 0;
+    let sommeDenominateur = 0;
+
+    // Trier les entrees par poids question decroissant
+    const sortedEntries = Object.entries(groupedByPoidsQuestion).sort((a, b) => {
+      return parseFloat(b[0]) - parseFloat(a[0]);
+    });
+
+    sortedEntries.forEach(([poidsQuestion, caractList]) => {
+      const sommeProduits = caractList.reduce((sum, c) => sum + (tabProduiBaremePoids[c.id_caracteristique] ?? 0), 0);
+      const sommePoids = caractList.reduce((sum, c) => sum + (c.poids ?? 0), 0);
+      const scoreParPQ = sommePoids !== 0 ? (sommeProduits / sommePoids) : 0;
+
+      scoresParPoidsQuestion[parseFloat(poidsQuestion)] = scoreParPQ;
+
+      const pq = parseFloat(poidsQuestion);
+      sommeNumerateur += scoreParPQ * pq;
+      sommeDenominateur += pq;
+
+      calculDetailsScoreTechnique.push(`(${parseFloat(scoreParPQ.toFixed(2))} x ${pq})`);
+    });
+
+    const scoreTechniqueProduit = sommeDenominateur !== 0 ? (sommeNumerateur / sommeDenominateur) : 0;
+    const scoreFinalProduit = scoreTechniqueProduit * (debug.coeff_geo ?? 1) * (debug.coeff_type_frns ?? 1) * (debug.coeff_etat_score ?? 1);
+
+    // Generer les lignes du tableau avec les lignes de sous-total
+    let tableRows = '';
+    sortedEntries.forEach(([poidsQuestion, caractList]) => {
+      // Ajouter les lignes pour chaque caracteristique
+      caractList.forEach(c => {
+        const charInfo = charsMap[c.id_caracteristique];
+        const nom = charInfo?.nom || '?';
+        const barColor = c.bareme >= 80 ? '#0f0' : c.bareme >= 50 ? '#ff0' : '#f80';
+        const negativColor = 'color:#f88';
+        const produiBaremePoids = tabProduiBaremePoids[c.id_caracteristique] ?? 0;
+        tableRows += `
+          <tr style="border-bottom:1px solid #1a1a1a">
+            <td style="padding:4px;color:#0ff">${c.id_caracteristique}</td>
+            <td style="padding:4px;color:#fff;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${nom}">${nom}</td>
+            <td style="text-align:center;padding:4px;color:${barColor};font-weight:bold">${parseFloat((c.bareme ?? 0).toFixed(2))}</td>
+            <td style="text-align:center;padding:1px;color:#fff">x</td>
+            <td style="text-align:center;padding:4px">${c.poids ?? '-'}</td>
+            <td style="text-align:left;padding:4px;${produiBaremePoids < 0 ? negativColor : ''}">= ${parseFloat(produiBaremePoids.toFixed(2))}</td>
+            <td style="text-align:center;padding:4px">${c.poids_question ?? '-'}</td>
+          </tr>
+        `;
+      });
+
+      // Calculer les sommes pour ce groupe de poids_question
+      const sommeProduits = caractList.reduce((sum, c) => sum + (tabProduiBaremePoids[c.id_caracteristique] ?? 0), 0);
+      const sommePoids = caractList.reduce((sum, c) => sum + (c.poids ?? 0), 0);
+      const resultat = scoresParPoidsQuestion[parseFloat(poidsQuestion)] ?? 0;
+
+      // Ajouter la ligne de sous-total
+      tableRows += `
+        <tr style="background:#1a3a1a;border-bottom:1px solid #0f0">
+          <td colspan="5" style="text-align:right;padding:6px;color:#fff;font-weight:bold">
+            Score Caracteristique :
+          </td>
+          <td colspan="2" style="padding:6px;color:#0f0;font-weight:bold">
+            ${parseFloat(sommeProduits.toFixed(2))} / ${sommePoids} = <span style="color:#ff0;font-weight:bold">${parseFloat(resultat.toFixed(2))}</span>
+          </td>
         </tr>
       `;
-    }).join('');
+    });
 
     panel.innerHTML = `
       <div style="color:#fff;font-weight:bold;font-size:13px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #0f0">
@@ -308,26 +381,40 @@ function debugInfo(): void {
         <div><span style="color:#888">coeff_geo:</span> <span style="color:#0f0">${debug.coeff_geo ?? 'N/A'}</span></div>
         <div><span style="color:#888">coeff_type_frns:</span> <span style="color:#0f0">${debug.coeff_type_frns ?? 'N/A'}</span></div>
         <div><span style="color:#888">isRecommended:</span> ${product.isRecommended ? '<span style="color:#0f0">true</span>' : '<span style="color:#f88">false</span>'}</div>
-        <div><span style="color:#888">Coeff_Carac:</span> <span style="color:#0f0">${debug.coeff_caracteristique ?? 'N/A'}</span></div>
+        <div><span style="color:#888">Coeff_Carac:</span> <span style="color:#0f0">${debug.coeff_caracteristique?.toFixed(2) ?? 'N/A'}</span></div>
         <div><span style="color:#888">Nb caracteristiques:</span> <span style="color:#0ff">${chars.length}</span></div>
         <div><span style="color:#888">Coeff Etat Score:</span> <span style="color:#0f0">${debug.coeff_etat_score ?? 'N/A'}</span></div>
       </div>
 
       <div style="color:#fff;font-weight:bold;margin-bottom:6px">characteristics_debug (${chars.length})</div>
 
-      <div style="max-height:200px;overflow-y:auto;background:#111;border-radius:4px">
+      <div style="max-height:400px;overflow-y:auto;background:#111;border-radius:4px">
         <table style="width:100%;border-collapse:collapse;font-size:11px">
           <thead style="position:sticky;top:0;background:#111">
             <tr style="color:#888">
               <th style="text-align:left;padding:4px;border-bottom:1px solid #333">Id</th>
               <th style="text-align:left;padding:4px;border-bottom:1px solid #333">Nom caracteristique</th>
               <th style="text-align:center;padding:4px;border-bottom:1px solid #333">Bareme</th>
+              <th style="text-align:center;padding:4px;border-bottom:1px solid #333"></th>
               <th style="text-align:center;padding:4px;border-bottom:1px solid #333">Poids</th>
-              <th style="text-align:center;padding:4px;border-bottom:1px solid #333">Poids Q</th>
+              <th style="text-align:left;padding:4px;border-bottom:1px solid #333"></th>
+              <th style="text-align:center;padding:4px;border-bottom:1px solid #333">Poids Question (${totalPoidsQuestion})</th>
             </tr>
           </thead>
           <tbody>
-            ${modalCharRows}
+            ${tableRows}
+            <tr style="border-bottom:1px solid #1a1a1a;background:#2a2a0a">
+              <td colspan="5" style="text-align:right;padding:6px;color:#fff;font-weight:bold">Score technique du produit : </td>
+              <td colspan="2" style="padding:6px;color:#0f0">
+                [${calculDetailsScoreTechnique.join(' + ')}] / ${sommeDenominateur} = <span style="color:#ff0;font-weight:bold">${parseFloat(scoreTechniqueProduit.toFixed(2))}</span>
+              </td>
+            </tr>
+            <tr style="border-bottom:1px solid #1a1a1a">
+              <td colspan="5" style="text-align:right;padding:6px;color:#fff;font-weight:bold">Score final du produit : </td>
+              <td colspan="2" style="padding:6px;color:#0f0">
+                ${parseFloat(scoreTechniqueProduit.toFixed(2))} x ${debug.coeff_geo ?? 1}(coeff_geo) x ${debug.coeff_type_frns ?? 1}(coeff_type_frns) x ${debug.coeff_etat_score ?? 1}(coeff_etat_score) = <span style="color:#ff0;font-weight:bold">${parseFloat(scoreFinalProduit.toFixed(2))}</span>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
