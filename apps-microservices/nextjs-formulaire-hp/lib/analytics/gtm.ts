@@ -199,8 +199,8 @@ export function trackQuoteFunnel(
     rubrique_id: funnelContext.rubrique_id,
     'product.category5': funnelContext['product.category5'],
 
-    // Type de parcours (null si pas encore déterminé)
-    flow_type: currentFlowType,
+    // Type de parcours (seulement si défini)
+    ...(currentFlowType && { flow_type: currentFlowType }),
 
     // Identifiants
     user_id: userId,
