@@ -94,7 +94,7 @@ export function trackGA4LeadSubmitted(leadId: string, suppliersCount: number, pr
     window.gtag('event', 'lead_submitted', {
       event_category: 'conversion',
       lead_id: leadId,
-      suppliers_count: suppliersCount,
+      nombre_fournisseur: suppliersCount,
       profile_type: profileType,
     });
   }

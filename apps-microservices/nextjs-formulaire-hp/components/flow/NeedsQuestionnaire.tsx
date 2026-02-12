@@ -31,6 +31,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     setDynamicAnswer,
     setStartTime,
     startTime,
+    categoryName,
   } = useFlowStore();
 
   // Hook pour le questionnaire dynamique
@@ -66,10 +67,11 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     // Track funnel start (une seule fois)
     if (!hasTrackedStart.current) {
       hasTrackedStart.current = true;
-      // Initialiser le contexte avec rubrique_id
+      // Initialiser le contexte avec rubrique_id et product.category5
       if (rubriqueId) {
         setFunnelContext({
           rubrique_id: parseInt(rubriqueId, 10),
+          'product.category5': categoryName || undefined,
         });
       }
       trackGTMFunnelStart();
