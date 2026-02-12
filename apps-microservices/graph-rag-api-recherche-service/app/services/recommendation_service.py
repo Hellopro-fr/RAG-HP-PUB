@@ -590,6 +590,10 @@ class RecommendationService:
         g_unknown_score = 0.8
         c_unknown_score = 0.5
 
+        if target_product_id:
+            logging.info(f"Target product ID: {target_product_id}")
+            logging.info(f"Filters: {flat_filters}")
+
         # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
         cypher_query = """
         // --- STEP 1: ANCHOR TRAVERSAL by CaracteristiqueTechnique ---
