@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
     }
 
     const url = new URL(URL_API_QUESTION);
-    console.log('Calling Questionnaire QN API:', url.toString());
 
      const payloadQN = {
       etape: "question",

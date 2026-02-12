@@ -26,8 +26,6 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    console.log('Calling get_info_produit API:', URL_API, payload);
-
     const response = await fetch(URL_API, {
       method: 'POST',
       headers: {
