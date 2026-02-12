@@ -606,7 +606,7 @@ class RecommendationService:
         WHERE toString(pc.id_source_caracteristique) = f.cid
         MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
         
-        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
+        WHERE ($target_product_id IS NULL OR toString(p.id_produit) = "$target_product_id")
           AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
         
         WITH DISTINCT p, $filters AS active_filters
