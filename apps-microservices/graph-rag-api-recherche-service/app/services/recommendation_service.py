@@ -1128,10 +1128,10 @@ class RecommendationService:
         
         // Calculate final_score = global_score * zone_score * etat_score * typo_score
         // Filter out products with negative final_score
-        WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
-             // forcer zone_geo à 1
-             // global_score * zone_score * etat_score * typo_score AS final_score
-             global_score * 1 * etat_score * typo_score AS final_score
+        // forcer zone_geo à 1
+        // global_score * zone_score * etat_score * typo_score AS final_score
+        WITH p, details, global_score, 1.0 AS zone_score, etat_score, typo_score, info_soc,
+             global_score * zone_score * etat_score * typo_score AS final_score
         WHERE final_score >= 0
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
