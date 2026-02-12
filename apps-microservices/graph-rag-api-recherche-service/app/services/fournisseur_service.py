@@ -30,8 +30,8 @@ class FournisseurService:
         // Collect related ZoneGeographique (Departements)
         OPTIONAL MATCH (f)-[:COUVRE_ZONE]->(z:ZoneGeographique)
         WITH pays_list, collect({
-            id_dept: z.id_zone, 
-            nom_dept: z.nom_zone
+            id_dept: z.id_dept, 
+            nom_dept: z.nom_dept
         }) as dept_list
         
         RETURN pays_list, dept_list
