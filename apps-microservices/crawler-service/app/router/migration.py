@@ -65,10 +65,9 @@ def detect_file_format(filename: str) -> FileFormat:
         return FileFormat.TAR_GZ
 
 
-def extract_archive(archive_path: str, file_format: FileFormat, destination: str) -> int:
+def extract_archive_to_dir(archive_path: str, file_format: FileFormat, destination: str) -> None:
     """
-    Extract an archive to the destination directory.
-    Returns the number of files extracted.
+    Extract an archive to the destination directory (raw extraction, no nesting fix).
     """
     if file_format == FileFormat.TAR_GZ:
         with tarfile.open(archive_path, "r:gz") as tar:
@@ -81,8 +80,60 @@ def extract_archive(archive_path: str, file_format: FileFormat, destination: str
             zip_ref.extractall(destination)
     else:
         raise ValueError(f"Unsupported file format: {file_format}")
+
+
+def extract_and_fix_nesting(archive_path: str, file_format: FileFormat, target_dir: str) -> int:
+    """
+    Extract an archive and automatically fix double nesting.
     
-    return count_files_in_directory(destination)
+    Client archives may contain either:
+    - Flat files: fichier1.json, fichier2.json
+    - A single subdirectory: example.com/fichier1.json
+    
+    In the second case, the subdirectory contents are moved up one level
+    to avoid double nesting (since target_dir already includes the domain name).
+    
+    Returns the number of files in the final target directory.
+    """
+    # 1. Extract to a temporary directory
+    temp_extract_dir = tempfile.mkdtemp(prefix="migration_extract_")
+    
+    try:
+        extract_archive_to_dir(archive_path, file_format, temp_extract_dir)
+        
+        # 2. Check for double nesting: single subdirectory as only content
+        contents = os.listdir(temp_extract_dir)
+        
+        if (len(contents) == 1
+                and os.path.isdir(os.path.join(temp_extract_dir, contents[0]))):
+            # Double nesting detected: archive contains a single directory
+            nested_dir = os.path.join(temp_extract_dir, contents[0])
+            source_dir = nested_dir
+            logger.info(f"Double nesting detected: archive contains single directory '{contents[0]}'. Unwrapping.")
+        else:
+            # Flat files or multiple items: use directly
+            source_dir = temp_extract_dir
+            logger.info(f"No nesting detected: {len(contents)} items at root level.")
+        
+        # 3. Move contents to the final target directory
+        os.makedirs(target_dir, exist_ok=True)
+        for item in os.listdir(source_dir):
+            src = os.path.join(source_dir, item)
+            dst = os.path.join(target_dir, item)
+            # If destination exists (e.g. incremental uploads), overwrite
+            if os.path.exists(dst):
+                if os.path.isdir(dst):
+                    shutil.rmtree(dst)
+                else:
+                    os.remove(dst)
+            shutil.move(src, dst)
+        
+        return count_files_in_directory(target_dir)
+    
+    finally:
+        # 4. Cleanup temp extraction directory
+        if os.path.exists(temp_extract_dir):
+            shutil.rmtree(temp_extract_dir)
 
 
 def reassemble_chunks(chunk_dir: str, output_path: str) -> None:
@@ -204,9 +255,9 @@ async def upload_migration_archive(
                 shutil.copyfileobj(archive.file, tmp_file)
             logger.info(f"Archive saved to temporary file: {tmp_path}")
 
-        # Extract the archive (whether reassembled or single)
+        # Extract the archive (whether reassembled or single) with auto nesting fix
         try:
-            extracted_count = extract_archive(tmp_path, actual_format, storage_path)
+            extracted_count = extract_and_fix_nesting(tmp_path, actual_format, storage_path)
             logger.info(f"Archive extracted to {storage_path}, {extracted_count} files")
         finally:
             if tmp_path and os.path.exists(tmp_path):
