@@ -1179,7 +1179,7 @@ class RecommendationService:
         // Filter out top_p products from all_products and limit to top_k
         WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
         
-        UNWIND filtered_products AS prod
+        UNWIND (CASE WHEN size(filtered_products) = 0 THEN [null] ELSE filtered_products END) AS prod
         WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
         RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
         """
@@ -1392,7 +1392,8 @@ class RecommendationService:
 
                 # Build liste_produit
                 for idx, rec in enumerate(results):
-                    liste_produit.append(build_produit(rec, idx + 1))
+                    if rec.get("product_data"):
+                        liste_produit.append(build_produit(rec, idx + 1))
 
             total_time = time.perf_counter() - start_time
             return MatchingResponse(
