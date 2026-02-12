@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
 
     // Convertir en FormData pour le PHP
     const formData = objectToFormData(payload);  
-
+    console.log(DEMANDE_INFO_ENDPOINT);
+    console.log(formData);
     // Envoyer au PHP
     const response = await fetch(DEMANDE_INFO_ENDPOINT, {
       method: 'POST',
