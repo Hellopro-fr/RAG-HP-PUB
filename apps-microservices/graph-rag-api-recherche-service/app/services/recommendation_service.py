@@ -603,7 +603,7 @@ class RecommendationService:
             logging.warning(f"Target product ID: {target_product_id}")
             query_step_1 = """
              MATCH (p:Produit)
-             WHERE toString(p.id_produit) = $target_product_id
+             WHERE toString(p.id) = $target_product_id
              WITH p, $filters AS active_filters
              """
         else:
@@ -1209,7 +1209,9 @@ class RecommendationService:
             ),
             "top_k": int(request.top_k),
             "target_product_id": (
-                str(request.id_produit) if request.id_produit is not None else None
+                str(f"""id_produit_{request.id_produit}""")
+                if request.id_produit is not None
+                else None
             ),
             "blocked_val": blocked_val,
             "different_val": different_val,
