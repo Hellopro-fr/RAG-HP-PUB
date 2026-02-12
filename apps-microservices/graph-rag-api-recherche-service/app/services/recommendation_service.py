@@ -567,6 +567,8 @@ class RecommendationService:
         """
         start_time = time.perf_counter()
 
+        if request.id_produit:
+            target_product_id = request.id_produit
         norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_caracteristique(request)
         norm_time = time.perf_counter() - norm_start
