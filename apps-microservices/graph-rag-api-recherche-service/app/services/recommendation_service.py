@@ -1009,7 +1009,7 @@ class RecommendationService:
                  couvre: r_zone.couvre,
                  ne_couvre_pas: r_zone.ne_couvre_pas
              }) AS zone_rels,
-             { id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie } AS info_soc
+             { id_etat: toInteger(f.id_etat), id_affichage: toInteger(f.id_affichage), typologie: f.typologie } AS info_soc
         
         // Calculate zone_score based on the algorithm:
         // 1. If has pays relation:
@@ -1112,7 +1112,7 @@ class RecommendationService:
              CASE
                 WHEN (info_soc.id_etat = 1 OR (info_soc.id_etat = 2 AND info_soc.id_affichage = 1)) THEN
                     CASE
-                        WHEN $user_typologie IS NOT NULL AND $user_typologie IN coalesce(info_soc.typologie, []) THEN 1.0
+                        WHEN $user_typologie IS NOT NULL AND ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
                         ELSE 0.2
                     END
                 ELSE 1.0
