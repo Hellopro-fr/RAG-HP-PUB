@@ -556,7 +556,9 @@ class RecommendationService:
         }
 
     async def get_products_by_caracteristique_filters(
-        self, request: MatchingPayloadIdProduit
+        self,
+        request: MatchingPayloadIdProduit,
+        target_product_id: Optional[str] = None,
     ) -> MatchingResponse:
         """
         Get products filtered and scored by CaracteristiqueTechnique constraints.
@@ -1185,7 +1187,7 @@ class RecommendationService:
                 str(request.id_categorie) if request.id_categorie is not None else None
             ),
             "top_k": int(request.top_k),
-            "target_product_id": request.id_produit or None,
+            "target_product_id": target_product_id,
             "blocked_val": blocked_val,
             "different_val": different_val,
             "user_dept": user_dept,

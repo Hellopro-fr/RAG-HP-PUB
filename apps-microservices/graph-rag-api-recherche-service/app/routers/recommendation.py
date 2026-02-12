@@ -123,9 +123,12 @@ async def match_products(request: MatchingPayloadIdProduit):
                 liste_produit=[],
                 temps_de_traitement=0.0,
             )
-
+        id_produit = None
+        if request.id_produit:
+            id_produit = request.id_produit
         results = await recommendation_service.get_products_by_caracteristique_filters(
-            request
+            request,
+            target_product_id=id_produit,
         )
         return results
 
