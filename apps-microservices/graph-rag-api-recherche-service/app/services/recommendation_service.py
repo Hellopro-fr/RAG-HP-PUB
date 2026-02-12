@@ -604,7 +604,6 @@ class RecommendationService:
             query_step_1 = """
              MATCH (p:Produit)
              WHERE p.id_produit = $target_product_id
-               AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
              WITH p, $filters AS active_filters
              """
         else:
@@ -1142,7 +1141,7 @@ class RecommendationService:
         // global_score * zone_score * etat_score * typo_score AS final_score
         WITH p, details, global_score, 1.0 AS zone_score, etat_score, typo_score, info_soc,
              global_score * zone_score * etat_score * typo_score AS final_score
-        WHERE final_score >= 0
+        WHERE final_score >= 0 OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         LIMIT $top_k + 4
