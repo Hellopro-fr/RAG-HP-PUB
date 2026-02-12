@@ -1118,7 +1118,7 @@ class RecommendationService:
         // Calculate typologie score
         WITH p, details, global_score, zone_score, etat_score, info_soc,
              CASE
-                WHEN ((info_soc.id_etat = '1') OR ((info_soc.id_etat = '2') AND (info_soc.id_affichage = '1'))) THEN
+                WHEN etat_score = 1.0 THEN
                     CASE
                         WHEN $user_typologie IS NOT NULL AND ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
                         ELSE 0.2
