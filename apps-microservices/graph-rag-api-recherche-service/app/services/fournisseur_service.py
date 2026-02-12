@@ -13,7 +13,7 @@ class FournisseurService:
         self, id_fournisseur: str
     ) -> Optional[FournisseurGeoResponse]:
         """
-        Retrieves the geographical coverage (Pays and ZoneGeographique/Departements)
+        Retrieves the geographical coverage (Pays and ZoneGeo/Departements)
         for a specific supplier (Fournisseur) by its ID.
         """
         cypher_query = """
@@ -27,8 +27,8 @@ class FournisseurService:
             couvre_partiel: coalesce(r_pays.partiel, false)
         }) as pays_list
         
-        // Collect related ZoneGeographique (Departements)
-        OPTIONAL MATCH (f)-[:COUVRE_ZONE]->(z:ZoneGeographique)
+        // Collect related ZoneGeo (Departements)
+        OPTIONAL MATCH (f)-[:COUVRE_ZONE]->(z:ZoneGeo)
         WITH pays_list, collect({
             id_dept: z.id_dept, 
             nom_dept: z.nom_dept
