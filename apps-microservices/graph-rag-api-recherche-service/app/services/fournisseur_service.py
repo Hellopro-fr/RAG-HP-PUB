@@ -85,5 +85,43 @@ class FournisseurService:
             )
             raise e
 
+    async def get_geo_coverage_by_produit(
+        self, id_produit: str
+    ) -> Optional[FournisseurGeoResponse]:
+        """
+        Retrieves the geographical coverage for a supplier associated with a specific product ID.
+        """
+        try:
+            # 1. Get id_fournisseur from Product
+            query_product = """
+            MATCH (p:Produit {id_produit: $id_produit})
+            RETURN p.id_fournisseur as id_fournisseur
+            """
+            results = await clients.execute_cypher(
+                query_product, {"id_produit": id_produit}
+            )
+
+            if not results:
+                logging.info(f"Product with ID '{id_produit}' not found.")
+                return None
+
+            id_fournisseur = results[0].get("id_fournisseur")
+
+            if not id_fournisseur:
+                logging.info(
+                    f"Product '{id_produit}' has no associated 'id_fournisseur'."
+                )
+                return None
+
+            # 2. Use existing method to get coverage
+            return await self.get_geo_coverage(id_fournisseur)
+
+        except Exception as e:
+            logging.error(
+                f"Error retrieving geo coverage by product {id_produit}: {e}",
+                exc_info=True,
+            )
+            raise e
+
 
 fournisseur_service = FournisseurService()
