@@ -72,5 +72,32 @@ class ProductService:
             )
             raise e
 
+    async def delete_produit(self, product_id: str) -> Optional[dict]:
+        """
+        Deletes a product node by its ID and returns the deleted node's properties.
+        """
+        cypher_query = """
+        MATCH (p:Produit {id_produit: $pid})
+        WITH p, properties(p) as props
+        DETACH DELETE p
+        RETURN props
+        """
+
+        try:
+            results = await clients.execute_cypher(cypher_query, {"pid": product_id})
+
+            if not results:
+                logging.info(f"Product with ID '{product_id}' not found for deletion.")
+                return None
+
+            return results[0].get("props")
+
+        except Exception as e:
+            logging.error(
+                f"Error deleting product {product_id}: {e}",
+                exc_info=True,
+            )
+            raise e
+
 
 product_service = ProductService()
