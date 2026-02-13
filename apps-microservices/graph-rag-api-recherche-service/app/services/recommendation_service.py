@@ -216,8 +216,8 @@ class RecommendationService:
         MATCH (r:Reponse {id_reponse: f.rid})
         MATCH (r)<-[:EQUIVAUT_A|COUVRE]-(intermediate)<-[:A_POUR_CARACTERISTIQUE|EST_PROPOSE_PAR]-(p:Produit)
         
-        WHERE ($target_product_id IS NULL OR toString(p.id_produit) = $target_product_id)
-          AND ($id_categorie IS NULL OR toString(p.id_categorie) = $id_categorie)
+        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
+          AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
         
         WITH DISTINCT p, $filters AS active_filters
         
@@ -598,19 +598,28 @@ class RecommendationService:
             logging.info(f"Target product ID: {target_product_id}")
             logging.info(f"Filters: {flat_filters}")
 
-        # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
-        cypher_query = """
-        // --- STEP 1: ANCHOR TRAVERSAL by CaracteristiqueTechnique ---
-        UNWIND $filters AS f
-        MATCH (pc:CaracteristiqueTechnique)
-        WHERE toString(pc.id_source_caracteristique) = f.cid
-        MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
-        
-        WHERE ($target_product_id IS NULL OR toString(p.id_produit) = $target_product_id)
-          AND ($id_categorie IS NULL OR toString(p.id_categorie) = $id_categorie)
-        
-        WITH DISTINCT p, $filters AS active_filters
-        
+        # Build Cypher Query Step 1 (Dynamic)
+        if target_product_id:
+            logging.warning(f"Target product ID: {target_product_id}")
+            query_step_1 = """
+             MATCH (p:Produit)
+             WHERE toString(p.id) = $target_product_id
+             WITH p, $filters AS active_filters
+             """
+        else:
+            query_step_1 = """
+             UNWIND $filters AS f
+             MATCH (pc:CaracteristiqueTechnique)
+             WHERE toString(pc.id_source_caracteristique) = f.cid
+             MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
+             
+             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+             
+             WITH DISTINCT p, $filters AS active_filters
+             """
+
+        # --- STEP 2: SCORING ---
+        query_step_2 = """
         // --- STEP 2: SCORING by CaracteristiqueTechnique with CONTINUOUS SCORING ---
         UNWIND active_filters AS f
         
@@ -1131,8 +1140,8 @@ class RecommendationService:
         // forcer zone_geo à 1
         // global_score * zone_score * etat_score * typo_score AS final_score
         WITH p, details, global_score, 1.0 AS zone_score, etat_score, typo_score, info_soc,
-             global_score * zone_score * etat_score * typo_score AS final_score
-        WHERE final_score >= 0
+             global_score * 1.0 * etat_score * typo_score AS final_score
+        WHERE final_score >= 0 OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         LIMIT $top_k + 4
@@ -1170,10 +1179,12 @@ class RecommendationService:
         // Filter out top_p products from all_products and limit to top_k
         WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
         
-        UNWIND filtered_products AS prod
+        UNWIND (CASE WHEN size(filtered_products) = 0 THEN [null] ELSE filtered_products END) AS prod
         WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
         RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
         """
+
+        cypher_query = query_step_1 + query_step_2
 
         # Determine projection
         if request.champs_sortie:
@@ -1198,7 +1209,9 @@ class RecommendationService:
             ),
             "top_k": int(request.top_k),
             "target_product_id": (
-                str(request.id_produit) if request.id_produit is not None else None
+                str(f"""id_produit_{request.id_produit}""")
+                if request.id_produit is not None
+                else None
             ),
             "blocked_val": blocked_val,
             "different_val": different_val,
@@ -1379,7 +1392,8 @@ class RecommendationService:
 
                 # Build liste_produit
                 for idx, rec in enumerate(results):
-                    liste_produit.append(build_produit(rec, idx + 1))
+                    if rec.get("product_data"):
+                        liste_produit.append(build_produit(rec, idx + 1))
 
             total_time = time.perf_counter() - start_time
             return MatchingResponse(

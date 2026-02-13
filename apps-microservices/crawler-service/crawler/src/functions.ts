@@ -701,9 +701,9 @@ export const updateUrlsCrawledStreaming = async (
     
     for await (const url of urlIterator) {
         if (!isFirst) {
-             if (!stream.write(',')) await new Promise(r => stream.once('drain', r));
+             if (!stream.write(',')) await new Promise<void>(r => stream.once('drain', () => r()));
         }
-        if (!stream.write(JSON.stringify(url))) await new Promise(r => stream.once('drain', r));
+        if (!stream.write(JSON.stringify(url))) await new Promise<void>(r => stream.once('drain', () => r()));
         
         isFirst = false;
         count++;

@@ -97,7 +97,7 @@ export class DedupManager {
             const toAdd: string[] = [];
 
             for (let i = 0; i < uniqueUrls.length; i++) {
-                if (results[i] === 0) { // 0 means NOT member (new)
+                if (!results[i]) { // false means NOT member (new)
                      newToLog.push(uniqueUrls[i]);
                      toAdd.push(uniqueUrls[i]);
                 }

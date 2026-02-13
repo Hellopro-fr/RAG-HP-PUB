@@ -56,6 +56,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
 
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
   const [files, setFiles] = useState<File[]>([]);
+  const [showAdditionalFields, setShowAdditionalFields] = useState<boolean>(false);
 
   // Ref pour éviter les doubles appels en StrictMode
   const hasTrackedView = useRef(false);
@@ -74,7 +75,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
   }, [formData.email]);
 
   // Dynamic buyer check via API
-  const { data: buyerCheckResult } = useBuyerCheck(
+  const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
     {
       email     : formData.email,
       rubriqueId: categoryId?.toString(),
@@ -124,7 +125,17 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
   }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
 
   // Show additional fields only if email is valid and not a known buyer
-  const showAdditionalFields = isEmailValid && !isKnownBuyer;
+  // AND we are not currently checking (to avoid flickering)
+  useEffect(() => {
+    // Si on est en train de vérifier, on ne change rien (ou on cache)
+    // Si la vérification est terminée, on décide d'afficher ou non
+    if (!isCheckingBuyer) {
+      setShowAdditionalFields(isEmailValid && !isKnownBuyer);
+    } else {
+      // Pendant le chargement, on cache les champs additionnels
+      setShowAdditionalFields(false);
+    }
+  }, [isEmailValid, isKnownBuyer, isCheckingBuyer]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
