@@ -87,28 +87,84 @@ function debugInfo(): void {
       display: flex; flex-direction: column;
     `;
 
-    const qaRows = userQuestionAnswers.map(qa => {
+    const qaRows = userQuestionAnswers.map((qa, index) => {
+      const questionNum = index + 1;
       const question = qa.questionLabel || `Question ${qa.questionId}`;
       const answer = Array.isArray(qa.answerLabel)
         ? qa.answerLabel.join(', ')
         : (qa.answerLabel || String(qa.answerId));
       return `
         <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #333">
-          <div style="color:#888;font-size:10px">Q: ${question}</div>
-          <div style="color:#0ff;font-weight:bold">R: ${answer}</div>
+          <div style="color:#888;font-size:10px"><span style="color:#0f0;font-weight:bold">Q${questionNum}:</span> ${question}</div>
+          <div style="color:#0ff;font-weight:bold">R${questionNum}: ${answer}</div>
         </div>
       `;
     }).join('');
 
+    // Preparer le texte a copier
+    const textToCopy = userQuestionAnswers.map((qa, index) => {
+      const questionNum = index + 1;
+      const question = qa.questionLabel || `Question ${qa.questionId}`;
+      const answer = Array.isArray(qa.answerLabel)
+        ? qa.answerLabel.join(', ')
+        : (qa.answerLabel || String(qa.answerId));
+      return `Q${questionNum}: ${question}\nR${questionNum}: ${answer}`;
+    }).join('\n\n');
+
+    // Stocker le texte a copier dans une variable globale temporaire
+    const copyId = `__debugQACopy_${Date.now()}`;
+    (window as any)[copyId] = textToCopy;
+
     qaPanel.innerHTML = `
       <div class="debug-qa-header" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#0f0;border-radius:6px 6px 0 0;cursor:move;user-select:none">
         <span style="color:#000;font-weight:bold;font-size:12px">Q/R (${userQuestionAnswers.length}) - Glisser pour deplacer</span>
-        <button onclick="this.closest('.debug-qa-panel').remove()" style="background:#f00;color:#fff;border:none;padding:2px 8px;cursor:pointer;border-radius:4px;font-weight:bold">X</button>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="debug-copy-btn" title="Copier Q/R" style="background:#1a1a2e;color:#0f0;border:1px solid #0f0;padding:4px 8px;cursor:pointer;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:4px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copier
+          </button>
+          <button onclick="this.closest('.debug-qa-panel').remove()" style="background:#f00;color:#fff;border:none;padding:2px 8px;cursor:pointer;border-radius:4px;font-weight:bold">X</button>
+        </div>
       </div>
       <div style="padding:12px;overflow-y:auto;flex:1">
         ${qaRows}
       </div>
     `;
+
+    // Ajouter l'event listener pour le bouton copier
+    const copyBtn = qaPanel.querySelector('.debug-copy-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText((window as any)[copyId]);
+          (copyBtn as HTMLElement).style.background = '#0f0';
+          (copyBtn as HTMLElement).style.color = '#000';
+          copyBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            Copie!
+          `;
+          setTimeout(() => {
+            (copyBtn as HTMLElement).style.background = '#1a1a2e';
+            (copyBtn as HTMLElement).style.color = '#0f0';
+            copyBtn.innerHTML = `
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              Copier
+            `;
+          }, 1500);
+        } catch (err) {
+          console.error('Erreur copie:', err);
+        }
+      });
+    }
 
     document.body.appendChild(qaPanel);
 
