@@ -1227,28 +1227,52 @@ class RecommendationService:
             OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
             WITH p, f,
                  collect(DISTINCT {
+                     pays: pays,
                      id_pays: pays.id_pays,
                      partiel: r_pays.partiel,
-                     couvre_tous: r_pays.couvre_tous
+                     couvre_tous: r_pays.couvre_tous,
+                     couvre: r_pays.couvre,
+                     ne_couvre_pas: r_pays.ne_couvre_pas
                  }) AS pays_rels,
                  collect(DISTINCT {
+                     zone: zone,
                      id_dept: zone.id_dept,
                      couvre_tous: r_zone.couvre_tous,
-                     couvre: r_zone.couvre
+                     couvre: r_zone.couvre,
+                     ne_couvre_pas: r_zone.ne_couvre_pas
                  }) AS zone_rels
-            RETURN p.id AS product_id, f.id AS fournisseur_id, 
-                   f.id_fournisseur AS raw_fournisseur_id,
-                   pays_rels, zone_rels
+            RETURN p.id AS product_id,
+                   f.id AS fournisseur_id,
+                   size(pays_rels) AS pays_count,
+                   pays_rels[0].pays IS NOT NULL AS has_pays_node,
+                   $user_id_pays IS NULL AS user_pays_null,
+                   ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) AS country_match,
+                   ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.partiel = true) AS partiel_true,
+                   $user_dept IS NULL AS user_dept_null,
+                   ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) AS dept_match,
+                   ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) AS zone_couvre_tous,
+                   [zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) | {id_dept: zr.id_dept, couvre_tous: zr.couvre_tous}] AS matched_zones,
+                   pays_rels AS pays_rels,
+                   zone_rels AS zone_rels_raw
             """
             debug_results = await clients.execute_cypher(debug_geo_query, params)
             for dr in debug_results:
                 logging.warning(f"🔍 GEO DEBUG for product {dr.get('product_id')}:")
                 logging.warning(f"   fournisseur_id: {dr.get('fournisseur_id')}")
                 logging.warning(
-                    f"   raw_fournisseur_id: {dr.get('raw_fournisseur_id')}"
+                    f"   pays_count: {dr.get('pays_count')}, has_pays_node: {dr.get('has_pays_node')}"
                 )
+                logging.warning(
+                    f"   user_pays_null: {dr.get('user_pays_null')}, country_match: {dr.get('country_match')}"
+                )
+                logging.warning(f"   partiel_true: {dr.get('partiel_true')}")
+                logging.warning(
+                    f"   user_dept_null: {dr.get('user_dept_null')}, dept_match: {dr.get('dept_match')}"
+                )
+                logging.warning(f"   zone_couvre_tous: {dr.get('zone_couvre_tous')}")
+                logging.warning(f"   matched_zones: {dr.get('matched_zones')}")
                 logging.warning(f"   pays_rels: {dr.get('pays_rels')}")
-                logging.warning(f"   zone_rels: {dr.get('zone_rels')}")
+                logging.warning(f"   zone_rels_raw: {dr.get('zone_rels_raw')}")
 
         try:
             query_start = time.perf_counter()
