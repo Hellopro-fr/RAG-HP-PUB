@@ -65,7 +65,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
     return emailRegex.test(formData.email);
   }, [formData.email]);
 
-  const { data: buyerCheckResult } = useBuyerCheck(
+  const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
     {
       email: formData.email,
       rubriqueId: categoryId?.toString(),
@@ -115,7 +115,8 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
   }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);
 
   // Show additional fields only if email is valid and not an existing buyer
-  const showAdditionalFields = isEmailValid && !isKnownBuyer;
+  // AND we are not currently checking (to avoid flickering)
+  const showAdditionalFields = isEmailValid && !isKnownBuyer && !isCheckingBuyer;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -197,13 +198,13 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
 
     finalData.files = finalData.files || files;
 
-    finalData.files.forEach((file: File, index: number) => {
-      console.log(`Fichier ${index}:`, {
-        nom: file.name,
-        taille: file.size,
-        type: file.type
-      });
-    });
+    // finalData.files.forEach((file: File, index: number) => {
+    //   console.log(`Fichier ${index}:`, {
+    //     nom: file.name,
+    //     taille: file.size,
+    //     type: file.type
+    //   });
+    // });
 
     setContactData(finalData);
 
