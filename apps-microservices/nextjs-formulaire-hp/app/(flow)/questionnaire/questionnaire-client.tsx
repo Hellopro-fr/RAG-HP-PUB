@@ -17,18 +17,22 @@ interface QuestionnaireClientProps {
   initialCategoryId?: string;
   initialUrlData?: string; // Base64 encoded URL data
   initialToken?: string;   // Token original pour redirection après F5
+  initialDdc?: string;   // Token original pour redirection après F5
 }
 
 export default function QuestionnaireClient({
   initialCategoryId,
   initialUrlData,
-  initialToken
+  initialToken,
+  initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer } = useFlowStore();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc } = useFlowStore();
   const { goToProfile } = useFlowNavigation();
   const hasProcessedUrlData = useRef(false);
   const isHydrated = useFlowStoreHydration();
+
+  // console.log('[QuestionnaireClient] Initial ddc :', { initialDdc });
 
   // État pour contrôler le rendu du questionnaire
   // On attend que les données URL soient traitées avant de rendre
@@ -51,6 +55,15 @@ export default function QuestionnaireClient({
       }
     }
 
+    if (initialDdc) {
+      setDdc(initialDdc);
+      console.log('[QuestionnaireClient] DDC set from initial props:', initialDdc);
+    }
+
+    if(initialDdc){
+      setDdc(initialDdc);
+      console.log('[QuestionnaireClient] DDC set from initial props:', initialDdc);
+    }
     // Sauvegarder le token original dans sessionStorage (separe du flow-store)
     // Ce token sera utilise pour la redirection apres F5
     // Priorite : prop du Server Component > searchParams client
@@ -59,7 +72,7 @@ export default function QuestionnaireClient({
       sessionStorage.setItem(FLOW_ORIGINAL_TOKEN_KEY, token);
       console.log('[QuestionnaireClient] Token saved for redirect:', token.substring(0, 20) + '...');
     }
-  }, [initialCategoryId, initialToken, searchParams, setCategoryId]);
+  }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc]);
 
   // Traiter les données URL (réponse Q1 pré-remplie depuis le token)
   // Doit s'exécuter AVANT que le questionnaire ne soit rendu

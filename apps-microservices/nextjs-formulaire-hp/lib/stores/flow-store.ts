@@ -164,6 +164,8 @@ export interface FlowState {
     others: any[];
   } | null;
 
+  ddc: string ;
+
   // Map des caractéristiques (lookup table pour ID -> label/valeurs)
   characteristicsMap: CharacteristicsMap;
 
@@ -191,6 +193,7 @@ export interface FlowState {
   // Actions
   setCategoryId: (id: number) => void;
   setCategoryName: (name: string | null) => void;
+  setDdc: (ddc: string) => void;
   setUserAnswers: (answers: Record<number, string[]>) => void;
   setOtherTexts: (texts: Record<number, string>) => void;
   setAnswer: (questionId: number, answerIds: string[]) => void;
@@ -236,6 +239,7 @@ const initialState = {
   orphanedSelectedSuppliers: [],
   criteriaHaveChanged: false,
   userQuestionAnswers: [],
+  ddc: "",
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -250,6 +254,8 @@ export const useFlowStore = create<FlowState>()(
       setUserAnswers: (answers) => set({ userAnswers: answers }),
 
       setOtherTexts: (texts) => set({ otherTexts: texts }),
+
+      setDdc: (ddc: string) => set({ ddc }),
 
       setAnswer: (questionId, answerIds) =>
         set((state) => ({
