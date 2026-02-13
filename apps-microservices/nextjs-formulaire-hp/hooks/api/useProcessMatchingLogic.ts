@@ -270,10 +270,20 @@ export function useProcessMatchingLogic() {
       const typologie = profileData?.type;
       const typologieValue = type_typologie[typologie as keyof typeof type_typologie] || "1";
 
-      const metadonnee_utilisateurs = {
+      const metadonnee_utilisateurs: Record<string, string | number> =  {
         "pays": profileData?.country || '',
         "typologie": typologieValue
       };
+
+      // Ajouter id_pays si disponible (vient de l'API geo)
+      if (profileData?.countryID) {
+        metadonnee_utilisateurs["id_pays"] = profileData.countryID;
+      }
+
+      // Ajouter cp (code postal) si disponible
+      if (profileData?.postalCode) {
+        metadonnee_utilisateurs["cp"] = profileData.postalCode;
+      }
 
       const formData = new FormData();
       formData.append('id_categorie', categoryId?.toString() || '');
