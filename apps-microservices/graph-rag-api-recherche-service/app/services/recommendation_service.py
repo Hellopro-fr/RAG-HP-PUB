@@ -1030,88 +1030,71 @@ class RecommendationService:
         
         // Calculate zone_score based on the algorithm:
         // 1. If has pays relation:
-        //    a. Check partiel:
-        //       - If partiel=true: full algorithm (couvre_tous + categorie + dept-level zone check)
-        //       - If partiel=false: only check couvre_tous + categorie (no dept drill-down)
-        // 2. If no pays relation but has zonegeographique relation: same logic as above
+        //    a. First check if user's id_pays matches any pays
+        //    b. If match found, check partiel:
+        //       - partiel=true: drill into ZoneGeo by dept, then check zone couvre_tous/couvre
+        //       - partiel=false: check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas for categorie
+        // 2. If no pays relation but has zonegeographique relation: check dept then couvre_tous/couvre
         // 3. If neither exists: score=g_unknown_score
         WITH p, info_soc, details, global_score, pays_rels, zone_rels,
              CASE
                  // Case 1: Has pays relations
                  WHEN size(pays_rels) > 0 AND pays_rels[0].pays IS NOT NULL THEN
                      CASE
-                         // Case 1a: partiel=true -> full algorithm (couvre_tous + categorie + dept check)
-                         WHEN ANY(pr IN pays_rels WHERE pr.partiel = true) THEN
+                         // First check if user_id_pays is provided
+                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
+                         // Check if user's country matches any COUVRE_PAYS
+                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN
+                             // Country matched - now check partiel on the matched pays relation
                              CASE
-                                 // couvre_tous=false -> check categorie, then dept
-                                 WHEN ANY(pr IN pays_rels WHERE pr.partiel = true AND pr.couvre_tous = false) THEN
+                                 // Case 1a: partiel=true -> drill into ZoneGeo by dept
+                                 WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.partiel = true) THEN
                                      CASE
-                                         // Check if id_categorie is in couvre list
-                                         WHEN ANY(pr IN pays_rels WHERE pr.partiel = true AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN
-                                             // Now check if user_dept matches any zone id_dept
+                                         WHEN $user_dept IS NULL THEN $g_unknown_score
+                                         // Check if user_dept matches any COUVRE_ZONE
+                                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN
+                                             // Dept matched - check couvre_tous on the matched zone relation
                                              CASE
-                                                 WHEN $user_dept IS NULL THEN $g_unknown_score
-                                                 WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN 1.0
+                                                 // Find the matched zone and check its couvre_tous
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) THEN 1.0
+                                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
                                                  ELSE $g_unknown_score
                                              END
-                                         // Check if id_categorie is in ne_couvre_pas list
-                                         WHEN ANY(pr IN pays_rels WHERE pr.partiel = true AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
-                                         // id_categorie not in either list
-                                         ELSE $g_unknown_score
-                                     END
-                                 // couvre_tous=true -> check only pays match
-                                 ELSE
-                                     CASE
-                                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
-                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN 1.0
+                                         // Dept not covered
                                          ELSE $z_unmatched
                                      END
-                             END
-                         // Case 1b: partiel=false -> only check couvre_tous + categorie (no dept drill-down)
-                         ELSE
-                             CASE
-                                 // couvre_tous=true -> just match by id_pays
-                                 WHEN ANY(pr IN pays_rels WHERE pr.couvre_tous = true) THEN
-                                     CASE
-                                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
-                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN 1.0
-                                         ELSE $z_unmatched
-                                     END
-                                 // couvre_tous=false -> only check categorie (no dept)
+                                 // Case 1b: partiel=false -> check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas
                                  ELSE
                                      CASE
-                                         WHEN ANY(pr IN pays_rels WHERE pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN 1.0
-                                         WHEN ANY(pr IN pays_rels WHERE pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
+                                         // couvre_tous=true -> covers all categories in this country
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = true) THEN 1.0
+                                         // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN 1.0
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
                                          ELSE $g_unknown_score
                                      END
                              END
+                         // User's country not in any COUVRE_PAYS
+                         ELSE $z_unmatched
                      END
                  // Case 2: No pays relation but has zonegeographique relation
                  WHEN size(zone_rels) > 0 AND zone_rels[0].zone IS NOT NULL THEN
                      CASE
-                         // Case 2a: couvre_tous=false -> check categorie in couvre/ne_couvre_pas, then check dept
-                         WHEN ANY(zr IN zone_rels WHERE zr.couvre_tous = false) THEN
+                         WHEN $user_dept IS NULL THEN $g_unknown_score
+                         // Check if user_dept matches any COUVRE_ZONE
+                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN
+                             // Dept matched - check couvre_tous on the matched zone relation
                              CASE
-                                 // Check if id_categorie is in couvre list
-                                 WHEN ANY(zr IN zone_rels WHERE zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN
-                                     // Now check if user_dept matches zone id_dept
-                                     CASE
-                                         WHEN $user_dept IS NULL THEN $g_unknown_score
-                                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN 1.0
-                                         ELSE $g_unknown_score
-                                     END
-                                 // Check if id_categorie is in ne_couvre_pas list
-                                 WHEN ANY(zr IN zone_rels WHERE zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
-                                 // id_categorie not in either list
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) THEN 1.0
+                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
                                  ELSE $g_unknown_score
                              END
-                         // Case 2b: couvre_tous=true -> check only dept match
-                         ELSE
-                             CASE
-                                 WHEN $user_dept IS NULL THEN $g_unknown_score
-                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept)) THEN 1.0
-                                 ELSE $z_unmatched
-                             END
+                         // Dept not covered
+                         ELSE $z_unmatched
                      END
                  // Case 3: Neither exists
                  ELSE $g_unknown_score
