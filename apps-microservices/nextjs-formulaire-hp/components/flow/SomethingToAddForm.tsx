@@ -36,7 +36,7 @@ const STEPS = [
 
 const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
 
-   const {
+  const {    
     setContactData,
     files: filesStore,
     addFilesStore,
@@ -107,7 +107,7 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
   const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
     {
       email     : formData.email,
-      rubriqueId: '2001661',
+      rubriqueId: categoryId?.toString(),
     },
     isEmailValid
   );
