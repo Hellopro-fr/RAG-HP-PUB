@@ -53,12 +53,12 @@ const CriteriaTags = ({
   }
 
   // New mode: compact single line display with custom scrollbar
-  // Le bouton Modifier est toujours visible, seuls les critères scrollent
+  // Le bouton Modifier est toujours visible et aligné horizontalement avec les tags
   return (
-    <div className="flex items-center gap-2">
+    <div className="relative flex items-center gap-3">
       {/* Scrollable area for criteria only */}
       <ScrollArea className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 pb-3">
+        <div className="flex items-center gap-2 pr-2">
           {/* Essential Criteria */}
           {essentialCriteria && essentialCriteria.length > 0 && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -94,14 +94,14 @@ const CriteriaTags = ({
             </div>
           )}
         </div>
-        <ScrollBar orientation="horizontal" className="h-2" />
+        <ScrollBar orientation="horizontal" className="h-1.5 mt-1" />
       </ScrollArea>
 
-      {/* Modify Button - Always visible outside scroll area */}
+      {/* Modify Button - Always visible, aligned horizontally with tags */}
       {onModify && (
         <button
           onClick={onModify}
-          className="flex-shrink-0 inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors whitespace-nowrap"
+          className="flex-shrink-0 inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors whitespace-nowrap self-center"
         >
           <Pencil className="h-3 w-3" />
           Modifier
