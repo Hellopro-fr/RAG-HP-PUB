@@ -1199,7 +1199,7 @@ class RecommendationService:
             "blocked_val": blocked_val,
             "different_val": different_val,
             "user_dept": user_dept,
-            "user_id_pays": user_id_pays,
+            "user_id_pays": str(user_id_pays) if user_id_pays is not None else None,
             "z_unmatched": z_unmatched,
             "e_unmatched": e_unmatched,
             "g_unknown_score": g_unknown_score,
