@@ -1217,6 +1217,39 @@ class RecommendationService:
                     f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>"
                 )
 
+        # --- DEBUG: Run a separate geo-debug query for target product ---
+        if target_product_id:
+            debug_geo_query = """
+            MATCH (p:Produit)
+            WHERE toString(p.id) = $target_product_id
+            OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
+            OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
+            OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
+            WITH p, f,
+                 collect(DISTINCT {
+                     id_pays: pays.id_pays,
+                     partiel: r_pays.partiel,
+                     couvre_tous: r_pays.couvre_tous
+                 }) AS pays_rels,
+                 collect(DISTINCT {
+                     id_dept: zone.id_dept,
+                     couvre_tous: r_zone.couvre_tous,
+                     couvre: r_zone.couvre
+                 }) AS zone_rels
+            RETURN p.id AS product_id, f.id AS fournisseur_id, 
+                   f.id_fournisseur AS raw_fournisseur_id,
+                   pays_rels, zone_rels
+            """
+            debug_results = await clients.execute_cypher(debug_geo_query, params)
+            for dr in debug_results:
+                logging.warning(f"🔍 GEO DEBUG for product {dr.get('product_id')}:")
+                logging.warning(f"   fournisseur_id: {dr.get('fournisseur_id')}")
+                logging.warning(
+                    f"   raw_fournisseur_id: {dr.get('raw_fournisseur_id')}"
+                )
+                logging.warning(f"   pays_rels: {dr.get('pays_rels')}")
+                logging.warning(f"   zone_rels: {dr.get('zone_rels')}")
+
         try:
             query_start = time.perf_counter()
             results = await clients.execute_cypher(cypher_query, params)
