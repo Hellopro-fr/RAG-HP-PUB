@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from "react";
 import { Check, CheckCircle, AlertTriangle, ShieldCheck, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProductSpec, PriceInfo } from "@/types";
@@ -73,6 +74,8 @@ const SupplierCard = ({
   viewMode = "grid",
   price,
 }: SupplierCardProps) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   
   const getMatchBadgeStyle = () => {
     if (matchScore >= 80) return "bg-match-high text-white";
@@ -116,11 +119,21 @@ const SupplierCard = ({
     >
       {/* Image */}
       <div className="relative w-24 h-24 flex-shrink-0 overflow-hidden bg-muted">
-        <img
-          src={image}
-          alt={productName}
-          className="h-full w-full object-cover"
-        />
+        {!imageError && image ? (
+          <img
+            src={image}
+            alt={productName}
+            className={cn(
+              "h-full w-full object-cover transition-opacity duration-300",
+              imageLoaded ? "opacity-100" : "opacity-0"
+            )}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          // TODO: Implement better fallback for missing images
+          <div className="w-full h-full" />
+        )}
         {isRecommended && (
           <div className="absolute top-1 left-1">
             <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
@@ -221,11 +234,21 @@ const SupplierCard = ({
 
       {/* Product Image - Fixed height */}
       <div className="relative h-32 sm:h-36 w-full overflow-hidden bg-muted flex-shrink-0">
-        <img
-          src={image}
-          alt={productName}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+        {!imageError && image ? (
+          <img
+            src={image}
+            alt={productName}
+            className={cn(
+              "h-full w-full object-cover transition-transform duration-300 group-hover:scale-105 transition-opacity",
+              imageLoaded ? "opacity-100" : "opacity-0"
+            )}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          // TODO: Implement better fallback for missing images
+          <div className="w-full h-full" />
+        )}
         {/* Match Score Badge */}
         <div className={cn(
           "absolute bottom-2 right-2 rounded-lg px-2.5 py-1 font-bold text-sm shadow-lg",

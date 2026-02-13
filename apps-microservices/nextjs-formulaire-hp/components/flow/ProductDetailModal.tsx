@@ -44,8 +44,14 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
   const [vendorDescriptionExpanded, setVendorDescriptionExpanded] = useState(false);
   const [isDescriptionTruncated, setIsDescriptionTruncated] = useState(false);
   const [isVendorTruncated, setIsVendorTruncated] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const descriptionRef = useRef<HTMLDivElement>(null);
   const vendorRef = useRef<HTMLDivElement>(null);
+
+  // Reset image loaded state when media changes
+  useEffect(() => {
+    setImageLoaded(false);
+  }, [currentMediaIndex]);
 
   // Track modal view on mount + Check if descriptions are truncated
   useEffect(() => {
@@ -115,11 +121,24 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                 onClick={() => setLightboxOpen(true)}
                 className="w-full h-full relative group cursor-zoom-in"
               >
-                <img
-                  src={currentMedia?.url}
-                  alt={product.name}
-                  className="w-full h-full object-contain bg-muted"
-                />
+                {currentMedia?.url ? (
+                  <img
+                    src={currentMedia.url}
+                    alt={product.name}
+                    className={cn(
+                      "w-full h-full object-contain bg-muted transition-opacity duration-300",
+                      imageLoaded ? "opacity-100" : "opacity-0"
+                    )}
+                    onLoad={() => setImageLoaded(true)}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      // TODO: Implement better fallback for missing images
+                    }}
+                  />
+                ) : (
+                  // TODO: Implement better fallback for missing images
+                  <div className="w-full h-full bg-muted" />
+                )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-background/90 rounded-full p-3 shadow-lg">
                     <ZoomIn className="h-5 w-5 text-foreground" />
