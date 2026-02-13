@@ -75,7 +75,7 @@ interface TokenUrlData {
 async function validateTokenInMiddleware(
   token: string,
   secret: string
-): Promise<{ valid: boolean; categoryId?: number; urlData?: TokenUrlData; error?: string }> {
+): Promise<{ valid: boolean; categoryId?: number; urlData?: TokenUrlData; error?: string; ddc?: string | undefined }> {
   try {
     // 1. Décoder le token Base64 URL-safe en bytes
     const encryptedData = base64UrlDecodeToBytes(token);
@@ -111,7 +111,9 @@ async function validateTokenInMiddleware(
     // 6. Convertir en string et parser le JSON
     const decoder = new TextDecoder();
     const payloadStr = decoder.decode(decryptedBuffer);
-    const payload: { c: number; d: string; t?: number; data?: TokenUrlData } = JSON.parse(payloadStr);
+    const payload: {
+      ddc_is_v: string | undefined; c: number; d: string; t?: number; data?: TokenUrlData 
+    } = JSON.parse(payloadStr);
 
     // 7. Vérifier la date d'expiration
     if (!payload.d || !isDateValid(payload.d)) {
@@ -126,7 +128,7 @@ async function validateTokenInMiddleware(
     // 9. Extraire les données URL optionnelles (réponse Q1 pré-remplie)
     const urlData = payload.data && payload.data.id_reponse ? payload.data : undefined;
 
-    return { valid: true, categoryId: payload.c, urlData };
+    return { valid: true, categoryId: payload.c, urlData, ddc: payload.ddc_is_v };
   } catch (error) {
     // Erreur de déchiffrement = token invalide
     console.error('[Middleware] Token validation error:', error);
@@ -190,6 +192,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(INVALID_TOKEN_REDIRECT);
   }
 
+  
+
   // Token valide - réécrire vers la route réelle
   const routePrefix = '/' + pathParts[0]; // ex: /questionnaire
   const targetRoute = ROUTE_MAPPING[routePrefix] || '/';
@@ -200,6 +204,9 @@ export async function middleware(request: NextRequest) {
   rewriteUrl.pathname = targetRoute;
   rewriteUrl.searchParams.set('categoryId', String(result.categoryId));
   rewriteUrl.searchParams.set('token', token);
+  if (result.ddc) {
+    rewriteUrl.searchParams.set('ddc', result.ddc);
+  }
 
   // Ajouter les données URL si présentes (réponse Q1 pré-remplie)
   if (result.urlData) {

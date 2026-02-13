@@ -100,6 +100,7 @@ export interface DemandeInfoPayload {
   souhait_devis?: boolean;
   souhait_infos?: boolean;
   souhait_rdv?: boolean;
+  ddc_is_i?: string;
 
   // Demande IA
   demande_ia?: boolean;

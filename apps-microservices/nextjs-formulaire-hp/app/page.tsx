@@ -15,7 +15,6 @@ interface PageProps {
 export default async function Home({ searchParams }: PageProps) {
   // Récupérer les searchParams du middleware rewrite
   const params = await searchParams;
-
   // categoryId vient du token validé par le middleware
   // id_categorie vient du mode dev bypass
   const categoryId = params.categoryId || params.id_categorie;
@@ -23,6 +22,8 @@ export default async function Home({ searchParams }: PageProps) {
   const urlData = params.urlData;
   // token original pour la redirection après F5
   const token = params.token;
+  // token original pour la redirection après F5
+  const ddc = params.ddc;
 
   return (
     <Suspense fallback={null}>
@@ -30,6 +31,7 @@ export default async function Home({ searchParams }: PageProps) {
         initialCategoryId={typeof categoryId === 'string' ? categoryId : undefined}
         initialUrlData={typeof urlData === 'string' ? urlData : undefined}
         initialToken={typeof token === 'string' ? token : undefined}
+        initialDdc={typeof ddc === 'string' ? ddc : undefined}
       />
     </Suspense>
   );
