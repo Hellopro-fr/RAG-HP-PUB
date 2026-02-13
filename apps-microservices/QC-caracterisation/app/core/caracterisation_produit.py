@@ -2,6 +2,7 @@ import time
 import logging
 import asyncio
 import re
+import contextvars
 from typing import Dict, List, Any, Optional, Tuple
 
 from app.core.api_client import HelloProAPIClient, DeepSeek
@@ -19,6 +20,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+BATCH_SIZE = 5  # Nombre de produits traités en parallèle
+
+
 class CaracterisationProduitGenerator:
     """Générateur de caractérisation des produits via LLM"""
     
@@ -31,6 +35,9 @@ class CaracterisationProduitGenerator:
     
     ETAPE = "7"
     
+    # ContextVar pour identifier le produit en cours dans chaque tâche async
+    _current_product_id = contextvars.ContextVar('current_product_id', default=None)
+    
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
@@ -39,12 +46,42 @@ class CaracterisationProduitGenerator:
         self.reverse_mapping = {}  # {id_base: id_incremente}
         self.prompt_caracterisation = None  # Sera chargé lors du premier traitement
         self.prompt_repasse = None  # Sera chargé lors du premier traitement
+        # Buffer de logs par produit pour éviter l'entrelacement en mode parallèle
+        self._product_log_buffers: Dict[str, List[str]] = {}
     
     def _log(self, message: str):
-        """Écrit dans le fichier de tracking et les logs"""
-        if self.tracking_file:
-            utils.write_log(self.tracking_file, message)
-        logger.info(message)
+        """
+        Écrit dans le fichier de tracking et les logs.
+        En mode parallèle, bufferise les logs par produit pour éviter l'entrelacement.
+        """
+        product_id = self._current_product_id.get(None)
+        
+        if product_id is not None:
+            # Mode parallèle: bufferiser le message avec préfixe produit
+            prefixed = f"[P-{product_id}] {message}"
+            if product_id not in self._product_log_buffers:
+                self._product_log_buffers[product_id] = []
+            self._product_log_buffers[product_id].append(prefixed)
+            # Logger en temps réel dans la console (avec préfixe)
+            logger.info(prefixed)
+        else:
+            # Mode séquentiel (hors traitement produit): écriture directe
+            if self.tracking_file:
+                utils.write_log(self.tracking_file, message)
+            logger.info(message)
+    
+    def _flush_product_logs(self, product_id: str):
+        """
+        Écrit tous les logs bufferisés d'un produit d'un seul bloc dans le fichier de tracking.
+        Garantit que les logs d'un même produit restent groupés et lisibles.
+        """
+        if product_id in self._product_log_buffers:
+            logs = self._product_log_buffers.pop(product_id)
+            if self.tracking_file and logs:
+                # Écrire tout le bloc d'un coup
+                block = "\n".join(logs)
+                utils.write_log(self.tracking_file, block)
+
 
     async def _load_prompts(self, id_categorie: str):
         """Charge les 2 prompts (caractérisation et repasse) une seule fois au début"""
@@ -610,6 +647,124 @@ class CaracterisationProduitGenerator:
         
         return result, has_changed
 
+    async def _process_single_product(
+        self,
+        semaphore: asyncio.Semaphore,
+        produit: Dict[str, Any],
+        id_categorie: str,
+        nom_rubrique: str,
+        description_categorie: str,
+        caracteristiques_for_llm: List[Dict[str, Any]],
+        jeu_carac_dict: Dict[Any, Dict]
+    ) -> bool:
+        """
+        Traite un seul produit (caractérisation + repasse + vérification + sauvegarde).
+        Utilisé pour le traitement parallèle par batch.
+        
+        Args:
+            semaphore: Sémaphore pour limiter la concurrence
+            produit: Données du produit
+            id_categorie: ID de la catégorie
+            nom_rubrique: Nom de la rubrique
+            description_categorie: Description de la catégorie
+            caracteristiques_for_llm: Caractéristiques formatées pour le LLM
+            jeu_carac_dict: Dictionnaire des caractéristiques {id: carac}
+            
+        Returns:
+            True si le produit a été traité avec succès
+        """
+        async with semaphore:
+            id_produit = str(produit.get("id_produit", ""))
+            titre_produit = produit.get("titre", "")
+            description_produit = produit.get("description", "")
+            
+            # Activer le contexte produit pour bufferiser les logs
+            token = self._current_product_id.set(id_produit)
+            
+            try:
+                self._log(f"\n--- Produit: {id_produit} {titre_produit}---")
+                
+                # Étape 1: Caractérisation initiale
+                produit_caract = await self.caracterise_produit(
+                    id_categorie,
+                    nom_rubrique,
+                    id_produit,
+                    titre_produit,
+                    description_produit,
+                    caracteristiques_for_llm,
+                    description_categorie
+                )
+                
+                if produit_caract is None:
+                    self._log(f"Caractérisation échouée pour produit {id_produit}")
+                    raise Exception(f"Caractérisation échouée pour produit {id_produit}")
+                
+                # Nettoyer les valeurs nulles
+                produit_caract = self._clean_null_values(produit_caract)
+                
+                # Restaurer les IDs base avant vérification
+                # produit_caract = self._restore_base_ids(produit_caract, id_mapping)
+                
+                # Vérifier et corriger les IDs incohérents
+                verif_result = self._verify_caracteristiques_ids(jeu_carac_dict, produit_caract)
+                produit_caract = verif_result['produit_caract']
+                
+                if verif_result['has_change']:
+                    self._log("IDs corrigés après vérification")
+                
+                # Étape 2: Repasse si des caractéristiques trouvées
+                if produit_caract:
+                    # Construire le référentiel pour la repasse
+                    carac_referentiel = []
+                    for item in produit_caract:
+                        id_carac = item.get('id_caracteristique')
+                        if id_carac in jeu_carac_dict:
+                            carac_referentiel.append(jeu_carac_dict[id_carac])
+                    
+                    if carac_referentiel:
+                        produit_caract = await self.repasse_caracterisation(
+                            id_categorie,
+                            nom_rubrique,
+                            titre_produit,
+                            description_produit,
+                            produit_caract,
+                            carac_referentiel
+                        )
+                    
+                    # Vérification des caractéristiques textuelles après repasse
+                    produit_caract, verif_changed = await self._verify_textual_values(
+                        produit_caract,
+                        jeu_carac_dict,
+                        id_categorie
+                    )
+                    
+                    if verif_changed:
+                        self._log("Caractéristiques textuelles corrigées après vérification")
+                
+                # Sauvegarder le résultat
+                res_carac_produit = await self.api_client.post(
+                    "caracterisation",
+                    "produit",
+                    "save",
+                    {
+                        "id_categorie": id_categorie,
+                        "id_produit": id_produit,
+                        "caracteristiques": produit_caract
+                    }
+                )
+
+                if res_carac_produit == False:
+                    raise Exception(f"Erreur lors de la sauvegarde du produit {id_produit}")
+                
+                self._log(f"✅ Traité avec succès ({len(produit_caract) if produit_caract else 0} caractéristiques)")
+                
+                return True
+            
+            finally:
+                # Toujours flush les logs et reset le contexte, même en cas d'erreur
+                self._flush_product_logs(id_produit)
+                self._current_product_id.reset(token)
+
     async def generate_all_caracterisations(
         self,
         request: RequestProcessus
@@ -756,129 +911,84 @@ class CaracterisationProduitGenerator:
             )
         
         self._log(f"Produits à traiter: {len(produits)}")
+        self._log(f"Mode parallèle: {BATCH_SIZE} produits simultanés")
         
         processed_count = 0
+        error_count = 0
         
         # Initialiser done si nécessaire
         if "done" not in process_data:
             process_data["done"] = []
         
-        # Traiter chaque produit
-        for produit in produits:
-            # Vérifier le stopper
-            if utils.check_stopper(id_categorie):
-                raise Exception("Processus arrêté manuellement")
-            
-            id_produit = str(produit.get("id_produit", ""))
-            titre_produit = produit.get("titre", "")
-            description_produit = produit.get("description", "")
+        # Filtrer les produits déjà traités et invalides
+        produits_to_process = []
+        for produit in produits:            
+            id_produit = str(produit.get("id_produit", ""))            
             
             if not id_produit:
                 self._log("ID produit manquant")
                 continue
 
-            self._log(f"\n--- Produit: {id_produit} {titre_produit}---")
+            self._log(f"\n--- Produit: {id_produit}---")
             
             # Vérifier si déjà traité
             if id_produit in process_data["done"]:
-                self._log("Déjà traité")
+                self._log(f"Produit {id_produit} déjà traité, skip")
                 continue
+            produits_to_process.append(produit)
+        
+        self._log(f"Produits restants à traiter: {len(produits_to_process)}")
+        
+        # Sémaphore pour limiter la concurrence
+        semaphore = asyncio.Semaphore(BATCH_SIZE)
+        
+        # Traiter les produits par batch
+        for batch_start in range(0, len(produits_to_process), BATCH_SIZE):
+            # Vérifier le stopper entre chaque batch
+            if utils.check_stopper(id_categorie):
+                raise Exception("Processus arrêté manuellement")
             
-            try:
-                # Étape 1: Caractérisation initiale
-                produit_caract = await self.caracterise_produit(
-                    id_categorie,
-                    nom_rubrique,
-                    id_produit,
-                    titre_produit,
-                    description_produit,
-                    caracteristiques_for_llm,
-                    description_categorie
-                )
-                
-                if produit_caract is None:
-                    self._log("Caractérisation échouée")
-                    continue
-                
-                # Nettoyer les valeurs nulles
-                produit_caract = self._clean_null_values(produit_caract)
-                
-                # Restaurer les IDs base avant vérification
-                # produit_caract = self._restore_base_ids(produit_caract, id_mapping)
-                
-                # Vérifier et corriger les IDs incohérents
-                verif_result = self._verify_caracteristiques_ids(jeu_carac_dict, produit_caract)
-                produit_caract = verif_result['produit_caract']
-                
-                if verif_result['has_change']:
-                    self._log("IDs corrigés après vérification")
-                
-                # Étape 2: Repasse si des caractéristiques trouvées
-                if produit_caract:
-                    # Construire le référentiel pour la repasse
-                    carac_referentiel = []
-                    for item in produit_caract:
-                        id_carac = item.get('id_caracteristique')
-                        if id_carac in jeu_carac_dict:
-                            carac_referentiel.append(jeu_carac_dict[id_carac])
-                    
-                    if carac_referentiel:
-                        produit_caract = await self.repasse_caracterisation(
-                            id_categorie,
-                            nom_rubrique,
-                            titre_produit,
-                            description_produit,
-                            produit_caract,
-                            carac_referentiel
-                        )
-                    
-                    # Vérification des caractéristiques textuelles après repasse
-                    produit_caract, verif_changed = await self._verify_textual_values(
-                        produit_caract,
-                        jeu_carac_dict,
-                        id_categorie
-                    )
-                    
-                    if verif_changed:
-                        self._log("Caractéristiques textuelles corrigées après vérification")
-                
-                # Sauvegarder le résultat
-                res_carac_produit = await self.api_client.post(
-                    "caracterisation",
-                    "produit",
-                    "save",
-                    {
-                        "id_categorie": id_categorie,
-                        "id_produit": id_produit,
-                        "caracteristiques": produit_caract
-                    }
-                )
-
-                if res_carac_produit == False:
-                    raise Exception("Erreur lors de la sauvegarde du produit")
-                
-                processed_count += 1
-                
-            except Exception as e:
-                self._log(f"ERREUR produit {id_produit}: {str(e)}")
-                await self.api_client.post(
-                    "caracterisation",
-                    "mail",
-                    "error",
-                    {
-                        "id_categorie": id_categorie,
-                        "id_produit": id_produit,
-                        "etape": self.ETAPE,
-                        "error_message": str(e),
-                        "tracking_file": self.tracking_file
-                    }
-                )
-                raise Exception(f"ERREUR produit {id_produit}: {str(e)}")
+            batch = produits_to_process[batch_start:batch_start + BATCH_SIZE]
+            batch_num = (batch_start // BATCH_SIZE) + 1
+            total_batches = (len(produits_to_process) + BATCH_SIZE - 1) // BATCH_SIZE
+            self._log(f"\n{'='*30} BATCH {batch_num}/{total_batches} ({len(batch)} produits) {'='*30}")
             
-            # Marquer comme traité
-            process_data["done"].append(id_produit)
+            # Lancer le traitement parallèle du batch
+            tasks = [
+                self._process_single_product(
+                    semaphore=semaphore,
+                    produit=produit,
+                    id_categorie=id_categorie,
+                    nom_rubrique=nom_rubrique,
+                    description_categorie=description_categorie,
+                    caracteristiques_for_llm=caracteristiques_for_llm,
+                    jeu_carac_dict=jeu_carac_dict
+                )
+                for produit in batch
+            ]
             
-            # Mettre à jour le processus
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Analyser les résultats du batch
+            batch_processed = 0
+            batch_errors = []
+            
+            for produit, result in zip(batch, results):
+                id_produit = str(produit.get("id_produit", ""))
+                
+                if isinstance(result, Exception):
+                    error_count += 1
+                    batch_errors.append((id_produit, result))
+                    self._log(f"[CAT-{id_categorie}] ❌ Produit {id_produit} en erreur: {str(result)}")
+                else:
+                    # Succès: marquer comme traité
+                    process_data["done"].append(id_produit)
+                    processed_count += 1
+                    batch_processed += 1
+            
+            self._log(f"Batch {batch_num} terminé: {batch_processed} OK, {len(batch_errors)} erreurs")
+            
+            # Mettre à jour le processus après chaque batch
             await self.api_client.post(
                 "caracterisation",
                 "process",
@@ -889,6 +999,23 @@ class CaracterisationProduitGenerator:
                     "process_data": process_data
                 }
             )
+            
+            # Si des erreurs dans ce batch, envoyer le mail d'erreur et lever l'exception
+            if batch_errors:
+                first_error_id, first_error = batch_errors[0]
+                error_summary = "; ".join([f"Produit {eid}: {str(err)}" for eid, err in batch_errors])
+                await self.api_client.post(
+                    "caracterisation",
+                    "mail",
+                    "error",
+                    {
+                        "id_categorie": id_categorie,
+                        "etape": self.ETAPE,
+                        "error_message": error_summary,
+                        "tracking_file": self.tracking_file
+                    }
+                )
+                raise Exception(f"ERREUR batch {batch_num}: {error_summary}")
         
         self._log("\n" + "=" * 50)
         self._log("CARACTÉRISATION TERMINÉE")
