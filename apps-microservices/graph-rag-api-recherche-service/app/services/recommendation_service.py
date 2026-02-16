@@ -1297,7 +1297,6 @@ class RecommendationService:
                 zone_score = rec.get("zone_score", 1.0)
                 etat_score = rec.get("etat_score", 1.0)
                 typo_score = rec.get("typo_score", 1.0)
-                info_soc = rec.get("info_soc", {})
                 carac_score = rec.get("global_score", 0.0)
 
                 caracteristiques = convert_to_caracteristique_matching(
