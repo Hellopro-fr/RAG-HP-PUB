@@ -29,6 +29,7 @@ class UnitNormalizationService:
             # --- FIX 3: Define units found in DLQ ---
             cls._instance.ureg.define("cheval = 735.49875 * watt = ch")
             cls._instance.ureg.define("chevaux = count")
+            cls._instance.ureg.define("segments = count = segment")
             cls._instance.ureg.define("mètres = meter")
             cls._instance.ureg.define("Litres = liter")
             cls._instance.ureg.define("Volts = volt")
@@ -88,6 +89,8 @@ class UnitNormalizationService:
                 "unite": "count",
                 "nb": "count",
                 "chevaux": "count",
+                "segments": "count",
+                "segment": "count",
                 # Sound
                 "db": "sound_level",
                 "dba": "sound_level",
@@ -231,6 +234,8 @@ class UnitNormalizationService:
                 "superficie": "area",
                 "angle": "angle",
                 "rotation": "angle",
+                "production horaire": "volume / time",
+                "déverrouillage": "count",
             }
 
             cls._instance.CANONICAL_UNITS = {
@@ -296,6 +301,9 @@ class UnitNormalizationService:
         if not all([label, value is not None]):
             return {}
 
+        # --- FIX: Save original unit for dimension lookup before sanitization ---
+        original_unit = unit
+
         # --- FIX: Sanitize units that Pint misinterprets ---
         # Specifically, dB(A) is interpreted as decibel * ampere because 'A' = ampere.
         if unit and unit.strip().lower() == "db(a)":
@@ -321,7 +329,7 @@ class UnitNormalizationService:
             elif unit_stripped == "m3":
                 unit = "m**3"
 
-        dimension = self._get_dimension(unit, label)
+        dimension = self._get_dimension(original_unit, label)
 
         if not dimension:
             return {}
