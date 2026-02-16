@@ -80,6 +80,7 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
         phone    : info.tel || "",
         civility: info.cv || "",
         company  : info.societe || formData.company || "",
+        id_acheteur: info.id || undefined,
       };
             
     }else{
@@ -92,6 +93,7 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
         phone      : "",
         countryCode: formData.countryCode || "+33",
         id_pays_tel: formData.id_pays_tel || 1,
+        id_acheteur: undefined,
       };
     }
 

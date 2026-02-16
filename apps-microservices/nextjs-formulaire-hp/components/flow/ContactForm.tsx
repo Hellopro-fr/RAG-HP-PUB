@@ -102,6 +102,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
         lastName : info.nom || "",
         phone    : info.tel || "",
         civility: info.cv || "",
+        id_acheteur: info.id || undefined,
       };
             
     }else{
@@ -114,6 +115,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
         phone      : "",
         countryCode: formData.countryCode || "+33",
         id_pays_tel: formData.id_pays_tel || 1,
+        id_acheteur: undefined,
       };
     }
 
