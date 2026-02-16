@@ -1333,6 +1333,7 @@ class RecommendationService:
                             caracteristique=convert_to_caracteristique_matching(
                                 entry.get("details", []), top_final_score
                             ),
+                            info_produit=entry.get("product_data", {}),
                             coeff_geo=float(top_zone_score),
                             coeff_type_frns=float(top_typo_score),
                             coeff_etat_score=float(top_etat_score),
