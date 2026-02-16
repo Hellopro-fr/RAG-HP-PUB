@@ -13,11 +13,6 @@ interface FunnelContext {
   'product.category5'?: string;
 }
 
-interface QuestionData {
-  question_id?: number;
-  question_title?: string;
-  total_questions?: number;
-}
 
 
 // =============================================================================
@@ -204,8 +199,8 @@ export function trackQuoteFunnel(
     rubrique_id: funnelContext.rubrique_id,
     'product.category5': funnelContext['product.category5'],
 
-    // Type de parcours (null si pas encore déterminé)
-    flow_type: currentFlowType,
+    // Type de parcours (seulement si défini)
+    ...(currentFlowType && { flow_type: currentFlowType }),
 
     // Identifiants
     user_id: userId,
@@ -237,17 +232,11 @@ export function trackFunnelStart(context?: FunnelContext) {
 /**
  * Track l'affichage d'une question
  */
-export function trackQuestionView(
-  questionIndex: number,
-  data?: QuestionData
-) {
+export function trackQuestionView(questionIndex: number) {
   currentStepIndex = questionIndex + 1; // +1 car funnel-start est à 0
   const stepName = questionIndex === 0 ? '1ere-question' : `${questionIndex + 1}eme-question`;
 
-  trackQuoteFunnel(currentStepIndex, stepName, 'question', {
-    question_id: data?.question_id,
-    question_title: data?.question_title,
-  });
+  trackQuoteFunnel(currentStepIndex, stepName, 'question');
 }
 
 /**
@@ -298,7 +287,7 @@ export function trackProductSelectionChange(
   action: 'ajouter' | 'retirer',
   totalSelected: number
 ) {
-  // Vérifier si c'est la première action de chaque type pour cet utilisateur dans la session
+  // Vérifier si c'est la première action de ce type pour cet utilisateur dans la session
   const isFirstAdd = action === 'ajouter' && isFirstView('product_selection_ajouter');
   const isFirstRemove = action === 'retirer' && isFirstView('product_selection_retirer');
 
@@ -306,8 +295,10 @@ export function trackProductSelectionChange(
     product_id: productId,
     action,
     total_selected: totalSelected,
-    is_first_add: isFirstAdd,
-    is_first_remove: isFirstRemove,
+    // Envoyer is_first_add uniquement si true (premier ajout)
+    ...(isFirstAdd && { is_first_add: true }),
+    // Envoyer is_first_remove uniquement si true (premier retrait)
+    ...(isFirstRemove && { is_first_remove: true }),
   });
 }
 

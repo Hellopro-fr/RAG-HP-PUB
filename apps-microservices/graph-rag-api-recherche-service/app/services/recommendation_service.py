@@ -7,6 +7,7 @@ from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
     MatchingPayload,
+    MatchingPayloadIdProduit,
     MatchingResponse,
     Produit,
     CaracteristiqueMatching,
@@ -556,7 +557,7 @@ class RecommendationService:
 
     async def get_products_by_caracteristique_filters(
         self,
-        request: MatchingPayload,
+        request: MatchingPayloadIdProduit,
         target_product_id: Optional[str] = None,
     ) -> MatchingResponse:
         """
@@ -565,6 +566,9 @@ class RecommendationService:
         Includes geographic zone scoring based on MetadonneUtilisateurs.
         """
         start_time = time.perf_counter()
+
+        if request.id_produit is not None:
+            target_product_id = str(request.id_produit)
 
         norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_caracteristique(request)
@@ -582,25 +586,34 @@ class RecommendationService:
         user_cp = user_meta.cp if user_meta else None
         user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
         user_id_pays = user_meta.id_pays if user_meta else None
+        user_typologie = user_meta.typologie if user_meta else None
 
         z_unmatched = 0.2
         e_unmatched = 0.8
         g_unknown_score = 0.8
         c_unknown_score = 0.5
 
-        # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
-        cypher_query = """
-        // --- STEP 1: ANCHOR TRAVERSAL by CaracteristiqueTechnique ---
-        UNWIND $filters AS f
-        MATCH (pc:CaracteristiqueTechnique)
-        WHERE toString(pc.id_source_caracteristique) = f.cid
-        MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
-        
-        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
-          AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
-        
-        WITH DISTINCT p, $filters AS active_filters
-        
+        # Build Cypher Query Step 1 (Dynamic)
+        if target_product_id:
+            query_step_1 = """
+             MATCH (p:Produit)
+             WHERE toString(p.id) = $target_product_id
+             WITH p, $filters AS active_filters
+             """
+        else:
+            query_step_1 = """
+             UNWIND $filters AS f
+             MATCH (pc:CaracteristiqueTechnique)
+             WHERE toString(pc.id_source_caracteristique) = f.cid
+             MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
+             
+             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+             
+             WITH DISTINCT p, $filters AS active_filters
+             """
+
+        # --- STEP 2: SCORING ---
+        query_step_2 = """
         // --- STEP 2: SCORING by CaracteristiqueTechnique with CONTINUOUS SCORING ---
         UNWIND active_filters AS f
         
@@ -1006,115 +1019,112 @@ class RecommendationService:
                  couvre_tous: r_zone.couvre_tous,
                  couvre: r_zone.couvre,
                  ne_couvre_pas: r_zone.ne_couvre_pas
-             }) AS zone_rels
+             }) AS zone_rels,
+             { id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie } AS info_soc
         
         // Calculate zone_score based on the algorithm:
         // 1. If has pays relation:
-        //    a. Check partiel:
-        //       - If partiel=true: full algorithm (couvre_tous + categorie + dept-level zone check)
-        //       - If partiel=false: only check couvre_tous + categorie (no dept drill-down)
-        // 2. If no pays relation but has zonegeographique relation: same logic as above
+        //    a. First check if user's id_pays matches any pays
+        //    b. If match found, check partiel:
+        //       - partiel=true: drill into ZoneGeo by dept, then check zone couvre_tous/couvre
+        //       - partiel=false: check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas for categorie
+        // 2. If no pays relation but has zonegeographique relation: check dept then couvre_tous/couvre
         // 3. If neither exists: score=g_unknown_score
-        WITH p, f, details, global_score, pays_rels, zone_rels,
+        WITH p, info_soc, details, global_score, pays_rels, zone_rels,
              CASE
                  // Case 1: Has pays relations
                  WHEN size(pays_rels) > 0 AND pays_rels[0].pays IS NOT NULL THEN
                      CASE
-                         // Case 1a: partiel=true -> full algorithm (couvre_tous + categorie + dept check)
-                         WHEN ANY(pr IN pays_rels WHERE pr.partiel = true) THEN
+                         // First check if user_id_pays is provided
+                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
+                         // Check if user's country matches any COUVRE_PAYS
+                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN
+                             // Country matched - now check partiel on the matched pays relation
                              CASE
-                                 // couvre_tous=false -> check categorie, then dept
-                                 WHEN ANY(pr IN pays_rels WHERE pr.partiel = true AND pr.couvre_tous = false) THEN
+                                 // Case 1a: partiel=true -> drill into ZoneGeo by dept
+                                 WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.partiel = true) THEN
                                      CASE
-                                         // Check if id_categorie is in couvre list
-                                         WHEN ANY(pr IN pays_rels WHERE pr.partiel = true AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN
-                                             // Now check if user_dept matches any zone id_dept
+                                         WHEN $user_dept IS NULL THEN $g_unknown_score
+                                         // Check if user_dept matches any COUVRE_ZONE
+                                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN
+                                             // Dept matched - check couvre_tous on the matched zone relation
                                              CASE
-                                                 WHEN $user_dept IS NULL THEN $g_unknown_score
-                                                 WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN 1.0
+                                                 // Find the matched zone and check its couvre_tous
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) THEN 1.0
+                                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
                                                  ELSE $g_unknown_score
                                              END
-                                         // Check if id_categorie is in ne_couvre_pas list
-                                         WHEN ANY(pr IN pays_rels WHERE pr.partiel = true AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
-                                         // id_categorie not in either list
-                                         ELSE $g_unknown_score
-                                     END
-                                 // couvre_tous=true -> check only pays match
-                                 ELSE
-                                     CASE
-                                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
-                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN 1.0
+                                         // Dept not covered
                                          ELSE $z_unmatched
                                      END
-                             END
-                         // Case 1b: partiel=false -> only check couvre_tous + categorie (no dept drill-down)
-                         ELSE
-                             CASE
-                                 // couvre_tous=true -> just match by id_pays
-                                 WHEN ANY(pr IN pays_rels WHERE pr.couvre_tous = true) THEN
-                                     CASE
-                                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
-                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN 1.0
-                                         ELSE $z_unmatched
-                                     END
-                                 // couvre_tous=false -> only check categorie (no dept)
+                                 // Case 1b: partiel=false -> check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas
                                  ELSE
                                      CASE
-                                         WHEN ANY(pr IN pays_rels WHERE pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN 1.0
-                                         WHEN ANY(pr IN pays_rels WHERE pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
+                                         // couvre_tous=true -> covers all categories in this country
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = true) THEN 1.0
+                                         // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN 1.0
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
                                          ELSE $g_unknown_score
                                      END
                              END
+                         // User's country not in any COUVRE_PAYS
+                         ELSE $z_unmatched
                      END
                  // Case 2: No pays relation but has zonegeographique relation
                  WHEN size(zone_rels) > 0 AND zone_rels[0].zone IS NOT NULL THEN
                      CASE
-                         // Case 2a: couvre_tous=false -> check categorie in couvre/ne_couvre_pas, then check dept
-                         WHEN ANY(zr IN zone_rels WHERE zr.couvre_tous = false) THEN
+                         WHEN $user_dept IS NULL THEN $g_unknown_score
+                         // Check if user_dept matches any COUVRE_ZONE
+                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN
+                             // Dept matched - check couvre_tous on the matched zone relation
                              CASE
-                                 // Check if id_categorie is in couvre list
-                                 WHEN ANY(zr IN zone_rels WHERE zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN
-                                     // Now check if user_dept matches zone id_dept
-                                     CASE
-                                         WHEN $user_dept IS NULL THEN $g_unknown_score
-                                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN 1.0
-                                         ELSE $g_unknown_score
-                                     END
-                                 // Check if id_categorie is in ne_couvre_pas list
-                                 WHEN ANY(zr IN zone_rels WHERE zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
-                                 // id_categorie not in either list
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) THEN 1.0
+                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
                                  ELSE $g_unknown_score
                              END
-                         // Case 2b: couvre_tous=true -> check only dept match
-                         ELSE
-                             CASE
-                                 WHEN $user_dept IS NULL THEN $g_unknown_score
-                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept)) THEN 1.0
-                                 ELSE $z_unmatched
-                             END
+                         // Dept not covered
+                         ELSE $z_unmatched
                      END
                  // Case 3: Neither exists
                  ELSE $g_unknown_score
              END AS zone_score
 
         // Calculate score by Etat and affichage fournisseur
-        WITH p, f, details, global_score, zone_score,
+        WITH p, info_soc, details, global_score, zone_score,
              CASE
-                WHEN (f.id_etat = 1 OR (f.id_etat = 2 AND f.id_affichage = 1)) THEN 1.0
+                WHEN ((info_soc.id_etat = '1') OR ((info_soc.id_etat = '2') AND (info_soc.id_affichage = '1'))) THEN 1.0
                 ELSE $e_unmatched
              END AS etat_score
         
-        // Calculate final_score = global_score * zone_score * etat_score
+        // Calculate typologie score
+        WITH p, details, global_score, zone_score, etat_score, info_soc,
+             CASE
+                WHEN etat_score = 1.0 THEN
+                    CASE
+                        WHEN $user_typologie IS NOT NULL AND ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
+                        ELSE 0.2
+                    END
+                ELSE 1.0
+             END AS typo_score
+        
+        // Calculate final_score = global_score * zone_score * etat_score * typo_score
         // Filter out products with negative final_score
-        WITH p, details, global_score, zone_score, etat_score,
-             global_score * zone_score * etat_score AS final_score
-        WHERE final_score >= 0
-        WITH p, details, global_score, zone_score, etat_score, final_score
+        // forcer zone_geo à 1
+        // global_score * zone_score * etat_score * typo_score AS final_score
+        WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
+            global_score * zone_score * etat_score * typo_score AS final_score
+        WHERE final_score >= 0 OR $target_product_id IS NOT NULL
+        WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         LIMIT $top_k + 4
         
         // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, final_score: final_score}) AS all_products
+        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_products
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
@@ -1130,24 +1140,28 @@ class RecommendationService:
         LIMIT 4
         
         // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score
+        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
+        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
         WITH all_products, collect({
             product_data: top_product_data,
             score: top_score,
             details: top_details,
             zone_score: top_zone_score,
             global_score: top_global_score,
-            etat_score: top_etat_score
+            etat_score: top_etat_score,
+            typo_score: top_typo_score,
+            info_soc: top_info_soc
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
         WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
         
-        UNWIND filtered_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.final_score AS final_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, final_score, top_p
+        UNWIND (CASE WHEN size(filtered_products) = 0 THEN [null] ELSE filtered_products END) AS prod
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
         """
+
+        cypher_query = query_step_1 + query_step_2
 
         # Determine projection
         if request.champs_sortie:
@@ -1171,26 +1185,21 @@ class RecommendationService:
                 str(request.id_categorie) if request.id_categorie is not None else None
             ),
             "top_k": int(request.top_k),
-            "target_product_id": target_product_id,
+            "target_product_id": (
+                str(f"""id_produit_{request.id_produit}""")
+                if request.id_produit is not None
+                else None
+            ),
             "blocked_val": blocked_val,
             "different_val": different_val,
             "user_dept": user_dept,
-            "user_id_pays": user_id_pays,
+            "user_id_pays": str(user_id_pays) if user_id_pays is not None else None,
             "z_unmatched": z_unmatched,
             "e_unmatched": e_unmatched,
             "g_unknown_score": g_unknown_score,
             "c_unknown_score": c_unknown_score,
+            "user_typologie": user_typologie,
         }
-
-        # Debug: Log parameters
-        logging.info("📝 Caracteristique filter params:")
-        for key, value in params.items():
-            if key not in ["filters", "weights"]:
-                logging.info(f"   {key}: {value} (type: {type(value).__name__})")
-            else:
-                logging.info(
-                    f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>"
-                )
 
         try:
             query_start = time.perf_counter()
@@ -1297,7 +1306,15 @@ class RecommendationService:
                 final_score = rec.get("final_score", 0.0)
                 zone_score = rec.get("zone_score", 1.0)
                 etat_score = rec.get("etat_score", 1.0)
+                typo_score = rec.get("typo_score", 1.0)
+                info_soc = rec.get("info_soc", {})
                 carac_score = rec.get("global_score", 0.0)
+
+                if etat_score < 1.0:
+                    logging.warning(
+                        f"⚠️ [DEBUG] Low etat_score ({etat_score}) for product {product_data.get('id_produit')}. "
+                        f"Fournisseur info: {info_soc}"
+                    )
 
                 caracteristiques = convert_to_caracteristique_matching(
                     details, final_score
@@ -1309,7 +1326,7 @@ class RecommendationService:
                     score=float(final_score),
                     caracteristique=caracteristiques,
                     coeff_geo=float(zone_score),
-                    coeff_type_frns=1.0,  # Default, can be computed from fournisseur type
+                    coeff_type_frns=float(typo_score),
                     coeff_etat_score=float(etat_score),
                     coeff_caracteristique=float(carac_score),
                 )
@@ -1324,6 +1341,7 @@ class RecommendationService:
                         top_zone_score = entry.get("zone_score", 1.0)
                         top_final_score = entry.get("score", 0.0)
                         top_etat_score = entry.get("etat_score", 1.0)
+                        top_typo_score = entry.get("typo_score", 1.0)
                         top_carac_score = entry.get("global_score", 0.0)
                         produit = Produit(
                             rang=idx + 1,
@@ -1333,7 +1351,7 @@ class RecommendationService:
                                 entry.get("details", []), top_final_score
                             ),
                             coeff_geo=float(top_zone_score),
-                            coeff_type_frns=1.0,
+                            coeff_type_frns=float(top_typo_score),
                             coeff_etat_score=float(top_etat_score),
                             coeff_caracteristique=float(top_carac_score),
                         )
@@ -1341,7 +1359,8 @@ class RecommendationService:
 
                 # Build liste_produit
                 for idx, rec in enumerate(results):
-                    liste_produit.append(build_produit(rec, idx + 1))
+                    if rec.get("product_data"):
+                        liste_produit.append(build_produit(rec, idx + 1))
 
             total_time = time.perf_counter() - start_time
             return MatchingResponse(

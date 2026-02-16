@@ -113,19 +113,44 @@ function objectToFormData(obj: Record<string, unknown>): FormData {
 
 /**
  * Envoie une demande d'information pour UN produit
+ * Gère l'envoi avec ou sans pièces jointes (fichiers)
  */
 async function envoyerDemandeUnique(
   payload: DemandeInfoPayload
 ): Promise<DemandeInfoResponse> {
-  const phpPayload = JSON.stringify(payload);  
   try {
-    const response = await fetch(`${getApiBasePath()}/api/demande-info`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: phpPayload,
-    });
+    const hasFiles = payload.files && payload.files.length > 0;
+
+    let response: Response;
+
+    if (hasFiles) {
+      // Avec fichiers : utiliser FormData (multipart/form-data)
+      const formData = new FormData();
+
+      // Ajouter les fichiers avec la clé 'filepond' (format attendu par PHP)
+      payload.files!.forEach((file) => {
+        formData.append('filepond', file, file.name);
+      });
+
+      // Créer une copie du payload sans les fichiers pour l'envoi JSON
+      const { files, ...payloadWithoutFiles } = payload;
+      formData.append('payload', JSON.stringify(payloadWithoutFiles));
+
+      response = await fetch(`${getApiBasePath()}/api/demande-info`, {
+        method: 'POST',
+        // Ne pas définir Content-Type - le navigateur le fait automatiquement avec boundary
+        body: formData,
+      });
+    } else {
+      // Sans fichiers : envoi JSON classique
+      response = await fetch(`${getApiBasePath()}/api/demande-info`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);

@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
     }
 
     const url = new URL(URL_API_MATCHING);
-    console.log('Calling API_MATCHING API:', url.toString());    
     
     // Reconstruction du payload avec les bons types
     const payload = {

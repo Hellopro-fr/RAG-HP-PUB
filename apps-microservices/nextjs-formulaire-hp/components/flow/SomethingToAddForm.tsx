@@ -36,7 +36,7 @@ const STEPS = [
 
 const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
 
-   const {
+  const {    
     setContactData,
     files: filesStore,
     addFilesStore,
@@ -104,10 +104,10 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
   }, [formData.email]);
 
     // Dynamic buyer check via API
-  const { data: buyerCheckResult } = useBuyerCheck(
+  const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
     {
       email     : formData.email,
-      rubriqueId: '2001661',
+      rubriqueId: categoryId?.toString(),
     },
     isEmailValid
   );
@@ -154,7 +154,8 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
     }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
 
   // Show additional fields only if email is valid and not an existing buyer
-  const showAdditionalFields = isEmailValid && !isKnownBuyer;
+  // AND we are not currently checking (to avoid flickering)
+  const showAdditionalFields = isEmailValid && !isKnownBuyer && !isCheckingBuyer;
 
   // Form is valid only if civility is selected when additional fields are shown
   const isFormValid = !showAdditionalFields || !!formData.civility;

@@ -283,6 +283,10 @@ class MatchingPayload(BaseModel):
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
 
 
+class MatchingPayloadIdProduit(MatchingPayload):
+    id_produit: Optional[int] = Field(None, description="Identifiant du produit")
+
+
 """ 
 Modèles pour le output : Réponse du matching de produits
  """
@@ -351,3 +355,27 @@ class MatchingResponse(BaseModel):
         ..., description="Temps pris pour effectuer le matching en secondes"
     )
     # alternative_matching: List[Produit] = Field(default_factory  = list, description = "Liste d'alternatives si applicable")
+
+
+class PaysCouverture(BaseModel):
+    id_pays: str = Field(..., description="Identifiant du pays")
+    nom_pays: str = Field(..., description="Nom du pays")
+    couvre_partiel: bool = Field(
+        ...,
+        description="Indique si le fournisseur couvre partiellement le pays (True) ou totalement (False)",
+    )
+
+
+class DepartementCouverture(BaseModel):
+    id_dept: str = Field(..., description="Identifiant du département")
+    nom_dept: str = Field(..., description="Nom du département")
+
+
+class FournisseurGeoResponse(BaseModel):
+    pays: List[PaysCouverture] = Field(
+        default_factory=list, description="Liste des pays couverts par le fournisseur"
+    )
+    departements: List[DepartementCouverture] = Field(
+        default_factory=list,
+        description="Liste des départements couverts par le fournisseur",
+    )

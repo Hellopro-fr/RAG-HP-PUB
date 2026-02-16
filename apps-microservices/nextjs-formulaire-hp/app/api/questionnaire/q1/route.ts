@@ -18,7 +18,6 @@ export async function POST(request: NextRequest) {
     }
 
     const url = new URL(URL_API_QUESTION);
-    console.log('Calling Questionnaire Q1 API:', url.toString());    
     
     const payloadQ1 = {
       etape: "question",
