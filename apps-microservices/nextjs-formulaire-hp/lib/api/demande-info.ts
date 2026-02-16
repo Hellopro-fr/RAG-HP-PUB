@@ -170,12 +170,12 @@ async function envoyerDemandeUnique(
     try {
       const data = JSON.parse(text);
       return {
-        success: true,
+        success: false,
         ...data,
       };
     } catch {
       return {
-        success: true,
+        success: false,
         redirect_url: text.trim(),
       };
     }

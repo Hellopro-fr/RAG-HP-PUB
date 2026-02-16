@@ -525,7 +525,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
 
           {leadSubmission.isError && (
             <p className="text-center text-sm text-destructive">
-              Une erreur est survenue. Veuillez réessayer.
+              Une erreur est survenue. Veuillez réessayer plus tard.
             </p>
           )}
         </form>

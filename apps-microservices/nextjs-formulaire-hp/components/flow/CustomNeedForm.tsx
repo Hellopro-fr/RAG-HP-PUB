@@ -600,12 +600,27 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
               {/* Submit button */}
               <button
                 type="submit"
-                disabled={!isFormValid}
+                disabled={!isFormValid || leadSubmission.isPending}
                 className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Send className="h-5 w-5" />
-                Envoyer ma demande
+                {leadSubmission.isPending ? (
+                  <>
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent-foreground border-t-transparent" />
+                    Envoi en cours...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-5 w-5" />
+                    Envoyer ma demande
+                  </>
+                )}
               </button>
+
+              {leadSubmission.isError && (
+                <p className="text-center text-sm text-destructive">
+                  Une erreur est survenue. Veuillez réessayer plus tard.
+                </p>
+              )}
             </form>
           </>
         )}
