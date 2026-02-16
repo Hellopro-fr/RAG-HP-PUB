@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // const BASE_URL = process.env.HELLOPRO_API_URL || 'https://www.hellopro.fr';
 
 const BASE_URL         = 'https://api.hellopro.eu';
-const URL_API_MATCHING = `${BASE_URL}/graphdebug-service/produits/matching`;
+const URL_API_MATCHING = `${BASE_URL}/graph-service/produits/matching`;
 
 export async function POST(request: NextRequest) {
   try {
