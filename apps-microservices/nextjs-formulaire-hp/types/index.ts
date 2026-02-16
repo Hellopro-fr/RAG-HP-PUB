@@ -47,6 +47,7 @@ export interface ProfileData {
   siret      ?: string;
   countryID  ?: number;
   naf        ?: string;
+  address     ?: string;
 }
 
 export interface PostalCodeCity {

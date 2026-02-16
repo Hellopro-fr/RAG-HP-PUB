@@ -222,6 +222,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
           data.siren       = selectedCompany?.siren;
           data.siret       = selectedCompany?.siret;
           data.naf         = selectedCompany?.naf;
+          data.address     = selectedCompany?.address;
         }
         info_datalayer = 'pro_france';
         break;

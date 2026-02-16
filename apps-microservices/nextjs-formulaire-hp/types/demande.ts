@@ -43,7 +43,7 @@ export interface AcheteurData {
   id_cartegie?: string;
 
   // Adresse
-  adresse?: string;
+  address?: string;
   code_postal: string;
   ville: string;
   pays: number;
