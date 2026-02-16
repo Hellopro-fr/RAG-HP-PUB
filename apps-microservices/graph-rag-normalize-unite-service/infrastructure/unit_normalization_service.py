@@ -296,6 +296,11 @@ class UnitNormalizationService:
         if unit and unit.strip().lower() == "db(a)":
             unit = "dBA"
 
+        # --- FIX: Pint interprets 'tr/min' as 'tr' divided by 'min', but 'tr' is undefined.
+        # Replace with 'rpm' which Pint understands natively.
+        if unit and unit.strip().lower() in ("tr/min", "trs/min"):
+            unit = "rpm"
+
         # --- FIX: Normalize unicode superscripts ---
         if unit:
             unit = unit.replace("³", "3").replace("²", "2")
