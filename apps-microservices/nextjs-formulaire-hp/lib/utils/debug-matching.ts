@@ -49,6 +49,55 @@ interface FlowStorage {
   };
 }
 
+interface FournisseurPays {
+  id_pays: number;
+  nom_pays: string;
+  couvre_partiel: boolean;
+}
+
+interface FournisseurDepartement {
+  id_dept: string;
+  nom_dept?: string;
+}
+
+interface FournisseurData {
+  pays?: FournisseurPays[];
+  departements?: FournisseurDepartement[];
+}
+
+/**
+ * Récupère les informations du fournisseur via l'API
+ */
+async function getFournisseur(id_produit: string): Promise<FournisseurData | null> {
+  try {
+    console.log('Recuperation fournisseur pour ID:', id_produit);
+
+    const response = await fetch(
+      `/formulaire/api/matching_fournisseur/produit/${id_produit}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    console.log('Response status:', response.status);
+
+    if (!response.ok) {
+      throw new Error(`Erreur HTTP: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Donnees recues:', data);
+
+    return data;
+  } catch (error) {
+    console.error("Erreur lors de l'appel API :", error);
+    return null;
+  }
+}
+
 function debugInfo(): void {
   const storageData = sessionStorage.getItem('flow-storage');
   if (!storageData) {
@@ -264,9 +313,8 @@ function debugInfo(): void {
           <td style="color:#0ff" title="${c.id_caracteristique}">${c.id_caracteristique}</td>
           <td style="padding:2px;color:#0ff;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${libelle}">- ${libelle}</td>
           <td style="text-align:right;padding:2px;color:${barColor}">${c.bareme}</td>
+          <td style="text-align:right;padding:2px">${c.poids ?? '-'}</td>
           <td style="text-align:right;padding:2px">${c.poids_question ?? '-'}</td>
-          <td style="text-align:right;padding:2px">${c.coeff_caracteristique ?? '-'}</td>
-          <td style="text-align:right;padding:2px">${c.coeff_etat_score ?? '-'}</td>
         </tr>
       `;
     }).join('');
@@ -279,7 +327,7 @@ function debugInfo(): void {
         <div><span style="color:#888">matchScore: </span><span style="color:#ff0">${product.matchScore}%</span></div>
         <div><span style="color:#888">isRecommended: </span>${product.isRecommended}</div>
         <div><span style="color:#888">coeff_geo: </span>${debug.coeff_geo ?? 'N/A'}</div>
-        <div><span style="color:#888">Typologie acheteur: </span>${debug.coeff_type_frns ?? 'N/A'}</div>
+        <div><span style="color:#888">coeff_type_frns: </span>${debug.coeff_type_frns ?? 'N/A'}</div>
       </div>
       <div style="color:#fff;font-weight:bold;margin:6px 0 4px;border-bottom:1px solid #333;padding-bottom:2px">
         Caracteristiques (${chars.length})
@@ -289,9 +337,8 @@ function debugInfo(): void {
           <th style="text-align:left">Id</th>
           <th style="text-align:left;padding:2px;width:35%">|Carac</th>
           <th style="text-align:right;padding:2px">|bareme</th>
+          <th style="text-align:right;padding:2px">|poids</th>
           <th style="text-align:right;padding:2px">|poids_q</th>
-          <th style="text-align:right;padding:2px">|coeff_car</th>
-          <th style="text-align:right;padding:2px">|coeff_etat</th>
         </tr>
         ${charRows}
       </table>
@@ -309,7 +356,7 @@ function debugInfo(): void {
   // ========================================
   // FONCTION: Injecter debug dans modal
   // ========================================
-  function injectDebugInModal(modal: Element, productName: string): void {
+  async function injectDebugInModal(modal: Element, productName: string): Promise<void> {
     const product = allProducts.find(p => p.productName === productName);
     if (!product) {
       console.error('Produit non trouve:', productName);
@@ -339,7 +386,6 @@ function debugInfo(): void {
     `;
 
     // Calculs des scores
-    const totalPoids = chars.reduce((total, c) => total + (c.poids ?? 0), 0);
     const tousLesPoidsQuestion = chars.map(c => c.poids_question).filter((pq): pq is number => pq !== undefined);
     const totalPoidsQuestion = [...new Set(tousLesPoidsQuestion)].reduce((a, b) => a + b, 0);
 
@@ -348,6 +394,14 @@ function debugInfo(): void {
     chars.forEach(c => {
       tabProduiBaremePoids[c.id_caracteristique] = (c.bareme ?? 0) * (c.poids ?? 0);
     });
+
+    // Récupérer les données du fournisseur
+    let data_fournisseur: FournisseurData | null = null;
+    try {
+      data_fournisseur = await getFournisseur(product.id);
+    } catch (error) {
+      console.warn('Impossible de recuperer les donnees fournisseur');
+    }
 
     // Grouper les caracteristiques par poids_question
     const groupedByPoidsQuestion: Record<number, CharacteristicDebug[]> = chars.reduce((acc, c) => {
@@ -426,20 +480,95 @@ function debugInfo(): void {
       `;
     });
 
+    // Préparer les informations du fournisseur pour l'affichage
+    let fournisseurInfo = '';
+    if (data_fournisseur) {
+      console.log('Donnees fournisseur completes:', JSON.stringify(data_fournisseur, null, 2));
+
+      // Traiter les pays
+      let paysHtml = '';
+      if (Array.isArray(data_fournisseur.pays) && data_fournisseur.pays.length > 0) {
+        paysHtml = data_fournisseur.pays.map(p => `
+          <div style="padding:4px 8px;background:#1a1a1a;border-radius:4px;margin-bottom:4px">
+            <div><span style="color:#888">ID:</span> <span style="color:#0ff">${p.id_pays}</span></div>
+            <div><span style="color:#888">Nom:</span> <span style="color:#0f0;font-weight:bold">${p.nom_pays}</span></div>
+            <div><span style="color:#888">Couvre partiel:</span> <span style="color:${p.couvre_partiel ? '#ff0' : '#0f0'}">${p.couvre_partiel ? 'Oui' : 'Non'}</span></div>
+          </div>
+        `).join('');
+      } else {
+        paysHtml = '<div style="color:#888">Aucun pays</div>';
+      }
+
+      // Traiter les départements
+      let departementsHtml = '';
+      if (Array.isArray(data_fournisseur.departements) && data_fournisseur.departements.length > 0) {
+        departementsHtml = data_fournisseur.departements.map(d => `
+          <div style="padding:4px 8px;background:#1a1a1a;border-radius:4px;margin-bottom:4px;display:inline-block;margin-right:4px">
+            <span style="color:#0ff">${d.id_dept}</span>
+            ${d.nom_dept ? `<span style="color:#888"> - ${d.nom_dept}</span>` : ''}
+          </div>
+        `).join('');
+      } else {
+        departementsHtml = '<div style="color:#888">Aucun departement</div>';
+      }
+
+      fournisseurInfo = `
+        <div style="color:#fff;font-weight:bold;margin-bottom:6px;margin-top:12px">Informations Fournisseur</div>
+        <div style="padding:8px;background:#111;border-radius:4px;margin-bottom:12px">
+          <div style="color:#888;font-weight:bold;margin-bottom:4px;border-bottom:1px solid #333;padding-bottom:2px">
+            Pays (${data_fournisseur.pays?.length || 0}) :
+          </div>
+          <div style="margin-bottom:8px;display:grid;grid-auto-flow:column;grid-auto-columns:150px;gap:10px;overflow-x:auto;overflow-y:hidden;">
+            ${paysHtml}
+          </div>
+
+          <div style="color:#888;font-weight:bold;margin-bottom:4px;border-bottom:1px solid #333;padding-bottom:2px">
+            Departements (${data_fournisseur.departements?.length || 0}) :
+          </div>
+          <div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(2, 50px);grid-auto-columns:150px;gap:10px;overflow-x:auto;overflow-y:hidden;">
+            ${departementsHtml}
+          </div>
+
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #333">
+            <details>
+              <summary style="color:#888;cursor:pointer;user-select:none">JSON brut</summary>
+              <pre style="color:#0ff;font-size:10px;margin-top:4px;overflow-x:auto;white-space:pre-wrap">${JSON.stringify(data_fournisseur, null, 2)}</pre>
+            </details>
+          </div>
+        </div>
+      `;
+    } else {
+      fournisseurInfo = `
+        <div style="color:#fff;font-weight:bold;margin-bottom:6px;margin-top:12px">Informations Fournisseur</div>
+        <div style="padding:8px;background:#111;border-radius:4px;margin-bottom:12px">
+          <div><span style="color:#f88">Donnees fournisseur non disponibles</span></div>
+        </div>
+      `;
+    }
+
     panel.innerHTML = `
       <div style="color:#fff;font-weight:bold;font-size:13px;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #0f0">
         DEBUG MATCHING
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;padding:8px;background:#111;border-radius:4px">
-        <div><span style="color:#888">ID:</span> <span style="color:#0ff">${product.id}</span></div>
-        <div><span style="color:#888">matchScore:</span> <span style="color:#ff0;font-weight:bold">${product.matchScore}%</span></div>
-        <div><span style="color:#888">coeff_geo:</span> <span style="color:#0f0">${debug.coeff_geo ?? 'N/A'}</span></div>
-        <div><span style="color:#888">Typologie acheteur:</span> <span style="color:#0f0">${debug.coeff_type_frns ?? 'N/A'}</span></div>
-        <div><span style="color:#888">isRecommended:</span> ${product.isRecommended ? '<span style="color:#0f0">true</span>' : '<span style="color:#f88">false</span>'}</div>
-        <div><span style="color:#888">Coeff_Carac:</span> <span style="color:#0f0">${debug.coeff_caracteristique?.toFixed(2) ?? 'N/A'}</span></div>
-        <div><span style="color:#888">Nb caracteristiques:</span> <span style="color:#0ff">${chars.length}</span></div>
-        <div><span style="color:#888">Coeff Etat Score:</span> <span style="color:#0f0">${debug.coeff_etat_score ?? 'N/A'}</span></div>
+      <div style="display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:12px;padding:8px;background:#111;border-radius:4px">
+        <table>
+          <tr>
+            <td><div><span style="color:#888">ID:</span> <span style="color:#0ff"><a target="_blank" href="https://www.hellopro.fr/${productName}-2012230-${product.id}-produit.html">${product.id}</a></span></div></td>
+            <td><div><span style="color:#888">matchScore:</span> <span style="color:#ff0;font-weight:bold">${product.matchScore}%</span></div></td>
+            <td><div><span style="color:#888">coeff_geo:</span> <span style="color:#0f0">${debug.coeff_geo ?? 'N/A'}</span></div></td>
+          </tr>
+          <tr>
+            <td><div><span style="color:#888">Nb caracteristiques:</span> <span style="color:#0ff">${chars.length}</span></div></td>
+            <td><div><span style="color:#888">Coeff Etat Score:</span> <span style="color:#0f0">${debug.coeff_etat_score ?? 'N/A'}</span></div></td>
+            <td><div><span style="color:#888">Coeff_Carac:</span> <span style="color:#0f0">${debug.coeff_caracteristique?.toFixed(2) ?? 'N/A'}</span></div></td>
+          </tr>
+          <tr>
+            <td><div><span style="color:#888">isRecommended:</span> ${product.isRecommended ? '<span style="color:#0f0">true</span>' : '<span style="color:#f88">false</span>'}</div></td>
+            <td><div><span style="color:#888">coeff_type_frns:</span> <span style="color:#0f0">${debug.coeff_type_frns ?? 'N/A'}</span></div></td>
+            <td></td>
+          </tr>
+        </table>
       </div>
 
       <div style="color:#fff;font-weight:bold;margin-bottom:6px">characteristics_debug (${chars.length})</div>
@@ -474,6 +603,8 @@ function debugInfo(): void {
           </tbody>
         </table>
       </div>
+
+      ${fournisseurInfo}
     `;
 
     scrollContainer.prepend(panel);

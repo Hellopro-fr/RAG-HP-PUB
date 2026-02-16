@@ -90,6 +90,9 @@ export async function POST(request: NextRequest) {
       files = fileEntries.filter((entry): entry is File => entry instanceof File);
 
       console.log(`[demande-info] Requête multipart avec ${files.length} fichier(s)`);
+      files.forEach((f, i) => {
+        console.log(`[demande-info] Fichier ${i + 1}: nom=${f.name}, taille=${f.size}, type=${f.type}`);
+      });
     } else {
       // Requête JSON classique (sans fichiers)
       payload = await request.json();
@@ -105,12 +108,20 @@ export async function POST(request: NextRequest) {
       const phpFormData = new FormData();
 
       // Ajouter les fichiers avec la clé 'filepond' (format attendu par PHP)
-      files.forEach((file) => {
-        phpFormData.append('filepond', file, file.name);
-      });
+      // On doit lire le contenu du fichier et créer un nouveau Blob pour Node.js
+      for (const file of files) {
+        const arrayBuffer = await file.arrayBuffer();
+        const blob = new Blob([arrayBuffer], { type: file.type });
+        phpFormData.append('filepond', blob, file.name);
+
+        console.log(`[demande-info] Fichier ajouté: ${file.name}, taille: ${file.size}, type: ${file.type}`);
+      }
 
       // Ajouter les données du payload
       appendObjectToFormData(phpFormData, payload);
+
+      // Log pour debug
+      console.log('[demande-info] Envoi multipart vers PHP...');
 
       response = await fetch(DEMANDE_INFO_ENDPOINT, {
         method: 'POST',
@@ -121,6 +132,8 @@ export async function POST(request: NextRequest) {
         },
         body: phpFormData,
       });
+
+      console.log('[demande-info] Statut réponse PHP:', response.status);
     } else {
       // Sans fichiers : envoyer en x-www-form-urlencoded (comportement actuel)
       const urlParams = objectToFormData(payload);
