@@ -41,7 +41,7 @@ export default function FlowStorageReset() {
     sessionStorage.removeItem(FLOW_NEEDS_REDIRECT_KEY);
 
     if (!needsRedirect) {
-      console.log('[FlowStorageReset] No redirect needed');
+      //console.log('[FlowStorageReset] No redirect needed');
       return;
     }
 
@@ -57,7 +57,7 @@ export default function FlowStorageReset() {
     // Si on est deja sur le questionnaire (avec ou sans token), pas de redirection
     // Le middleware gere deja le token et passe les params necessaires
     if (isQuestionnairePage) {
-      console.log('[FlowStorageReset] Already on questionnaire page, no redirect needed');
+      //console.log('[FlowStorageReset] Already on questionnaire page, no redirect needed');
       return;
     }
 
@@ -69,11 +69,11 @@ export default function FlowStorageReset() {
       // Rediriger vers l'URL tokenisee pour recuperer le categoryId
       // Note: router.replace() ajoute automatiquement le basePath
       const redirectUrl = `/questionnaire/${originalToken}`;
-      console.log('[FlowStorageReset] Redirecting to questionnaire with token from', pathname, 'to', redirectUrl);
+      //console.log('[FlowStorageReset] Redirecting to questionnaire with token from', pathname, 'to', redirectUrl);
       router.replace(redirectUrl);
     } else {
       // Pas de token sauvegarde, rediriger vers / (l'utilisateur devra recommencer)
-      console.log('[FlowStorageReset] Redirecting to questionnaire (no token) from', pathname);
+      //console.log('[FlowStorageReset] Redirecting to questionnaire (no token) from', pathname);
       const params = searchParams.toString();
       router.replace(params ? `/?${params}` : '/');
     }

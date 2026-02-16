@@ -89,17 +89,17 @@ export async function POST(request: NextRequest) {
       const fileEntries = formData.getAll('filepond');
       files = fileEntries.filter((entry): entry is File => entry instanceof File);
 
-      console.log(`[demande-info] Requête multipart avec ${files.length} fichier(s)`);
+      //console.log(`[demande-info] Requête multipart avec ${files.length} fichier(s)`);
       files.forEach((f, i) => {
-        console.log(`[demande-info] Fichier ${i + 1}: nom=${f.name}, taille=${f.size}, type=${f.type}`);
+        //console.log(`[demande-info] Fichier ${i + 1}: nom=${f.name}, taille=${f.size}, type=${f.type}`);
       });
     } else {
       // Requête JSON classique (sans fichiers)
       payload = await request.json();
-      console.log('[demande-info] Requête JSON (sans fichiers)');
+      //console.log('[demande-info] Requête JSON (sans fichiers)');
     }
 
-    console.log('[demande-info] Endpoint:', DEMANDE_INFO_ENDPOINT);
+    //console.log('[demande-info] Endpoint:', DEMANDE_INFO_ENDPOINT);
 
     let response: Response;
 
@@ -115,14 +115,14 @@ export async function POST(request: NextRequest) {
         // Utiliser 'filepond[]' pour forcer PHP à créer un tableau même avec 1 fichier
         phpFormData.append('filepond[]', blob, file.name);
 
-        console.log(`[demande-info] Fichier ajouté: ${file.name}, taille: ${file.size}, type: ${file.type}`);
+        //console.log(`[demande-info] Fichier ajouté: ${file.name}, taille: ${file.size}, type: ${file.type}`);
       }
 
       // Ajouter les données du payload
       appendObjectToFormData(phpFormData, payload);
 
       // Log pour debug
-      console.log('[demande-info] Envoi multipart vers PHP...');
+      //console.log('[demande-info] Envoi multipart vers PHP...');
 
       response = await fetch(DEMANDE_INFO_ENDPOINT, {
         method: 'POST',
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
         body: phpFormData,
       });
 
-      console.log('[demande-info] Statut réponse PHP:', response.status);
+      //console.log('[demande-info] Statut réponse PHP:', response.status);
     } else {
       // Sans fichiers : envoyer en x-www-form-urlencoded (comportement actuel)
       const urlParams = objectToFormData(payload);
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
 
     // Récupérer la réponse du PHP
     const responseText = await response.text();
-    console.log('[demande-info] Réponse PHP:', responseText.substring(0, 200));
+    //console.log('[demande-info] Réponse PHP:', responseText.substring(0, 200));
 
     // Le PHP retourne généralement une URL de redirection
     if (responseText.startsWith('http')) {

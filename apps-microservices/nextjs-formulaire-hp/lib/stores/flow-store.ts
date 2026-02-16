@@ -62,12 +62,12 @@ if (typeof window !== 'undefined') {
 
     if (shouldClear) {
       sessionStorage.removeItem('flow-storage');
-      console.log('[FlowStore] Storage cleared -', reason);
+      //console.log('[FlowStore] Storage cleared -', reason);
     }
 
     if (needsRedirect) {
       sessionStorage.setItem(NEEDS_REDIRECT_KEY, 'true');
-      console.log('[FlowStore] Redirect flag set');
+      //console.log('[FlowStore] Redirect flag set');
     }
 
     // Marquer la session comme active

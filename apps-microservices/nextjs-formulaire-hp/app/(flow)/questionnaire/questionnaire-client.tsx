@@ -57,12 +57,12 @@ export default function QuestionnaireClient({
 
     if (initialDdc) {
       setDdc(initialDdc);
-      console.log('[QuestionnaireClient] DDC set from initial props:', initialDdc);
+      //console.log('[QuestionnaireClient] DDC set from initial props:', initialDdc);
     }
 
     if(initialDdc){
       setDdc(initialDdc);
-      console.log('[QuestionnaireClient] DDC set from initial props:', initialDdc);
+      //console.log('[QuestionnaireClient] DDC set from initial props:', initialDdc);
     }
     // Sauvegarder le token original dans sessionStorage (separe du flow-store)
     // Ce token sera utilise pour la redirection apres F5
@@ -70,7 +70,7 @@ export default function QuestionnaireClient({
     const token = initialToken || searchParams.get('token');
     if (token && typeof window !== 'undefined') {
       sessionStorage.setItem(FLOW_ORIGINAL_TOKEN_KEY, token);
-      console.log('[QuestionnaireClient] Token saved for redirect:', token.substring(0, 20) + '...');
+      //console.log('[QuestionnaireClient] Token saved for redirect:', token.substring(0, 20) + '...');
     }
   }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc]);
 

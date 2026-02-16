@@ -29,7 +29,7 @@ export async function submitLead(data: LeadSubmission): Promise<ApiResponse<Lead
 
     return response;
   } catch {
-    console.log('[Mock] Lead submitted:', data);
+    //console.log('[Mock] Lead submitted:', data);
     return {
       data: {
         success: true,
