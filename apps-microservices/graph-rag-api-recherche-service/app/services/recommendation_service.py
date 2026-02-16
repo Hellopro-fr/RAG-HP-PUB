@@ -1300,12 +1300,6 @@ class RecommendationService:
                 info_soc = rec.get("info_soc", {})
                 carac_score = rec.get("global_score", 0.0)
 
-                if etat_score < 1.0:
-                    logging.warning(
-                        f"⚠️ [DEBUG] Low etat_score ({etat_score}) for product {product_data.get('id_produit')}. "
-                        f"Fournisseur info: {info_soc}"
-                    )
-
                 caracteristiques = convert_to_caracteristique_matching(
                     details, final_score
                 )

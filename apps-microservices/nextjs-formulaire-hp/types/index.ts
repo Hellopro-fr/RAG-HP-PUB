@@ -139,6 +139,7 @@ export interface ContactFormData {
   phone: string;
   message?: string;
   files?: File[];  // Pièces jointes (PJ)
+  id_acheteur?: string;  // ID de l'acheteur si le mail est connu
 }
 
 export interface LeadSubmission {
