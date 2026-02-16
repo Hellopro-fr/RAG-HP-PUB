@@ -26,6 +26,13 @@ class UnitNormalizationService:
             # --- FIX 2: Define Sound/Acoustic Units ---
             cls._instance.ureg.define("decibel = [sound] = dB = dBA")
 
+            # --- FIX 3: Define units found in DLQ ---
+            cls._instance.ureg.define("cheval = 735.49875 * watt = ch")
+            cls._instance.ureg.define("chevaux = count")
+            cls._instance.ureg.define("mètres = meter")
+            cls._instance.ureg.define("Litres = liter")
+            cls._instance.ureg.define("Volts = volt")
+
             # Base & Common
             cls._instance.ureg.define("tonne = 1000 * kilogram = t")
             cls._instance.ureg.define("mm = millimeter")
@@ -80,6 +87,7 @@ class UnitNormalizationService:
                 "unité": "count",
                 "unite": "count",
                 "nb": "count",
+                "chevaux": "count",
                 # Sound
                 "db": "sound_level",
                 "dba": "sound_level",
@@ -98,13 +106,16 @@ class UnitNormalizationService:
                 "km": "length",
                 "pieds": "length",
                 "pied": "length",
+                "mètres": "length",
                 # Power
                 "w": "power",
                 "kw": "power",
                 "cv": "power",
+                "ch": "power",
                 "hp": "power",
                 # Electrical
                 "v": "voltage",
+                "volts": "voltage",
                 "a": "current",
                 # Rotational Speed
                 "rpm": "[frequency]",
@@ -135,6 +146,7 @@ class UnitNormalizationService:
                 "l/min": "volume / time",
                 "l/h": "volume / time",
                 "m3/h": "volume / time",
+                "m³/h": "volume / time",
                 "débit": "volume / time",
                 # Force
                 "n": "force",
@@ -283,6 +295,10 @@ class UnitNormalizationService:
         # Specifically, dB(A) is interpreted as decibel * ampere because 'A' = ampere.
         if unit and unit.strip().lower() == "db(a)":
             unit = "dBA"
+
+        # --- FIX: Normalize unicode superscripts ---
+        if unit:
+            unit = unit.replace("³", "3").replace("²", "2")
 
         dimension = self._get_dimension(unit, label)
 
