@@ -279,7 +279,7 @@ function debugInfo(): void {
         <div><span style="color:#888">matchScore: </span><span style="color:#ff0">${product.matchScore}%</span></div>
         <div><span style="color:#888">isRecommended: </span>${product.isRecommended}</div>
         <div><span style="color:#888">coeff_geo: </span>${debug.coeff_geo ?? 'N/A'}</div>
-        <div><span style="color:#888">coeff_type_frns: </span>${debug.coeff_type_frns ?? 'N/A'}</div>
+        <div><span style="color:#888">Typologie acheteur: </span>${debug.coeff_type_frns ?? 'N/A'}</div>
       </div>
       <div style="color:#fff;font-weight:bold;margin:6px 0 4px;border-bottom:1px solid #333;padding-bottom:2px">
         Caracteristiques (${chars.length})
@@ -435,7 +435,7 @@ function debugInfo(): void {
         <div><span style="color:#888">ID:</span> <span style="color:#0ff">${product.id}</span></div>
         <div><span style="color:#888">matchScore:</span> <span style="color:#ff0;font-weight:bold">${product.matchScore}%</span></div>
         <div><span style="color:#888">coeff_geo:</span> <span style="color:#0f0">${debug.coeff_geo ?? 'N/A'}</span></div>
-        <div><span style="color:#888">coeff_type_frns:</span> <span style="color:#0f0">${debug.coeff_type_frns ?? 'N/A'}</span></div>
+        <div><span style="color:#888">Typologie acheteur:</span> <span style="color:#0f0">${debug.coeff_type_frns ?? 'N/A'}</span></div>
         <div><span style="color:#888">isRecommended:</span> ${product.isRecommended ? '<span style="color:#0f0">true</span>' : '<span style="color:#f88">false</span>'}</div>
         <div><span style="color:#888">Coeff_Carac:</span> <span style="color:#0f0">${debug.coeff_caracteristique?.toFixed(2) ?? 'N/A'}</span></div>
         <div><span style="color:#888">Nb caracteristiques:</span> <span style="color:#0ff">${chars.length}</span></div>
