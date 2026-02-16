@@ -171,9 +171,11 @@ class UnitNormalizationService:
                 # Energy
                 "énergie": "energy",
                 "consommation": "energy",
-                # Area
                 "surface": "area",
                 "superficie": "area",
+                # Angle
+                "°": "angle",
+                "deg": "angle",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -227,6 +229,8 @@ class UnitNormalizationService:
                 "consommation": "energy",
                 "surface": "area",
                 "superficie": "area",
+                "angle": "angle",
+                "rotation": "angle",
             }
 
             cls._instance.CANONICAL_UNITS = {
@@ -251,6 +255,7 @@ class UnitNormalizationService:
                 "energy": "joule",
                 "area": "meter ** 2",
                 "area_density": "kilogram / meter ** 2",
+                "angle": "degree",
             }
         return cls._instance
 
