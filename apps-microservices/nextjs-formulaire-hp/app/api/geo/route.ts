@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // Force dynamic rendering (uses searchParams)
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = process.env.HELLOPRO_FRONTEND_URL || 'https://dev-www.hellopro.fr';
+const BASE_URL = process.env.HELLOPRO_FRONTEND_URL || 'https://www.hellopro.fr';
 
 /**
  * Proxy pour ajax_get_data.php

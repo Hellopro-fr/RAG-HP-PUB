@@ -18,7 +18,7 @@ const PROTECTED_ROUTES = Object.keys(ROUTE_MAPPING);
 
 // URL de redirection pour les tokens invalides (page catégorie externe)
 // TODO: Remplacer par l'URL de la page catégorie réelle
-const INVALID_TOKEN_REDIRECT = process.env.INVALID_TOKEN_REDIRECT_URL || 'https://dev-www.hellopro.fr/categories';
+const INVALID_TOKEN_REDIRECT = process.env.INVALID_TOKEN_REDIRECT_URL || 'https://www.hellopro.fr/404.html';
 
 // =============================================================================
 // TOKEN VALIDATION - AES-256-CBC (inline pour éviter les imports dans Edge Runtime)

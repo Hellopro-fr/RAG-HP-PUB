@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BASE_URL = process.env.HELLOPRO_API_URL || 'https://dev-api.hellopro.fr';
+const BASE_URL = process.env.HELLOPRO_API_URL || 'https://api.hellopro.fr';
 const URL_API_QUESTION = `${BASE_URL}/v2/index.php`;
 const TOKEN            = process.env.NEXT_TOKEN_API_QUESTION || '';
 

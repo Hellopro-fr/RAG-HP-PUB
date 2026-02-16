@@ -554,7 +554,7 @@ function debugInfo(): void {
       <div style="display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:12px;padding:8px;background:#111;border-radius:4px">
         <table>
           <tr>
-            <td><div><span style="color:#888">ID:</span> <span style="color:#0ff"><a target="_blank" href="https://www.hellopro.fr/${productName}-2012230-${product.id}-produit.html">${product.id}</a></span></div></td>
+            <td><div><span style="color:#888">ID:</span> <span style="color:#0ff">${product.id}</span></div></td>
             <td><div><span style="color:#888">matchScore:</span> <span style="color:#ff0;font-weight:bold">${product.matchScore}%</span></div></td>
             <td><div><span style="color:#888">coeff_geo:</span> <span style="color:#0f0">${debug.coeff_geo ?? 'N/A'}</span></div></td>
           </tr>
