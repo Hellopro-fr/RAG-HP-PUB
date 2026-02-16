@@ -305,6 +305,17 @@ class UnitNormalizationService:
         if unit:
             unit = unit.replace("³", "3").replace("²", "2")
 
+        # --- FIX: Pint doesn't understand shorthand like 'm2', 'm3', 'm3/h'.
+        # Convert to Pint-compatible exponent syntax.
+        if unit:
+            unit_stripped = unit.strip().lower()
+            if unit_stripped == "m3/h":
+                unit = "m**3 / hour"
+            elif unit_stripped == "m2":
+                unit = "m**2"
+            elif unit_stripped == "m3":
+                unit = "m**3"
+
         dimension = self._get_dimension(unit, label)
 
         if not dimension:
