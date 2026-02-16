@@ -107,12 +107,13 @@ export async function POST(request: NextRequest) {
       // Avec fichiers : envoyer en multipart/form-data au PHP
       const phpFormData = new FormData();
 
-      // Ajouter les fichiers avec la clé 'filepond' (format attendu par PHP)
+      // Ajouter les fichiers avec la clé 'filepond[]' (format tableau attendu par PHP)
       // On doit lire le contenu du fichier et créer un nouveau Blob pour Node.js
       for (const file of files) {
         const arrayBuffer = await file.arrayBuffer();
         const blob = new Blob([arrayBuffer], { type: file.type });
-        phpFormData.append('filepond', blob, file.name);
+        // Utiliser 'filepond[]' pour forcer PHP à créer un tableau même avec 1 fichier
+        phpFormData.append('filepond[]', blob, file.name);
 
         console.log(`[demande-info] Fichier ajouté: ${file.name}, taille: ${file.size}, type: ${file.type}`);
       }
