@@ -255,14 +255,14 @@ const QuestionScreen = ({
       {/* Mobile sticky footer with reassurance */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
         {/* Reassurance line */}
-        <div className="flex flex-col items-center gap-1.5 px-4 py-2 border-b border-border/50 bg-primary/5">
-          <div className="inline-flex items-center gap-1.5 text-xs">
-            <Package className="h-3.5 w-3.5 text-primary" />
-            <span className="font-semibold text-primary">{categoryName || ""}</span>
-            <span className="text-muted-foreground">: 347 produits analysés • 24 fournisseurs</span>
+        <div className="flex flex-col items-center gap-1 px-4 py-2 border-b border-border/50 bg-primary/5">
+          <div className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap overflow-hidden">
+            <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="font-semibold text-primary truncate">{categoryName || ""}</span>
+            <span className="text-muted-foreground shrink-0">: 347 produits analysés • 24 fournisseurs</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5" />
+          <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
+            <Users className="h-3.5 w-3.5 shrink-0" />
             <span>+ de 10 000 pros équipés / mois</span>
           </div>
         </div>

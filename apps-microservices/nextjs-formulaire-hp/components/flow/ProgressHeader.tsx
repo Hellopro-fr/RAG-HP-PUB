@@ -22,12 +22,12 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
   return (
     <div className="border-b border-border bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 sm:px-6 sm:py-4">
+      <div className="flex items-center justify-between px-3 py-2 lg:px-6 lg:py-4">
         {/* Logo */}
-        <img src={hpLogo} alt="Hellopro" className="h-5 sm:h-8 shrink-0" />
+        <img src={hpLogo} alt="Hellopro" className="h-5 lg:h-8 shrink-0" />
 
-        {/* Mobile: Current step indicator - simplified */}
-        <div className="flex sm:hidden items-center gap-1.5">
+        {/* Mobile/Tablet: Current step indicator - simplified */}
+        <div className="flex lg:hidden items-center gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">
             Étape {currentStep}/{steps.length}
           </span>
@@ -37,7 +37,7 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
         </div>
 
         {/* Desktop: Full steps */}
-        <div className="hidden sm:flex items-center gap-6">
+        <div className="hidden lg:flex items-center gap-6">
           {steps.map((step, index) => (
             <div key={step.id} className="flex items-center gap-2">
               <div
@@ -76,7 +76,7 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
         {/* Expert help - desktop */}
         <a
           href="tel:+33123456789"
-          className="hidden sm:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="hidden lg:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <img
             src={expertPhoto}
@@ -87,10 +87,10 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
           <span className="font-medium text-foreground">01 23 45 67 89</span>
         </a>
 
-        {/* Expert help - mobile (icon only) */}
+        {/* Expert help - mobile/tablet (icon only) */}
         <a
           href="tel:+33123456789"
-          className="sm:hidden flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          className="lg:hidden flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
         >
           <img
             src={expertPhoto}

@@ -446,14 +446,14 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
       {/* Footer - Floating compact bar */}
       {viewState === "selection" && (
-        <div className="border-t border-border bg-card/95 backdrop-blur-sm px-4 py-4 sm:px-6">
-          <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:justify-between">
+        <div className="border-t border-border bg-card/95 backdrop-blur-sm px-4 py-3 md:py-4 md:px-6">
+          <div className="mx-auto max-w-7xl flex flex-col lg:flex-row items-stretch lg:items-center gap-2 md:gap-3 lg:justify-between">
             {/* Primary CTA - on top for mobile */}
             <button
               disabled={selectedCount === 0}
               onClick={() => setViewState("contact")}
               className={cn(
-                "order-1 sm:order-2 rounded-lg px-6 py-3 text-base font-semibold transition-all duration-200 w-full sm:w-auto",
+                "order-1 lg:order-2 rounded-lg px-6 py-3 text-base font-semibold transition-all duration-200 w-full lg:w-auto",
                 selectedCount > 0
                   ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
                   : "bg-muted text-muted-foreground cursor-not-allowed"
@@ -466,25 +466,25 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
             </button>
 
             {/* Secondary actions */}
-            <div className="order-2 sm:order-1 flex items-center gap-2 sm:gap-3">
+            <div className="order-2 lg:order-1 flex flex-wrap items-center gap-2 md:gap-3">
               <button
                 onClick={() => {
                   trackComparisonModalView();
                   setShowComparison(true);
                 }}
-                className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-4 text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-1.5 md:gap-2"
               >
-                <LayoutGrid className="h-4 w-4" />
+                <LayoutGrid className="h-4 w-4 shrink-0" />
                 Comparer
               </button>
-              
+
               <button
                 onClick={() => setViewState("modify-criteria")}
-                className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-4 text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
+                className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
               >
                 Modifier critères
               </button>
-              
+
               <button
                 onClick={() => {
                   // Définir flowType = 'pas_trouve_recherchez' car l'utilisateur a cliqué "pas trouvé"
@@ -492,7 +492,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   setFlowType('pas_trouve_recherchez');
                   setViewState("custom-need");
                 }}
-                className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-2 sm:px-4 text-[10px] sm:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center text-center leading-tight"
+                className="flex-1 min-w-[200px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
               >
                 Pas trouvé ce que vous cherchez ?
               </button>
