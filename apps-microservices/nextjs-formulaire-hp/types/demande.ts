@@ -59,6 +59,8 @@ export interface AcheteurData {
   website?: string;
   reception_alerte?: boolean;
   naf?: string;
+
+  id_societe_acheteur ?: string | number;
 }
 
 /**
