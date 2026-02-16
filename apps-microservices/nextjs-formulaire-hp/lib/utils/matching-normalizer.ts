@@ -364,8 +364,26 @@ export function enrichSuppliersWithProductInfo(
         ? vendeur.domaine.replace(/^www\./, '').split('.')[0].toUpperCase()
         : PLACEHOLDER_SUPPLIER);
 
-    // Image du produit (peut être vide)
-    const image = produit.image_produit || PLACEHOLDER_IMAGE;
+    // Image du produit (peut contenir plusieurs URLs séparées par <br> ou \n)
+    let images: string[] = [];
+    let mainImage = PLACEHOLDER_IMAGE;
+
+    if (produit.image_produit) {
+      // Nettoyer et séparer les URLs
+      images = produit.image_produit
+        .split(/<br\s*\/?>|\n/i) // Séparer par <br>, <br/>, <br /> ou saut de ligne
+        .map(url => url.trim())
+        .filter(url => url.length > 0 && url.startsWith('http'));
+
+      if (images.length > 0) {
+        mainImage = images[0];
+      } else {
+        // Fallback si aucune URL valide trouvée après split
+        images = [PLACEHOLDER_IMAGE];
+      }
+    } else {
+      images = [PLACEHOLDER_IMAGE];
+    }
 
     const responseTime = vendeur.temps_reponse || 'Répond en < 48h';
         
@@ -375,8 +393,8 @@ export function enrichSuppliersWithProductInfo(
       supplierName,
       description: '', // On n'utilise pas la description HTML brute
       descriptionHtml: produit.description_produit || undefined,
-      image,
-      images: image !== PLACEHOLDER_IMAGE ? [image] : supplier.images,
+      image: mainImage,
+      images: images,
       logo: vendeur.logo || undefined,
       supplier: {
         id: vendeur.id,
