@@ -152,7 +152,7 @@ services:
     profiles: ["app"]
     restart: unless-stopped
     deploy:
-      replicas: 10
+      replicas: 20
       resources:
         limits:
           cpus: "1.0"
