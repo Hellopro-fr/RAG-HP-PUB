@@ -589,7 +589,7 @@ class RecommendationService:
         user_typologie = user_meta.typologie if user_meta else None
 
         z_unmatched = 0.2
-        e_unmatched = 0.8
+        e_unmatched = 0.9
         g_unknown_score = 0.8
         c_unknown_score = 0.5
 
@@ -679,20 +679,12 @@ class RecommendationService:
                                                     apoc.coll.max([
                                                         CASE 
                                                             WHEN pc.valeur_canonique >= item.conf.target_numeric.exact 
-                                                            THEN CASE 
-                                                                WHEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) >= 0.8 
-                                                                THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique)
-                                                                ELSE 0.0 
-                                                            END
+                                                            THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique)
                                                             ELSE 0.0 
                                                         END,
                                                         CASE 
                                                             WHEN pc.valeur_canonique <= item.conf.target_numeric.exact 
-                                                            THEN CASE 
-                                                                WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) >= 0.8 
-                                                                THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact)
-                                                                ELSE 0.0 
-                                                            END
+                                                            THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact)
                                                             ELSE 0.0 
                                                         END
                                                     ])
@@ -708,11 +700,7 @@ class RecommendationService:
                                                 apoc.coll.max([
                                                     CASE 
                                                         WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
-                                                        THEN CASE 
-                                                            WHEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique) >= 0.8 
-                                                            THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
-                                                            ELSE 0.0 
-                                                        END
+                                                        THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
                                                         ELSE 0.0 
                                                     END,
                                                     CASE 
@@ -737,11 +725,7 @@ class RecommendationService:
                                                 apoc.coll.max([
                                                     CASE 
                                                         WHEN pc.valeur_canonique <= item.conf.target_numeric.max 
-                                                        THEN CASE 
-                                                            WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max) >= 0.8 
-                                                            THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
-                                                            ELSE 0.0 
-                                                        END
+                                                        THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
                                                         ELSE 0.0 
                                                     END,
                                                     CASE 
@@ -784,11 +768,7 @@ class RecommendationService:
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE
                                             WHEN pc.valeur_max_canonique IS NOT NULL AND pc.valeur_max_canonique >= item.conf.target_numeric.min THEN
-                                                CASE 
-                                                    WHEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique) >= 0.8 
-                                                    THEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
-                                                    ELSE 0.0 
-                                                END
+                                                toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
                                             ELSE 0.0
                                         END
                                         
@@ -796,11 +776,7 @@ class RecommendationService:
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
                                             WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_min_canonique <= item.conf.target_numeric.max THEN
-                                                CASE 
-                                                    WHEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max) >= 0.8 
-                                                    THEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
-                                                    ELSE 0.0 
-                                                END
+                                                toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
                                             ELSE 0.0
                                         END
                                         
@@ -873,21 +849,21 @@ class RecommendationService:
                                                 CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
                                             ELSE
                                                 apoc.coll.max([
-                                                    CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.exact AND toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) ELSE 0.0 END,
-                                                    CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.exact AND toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) >= 0.8 THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) ELSE 0.0 END
+                                                    CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.exact THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) ELSE 0.0 END,
+                                                    CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.exact THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) ELSE 0.0 END
                                                 ])
                                         END
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE WHEN pc.valeur_canonique = 0 OR item.conf.target_numeric.min = 0 THEN 0.0 ELSE
                                             apoc.coll.max([
-                                                CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.min AND toFloat(item.conf.target_numeric.min / pc.valeur_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique) ELSE 0.0 END,
+                                                CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.min THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique) ELSE 0.0 END,
                                                 CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.min AND toFloat(pc.valeur_canonique / item.conf.target_numeric.min) >= 0.8 THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.min) ELSE 0.0 END
                                             ])
                                         END
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE WHEN pc.valeur_canonique = 0 OR item.conf.target_numeric.max = 0 THEN 0.0 ELSE
                                             apoc.coll.max([
-                                                CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.max AND toFloat(pc.valeur_canonique / item.conf.target_numeric.max) >= 0.8 THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max) ELSE 0.0 END,
+                                                CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.max THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max) ELSE 0.0 END,
                                                 CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.max AND toFloat(item.conf.target_numeric.max / pc.valeur_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.max / pc.valeur_canonique) ELSE 0.0 END
                                             ])
                                         END
@@ -901,11 +877,11 @@ class RecommendationService:
                                         CASE WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact) AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact) THEN 1.0 ELSE 0.0 END
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE WHEN pc.valeur_max_canonique IS NOT NULL AND pc.valeur_max_canonique >= item.conf.target_numeric.min THEN
-                                            CASE WHEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique) ELSE 0.0 END
+                                            toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
                                         ELSE 0.0 END
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_min_canonique <= item.conf.target_numeric.max THEN
-                                            CASE WHEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max) >= 0.8 THEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max) ELSE 0.0 END
+                                            toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
                                         ELSE 0.0 END
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
                                         CASE WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
@@ -1099,7 +1075,21 @@ class RecommendationService:
              CASE
                 WHEN ((info_soc.id_etat = '1') OR ((info_soc.id_etat = '2') AND (info_soc.id_affichage = '1'))) THEN 1.0
                 ELSE $e_unmatched
-             END AS etat_score
+             END AS raw_etat_score
+        
+        // Post-process etat_score and global_score based on cross-score rules:
+        // If etat_score = 1 and global_score between 0.80 and 0.95: add 0.05 to global_score (max 1.0)
+        // If etat_score != 1 and global_score >= 0.8: set etat_score to 1.0
+        WITH p, info_soc, details, zone_score,
+             CASE
+                 WHEN raw_etat_score <> 1.0 AND global_score >= 0.8 THEN 1.0
+                 ELSE raw_etat_score
+             END AS etat_score,
+             CASE
+                 WHEN raw_etat_score = 1.0 AND global_score >= 0.80 AND global_score <= 0.95 THEN
+                     CASE WHEN global_score + 0.05 > 1.0 THEN 1.0 ELSE global_score + 0.05 END
+                 ELSE global_score
+             END AS global_score
         
         // Calculate typologie score
         WITH p, details, global_score, zone_score, etat_score, info_soc,
