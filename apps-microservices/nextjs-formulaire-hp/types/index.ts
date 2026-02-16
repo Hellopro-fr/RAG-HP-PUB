@@ -138,6 +138,7 @@ export interface ContactFormData {
   id_pays_tel?: number;  // ID du pays pour le téléphone
   phone: string;
   message?: string;
+  files?: File[];  // Pièces jointes (PJ)
 }
 
 export interface LeadSubmission {

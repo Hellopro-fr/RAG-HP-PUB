@@ -112,8 +112,11 @@ export interface DemandeInfoPayload {
   info_acheteur_matching?: string;
   
   question_reponse_acheteur?: string;
-  
+
   caracteristiques?: string;
+
+  // Pièces jointes (fichiers)
+  files?: File[];
 }
 
 /**
