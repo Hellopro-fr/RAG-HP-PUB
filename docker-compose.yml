@@ -171,6 +171,26 @@ services:
       - services-net
     logging: *logging_defaults
 
+  image-cdn-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/image-cdn-service/Dockerfile
+    container_name: image-cdn-service
+    profiles: ["app"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+    ports:
+      - "8580:8580"
+    volumes:
+      - image_download_data:/data:ro
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   llm-service:
     build:
       context: .
