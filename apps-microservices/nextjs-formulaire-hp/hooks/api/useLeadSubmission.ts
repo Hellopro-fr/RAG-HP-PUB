@@ -147,6 +147,8 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
               "cible": o.valeurs_cibles
             }
           })) : undefined,
+        // Pièces jointes
+        files: data.contact.files,
       };
 
       // Envoyer les demandes au PHP
