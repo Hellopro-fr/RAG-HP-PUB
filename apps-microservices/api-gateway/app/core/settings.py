@@ -5,49 +5,38 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 # Load default .env
-env_path = Path(".") / ".env"
+env_path = Path('.') / '.env'
 load_dotenv(dotenv_path=env_path)
 
 # Load extra .env if exists
-extra_env_path = Path(".") / ".env.url"
+extra_env_path = Path('.') / '.env.url'
 if extra_env_path.exists():
     load_dotenv(dotenv_path=extra_env_path, override=True)
-
 
 @dataclass(frozen=True)
 class Service:
     """Represents a microservice with its URL and the API path to access it."""
-
     url: str
     api_path: str
-
 
 class Configuration:
     PROJECT_NAME: str = "API-HP-RAG"
     PROJECT_VERSION: str = "0.0.1"
 
-    # ─── Auth configuration ────────────────────────────────────────────────
-    OAUTH2_API_KEY: str = os.getenv("OAUTH2_API_KEY", "changeme-default-api-key")
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "changeme-jwt-secret")
-    JWT_ALGO: str = os.getenv("JWT_ALGO", "HS256")
-    JWT_AUDIENCE: str = os.getenv("JWT_AUDIENCE", "hellopro")
-
     # CLEANER: Service = Service(
-    #     url=os.getenv("CLEANER", "http://localhost:8001"),
+    #     url=os.getenv("CLEANER", "http://localhost:8001"), 
     #     api_path="/cleaner-service"
     # )
     # SCRAPING: Service = Service(
-    #     url=os.getenv("SCRAPING", "http://localhost:8002"),
+    #     url=os.getenv("SCRAPING", "http://localhost:8002"), 
     #     api_path="/scraping-service"
     # )
     # EMBEDDING: Service = Service(
-    #     url=os.getenv("EMBEDDING", "http://localhost:8003"),
+    #     url=os.getenv("EMBEDDING", "http://localhost:8003"), 
     #     api_path="/embedding-service"
     # )
 
-    DOCUMENT_ROOT: str = os.path.abspath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-    )
+    DOCUMENT_ROOT: str = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
     # Dynamically add services based on environment keys
     EXTRA_SERVICES: Dict[str, Service] = {}
@@ -55,11 +44,11 @@ class Configuration:
     for key, value in os.environ.items():
         # convention: SERVICE_<NAME>=http://url  --> api_path="/<name>-service"
         if key.startswith("SERVICE_"):
-            service_name = key[len("SERVICE_") :].lower()
+            service_name = key[len("SERVICE_"):].lower()
             EXTRA_SERVICES[service_name] = Service(
-                url=value, api_path=f"/{service_name}-service"
+                url=value,
+                api_path=f"/{service_name}-service"
             )
-
 
 def _create_service_map(config_class: Type[Configuration]) -> Dict[str, str]:
     """
@@ -75,7 +64,6 @@ def _create_service_map(config_class: Type[Configuration]) -> Dict[str, str]:
     for service in config_class.EXTRA_SERVICES.values():
         service_map[service.api_path] = service.url
     return service_map
-
 
 SERVICE_MAP = _create_service_map(Configuration)
 settings = Configuration()
