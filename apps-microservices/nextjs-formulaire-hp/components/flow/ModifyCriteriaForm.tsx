@@ -659,6 +659,9 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
   // Vérifier s'il y a des critères supprimés dans chaque catégorie
   const hasRemovedCritiqueCriteria = removedCritiqueCriteria.length > 0;
   const hasRemovedSecondaireCriteria = removedSecondaireCriteria.length > 0;
+  // Vérifier si une section doit être affichée (critères actifs OU critères supprimés à restaurer)
+  const showCritiqueSection = critiqueCriteria.length > 0 || hasRemovedCritiqueCriteria;
+  const showSecondaireSection = secondaireCriteria.length > 0 || hasRemovedSecondaireCriteria;
 
   // Vérifier si tous les critères numériques ont des valeurs valides (max >= min)
   const hasNumericValidationErrors = [...critiqueCriteria, ...secondaireCriteria].some(c => {
@@ -701,7 +704,7 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
           ) : (
             <>
               {/* Section critique */}
-              {critiqueCriteria.length > 0 && (
+              {showCritiqueSection && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-primary/10">
@@ -720,7 +723,7 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
                         key={criterion.id_caracteristique}
                         criterion={criterion}
                         isCritique={true}
-                        canRemove={critiqueCriteria.length > 1}
+                        canRemove={critiqueCriteria.length > 1 || hasRemovedCritiqueCriteria || secondaireCriteria.length > 0 || hasRemovedSecondaireCriteria}
                         onRemove={removeCriterion}
                         onToggleMultiValue={toggleMultiValue}
                         onUpdateSingleValue={updateSingleValue}
@@ -750,7 +753,7 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
               )}
 
               {/* Section secondaire */}
-              {secondaireCriteria.length > 0 && (
+              {showSecondaireSection && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-amber-500/10">
