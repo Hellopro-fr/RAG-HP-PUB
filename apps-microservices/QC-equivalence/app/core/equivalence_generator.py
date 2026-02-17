@@ -698,6 +698,7 @@ class EquivalenceGenerator:
                     # Ajouter ses caractéristiques au cumul pour les questions suivantes
                     previously_found = process_data["data"].get(question_id, [])
                     cumulative_exclude_ids.extend(previously_found)
+                    self._log(f"{question_id} → {previously_found} caractéristiques trouvées, cumul exclu: {cumulative_exclude_ids}")
                     continue
                 
                 self._log(f"Question {question_id}: exclusion de {len(cumulative_exclude_ids)} caractéristiques des questions précédentes")
@@ -759,7 +760,6 @@ class EquivalenceGenerator:
                 }
             )
 
-            raise Exception("Test")
         
         self._log("\n" + "=" * 50)
         self._log("GÉNÉRATION ÉQUIVALENCES TERMINÉE")
