@@ -88,15 +88,22 @@ async def get_node(label: str, id: str):
 
         if node:
             return {
-                "label": label,
-                "id": id,
-                "node": node,
+                "code": 200,
+                "data": {
+                    "label": label,
+                    "id": id,
+                    "node": node,
+                },
             }
         else:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Node {label} with ID {id} not found.",
-            )
+            return {
+                "code": 404,
+                "data": {
+                    "label": label,
+                    "id": id,
+                    "node": None,
+                },
+            }
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
