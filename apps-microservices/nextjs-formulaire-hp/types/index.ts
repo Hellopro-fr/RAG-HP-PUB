@@ -110,6 +110,7 @@ export interface Supplier {
   specs: ProductSpec[];
   supplier: SupplierInfo;
   price?: PriceInfo;
+  priceLabel?: string;  // Prix brut retourné par l'API (ex: "699,00 € HT")
   debugInfo?: {
     coeff_geo: number;
     coeff_type_frns: number;

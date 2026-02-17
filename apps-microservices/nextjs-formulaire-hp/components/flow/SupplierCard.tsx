@@ -23,6 +23,7 @@ interface SupplierCardProps {
   matchGaps?: string[];
   viewMode?: "grid" | "list";
   price?: PriceInfo;
+  priceLabel?: string;
 }
 
 // Format price with French locale
@@ -34,7 +35,16 @@ const formatPrice = (amount: number): string => {
 };
 
 // Price display component
-const PriceDisplay = ({ price }: { price?: PriceInfo }) => {
+const PriceDisplay = ({ price, priceLabel }: { price?: PriceInfo; priceLabel?: string }) => {
+  // Priorité au prix brut retourné par l'API
+  if (priceLabel) {
+    return (
+      <span className="text-sm font-semibold text-foreground">
+        {priceLabel}
+      </span>
+    );
+  }
+
   if (!price || price.amount === undefined || price.amount === null) {
     return (
       <span className="text-muted-foreground text-sm">
@@ -73,6 +83,7 @@ const SupplierCard = ({
   matchGaps = [],
   viewMode = "grid",
   price,
+  priceLabel,
 }: SupplierCardProps) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -167,7 +178,7 @@ const SupplierCard = ({
           </div>
         </div>
         <div className="flex items-center justify-between mt-2">
-          <PriceDisplay price={price} />
+          <PriceDisplay price={price} priceLabel={priceLabel} />
         </div>
       </div>
 
@@ -269,7 +280,7 @@ const SupplierCard = ({
 
         {/* Price - Fixed height */}
         <div className="h-6 mb-3 flex items-center">
-          <PriceDisplay price={price} />
+          <PriceDisplay price={price} priceLabel={priceLabel} />
         </div>
 
         {/* Criteria Match - Prominent display */}

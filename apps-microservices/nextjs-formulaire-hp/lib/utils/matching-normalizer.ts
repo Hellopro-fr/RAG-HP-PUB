@@ -404,6 +404,7 @@ export function enrichSuppliersWithProductInfo(
         responseTime,
         logo: vendeur.logo,
       },
+      priceLabel: produit.prix_produit || undefined,
     };
   });
 }
