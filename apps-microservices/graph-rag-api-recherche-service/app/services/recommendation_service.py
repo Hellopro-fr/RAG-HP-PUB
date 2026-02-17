@@ -1310,7 +1310,10 @@ class RecommendationService:
                     score=float(final_score),
                     caracteristique=caracteristiques,
                     info_produit=(
-                        info_produit if len(request.champs_sortie) > 0 else None
+                        info_produit
+                        if request.champs_sortie is not None
+                        and len(request.champs_sortie) > 0
+                        else None
                     ),
                     coeff_geo=float(zone_score),
                     coeff_type_frns=float(typo_score),
@@ -1339,7 +1342,8 @@ class RecommendationService:
                             ),
                             info_produit=(
                                 entry.get("product_data", {})
-                                if len(request.champs_sortie) > 0
+                                if request.champs_sortie is not None
+                                and len(request.champs_sortie) > 0
                                 else None
                             ),
                             coeff_geo=float(top_zone_score),
