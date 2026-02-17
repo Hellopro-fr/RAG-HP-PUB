@@ -1153,6 +1153,9 @@ class RecommendationService:
 
         cypher_query = query_step_1 + query_step_2
 
+        if len(request.champs_sortie) > 0 and "id_produit" not in request.champs_sortie:
+            request.champs_sortie.append("id_produit")
+
         # Determine projection
         if request.champs_sortie:
             fields = (
