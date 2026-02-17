@@ -135,7 +135,7 @@ class Consumer:
                 # 4. Succès - publier et ACK
                 output_message = {
                     'id_categorie': id_categorie, 
-                    'is_reset': is_reset, 
+                    'is_reset': False,  # par défaut false
                     'step': 7, 
                     'previous_step': 'equivalence', 
                     'status': result.status
