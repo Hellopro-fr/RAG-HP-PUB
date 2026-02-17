@@ -161,6 +161,7 @@ function buildProductSpecs(
       if (matchingChar.statut_matching === 4) {
         const expected = getExpectedValue(characteristicsMap, equivalences, equivalence.id_caracteristique);
         return {
+          id_caracteristique: equivalence.id_caracteristique,
           label,
           value: 'Non renseigné',
           matches: undefined, // ni true ni false pour non renseigné
@@ -180,6 +181,7 @@ function buildProductSpecs(
         : undefined;
 
       return {
+        id_caracteristique: equivalence.id_caracteristique,
         label,
         value,
         matches,
@@ -192,6 +194,7 @@ function buildProductSpecs(
       const expected = getExpectedValue(characteristicsMap, equivalences, equivalence.id_caracteristique);
 
       return {
+        id_caracteristique: equivalence.id_caracteristique,
         label,
         value: 'Non renseigné',
         matches: undefined, // ni true ni false pour non renseigné

@@ -48,7 +48,9 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     equivalenceCaracteristique,
     characteristicsMap,
     orphanedSelectedSuppliers,
-    criteriaHaveChanged
+    criteriaHaveChanged,
+    removedCritiqueCriteriaIds,
+    removedSecondaireCriteriaIds
   } = useFlowStore();
 
   // Utiliser uniquement les résultats dynamiques du matching (pas de fallback statique)
@@ -58,6 +60,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   const ALL_SUPPLIERS = [...orphanedSelectedSuppliers, ...RECOMMENDED, ...OTHERS];
 
   // Formater les critères pour CriteriaTags depuis equivalenceCaracteristique
+  // Filtrer les critères supprimés pour ne pas les afficher dans le résumé
   const { essentialCriteria, secondaryCriteria } = useMemo(() => {
     const essential: { label: string; value: string }[] = [];
     const secondary: { label: string; value: string }[] = [];
@@ -66,7 +69,13 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
       return { essentialCriteria: essential, secondaryCriteria: secondary };
     }
 
+    // Créer un Set des IDs supprimés pour une recherche rapide
+    const removedIdsSet = new Set([...removedCritiqueCriteriaIds, ...removedSecondaireCriteriaIds]);
+
     for (const c of equivalenceCaracteristique) {
+      // Skip les critères supprimés
+      if (removedIdsSet.has(c.id_caracteristique)) continue;
+
       const label = getCharacteristicLabel(characteristicsMap, c.id_caracteristique);
       const value = formatSelectedValues(characteristicsMap, c.id_caracteristique, c.valeurs_cibles);
 
@@ -84,7 +93,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     }
 
     return { essentialCriteria: essential, secondaryCriteria: secondary };
-  }, [equivalenceCaracteristique, characteristicsMap]);
+  }, [equivalenceCaracteristique, characteristicsMap, removedCritiqueCriteriaIds, removedSecondaireCriteriaIds]);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [animatingCount, setAnimatingCount] = useState(false);

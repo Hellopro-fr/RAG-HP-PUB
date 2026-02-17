@@ -2,8 +2,9 @@
 
 import { X, Check, Plus, Minus, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { ProductSpec, Supplier } from "@/types";
+import { useFlowStore } from "@/lib/stores/flow-store";
 
 interface ProductComparisonModalProps {
   products: Supplier[];
@@ -20,14 +21,26 @@ const ProductComparisonModal = ({
 }: ProductComparisonModalProps) => {
   const [currentProductIndex, setCurrentProductIndex] = useState(0);
 
+  // Récupérer les IDs des critères supprimés depuis le store
+  const { removedCritiqueCriteriaIds, removedSecondaireCriteriaIds } = useFlowStore();
+
+  // Créer un Set des IDs supprimés pour filtrage rapide
+  const removedIdsSet = useMemo(
+    () => new Set([...removedCritiqueCriteriaIds, ...removedSecondaireCriteriaIds]),
+    [removedCritiqueCriteriaIds, removedSecondaireCriteriaIds]
+  );
+
   // Collecter tous les labels uniques des critères demandés (isRequested: true)
-  const allSpecLabels = Array.from(
+  // en excluant les critères supprimés
+  const allSpecLabels: string[] = useMemo(() => Array.from(
     new Set(
       products.flatMap((p) =>
-        p.specs.filter((s) => s.isRequested).map((s) => s.label)
+        p.specs
+          .filter((s) => s.isRequested && (!s.id_caracteristique || !removedIdsSet.has(s.id_caracteristique)))
+          .map((s) => s.label)
       )
     )
-  );
+  ), [products, removedIdsSet]);
 
   const getSpecValue = (product: Supplier, label: string) => {
     const spec = product.specs.find((s) => s.label === label);

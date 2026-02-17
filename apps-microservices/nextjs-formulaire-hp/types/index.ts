@@ -59,6 +59,8 @@ export interface PostalCodeCity {
 // SUPPLIER & PRODUCT TYPES
 // ========================================
 export interface ProductSpec {
+  /** ID de la caractéristique (pour filtrage des critères supprimés) */
+  id_caracteristique?: number;
   label: string;
   value: string;
   matches?: boolean;
