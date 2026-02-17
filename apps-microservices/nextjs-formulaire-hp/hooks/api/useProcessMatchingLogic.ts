@@ -260,10 +260,25 @@ export function useProcessMatchingLogic() {
   /**
    * Relancer le matching avec des caractéristiques modifiées
    * Utilisé quand l'utilisateur affine ses critères dans ModifyCriteriaForm
+   *
+   * @param updatedEquivalences - TOUS les critères (y compris ceux marqués comme supprimés)
+   * @param removedCritiqueIds - IDs des critères critiques supprimés (passés directement pour éviter stale closure)
+   * @param removedSecondaireIds - IDs des critères secondaires supprimés (passés directement pour éviter stale closure)
    */
-  const refetchMatchingWithUpdatedCriteria = async (updatedEquivalences: any[]) => {
-    // Mettre à jour les équivalences dans le store
+  const refetchMatchingWithUpdatedCriteria = async (
+    updatedEquivalences: any[],
+    removedCritiqueIds: number[] = [],
+    removedSecondaireIds: number[] = []
+  ) => {
+    // Mettre à jour les équivalences dans le store (TOUS les critères)
     setEquivalenceCaracteristique(updatedEquivalences);
+
+    // Filtrer les critères supprimés pour l'envoi à l'API (fusionner les deux listes)
+    const allRemovedIds = [...removedCritiqueIds, ...removedSecondaireIds];
+    const removedIdsSet = new Set(allRemovedIds);
+    const activeEquivalences = updatedEquivalences.filter(
+      (eq: any) => !removedIdsSet.has(eq.id_caracteristique)
+    );
 
     setShowLoader(true);
 
@@ -292,15 +307,17 @@ export function useProcessMatchingLogic() {
       formData.append('top_k', '12');
       formData.append('champs_sortie', JSON.stringify(["url"]));
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
-      formData.append('liste_caracteristique', JSON.stringify(updatedEquivalences));
+      // Envoyer uniquement les critères actifs (non supprimés) à l'API
+      formData.append('liste_caracteristique', JSON.stringify(activeEquivalences));
 
       console.log('Payload MATCHING (client - refetch):', {
         id_categorie: categoryId,
         top_k: 12,
         metadonnee_utilisateurs,
         champs_sortie: ["url"],
-        liste_caracteristique: updatedEquivalences
-      }); 
+        liste_caracteristique: activeEquivalences,
+        removed_criteria_ids: allRemovedIds
+      });
 
       const apiBase = getApiBasePath();
       const apiUrl = `${apiBase}/api/matching`;
@@ -315,11 +332,12 @@ export function useProcessMatchingLogic() {
       const apiData: MatchingResponse = await res.json();
 
       // Normaliser les données de matching vers le format Supplier
+      // Utiliser les critères actifs pour construire les specs (exclut les critères supprimés)
       const { recommended, others } = normalizeMatchingToSuppliers(
         apiData.top_produit,
         apiData.liste_produit,
         characteristicsMap,
-        updatedEquivalences
+        activeEquivalences
       );
 
       // Identifier les produits orphelins (sélectionnés mais plus dans les nouveaux résultats)

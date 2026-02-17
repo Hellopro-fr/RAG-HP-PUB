@@ -53,7 +53,8 @@ const ProductComparisonModal = ({
           <img
             src={product.image}
             alt={product.productName}
-            className="h-full w-full object-cover"
+            loading="lazy"
+            className="h-full w-full object-contain"
           />
         </div>
         <div className="text-center">
@@ -226,13 +227,14 @@ const ProductComparisonModal = ({
       </div>
 
       {/* Desktop view - Table */}
-      <div className="hidden md:block flex-1 overflow-auto p-6">
-        <div className="overflow-x-auto">
+      <div className="hidden md:flex flex-1 flex-col overflow-hidden p-6">
+        {/* Table container avec scrollbars natifs */}
+        <div className="flex-1 overflow-x-auto overflow-y-auto relative">
           <table className="w-full border-collapse">
-            <thead>
+            <thead className="sticky top-0 z-20">
               <tr>
                 {/* Fixed column header */}
-                <th className="sticky left-0 z-10 bg-card border-b-2 border-r border-border p-4 text-left text-sm font-semibold text-muted-foreground min-w-[180px]">
+                <th className="sticky left-0 z-30 bg-card border-b-2 border-r border-border p-4 text-left text-sm font-semibold text-muted-foreground min-w-[180px]">
                   Caractéristiques
                 </th>
                 {/* Product headers */}
@@ -240,8 +242,8 @@ const ProductComparisonModal = ({
                   <th
                     key={product.id}
                     className={cn(
-                      "border-b-2 border-border p-4 min-w-[200px] text-center",
-                      selectedIds.has(product.id) && "bg-primary/5"
+                      "border-b-2 border-border p-4 min-w-[200px] text-center bg-card relative",
+                      selectedIds.has(product.id) && "before:absolute before:inset-0 before:bg-primary/5 before:pointer-events-none"
                     )}
                   >
                     <div className="flex flex-col items-center gap-3">
@@ -250,7 +252,8 @@ const ProductComparisonModal = ({
                         <img
                           src={product.image}
                           alt={product.productName}
-                          className="h-full w-full object-cover"
+                          loading="lazy"
+                          className="h-full w-full object-contain"
                         />
                       </div>
                       {/* Product name */}

@@ -175,6 +175,10 @@ export interface FlowState {
   // Flag pour indiquer que les critères ont été modifiés
   criteriaHaveChanged: boolean;
 
+  // IDs des critères supprimés par catégorie (pour pouvoir les réajouter)
+  removedCritiqueCriteriaIds: number[];
+  removedSecondaireCriteriaIds: number[];
+
   // Historique des questions/réponses de l'utilisateur (pour tracking et debug)
   userQuestionAnswers: UserQuestionAnswer[];
 
@@ -186,6 +190,11 @@ export interface FlowState {
   setUserQuestionAnswers: (answers: UserQuestionAnswer[]) => void;
   addUserQuestionAnswer: (answer: UserQuestionAnswer) => void;
   clearUserQuestionAnswers: () => void;
+
+  setRemovedCritiqueCriteriaIds: (ids: number[]) => void;
+  setRemovedSecondaireCriteriaIds: (ids: number[]) => void;
+  addRemovedCriteriaId: (id: number, isCritique: boolean) => void;
+  removeRemovedCriteriaId: (id: number) => void;
 
   setFilesStore: (files: File[]) => void;
   addFilesStore: (newFiles: File[]) => void;
@@ -238,6 +247,8 @@ const initialState = {
   characteristicsMap: {},
   orphanedSelectedSuppliers: [],
   criteriaHaveChanged: false,
+  removedCritiqueCriteriaIds: [],
+  removedSecondaireCriteriaIds: [],
   userQuestionAnswers: [],
   ddc: "",
 };
@@ -350,6 +361,33 @@ export const useFlowStore = create<FlowState>()(
         })),
 
       clearUserQuestionAnswers: () => set({ userQuestionAnswers: [] }),
+
+      setRemovedCritiqueCriteriaIds: (ids: number[]) => set({ removedCritiqueCriteriaIds: ids }),
+
+      setRemovedSecondaireCriteriaIds: (ids: number[]) => set({ removedSecondaireCriteriaIds: ids }),
+
+      addRemovedCriteriaId: (id: number, isCritique: boolean) =>
+        set((state) => {
+          if (isCritique) {
+            return {
+              removedCritiqueCriteriaIds: state.removedCritiqueCriteriaIds.includes(id)
+                ? state.removedCritiqueCriteriaIds
+                : [...state.removedCritiqueCriteriaIds, id],
+            };
+          } else {
+            return {
+              removedSecondaireCriteriaIds: state.removedSecondaireCriteriaIds.includes(id)
+                ? state.removedSecondaireCriteriaIds
+                : [...state.removedSecondaireCriteriaIds, id],
+            };
+          }
+        }),
+
+      removeRemovedCriteriaId: (id: number) =>
+        set((state) => ({
+          removedCritiqueCriteriaIds: state.removedCritiqueCriteriaIds.filter((i) => i !== id),
+          removedSecondaireCriteriaIds: state.removedSecondaireCriteriaIds.filter((i) => i !== id),
+        })),
 
     }),
     {

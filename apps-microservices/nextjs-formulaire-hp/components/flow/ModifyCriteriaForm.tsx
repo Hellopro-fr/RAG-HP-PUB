@@ -1,6 +1,6 @@
 'use client';
 
-import { X, GripVertical, Sparkles, Target, Gift, Check, Loader2, AlertCircle } from "lucide-react";
+import { X, GripVertical, Sparkles, Target, Gift, Check, Loader2, AlertCircle, Plus } from "lucide-react";
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { trackModifyCriteriaModalView, trackCriteriaModified } from "@/lib/analytics";
 import { useFlowStore } from "@/lib/stores/flow-store";
@@ -331,11 +331,24 @@ function formStateToCharacteristic(s: CriterionFormState): ConsolidatedCharacter
 // =============================================================================
 
 const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
-  const { equivalenceCaracteristique, characteristicsMap } = useFlowStore();
+  const {
+    equivalenceCaracteristique,
+    characteristicsMap,
+    removedCritiqueCriteriaIds,
+    removedSecondaireCriteriaIds,
+    setRemovedCritiqueCriteriaIds,
+    setRemovedSecondaireCriteriaIds,
+  } = useFlowStore();
   const { refetchMatchingWithUpdatedCriteria, showLoader } = useProcessMatchingLogic();
 
   const [critiqueCriteria, setCritiqueCriteria] = useState<CriterionFormState[]>([]);
   const [secondaireCriteria, setSecondaireCriteria] = useState<CriterionFormState[]>([]);
+
+  // Critères supprimés par catégorie (pour pouvoir les réajouter)
+  const [removedCritiqueCriteria, setRemovedCritiqueCriteria] = useState<CriterionFormState[]>([]);
+  const [removedSecondaireCriteria, setRemovedSecondaireCriteria] = useState<CriterionFormState[]>([]);
+  const [showAddEssential, setShowAddEssential] = useState(false);
+  const [showAddSecondary, setShowAddSecondary] = useState(false);
 
   const hasTrackedView = useRef(false);
   const hasInitialized = useRef(false);
@@ -359,9 +372,37 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
     const critiques: CriterionFormState[] = [];
     const secondaires: CriterionFormState[] = [];
+    const removedCritiques: CriterionFormState[] = [];
+    const removedSecondaires: CriterionFormState[] = [];
+
+    // Récupérer les IDs des critères précédemment supprimés depuis le store (par catégorie)
+    const removedCritiqueIdsSet = new Set(removedCritiqueCriteriaIds);
+    const removedSecondaireIdsSet = new Set(removedSecondaireCriteriaIds);
+
+    // Set pour éviter les doublons (déduplication par id_caracteristique)
+    const seenIds = new Set<number>();
 
     for (const c of consolidated) {
+      // Éviter les doublons
+      if (seenIds.has(c.id_caracteristique)) {
+        continue;
+      }
+      seenIds.add(c.id_caracteristique);
+
       const formState = characteristicToFormState(c, characteristicsMap);
+
+      // Si ce critère était précédemment supprimé en tant que critique
+      if (removedCritiqueIdsSet.has(c.id_caracteristique)) {
+        removedCritiques.push({ ...formState, poids_caracteristique: 'critique' });
+        continue;
+      }
+
+      // Si ce critère était précédemment supprimé en tant que secondaire
+      if (removedSecondaireIdsSet.has(c.id_caracteristique)) {
+        removedSecondaires.push({ ...formState, poids_caracteristique: 'secondaire' });
+        continue;
+      }
+
       // Normaliser en minuscule pour éviter les problèmes de casse ('Critique' vs 'critique')
       const poids = c.poids_caracteristique?.toLowerCase();
       if (poids === 'critique') {
@@ -373,7 +414,9 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
     setCritiqueCriteria(critiques);
     setSecondaireCriteria(secondaires);
-  }, [equivalenceCaracteristique, characteristicsMap]);
+    setRemovedCritiqueCriteria(removedCritiques);
+    setRemovedSecondaireCriteria(removedSecondaires);
+  }, [equivalenceCaracteristique, characteristicsMap, removedCritiqueCriteriaIds, removedSecondaireCriteriaIds]);
 
   // Track modal view on mount
   useEffect(() => {
@@ -389,10 +432,93 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
   const removeCriterion = useCallback((id: number, isCritique: boolean) => {
     if (isCritique) {
-      setCritiqueCriteria(prev => prev.filter(c => c.id_caracteristique !== id));
+      setCritiqueCriteria(prev => {
+        const criterionToRemove = prev.find(c => c.id_caracteristique === id);
+        if (criterionToRemove) {
+          // Conserver le critère supprimé dans la liste des critiques supprimés (éviter les doublons)
+          setRemovedCritiqueCriteria((removed: CriterionFormState[]) => {
+            if (removed.some(r => r.id_caracteristique === criterionToRemove.id_caracteristique)) {
+              return removed; // Déjà présent, ne pas ajouter
+            }
+            return [...removed, criterionToRemove];
+          });
+        }
+        return prev.filter(c => c.id_caracteristique !== id);
+      });
     } else {
-      setSecondaireCriteria(prev => prev.filter(c => c.id_caracteristique !== id));
+      setSecondaireCriteria(prev => {
+        const criterionToRemove = prev.find(c => c.id_caracteristique === id);
+        if (criterionToRemove) {
+          // Conserver le critère supprimé dans la liste des secondaires supprimés (éviter les doublons)
+          setRemovedSecondaireCriteria((removed: CriterionFormState[]) => {
+            if (removed.some(r => r.id_caracteristique === criterionToRemove.id_caracteristique)) {
+              return removed; // Déjà présent, ne pas ajouter
+            }
+            return [...removed, criterionToRemove];
+          });
+        }
+        return prev.filter(c => c.id_caracteristique !== id);
+      });
     }
+  }, []);
+
+  // Restaurer un critère supprimé (depuis la liste correspondante à sa catégorie d'origine)
+  // Les valeurs sont réinitialisées (vierges) lors de la restauration
+  const restoreCriterion = useCallback((id: number, fromEssential: boolean) => {
+    if (fromEssential) {
+      // Restaurer depuis la liste des critiques supprimés → vers critiques actifs
+      setRemovedCritiqueCriteria((prev: CriterionFormState[]) => {
+        const criterionToRestore = prev.find((c: CriterionFormState) => c.id_caracteristique === id);
+        if (criterionToRestore) {
+          // Réinitialiser les valeurs (vierge) et définir le poids
+          const restored: CriterionFormState = {
+            ...criterionToRestore,
+            poids_caracteristique: 'critique' as PoidsCaracteristique,
+            // Réinitialiser les valeurs
+            valeurs_cibles_ids: [],
+            valeurs_bloquantes_ids: [],
+            valeur_numerique_min: undefined,
+            valeur_numerique_max: undefined,
+          };
+          // Éviter les doublons
+          setCritiqueCriteria(current => {
+            if (current.some((c: CriterionFormState) => c.id_caracteristique === id)) {
+              return current; // Déjà présent
+            }
+            return [...current, restored];
+          });
+        }
+        return prev.filter((c: CriterionFormState) => c.id_caracteristique !== id);
+      });
+    } else {
+      // Restaurer depuis la liste des secondaires supprimés → vers secondaires actifs
+      setRemovedSecondaireCriteria((prev: CriterionFormState[]) => {
+        const criterionToRestore = prev.find((c: CriterionFormState) => c.id_caracteristique === id);
+        if (criterionToRestore) {
+          // Réinitialiser les valeurs (vierge) et définir le poids
+          const restored: CriterionFormState = {
+            ...criterionToRestore,
+            poids_caracteristique: 'secondaire' as PoidsCaracteristique,
+            // Réinitialiser les valeurs
+            valeurs_cibles_ids: [],
+            valeurs_bloquantes_ids: [],
+            valeur_numerique_min: undefined,
+            valeur_numerique_max: undefined,
+          };
+          // Éviter les doublons
+          setSecondaireCriteria(current => {
+            if (current.some((c: CriterionFormState) => c.id_caracteristique === id)) {
+              return current; // Déjà présent
+            }
+            return [...current, restored];
+          });
+        }
+        return prev.filter((c: CriterionFormState) => c.id_caracteristique !== id);
+      });
+    }
+    // Fermer les dropdowns
+    setShowAddEssential(false);
+    setShowAddSecondary(false);
   }, []);
 
   const updateSingleValue = useCallback((id: number, valueId: number, isCritique: boolean) => {
@@ -443,28 +569,96 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
   }, []);
 
   const handleApply = async () => {
+    // Inclure TOUS les critères (y compris les supprimés) pour les stocker dans le store
     const allCriteria = [
       ...critiqueCriteria.map(formStateToCharacteristic),
       ...secondaireCriteria.map(formStateToCharacteristic),
+      ...removedCritiqueCriteria.map(formStateToCharacteristic),
+      ...removedSecondaireCriteria.map(formStateToCharacteristic),
     ];
+
+    // Sauvegarder les IDs des critères supprimés dans le store (par catégorie)
+    const newRemovedCritiqueIds = removedCritiqueCriteria.map((c: CriterionFormState) => c.id_caracteristique);
+    const newRemovedSecondaireIds = removedSecondaireCriteria.map((c: CriterionFormState) => c.id_caracteristique);
+    setRemovedCritiqueCriteriaIds(newRemovedCritiqueIds);
+    setRemovedSecondaireCriteriaIds(newRemovedSecondaireIds);
 
     trackCriteriaModified(critiqueCriteria.length + secondaireCriteria.length);
 
     // Relancer le matching avec les nouvelles caractéristiques
-    const success = await refetchMatchingWithUpdatedCriteria(allCriteria);
+    // Passer les IDs supprimés directement pour éviter le problème de stale closure
+    const success = await refetchMatchingWithUpdatedCriteria(allCriteria, newRemovedCritiqueIds, newRemovedSecondaireIds);
 
     if (success) {
       // Appeler onApply pour fermer le modal et mettre à jour l'UI
+      // Passer TOUS les critères (y compris les supprimés) pour que le store les conserve
       onApply(allCriteria);
     }
   };
 
 
   // =========================================================================
+  // COMPOSANT DROPDOWN POUR AJOUTER UN CRITÈRE
+  // =========================================================================
+
+  const AddCriterionDropdown = ({
+    isEssential,
+    onClose
+  }: {
+    isEssential: boolean;
+    onClose: () => void;
+  }) => {
+    // Utiliser la liste correspondante à la catégorie
+    const criteriaList = isEssential ? removedCritiqueCriteria : removedSecondaireCriteria;
+
+    if (criteriaList.length === 0) {
+      return (
+        <div className="rounded-xl border border-border bg-card p-4 text-center text-sm text-muted-foreground">
+          Aucun critère à ajouter
+          <button
+            onClick={onClose}
+            className="ml-2 text-primary hover:underline"
+          >
+            Fermer
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-xl border border-border bg-card p-2 shadow-lg">
+        <div className="text-xs font-medium text-muted-foreground px-2 py-1 mb-1">
+          Ajouter un critère
+        </div>
+        {criteriaList.map((criterion: CriterionFormState) => (
+          <button
+            key={criterion.id_caracteristique}
+            onClick={() => restoreCriterion(criterion.id_caracteristique, isEssential)}
+            className="w-full text-left rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+          >
+            {criterion.label}
+          </button>
+        ))}
+        <div className="border-t border-border mt-1 pt-1">
+          <button
+            onClick={onClose}
+            className="w-full text-left rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+          >
+            Annuler
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // =========================================================================
   // RENDU PRINCIPAL
   // =========================================================================
 
   const hasCriteria = critiqueCriteria.length > 0 || secondaireCriteria.length > 0;
+  // Vérifier s'il y a des critères supprimés dans chaque catégorie
+  const hasRemovedCritiqueCriteria = removedCritiqueCriteria.length > 0;
+  const hasRemovedSecondaireCriteria = removedSecondaireCriteria.length > 0;
 
   // Vérifier si tous les critères numériques ont des valeurs valides (max >= min)
   const hasNumericValidationErrors = [...critiqueCriteria, ...secondaireCriteria].some(c => {
@@ -533,6 +727,24 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
                         onUpdateNumericValue={updateNumericValue}
                       />
                     ))}
+
+                    {/* Bouton Ajouter un critère essentiel - visible uniquement si des critères essentiels ont été supprimés */}
+                    {hasRemovedCritiqueCriteria && (
+                      showAddEssential ? (
+                        <AddCriterionDropdown
+                          isEssential={true}
+                          onClose={() => setShowAddEssential(false)}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setShowAddEssential(true)}
+                          className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-2.5 text-sm font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Ajouter un critère essentiel
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               )}
@@ -564,6 +776,24 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
                         onUpdateNumericValue={updateNumericValue}
                       />
                     ))}
+
+                    {/* Bouton Ajouter un critère secondaire - visible uniquement si des critères secondaires ont été supprimés */}
+                    {hasRemovedSecondaireCriteria && (
+                      showAddSecondary ? (
+                        <AddCriterionDropdown
+                          isEssential={false}
+                          onClose={() => setShowAddSecondary(false)}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setShowAddSecondary(true)}
+                          className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-2.5 text-sm font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Ajouter un critère secondaire
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               )}

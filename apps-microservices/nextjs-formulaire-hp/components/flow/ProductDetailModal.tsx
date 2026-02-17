@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -121,10 +121,16 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                 onClick={() => setLightboxOpen(true)}
                 className="w-full h-full relative group cursor-zoom-in"
               >
+                {!imageLoaded && currentMedia?.url && (
+                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                    <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+                  </div>
+                )}
                 {currentMedia?.url ? (
                   <img
                     src={currentMedia.url}
                     alt={product.name}
+                    loading="lazy"
                     className={cn(
                       "w-full h-full object-contain bg-muted transition-opacity duration-300",
                       imageLoaded ? "opacity-100" : "opacity-0"
@@ -208,7 +214,8 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                     <img
                       src={thumbnailUrl}
                       alt=""
-                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      className="h-full w-full object-contain"
                     />
                     {isMediaVideo && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -401,6 +408,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                     <img
                       src={product.supplier.logo}
                       alt={product.supplier.name}
+                      loading="lazy"
                       className="max-h-full max-w-full object-contain"
                     />
                   </div>
@@ -557,6 +565,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
           <img
             src={currentMedia?.url}
             alt={product.name}
+            loading="lazy"
             className="max-w-full max-h-full object-contain"
             onClick={(e) => e.stopPropagation()}
           />

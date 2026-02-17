@@ -66,7 +66,7 @@ const QuestionScreen = ({
               {question.title}
             </h2>
             
-            {/* Justification toggle */}
+            {/* Justification toggle - temporairement masqué
             <button
               onClick={() => setShowJustification(!showJustification)}
               className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors"
@@ -75,12 +75,13 @@ const QuestionScreen = ({
               {showJustification ? "Masquer l'explication" : "Pourquoi cette question ?"}
             </button>
 
-            
+
             {showJustification && (
               <div className="rounded-lg bg-primary/5 border border-primary/20 p-4 text-sm text-muted-foreground text-left">
                 {question.justification}
               </div>
             )}
+            */}
           </div>
 
           {/* Answer options */}
