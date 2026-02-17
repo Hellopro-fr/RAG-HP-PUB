@@ -121,12 +121,14 @@ export function useProcessMatchingLogic() {
       const formData = new FormData();
       formData.append('id_categorie', categoryId?.toString() || '');
       formData.append('top_k', '12');
+      formData.append('champs_sortie', JSON.stringify(["url"]));
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
 
       console.log('Payload MATCHING :', {
         id_categorie: categoryId,
         top_k: 12,
+        champs_sortie: ["url"],
         metadonnee_utilisateurs,
         liste_caracteristique: consolidatedEquivalences
       });
@@ -288,6 +290,7 @@ export function useProcessMatchingLogic() {
       const formData = new FormData();
       formData.append('id_categorie', categoryId?.toString() || '');
       formData.append('top_k', '12');
+      formData.append('champs_sortie', JSON.stringify(["url"]));
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(updatedEquivalences));
 
@@ -295,6 +298,7 @@ export function useProcessMatchingLogic() {
         id_categorie: categoryId,
         top_k: 12,
         metadonnee_utilisateurs,
+        champs_sortie: ["url"],
         liste_caracteristique: updatedEquivalences
       }); 
 

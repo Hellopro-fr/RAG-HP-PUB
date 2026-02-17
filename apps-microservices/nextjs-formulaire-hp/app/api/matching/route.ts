@@ -7,11 +7,12 @@ const URL_API_MATCHING = `${BASE_URL}/graph-service/produits/matching`;
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.formData();
-    const id_categorie = body.get('id_categorie');
-    const top_k = body.get('top_k');
+    const body                    = await request.formData();
+    const id_categorie            = body.get('id_categorie');
+    const top_k                   = body.get('top_k');
+    const champs_sortie           = body.get('champs_sortie');
     const metadonnee_utilisateurs = body.get('metadonnee_utilisateurs');
-    const liste_caracteristique = body.get('liste_caracteristique');
+    const liste_caracteristique   = body.get('liste_caracteristique');
 
     if (!id_categorie) {
       return NextResponse.json(
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest) {
     const payload = {
       id_categorie: Number(id_categorie), // Conversion en nombre si nécessaire
       top_k: Number(top_k) || 12,        // Conversion en nombre
+      champs_sortie : champs_sortie 
+        ? JSON.parse(champs_sortie.toString()) 
+        : {},
       // On parse les chaînes JSON pour les transformer en vrais objets/tableaux JS
       metadonnee_utilisateurs: metadonnee_utilisateurs 
         ? JSON.parse(metadonnee_utilisateurs.toString()) 
