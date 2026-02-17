@@ -164,7 +164,7 @@ class EquivalenceGenerator:
         if not exclude_ids:
             return jeu_caracteristique
         exclude_set = set(str(id_c) for id_c in exclude_ids)
-        filtered = [c for c in jeu_caracteristique if str(c.get("id", "")) not in exclude_set]
+        filtered = [c for c in jeu_caracteristique if str(c.get("id_caracteristique", "")) not in exclude_set]
         self._log(f"Filtrage: {len(jeu_caracteristique)} → {len(filtered)} caractéristiques ({len(exclude_set)} exclues)")
         return filtered
 
