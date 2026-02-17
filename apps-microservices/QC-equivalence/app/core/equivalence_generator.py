@@ -742,9 +742,6 @@ class EquivalenceGenerator:
                         "process_data": process_data
                     }
                 )
-
-                raise Exception("Test")
-
             
             # Marquer la réponse comme traitée
             if unique_reponse not in process_data["done"]:
@@ -761,6 +758,8 @@ class EquivalenceGenerator:
                     "process_data": process_data
                 }
             )
+
+            raise Exception("Test")
         
         self._log("\n" + "=" * 50)
         self._log("GÉNÉRATION ÉQUIVALENCES TERMINÉE")
