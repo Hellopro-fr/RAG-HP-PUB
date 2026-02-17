@@ -1298,6 +1298,7 @@ class RecommendationService:
                 etat_score = rec.get("etat_score", 1.0)
                 typo_score = rec.get("typo_score", 1.0)
                 carac_score = rec.get("global_score", 0.0)
+                info_produit = rec.get("product_data", {})
 
                 caracteristiques = convert_to_caracteristique_matching(
                     details, final_score
@@ -1308,6 +1309,9 @@ class RecommendationService:
                     id_produit=str(product_data.get("id_produit", "")),
                     score=float(final_score),
                     caracteristique=caracteristiques,
+                    info_produit=(
+                        info_produit if len(request.champs_sortie) > 0 else None
+                    ),
                     coeff_geo=float(zone_score),
                     coeff_type_frns=float(typo_score),
                     coeff_etat_score=float(etat_score),
@@ -1333,7 +1337,11 @@ class RecommendationService:
                             caracteristique=convert_to_caracteristique_matching(
                                 entry.get("details", []), top_final_score
                             ),
-                            info_produit=entry.get("product_data", {}),
+                            info_produit=(
+                                entry.get("product_data", {})
+                                if len(request.champs_sortie) > 0
+                                else None
+                            ),
                             coeff_geo=float(top_zone_score),
                             coeff_type_frns=float(top_typo_score),
                             coeff_etat_score=float(top_etat_score),
