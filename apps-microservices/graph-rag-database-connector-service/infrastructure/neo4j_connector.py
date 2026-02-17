@@ -98,7 +98,7 @@ class Neo4jConnector:
             try:
                 graph = self.get_graph()
                 print(f"parameters: {parameters}")
-                if parameters.get("top_k"):
+                if parameters and parameters.get("top_k"):
                     parameters["top_k"] = int(parameters["top_k"])
                 results = graph.query(query, params=parameters or {})
                 records_affected = len(results) if results else 0
@@ -358,6 +358,7 @@ class Neo4jConnector:
             "reponse_id_index",
             "produit_categorie_index",
             "produit_id_produit_index",
+            "produit_est_actif_index",
             "char_source_id_index",
             "char_source_valeur_index",
             "char_valeur_index",
@@ -373,6 +374,9 @@ class Neo4jConnector:
             "couvre_pays_couvre_tous_index",
             "couvre_pays_couvre_index",
             "couvre_pays_ne_couvre_pas_index",
+            "fournisseur_typologie_index",
+            "fournisseur_id_etat_index",
+            "fournisseur_id_affichage_index",
         }
 
         # Step 1: Drop all existing indexes (except constraints)
@@ -421,6 +425,7 @@ class Neo4jConnector:
             "CREATE INDEX reponse_id_index IF NOT EXISTS FOR (n:Reponse) ON (n.id_reponse)",
             "CREATE INDEX produit_categorie_index IF NOT EXISTS FOR (n:Produit) ON (n.id_categorie)",
             "CREATE INDEX produit_id_produit_index IF NOT EXISTS FOR (n:Produit) ON (n.id_produit)",
+            "CREATE INDEX produit_est_actif_index IF NOT EXISTS FOR (n:Produit) ON (n.est_actif)",
             # Characteristic Matching
             "CREATE INDEX char_source_id_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.id_source_caracteristique)",
             "CREATE INDEX char_source_valeur_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.id_source_valeur)",
@@ -441,6 +446,10 @@ class Neo4jConnector:
             "CREATE INDEX couvre_pays_couvre_tous_index IF NOT EXISTS FOR ()-[r:COUVRE_PAYS]-() ON (r.couvre_tous)",
             "CREATE INDEX couvre_pays_couvre_index IF NOT EXISTS FOR ()-[r:COUVRE_PAYS]-() ON (r.couvre)",
             "CREATE INDEX couvre_pays_ne_couvre_pas_index IF NOT EXISTS FOR ()-[r:COUVRE_PAYS]-() ON (r.ne_couvre_pas)",
+            # Fournisseur Filtering
+            "CREATE INDEX fournisseur_typologie_index IF NOT EXISTS FOR (n:Fournisseur) ON (n.typologie)",
+            "CREATE INDEX fournisseur_id_etat_index IF NOT EXISTS FOR (n:Fournisseur) ON (n.id_etat)",
+            "CREATE INDEX fournisseur_id_affichage_index IF NOT EXISTS FOR (n:Fournisseur) ON (n.id_affichage)",
         ]
 
         logging.info("Applying Neo4j Unique Constraints...")
