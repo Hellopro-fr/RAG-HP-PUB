@@ -204,6 +204,12 @@ class CypherQueryResponse(BaseModel):
     )
 
 
+class CategorieCountResponse(BaseModel):
+    id_categorie: Optional[str] = Field(None, description="Identifiant de la catégorie")
+    fournisseur: int = Field(..., description="Nombre de fournisseurs distincts")
+    produit: int = Field(..., description="Nombre de produits distincts")
+
+
 """ 
  Modèles pour l'input : Payload d'entrée pour le matching de produits
  """
