@@ -93,12 +93,34 @@ const CriterionCard = memo(({
   })();
 
   // Handlers pour les inputs numériques (mise à jour locale immédiate, propagation sur blur)
+  // Filtrer pour n'accepter que les chiffres, le point décimal et le signe moins
   const handleMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalMin(e.target.value);
+    const value = e.target.value;
+    // Autoriser uniquement: chiffres, point décimal, signe moins au début
+    if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
+      setLocalMin(value);
+    }
   };
 
   const handleMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalMax(e.target.value);
+    const value = e.target.value;
+    // Autoriser uniquement: chiffres, point décimal, signe moins au début
+    if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
+      setLocalMax(value);
+    }
+  };
+
+  // Bloquer les touches non-numériques (lettres, caractères spéciaux sauf point et moins)
+  const handleNumericKeyDown = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+    // Autoriser: chiffres, point, moins, Backspace, Delete, Tab, Enter, Arrows, Home, End
+    const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+    const isNumber = /^[0-9]$/.test(e.key);
+    const isDecimalPoint = e.key === '.' && !e.currentTarget.value.includes('.');
+    const isMinus = e.key === '-' && e.currentTarget.selectionStart === 0 && !e.currentTarget.value.includes('-');
+
+    if (!isNumber && !isDecimalPoint && !isMinus && !allowedKeys.includes(e.key) && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+    }
   };
 
   const handleMinBlur = () => {
@@ -169,9 +191,11 @@ const CriterionCard = memo(({
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-8">Min</span>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={localMin}
                 onChange={handleMinChange}
+                onKeyDown={handleNumericKeyDown}
                 onBlur={handleMinBlur}
                 placeholder="min"
                 className={`w-24 rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 ${
@@ -183,9 +207,11 @@ const CriterionCard = memo(({
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-8">Max</span>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={localMax}
                 onChange={handleMaxChange}
+                onKeyDown={handleNumericKeyDown}
                 onBlur={handleMaxBlur}
                 placeholder="max"
                 className={`w-24 rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 ${
