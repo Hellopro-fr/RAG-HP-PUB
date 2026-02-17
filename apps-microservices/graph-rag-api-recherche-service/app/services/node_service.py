@@ -89,7 +89,7 @@ class NodeService:
         # Cypher query using db.schema.nodeTypeProperties()
         # Note: The 'nodeType' returned by this procedure is a string formatted like ":Label"
         # We need to construct the expected nodeType string.
-        formatted_node_type = f":{label}"
+        formatted_node_type = f":`{label}`"
 
         query = """
         CALL db.schema.nodeTypeProperties()
