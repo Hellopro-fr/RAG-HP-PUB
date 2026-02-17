@@ -4,6 +4,22 @@ from app.infrastructure.clients import clients
 
 
 class NodeService:
+    def _format_node_id(self, label: str, node_id: str) -> str:
+        """
+        Formats the node ID based on the label.
+        """
+        match label:
+            case "Produit":
+                return f"id_produit_{node_id}"
+            case "Fournisseur":
+                return f"id_fournisseur_{node_id}"
+            case "Categorie":
+                return f"id_categorie_{node_id}"
+            case _:
+                raise ValueError(
+                    f"Invalid node label: {label}. Allowed: Produit, Fournisseur, Categorie"
+                )
+
     async def update_node(
         self, label: str, node_id: str, properties: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
@@ -27,17 +43,8 @@ class NodeService:
             logging.info(f"No properties to update for node {label} {node_id}")
             return None
 
-        match label:
-            case "Produit":
-                node_id = f"id_produit_{node_id}"
-            case "Fournisseur":
-                node_id = f"id_fournisseur_{node_id}"
-            case "Categorie":
-                node_id = f"id_categorie_{node_id}"
-            case _:
-                raise ValueError(
-                    f"Invalid node label: {label}. Allowed: Produit, Fournisseur, Categorie"
-                )
+        # Format the node ID based on label-specific prefixes
+        node_id = self._format_node_id(label, node_id)
 
         # Construct Cypher query
         # We use f-string for label because labels cannot be parameterized in Cypher
@@ -123,6 +130,46 @@ class NodeService:
             # Return empty list or re-raise depending on desired behavior.
             # Returning empty list implies no schema found or error.
             return []
+
+    async def get_node(self, label: str, node_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves a specific node from the graph database.
+
+        Args:
+            label (str): The label of the node (e.g., 'Produit').
+            node_id (str): The ID of the node.
+
+        Returns:
+            Optional[Dict[str, Any]]: The node properties if found, None otherwise.
+        """
+        # Security check: Ensure label is alphanumeric to prevent Cypher injection
+        if not label.isalnum():
+            logging.warning(f"Invalid label format: {label}")
+            raise ValueError("Invalid node label format. Must be alphanumeric.")
+
+        formatted_id = self._format_node_id(label, node_id)
+
+        query = f"""
+        MATCH (n:{label} {{id: $id}})
+        RETURN n
+        """
+
+        params = {"id": formatted_id}
+
+        try:
+            # Use read_only=True for retrieval
+            results = await clients.execute_cypher(query, params, read_only=True)
+
+            if results:
+                # results is a list of dicts. Each dict contains key "n".
+                # The value of "n" is the node object/dict.
+                return results[0].get("n")
+
+            return None
+
+        except Exception as e:
+            logging.error(f"Error fetching node {label} {node_id}: {e}", exc_info=True)
+            raise e
 
 
 node_service = NodeService()

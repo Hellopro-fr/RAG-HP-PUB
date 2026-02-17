@@ -71,6 +71,38 @@ async def get_node_schema(label: str):
     except Exception as e:
         logging.error(f"Error in GET /nodes/{label}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching the node schema.",
+        )
+
+
+@router.get("/{label}/{id}", response_model=Dict[str, Any])
+async def get_node(label: str, id: str):
+    """
+    Get a specific node by its label and ID.
+
+    - **label**: The node label (e.g., 'Produit', 'Fournisseur')
+    - **id**: The unique identifier of the node.
+    """
+    try:
+        node = await node_service.get_node(label, id)
+
+        if node:
+            return {
+                "label": label,
+                "id": id,
+                "node": node,
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Node {label} with ID {id} not found.",
+            )
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logging.error(f"Error in GET /nodes/{label}/{id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal error occurred while fetching the node.",
         )
