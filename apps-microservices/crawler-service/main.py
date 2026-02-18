@@ -69,8 +69,8 @@ app = FastAPI(
     title="Crawler Service",
     description="An API to manage scalable web crawling jobs.",
     version="1.0.0"
-    # Removed prefixes/custom paths. Service runs at root.
-    # Nginx handles path stripping.
+    # Reverted to default docs paths (served at root)
+    # Nginx rewrites /crawler/openapi.json -> /openapi.json
 )
 
 @app.exception_handler(RequestValidationError)
@@ -144,9 +144,9 @@ async def shutdown_event():
     await close_redis_pool()
     logger.info("All crawl processes terminated and Redis connection closed.")
 
-# Include routers without prefix, as Nginx strips the incoming /crawler/ prefix
+# Include routers WITHOUT prefix. Nginx handles the path stripping.
 app.include_router(CrawlerRouter, tags=["Crawler"])
-app.include_router(MigrationRouter, prefix="/migration", tags=["Migration (Temporary)"])  # Keep /migration prefix as it might need specific handling or be internal
+app.include_router(MigrationRouter, prefix="/migration", tags=["Migration (Temporary)"])
 
 @app.get("/", tags=["Health Check"])
 def read_root():

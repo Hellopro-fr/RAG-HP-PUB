@@ -14,8 +14,8 @@ app = FastAPI(
     title="Image Comparison Service",
     description="High-performance microservice for batch image similarity detection.",
     version="1.0.0"
-    # Removed prefixes/custom paths. Service runs at root.
-    # Nginx handles path stripping.
+    # Reverted to default docs paths (served at root)
+    # Nginx rewrites /comparator/openapi.json -> /openapi.json
 )
 
 @app.exception_handler(RequestValidationError)
@@ -35,7 +35,7 @@ async def shutdown_event():
     logger.info("Service shutting down.")
     await job_manager.close_redis()
 
-# Include router without prefix
+# Include router WITHOUT prefix. Nginx handles the path stripping.
 app.include_router(ComparatorRouter, tags=["Comparator"])
 
 @app.get("/", tags=["Health Check"])

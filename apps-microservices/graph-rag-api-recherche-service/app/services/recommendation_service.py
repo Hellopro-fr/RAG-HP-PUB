@@ -578,20 +578,66 @@ class RecommendationService:
         weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
 
         # Use default values for blocked_val and different_val
-        blocked_val = request.scoring.v_blocked or -2.0
-        different_val = request.scoring.v_different or -0.3
+        blocked_val = (
+            request.scoring.v_blocked if request.scoring.v_blocked is not None else -2.0
+        )
+        different_val = (
+            request.scoring.v_different
+            if request.scoring.v_different is not None
+            else -0.3
+        )
 
-        z_unmatched = request.scoring.z_unmatched or 0.2
-        e_unmatched = request.scoring.e_unmatched or 0.9
-        g_unknown_score = request.scoring.g_unknown_score or 0.8
-        c_unknown_score = request.scoring.c_unknown_score or 0.5
-        t_unmatched = request.scoring.t_unmatched or 0.2
+        z_unmatched = (
+            request.scoring.z_unmatched
+            if request.scoring.z_unmatched is not None
+            else 0.2
+        )
+        e_unmatched = (
+            request.scoring.e_unmatched
+            if request.scoring.e_unmatched is not None
+            else 0.9
+        )
+        g_unknown_score = (
+            request.scoring.g_unknown_score
+            if request.scoring.g_unknown_score is not None
+            else 0.8
+        )
+        c_unknown_score = (
+            request.scoring.c_unknown_score
+            if request.scoring.c_unknown_score is not None
+            else 0.5
+        )
+        t_unmatched = (
+            request.scoring.t_unmatched
+            if request.scoring.t_unmatched is not None
+            else 0.2
+        )
 
-        absolute_threshold = request.scoring.absolute_threshold
-        relative_tolerance = request.scoring.relative_tolerance
-        max_per_supplier_primary = request.scoring.max_per_supplier_primary
-        max_per_supplier_extended = request.scoring.max_per_supplier_extended
-        score_step = request.scoring.score_step
+        absolute_threshold = (
+            request.scoring.absolute_threshold
+            if request.scoring.absolute_threshold is not None
+            else 0.0
+        )
+        relative_tolerance = (
+            request.scoring.relative_tolerance
+            if request.scoring.relative_tolerance is not None
+            else 0.1
+        )
+        max_per_supplier_primary = (
+            request.scoring.max_per_supplier_primary
+            if request.scoring.max_per_supplier_primary is not None
+            else 10
+        )
+        max_per_supplier_extended = (
+            request.scoring.max_per_supplier_extended
+            if request.scoring.max_per_supplier_extended is not None
+            else 20
+        )
+        score_step = (
+            request.scoring.score_step
+            if request.scoring.score_step is not None
+            else 0.1
+        )
 
         # Extract user location data from metadonnee_utilisateurs
         user_meta = request.metadonnee_utilisateurs
