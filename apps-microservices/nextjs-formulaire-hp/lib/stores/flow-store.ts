@@ -135,12 +135,21 @@ export interface MatchingTestParams {
   t_unmatched?: number;
 }
 
+// Statistiques de la catégorie (nb produits, nb fournisseurs)
+export interface CategoryStats {
+  productsCount: number;
+  suppliersCount: number;
+}
+
 export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
 
   // Nom de la catégorie (depuis l'API questionnaire)
   categoryName: string | null;
+
+  // Statistiques de la catégorie (depuis l'API info-categorie)
+  categoryStats: CategoryStats | null;
 
   // Type de parcours (pour tracking GTM)
   flowType: FlowType;
@@ -217,6 +226,7 @@ export interface FlowState {
   // Actions
   setCategoryId: (id: number) => void;
   setCategoryName: (name: string | null) => void;
+  setCategoryStats: (stats: CategoryStats | null) => void;
   setDdc: (ddc: string) => void;
   setUserAnswers: (answers: Record<number, string[]>) => void;
   setOtherTexts: (texts: Record<number, string>) => void;
@@ -246,6 +256,7 @@ export interface FlowState {
 const initialState = {
   categoryId: null,
   categoryName: null,
+  categoryStats: null,
   flowType: null as FlowType,
   userAnswers: {},
   otherTexts: {},
@@ -277,6 +288,8 @@ export const useFlowStore = create<FlowState>()(
       setCategoryId: (id) => set({ categoryId: id }),
 
       setCategoryName: (name) => set({ categoryName: name }),
+
+      setCategoryStats: (stats) => set({ categoryStats: stats }),
 
       setUserAnswers: (answers) => set({ userAnswers: answers }),
 

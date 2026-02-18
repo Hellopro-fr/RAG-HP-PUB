@@ -33,8 +33,12 @@ const QuestionScreen = ({
   isFirst,
   isLast,
 }: QuestionScreenProps) => {
-  const { categoryName } = useFlowStore();
+  const { categoryName, categoryStats } = useFlowStore();
   const [showJustification, setShowJustification] = useState(false);
+
+  // Stats avec fallback sur valeurs statiques
+  const productsCount = categoryStats?.productsCount ?? 347;
+  const suppliersCount = categoryStats?.suppliersCount ?? 24;
 
   const showOtherOption = question.id === 3;
   const isOtherSelected = selectedAnswers.includes("other");
@@ -241,7 +245,7 @@ const QuestionScreen = ({
                 <Package className="h-4 w-4 text-primary" />
                 <span className="text-foreground">
                   <span className="font-semibold text-primary">{categoryName || ""}</span>
-                  <span className="text-muted-foreground"> : 347 produits analysés • 24 fournisseurs</span>
+                  <span className="text-muted-foreground"> : {productsCount} produits analysés • {suppliersCount} fournisseurs</span>
                 </span>
               </div>
               <div className="inline-flex items-center gap-2 text-muted-foreground">
@@ -260,7 +264,7 @@ const QuestionScreen = ({
           <div className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap overflow-hidden">
             <Package className="h-3.5 w-3.5 text-primary shrink-0" />
             <span className="font-semibold text-primary truncate">{categoryName || ""}</span>
-            <span className="text-muted-foreground shrink-0">: 347 produits analysés • 24 fournisseurs</span>
+            <span className="text-muted-foreground shrink-0">: {productsCount} produits analysés • {suppliersCount} fournisseurs</span>
           </div>
           <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
             <Users className="h-3.5 w-3.5 shrink-0" />
