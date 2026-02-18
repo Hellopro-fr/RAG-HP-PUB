@@ -1162,7 +1162,7 @@ class RecommendationService:
         ] AS primary_selected, enriched, best_score
         
         // Step 5: Extended fill (max per supplier = $max_per_supplier_extended, for products not in primary)
-        WITH primary_selected,
+        WITH primary_selected, enriched,
              CASE WHEN size(primary_selected) < $top_k THEN
                  [prod IN enriched WHERE 
                      NOT toString(prod.node.id_produit) IN [p IN primary_selected | toString(p.node.id_produit)] AND
@@ -1173,26 +1173,27 @@ class RecommendationService:
              ELSE []
              END AS extended_selected
         
-        // Step 6: Combine diversity-selected products
-        WITH (primary_selected + extended_selected) AS all_products
+        // Step 6: Combine diversity-selected products + build pre-diversity debug summary
+        WITH (primary_selected + extended_selected) AS all_products,
+             [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, supplier_rank: e.supplier_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
-        WITH all_products,
+        WITH all_products, pre_diversity_debug,
              [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
                  head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
              ] AS top_per_fournisseur
         
         // Sort top_per_fournisseur by final_score descending and limit to 4
-        WITH all_products, top_per_fournisseur
+        WITH all_products, pre_diversity_debug, top_per_fournisseur
         UNWIND top_per_fournisseur AS p_top
-        WITH all_products, p_top 
+        WITH all_products, pre_diversity_debug, p_top 
         ORDER BY p_top.final_score DESC 
         LIMIT 4
         
         // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
-        WITH all_products, collect({
+        WITH all_products, pre_diversity_debug, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
+        WITH all_products, pre_diversity_debug, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
+        WITH all_products, pre_diversity_debug, collect({
             product_data: top_product_data,
             score: top_score,
             details: top_details,
@@ -1204,11 +1205,11 @@ class RecommendationService:
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
-        WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
+        WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p, pre_diversity_debug
         
         UNWIND (CASE WHEN size(filtered_products) = 0 THEN [null] ELSE filtered_products END) AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p, pre_diversity_debug
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p, pre_diversity_debug
         """
 
         cypher_query = query_step_1 + query_step_2
@@ -1430,6 +1431,46 @@ class RecommendationService:
                 for idx, rec in enumerate(results):
                     if rec.get("product_data"):
                         liste_produit.append(build_produit(rec, idx + 1))
+
+                # --- DEBUG: Log pre-diversity vs post-diversity comparison ---
+                pre_diversity = (
+                    results[0].get("pre_diversity_debug", []) if results else []
+                )
+                post_diversity_ids = [p.id_produit for p in liste_produit]
+                post_top_p_ids = [p.id_produit for p in top_produit]
+                post_all_ids = set(post_diversity_ids + post_top_p_ids)
+
+                logging.warning(
+                    f"[DIVERSITY DEBUG] === Pre-Diversity List ({len(pre_diversity)} products) ==="
+                )
+                for item in pre_diversity:
+                    in_final = str(item.get("id_produit", "")) in post_all_ids
+                    logging.warning(
+                        f"  id_produit={item.get('id_produit')}, "
+                        f"id_fournisseur={item.get('id_fournisseur')}, "
+                        f"final_score={item.get('final_score', 0):.4f}, "
+                        f"supplier_rank={item.get('supplier_rank')}, "
+                        f"supplier_avg={item.get('supplier_avg_score', 0):.4f}, "
+                        f"{'✅ KEPT' if in_final else '❌ FILTERED'}"
+                    )
+
+                logging.warning(
+                    f"[DIVERSITY DEBUG] === Post-Diversity: top_produit ({len(top_produit)}) ==="
+                )
+                for p in top_produit:
+                    logging.warning(
+                        f"  id_produit={p.id_produit}, score={p.score:.4f}, "
+                        f"id_fournisseur={p.info_produit.get('id_fournisseur', 'N/A') if p.info_produit else 'N/A'}"
+                    )
+
+                logging.warning(
+                    f"[DIVERSITY DEBUG] === Post-Diversity: liste_produit ({len(liste_produit)}) ==="
+                )
+                for p in liste_produit:
+                    logging.warning(
+                        f"  id_produit={p.id_produit}, score={p.score:.4f}, "
+                        f"id_fournisseur={p.info_produit.get('id_fournisseur', 'N/A') if p.info_produit else 'N/A'}"
+                    )
 
             total_time = time.perf_counter() - start_time
             return MatchingResponse(
