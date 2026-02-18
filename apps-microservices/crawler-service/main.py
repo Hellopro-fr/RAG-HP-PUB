@@ -68,11 +68,9 @@ async def scheduled_archive_cleanup():
 app = FastAPI(
     title="Crawler Service",
     description="An API to manage scalable web crawling jobs.",
-    version="1.0.0",
-    # Serve docs at the path proxied by Nginx
-    openapi_url="/crawler/openapi.json",
-    docs_url="/crawler/docs",
-    redoc_url="/crawler/redoc"
+    version="1.0.0"
+    # Removed prefixes/custom paths. Service runs at root.
+    # Nginx handles path stripping.
 )
 
 @app.exception_handler(RequestValidationError)
@@ -146,8 +144,9 @@ async def shutdown_event():
     await close_redis_pool()
     logger.info("All crawl processes terminated and Redis connection closed.")
 
-app.include_router(CrawlerRouter, prefix="/crawler", tags=["Crawler"])
-app.include_router(MigrationRouter, prefix="/migration", tags=["Migration (Temporary)"])  # TODO: Remove after migration complete
+# Include routers without prefix, as Nginx strips the incoming /crawler/ prefix
+app.include_router(CrawlerRouter, tags=["Crawler"])
+app.include_router(MigrationRouter, prefix="/migration", tags=["Migration (Temporary)"])  # Keep /migration prefix as it might need specific handling or be internal
 
 @app.get("/", tags=["Health Check"])
 def read_root():
