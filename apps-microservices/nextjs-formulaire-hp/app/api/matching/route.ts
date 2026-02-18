@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const champs_sortie           = body.get('champs_sortie');
     const metadonnee_utilisateurs = body.get('metadonnee_utilisateurs');
     const liste_caracteristique   = body.get('liste_caracteristique');
-    const matching_test_params    = body.get('matching_test_params');
+    const scoring    = body.get('scoring');
 
     if (!id_categorie) {
       return NextResponse.json(
@@ -40,8 +40,8 @@ export async function POST(request: NextRequest) {
 
     // Ajouter les paramètres de test du matching (si présents)
     // Ces paramètres sont passés via l'URL pour les tests uniquement
-    if (matching_test_params) {
-      const testParams = JSON.parse(matching_test_params.toString());
+    if (scoring) {
+      const testParams = JSON.parse(scoring.toString());
       // Ajouter chaque paramètre individuellement au payload
       for (const [key, value] of Object.entries(testParams)) {
         if (value !== undefined && value !== null) {
