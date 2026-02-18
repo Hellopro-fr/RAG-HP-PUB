@@ -62,7 +62,6 @@ export function useProcessMatchingLogic() {
     characteristicsMap,
     matchingResults,
     selectedSupplierIds,
-    matchingTestParams,
     setEquivalenceCaracteristique,
     setMatchingResults,
     setOrphanedSelectedSuppliers,
@@ -127,8 +126,11 @@ export function useProcessMatchingLogic() {
       formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
 
       // Ajouter les paramètres de test du matching (si présents dans l'URL)
+      // Lire directement depuis getState() pour éviter les problèmes de stale closure
+      const matchingTestParams = useFlowStore.getState().matchingTestParams;
       if (matchingTestParams) {
         formData.append('scoring', JSON.stringify(matchingTestParams));
+        console.log('[MATCHING] Scoring params from store:', matchingTestParams);
       }
 
       console.log('Payload MATCHING :', {
@@ -318,8 +320,11 @@ export function useProcessMatchingLogic() {
       formData.append('liste_caracteristique', JSON.stringify(activeEquivalences));
 
       // Ajouter les paramètres de test du matching (si présents dans l'URL)
+      // Lire directement depuis getState() pour éviter les problèmes de stale closure
+      const matchingTestParams = useFlowStore.getState().matchingTestParams;
       if (matchingTestParams) {
         formData.append('scoring', JSON.stringify(matchingTestParams));
+        console.log('[MATCHING REFETCH] Scoring params from store:', matchingTestParams);
       }
 
       console.log('Payload MATCHING (client - refetch):', {
