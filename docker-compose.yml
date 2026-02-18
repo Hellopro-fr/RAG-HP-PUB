@@ -1145,7 +1145,6 @@ services:
     command: --config.file=/etc/prometheus/prometheus.yml
     networks:
       - services-net
-      - graph-rag-net
     logging: *logging_defaults
 
   grafana:

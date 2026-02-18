@@ -68,7 +68,11 @@ async def scheduled_archive_cleanup():
 app = FastAPI(
     title="Crawler Service",
     description="An API to manage scalable web crawling jobs.",
-    version="1.0.0"
+    version="1.0.0",
+    # Serve docs at the path proxied by Nginx
+    openapi_url="/crawler/openapi.json",
+    docs_url="/crawler/docs",
+    redoc_url="/crawler/redoc"
 )
 
 @app.exception_handler(RequestValidationError)

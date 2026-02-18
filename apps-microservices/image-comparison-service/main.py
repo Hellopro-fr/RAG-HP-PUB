@@ -13,7 +13,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Image Comparison Service",
     description="High-performance microservice for batch image similarity detection.",
-    version="1.0.0"
+    version="1.0.0",
+    # Serve docs at the path proxied by Nginx
+    openapi_url="/comparator/openapi.json",
+    docs_url="/comparator/docs",
+    redoc_url="/comparator/redoc"
 )
 
 @app.exception_handler(RequestValidationError)
