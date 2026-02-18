@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,4 +11,8 @@ class Settings:
     # Processing Limits
     MAX_CONCURRENT_JOBS: int = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
     
+    # Proxy Configuration
+    # Used for downloading images from external URLs to avoid blocking
+    APIFY_PROXY: Optional[str] = os.getenv("APIFY_PROXY")
+
 settings = Settings()

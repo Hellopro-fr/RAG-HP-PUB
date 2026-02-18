@@ -5,12 +5,12 @@ import httpx
 import imagehash
 import asyncio
 import base64
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError, ImageOps
 from io import BytesIO
 from typing import List, Dict, Tuple, Any
 import anyio
 
-# Import schema for type hinting
+from app.core.config import settings
 from app.schemas.comparator import ImageInput
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,34 @@ class ImageProcessor:
         "Pragma": "no-cache",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     }
+
+    @staticmethod
+    def trim_borders(pil_image: Image.Image) -> Image.Image:
+        """
+        Removes whitespace/borders from the image (Auto-Crop).
+        Equivalent to the PHP 'removeBorders' function but faster.
+        """
+        try:
+            # 1. Convert to RGB if not already
+            if pil_image.mode != "RGB":
+                pil_image = pil_image.convert("RGB")
+            
+            # 2. Invert image (assuming white background becomes black)
+            # This helps getbbox find the "content" (non-black pixels)
+            inverted_image = ImageOps.invert(pil_image)
+            
+            # 3. Get bounding box of non-zero regions
+            bbox = inverted_image.getbbox()
+            
+            if bbox:
+                # 4. Crop to the content
+                return pil_image.crop(bbox)
+            
+            # If bbox is None (e.g. solid white image), return original
+            return pil_image
+        except Exception as e:
+            logger.warning(f"Border trimming failed: {e}")
+            return pil_image
 
     @staticmethod
     async def load_images(inputs: List[ImageInput]) -> Tuple[Dict[str, Image.Image], List[str]]:
@@ -59,7 +87,9 @@ class ImageProcessor:
                     
                     image_data = base64.b64decode(content_str)
                     pil_image = Image.open(BytesIO(image_data)).convert('RGB')
-                    images[inp.id] = pil_image
+                    
+                    # Apply border trimming immediately upon load
+                    images[inp.id] = ImageProcessor.trim_borders(pil_image)
                 except Exception as e:
                     logger.error(f"Failed to decode base64 for image {inp.id}: {e}")
                     failed.append(inp.id)
@@ -71,11 +101,19 @@ class ImageProcessor:
 
         # Execute downloads if any
         if download_tasks:
+            # Configure Proxy if available
+            # httpx accepts proxies={"http://": ..., "https://": ...} or just the string
+            proxies = None
+            if settings.APIFY_PROXY:
+                proxies = settings.APIFY_PROXY
+                logger.info("Using APIFY_PROXY for image downloads.")
+
             async with httpx.AsyncClient(
                 timeout=20.0, 
                 follow_redirects=True, 
                 headers=ImageProcessor.DOWNLOAD_HEADERS,
-                verify=False # Mimic CURLOPT_SSL_VERIFYPEER = false
+                verify=False,
+                proxies=proxies
             ) as client:
                 
                 # Create coroutines
@@ -89,33 +127,21 @@ class ImageProcessor:
                     img_id = img_input.id
                     
                     if isinstance(response, Exception):
-                        logger.warning(f"Download exception for {img_id} ({img_input.url}): {response}")
+                        logger.warning(f"Download exception for {img_id}: {response}")
                         failed.append(img_id)
                         continue
                         
-                    if response.status_code == 429:
-                        # Simple retry logic for 429 could go here, but for now mark failed
-                        logger.warning(f"Rate limited (429) for {img_id}")
-                        failed.append(img_id)
-                        continue
-
                     if response.status_code != 200:
                         logger.warning(f"HTTP {response.status_code} for {img_id}")
                         failed.append(img_id)
                         continue
                     
                     try:
-                        # Validate Content-Type roughly
-                        content_type = response.headers.get("content-type", "")
-                        # PHP script does more complex checks (binary/octet-stream), 
-                        # but PIL.open is the ultimate validation.
-                        
                         image_bytes = BytesIO(response.content)
                         pil_image = Image.open(image_bytes).convert('RGB')
-                        images[img_id] = pil_image
-                    except UnidentifiedImageError:
-                        logger.error(f"Invalid image format for {img_id}")
-                        failed.append(img_id)
+                        
+                        # Apply border trimming immediately upon load
+                        images[img_id] = ImageProcessor.trim_borders(pil_image)
                     except Exception as e:
                         logger.error(f"Processing error for {img_id}: {e}")
                         failed.append(img_id)
@@ -165,6 +191,8 @@ class ImageProcessor:
         hist_score = max(0, hist_score_raw) * 100
 
         # Weighted Combination
+        # Increased weight for pHash as it's generally more robust for product matching
+        # provided borders are handled (which we now do).
         final_score = (phash_score * 0.6) + (hist_score * 0.4)
         
         # Boost score if both are high
