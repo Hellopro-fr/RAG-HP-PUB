@@ -100,7 +100,7 @@ echo ""
 # --- PHASE 3: Start dependent services (if needed) ---
 echo "[PHASE 3/4] Starting reverse-proxy..."
 # Ensure the reverse proxy is up. This command is idempotent.
-docker compose --profile crawling up -d --no-deps reverse-proxy
+docker compose up -d --no-deps reverse-proxy
 echo "Reverse proxy is up."
 echo ""
 
@@ -115,7 +115,7 @@ echo ""
 echo "[PHASE 5/5] Reloading Nginx in reverse-proxy..."
 # Nginx needs to be reloaded to re-resolve the 'crawler-service' hostname
 # and pick up the new IP addresses of the scaled replicas.
-docker compose --profile crawling exec reverse-proxy nginx -s reload
+docker compose exec reverse-proxy nginx -s reload
 echo "Nginx reloaded."
 echo ""
 
