@@ -40,16 +40,18 @@ export async function POST(request: NextRequest) {
 
     // Ajouter les paramètres de test du matching (si présents)
     // Ces paramètres sont passés via l'URL pour les tests uniquement
+    // Ils doivent être encapsulés dans un objet "scoring"
+    console.log('[API Matching] Scoring field received:', scoring);
     if (scoring) {
       const testParams = JSON.parse(scoring.toString());
-      // Ajouter chaque paramètre individuellement au payload
-      for (const [key, value] of Object.entries(testParams)) {
-        if (value !== undefined && value !== null) {
-          payload[key] = value;
-        }
-      }
-      console.log('[API Matching] Test params added to payload:', testParams);
+      // Encapsuler dans l'objet scoring
+      payload.scoring = testParams;
+      console.log('[API Matching] Scoring params added to payload:', testParams);
+    } else {
+      console.log('[API Matching] No scoring params received');
     }
+
+    console.log('[API Matching] Final payload to GraphRAG:', JSON.stringify(payload, null, 2));
 
     const response = await fetch(URL_API_MATCHING, {
       method: 'POST',

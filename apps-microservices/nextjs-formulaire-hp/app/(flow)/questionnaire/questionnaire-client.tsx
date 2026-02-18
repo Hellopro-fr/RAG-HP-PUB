@@ -86,6 +86,9 @@ export default function QuestionnaireClient({
       't_unmatched',
     ];
 
+    console.log('[QuestionnaireClient] Reading scoring params from URL...');
+    console.log('[QuestionnaireClient] Current URL searchParams:', Object.fromEntries(searchParams.entries()));
+
     const params: MatchingTestParams = {};
     let hasAnyParam = false;
 
@@ -96,6 +99,7 @@ export default function QuestionnaireClient({
         if (!isNaN(numValue)) {
           params[key] = numValue;
           hasAnyParam = true;
+          console.log(`[QuestionnaireClient] Found param ${key}=${numValue}`);
         }
       }
     }
@@ -103,7 +107,9 @@ export default function QuestionnaireClient({
     // Stocker seulement si au moins un paramètre est présent
     if (hasAnyParam) {
       setMatchingTestParams(params);
-      console.log('[QuestionnaireClient] Matching test params from URL:', params);
+      console.log('[QuestionnaireClient] Stored matching test params:', params);
+    } else {
+      console.log('[QuestionnaireClient] No scoring params found in URL');
     }
   }, [searchParams, setMatchingTestParams]);
 

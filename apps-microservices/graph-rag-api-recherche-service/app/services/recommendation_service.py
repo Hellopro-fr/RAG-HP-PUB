@@ -587,6 +587,11 @@ class RecommendationService:
         c_unknown_score = request.scoring.c_unknown_score or 0.5
         t_unmatched = request.scoring.t_unmatched or 0.2
 
+        absolute_threshold = request.scoring.absolute_threshold
+        relative_tolerance = request.scoring.relative_tolerance
+        max_per_supplier_primary = request.scoring.max_per_supplier_primary
+        max_per_supplier_extended = request.scoring.max_per_supplier_extended
+
         logging.warning(f"[DEBUG] scoring parameters: {request.scoring}")
         logging.warning(
             f"[DEBUG] scoring parameters assigné: {blocked_val}, {different_val}, {z_unmatched}, {e_unmatched}, {g_unknown_score}, {c_unknown_score}, {t_unmatched}"
@@ -1118,8 +1123,58 @@ class RecommendationService:
         ORDER BY final_score DESC
         LIMIT $top_k + 4
         
-        // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_products
+        // --- SUPPLIER DIVERSITY ALGORITHM ---
+        // Step 1: Collect all scored products
+        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_scored
+        
+        // Step 2: Compute supplier average scores and best score
+        WITH all_scored,
+             apoc.map.fromPairs(
+                 [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
+                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid] | acc + item.final_score)
+                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid]))]]
+             ) AS supplier_avg_map,
+             CASE WHEN size(all_scored) > 0 THEN all_scored[0].final_score ELSE 0.0 END AS best_score
+        
+        // Step 3: Enrich with supplier_rank and supplier_avg_score
+        WITH [prod IN all_scored | {
+            node: prod.node,
+            details: prod.details,
+            global_score: prod.global_score,
+            zone_score: prod.zone_score,
+            etat_score: prod.etat_score,
+            typo_score: prod.typo_score,
+            final_score: prod.final_score,
+            info_soc: prod.info_soc,
+            supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)],
+            supplier_rank: size([other IN all_scored WHERE 
+                toString(other.node.id_fournisseur) = toString(prod.node.id_fournisseur) AND 
+                (other.final_score > prod.final_score OR 
+                 (other.final_score = prod.final_score AND toString(other.node.id_produit) < toString(prod.node.id_produit)))
+            ]) + 1
+        }] AS enriched, best_score
+        
+        // Step 4: Primary pass (max per supplier = $max_per_supplier_primary, within relative tolerance)
+        WITH [prod IN enriched WHERE 
+            (prod.final_score >= $absolute_threshold) AND
+            (prod.final_score >= best_score - $relative_tolerance) AND
+            prod.supplier_rank <= $max_per_supplier_primary
+        ] AS primary_selected, enriched, best_score
+        
+        // Step 5: Extended fill (max per supplier = $max_per_supplier_extended, for products not in primary)
+        WITH primary_selected,
+             CASE WHEN size(primary_selected) < $top_k THEN
+                 [prod IN enriched WHERE 
+                     NOT toString(prod.node.id_produit) IN [p IN primary_selected | toString(p.node.id_produit)] AND
+                     (prod.final_score >= $absolute_threshold) AND
+                     (prod.final_score >= best_score - $relative_tolerance) AND
+                     prod.supplier_rank <= $max_per_supplier_extended
+                 ]
+             ELSE []
+             END AS extended_selected
+        
+        // Step 6: Combine diversity-selected products
+        WITH (primary_selected + extended_selected) AS all_products
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products,
@@ -1160,6 +1215,11 @@ class RecommendationService:
 
         if len(request.champs_sortie) > 0 and "id_produit" not in request.champs_sortie:
             request.champs_sortie.append("id_produit")
+        if (
+            len(request.champs_sortie) > 0
+            and "id_fournisseur" not in request.champs_sortie
+        ):
+            request.champs_sortie.append("id_fournisseur")
 
         # Determine projection
         if request.champs_sortie:
@@ -1198,6 +1258,10 @@ class RecommendationService:
             "c_unknown_score": c_unknown_score,
             "user_typologie": user_typologie,
             "t_unmatched": t_unmatched,
+            "absolute_threshold": absolute_threshold,
+            "relative_tolerance": relative_tolerance,
+            "max_per_supplier_primary": max_per_supplier_primary,
+            "max_per_supplier_extended": max_per_supplier_extended,
         }
 
         try:
