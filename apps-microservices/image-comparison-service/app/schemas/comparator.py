@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 from pydantic import BaseModel, HttpUrl, Field
 from datetime import datetime
 
@@ -10,6 +10,7 @@ class CompareRequest(BaseModel):
     job_id: str = Field(..., description="Unique identifier for this comparison job")
     images: List[ImageInput] = Field(..., description="List of images to compare")
     threshold: Optional[float] = Field(90.0, description="Similarity percentage threshold (0-100)")
+    sync: Optional[bool] = Field(False, description="If True, the request waits for completion and returns the result.")
 
 class JobResponse(BaseModel):
     message: str
@@ -36,3 +37,7 @@ class JobStatus(BaseModel):
     status: str = Field(..., description="queued, processing, finished, failed")
     progress: float = Field(0.0, description="0 to 100")
     error: Optional[str] = None
+
+class JobListResponse(BaseModel):
+    total_jobs: int
+    jobs: List[JobStatus]

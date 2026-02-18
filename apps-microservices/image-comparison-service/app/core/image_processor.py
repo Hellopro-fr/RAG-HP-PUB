@@ -7,6 +7,7 @@ from PIL import Image
 from io import BytesIO
 from typing import List, Dict, Tuple, Any
 import anyio
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +32,9 @@ class ImageProcessor:
             for img_input in inputs:
                 tasks.append(client.get(str(img_input.url)))
             
-            # Execute all requests concurrently
-            responses = await httpx.gather(*tasks, return_exceptions=True)
+            # Execute all requests concurrently using asyncio.gather
+            # FIX: Changed from httpx.gather to asyncio.gather
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
             
             for i, response in enumerate(responses):
                 img_id = inputs[i].id
