@@ -1121,7 +1121,6 @@ class RecommendationService:
         WHERE final_score > 0 OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
-        LIMIT $top_k + 4
         
         // --- SUPPLIER DIVERSITY ALGORITHM ---
         // Step 1: Collect all scored products
@@ -1174,7 +1173,7 @@ class RecommendationService:
              END AS extended_selected
         
         // Step 6: Combine diversity-selected products + build pre-diversity debug summary
-        WITH (primary_selected + extended_selected) AS all_products,
+        WITH (primary_selected + extended_selected)[0..$top_k + 4] AS all_products,
              [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, supplier_rank: e.supplier_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
