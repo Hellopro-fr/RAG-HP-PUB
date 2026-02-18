@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from typing import Union
+import uuid
 from app.schemas.comparator import CompareRequest, JobResponse, JobStatus, ComparisonResult, JobListResponse
 from app.core.job_manager import job_manager
 
@@ -10,29 +11,34 @@ async def start_comparison(request: CompareRequest):
     """
     Starts a new image comparison job.
     
+    - Can process images via URL or Base64 content.
     - If `sync` is False (default): Returns a Job ID immediately. Processing runs in background.
     - If `sync` is True: Waits for the job to complete and returns the full result.
+    - `job_id` is optional; one will be generated if not provided.
     """
-    existing_status = await job_manager.get_job_status(request.job_id)
+    # Generate ID if missing
+    job_id = request.job_id or str(uuid.uuid4())
+
+    existing_status = await job_manager.get_job_status(job_id)
     if existing_status:
         raise HTTPException(
             status_code=409, 
-            detail=f"Job {request.job_id} already exists with status: {existing_status.status}"
+            detail=f"Job {job_id} already exists with status: {existing_status.status}"
         )
 
     if request.sync:
         # Synchronous execution
         try:
-            result = await job_manager.submit_job_sync(request.job_id, request.images, request.threshold)
+            result = await job_manager.submit_job_sync(job_id, request.images, request.threshold)
             return result
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Job failed: {str(e)}")
     else:
         # Asynchronous execution
-        await job_manager.submit_job_async(request.job_id, request.images, request.threshold)
+        await job_manager.submit_job_async(job_id, request.images, request.threshold)
         return JobResponse(
             message="Comparison job accepted and started.",
-            job_id=request.job_id
+            job_id=job_id
         )
 
 @router.get("/status/{job_id}", response_model=JobStatus)

@@ -3,11 +3,15 @@ import cv2
 import numpy as np
 import httpx
 import imagehash
-from PIL import Image
+import asyncio
+import base64
+from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 from typing import List, Dict, Tuple, Any
 import anyio
-import asyncio
+
+# Import schema for type hinting
+from app.schemas.comparator import ImageInput
 
 logger = logging.getLogger(__name__)
 
@@ -17,41 +21,104 @@ class ImageProcessor:
     Combines Perceptual Hashing (Structure) and Color Histograms (Content).
     """
 
+    # Headers mimicking the PHP `isUrlAccessible` function
+    DOWNLOAD_HEADERS = {
+        "Accept": "*/*",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Priority": "u=0, i",
+        "Pragma": "no-cache",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    }
+
     @staticmethod
-    async def download_images(inputs: List[Any]) -> Tuple[Dict[str, Image.Image], List[str]]:
+    async def load_images(inputs: List[ImageInput]) -> Tuple[Dict[str, Image.Image], List[str]]:
         """
-        Concurrently downloads images using HTTPX.
-        Returns a dictionary of {id: PIL.Image} and a list of failed IDs.
+        Loads images from URLs (download) or Base64 content (decode).
+        Returns:
+            - Dictionary {id: PIL.Image}
+            - List of failed IDs
         """
         images = {}
         failed = []
         
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            # Create tasks for all downloads
-            tasks = []
-            for img_input in inputs:
-                tasks.append(client.get(str(img_input.url)))
-            
-            # Execute all requests concurrently using asyncio.gather
-            # FIX: Changed from httpx.gather to asyncio.gather
-            responses = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            for i, response in enumerate(responses):
-                img_id = inputs[i].id
-                
-                if isinstance(response, Exception) or response.status_code != 200:
-                    logger.warning(f"Failed to download image {img_id}: {response}")
-                    failed.append(img_id)
-                    continue
-                
+        # Separate inputs into URL-based (to download) and Content-based (to decode)
+        download_tasks = []
+        download_map = {} # Map index in tasks to image ID
+
+        for inp in inputs:
+            if inp.content:
+                # Handle Base64 Content
                 try:
-                    # Convert bytes to PIL Image
-                    image_data = BytesIO(response.content)
-                    pil_image = Image.open(image_data).convert('RGB')
-                    images[img_id] = pil_image
+                    # Fix: Handle data URI scheme if present (e.g., "data:image/png;base64,...")
+                    content_str = inp.content
+                    if "," in content_str[:50]:
+                        content_str = content_str.split(",", 1)[1]
+                    
+                    image_data = base64.b64decode(content_str)
+                    pil_image = Image.open(BytesIO(image_data)).convert('RGB')
+                    images[inp.id] = pil_image
                 except Exception as e:
-                    logger.error(f"Failed to decode image {img_id}: {e}")
-                    failed.append(img_id)
+                    logger.error(f"Failed to decode base64 for image {inp.id}: {e}")
+                    failed.append(inp.id)
+            elif inp.url:
+                # Handle URL - Queue for batch download
+                download_tasks.append(inp)
+            else:
+                failed.append(inp.id)
+
+        # Execute downloads if any
+        if download_tasks:
+            async with httpx.AsyncClient(
+                timeout=20.0, 
+                follow_redirects=True, 
+                headers=ImageProcessor.DOWNLOAD_HEADERS,
+                verify=False # Mimic CURLOPT_SSL_VERIFYPEER = false
+            ) as client:
+                
+                # Create coroutines
+                reqs = [client.get(str(inp.url)) for inp in download_tasks]
+                
+                # Execute concurrently
+                responses = await asyncio.gather(*reqs, return_exceptions=True)
+                
+                for i, response in enumerate(responses):
+                    img_input = download_tasks[i]
+                    img_id = img_input.id
+                    
+                    if isinstance(response, Exception):
+                        logger.warning(f"Download exception for {img_id} ({img_input.url}): {response}")
+                        failed.append(img_id)
+                        continue
+                        
+                    if response.status_code == 429:
+                        # Simple retry logic for 429 could go here, but for now mark failed
+                        logger.warning(f"Rate limited (429) for {img_id}")
+                        failed.append(img_id)
+                        continue
+
+                    if response.status_code != 200:
+                        logger.warning(f"HTTP {response.status_code} for {img_id}")
+                        failed.append(img_id)
+                        continue
+                    
+                    try:
+                        # Validate Content-Type roughly
+                        content_type = response.headers.get("content-type", "")
+                        # PHP script does more complex checks (binary/octet-stream), 
+                        # but PIL.open is the ultimate validation.
+                        
+                        image_bytes = BytesIO(response.content)
+                        pil_image = Image.open(image_bytes).convert('RGB')
+                        images[img_id] = pil_image
+                    except UnidentifiedImageError:
+                        logger.error(f"Invalid image format for {img_id}")
+                        failed.append(img_id)
+                    except Exception as e:
+                        logger.error(f"Processing error for {img_id}: {e}")
+                        failed.append(img_id)
 
         return images, failed
 
@@ -68,10 +135,16 @@ class ImageProcessor:
         features['phash'] = imagehash.phash(pil_image)
 
         # 2. Compute Histogram (Color)
+        # Convert to numpy array for OpenCV
         cv_image = np.array(pil_image)
+        
+        # Convert RGB to HSV (Note: PIL is RGB, OpenCV expects RGB here because we converted PIL->NP)
+        # However, cv2.cvtColor usually assumes BGR if read via cv2.imread. 
+        # Since we use PIL (RGB), we use COLOR_RGB2HSV directly.
         hsv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2HSV)
         
         # Calculate Histograms for H, S, V channels
+        # Ranges: H (0-180), S (0-256), V (0-256)
         hist = cv2.calcHist([hsv_image], [0, 1, 2], None, [8, 8, 8], [0, 180, 0, 256, 0, 256])
         cv2.normalize(hist, hist)
         features['hist'] = hist.flatten()

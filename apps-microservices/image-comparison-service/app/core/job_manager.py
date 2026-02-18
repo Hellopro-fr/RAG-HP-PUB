@@ -61,7 +61,6 @@ class JobManager:
                     results.append(JobStatus(**json.loads(data)))
                 except Exception:
                     continue
-        
         return results
 
     async def process_job_logic(self, job_id: str, inputs: list, threshold: float) -> ComparisonResult:
@@ -77,11 +76,13 @@ class JobManager:
                     JobStatus(job_id=job_id, status="processing", progress=10.0).json()
                 )
 
-                logger.info(f"Job {job_id}: Downloading {len(inputs)} images...")
-                images_map, failed_ids = await ImageProcessor.download_images(inputs)
+                logger.info(f"Job {job_id}: Loading {len(inputs)} images (URL or Content)...")
+                
+                # Use load_images which handles both URLs and Base64 content
+                images_map, failed_ids = await ImageProcessor.load_images(inputs)
                 
                 if not images_map:
-                    raise Exception("No images could be downloaded successfully.")
+                    raise Exception("No valid images could be loaded/downloaded.")
 
                 await self.redis.set(
                     f"job:{job_id}:status", 

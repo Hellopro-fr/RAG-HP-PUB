@@ -1,13 +1,28 @@
 from typing import List, Optional, Dict, Union
-from pydantic import BaseModel, HttpUrl, Field
+from pydantic import BaseModel, HttpUrl, Field, model_validator
 from datetime import datetime
+import uuid
 
 class ImageInput(BaseModel):
-    id: str = Field(..., description="Unique identifier for the image")
-    url: HttpUrl = Field(..., description="Publicly accessible URL of the image")
+    id: Optional[str] = Field(None, description="Unique identifier. If not provided, one will be generated.")
+    url: Optional[HttpUrl] = Field(None, description="Publicly accessible URL of the image")
+    content: Optional[str] = Field(None, description="Base64 encoded image content. Use this if the image is already downloaded.")
+
+    @model_validator(mode='after')
+    def check_source_exists(self) -> 'ImageInput':
+        if not self.url and not self.content:
+            raise ValueError('Either "url" or "content" (base64) must be provided.')
+        # Auto-generate ID if missing
+        if not self.id:
+            if self.url:
+                # Use a predictable hash of the URL if possible, or random
+                self.id = str(uuid.uuid5(uuid.NAMESPACE_URL, str(self.url)))
+            else:
+                self.id = str(uuid.uuid4())
+        return self
 
 class CompareRequest(BaseModel):
-    job_id: str = Field(..., description="Unique identifier for this comparison job")
+    job_id: Optional[str] = Field(None, description="Unique identifier for this comparison job. If missing, one is generated.")
     images: List[ImageInput] = Field(..., description="List of images to compare")
     threshold: Optional[float] = Field(90.0, description="Similarity percentage threshold (0-100)")
     sync: Optional[bool] = Field(False, description="If True, the request waits for completion and returns the result.")
