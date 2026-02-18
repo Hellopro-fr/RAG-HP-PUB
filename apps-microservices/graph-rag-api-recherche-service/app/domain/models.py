@@ -269,6 +269,26 @@ class MatchingOptions(BaseModel):
     )
 
 
+class ScoringOptions(BaseModel):
+    z_unmatched: float = Field(
+        0.2, description="Score pour les geolocalisation non matched"
+    )
+    e_unmatched: float = Field(0.9, description="Score pour les non client")
+    g_unknown_score: float = Field(
+        0.8, description="Score pour les géolocalisations inconnues"
+    )
+    c_unknown_score: float = Field(
+        0.5, description="Score pour les caractéristiques inconnues"
+    )
+    v_blocked: float = Field(
+        -2.0, description="Score pour les caractéristiques bloquées"
+    )
+    v_different: float = Field(
+        -0.3, description="Score pour les caractéristiques différentes"
+    )
+    t_unmatched: float = Field(0.2, description="Score pour les typologies non matched")
+
+
 class MatchingPayload(BaseModel):
     id_categorie: int = Field(..., description="Identifiant de la catégorie")
     top_k: int = Field(15, description="Nombre de résultats souhaités")
@@ -285,6 +305,18 @@ class MatchingPayload(BaseModel):
     options: Optional[MatchingOptions] = Field(
         MatchingOptions(score=MatchingOptionsScore(critique=5, secondaire=1)),
         description="Options pour le matching",
+    )
+    scoring: Optional[ScoringOptions] = Field(
+        ScoringOptions(
+            z_unmatched=0.2,
+            e_unmatched=0.9,
+            g_unknown_score=0.8,
+            c_unknown_score=0.5,
+            v_blocked=-2.0,
+            v_different=-0.3,
+            t_unmatched=0.2,
+        ),
+        description="Options pour le scoring",
     )
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
 

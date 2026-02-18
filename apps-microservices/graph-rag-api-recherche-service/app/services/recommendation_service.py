@@ -578,8 +578,14 @@ class RecommendationService:
         weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
 
         # Use default values for blocked_val and different_val
-        blocked_val = -2.0
-        different_val = -0.3
+        blocked_val = request.scoring.v_blocked or -2.0
+        different_val = request.scoring.v_different or -0.3
+
+        z_unmatched = request.scoring.z_unmatched or 0.2
+        e_unmatched = request.scoring.e_unmatched or 0.9
+        g_unknown_score = request.scoring.g_unknown_score or 0.8
+        c_unknown_score = request.scoring.c_unknown_score or 0.5
+        t_unmatched = request.scoring.t_unmatched or 0.2
 
         # Extract user location data from metadonnee_utilisateurs
         user_meta = request.metadonnee_utilisateurs
@@ -587,11 +593,6 @@ class RecommendationService:
         user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
         user_id_pays = user_meta.id_pays if user_meta else None
         user_typologie = user_meta.typologie if user_meta else None
-
-        z_unmatched = 0.2
-        e_unmatched = 0.9
-        g_unknown_score = 0.8
-        c_unknown_score = 0.5
 
         # Build Cypher Query Step 1 (Dynamic)
         if target_product_id:
@@ -1097,7 +1098,7 @@ class RecommendationService:
                 WHEN etat_score = 1.0 THEN
                     CASE
                         WHEN $user_typologie IS NOT NULL AND ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
-                        ELSE 0.2
+                        ELSE $t_unmatched
                     END
                 ELSE 1.0
              END AS typo_score
@@ -1108,7 +1109,7 @@ class RecommendationService:
         // global_score * zone_score * etat_score * typo_score AS final_score
         WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
             global_score * zone_score * etat_score * typo_score AS final_score
-        WHERE final_score >= 0 OR $target_product_id IS NOT NULL
+        WHERE final_score > 0 OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         LIMIT $top_k + 4
@@ -1192,6 +1193,7 @@ class RecommendationService:
             "g_unknown_score": g_unknown_score,
             "c_unknown_score": c_unknown_score,
             "user_typologie": user_typologie,
+            "t_unmatched": t_unmatched,
         }
 
         try:
