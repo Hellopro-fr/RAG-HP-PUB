@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const BASE_URL = 'https://api.hellopro.eu';
-const URL_API_FOURNISSEUR = `${BASE_URL}/graphdebug-service/fournisseur`;
+const URL_API_FOURNISSEUR = `${BASE_URL}/graph-service/fournisseur`;
 
 /**
  * GET /api/matching_fournisseur/[...path]
