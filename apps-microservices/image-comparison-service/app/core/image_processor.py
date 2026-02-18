@@ -126,7 +126,8 @@ class ImageProcessor:
                     img_id = img_input.id
                     
                     if isinstance(response, Exception):
-                        logger.warning(f"Download exception for {img_id}: {response}")
+                        # Enhanced logging to show URL and specific exception type and message
+                        logger.warning(f"Download exception for {img_id} ({img_input.url}): {type(response).__name__} - {str(response)}")
                         failed.append(img_id)
                         continue
                         
