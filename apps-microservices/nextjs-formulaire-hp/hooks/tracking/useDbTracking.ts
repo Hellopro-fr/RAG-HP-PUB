@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import { getSessionId } from '@/lib/analytics/gtm';
 import { basePath } from '@/lib/utils';
+import { FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
 
 const getApiBasePath = () => {
   return basePath || '';
@@ -55,11 +56,17 @@ export function useDbTracking() {
       // Préparer les méta-données de session (seulement si pas encore envoyées)
       let sessionMeta = undefined;
       if (!hasSentMeta) {
+        // Récupérer le token original si présent
+        let token = undefined;
+        if (typeof window !== 'undefined') {
+          token = sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY) || undefined;
+        }
+
         sessionMeta = {
           user_agent: navigator.userAgent,
           referrer: document.referrer,
           entry_url: window.location.pathname,
-          // token: ... (si disponible via URL ou store)
+          token: token,
         };
         sessionStorage.setItem(metaKey, 'true');
       }
