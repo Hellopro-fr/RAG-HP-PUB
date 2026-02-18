@@ -99,6 +99,11 @@ async function getFournisseur(id_produit: string): Promise<FournisseurData | nul
 }
 
 function debugInfo(): void {
+  // Activer le mode debug pour les boutons de copie dans les modals produit
+  (window as any).__debugModeEnabled = true;
+  window.dispatchEvent(new Event('enableDebugMode'));
+  console.log('[DEBUG] Copy buttons enabled in product modals');
+
   const storageData = sessionStorage.getItem('flow-storage');
   if (!storageData) {
     console.error('Pas de flow-storage trouve');
