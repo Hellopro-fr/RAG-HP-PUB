@@ -124,7 +124,7 @@ async def match_products(request: MatchingPayloadIdProduit):
                 temps_de_traitement=0.0,
             )
 
-        logging.warning(f"[DEBUG] - request: {request}")
+        logging.warning(f"[DEBUG] - request: {request.model_dump()}")
         results = await recommendation_service.get_products_by_caracteristique_filters(
             request
         )
