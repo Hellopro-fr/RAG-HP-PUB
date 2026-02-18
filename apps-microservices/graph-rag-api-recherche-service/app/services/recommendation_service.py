@@ -1164,7 +1164,7 @@ class RecommendationService:
         //         Limit to $top_k + 4
         WITH [prod IN enriched WHERE 
             prod.supplier_range_rank <= $max_per_supplier_primary
-        ] AS diversity_filtered
+        ] AS diversity_filtered, enriched
         
         // Step 5: Build pre-diversity debug + take top_k + 4
         WITH diversity_filtered[0..$top_k + 4] AS all_products,
