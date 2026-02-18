@@ -591,6 +591,7 @@ class RecommendationService:
         relative_tolerance = request.scoring.relative_tolerance
         max_per_supplier_primary = request.scoring.max_per_supplier_primary
         max_per_supplier_extended = request.scoring.max_per_supplier_extended
+        score_step = request.scoring.score_step
 
         logging.warning(f"[DEBUG] scoring parameters: {request.scoring}")
         logging.warning(
@@ -1135,7 +1136,10 @@ class RecommendationService:
              ) AS supplier_avg_map,
              CASE WHEN size(all_scored) > 0 THEN all_scored[0].final_score ELSE 0.0 END AS best_score
         
-        // Step 3: Enrich with supplier_rank and supplier_avg_score
+        // Step 3: Enrich with supplier_range_rank (rank within same supplier + same score range)
+        //         Score ranges: [1.0-0.8], [0.8-0.6], [0.6-0.4], [0.4-0.2], [0.2-0.0]
+        //         Max 2 products per supplier per range
+        //         Tie-break between same-score products by supplier_avg_score DESC
         WITH [prod IN all_scored | {
             node: prod.node,
             details: prod.details,
@@ -1146,35 +1150,25 @@ class RecommendationService:
             final_score: prod.final_score,
             info_soc: prod.info_soc,
             supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)],
-            supplier_rank: size([other IN all_scored WHERE 
+            score_range: toInteger(floor(prod.final_score / $score_step)),
+            supplier_range_rank: size([other IN all_scored WHERE 
                 toString(other.node.id_fournisseur) = toString(prod.node.id_fournisseur) AND 
+                toInteger(floor(other.final_score / $score_step)) = toInteger(floor(prod.final_score / $score_step)) AND
                 (other.final_score > prod.final_score OR 
                  (other.final_score = prod.final_score AND toString(other.node.id_produit) < toString(prod.node.id_produit)))
             ]) + 1
-        }] AS enriched, best_score
+        }] AS enriched
         
-        // Step 4: Primary pass (max per supplier = $max_per_supplier_primary, within relative tolerance)
+        // Step 4: Keep max $max_per_supplier_primary products per supplier per score range
+        //         Sort by final_score DESC, supplier_avg_score DESC (tie-breaker)
+        //         Limit to $top_k + 4
         WITH [prod IN enriched WHERE 
-            (prod.final_score >= $absolute_threshold) AND
-            (prod.final_score >= best_score - $relative_tolerance) AND
-            prod.supplier_rank <= $max_per_supplier_primary
-        ] AS primary_selected, enriched, best_score
+            prod.supplier_range_rank <= $max_per_supplier_primary
+        ] AS diversity_filtered
         
-        // Step 5: Extended fill (max per supplier = $max_per_supplier_extended, for products not in primary)
-        WITH primary_selected, enriched,
-             CASE WHEN size(primary_selected) < $top_k THEN
-                 [prod IN enriched WHERE 
-                     NOT toString(prod.node.id_produit) IN [p IN primary_selected | toString(p.node.id_produit)] AND
-                     (prod.final_score >= $absolute_threshold) AND
-                     (prod.final_score >= best_score - $relative_tolerance) AND
-                     prod.supplier_rank <= $max_per_supplier_extended
-                 ]
-             ELSE []
-             END AS extended_selected
-        
-        // Step 6: Combine diversity-selected products + build pre-diversity debug summary
-        WITH (primary_selected + extended_selected)[0..$top_k + 4] AS all_products,
-             [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, supplier_rank: e.supplier_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
+        // Step 5: Build pre-diversity debug + take top_k + 4
+        WITH diversity_filtered[0..$top_k + 4] AS all_products,
+             [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, score_range: e.score_range, supplier_range_rank: e.supplier_range_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products, pre_diversity_debug,
@@ -1262,6 +1256,7 @@ class RecommendationService:
             "relative_tolerance": relative_tolerance,
             "max_per_supplier_primary": max_per_supplier_primary,
             "max_per_supplier_extended": max_per_supplier_extended,
+            "score_step": score_step,
         }
 
         try:

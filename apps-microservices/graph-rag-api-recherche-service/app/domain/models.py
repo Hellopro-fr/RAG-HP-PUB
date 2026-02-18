@@ -299,6 +299,9 @@ class ScoringOptions(BaseModel):
     max_per_supplier_extended: int = Field(
         3, description="Nombre maximum de produits par fournisseur (passe étendue)"
     )
+    score_step: float = Field(
+        0.2, description="Pas de score pour les tranches de diversité fournisseur"
+    )
 
 
 class MatchingPayload(BaseModel):
