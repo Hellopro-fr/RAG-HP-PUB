@@ -1426,46 +1426,6 @@ class RecommendationService:
                     if rec.get("product_data"):
                         liste_produit.append(build_produit(rec, idx + 1))
 
-                # --- DEBUG: Log pre-diversity vs post-diversity comparison ---
-                pre_diversity = (
-                    results[0].get("pre_diversity_debug", []) if results else []
-                )
-                post_diversity_ids = [p.id_produit for p in liste_produit]
-                post_top_p_ids = [p.id_produit for p in top_produit]
-                post_all_ids = set(post_diversity_ids + post_top_p_ids)
-
-                logging.warning(
-                    f"[DIVERSITY DEBUG] === Pre-Diversity List ({len(pre_diversity)} products) ==="
-                )
-                for item in pre_diversity:
-                    in_final = str(item.get("id_produit", "")) in post_all_ids
-                    logging.warning(
-                        f"  id_produit={item.get('id_produit')}, "
-                        f"id_fournisseur={item.get('id_fournisseur')}, "
-                        f"final_score={item.get('final_score', 0):.4f}, "
-                        f"supplier_rank={item.get('supplier_rank')}, "
-                        f"supplier_avg={item.get('supplier_avg_score', 0):.4f}, "
-                        f"{'✅ KEPT' if in_final else '❌ FILTERED'}"
-                    )
-
-                logging.warning(
-                    f"[DIVERSITY DEBUG] === Post-Diversity: top_produit ({len(top_produit)}) ==="
-                )
-                for p in top_produit:
-                    logging.warning(
-                        f"  id_produit={p.id_produit}, score={p.score:.4f}, "
-                        f"id_fournisseur={p.info_produit.get('id_fournisseur', 'N/A') if p.info_produit else 'N/A'}"
-                    )
-
-                logging.warning(
-                    f"[DIVERSITY DEBUG] === Post-Diversity: liste_produit ({len(liste_produit)}) ==="
-                )
-                for p in liste_produit:
-                    logging.warning(
-                        f"  id_produit={p.id_produit}, score={p.score:.4f}, "
-                        f"id_fournisseur={p.info_produit.get('id_fournisseur', 'N/A') if p.info_produit else 'N/A'}"
-                    )
-
             total_time = time.perf_counter() - start_time
             return MatchingResponse(
                 top_produit=top_produit,
