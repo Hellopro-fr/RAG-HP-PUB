@@ -76,7 +76,7 @@ class JobManager:
                     JobStatus(job_id=job_id, status="processing", progress=10.0).json()
                 )
 
-                logger.info(f"Job {job_id}: Loading {len(inputs)} images (URL or Content)...")
+                logger.info(f"Job {job_id}: Loading {len(inputs)} images...")
                 
                 # Use load_images which handles both URLs and Base64 content
                 images_map, failed_ids = await ImageProcessor.load_images(inputs)
@@ -91,10 +91,11 @@ class JobManager:
 
                 logger.info(f"Job {job_id}: Processing comparisons for {len(images_map)} images...")
                 
-                # CPU Bound execution
+                # We now pass 'inputs' to compare_batch to allow URL mapping
                 raw_results = await anyio.to_thread.run_sync(
                     ImageProcessor.compare_batch, 
-                    images_map
+                    images_map,
+                    inputs 
                 )
 
                 similar_pairs = []
@@ -113,14 +114,16 @@ class JobManager:
                     failed_images=failed_ids
                 )
                 
-                # Save result and status
-                await self.redis.set(f"job:{job_id}:result", result.json(), ex=3600*24)
+                # Use Configurable TTL from Settings
+                ttl = settings.JOB_RESULT_TTL
+                
+                await self.redis.set(f"job:{job_id}:result", result.json(), ex=ttl)
                 await self.redis.set(
                     f"job:{job_id}:status", 
                     JobStatus(job_id=job_id, status="finished", progress=100.0).json(),
-                    ex=3600*24
+                    ex=ttl
                 )
-                logger.info(f"Job {job_id} finished successfully.")
+                logger.info(f"Job {job_id} finished successfully. Results stored for {ttl}s.")
                 
                 return result
 
@@ -132,13 +135,13 @@ class JobManager:
                     error=str(e),
                     progress=0.0
                 )
-                await self.redis.set(f"job:{job_id}:status", error_status.json(), ex=3600*24)
+                await self.redis.set(f"job:{job_id}:status", error_status.json(), ex=settings.JOB_RESULT_TTL)
                 raise e
 
     async def submit_job_async(self, job_id: str, images: list, threshold: float):
         """Fire and forget execution."""
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
-        await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=3600*24)
+        await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
         
         # Launch in background
         asyncio.create_task(self.process_job_logic(job_id, images, threshold))
@@ -146,7 +149,7 @@ class JobManager:
     async def submit_job_sync(self, job_id: str, images: list, threshold: float) -> ComparisonResult:
         """Wait for execution and return result."""
         initial_status = JobStatus(job_id=job_id, status="queued", progress=0.0)
-        await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=3600*24)
+        await self.redis.set(f"job:{job_id}:status", initial_status.json(), ex=settings.JOB_RESULT_TTL)
         
         # Await completion
         return await self.process_job_logic(job_id, images, threshold)

@@ -7,7 +7,7 @@ import asyncio
 import base64
 from PIL import Image, UnidentifiedImageError, ImageOps
 from io import BytesIO
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 import anyio
 
 from app.core.config import settings
@@ -112,7 +112,7 @@ class ImageProcessor:
                 follow_redirects=True, 
                 headers=ImageProcessor.DOWNLOAD_HEADERS,
                 verify=False,
-                proxy=proxy_url  # Changed from proxies=proxies to proxy=proxy_url
+                proxy=proxy_url
             ) as client:
                 
                 # Create coroutines
@@ -201,16 +201,18 @@ class ImageProcessor:
         return final_score, {"phash": phash_score, "hist": hist_score}
 
     @staticmethod
-    def compare_batch(images: Dict[str, Image.Image]) -> List[Dict]:
+    def compare_batch(images: Dict[str, Image.Image], inputs: List[ImageInput]) -> List[Dict]:
         """
-        Main CPU-bound function.
-        Extracts features for all images and compares them.
+        Compares images and maps IDs back to URLs if available.
         """
         ids = list(images.keys())
         n = len(ids)
         if n < 2:
             return []
             
+        # Create map for ID -> URL for quick lookup
+        url_map = {inp.id: inp.url for inp in inputs}
+
         # 1. Feature Extraction (O(N))
         features_map = {}
         for img_id in ids:
@@ -227,7 +229,9 @@ class ImageProcessor:
                 
                 results.append({
                     "image_a_id": id_a,
+                    "image_a_url": url_map.get(id_a), # Inject URL
                     "image_b_id": id_b,
+                    "image_b_url": url_map.get(id_b), # Inject URL
                     "score": round(score, 2),
                     "method_details": details
                 })

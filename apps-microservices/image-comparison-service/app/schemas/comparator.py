@@ -33,7 +33,11 @@ class JobResponse(BaseModel):
 
 class SimilarityPair(BaseModel):
     image_a_id: str
+    image_a_url: Optional[HttpUrl] = Field(None, description="URL of image A (if available)")
+    
     image_b_id: str
+    image_b_url: Optional[HttpUrl] = Field(None, description="URL of image B (if available)")
+    
     score: float = Field(..., description="Similarity score (0-100)")
     method_details: Optional[Dict[str, float]] = Field(None, description="Breakdown of scores")
 

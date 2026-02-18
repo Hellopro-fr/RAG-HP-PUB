@@ -18,4 +18,8 @@ class Settings:
     if APIFY_PROXY_PASSWORD:
         APIFY_PROXY = f"http://auto:{APIFY_PROXY_PASSWORD}@proxy.apify.com:8000"
 
+    # Data Retention
+    # Time in seconds to keep job status and results in Redis (Default: 24 hours)
+    JOB_RESULT_TTL: int = int(os.getenv("JOB_RESULT_TTL", "86400"))
+
 settings = Settings()
