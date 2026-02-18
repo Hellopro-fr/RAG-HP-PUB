@@ -128,7 +128,7 @@ export function useProcessMatchingLogic() {
 
       // Ajouter les paramètres de test du matching (si présents dans l'URL)
       if (matchingTestParams) {
-        formData.append('matching_test_params', JSON.stringify(matchingTestParams));
+        formData.append('scoring', JSON.stringify(matchingTestParams));
       }
 
       console.log('Payload MATCHING :', {
@@ -137,7 +137,7 @@ export function useProcessMatchingLogic() {
         champs_sortie: ["url"],
         metadonnee_utilisateurs,
         liste_caracteristique: consolidatedEquivalences,
-        ...(matchingTestParams && { matching_test_params: matchingTestParams })
+        ...(matchingTestParams && { scoring: matchingTestParams })
       });
 
       const apiBase = getApiBasePath();
@@ -319,7 +319,7 @@ export function useProcessMatchingLogic() {
 
       // Ajouter les paramètres de test du matching (si présents dans l'URL)
       if (matchingTestParams) {
-        formData.append('matching_test_params', JSON.stringify(matchingTestParams));
+        formData.append('scoring', JSON.stringify(matchingTestParams));
       }
 
       console.log('Payload MATCHING (client - refetch):', {
@@ -329,7 +329,7 @@ export function useProcessMatchingLogic() {
         champs_sortie: ["url"],
         liste_caracteristique: activeEquivalences,
         removed_criteria_ids: allRemovedIds,
-        ...(matchingTestParams && { matching_test_params: matchingTestParams })
+        ...(matchingTestParams && { scoring: matchingTestParams })
       });
 
       const apiBase = getApiBasePath();
