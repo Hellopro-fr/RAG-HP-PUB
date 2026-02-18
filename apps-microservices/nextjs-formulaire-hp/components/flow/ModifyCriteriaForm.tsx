@@ -111,7 +111,7 @@ const CriterionCard = memo(({
   };
 
   // Bloquer les touches non-numériques (lettres, caractères spéciaux sauf point et moins)
-  const handleNumericKeyDown = (e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+  const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Autoriser: chiffres, point, moins, Backspace, Delete, Tab, Enter, Arrows, Home, End
     const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
     const isNumber = /^[0-9]$/.test(e.key);
