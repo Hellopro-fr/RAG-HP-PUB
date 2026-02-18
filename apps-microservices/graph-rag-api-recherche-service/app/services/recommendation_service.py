@@ -1130,9 +1130,9 @@ class RecommendationService:
         // Step 2: Compute supplier average scores and best score
         WITH all_scored,
              apoc.map.fromPairs(
-                 [sid IN apoc.coll.toSet([p IN all_scored | toString(p.node.id_fournisseur)]) |
-                  [sid, reduce(s = 0.0, p IN [x IN all_scored WHERE toString(x.node.id_fournisseur) = sid] | s + x.final_score)
-                        / toFloat(size([x IN all_scored WHERE toString(x.node.id_fournisseur) = sid]))]]
+                 [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
+                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid] | acc + item.final_score)
+                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid]))]]
              ) AS supplier_avg_map,
              CASE WHEN size(all_scored) > 0 THEN all_scored[0].final_score ELSE 0.0 END AS best_score
         
@@ -1147,10 +1147,10 @@ class RecommendationService:
             final_score: prod.final_score,
             info_soc: prod.info_soc,
             supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)],
-            supplier_rank: size([p IN all_scored WHERE 
-                toString(p.node.id_fournisseur) = toString(prod.node.id_fournisseur) AND 
-                (p.final_score > prod.final_score OR 
-                 (p.final_score = prod.final_score AND toString(p.node.id_produit) < toString(prod.node.id_produit)))
+            supplier_rank: size([other IN all_scored WHERE 
+                toString(other.node.id_fournisseur) = toString(prod.node.id_fournisseur) AND 
+                (other.final_score > prod.final_score OR 
+                 (other.final_score = prod.final_score AND toString(other.node.id_produit) < toString(prod.node.id_produit)))
             ]) + 1
         }] AS enriched, best_score
         
