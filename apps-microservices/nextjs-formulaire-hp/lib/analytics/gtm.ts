@@ -10,17 +10,9 @@ type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | n
 
 interface FunnelContext {
   rubrique_id?: number;
-  rubrique_name?: string;
-  page_location_uri?: string;
+  'product.category5'?: string;
 }
 
-interface QuestionData {
-  question_id?: number;
-  question_title?: string;
-  answer_ids?: string[];
-  is_multiselect?: boolean;
-  total_questions?: number;
-}
 
 
 // =============================================================================
@@ -56,7 +48,10 @@ function getUserId(): string {
 /**
  * Obtenir ou créer un ID de session (temporaire)
  */
-function getSessionId(): string {
+/**
+ * Obtenir ou créer un ID de session (temporaire)
+ */
+export function getSessionId(): string {
   if (typeof window === 'undefined') return 'unknown';
 
   let sessionId = sessionStorage.getItem('hp_session_id');
@@ -142,14 +137,6 @@ function getDeviceInfo() {
   };
 }
 
-/**
- * Obtenir le page_location_uri actuel
- */
-function getPageLocationUri(): string {
-  if (typeof window === 'undefined') return '';
-  return window.location.pathname;
-}
-
 // =============================================================================
 // CONTEXTE FUNNEL (stocké en session)
 // =============================================================================
@@ -210,11 +197,10 @@ export function trackQuoteFunnel(
 
     // Contexte funnel
     rubrique_id: funnelContext.rubrique_id,
-    rubrique_name: funnelContext.rubrique_name,
-    page_location_uri: getPageLocationUri(),
+    'product.category5': funnelContext['product.category5'],
 
-    // Type de parcours (null si pas encore déterminé)
-    flow_type: currentFlowType,
+    // Type de parcours (seulement si défini)
+    ...(currentFlowType && { flow_type: currentFlowType }),
 
     // Identifiants
     user_id: userId,
@@ -246,38 +232,11 @@ export function trackFunnelStart(context?: FunnelContext) {
 /**
  * Track l'affichage d'une question
  */
-export function trackQuestionView(
-  questionIndex: number,
-  data?: QuestionData
-) {
+export function trackQuestionView(questionIndex: number) {
   currentStepIndex = questionIndex + 1; // +1 car funnel-start est à 0
   const stepName = questionIndex === 0 ? '1ere-question' : `${questionIndex + 1}eme-question`;
 
-  trackQuoteFunnel(currentStepIndex, stepName, 'question', {
-    question_id: data?.question_id,
-    question_title: data?.question_title,
-  });
-}
-
-/**
- * Track une question répondue
- */
-export function trackQuestionAnswered(
-  questionIndex: number,
-  questionId: number,
-  questionTitle: string,
-  answerIds: string[],
-  isMultiSelect: boolean
-) {
-  currentStepIndex = questionIndex + 1;
-  const stepName = questionIndex === 0 ? '1ere-question-answered' : `${questionIndex + 1}eme-question-answered`;
-
-  trackQuoteFunnel(currentStepIndex, stepName, 'question', {
-    question_id: questionId,
-    question_title: questionTitle,
-    answer_ids: answerIds,
-    is_multiselect: isMultiSelect,
-  });
+  trackQuoteFunnel(currentStepIndex, stepName, 'question');
 }
 
 /**
@@ -321,23 +280,6 @@ export function trackSelectionPageView(recommendedCount: number, totalCount: num
 }
 
 /**
- * Track le clic sur une carte produit
- */
-export function trackProductCardClick(
-  productId: string,
-  productName: string,
-  matchScore: number,
-  action: 'view_details' | 'toggle_select'
-) {
-  trackQuoteFunnel(currentStepIndex, 'product-click', 'selection', {
-    product_id: productId,
-    product_name: productName,
-    match_score: matchScore,
-    action,
-  });
-}
-
-/**
  * Track le changement de sélection produit
  */
 export function trackProductSelectionChange(
@@ -345,7 +287,7 @@ export function trackProductSelectionChange(
   action: 'ajouter' | 'retirer',
   totalSelected: number
 ) {
-  // Vérifier si c'est la première action de chaque type pour cet utilisateur dans la session
+  // Vérifier si c'est la première action de ce type pour cet utilisateur dans la session
   const isFirstAdd = action === 'ajouter' && isFirstView('product_selection_ajouter');
   const isFirstRemove = action === 'retirer' && isFirstView('product_selection_retirer');
 
@@ -353,20 +295,21 @@ export function trackProductSelectionChange(
     product_id: productId,
     action,
     total_selected: totalSelected,
-    is_first_add: isFirstAdd,
-    is_first_remove: isFirstRemove,
+    // Envoyer is_first_add uniquement si true (premier ajout)
+    ...(isFirstAdd && { is_first_add: true }),
+    // Envoyer is_first_remove uniquement si true (premier retrait)
+    ...(isFirstRemove && { is_first_remove: true }),
   });
 }
 
 /**
  * Track l'ouverture du modal de comparaison
  */
-export function trackComparisonModalView(supplierIds: string[]) {
+export function trackComparisonModalView() {
+  currentStepIndex++;
   const isFirstViewForSession = isFirstView('comparison_modal');
 
-  trackQuoteFunnel(currentStepIndex, 'comparison-modal', 'selection', {
-    suppliers_compared: supplierIds,
-    suppliers_count: supplierIds.length,
+  trackQuoteFunnel(currentStepIndex, 'vue-comparaison', 'selection', {
     is_first_view: isFirstViewForSession,
   });
 }
@@ -378,16 +321,6 @@ export function trackContactFormView(selectedSuppliersCount: number) {
   currentStepIndex++;
   trackQuoteFunnel(currentStepIndex, 'formulaire-contact', 'contact', {
     selected_count: selectedSuppliersCount,
-  });
-}
-
-/**
- * Track le remplissage d'un champ du formulaire
- */
-export function trackContactFieldFilled(fieldName: string, fieldIndex: number) {
-  trackQuoteFunnel(currentStepIndex, `champ-coordonnees-${fieldIndex + 1}`, 'contact', {
-    field_name: fieldName,
-    field_index: fieldIndex,
   });
 }
 
@@ -410,7 +343,7 @@ export function trackFormValidationErrors(
 export function trackLeadSubmitted(suppliersCount: number, profileType: string, userKnownStatus: 'known' | 'unknown') {
   currentStepIndex++;
   trackQuoteFunnel(currentStepIndex, 'submit-success', 'conversion', {
-    suppliers_count: suppliersCount,
+    nombre_fournisseur: suppliersCount,
     profile_type: profileType,
     user_known_status: userKnownStatus,
     conversion: true,
@@ -429,36 +362,29 @@ export function trackLeadSubmissionError(errorType: string, errorMessage: string
 }
 
 // =============================================================================
-// ÉVÉNEMENTS SECONDAIRES (hors funnel principal)
+// ÉVÉNEMENTS SECONDAIRES (intégrés dans devis_funnel_formulaire)
 // =============================================================================
 
 /**
  * Track l'ouverture du modal de modification de critères
  */
 export function trackModifyCriteriaModalView() {
-  const userId = getUserId();
-  const sessionId = getSessionId();
+  currentStepIndex++;
   const isFirstViewForSession = isFirstView('modify_criteria_modal');
 
-  pushToDataLayer('page_vue_critere', {
-    user_id: userId,
-    session_id: sessionId,
+  trackQuoteFunnel(currentStepIndex, 'vue-criteres', 'selection', {
     is_first_view: isFirstViewForSession,
-    timestamp: new Date().toISOString(),
   });
 }
 
 /**
  * Track la modification effective de critères
  */
-export function trackCriteriaModified(criteriaCount: number, modifiedFields: string[]) {
-  const userId = getUserId();
+export function trackCriteriaModified(criteriaCount: number) {
+  currentStepIndex++;
 
-  pushToDataLayer('critere_modifie', {
-    user_id: userId,
+  trackQuoteFunnel(currentStepIndex, 'criteres-modifies', 'selection', {
     criteria_count: criteriaCount,
-    modified_fields: modifiedFields,
-    timestamp: new Date().toISOString(),
   });
 }
 
@@ -473,7 +399,7 @@ export function trackCustomNeedPageView() {
 
   trackQuoteFunnel(currentStepIndex, 'description-besoin', 'contact', {
     is_first_view: isFirstViewForSession,
-  });
+  }); 
 }
 
 /**
@@ -487,20 +413,13 @@ export function trackCustomNeedContactView() {
 /**
  * Track l'ouverture du modal fiche produit
  */
-export function trackProductModalView(productId: string, productName: string, supplierId: string) {
-  const userId = getUserId();
-  const sessionId = getSessionId();
-  const modalKey = `product_modal_${productId}`;
-  const isFirstViewForSession = isFirstView(modalKey);
+export function trackProductModalView(productId: string) {
+  currentStepIndex++;
+  const isFirstViewForSession = isFirstView('product_modal');
 
-  pushToDataLayer('vue_modal_produit', {
-    user_id: userId,
-    session_id: sessionId,
-    is_first_view: isFirstViewForSession,
+  trackQuoteFunnel(currentStepIndex, 'vue-produit', 'selection', {
     product_id: productId,
-    product_name: productName,
-    supplier_id: supplierId,
-    timestamp: new Date().toISOString(),
+    is_first_view: isFirstViewForSession,
   });
 }
 
@@ -594,8 +513,8 @@ export function trackQuestionNavigation(
 }
 
 /** @deprecated Utiliser trackComparisonModalView à la place */
-export function trackComparisonModalOpen(supplierIds: string[]) {
-  trackComparisonModalView(supplierIds);
+export function trackComparisonModalOpen() {
+  trackComparisonModalView();
 }
 
 /** @deprecated Utiliser trackFormValidationErrors à la place */

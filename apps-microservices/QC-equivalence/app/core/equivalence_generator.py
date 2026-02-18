@@ -130,6 +130,44 @@ class EquivalenceGenerator:
             jeu_carac_clean.append(carac_copy)
         return jeu_carac_clean
 
+    def _extract_carac_ids_from_equivalences(self, json_data: Dict[str, Any]) -> List:
+        """
+        Extrait tous les id_caracteristique distincts du résultat d'équivalence.
+        json_data est le dict mappé {id_reponse: [equivs normalisées]}
+        """
+        carac_ids = set()
+        for reponse_key, equivs in json_data.items():
+            # equivs peut être une liste de dicts normalisés ou un dict brut
+            normalized = self._normalize_equivalence(equivs)
+            for equiv in normalized:
+                id_c = equiv.get("id_caracteristique")
+                if id_c is not None:
+                    carac_ids.add(str(id_c))
+        return list(carac_ids)
+
+    def _filter_jeu_caracteristique(
+        self,
+        jeu_caracteristique: List[Dict[str, Any]],
+        exclude_ids: List
+    ) -> List[Dict[str, Any]]:
+        """
+        Filtre le jeu de caractéristiques en excluant les IDs déjà trouvés
+        dans les équivalences précédentes.
+        
+        Args:
+            jeu_caracteristique: Jeu complet de caractéristiques
+            exclude_ids: Liste d'IDs de caractéristiques à exclure
+            
+        Returns:
+            Jeu de caractéristiques filtré
+        """
+        if not exclude_ids:
+            return jeu_caracteristique
+        exclude_set = set(str(id_c) for id_c in exclude_ids)
+        filtered = [c for c in jeu_caracteristique if str(c.get("id_caracteristique", "")) not in exclude_set]
+        self._log(f"Filtrage: {len(jeu_caracteristique)} → {len(filtered)} caractéristiques ({len(exclude_set)} exclues)")
+        return filtered
+
     def _normalize_equivalence(self, data: Any) -> List[Dict[str, Any]]:
         """
         Normalise une ou plusieurs équivalences en format uniforme.
@@ -219,7 +257,8 @@ class EquivalenceGenerator:
         question_identifier: str,
         process_data: Dict[str, Any],
         nom_reponse: str = "",
-        use_transform: bool = True
+        use_transform: bool = True,
+        exclude_carac_ids: List = None
     ) -> Optional[Dict[str, Any]]:
         """
         Génère les équivalences pour une question (factorisée)
@@ -233,6 +272,7 @@ class EquivalenceGenerator:
             question_identifier: Identifiant unique de la question (ex: "Q1", "123_Q2")
             process_data: Données du processus
             use_transform: Si True, transforme pour créer mapping (toujours True maintenant)
+            exclude_carac_ids: IDs de caractéristiques à exclure (déjà trouvées dans questions précédentes)
             
         Returns:
             Résultat des équivalences ou "already_done"
@@ -263,6 +303,10 @@ class EquivalenceGenerator:
             self._log("Déjà traité")
             return "already_done"
         
+        # Filtrer les caractéristiques déjà trouvées dans les questions précédentes
+        if exclude_carac_ids:
+            jeu_caracteristique = self._filter_jeu_caracteristique(jeu_caracteristique, exclude_carac_ids)
+        
         # Récupérer le prompt (copie du prompt chargé au début)
         prompt_config = self.prompt_equivalence.copy()
 
@@ -285,6 +329,8 @@ class EquivalenceGenerator:
 
         self._log(f"JSON Question: {json_question}")
         self._log(f"Corres Reponse: {corres_reponse}")
+        self._log(f"Exclude Carac Ids: {exclude_carac_ids}")
+        self._log(f"Jeu Caracteristique: {json_caracteristique}")
         
         prompt_text = prompt_config["contenu_prompt"]
         prompt_text = prompt_text.replace("{CATEGORIE}", nom_rubrique)
@@ -292,7 +338,7 @@ class EquivalenceGenerator:
         prompt_text = prompt_text.replace("{INFO_QUESTION_REPONSE}", json_question)
         prompt_text = prompt_text.replace("{JEU_CARACTERISTIQUE}", json_caracteristique)
         
-        # self._log(f"Prompt: {prompt_text}")
+        self._log(f"Prompt: {prompt_text[:100]}")
         
         # Appeler le LLM Gemini
         gemini = GeminiProvider(
@@ -405,7 +451,10 @@ class EquivalenceGenerator:
             self._log("⚠️ Aucun ID d'équivalence retourné par l'API")
             raise Exception("Erreur lors de la génération des équivalences")
 
-        return res_insert
+        return {
+            "result": res_insert,
+            "equivalences": json_data
+        }
     
     async def generate_all_equivalences(
         self,
@@ -484,6 +533,17 @@ class EquivalenceGenerator:
         can_start = process_data.get("can_start", False)
         if not can_start:
             self._log("Processus peut pas commencer")
+            await self.api_client.post(
+                "equivalence",
+                "mail",
+                "error",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE,
+                    "error_message": f"Processus peut pas commencer",
+                    "tracking_file": self.tracking_file
+                }
+            )
             raise Exception("Processus peut pas commencer")
             
         # Reset si demandé
@@ -531,32 +591,39 @@ class EquivalenceGenerator:
         
         processed_count = 0
         
-        # Initialiser done
+        # Initialiser done et data
         if "done" not in process_data:
             process_data["done"] = []
+        if "data" not in process_data:
+            process_data["data"] = {}
         
         # ========== TRAITER QUESTION 1 ==========
         id_question_1 = question_1.get('id_question')
-        question_id = f"Q1_{id_question_1}"
+        question_id_q1 = f"Q1_{id_question_1}"
         result_q1 = await self._generate_equivalence(
             id_categorie=id_categorie,
             nom_rubrique=nom_rubrique,
             nom_reponse="",
             question_data=question_1,
             jeu_caracteristique=jeu_caracteristique,
-            question_identifier=question_id,
+            question_identifier=question_id_q1,
             process_data=process_data,
             use_transform=True 
         )
         
         if result_q1 == "already_done":
             self._log("Question 1 déjà traitée")
-        elif result_q1:            
+        elif result_q1:
             processed_count += 1
+            # Extraire et stocker les IDs de caractéristiques trouvées pour Q1
+            equivalences_q1 = result_q1.get("equivalences", {})
+            carac_ids_q1 = self._extract_carac_ids_from_equivalences(equivalences_q1)
+            process_data["data"][question_id_q1] = carac_ids_q1
+            self._log(f"Q1 → caractéristiques trouvées: {carac_ids_q1}")
         
         # Marquer Q1 comme traité
-        if question_id not in process_data["done"]:
-            process_data["done"].append(question_id)
+        if question_id_q1 not in process_data["done"]:
+            process_data["done"].append(question_id_q1)
         
         await self.api_client.post(
             "equivalence",
@@ -601,8 +668,11 @@ class EquivalenceGenerator:
                 self._log(f"Réponse {id_reponse} déjà traitée")
                 continue
             
-            # Collecter toutes les équivalences pour cette réponse
-            equivalences_reponse = []
+            # Construire la liste cumulative des IDs de caractéristiques
+            # à exclure pour cette chaîne de réponse.
+            # On commence avec les caractéristiques trouvées dans Q1.
+            cumulative_exclude_ids = list(process_data["data"].get(question_id_q1, []))
+            self._log(f"Chaîne R{id_reponse}: exclusion initiale Q1 = {cumulative_exclude_ids} caractéristiques")
             
             # Traiter chaque question de cette réponse
             for question_suivante in liste_questions:
@@ -621,6 +691,17 @@ class EquivalenceGenerator:
                 
                 question_id = f"R{id_reponse}_Q{numero_question}"
                 
+                # Si cette question a déjà été traitée (reprise après coupure),
+                # récupérer ses IDs depuis process_data['data'] pour le cumul
+                if question_id in process_data["done"]:
+                    self._log(f"Question {question_id} déjà traitée")
+                    # Ajouter ses caractéristiques au cumul pour les questions suivantes
+                    previously_found = process_data["data"].get(question_id, [])
+                    cumulative_exclude_ids.extend(previously_found)
+                    self._log(f"{question_id} → {previously_found} caractéristiques trouvées, cumul exclu: {cumulative_exclude_ids}")
+                    continue
+                
+                self._log(f"Question {question_id}: exclusion de {len(cumulative_exclude_ids)} caractéristiques des questions précédentes")
                 
                 result = await self._generate_equivalence(
                     id_categorie=id_categorie,
@@ -630,13 +711,22 @@ class EquivalenceGenerator:
                     jeu_caracteristique=jeu_caracteristique,
                     question_identifier=question_id,
                     process_data=process_data,
-                    use_transform=True  
+                    use_transform=True,
+                    exclude_carac_ids=cumulative_exclude_ids
                 )
                 
                 if result == "already_done":
                     self._log(f"Question {question_id} déjà traitée")
-                elif result: 
+                elif result:
                     processed_count += 1
+                    # Extraire les IDs de caractéristiques trouvées pour cette question
+                    equivalences_q = result.get("equivalences", {})
+                    carac_ids_found = self._extract_carac_ids_from_equivalences(equivalences_q)
+                    # Stocker dans process_data['data']
+                    process_data["data"][question_id] = carac_ids_found
+                    # Ajouter au cumul pour les questions suivantes de cette chaîne
+                    cumulative_exclude_ids.extend(carac_ids_found)
+                    self._log(f"{question_id} → {carac_ids_found} nouvelles caractéristiques trouvées, cumul exclu: {cumulative_exclude_ids}")
                 
                 # Marquer comme traité
                 if question_id not in process_data["done"]:
@@ -653,7 +743,6 @@ class EquivalenceGenerator:
                         "process_data": process_data
                     }
                 )
-
             
             # Marquer la réponse comme traitée
             if unique_reponse not in process_data["done"]:
@@ -670,6 +759,7 @@ class EquivalenceGenerator:
                     "process_data": process_data
                 }
             )
+
         
         self._log("\n" + "=" * 50)
         self._log("GÉNÉRATION ÉQUIVALENCES TERMINÉE")

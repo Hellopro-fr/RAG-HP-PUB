@@ -29,10 +29,12 @@ export interface AcheteurData {
   prenom: string;
 
   // Contact
-  mail: string;
-  telephone: string;
+  mail          : string;
+  telephone     : string;
   indicatif_tel?: string;
-  isKnown?: string;
+  isKnown      ?: string;
+  id_pays_tel   : number;
+
 
   // Entreprise
   societe: string;
@@ -41,7 +43,7 @@ export interface AcheteurData {
   id_cartegie?: string;
 
   // Adresse
-  adresse?: string;
+  address?: string;
   code_postal: string;
   ville: string;
   pays: number;
@@ -57,6 +59,8 @@ export interface AcheteurData {
   website?: string;
   reception_alerte?: boolean;
   naf?: string;
+
+  id_societe_acheteur ?: string | number;
 }
 
 /**
@@ -98,6 +102,7 @@ export interface DemandeInfoPayload {
   souhait_devis?: boolean;
   souhait_infos?: boolean;
   souhait_rdv?: boolean;
+  ddc_is_i?: string;
 
   // Demande IA
   demande_ia?: boolean;
@@ -105,6 +110,15 @@ export interface DemandeInfoPayload {
   id_rubrique?: number | string;
 
   tab_matching_acheteur?: string;
+
+  info_acheteur_matching?: string;
+  
+  question_reponse_acheteur?: string;
+
+  caracteristiques?: string;
+
+  // Pièces jointes (fichiers)
+  files?: File[];
 }
 
 /**

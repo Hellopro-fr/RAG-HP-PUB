@@ -67,11 +67,11 @@ class ServiceClients:
 
     # --- Graph Database (Neo4j) ---
     async def execute_cypher(
-        self, query: str, params: Dict[str, Any] = None
+        self, query: str, params: Dict[str, Any] = None, read_only: bool = True
     ) -> List[Dict[str, Any]]:
         try:
             success, results, _ = await graph_database_client.execute_cypher(
-                query=query, parameters=params, read_only=True
+                query=query, parameters=params, read_only=read_only
             )
             return results if success else []
         except Exception as e:

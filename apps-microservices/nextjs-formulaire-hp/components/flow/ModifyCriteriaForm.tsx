@@ -1,7 +1,7 @@
 'use client';
 
-import { X, GripVertical, Sparkles, Target, Gift, Check, Loader2 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { X, GripVertical, Sparkles, Target, Gift, Check, Loader2, AlertCircle, Plus } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { trackModifyCriteriaModalView, trackCriteriaModified } from "@/lib/analytics";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { useProcessMatchingLogic } from "@/hooks/api/useProcessMatchingLogic";
@@ -35,7 +35,7 @@ interface CriterionFormState {
   // Valeurs éditables
   valeurs_cibles_ids: number[];
   valeurs_bloquantes_ids: number[];
-  valeur_numerique_exact?: number;
+  // Pour numérique: toujours min/max (pas de valeur exacte séparée)
   valeur_numerique_min?: number;
   valeur_numerique_max?: number;
 
@@ -43,6 +43,207 @@ interface CriterionFormState {
   options_disponibles: { id: number; label: string }[];
   isMulti: boolean;
 }
+
+// =============================================================================
+// COMPOSANT CRITERION CARD (memo pour éviter re-renders inutiles)
+// =============================================================================
+
+interface CriterionCardProps {
+  criterion: CriterionFormState;
+  isCritique: boolean;
+  canRemove: boolean;
+  onRemove: (id: number, isCritique: boolean) => void;
+  onToggleMultiValue: (id: number, valueId: number, isCritique: boolean) => void;
+  onUpdateSingleValue: (id: number, valueId: number, isCritique: boolean) => void;
+  onUpdateNumericValue: (id: number, field: 'min' | 'max', value: string, isCritique: boolean) => void;
+}
+
+const CriterionCard = memo(({
+  criterion,
+  isCritique,
+  canRemove,
+  onRemove,
+  onToggleMultiValue,
+  onUpdateSingleValue,
+  onUpdateNumericValue,
+}: CriterionCardProps) => {
+  // État local pour les inputs numériques (évite la perte de focus)
+  const [localMin, setLocalMin] = useState<string>(
+    criterion.valeur_numerique_min !== undefined ? String(criterion.valeur_numerique_min) : ''
+  );
+  const [localMax, setLocalMax] = useState<string>(
+    criterion.valeur_numerique_max !== undefined ? String(criterion.valeur_numerique_max) : ''
+  );
+
+  // Synchroniser avec les props quand elles changent de l'extérieur
+  useEffect(() => {
+    setLocalMin(criterion.valeur_numerique_min !== undefined ? String(criterion.valeur_numerique_min) : '');
+  }, [criterion.valeur_numerique_min]);
+
+  useEffect(() => {
+    setLocalMax(criterion.valeur_numerique_max !== undefined ? String(criterion.valeur_numerique_max) : '');
+  }, [criterion.valeur_numerique_max]);
+
+  // Validation: max doit être >= min
+  const hasValidationError = (() => {
+    if (localMin === '' || localMax === '') return false;
+    const minVal = Number(localMin);
+    const maxVal = Number(localMax);
+    return !isNaN(minVal) && !isNaN(maxVal) && maxVal < minVal;
+  })();
+
+  // Handlers pour les inputs numériques (mise à jour locale immédiate, propagation sur blur)
+  // Filtrer pour n'accepter que les chiffres, le point décimal et le signe moins
+  const handleMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Autoriser uniquement: chiffres, point décimal, signe moins au début
+    if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
+      setLocalMin(value);
+    }
+  };
+
+  const handleMaxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Autoriser uniquement: chiffres, point décimal, signe moins au début
+    if (value === '' || /^-?\d*\.?\d*$/.test(value)) {
+      setLocalMax(value);
+    }
+  };
+
+  // Bloquer les touches non-numériques (lettres, caractères spéciaux sauf point et moins)
+  const handleNumericKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Autoriser: chiffres, point, moins, Backspace, Delete, Tab, Enter, Arrows, Home, End
+    const allowedKeys = ['Backspace', 'Delete', 'Tab', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+    const isNumber = /^[0-9]$/.test(e.key);
+    const isDecimalPoint = e.key === '.' && !e.currentTarget.value.includes('.');
+    const isMinus = e.key === '-' && e.currentTarget.selectionStart === 0 && !e.currentTarget.value.includes('-');
+
+    if (!isNumber && !isDecimalPoint && !isMinus && !allowedKeys.includes(e.key) && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+    }
+  };
+
+  const handleMinBlur = () => {
+    onUpdateNumericValue(criterion.id_caracteristique, 'min', localMin, isCritique);
+  };
+
+  const handleMaxBlur = () => {
+    onUpdateNumericValue(criterion.id_caracteristique, 'max', localMax, isCritique);
+  };
+
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 transition-all hover:border-primary/30 hover:shadow-sm">
+      <div className="flex-shrink-0 text-muted-foreground/40 mt-1">
+        <GripVertical className="h-4 w-4" />
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
+            {criterion.label}
+          </span>
+          {criterion.unite && (
+            <span className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded">
+              {criterion.unite}
+            </span>
+          )}
+        </div>
+
+        {criterion.type === 'textuelle' ? (
+          criterion.isMulti ? (
+            // Multi-select: toggle buttons
+            <div className="flex flex-wrap gap-1.5">
+              {criterion.options_disponibles.map((option) => {
+                const isSelected = criterion.valeurs_cibles_ids.includes(option.id);
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => onToggleMultiValue(criterion.id_caracteristique, option.id, isCritique)}
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                      isSelected
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {isSelected && <Check className="h-3 w-3" />}
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            // Single-select: dropdown
+            <select
+              value={criterion.valeurs_cibles_ids[0] ?? ''}
+              onChange={(e) => onUpdateSingleValue(criterion.id_caracteristique, Number(e.target.value), isCritique)}
+              className="w-full rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+            >
+              {criterion.options_disponibles.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )
+        ) : (
+          // Numérique: toujours min et max
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground w-8">Min</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={localMin}
+                onChange={handleMinChange}
+                onKeyDown={handleNumericKeyDown}
+                onBlur={handleMinBlur}
+                placeholder="min"
+                className={`w-24 rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                  hasValidationError ? 'ring-2 ring-destructive/50' : ''
+                }`}
+              />
+              {criterion.unite && <span className="text-xs text-muted-foreground">{criterion.unite}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground w-8">Max</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={localMax}
+                onChange={handleMaxChange}
+                onKeyDown={handleNumericKeyDown}
+                onBlur={handleMaxBlur}
+                placeholder="max"
+                className={`w-24 rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                  hasValidationError ? 'ring-2 ring-destructive/50' : ''
+                }`}
+              />
+              {criterion.unite && <span className="text-xs text-muted-foreground">{criterion.unite}</span>}
+            </div>
+            {hasValidationError && (
+              <div className="flex items-center gap-1 text-xs text-destructive">
+                <AlertCircle className="h-3 w-3" />
+                <span>Le max doit être supérieur ou égal au min</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {canRemove && (
+        <button
+          onClick={() => onRemove(criterion.id_caracteristique, isCritique)}
+          className="flex-shrink-0 rounded-full p-1.5 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
+          title="Supprimer ce critère"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+});
+
+CriterionCard.displayName = 'CriterionCard';
 
 // =============================================================================
 // HELPERS : ConsolidatedCharacteristic <-> CriterionFormState
@@ -96,12 +297,18 @@ function characteristicToFormState(
     // Toujours autoriser la sélection multiple pour les caractéristiques textuelles
     state.isMulti = true;
   } else {
-    // Numérique : inputs min/max ou exact
+    // Numérique : toujours min/max
+    // Si une valeur exacte est définie, l'utiliser comme min ET max
     const val = c.valeurs_cibles;
     if (val && !Array.isArray(val)) {
-      state.valeur_numerique_exact = val.exact;
-      state.valeur_numerique_min = val.min;
-      state.valeur_numerique_max = val.max;
+      if (val.exact !== undefined) {
+        // Valeur exacte → mettre en min et max identiques
+        state.valeur_numerique_min = val.exact;
+        state.valeur_numerique_max = val.exact;
+      } else {
+        state.valeur_numerique_min = val.min;
+        state.valeur_numerique_max = val.max;
+      }
     }
   }
 
@@ -126,14 +333,19 @@ function formStateToCharacteristic(s: CriterionFormState): ConsolidatedCharacter
     result.valeurs_cibles = [...s.valeurs_cibles_ids];
     result.valeurs_bloquantes = [...s.valeurs_bloquantes_ids];
   } else {
-    if (s.valeur_numerique_exact !== undefined) {
-      result.valeurs_cibles = { exact: s.valeur_numerique_exact };
+    // Toujours utiliser le format min/max
+    const numVal: { min?: number; max?: number; exact?: number } = {};
+
+    // Si min et max sont identiques, utiliser exact
+    if (s.valeur_numerique_min !== undefined && s.valeur_numerique_max !== undefined
+        && s.valeur_numerique_min === s.valeur_numerique_max) {
+      numVal.exact = s.valeur_numerique_min;
     } else {
-      const numVal: { min?: number; max?: number } = {};
       if (s.valeur_numerique_min !== undefined) numVal.min = s.valeur_numerique_min;
       if (s.valeur_numerique_max !== undefined) numVal.max = s.valeur_numerique_max;
-      result.valeurs_cibles = Object.keys(numVal).length > 0 ? numVal : [];
     }
+
+    result.valeurs_cibles = Object.keys(numVal).length > 0 ? numVal : [];
     result.valeurs_bloquantes = [];
   }
 
@@ -145,11 +357,24 @@ function formStateToCharacteristic(s: CriterionFormState): ConsolidatedCharacter
 // =============================================================================
 
 const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
-  const { equivalenceCaracteristique, characteristicsMap } = useFlowStore();
+  const {
+    equivalenceCaracteristique,
+    characteristicsMap,
+    removedCritiqueCriteriaIds,
+    removedSecondaireCriteriaIds,
+    setRemovedCritiqueCriteriaIds,
+    setRemovedSecondaireCriteriaIds,
+  } = useFlowStore();
   const { refetchMatchingWithUpdatedCriteria, showLoader } = useProcessMatchingLogic();
 
   const [critiqueCriteria, setCritiqueCriteria] = useState<CriterionFormState[]>([]);
   const [secondaireCriteria, setSecondaireCriteria] = useState<CriterionFormState[]>([]);
+
+  // Critères supprimés par catégorie (pour pouvoir les réajouter)
+  const [removedCritiqueCriteria, setRemovedCritiqueCriteria] = useState<CriterionFormState[]>([]);
+  const [removedSecondaireCriteria, setRemovedSecondaireCriteria] = useState<CriterionFormState[]>([]);
+  const [showAddEssential, setShowAddEssential] = useState(false);
+  const [showAddSecondary, setShowAddSecondary] = useState(false);
 
   const hasTrackedView = useRef(false);
   const hasInitialized = useRef(false);
@@ -173,9 +398,37 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
     const critiques: CriterionFormState[] = [];
     const secondaires: CriterionFormState[] = [];
+    const removedCritiques: CriterionFormState[] = [];
+    const removedSecondaires: CriterionFormState[] = [];
+
+    // Récupérer les IDs des critères précédemment supprimés depuis le store (par catégorie)
+    const removedCritiqueIdsSet = new Set(removedCritiqueCriteriaIds);
+    const removedSecondaireIdsSet = new Set(removedSecondaireCriteriaIds);
+
+    // Set pour éviter les doublons (déduplication par id_caracteristique)
+    const seenIds = new Set<number>();
 
     for (const c of consolidated) {
+      // Éviter les doublons
+      if (seenIds.has(c.id_caracteristique)) {
+        continue;
+      }
+      seenIds.add(c.id_caracteristique);
+
       const formState = characteristicToFormState(c, characteristicsMap);
+
+      // Si ce critère était précédemment supprimé en tant que critique
+      if (removedCritiqueIdsSet.has(c.id_caracteristique)) {
+        removedCritiques.push({ ...formState, poids_caracteristique: 'critique' });
+        continue;
+      }
+
+      // Si ce critère était précédemment supprimé en tant que secondaire
+      if (removedSecondaireIdsSet.has(c.id_caracteristique)) {
+        removedSecondaires.push({ ...formState, poids_caracteristique: 'secondaire' });
+        continue;
+      }
+
       // Normaliser en minuscule pour éviter les problèmes de casse ('Critique' vs 'critique')
       const poids = c.poids_caracteristique?.toLowerCase();
       if (poids === 'critique') {
@@ -187,7 +440,9 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
     setCritiqueCriteria(critiques);
     setSecondaireCriteria(secondaires);
-  }, [equivalenceCaracteristique, characteristicsMap]);
+    setRemovedCritiqueCriteria(removedCritiques);
+    setRemovedSecondaireCriteria(removedSecondaires);
+  }, [equivalenceCaracteristique, characteristicsMap, removedCritiqueCriteriaIds, removedSecondaireCriteriaIds]);
 
   // Track modal view on mount
   useEffect(() => {
@@ -201,15 +456,98 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
   // ACTIONS
   // =========================================================================
 
-  const removeCriterion = (id: number, isCritique: boolean) => {
+  const removeCriterion = useCallback((id: number, isCritique: boolean) => {
     if (isCritique) {
-      setCritiqueCriteria(prev => prev.filter(c => c.id_caracteristique !== id));
+      setCritiqueCriteria(prev => {
+        const criterionToRemove = prev.find(c => c.id_caracteristique === id);
+        if (criterionToRemove) {
+          // Conserver le critère supprimé dans la liste des critiques supprimés (éviter les doublons)
+          setRemovedCritiqueCriteria((removed: CriterionFormState[]) => {
+            if (removed.some(r => r.id_caracteristique === criterionToRemove.id_caracteristique)) {
+              return removed; // Déjà présent, ne pas ajouter
+            }
+            return [...removed, criterionToRemove];
+          });
+        }
+        return prev.filter(c => c.id_caracteristique !== id);
+      });
     } else {
-      setSecondaireCriteria(prev => prev.filter(c => c.id_caracteristique !== id));
+      setSecondaireCriteria(prev => {
+        const criterionToRemove = prev.find(c => c.id_caracteristique === id);
+        if (criterionToRemove) {
+          // Conserver le critère supprimé dans la liste des secondaires supprimés (éviter les doublons)
+          setRemovedSecondaireCriteria((removed: CriterionFormState[]) => {
+            if (removed.some(r => r.id_caracteristique === criterionToRemove.id_caracteristique)) {
+              return removed; // Déjà présent, ne pas ajouter
+            }
+            return [...removed, criterionToRemove];
+          });
+        }
+        return prev.filter(c => c.id_caracteristique !== id);
+      });
     }
-  };
+  }, []);
 
-  const updateSingleValue = (id: number, valueId: number, isCritique: boolean) => {
+  // Restaurer un critère supprimé (depuis la liste correspondante à sa catégorie d'origine)
+  // Les valeurs sont réinitialisées (vierges) lors de la restauration
+  const restoreCriterion = useCallback((id: number, fromEssential: boolean) => {
+    if (fromEssential) {
+      // Restaurer depuis la liste des critiques supprimés → vers critiques actifs
+      setRemovedCritiqueCriteria((prev: CriterionFormState[]) => {
+        const criterionToRestore = prev.find((c: CriterionFormState) => c.id_caracteristique === id);
+        if (criterionToRestore) {
+          // Réinitialiser les valeurs (vierge) et définir le poids
+          const restored: CriterionFormState = {
+            ...criterionToRestore,
+            poids_caracteristique: 'critique' as PoidsCaracteristique,
+            // Réinitialiser les valeurs
+            valeurs_cibles_ids: [],
+            valeurs_bloquantes_ids: [],
+            valeur_numerique_min: undefined,
+            valeur_numerique_max: undefined,
+          };
+          // Éviter les doublons
+          setCritiqueCriteria(current => {
+            if (current.some((c: CriterionFormState) => c.id_caracteristique === id)) {
+              return current; // Déjà présent
+            }
+            return [...current, restored];
+          });
+        }
+        return prev.filter((c: CriterionFormState) => c.id_caracteristique !== id);
+      });
+    } else {
+      // Restaurer depuis la liste des secondaires supprimés → vers secondaires actifs
+      setRemovedSecondaireCriteria((prev: CriterionFormState[]) => {
+        const criterionToRestore = prev.find((c: CriterionFormState) => c.id_caracteristique === id);
+        if (criterionToRestore) {
+          // Réinitialiser les valeurs (vierge) et définir le poids
+          const restored: CriterionFormState = {
+            ...criterionToRestore,
+            poids_caracteristique: 'secondaire' as PoidsCaracteristique,
+            // Réinitialiser les valeurs
+            valeurs_cibles_ids: [],
+            valeurs_bloquantes_ids: [],
+            valeur_numerique_min: undefined,
+            valeur_numerique_max: undefined,
+          };
+          // Éviter les doublons
+          setSecondaireCriteria(current => {
+            if (current.some((c: CriterionFormState) => c.id_caracteristique === id)) {
+              return current; // Déjà présent
+            }
+            return [...current, restored];
+          });
+        }
+        return prev.filter((c: CriterionFormState) => c.id_caracteristique !== id);
+      });
+    }
+    // Fermer les dropdowns
+    setShowAddEssential(false);
+    setShowAddSecondary(false);
+  }, []);
+
+  const updateSingleValue = useCallback((id: number, valueId: number, isCritique: boolean) => {
     const updateFn = (prev: CriterionFormState[]) =>
       prev.map(c => {
         if (c.id_caracteristique !== id) return c;
@@ -218,9 +556,9 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
     if (isCritique) setCritiqueCriteria(updateFn);
     else setSecondaireCriteria(updateFn);
-  };
+  }, []);
 
-  const toggleMultiValue = (id: number, valueId: number, isCritique: boolean) => {
+  const toggleMultiValue = useCallback((id: number, valueId: number, isCritique: boolean) => {
     const updateFn = (prev: CriterionFormState[]) =>
       prev.map(c => {
         if (c.id_caracteristique !== id) return c;
@@ -234,11 +572,11 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
     if (isCritique) setCritiqueCriteria(updateFn);
     else setSecondaireCriteria(updateFn);
-  };
+  }, []);
 
-  const updateNumericValue = (
+  const updateNumericValue = useCallback((
     id: number,
-    field: 'exact' | 'min' | 'max',
+    field: 'min' | 'max',
     value: string,
     isCritique: boolean
   ) => {
@@ -246,151 +584,95 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
     const updateFn = (prev: CriterionFormState[]) =>
       prev.map(c => {
         if (c.id_caracteristique !== id) return c;
-        if (field === 'exact') {
-          return { ...c, valeur_numerique_exact: parsed, valeur_numerique_min: undefined, valeur_numerique_max: undefined };
-        } else if (field === 'min') {
-          return { ...c, valeur_numerique_min: parsed, valeur_numerique_exact: undefined };
+        if (field === 'min') {
+          return { ...c, valeur_numerique_min: parsed };
         }
-        return { ...c, valeur_numerique_max: parsed, valeur_numerique_exact: undefined };
+        return { ...c, valeur_numerique_max: parsed };
       });
 
     if (isCritique) setCritiqueCriteria(updateFn);
     else setSecondaireCriteria(updateFn);
-  };
+  }, []);
 
   const handleApply = async () => {
+    // Inclure TOUS les critères (y compris les supprimés) pour les stocker dans le store
     const allCriteria = [
       ...critiqueCriteria.map(formStateToCharacteristic),
       ...secondaireCriteria.map(formStateToCharacteristic),
+      ...removedCritiqueCriteria.map(formStateToCharacteristic),
+      ...removedSecondaireCriteria.map(formStateToCharacteristic),
     ];
 
-    const modifiedFields = [...critiqueCriteria, ...secondaireCriteria].map(c => String(c.id_caracteristique));
-    trackCriteriaModified(critiqueCriteria.length + secondaireCriteria.length, modifiedFields);
+    // Sauvegarder les IDs des critères supprimés dans le store (par catégorie)
+    const newRemovedCritiqueIds = removedCritiqueCriteria.map((c: CriterionFormState) => c.id_caracteristique);
+    const newRemovedSecondaireIds = removedSecondaireCriteria.map((c: CriterionFormState) => c.id_caracteristique);
+    setRemovedCritiqueCriteriaIds(newRemovedCritiqueIds);
+    setRemovedSecondaireCriteriaIds(newRemovedSecondaireIds);
+
+    trackCriteriaModified(critiqueCriteria.length + secondaireCriteria.length);
 
     // Relancer le matching avec les nouvelles caractéristiques
-    const success = await refetchMatchingWithUpdatedCriteria(allCriteria);
+    // Passer les IDs supprimés directement pour éviter le problème de stale closure
+    const success = await refetchMatchingWithUpdatedCriteria(allCriteria, newRemovedCritiqueIds, newRemovedSecondaireIds);
 
     if (success) {
       // Appeler onApply pour fermer le modal et mettre à jour l'UI
+      // Passer TOUS les critères (y compris les supprimés) pour que le store les conserve
       onApply(allCriteria);
     }
   };
 
+
   // =========================================================================
-  // RENDU D'UN CRITÈRE
+  // COMPOSANT DROPDOWN POUR AJOUTER UN CRITÈRE
   // =========================================================================
 
-  const CriterionCard = ({
-    criterion,
-    isCritique,
-    canRemove = true
+  const AddCriterionDropdown = ({
+    isEssential,
+    onClose
   }: {
-    criterion: CriterionFormState;
-    isCritique: boolean;
-    canRemove?: boolean;
+    isEssential: boolean;
+    onClose: () => void;
   }) => {
-    return (
-      <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 transition-all hover:border-primary/30 hover:shadow-sm">
-        <div className="flex-shrink-0 text-muted-foreground/40 mt-1">
-          <GripVertical className="h-4 w-4" />
-        </div>
+    // Utiliser la liste correspondante à la catégorie
+    const criteriaList = isEssential ? removedCritiqueCriteria : removedSecondaireCriteria;
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              {criterion.label}
-            </span>
-            {criterion.unite && (
-              <span className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded">
-                {criterion.unite}
-              </span>
-            )}
-          </div>
-
-          {criterion.type === 'textuelle' ? (
-            criterion.isMulti ? (
-              // Multi-select: toggle buttons
-              <div className="flex flex-wrap gap-1.5">
-                {criterion.options_disponibles.map((option) => {
-                  const isSelected = criterion.valeurs_cibles_ids.includes(option.id);
-                  return (
-                    <button
-                      key={option.id}
-                      onClick={() => toggleMultiValue(criterion.id_caracteristique, option.id, isCritique)}
-                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                        isSelected
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {isSelected && <Check className="h-3 w-3" />}
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              // Single-select: dropdown
-              <select
-                value={criterion.valeurs_cibles_ids[0] ?? ''}
-                onChange={(e) => updateSingleValue(criterion.id_caracteristique, Number(e.target.value), isCritique)}
-                className="w-full rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-              >
-                {criterion.options_disponibles.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            )
-          ) : (
-            // Numérique: inputs
-            <div className="flex items-center gap-2">
-              {criterion.valeur_numerique_exact !== undefined ? (
-                <>
-                  <span className="text-xs text-muted-foreground">Valeur :</span>
-                  <input
-                    type="number"
-                    value={criterion.valeur_numerique_exact ?? ''}
-                    onChange={(e) => updateNumericValue(criterion.id_caracteristique, 'exact', e.target.value, isCritique)}
-                    className="w-24 rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                  {criterion.unite && <span className="text-xs text-muted-foreground">{criterion.unite}</span>}
-                </>
-              ) : (
-                <>
-                  <span className="text-xs text-muted-foreground">De</span>
-                  <input
-                    type="number"
-                    value={criterion.valeur_numerique_min ?? ''}
-                    onChange={(e) => updateNumericValue(criterion.id_caracteristique, 'min', e.target.value, isCritique)}
-                    placeholder="min"
-                    className="w-20 rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                  <span className="text-xs text-muted-foreground">à</span>
-                  <input
-                    type="number"
-                    value={criterion.valeur_numerique_max ?? ''}
-                    onChange={(e) => updateNumericValue(criterion.id_caracteristique, 'max', e.target.value, isCritique)}
-                    placeholder="max"
-                    className="w-20 rounded-lg border-0 bg-muted/50 px-3 py-1.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                  {criterion.unite && <span className="text-xs text-muted-foreground">{criterion.unite}</span>}
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {canRemove && (
+    if (criteriaList.length === 0) {
+      return (
+        <div className="rounded-xl border border-border bg-card p-4 text-center text-sm text-muted-foreground">
+          Aucun critère à ajouter
           <button
-            onClick={() => removeCriterion(criterion.id_caracteristique, isCritique)}
-            className="flex-shrink-0 rounded-full p-1.5 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
-            title="Supprimer ce critère"
+            onClick={onClose}
+            className="ml-2 text-primary hover:underline"
           >
-            <X className="h-4 w-4" />
+            Fermer
           </button>
-        )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-xl border border-border bg-card p-2 shadow-lg">
+        <div className="text-xs font-medium text-muted-foreground px-2 py-1 mb-1">
+          Ajouter un critère
+        </div>
+        {criteriaList.map((criterion: CriterionFormState) => (
+          <button
+            key={criterion.id_caracteristique}
+            onClick={() => restoreCriterion(criterion.id_caracteristique, isEssential)}
+            className="w-full text-left rounded-lg px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+          >
+            {criterion.label}
+          </button>
+        ))}
+        <div className="border-t border-border mt-1 pt-1">
+          <button
+            onClick={onClose}
+            className="w-full text-left rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+          >
+            Annuler
+          </button>
+        </div>
       </div>
     );
   };
@@ -400,6 +682,19 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
   // =========================================================================
 
   const hasCriteria = critiqueCriteria.length > 0 || secondaireCriteria.length > 0;
+  // Vérifier s'il y a des critères supprimés dans chaque catégorie
+  const hasRemovedCritiqueCriteria = removedCritiqueCriteria.length > 0;
+  const hasRemovedSecondaireCriteria = removedSecondaireCriteria.length > 0;
+  // Vérifier si une section doit être affichée (critères actifs OU critères supprimés à restaurer)
+  const showCritiqueSection = critiqueCriteria.length > 0 || hasRemovedCritiqueCriteria;
+  const showSecondaireSection = secondaireCriteria.length > 0 || hasRemovedSecondaireCriteria;
+
+  // Vérifier si tous les critères numériques ont des valeurs valides (max >= min)
+  const hasNumericValidationErrors = [...critiqueCriteria, ...secondaireCriteria].some(c => {
+    if (c.type !== 'numerique') return false;
+    if (c.valeur_numerique_min === undefined || c.valeur_numerique_max === undefined) return false;
+    return c.valeur_numerique_max < c.valeur_numerique_min;
+  });
 
   return (
     <div className="h-full flex flex-col p-4 lg:p-6">
@@ -435,7 +730,7 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
           ) : (
             <>
               {/* Section critique */}
-              {critiqueCriteria.length > 0 && (
+              {showCritiqueSection && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-primary/10">
@@ -454,15 +749,37 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
                         key={criterion.id_caracteristique}
                         criterion={criterion}
                         isCritique={true}
-                        canRemove={critiqueCriteria.length > 1}
+                        canRemove={critiqueCriteria.length > 1 || hasRemovedCritiqueCriteria || secondaireCriteria.length > 0 || hasRemovedSecondaireCriteria}
+                        onRemove={removeCriterion}
+                        onToggleMultiValue={toggleMultiValue}
+                        onUpdateSingleValue={updateSingleValue}
+                        onUpdateNumericValue={updateNumericValue}
                       />
                     ))}
+
+                    {/* Bouton Ajouter un critère essentiel - visible uniquement si des critères essentiels ont été supprimés */}
+                    {hasRemovedCritiqueCriteria && (
+                      showAddEssential ? (
+                        <AddCriterionDropdown
+                          isEssential={true}
+                          onClose={() => setShowAddEssential(false)}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setShowAddEssential(true)}
+                          className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-2.5 text-sm font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Ajouter un critère essentiel
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               )}
 
               {/* Section secondaire */}
-              {secondaireCriteria.length > 0 && (
+              {showSecondaireSection && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-amber-500/10">
@@ -481,8 +798,31 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
                         key={criterion.id_caracteristique}
                         criterion={criterion}
                         isCritique={false}
+                        canRemove={true}
+                        onRemove={removeCriterion}
+                        onToggleMultiValue={toggleMultiValue}
+                        onUpdateSingleValue={updateSingleValue}
+                        onUpdateNumericValue={updateNumericValue}
                       />
                     ))}
+
+                    {/* Bouton Ajouter un critère secondaire - visible uniquement si des critères secondaires ont été supprimés */}
+                    {hasRemovedSecondaireCriteria && (
+                      showAddSecondary ? (
+                        <AddCriterionDropdown
+                          isEssential={false}
+                          onClose={() => setShowAddSecondary(false)}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setShowAddSecondary(true)}
+                          className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-2.5 text-sm font-medium text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Ajouter un critère secondaire
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               )}
@@ -501,7 +841,7 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
             </button>
             <button
               onClick={handleApply}
-              disabled={!hasCriteria || showLoader}
+              disabled={!hasCriteria || showLoader || hasNumericValidationErrors}
               className="order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg bg-accent px-8 py-2.5 text-base font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {showLoader ? (

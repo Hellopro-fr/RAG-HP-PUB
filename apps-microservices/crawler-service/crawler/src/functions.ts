@@ -24,6 +24,20 @@ import {
 } from "./interfaces/queue.js";
 import { context } from "./context.js";
 
+/**
+ * Constructs the Apify proxy URL based on the provided password.
+ * @param password - The Apify proxy password.
+ * @returns The constructed proxy URL.
+ */
+export const getApifyProxyUrl = (password?: string): string => {
+    const PROXY_HOST = "proxy.apify.com";
+    const PROXY_HOST_PORT = 8000;
+    const PROXY_USERNAME = "auto";
+    // const PROXY_USERNAME_FR = "country-FR"; // Unused in original code, but could be useful
+    
+    return `http://${PROXY_USERNAME}:${password}@${PROXY_HOST}:${PROXY_HOST_PORT}`;
+};
+
 export let stats: StatisticState;
 
 /**
@@ -191,29 +205,32 @@ export const startCrawler = async (
     bypassQuestionMark?: boolean,
     bypassDiez?: boolean,
     skipquestionmark?: boolean,
-    skipdiez?: boolean
+    skipdiez?: boolean,
+    containerMemoryMb?: number
 ) => {
     const requestQueue = await RequestQueue.open(domain);
 
     // Apify proxy
-    const PROXY_HOST = "proxy.apify.com";
-    const PROXY_HOST_PORT = 8000;
-    const PROXY_USERNAME = "auto";
-    const PROXY_USERNAME_FR = "country-FR";
-    const PROXY_PASSWORD = apifyProxyPassword;
-
-    const proxyUrl = `http://${PROXY_USERNAME}:${PROXY_PASSWORD}@${PROXY_HOST}:${PROXY_HOST_PORT}`;
+    const proxyUrl = getApifyProxyUrl(apifyProxyPassword);
     
     let proxyConfiguration: ProxyConfiguration | undefined;
 
     // V3 Optimization: Persist storage to prevent OOM
-    let configuration = new Configuration({
+    // memoryMbytes: Tells Crawlee the real container memory limit (from cgroups).
+    // Without this, Crawlee defaults to os.totalmem() which returns the HOST memory,
+    // causing the autoscaler to report memInfo.actualRatio: 0 and never throttle concurrency.
+    let configOptions: Record<string, any> = {
         maxUsedCpuRatio: 0.95, // V3 allows more CPU usage
-        availableMemoryRatio: 0.95,
+        availableMemoryRatio: 0.8, // Reduced from 0.95 to throttle earlier
         persistStorage: true,
-    });
+    };
+    if (containerMemoryMb && containerMemoryMb > 0) {
+        configOptions.memoryMbytes = containerMemoryMb;
+        console.log(`💾 Crawlee Configuration: memoryMbytes set to ${containerMemoryMb} MB (from container cgroups)`);
+    }
+    let configuration = new Configuration(configOptions);
 
-    if (PROXY_PASSWORD) {
+    if (apifyProxyPassword) {
         proxyConfiguration = new ProxyConfiguration({
             proxyUrls: [proxyUrl],
         });
@@ -683,8 +700,11 @@ export const updateUrlsCrawledStreaming = async (
     let count = 0;
     
     for await (const url of urlIterator) {
-        if (!isFirst) stream.write(',');
-        stream.write(JSON.stringify(url));
+        if (!isFirst) {
+             if (!stream.write(',')) await new Promise<void>(r => stream.once('drain', () => r()));
+        }
+        if (!stream.write(JSON.stringify(url))) await new Promise<void>(r => stream.once('drain', () => r()));
+        
         isFirst = false;
         count++;
     }

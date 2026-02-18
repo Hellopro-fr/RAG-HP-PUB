@@ -22,10 +22,10 @@ import CriteriaChangedBanner from "./CriteriaChangedBanner";
 import {
   trackComparisonModalView,
   trackProductSelectionChange,
-  trackProductModalView,
   setFlowType,
 } from "@/lib/analytics";
 import { Supplier } from "@/types";
+import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 
 type ViewState = "selection" | "contact" | "modify-criteria" | "custom-need";
 
@@ -48,7 +48,9 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     equivalenceCaracteristique,
     characteristicsMap,
     orphanedSelectedSuppliers,
-    criteriaHaveChanged
+    criteriaHaveChanged,
+    removedCritiqueCriteriaIds,
+    removedSecondaireCriteriaIds
   } = useFlowStore();
 
   // Utiliser uniquement les résultats dynamiques du matching (pas de fallback statique)
@@ -58,6 +60,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   const ALL_SUPPLIERS = [...orphanedSelectedSuppliers, ...RECOMMENDED, ...OTHERS];
 
   // Formater les critères pour CriteriaTags depuis equivalenceCaracteristique
+  // Filtrer les critères supprimés pour ne pas les afficher dans le résumé
   const { essentialCriteria, secondaryCriteria } = useMemo(() => {
     const essential: { label: string; value: string }[] = [];
     const secondary: { label: string; value: string }[] = [];
@@ -66,7 +69,13 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
       return { essentialCriteria: essential, secondaryCriteria: secondary };
     }
 
+    // Créer un Set des IDs supprimés pour une recherche rapide
+    const removedIdsSet = new Set([...removedCritiqueCriteriaIds, ...removedSecondaireCriteriaIds]);
+
     for (const c of equivalenceCaracteristique) {
+      // Skip les critères supprimés
+      if (removedIdsSet.has(c.id_caracteristique)) continue;
+
       const label = getCharacteristicLabel(characteristicsMap, c.id_caracteristique);
       const value = formatSelectedValues(characteristicsMap, c.id_caracteristique, c.valeurs_cibles);
 
@@ -84,7 +93,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     }
 
     return { essentialCriteria: essential, secondaryCriteria: secondary };
-  }, [equivalenceCaracteristique, characteristicsMap]);
+  }, [equivalenceCaracteristique, characteristicsMap, removedCritiqueCriteriaIds, removedSecondaireCriteriaIds]);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [animatingCount, setAnimatingCount] = useState(false);
@@ -102,8 +111,11 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     setFlowType: setStoreFlowType,
     setEquivalenceCaracteristique,
     setOrphanedSelectedSuppliers,
-    setCriteriaHaveChanged
+    setCriteriaHaveChanged,
+    categoryId
   } = useFlowStore();
+
+  const { trackDbEvent } = useDbTracking();
 
   // Convertir le tableau en Set pour les opérations
   const selectedIds = useMemo(() => new Set(selectedSupplierIds), [selectedSupplierIds]);
@@ -119,9 +131,11 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   }, [matchingResults]);
 
   // Séparer les produits en fonction de leur sélection
+  // Note: ALL_SUPPLIERS doit être dans les dépendances pour que les listes se recalculent
+  // quand matchingResults change (ex: après modification des critères)
   const selectedSuppliersList = useMemo(() => {
     return ALL_SUPPLIERS.filter((s) => selectedIds.has(s.id));
-  }, [selectedIds]);
+  }, [ALL_SUPPLIERS, selectedIds]);
 
   const unselectedSuppliersList = useMemo(() => {
     const unselected = ALL_SUPPLIERS.filter((s) => !selectedIds.has(s.id));
@@ -133,7 +147,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
         s.supplierName.toLowerCase().includes(query) ||
         s.description.toLowerCase().includes(query)
     );
-  }, [selectedIds, searchQuery]);
+  }, [ALL_SUPPLIERS, selectedIds, searchQuery]);
 
   const initialSelectedIds = useMemo(
     () => new Set(RECOMMENDED.map((s) => s.id)),
@@ -158,8 +172,15 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     setSelectedSupplierIds(newIds);
     setAnimatingCount(true);
 
-    // Track add/remove selection
+    // Track add/remove selection (GTM)
     trackProductSelectionChange(id, isRemoving ? 'retirer' : 'ajouter', newIds.length);
+
+    // Track DB
+    trackDbEvent('selection', isRemoving ? 'deselect' : 'select', {
+      product_id: id,
+      action: isRemoving ? 'retirer' : 'ajouter',
+      total_selected: newIds.length
+    }, categoryId);
   };
 
   const resetSelection = () => {
@@ -169,12 +190,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
   const handleViewDetails = (id: string) => {
     setSelectedProductId(id);
-
-    // Track product modal view
-    const product = ALL_SUPPLIERS.find((s) => s.id === id);
-    if (product) {
-      trackProductModalView(id, product.productName, product.supplier?.name || product.supplierName);
-    }
+    // Note: Le tracking est fait dans ProductDetailModal au montage
   };
 
   const selectedProduct = selectedProductId
@@ -253,12 +269,16 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
               {criteriaHaveChanged && selectedSupplierIds.length > 0 && (
                 <CriteriaChangedBanner
                   onNewSelection={() => {
-                    // Reset les orphelins
-                    setOrphanedSelectedSuppliers([]);
-                    // Clear les anciennes sélections et sélectionner les nouveaux top_produits
-                    setSelectedSupplierIds(RECOMMENDED.map((s) => s.id));
-                    // Reset le flag
-                    setCriteriaHaveChanged(false);
+                    // Récupérer les IDs des nouveaux top_produits (recommandés)
+                    const newRecommendedIds = RECOMMENDED.map((s) => s.id);
+
+                    // Mise à jour atomique de tous les états en un seul batch
+                    // pour éviter les problèmes de synchronisation
+                    useFlowStore.setState({
+                      orphanedSelectedSuppliers: [],
+                      selectedSupplierIds: newRecommendedIds,
+                      criteriaHaveChanged: false
+                    });
                   }}
                   onDismiss={() => {
                     // Garder la sélection actuelle, juste cacher la bannière
@@ -435,14 +455,14 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
       {/* Footer - Floating compact bar */}
       {viewState === "selection" && (
-        <div className="border-t border-border bg-card/95 backdrop-blur-sm px-4 py-4 sm:px-6">
-          <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:justify-between">
+        <div className="border-t border-border bg-card/95 backdrop-blur-sm px-4 py-3 md:py-4 md:px-6">
+          <div className="mx-auto max-w-7xl flex flex-col lg:flex-row items-stretch lg:items-center gap-2 md:gap-3 lg:justify-between">
             {/* Primary CTA - on top for mobile */}
             <button
               disabled={selectedCount === 0}
               onClick={() => setViewState("contact")}
               className={cn(
-                "order-1 sm:order-2 rounded-lg px-6 py-3 text-base font-semibold transition-all duration-200 w-full sm:w-auto",
+                "order-1 lg:order-2 rounded-lg px-6 py-3 text-base font-semibold transition-all duration-200 w-full lg:w-auto",
                 selectedCount > 0
                   ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
                   : "bg-muted text-muted-foreground cursor-not-allowed"
@@ -455,26 +475,25 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
             </button>
 
             {/* Secondary actions */}
-            <div className="order-2 sm:order-1 flex items-center gap-2 sm:gap-3">
+            <div className="order-2 lg:order-1 flex flex-wrap items-center gap-2 md:gap-3">
               <button
                 onClick={() => {
-                  const selectedSupplierIds = Array.from(selectedIds);
-                  trackComparisonModalView(selectedSupplierIds);
+                  trackComparisonModalView();
                   setShowComparison(true);
                 }}
-                className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-4 text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-1.5 md:gap-2"
               >
-                <LayoutGrid className="h-4 w-4" />
+                <LayoutGrid className="h-4 w-4 shrink-0" />
                 Comparer
               </button>
-              
+
               <button
                 onClick={() => setViewState("modify-criteria")}
-                className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-4 text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
+                className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
               >
                 Modifier critères
               </button>
-              
+
               <button
                 onClick={() => {
                   // Définir flowType = 'pas_trouve_recherchez' car l'utilisateur a cliqué "pas trouvé"
@@ -482,7 +501,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   setFlowType('pas_trouve_recherchez');
                   setViewState("custom-need");
                 }}
-                className="flex-1 sm:flex-none h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-4 text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
+                className="flex-1 min-w-[200px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
               >
                 Pas trouvé ce que vous cherchez ?
               </button>

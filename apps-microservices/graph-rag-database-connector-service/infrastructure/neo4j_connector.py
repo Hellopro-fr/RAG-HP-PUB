@@ -98,7 +98,7 @@ class Neo4jConnector:
             try:
                 graph = self.get_graph()
                 print(f"parameters: {parameters}")
-                if parameters.get("top_k"):
+                if parameters and parameters.get("top_k"):
                     parameters["top_k"] = int(parameters["top_k"])
                 results = graph.query(query, params=parameters or {})
                 records_affected = len(results) if results else 0
@@ -343,6 +343,7 @@ class Neo4jConnector:
     def setup_constraints(self) -> Tuple[List[str], List[str]]:
         """
         Apply unique constraints and indexes to the graph.
+        Drops all existing non-constraint indexes first to clean up unused ones.
 
         Returns:
             Tuple of (applied_constraints, applied_indexes)
@@ -350,6 +351,61 @@ class Neo4jConnector:
         graph = self.get_graph()
         applied_constraints = []
         applied_indexes = []
+        dropped_indexes = []
+
+        # Define the desired index names for reference
+        desired_index_names = {
+            "reponse_id_index",
+            "produit_categorie_index",
+            "produit_id_produit_index",
+            "produit_est_actif_index",
+            "char_source_id_index",
+            "char_source_valeur_index",
+            "char_valeur_index",
+            "char_type_donnee_index",
+            "char_unite_canonique_index",
+            "char_valeur_canonique_index",
+            "char_valeur_min_canonique_index",
+            "char_valeur_max_canonique_index",
+            "dept_id_dept_index",
+            "couvre_zone_couvre_tous_index",
+            "couvre_zone_couvre_index",
+            "couvre_zone_ne_couvre_pas_index",
+            "couvre_pays_couvre_tous_index",
+            "couvre_pays_couvre_index",
+            "couvre_pays_ne_couvre_pas_index",
+            "fournisseur_typologie_index",
+            "fournisseur_id_etat_index",
+            "fournisseur_id_affichage_index",
+        }
+
+        # Step 1: Drop all existing indexes (except constraints)
+        logging.info("Dropping existing indexes to clean up unused ones...")
+        try:
+            index_query = "SHOW INDEXES"
+            existing_indexes = graph.query(index_query)
+            for idx in existing_indexes:
+                idx_name = idx.get("name", "")
+                idx_type = idx.get("type", "")
+                # Skip constraints (they have type UNIQUE or similar)
+                if idx_type in ["UNIQUE", "NODE_KEY", "UNIQUENESS"]:
+                    continue
+                # Drop non-constraint indexes
+                if idx_name:
+                    try:
+                        drop_query = f"DROP INDEX {idx_name} IF EXISTS"
+                        graph.query(drop_query)
+                        dropped_indexes.append(idx_name)
+                        logging.debug(f"Dropped index: {idx_name}")
+                    except Exception as e:
+                        logging.warning(f"Failed to drop index {idx_name}: {e}")
+        except Exception as e:
+            logging.warning(f"Could not list existing indexes for cleanup: {e}")
+
+        if dropped_indexes:
+            logging.info(
+                f"Dropped {len(dropped_indexes)} existing indexes: {dropped_indexes}"
+            )
 
         constraints = [
             "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Fournisseur) REQUIRE n.id IS UNIQUE",
@@ -369,6 +425,7 @@ class Neo4jConnector:
             "CREATE INDEX reponse_id_index IF NOT EXISTS FOR (n:Reponse) ON (n.id_reponse)",
             "CREATE INDEX produit_categorie_index IF NOT EXISTS FOR (n:Produit) ON (n.id_categorie)",
             "CREATE INDEX produit_id_produit_index IF NOT EXISTS FOR (n:Produit) ON (n.id_produit)",
+            "CREATE INDEX produit_est_actif_index IF NOT EXISTS FOR (n:Produit) ON (n.est_actif)",
             # Characteristic Matching
             "CREATE INDEX char_source_id_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.id_source_caracteristique)",
             "CREATE INDEX char_source_valeur_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.id_source_valeur)",
@@ -379,9 +436,20 @@ class Neo4jConnector:
             "CREATE INDEX char_valeur_canonique_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.valeur_canonique)",
             "CREATE INDEX char_valeur_min_canonique_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.valeur_min_canonique)",
             "CREATE INDEX char_valeur_max_canonique_index IF NOT EXISTS FOR (n:CaracteristiqueTechnique) ON (n.valeur_max_canonique)",
-            # Geographic & Coverage
-            "CREATE INDEX zone_geo_list_dept_index IF NOT EXISTS FOR (n:ZoneGeo) ON (n.list_dept)",
-            "CREATE INDEX couvre_partiel_index IF NOT EXISTS FOR ()-[r:COUVRE]-() ON (r.partiel)",
+            # Geographic & Coverage - ZoneGeo
+            "CREATE INDEX dept_id_dept_index IF NOT EXISTS FOR (n:ZoneGeo) ON (n.id_dept)",
+            # Relationship indexes pour couvre zone
+            "CREATE INDEX couvre_zone_couvre_tous_index IF NOT EXISTS FOR ()-[r:COUVRE_ZONE]-() ON (r.couvre_tous)",
+            "CREATE INDEX couvre_zone_couvre_index IF NOT EXISTS FOR ()-[r:COUVRE_ZONE]-() ON (r.couvre)",
+            "CREATE INDEX couvre_zone_ne_couvre_pas_index IF NOT EXISTS FOR ()-[r:COUVRE_ZONE]-() ON (r.ne_couvre_pas)",
+            # Relationship indexes pour couvre pays
+            "CREATE INDEX couvre_pays_couvre_tous_index IF NOT EXISTS FOR ()-[r:COUVRE_PAYS]-() ON (r.couvre_tous)",
+            "CREATE INDEX couvre_pays_couvre_index IF NOT EXISTS FOR ()-[r:COUVRE_PAYS]-() ON (r.couvre)",
+            "CREATE INDEX couvre_pays_ne_couvre_pas_index IF NOT EXISTS FOR ()-[r:COUVRE_PAYS]-() ON (r.ne_couvre_pas)",
+            # Fournisseur Filtering
+            "CREATE INDEX fournisseur_typologie_index IF NOT EXISTS FOR (n:Fournisseur) ON (n.typologie)",
+            "CREATE INDEX fournisseur_id_etat_index IF NOT EXISTS FOR (n:Fournisseur) ON (n.id_etat)",
+            "CREATE INDEX fournisseur_id_affichage_index IF NOT EXISTS FOR (n:Fournisseur) ON (n.id_affichage)",
         ]
 
         logging.info("Applying Neo4j Unique Constraints...")
@@ -401,7 +469,7 @@ class Neo4jConnector:
                 logging.warning(f"Failed to apply index: {query}. Error: {e}")
 
         logging.info(
-            f"Applied {len(applied_constraints)} constraints and {len(applied_indexes)} indexes."
+            f"Dropped {len(dropped_indexes)} old indexes. Applied {len(applied_constraints)} constraints and {len(applied_indexes)} indexes."
         )
         return applied_constraints, applied_indexes
 

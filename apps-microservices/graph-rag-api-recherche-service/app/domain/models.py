@@ -204,6 +204,12 @@ class CypherQueryResponse(BaseModel):
     )
 
 
+class CategorieCountResponse(BaseModel):
+    id_categorie: Optional[str] = Field(None, description="Identifiant de la catégorie")
+    fournisseur: int = Field(..., description="Nombre de fournisseurs distincts")
+    produit: int = Field(..., description="Nombre de produits distincts")
+
+
 """ 
  Modèles pour l'input : Payload d'entrée pour le matching de produits
  """
@@ -230,6 +236,8 @@ class MetadonneUtilisateurs(BaseModel):
         ...,
         description="Typologie d'entreprise de l'acheteur, 1:professionnel, 2:particulier",
     )
+    id_pays: Optional[int] = Field(None, description="ID du pays")
+    cp: Optional[str] = Field(None, description="Code postal de l'acheteur")
 
 
 class MatchingCaracteristique(BaseModel):
@@ -261,6 +269,41 @@ class MatchingOptions(BaseModel):
     )
 
 
+class ScoringOptions(BaseModel):
+    z_unmatched: float = Field(
+        0.2, description="Score pour les geolocalisation non matched"
+    )
+    e_unmatched: float = Field(0.9, description="Score pour les non client")
+    g_unknown_score: float = Field(
+        0.8, description="Score pour les géolocalisations inconnues"
+    )
+    c_unknown_score: float = Field(
+        0.5, description="Score pour les caractéristiques inconnues"
+    )
+    v_blocked: float = Field(
+        -2.0, description="Score pour les caractéristiques bloquées"
+    )
+    v_different: float = Field(
+        -0.3, description="Score pour les caractéristiques différentes"
+    )
+    t_unmatched: float = Field(0.2, description="Score pour les typologies non matched")
+    absolute_threshold: float = Field(
+        0.0, description="Seuil absolu de score minimum pour les produits"
+    )
+    relative_tolerance: float = Field(
+        0.15, description="Tolérance relative par rapport au meilleur score"
+    )
+    max_per_supplier_primary: int = Field(
+        2, description="Nombre maximum de produits par fournisseur (passe primaire)"
+    )
+    max_per_supplier_extended: int = Field(
+        3, description="Nombre maximum de produits par fournisseur (passe étendue)"
+    )
+    score_step: float = Field(
+        0.2, description="Pas de score pour les tranches de diversité fournisseur"
+    )
+
+
 class MatchingPayload(BaseModel):
     id_categorie: int = Field(..., description="Identifiant de la catégorie")
     top_k: int = Field(15, description="Nombre de résultats souhaités")
@@ -278,7 +321,23 @@ class MatchingPayload(BaseModel):
         MatchingOptions(score=MatchingOptionsScore(critique=5, secondaire=1)),
         description="Options pour le matching",
     )
+    scoring: Optional[ScoringOptions] = Field(
+        ScoringOptions(
+            z_unmatched=0.2,
+            e_unmatched=0.9,
+            g_unknown_score=0.8,
+            c_unknown_score=0.5,
+            v_blocked=-2.0,
+            v_different=-0.3,
+            t_unmatched=0.2,
+        ),
+        description="Options pour le scoring",
+    )
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
+
+
+class MatchingPayloadIdProduit(MatchingPayload):
+    id_produit: Optional[int] = Field(None, description="Identifiant du produit")
 
 
 """ 
@@ -331,6 +390,11 @@ class Produit(BaseModel):
     )
     coeff_geo: float = Field(..., description="Coefficient zone Géographique")
     coeff_type_frns: float = Field(..., description="Coefficient type de fournisseur")
+    coeff_etat_score: float = Field(..., description="Coefficient etat score")
+    coeff_caracteristique: float = Field(..., description="Coefficient caractéristique")
+    info_produit: Optional[Dict[str, Any]] = Field(
+        None, description="Informations sur le produit"
+    )
     # top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 
@@ -347,3 +411,27 @@ class MatchingResponse(BaseModel):
         ..., description="Temps pris pour effectuer le matching en secondes"
     )
     # alternative_matching: List[Produit] = Field(default_factory  = list, description = "Liste d'alternatives si applicable")
+
+
+class PaysCouverture(BaseModel):
+    id_pays: str = Field(..., description="Identifiant du pays")
+    nom_pays: str = Field(..., description="Nom du pays")
+    couvre_partiel: bool = Field(
+        ...,
+        description="Indique si le fournisseur couvre partiellement le pays (True) ou totalement (False)",
+    )
+
+
+class DepartementCouverture(BaseModel):
+    id_dept: str = Field(..., description="Identifiant du département")
+    nom_dept: str = Field(..., description="Nom du département")
+
+
+class FournisseurGeoResponse(BaseModel):
+    pays: List[PaysCouverture] = Field(
+        default_factory=list, description="Liste des pays couverts par le fournisseur"
+    )
+    departements: List[DepartementCouverture] = Field(
+        default_factory=list,
+        description="Liste des départements couverts par le fournisseur",
+    )

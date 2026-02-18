@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -41,19 +41,97 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [vendorDescriptionExpanded, setVendorDescriptionExpanded] = useState(false);
   const [isDescriptionTruncated, setIsDescriptionTruncated] = useState(false);
+  const [isVendorTruncated, setIsVendorTruncated] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
   const descriptionRef = useRef<HTMLDivElement>(null);
+  const vendorRef = useRef<HTMLDivElement>(null);
 
-  // Track modal view on mount + Check if description is truncated
+  // Global debug mode - persists across modal opens and product changes
   useEffect(() => {
-    // Track product modal view (only once per product per session)
-    trackProductModalView(product.id, product.name, product.supplier.name);
+    // Check if debug mode was already enabled globally
+    if ((window as any).__debugModeEnabled) {
+      setDebugMode(true);
+    }
+
+    // Listen for debug mode activation events
+    const handleDebugMode = () => {
+      setDebugMode(true);
+    };
+    window.addEventListener('enableDebugMode', handleDebugMode);
+
+    return () => {
+      window.removeEventListener('enableDebugMode', handleDebugMode);
+    };
+  }, []);
+
+  // Copy functions
+  const copyToClipboard = async (text: string, type: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      console.log(`[DEBUG] Copied ${type}:`, text);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const copyName = () => copyToClipboard(product.name, 'name');
+
+  const copyDescription = () => {
+    const text = product.descriptionHtml
+      ? product.descriptionHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+      : product.description;
+    copyToClipboard(text, 'description');
+  };
+
+  const copySpecs = () => {
+    const matchedSpecs = product.specs
+      .filter(s => s.isRequested !== false && s.matches === true)
+      .map(s => `✓ ${s.label}: ${s.value}`)
+      .join('\n');
+
+    const gapSpecs = product.specs
+      .filter(s => s.isRequested !== false && s.matches === false)
+      .map(s => `✗ ${s.label}: ${s.value}${s.expected ? ` (demandé: ${s.expected})` : ''}`)
+      .join('\n');
+
+    const unknownSpecs = product.specs
+      .filter(s => s.isRequested !== false && s.matches === undefined)
+      .map(s => `? ${s.label}: Non renseigné`)
+      .join('\n');
+
+    const text = [
+      matchedSpecs && `CORRESPOND:\n${matchedSpecs}`,
+      gapSpecs && `ÉCARTS:\n${gapSpecs}`,
+      unknownSpecs && `NON RENSEIGNÉ:\n${unknownSpecs}`
+    ].filter(Boolean).join('\n\n');
+
+    copyToClipboard(text, 'specs');
+  };
+
+
+  // Reset image loaded state when media changes
+  useEffect(() => {
+    setImageLoaded(false);
+  }, [currentMediaIndex]);
+
+  // Track modal view on mount + Check if descriptions are truncated
+  useEffect(() => {
+    // Track product modal view (is_first_view = première ouverture de modal produit quelconque)
+    trackProductModalView(product.id);
 
     if (descriptionRef.current) {
       const element = descriptionRef.current;
       setIsDescriptionTruncated(element.scrollHeight > element.clientHeight);
     }
-  }, [product.id, product.name, product.supplier.name, product.descriptionHtml, product.description]);
+
+    if (vendorRef.current) {
+      const element = vendorRef.current;
+      setIsVendorTruncated(element.scrollHeight > element.clientHeight);
+    }
+  }, [product.id, product.name, product.supplier.name, product.descriptionHtml, product.description, product.supplier.description]);
 
   // Build media array from images or media prop
   const mediaItems: MediaItem[] = product.media || product.images.map(url => ({ type: "image" as const, url }));
@@ -81,7 +159,18 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
       <div className="relative max-h-[95vh] sm:max-h-[95vh] h-full sm:h-auto w-full max-w-5xl overflow-hidden rounded-t-2xl sm:rounded-2xl bg-background shadow-2xl animate-scale-in flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b px-4 py-3 sm:px-6 sm:py-4 flex-shrink-0">
-          <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold text-foreground pr-8">{product.name}</h2>
+          <div className="flex items-center gap-2 pr-8">
+            <h2 className="text-lg sm:text-xl lg:text-2xl font-semibold text-foreground">{product.name}</h2>
+            {debugMode && (
+              <button
+                onClick={copyName}
+                className="p-1 rounded hover:bg-muted transition-colors"
+                title="Copier le nom"
+              >
+                <Copy className="h-4 w-4 text-muted-foreground" />
+              </button>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="absolute right-3 top-3 sm:right-4 sm:top-4 rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors z-10"
@@ -107,11 +196,30 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                 onClick={() => setLightboxOpen(true)}
                 className="w-full h-full relative group cursor-zoom-in"
               >
-                <img
-                  src={currentMedia?.url}
-                  alt={product.name}
-                  className="w-full h-full object-contain bg-muted"
-                />
+                {!imageLoaded && currentMedia?.url && (
+                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                    <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+                  </div>
+                )}
+                {currentMedia?.url ? (
+                  <img
+                    src={currentMedia.url}
+                    alt={product.name}
+                    loading="lazy"
+                    className={cn(
+                      "w-full h-full object-contain bg-muted transition-opacity duration-300",
+                      imageLoaded ? "opacity-100" : "opacity-0"
+                    )}
+                    onLoad={() => setImageLoaded(true)}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      // TODO: Implement better fallback for missing images
+                    }}
+                  />
+                ) : (
+                  // TODO: Implement better fallback for missing images
+                  <div className="w-full h-full bg-muted" />
+                )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-background/90 rounded-full p-3 shadow-lg">
                     <ZoomIn className="h-5 w-5 text-foreground" />
@@ -181,7 +289,8 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                     <img
                       src={thumbnailUrl}
                       alt=""
-                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      className="h-full w-full object-contain"
                     />
                     {isMediaVideo && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -210,7 +319,18 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
 
             {/* Description - Rich HTML support with expandable */}
             <div>
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">Description</h3>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Description</h3>
+                {debugMode && (
+                  <button
+                    onClick={copyDescription}
+                    className="p-1 rounded hover:bg-muted transition-colors"
+                    title="Copier la description"
+                  >
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 {product.descriptionHtml ? (
                   <div
@@ -265,7 +385,18 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
 
             {/* Specifications */}
             <div>
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">Caractéristiques</h3>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Caractéristiques</h3>
+                {debugMode && (
+                  <button
+                    onClick={copySpecs}
+                    className="p-1 rounded hover:bg-muted transition-colors"
+                    title="Copier les caractéristiques"
+                  >
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                )}
+              </div>
 
               {/* Legend */}
               <div className="flex flex-wrap gap-3 mb-3 text-xs text-muted-foreground">
@@ -324,17 +455,17 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                           borderClass
                         )}
                       >
-                        <div className="flex items-center gap-2 min-w-0 shrink-0">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
                           {/* Status icon */}
-                          {isKO && <X className="h-4 w-4 text-warning shrink-0" />}
-                          {isOK && isRequested && <Check className="h-4 w-4 text-match-high shrink-0" />}
-                          {isUnknown && isRequested && <HelpCircle className="h-4 w-4 text-muted-foreground shrink-0" />}
-                          {isExtraInfo && <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40 shrink-0" />}
+                          {isKO && <X className="h-4 w-4 text-warning shrink-0 mt-0.5" />}
+                          {isOK && isRequested && <Check className="h-4 w-4 text-match-high shrink-0 mt-0.5" />}
+                          {isUnknown && isRequested && <HelpCircle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />}
+                          {isExtraInfo && <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/40 shrink-0 mt-0.5" />}
 
-                          <span className="text-muted-foreground">{spec.label}</span>
+                          <span className="text-muted-foreground break-words">{spec.label}</span>
                         </div>
 
-                        <div className="flex flex-col items-end text-right">
+                        <div className="flex flex-col items-end text-right shrink-0 max-w-[45%]">
                           {isUnknown ? (
                             <span className="font-medium text-muted-foreground italic">
                               Non renseigné
@@ -374,6 +505,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                     <img
                       src={product.supplier.logo}
                       alt={product.supplier.name}
+                      loading="lazy"
                       className="max-h-full max-w-full object-contain"
                     />
                   </div>
@@ -389,21 +521,56 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                   </h4>
 
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1 text-match-high">
+                    {<span className="flex items-center gap-1 text-match-high">
                       <Truck className="h-4 w-4" />
                       Livre dans votre zone
-                    </span>
+                    </span>}
                     <span className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />
-                      Répond en {product.supplier.responseTime}
+                      {product.supplier.responseTime}
                     </span>
                   </div>
                 </div>
               </div>
 
-              <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-                {product.supplier.description}
-              </p>
+              <div className="relative mt-4">
+                <div
+                  ref={vendorRef}
+                  className={cn(
+                    "text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none",
+                    "prose-strong:text-foreground prose-strong:font-semibold",
+                    "prose-ul:list-disc prose-ul:pl-4 prose-ul:space-y-1",
+                    "prose-li:text-muted-foreground",
+                    !vendorDescriptionExpanded && "max-h-[8rem] overflow-hidden"
+                  )}
+                  dangerouslySetInnerHTML={{ __html: product.supplier.description }}
+                />
+
+                {/* Gradient overlay when truncated */}
+                {!vendorDescriptionExpanded && isVendorTruncated && (
+                  <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+                )}
+              </div>
+
+              {/* Show more/less button */}
+              {isVendorTruncated && (
+                <button
+                  onClick={() => setVendorDescriptionExpanded(!vendorDescriptionExpanded)}
+                  className="mt-2 flex items-center gap-1 text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  {vendorDescriptionExpanded ? (
+                    <>
+                      <ChevronUp className="h-4 w-4" />
+                      Voir moins
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4" />
+                      Voir plus
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -495,6 +662,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
           <img
             src={currentMedia?.url}
             alt={product.name}
+            loading="lazy"
             className="max-w-full max-h-full object-contain"
             onClick={(e) => e.stopPropagation()}
           />

@@ -111,3 +111,33 @@ All colors MUST be HSL.
 .animate-float {
   animation: float 4s ease-in-out infinite;
 }
+
+/* Container that hides horizontal scrollbar via clipping */
+.hide-horizontal-scrollbar-wrapper {
+  overflow: hidden;
+}
+
+.hide-horizontal-scrollbar {
+  margin-bottom: -20px; /* Push horizontal scrollbar out of view */
+  padding-bottom: 20px; /* Compensate for negative margin */
+  scrollbar-width: thin; /* Firefox */
+}
+
+.hide-horizontal-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.hide-horizontal-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+.hide-horizontal-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+}
+
+.hide-horizontal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}

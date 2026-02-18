@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ArrowLeft, ArrowRight, Info, Check, Package, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Question } from "@/types";
+import { useFlowStore } from "@/lib/stores/flow-store";
 
 interface QuestionScreenProps {
   question: Question;
@@ -32,7 +33,12 @@ const QuestionScreen = ({
   isFirst,
   isLast,
 }: QuestionScreenProps) => {
+  const { categoryName, categoryStats } = useFlowStore();
   const [showJustification, setShowJustification] = useState(false);
+
+  // Stats avec fallback sur valeurs statiques
+  const productsCount = categoryStats?.productsCount ?? 347;
+  const suppliersCount = categoryStats?.suppliersCount ?? 24;
 
   const showOtherOption = question.id === 3;
   const isOtherSelected = selectedAnswers.includes("other");
@@ -64,7 +70,7 @@ const QuestionScreen = ({
               {question.title}
             </h2>
             
-            {/* Justification toggle */}
+            {/* Justification toggle - temporairement masqué
             <button
               onClick={() => setShowJustification(!showJustification)}
               className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors"
@@ -73,12 +79,13 @@ const QuestionScreen = ({
               {showJustification ? "Masquer l'explication" : "Pourquoi cette question ?"}
             </button>
 
-            
+
             {showJustification && (
               <div className="rounded-lg bg-primary/5 border border-primary/20 p-4 text-sm text-muted-foreground text-left">
                 {question.justification}
               </div>
             )}
+            */}
           </div>
 
           {/* Answer options */}
@@ -237,8 +244,8 @@ const QuestionScreen = ({
               <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5">
                 <Package className="h-4 w-4 text-primary" />
                 <span className="text-foreground">
-                  <span className="font-semibold text-primary">Ponts élévateurs</span>
-                  <span className="text-muted-foreground"> : 347 produits analysés • 24 fournisseurs</span>
+                  <span className="font-semibold text-primary">{categoryName || ""}</span>
+                  <span className="text-muted-foreground"> : {productsCount} produits analysés • {suppliersCount} fournisseurs</span>
                 </span>
               </div>
               <div className="inline-flex items-center gap-2 text-muted-foreground">
@@ -253,14 +260,14 @@ const QuestionScreen = ({
       {/* Mobile sticky footer with reassurance */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border shadow-[0_-4px_20px_rgba(0,0,0,0.1)]">
         {/* Reassurance line */}
-        <div className="flex flex-col items-center gap-1.5 px-4 py-2 border-b border-border/50 bg-primary/5">
-          <div className="inline-flex items-center gap-1.5 text-xs">
-            <Package className="h-3.5 w-3.5 text-primary" />
-            <span className="font-semibold text-primary">Ponts élévateurs</span>
-            <span className="text-muted-foreground">: 347 produits analysés • 24 fournisseurs</span>
+        <div className="flex flex-col items-center gap-1 px-4 py-2 border-b border-border/50 bg-primary/5">
+          <div className="inline-flex items-center gap-1.5 text-xs whitespace-nowrap overflow-hidden">
+            <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="font-semibold text-primary truncate">{categoryName || ""}</span>
+            <span className="text-muted-foreground shrink-0">: {productsCount} produits analysés • {suppliersCount} fournisseurs</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5" />
+          <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap">
+            <Users className="h-3.5 w-3.5 shrink-0" />
             <span>+ de 10 000 pros équipés / mois</span>
           </div>
         </div>
@@ -291,7 +298,7 @@ const QuestionScreen = ({
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
           >
-            {isLast ? "Voir ma sélection" : "Suivant"}
+            {isLast && totalQuestions > 1 ? "Voir ma sélection" : "Suivant"}
             <ArrowRight className="h-5 w-5" />
           </button>
         </div>

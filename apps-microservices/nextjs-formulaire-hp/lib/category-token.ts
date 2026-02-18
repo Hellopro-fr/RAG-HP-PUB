@@ -68,20 +68,22 @@ function getTodayDate(): string {
 }
 
 /**
- * Vérifie si une date est valide (aujourd'hui ou hier)
+ * Vérifie si une date est valide (7 jours max)
+ * TODO: Remettre à 24-48h après les tests (aujourd'hui ou hier)
  */
 function isDateValid(dateStr: string): boolean {
   const tokenDate = new Date(dateStr);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
+  // Token valide pendant 7 jours (pour tests)
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
   const maxDate = new Date(today);
   maxDate.setDate(maxDate.getDate() + 1); // Fin de journée
 
-  return tokenDate >= yesterday && tokenDate < maxDate;
+  return tokenDate >= sevenDaysAgo && tokenDate < maxDate;
 }
 
 // =============================================================================

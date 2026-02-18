@@ -31,6 +31,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     setDynamicAnswer,
     setStartTime,
     startTime,
+    categoryName,
   } = useFlowStore();
 
   // Hook pour le questionnaire dynamique
@@ -76,6 +77,15 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     }
   }, [startTime, setStartTime, rubriqueId]);
 
+  // Mettre à jour le contexte quand categoryName devient disponible (chargé via API)
+  useEffect(() => {
+    if (categoryName) {
+      setFunnelContext({
+        'product.category5': categoryName,
+      });
+    }
+  }, [categoryName]);
+
   // Quand le questionnaire dynamique est terminé
   useEffect(() => {
     if (dynamicQuestionnaire.isComplete) {
@@ -89,13 +99,9 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
   useEffect(() => {
     if (dynamicQuestionnaire.currentQuestion && lastTrackedQuestionIndex.current !== dynamicQuestionnaire.currentIndex) {
       lastTrackedQuestionIndex.current = dynamicQuestionnaire.currentIndex;
-      trackQuestionView(dynamicQuestionnaire.currentIndex, {
-        question_id: dynamicQuestionnaire.currentQuestion.id,
-        question_title: dynamicQuestionnaire.currentQuestion.title,
-        total_questions: dynamicQuestionnaire.progress.total,
-      });
+      trackQuestionView(dynamicQuestionnaire.currentIndex);
     }
-  }, [dynamicQuestionnaire.currentIndex, dynamicQuestionnaire.currentQuestion, dynamicQuestionnaire.progress.total]);
+  }, [dynamicQuestionnaire.currentIndex, dynamicQuestionnaire.currentQuestion]);
 
   const {
     currentQuestion,

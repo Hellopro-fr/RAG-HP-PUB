@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { basePath } from '@/lib/utils';
 import type { CharacteristicDefinition, CharacteristicsMap } from '@/types/characteristics';
+import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 
 // Toujours utiliser le proxy Next.js pour éviter les problèmes CORS
 const getApiBasePath = () => {
@@ -15,6 +16,36 @@ const getApiBasePath = () => {
  * Prefetch les caractéristiques en background (non-bloquant)
  * Appelé dès que l'API Qn répond pour avoir les données prêtes
  */
+/**
+ * Prefetch les statistiques de catégorie (nb produits, nb fournisseurs)
+ * Appelé dès le chargement de Q1 pour avoir les données prêtes
+ */
+async function prefetchCategoryStats(
+  categoryId: number,
+  setCategoryStats: (stats: { productsCount: number; suppliersCount: number } | null) => void
+): Promise<void> {
+  try {
+    const apiBase = getApiBasePath();
+    const response = await fetch(`${apiBase}/api/info-categorie/${categoryId}`, {
+      method: 'GET',
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    // API retourne: {"id_categorie":"2007702","fournisseur":33,"produit":748}
+    if (data.produit !== undefined && data.fournisseur !== undefined) {
+      setCategoryStats({
+        productsCount: Number(data.produit),
+        suppliersCount: Number(data.fournisseur),
+      });
+    }
+  } catch (error) {
+    console.error('Prefetch category stats error:', error);
+    // En cas d'erreur, on garde null (fallback sur valeurs statiques)
+  }
+}
+
 async function prefetchCharacteristics(
   categoryId: number,
   setCharacteristicsMap: (map: CharacteristicsMap) => void
@@ -138,14 +169,21 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     categoryId,
     characteristicsMap,
     setCharacteristicsMap,
+    addUserQuestionAnswer,
+    setCategoryName,
+    setCategoryStats,
   } = useFlowStore();
 
+  const { trackDbEvent } = useDbTracking();
+
   // Restaurer l'index à partir des réponses déjà enregistrées dans le store.
-  // Si l'utilisateur revient (ex: retour depuis /profile), on affiche la dernière
-  // question répondue au lieu de repartir à Q1.
+  // Si l'utilisateur revient (ex: retour depuis /profile), on affiche la question suivante.
+  // Si Q1 est pré-remplie via l'URL, on démarre directement à Q2.
   const [currentIndex, setCurrentIndex] = useState(() => {
     const answeredCount = Object.keys(dynamicAnswers).length;
-    return answeredCount > 0 ? answeredCount - 1 : 0;
+    // answeredCount = nombre de questions déjà répondues
+    // On veut afficher la question suivante (index = answeredCount)
+    return answeredCount;
   });
 
   // Appel A : Charger Q1
@@ -171,19 +209,23 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       if (!res.ok) throw new Error('Failed to fetch Q1');
 
       let apiData = await res.json();
+      const nom_categorie = apiData.nom_categorie || null;
       apiData = apiData.response;
 
-      console.log("apiData RAW", apiData);
-      
-      const apiDataAPI : ApiQuestion = apiData;
+      if (nom_categorie) {
+        setCategoryName(nom_categorie);
+      }
 
-      console.log("apiData", apiDataAPI);
+      // Prefetch category stats (non-bloquant)
+      if (rubriqueId) {
+        prefetchCategoryStats(Number(rubriqueId), setCategoryStats);
+      }
+
+      const apiDataAPI : ApiQuestion = apiData;
 
       const dataReturn = {
         entryQuestion: normalizeQuestion(apiDataAPI, 0),
       };
-
-      console.log("dataReturn waaaaaa", dataReturn);
 
       // Transformer vers le format frontend
       return dataReturn;
@@ -216,7 +258,12 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       
       if (!res.ok) throw new Error('Failed to fetch path questions');
       let apiData = await res.json();
+      const nom_categorie = apiData.nom_categorie || null;
       apiData = apiData.response;
+
+      if (nom_categorie) {
+        setCategoryName(nom_categorie);
+      }
       // L'API retourne un tableau imbriqué [[...questions]], on aplatit
       const apiDataAPI: ApiQuestion[] = Array.isArray(apiData?.[0]) ? apiData.flat() : apiData;
 
@@ -274,6 +321,26 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       .flatMap((a) => Array.isArray(a.equivalence) ? a.equivalence : []);
 
     setDynamicAnswer(questionCode, answerCodes, selectedEquivalences);
+
+    // Stocker question/réponse pour debug et tracking
+    const answerLabels = matchedAnswers.map(a => a.mainText);
+    addUserQuestionAnswer({
+      questionId: currentQuestion.id,
+      questionCode: questionCode,
+      questionLabel: currentQuestion.title,
+      answerId: answerCodes,
+      answerLabel: answerLabels,
+      equivalences: selectedEquivalences,
+      timestamp: Date.now(),
+    });
+
+    // Tracking DB
+    trackDbEvent('questionnaire', 'question_answer', {
+      question_id: currentQuestion.id,
+      question_code: questionCode,
+      answer_ids: answerCodes,
+      equivalences: selectedEquivalences
+    }, categoryId, currentIndex + 1); // step_index = numéro de la question (1-based)
 
     setCurrentIndex((prev) => prev + 1);
   };

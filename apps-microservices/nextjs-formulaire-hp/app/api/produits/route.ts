@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BASE_URL = process.env.HELLOPRO_API_URL || 'https://dev-api.hellopro.fr';
+const BASE_URL = process.env.HELLOPRO_API_URL || 'https://api.hellopro.fr';
 const URL_API = `${BASE_URL}/api/hp/view/index.php`;
 const TOKEN   = process.env.TOKEN_INFO_PRODUIT || '';
 
@@ -25,8 +25,6 @@ export async function POST(request: NextRequest) {
         id_produits: id_produits.map(String),
       },
     };
-
-    console.log('Calling get_info_produit API:', URL_API, payload);
 
     const response = await fetch(URL_API, {
       method: 'POST',
@@ -56,9 +54,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = JSON.parse(jsonMatch[0]);
-
-    console.log('get_info_produit response:', Object.keys(data.items || {}));
+    const data = JSON.parse(jsonMatch[0]);    
 
     return NextResponse.json(data, { status: 200 });
   } catch (error) {

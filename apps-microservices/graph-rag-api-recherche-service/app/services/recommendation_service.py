@@ -7,6 +7,7 @@ from app.domain.models import (
     ComplexFilterRequest,
     FilterCaracteristiqueRequest,
     MatchingPayload,
+    MatchingPayloadIdProduit,
     MatchingResponse,
     Produit,
     CaracteristiqueMatching,
@@ -556,14 +557,18 @@ class RecommendationService:
 
     async def get_products_by_caracteristique_filters(
         self,
-        request: MatchingPayload,
+        request: MatchingPayloadIdProduit,
         target_product_id: Optional[str] = None,
     ) -> MatchingResponse:
         """
         Get products filtered and scored by CaracteristiqueTechnique constraints.
         Uses MatchingPayload schema with MatchingOptions.Score for caracteristique weights.
+        Includes geographic zone scoring based on MetadonneUtilisateurs.
         """
         start_time = time.perf_counter()
+
+        if request.id_produit is not None:
+            target_product_id = str(request.id_produit)
 
         norm_start = time.perf_counter()
         flat_filters = await self._normalize_constraints_for_caracteristique(request)
@@ -573,22 +578,95 @@ class RecommendationService:
         weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
 
         # Use default values for blocked_val and different_val
-        blocked_val = -2.0
-        different_val = -0.3
+        blocked_val = (
+            request.scoring.v_blocked if request.scoring.v_blocked is not None else -2.0
+        )
+        different_val = (
+            request.scoring.v_different
+            if request.scoring.v_different is not None
+            else -0.3
+        )
 
-        # Build Cypher Query for caracteristique-based filtering with CONTINUOUS SCORING
-        cypher_query = """
-        // --- STEP 1: ANCHOR TRAVERSAL by CaracteristiqueTechnique ---
-        UNWIND $filters AS f
-        MATCH (pc:CaracteristiqueTechnique)
-        WHERE toString(pc.id_source_caracteristique) = f.cid
-        MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
-        
-        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
-          AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
-        
-        WITH DISTINCT p, $filters AS active_filters
-        
+        z_unmatched = (
+            request.scoring.z_unmatched
+            if request.scoring.z_unmatched is not None
+            else 0.2
+        )
+        e_unmatched = (
+            request.scoring.e_unmatched
+            if request.scoring.e_unmatched is not None
+            else 0.9
+        )
+        g_unknown_score = (
+            request.scoring.g_unknown_score
+            if request.scoring.g_unknown_score is not None
+            else 0.8
+        )
+        c_unknown_score = (
+            request.scoring.c_unknown_score
+            if request.scoring.c_unknown_score is not None
+            else 0.5
+        )
+        t_unmatched = (
+            request.scoring.t_unmatched
+            if request.scoring.t_unmatched is not None
+            else 0.2
+        )
+
+        absolute_threshold = (
+            request.scoring.absolute_threshold
+            if request.scoring.absolute_threshold is not None
+            else 0.0
+        )
+        relative_tolerance = (
+            request.scoring.relative_tolerance
+            if request.scoring.relative_tolerance is not None
+            else 0.1
+        )
+        max_per_supplier_primary = (
+            request.scoring.max_per_supplier_primary
+            if request.scoring.max_per_supplier_primary is not None
+            else 10
+        )
+        max_per_supplier_extended = (
+            request.scoring.max_per_supplier_extended
+            if request.scoring.max_per_supplier_extended is not None
+            else 20
+        )
+        score_step = (
+            request.scoring.score_step
+            if request.scoring.score_step is not None
+            else 0.1
+        )
+
+        # Extract user location data from metadonnee_utilisateurs
+        user_meta = request.metadonnee_utilisateurs
+        user_cp = user_meta.cp if user_meta else None
+        user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
+        user_id_pays = user_meta.id_pays if user_meta else None
+        user_typologie = user_meta.typologie if user_meta else None
+
+        # Build Cypher Query Step 1 (Dynamic)
+        if target_product_id:
+            query_step_1 = """
+             MATCH (p:Produit)
+             WHERE toString(p.id) = $target_product_id
+             WITH p, $filters AS active_filters
+             """
+        else:
+            query_step_1 = """
+             UNWIND $filters AS f
+             MATCH (pc:CaracteristiqueTechnique)
+             WHERE toString(pc.id_source_caracteristique) = f.cid
+             MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
+             
+             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+             
+             WITH DISTINCT p, $filters AS active_filters
+             """
+
+        # --- STEP 2: SCORING ---
+        query_step_2 = """
         // --- STEP 2: SCORING by CaracteristiqueTechnique with CONTINUOUS SCORING ---
         UNWIND active_filters AS f
         
@@ -608,7 +686,15 @@ class RecommendationService:
         WITH p, f, [item IN constraint_data | {
             cid: item.cid,
             score: CASE 
-                // ============== BLOCKING CHECK (Fatal Mismatch = 0) ==============
+                // ============== TARGET LIST CHECK (Priority for text type) ==============
+                // If ANY node matches a target value, prioritize it over blocking
+                // This handles products with multiple text nodes for the same characteristic
+                WHEN ANY(pc IN item.matches WHERE 
+                    size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
+                ) THEN 1.0
+                
+                // ============== BLOCKING CHECK (Fatal Mismatch) ==============
+                // Only reached if no target list match was found above
                 WHEN ANY(pc IN item.matches WHERE 
                     (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
                     OR
@@ -618,11 +704,6 @@ class RecommendationService:
                         (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
                     ))
                 ) THEN $blocked_val
-                
-                // ============== TARGET LIST CHECK (Binary 1.0) ==============
-                WHEN ANY(pc IN item.matches WHERE 
-                    size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
-                ) THEN 1.0
                 
                 // ============== CONTINUOUS NUMERIC SCORING WITH THRESHOLD ==============
                 // New logic: Calculate direct score + inverted score, apply 0.8 threshold each
@@ -651,20 +732,12 @@ class RecommendationService:
                                                     apoc.coll.max([
                                                         CASE 
                                                             WHEN pc.valeur_canonique >= item.conf.target_numeric.exact 
-                                                            THEN CASE 
-                                                                WHEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) >= 0.8 
-                                                                THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique)
-                                                                ELSE 0.0 
-                                                            END
+                                                            THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique)
                                                             ELSE 0.0 
                                                         END,
                                                         CASE 
                                                             WHEN pc.valeur_canonique <= item.conf.target_numeric.exact 
-                                                            THEN CASE 
-                                                                WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) >= 0.8 
-                                                                THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact)
-                                                                ELSE 0.0 
-                                                            END
+                                                            THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact)
                                                             ELSE 0.0 
                                                         END
                                                     ])
@@ -680,11 +753,7 @@ class RecommendationService:
                                                 apoc.coll.max([
                                                     CASE 
                                                         WHEN pc.valeur_canonique >= item.conf.target_numeric.min 
-                                                        THEN CASE 
-                                                            WHEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique) >= 0.8 
-                                                            THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
-                                                            ELSE 0.0 
-                                                        END
+                                                        THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique)
                                                         ELSE 0.0 
                                                     END,
                                                     CASE 
@@ -709,11 +778,7 @@ class RecommendationService:
                                                 apoc.coll.max([
                                                     CASE 
                                                         WHEN pc.valeur_canonique <= item.conf.target_numeric.max 
-                                                        THEN CASE 
-                                                            WHEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max) >= 0.8 
-                                                            THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
-                                                            ELSE 0.0 
-                                                        END
+                                                        THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max)
                                                         ELSE 0.0 
                                                     END,
                                                     CASE 
@@ -756,11 +821,7 @@ class RecommendationService:
                                     WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
                                         CASE
                                             WHEN pc.valeur_max_canonique IS NOT NULL AND pc.valeur_max_canonique >= item.conf.target_numeric.min THEN
-                                                CASE 
-                                                    WHEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique) >= 0.8 
-                                                    THEN toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
-                                                    ELSE 0.0 
-                                                END
+                                                toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
                                             ELSE 0.0
                                         END
                                         
@@ -768,11 +829,7 @@ class RecommendationService:
                                     WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
                                         CASE
                                             WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_min_canonique <= item.conf.target_numeric.max THEN
-                                                CASE 
-                                                    WHEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max) >= 0.8 
-                                                    THEN toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
-                                                    ELSE 0.0 
-                                                END
+                                                toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
                                             ELSE 0.0
                                         END
                                         
@@ -814,19 +871,91 @@ class RecommendationService:
                 // Connected Check
                 WHEN size(item.matches) > 0 THEN $different_val
                 // Default
-                ELSE 0.1
+                ELSE $c_unknown_score
             END,
             has_pc: size(item.matches) > 0,
             c_weight: item.conf.c_weight,
-            // User requirements from the constraint
-            user_requirements: {
-                target_list: item.conf.target_list,
-                blocking_list: item.conf.blocking_list,
-                target_numeric: item.conf.target_numeric,
-                blocking_numeric: item.conf.blocking_numeric
-            },
-            // Complete matched nodes (product data)
-            matched_nodes: [pc IN item.matches | properties(pc)]
+            // Matched nodes with per-node score for best-node selection
+            matched_nodes: [pc IN item.matches | apoc.map.merge(properties(pc), {
+                node_score: CASE
+                    // Text target match
+                    WHEN size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list)
+                    THEN 1.0
+                    // Text blocking match
+                    WHEN (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
+                        OR
+                        (item.conf.blocking_numeric IS NOT NULL AND (item.conf.blocking_numeric.unit IS NULL OR pc.unite_canonique = item.conf.blocking_numeric.unit) AND (
+                            (item.conf.blocking_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.blocking_numeric.min) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique >= item.conf.blocking_numeric.min))) OR
+                            (item.conf.blocking_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.blocking_numeric.max) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_max_canonique <= item.conf.blocking_numeric.max))) OR
+                            (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
+                        ))
+                    THEN $blocked_val
+                    // Numeric target scoring (same formulas as the score field above)
+                    WHEN item.conf.target_numeric IS NOT NULL AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit)
+                    THEN
+                        CASE
+                            WHEN pc.type_donnee = 'numeric' THEN
+                                CASE
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE 
+                                            WHEN item.conf.target_numeric.exact = 0 THEN 
+                                                CASE WHEN pc.valeur_canonique = 0 THEN 1.0 ELSE 0.0 END
+                                            ELSE
+                                                apoc.coll.max([
+                                                    CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.exact THEN toFloat(item.conf.target_numeric.exact / pc.valeur_canonique) ELSE 0.0 END,
+                                                    CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.exact THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.exact) ELSE 0.0 END
+                                                ])
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE WHEN pc.valeur_canonique = 0 OR item.conf.target_numeric.min = 0 THEN 0.0 ELSE
+                                            apoc.coll.max([
+                                                CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.min THEN toFloat(item.conf.target_numeric.min / pc.valeur_canonique) ELSE 0.0 END,
+                                                CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.min AND toFloat(pc.valeur_canonique / item.conf.target_numeric.min) >= 0.8 THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.min) ELSE 0.0 END
+                                            ])
+                                        END
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE WHEN pc.valeur_canonique = 0 OR item.conf.target_numeric.max = 0 THEN 0.0 ELSE
+                                            apoc.coll.max([
+                                                CASE WHEN pc.valeur_canonique <= item.conf.target_numeric.max THEN toFloat(pc.valeur_canonique / item.conf.target_numeric.max) ELSE 0.0 END,
+                                                CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.max AND toFloat(item.conf.target_numeric.max / pc.valeur_canonique) >= 0.8 THEN toFloat(item.conf.target_numeric.max / pc.valeur_canonique) ELSE 0.0 END
+                                            ])
+                                        END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE WHEN pc.valeur_canonique >= item.conf.target_numeric.min AND pc.valeur_canonique <= item.conf.target_numeric.max THEN 1.0 ELSE 0.0 END
+                                    ELSE 1.0
+                                END
+                            WHEN pc.type_donnee = 'numeric_range' THEN
+                                CASE
+                                    WHEN item.conf.target_numeric.exact IS NOT NULL THEN
+                                        CASE WHEN (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact) AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact) THEN 1.0 ELSE 0.0 END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NULL THEN
+                                        CASE WHEN pc.valeur_max_canonique IS NOT NULL AND pc.valeur_max_canonique >= item.conf.target_numeric.min THEN
+                                            toFloat(item.conf.target_numeric.min / pc.valeur_max_canonique)
+                                        ELSE 0.0 END
+                                    WHEN item.conf.target_numeric.max IS NOT NULL AND item.conf.target_numeric.min IS NULL THEN
+                                        CASE WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_min_canonique <= item.conf.target_numeric.max THEN
+                                            toFloat(pc.valeur_min_canonique / item.conf.target_numeric.max)
+                                        ELSE 0.0 END
+                                    WHEN item.conf.target_numeric.min IS NOT NULL AND item.conf.target_numeric.max IS NOT NULL THEN
+                                        CASE WHEN pc.valeur_min_canonique IS NOT NULL AND pc.valeur_max_canonique IS NOT NULL THEN
+                                            CASE
+                                                WHEN pc.valeur_max_canonique < item.conf.target_numeric.min OR pc.valeur_min_canonique > item.conf.target_numeric.max THEN 0.0
+                                                WHEN item.conf.target_numeric.max - item.conf.target_numeric.min = 0 THEN 1.0
+                                                ELSE toFloat(
+                                                    (CASE WHEN pc.valeur_max_canonique < item.conf.target_numeric.max THEN pc.valeur_max_canonique ELSE item.conf.target_numeric.max END
+                                                     - CASE WHEN pc.valeur_min_canonique > item.conf.target_numeric.min THEN pc.valeur_min_canonique ELSE item.conf.target_numeric.min END)
+                                                    / (item.conf.target_numeric.max - item.conf.target_numeric.min)
+                                                )
+                                            END
+                                        ELSE 0.5 END
+                                    ELSE 1.0
+                                END
+                            ELSE 0.0
+                        END
+                    // Connected but no specific match
+                    ELSE 0.0
+                END
+            })]
         }] AS char_results
         
         // --- HIERARCHICAL SCORING ---
@@ -856,9 +985,7 @@ class RecommendationService:
              c_weight_sum,
              matched,
              // Flatten matched nodes from all char_results
-             apoc.coll.flatten([res IN char_results | res.matched_nodes]) AS matched_nodes,
-             // Keep first user_requirements (they should all be the same for same cid)
-             head([res IN char_results | res.user_requirements]) AS user_requirements
+             apoc.coll.flatten([res IN char_results | res.matched_nodes]) AS matched_nodes
         
         // Collect all cid scores grouped by q_weight
         WITH p, collect({
@@ -867,7 +994,6 @@ class RecommendationService:
             c_weight_sum: c_weight_sum,
             q_weight: q_weight,
             matched: matched,
-            user_requirements: user_requirements,
             matched_nodes: matched_nodes
         }) AS all_constraints
         
@@ -897,41 +1023,239 @@ class RecommendationService:
         WITH p, q_weight_groups AS details, 
              CASE WHEN denominator = 0 THEN 0.0 ELSE (numerator / denominator) END AS global_score
         
-        ORDER BY global_score DESC
-        LIMIT $top_k + 4
+        // --- STEP 2.5: ZONE SCORING based on MetadonneUtilisateurs ---
+        // Get the product's fournisseur
+        OPTIONAL MATCH (p)-[:EST_PROPOSE_PAR]->(f:Fournisseur)
         
-        // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score}) AS all_products
+        // Check for COUVRE_PAYS relationships with couvre_tous, couvre, ne_couvre_pas properties
+        OPTIONAL MATCH (f)-[r_pays:COUVRE_PAYS]->(pays:Pays)
+        
+        // Check for COUVRE_ZONE relationships with couvre_tous, couvre, ne_couvre_pas properties
+        OPTIONAL MATCH (f)-[r_zone:COUVRE_ZONE]->(zone:ZoneGeo)
+        
+        WITH p, details, global_score, f,
+             collect(DISTINCT {
+                 pays: pays, 
+                 id_pays: pays.id_pays, 
+                 partiel: r_pays.partiel,
+                 couvre_tous: r_pays.couvre_tous, 
+                 couvre: r_pays.couvre, 
+                 ne_couvre_pas: r_pays.ne_couvre_pas
+             }) AS pays_rels,
+             collect(DISTINCT {
+                 zone: zone,
+                 id_dept: zone.id_dept,
+                 couvre_tous: r_zone.couvre_tous,
+                 couvre: r_zone.couvre,
+                 ne_couvre_pas: r_zone.ne_couvre_pas
+             }) AS zone_rels,
+             { id_etat: f.id_etat, id_affichage: f.id_affichage, typologie: f.typologie } AS info_soc
+        
+        // Calculate zone_score based on the algorithm:
+        // 1. If has pays relation:
+        //    a. First check if user's id_pays matches any pays
+        //    b. If match found, check partiel:
+        //       - partiel=true: drill into ZoneGeo by dept, then check zone couvre_tous/couvre
+        //       - partiel=false: check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas for categorie
+        // 2. If no pays relation but has zonegeographique relation: check dept then couvre_tous/couvre
+        // 3. If neither exists: score=g_unknown_score
+        WITH p, info_soc, details, global_score, pays_rels, zone_rels,
+             CASE
+                 // Case 1: Has pays relations
+                 WHEN size(pays_rels) > 0 AND pays_rels[0].pays IS NOT NULL THEN
+                     CASE
+                         // First check if user_id_pays is provided
+                         WHEN $user_id_pays IS NULL THEN $g_unknown_score
+                         // Check if user's country matches any COUVRE_PAYS
+                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays)) THEN
+                             // Country matched - now check partiel on the matched pays relation
+                             CASE
+                                 // Case 1a: partiel=true -> drill into ZoneGeo by dept
+                                 WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.partiel = true) THEN
+                                     CASE
+                                         WHEN $user_dept IS NULL THEN $g_unknown_score
+                                         // Check if user_dept matches any COUVRE_ZONE
+                                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN
+                                             // Dept matched - check couvre_tous on the matched zone relation
+                                             CASE
+                                                 // Find the matched zone and check its couvre_tous
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) THEN 1.0
+                                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
+                                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
+                                                 ELSE $g_unknown_score
+                                             END
+                                         // Dept not covered
+                                         ELSE $z_unmatched
+                                     END
+                                 // Case 1b: partiel=false -> check COUVRE_PAYS couvre_tous/couvre/ne_couvre_pas
+                                 ELSE
+                                     CASE
+                                         // couvre_tous=true -> covers all categories in this country
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = true) THEN 1.0
+                                         // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.couvre, [])) THEN 1.0
+                                         WHEN ANY(pr IN pays_rels WHERE toString(pr.id_pays) = toString($user_id_pays) AND pr.couvre_tous = false AND $id_categorie IN coalesce(pr.ne_couvre_pas, [])) THEN $z_unmatched
+                                         ELSE $g_unknown_score
+                                     END
+                             END
+                         // User's country not in any COUVRE_PAYS
+                         ELSE $z_unmatched
+                     END
+                 // Case 2: No pays relation but has zonegeographique relation
+                 WHEN size(zone_rels) > 0 AND zone_rels[0].zone IS NOT NULL THEN
+                     CASE
+                         WHEN $user_dept IS NULL THEN $g_unknown_score
+                         // Check if user_dept matches any COUVRE_ZONE
+                         WHEN ANY(zr IN zone_rels WHERE zr.zone IS NOT NULL AND toString(zr.id_dept) = toString($user_dept)) THEN
+                             // Dept matched - check couvre_tous on the matched zone relation
+                             CASE
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = true) THEN 1.0
+                                 // couvre_tous=false -> check couvre/ne_couvre_pas for id_categorie
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.couvre, [])) THEN 1.0
+                                 WHEN ANY(zr IN zone_rels WHERE toString(zr.id_dept) = toString($user_dept) AND zr.couvre_tous = false AND $id_categorie IN coalesce(zr.ne_couvre_pas, [])) THEN $z_unmatched
+                                 ELSE $g_unknown_score
+                             END
+                         // Dept not covered
+                         ELSE $z_unmatched
+                     END
+                 // Case 3: Neither exists
+                 ELSE $g_unknown_score
+             END AS zone_score
+
+        // Calculate score by Etat and affichage fournisseur
+        WITH p, info_soc, details, global_score, zone_score,
+             CASE
+                WHEN ((info_soc.id_etat = '1') OR ((info_soc.id_etat = '2') AND (info_soc.id_affichage = '1'))) THEN 1.0
+                ELSE $e_unmatched
+             END AS raw_etat_score
+        
+        // Post-process etat_score and global_score based on cross-score rules:
+        // If etat_score = 1 and global_score between 0.80 and 0.95: add 0.05 to global_score (max 1.0)
+        // If etat_score != 1 and global_score >= 0.8: set etat_score to 1.0
+        WITH p, info_soc, details, zone_score,
+             CASE
+                 WHEN raw_etat_score <> 1.0 AND global_score >= 0.8 THEN 1.0
+                 ELSE raw_etat_score
+             END AS etat_score,
+             CASE
+                 WHEN raw_etat_score = 1.0 AND global_score >= 0.80 AND global_score <= 0.95 THEN
+                     CASE WHEN global_score + 0.05 > 1.0 THEN 1.0 ELSE global_score + 0.05 END
+                 ELSE global_score
+             END AS global_score
+        
+        // Calculate typologie score
+        WITH p, details, global_score, zone_score, etat_score, info_soc,
+             CASE
+                WHEN etat_score = 1.0 THEN
+                    CASE
+                        WHEN $user_typologie IS NOT NULL AND ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
+                        ELSE $t_unmatched
+                    END
+                ELSE 1.0
+             END AS typo_score
+        
+        // Calculate final_score = global_score * zone_score * etat_score * typo_score
+        // Filter out products with negative final_score
+        // forcer zone_geo à 1
+        // global_score * zone_score * etat_score * typo_score AS final_score
+        WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
+            global_score * zone_score * etat_score * typo_score AS final_score
+        WHERE final_score > 0 OR $target_product_id IS NOT NULL
+        WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
+        ORDER BY final_score DESC
+        
+        // --- SUPPLIER DIVERSITY ALGORITHM ---
+        // Step 1: Collect all scored products
+        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_scored
+        
+        // Step 2: Compute supplier average scores and best score
+        WITH all_scored,
+             apoc.map.fromPairs(
+                 [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
+                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid] | acc + item.final_score)
+                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid]))]]
+             ) AS supplier_avg_map,
+             CASE WHEN size(all_scored) > 0 THEN all_scored[0].final_score ELSE 0.0 END AS best_score
+        
+        // Step 3: Enrich with supplier_range_rank (rank within same supplier + same score range)
+        //         Score ranges: [1.0-0.8], [0.8-0.6], [0.6-0.4], [0.4-0.2], [0.2-0.0]
+        //         Max 2 products per supplier per range
+        //         Tie-break between same-score products by supplier_avg_score DESC
+        WITH [prod IN all_scored | {
+            node: prod.node,
+            details: prod.details,
+            global_score: prod.global_score,
+            zone_score: prod.zone_score,
+            etat_score: prod.etat_score,
+            typo_score: prod.typo_score,
+            final_score: prod.final_score,
+            info_soc: prod.info_soc,
+            supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)],
+            score_range: toInteger(floor(prod.final_score / $score_step)),
+            supplier_range_rank: size([other IN all_scored WHERE 
+                toString(other.node.id_fournisseur) = toString(prod.node.id_fournisseur) AND 
+                toInteger(floor(other.final_score / $score_step)) = toInteger(floor(prod.final_score / $score_step)) AND
+                (other.final_score > prod.final_score OR 
+                 (other.final_score = prod.final_score AND toString(other.node.id_produit) < toString(prod.node.id_produit)))
+            ]) + 1
+        }] AS enriched
+        
+        // Step 4: Keep max $max_per_supplier_primary products per supplier per score range
+        //         Sort by final_score DESC, supplier_avg_score DESC (tie-breaker)
+        //         Limit to $top_k + 4
+        WITH [prod IN enriched WHERE 
+            prod.supplier_range_rank <= $max_per_supplier_primary
+        ] AS diversity_filtered, enriched
+        
+        // Step 5: Build pre-diversity debug + take top_k + 4
+        WITH diversity_filtered[0..$top_k + 4] AS all_products,
+             [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, score_range: e.score_range, supplier_range_rank: e.supplier_range_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
-        WITH all_products,
+        WITH all_products, pre_diversity_debug,
              [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
                  head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
              ] AS top_per_fournisseur
         
-        // Sort top_per_fournisseur by global_score descending and limit to 4
-        WITH all_products, top_per_fournisseur
+        // Sort top_per_fournisseur by final_score descending and limit to 4
+        WITH all_products, pre_diversity_debug, top_per_fournisseur
         UNWIND top_per_fournisseur AS p_top
-        WITH all_products, p_top 
-        ORDER BY p_top.global_score DESC 
+        WITH all_products, pre_diversity_debug, p_top 
+        ORDER BY p_top.final_score DESC 
         LIMIT 4
         
         // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.global_score AS top_score, p_top.details AS top_details
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id
-        WITH all_products, collect({
+        WITH all_products, pre_diversity_debug, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
+        WITH all_products, pre_diversity_debug, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
+        WITH all_products, pre_diversity_debug, collect({
             product_data: top_product_data,
             score: top_score,
-            details: top_details
+            details: top_details,
+            zone_score: top_zone_score,
+            global_score: top_global_score,
+            etat_score: top_etat_score,
+            typo_score: top_typo_score,
+            info_soc: top_info_soc
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
-        WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
+        WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p, pre_diversity_debug
         
-        UNWIND filtered_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
+        UNWIND (CASE WHEN size(filtered_products) = 0 THEN [null] ELSE filtered_products END) AS prod
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p, pre_diversity_debug
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p, pre_diversity_debug
         """
+
+        cypher_query = query_step_1 + query_step_2
+
+        if len(request.champs_sortie) > 0 and "id_produit" not in request.champs_sortie:
+            request.champs_sortie.append("id_produit")
+        if (
+            len(request.champs_sortie) > 0
+            and "id_fournisseur" not in request.champs_sortie
+        ):
+            request.champs_sortie.append("id_fournisseur")
 
         # Determine projection
         if request.champs_sortie:
@@ -955,20 +1279,27 @@ class RecommendationService:
                 str(request.id_categorie) if request.id_categorie is not None else None
             ),
             "top_k": int(request.top_k),
-            "target_product_id": target_product_id,
+            "target_product_id": (
+                str(f"""id_produit_{request.id_produit}""")
+                if request.id_produit is not None
+                else None
+            ),
             "blocked_val": blocked_val,
             "different_val": different_val,
+            "user_dept": user_dept,
+            "user_id_pays": str(user_id_pays) if user_id_pays is not None else None,
+            "z_unmatched": z_unmatched,
+            "e_unmatched": e_unmatched,
+            "g_unknown_score": g_unknown_score,
+            "c_unknown_score": c_unknown_score,
+            "user_typologie": user_typologie,
+            "t_unmatched": t_unmatched,
+            "absolute_threshold": absolute_threshold,
+            "relative_tolerance": relative_tolerance,
+            "max_per_supplier_primary": max_per_supplier_primary,
+            "max_per_supplier_extended": max_per_supplier_extended,
+            "score_step": score_step,
         }
-
-        # Debug: Log parameters
-        logging.info(f"📝 Caracteristique filter params:")
-        for key, value in params.items():
-            if key not in ["filters", "weights"]:
-                logging.info(f"   {key}: {value} (type: {type(value).__name__})")
-            else:
-                logging.info(
-                    f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>"
-                )
 
         try:
             query_start = time.perf_counter()
@@ -1008,7 +1339,7 @@ class RecommendationService:
                         else:
                             statut = 2  # Ecart
 
-                        # Extract value and unit from matched nodes if available
+                        # Extract value and unit from the best-scoring matched node
                         valeur = None
                         valeur_min = None
                         valeur_max = None
@@ -1017,7 +1348,10 @@ class RecommendationService:
                         id_valeurs = []
 
                         if matched_nodes:
-                            node = matched_nodes[0]  # Take first matched node
+                            # Pick the node with the highest node_score (computed in Cypher)
+                            node = max(
+                                matched_nodes, key=lambda n: n.get("node_score", 0)
+                            )
                             valeur = (
                                 str(node.get("valeur", ""))
                                 if node.get("valeur")
@@ -1069,19 +1403,32 @@ class RecommendationService:
                 """Convert a result record to Produit."""
                 product_data = rec.get("product_data", {})
                 details = rec.get("details", [])
-                global_score = rec.get("global_score", 0.0)
+                final_score = rec.get("final_score", 0.0)
+                zone_score = rec.get("zone_score", 1.0)
+                etat_score = rec.get("etat_score", 1.0)
+                typo_score = rec.get("typo_score", 1.0)
+                carac_score = rec.get("global_score", 0.0)
+                info_produit = rec.get("product_data", {})
 
                 caracteristiques = convert_to_caracteristique_matching(
-                    details, global_score
+                    details, final_score
                 )
 
                 return Produit(
                     rang=rang,
                     id_produit=str(product_data.get("id_produit", "")),
-                    score=float(global_score),
+                    score=float(final_score),
                     caracteristique=caracteristiques,
-                    coeff_geo=1.0,  # Default, can be computed from zone matching
-                    coeff_type_frns=1.0,  # Default, can be computed from fournisseur type
+                    info_produit=(
+                        info_produit
+                        if request.champs_sortie is not None
+                        and len(request.champs_sortie) > 0
+                        else None
+                    ),
+                    coeff_geo=float(zone_score),
+                    coeff_type_frns=float(typo_score),
+                    coeff_etat_score=float(etat_score),
+                    coeff_caracteristique=float(carac_score),
                 )
 
             if results:
@@ -1091,21 +1438,35 @@ class RecommendationService:
                 # Build top_produit list
                 for idx, entry in enumerate(raw_top_p):
                     if isinstance(entry, dict) and "product_data" in entry:
+                        top_zone_score = entry.get("zone_score", 1.0)
+                        top_final_score = entry.get("score", 0.0)
+                        top_etat_score = entry.get("etat_score", 1.0)
+                        top_typo_score = entry.get("typo_score", 1.0)
+                        top_carac_score = entry.get("global_score", 0.0)
                         produit = Produit(
                             rang=idx + 1,
                             id_produit=str(entry["product_data"].get("id_produit", "")),
-                            score=float(entry.get("score", 0.0)),
+                            score=float(top_final_score),
                             caracteristique=convert_to_caracteristique_matching(
-                                entry.get("details", []), entry.get("score", 0.0)
+                                entry.get("details", []), top_final_score
                             ),
-                            coeff_geo=1.0,
-                            coeff_type_frns=1.0,
+                            info_produit=(
+                                entry.get("product_data", {})
+                                if request.champs_sortie is not None
+                                and len(request.champs_sortie) > 0
+                                else None
+                            ),
+                            coeff_geo=float(top_zone_score),
+                            coeff_type_frns=float(top_typo_score),
+                            coeff_etat_score=float(top_etat_score),
+                            coeff_caracteristique=float(top_carac_score),
                         )
                         top_produit.append(produit)
 
                 # Build liste_produit
                 for idx, rec in enumerate(results):
-                    liste_produit.append(build_produit(rec, idx + 1))
+                    if rec.get("product_data"):
+                        liste_produit.append(build_produit(rec, idx + 1))
 
             total_time = time.perf_counter() - start_time
             return MatchingResponse(

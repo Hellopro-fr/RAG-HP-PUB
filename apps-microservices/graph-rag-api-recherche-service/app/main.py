@@ -2,7 +2,7 @@ import logging
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
-from app.routers import query, recommendation, product, admin
+from app.routers import query, recommendation, product, admin, fournisseur, nodes
 from app.config import settings
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
 from app.infrastructure.clients import clients
@@ -29,6 +29,8 @@ app = FastAPI(title="Graph RAG Search API", version="1.0.0", lifespan=lifespan)
 app.include_router(query.router, prefix="/query", tags=["Intelligent Search"])
 app.include_router(recommendation.router, prefix="/produits", tags=["Recommendation"])
 app.include_router(product.router, prefix="/produits", tags=["Produits"])
+app.include_router(fournisseur.router, prefix="/fournisseur", tags=["Fournisseur"])
+app.include_router(nodes.router, prefix="/nodes", tags=["Admin"])
 app.include_router(admin.router, prefix="/admin", tags=["Admin"])
 
 

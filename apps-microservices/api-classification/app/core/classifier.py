@@ -1100,7 +1100,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
 
         return merged_results
 
-    async def build_prompt_async(self, product: Dict, categories: List[Dict], category_info: Dict, top_k_products: List[Dict]) -> Tuple[str, float]:
+    async def build_prompt_async(self, product: Dict, categories: List[Dict], category_info: Dict, top_k_products: List[Dict], prompt_id: int = 20) -> Tuple[str, float]:
         """
         Construit le prompt pour le LLM en récupérant le template depuis l'API externe.
         Remplace les placeholders par les valeurs réelles.
@@ -1110,12 +1110,13 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
             categories: Liste des catégories candidates
             category_info: Dict {cat_id: {"summary": résumé, "fil_ariane": fil d'ariane}}
             top_k_products: Produits similaires
+            prompt_id: ID du prompt à utiliser (par défaut 20, 110 pour classify-provider)
 
         Returns:
             Tuple[str, float]: (prompt_final, temperature)
         """
         # Récupérer le template de prompt avec la température (avec cache)
-        prompt_data = await self.get_prompt_template_async(prompt_id=20)
+        prompt_data = await self.get_prompt_template_async(prompt_id=prompt_id)
         prompt_template = prompt_data['prompt']
         temperature = prompt_data['temperature']
 
@@ -1306,8 +1307,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 }
             }
 
-    async def classify_single(self, product: Dict, llm_override: Optional[str] = None, enable_thinking: bool = False, optimize: bool = False) -> Dict:
-        """Classifie un seul produit (asynchrone)"""
+    async def classify_single(self, product: Dict, llm_override: Optional[str] = None, enable_thinking: bool = False, optimize: bool = False, prompt_id: int = 20) -> Dict:
+        """Classifie un seul produit (asynchrone). prompt_id=110 pour classify-provider."""
         start_time = time.time()
 
         # Gestion de l'override du LLM
@@ -1503,7 +1504,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 product_for_prompt['nom_produit'] = nom_produit_optimise
                 logger.info(f"[PROMPT] Utilisation du titre optimisé pour la classification: {nom_produit_optimise[:50]}...")
 
-            prompt, temperature = await self.build_prompt_async(product_for_prompt, categories, category_info, similar_products)
+            prompt, temperature = await self.build_prompt_async(product_for_prompt, categories, category_info, similar_products, prompt_id=prompt_id)
             llm_result_wrapper = await self.query_llm(prompt, enable_thinking=enable_thinking, temperature=temperature)
 
             # Vérifier si l'appel LLM a échoué
@@ -1675,8 +1676,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 self.openai_client = original_openai_client
                 self.deepseek_client = original_deepseek_client
 
-    async def classify_batch(self, products: List[Dict], llm_override: Optional[str] = None, enable_thinking: bool = False, optimize: bool = False) -> Dict:
-        """Classifie plusieurs produits en lot (asynchrone avec traitement parallèle)"""
+    async def classify_batch(self, products: List[Dict], llm_override: Optional[str] = None, enable_thinking: bool = False, optimize: bool = False, prompt_id: int = 20) -> Dict:
+        """Classifie plusieurs produits en lot (asynchrone avec traitement parallèle). prompt_id=110 pour classify-provider."""
         start_time = time.time()
 
         if not products:
@@ -1733,7 +1734,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
         # Créer une tâche asynchrone pour chaque produit
         # Note: Si optimize=True, on passe optimize=False car les titres sont déjà optimisés
         tasks = [
-            self.classify_single(product, llm_override=llm_override, enable_thinking=enable_thinking, optimize=False)
+            self.classify_single(product, llm_override=llm_override, enable_thinking=enable_thinking, optimize=False, prompt_id=prompt_id)
             for product in products
         ]
 

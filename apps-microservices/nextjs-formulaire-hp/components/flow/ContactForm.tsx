@@ -16,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 
 // Analytics imports
 import { trackContactFormView, trackFormValidationErrors } from "@/lib/analytics";
+import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 
 interface ContactFormProps {
   selectedSuppliers: Supplier[];
@@ -38,6 +39,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
   
 
   const leadSubmission = useLeadSubmission({ suppliers: selectedSuppliers });
+  const { trackDbEvent } = useDbTracking();
 
   const [formData, setFormData] = useState<ContactFormData>({
     email: "",
@@ -54,6 +56,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
 
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
   const [files, setFiles] = useState<File[]>([]);
+  const [showAdditionalFields, setShowAdditionalFields] = useState<boolean>(false);
 
   // Ref pour éviter les doubles appels en StrictMode
   const hasTrackedView = useRef(false);
@@ -72,7 +75,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
   }, [formData.email]);
 
   // Dynamic buyer check via API
-  const { data: buyerCheckResult } = useBuyerCheck(
+  const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
     {
       email     : formData.email,
       rubriqueId: categoryId?.toString(),
@@ -99,6 +102,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
         lastName : info.nom || "",
         phone    : info.tel || "",
         civility: info.cv || "",
+        id_acheteur: info.id || undefined,
       };
             
     }else{
@@ -111,6 +115,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
         phone      : "",
         countryCode: formData.countryCode || "+33",
         id_pays_tel: formData.id_pays_tel || 1,
+        id_acheteur: undefined,
       };
     }
 
@@ -122,7 +127,17 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
   }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
 
   // Show additional fields only if email is valid and not a known buyer
-  const showAdditionalFields = isEmailValid && !isKnownBuyer;
+  // AND we are not currently checking (to avoid flickering)
+  useEffect(() => {
+    // Si on est en train de vérifier, on ne change rien (ou on cache)
+    // Si la vérification est terminée, on décide d'afficher ou non
+    if (!isCheckingBuyer) {
+      setShowAdditionalFields(isEmailValid && !isKnownBuyer);
+    } else {
+      // Pendant le chargement, on cache les champs additionnels
+      setShowAdditionalFields(false);
+    }
+  }, [isEmailValid, isKnownBuyer, isCheckingBuyer]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -215,15 +230,24 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
       files: filesStore // On s'assure que les fichiers du store sont inclus
     };
 
-    finalData.files.forEach((file, index) => {
-      console.log(`Fichier ${index}:`, {
-        nom: file.name,
-        taille: file.size,
-        type: file.type
-      });
-    });
+    // finalData.files.forEach((file, index) => {
+    //   console.log(`Fichier ${index}:`, {
+    //     nom: file.name,
+    //     taille: file.size,
+    //     type: file.type
+    //   });
+    // });
 
     setContactData(finalData);
+
+    // Tracking DB - Contact form submission
+    trackDbEvent('contact', 'form_submit', {
+      email: finalData.email,
+      is_known_buyer: isKnownBuyer,
+      has_files: (finalData.files?.length || 0) > 0,
+      files_count: finalData.files?.length || 0,
+      selected_suppliers_count: selectedSupplierIds.length
+    }, categoryId, 1);
 
     // Submit lead
     leadSubmission.mutate({
@@ -234,6 +258,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
       submittedAt: new Date().toISOString(),
       userKnownStatus,
       categoryId: categoryId?.toString(),
+      source: 2, // produit
     });
   };
 
@@ -264,13 +289,18 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
             Votre demande sera envoyée à :
           </p>
           <div className="flex flex-wrap gap-2">
-            {selectedSuppliers.map((supplier) => (
-              <span
-                key={supplier.id}
-                className="inline-flex items-center rounded-full bg-card border border-border px-3 py-1 text-sm font-medium text-foreground"
-              >
-                {supplier.supplierName}
-              </span>
+            {/* Deduplicate suppliers by name to avoid showing the same supplier multiple times */}
+            {selectedSuppliers
+              .filter((supplier, index, self) => 
+                index === self.findIndex((s) => s.supplierName === supplier.supplierName)
+              )
+              .map((supplier) => (
+                <span
+                  key={supplier.id} // Using the ID of the first product found for this supplier as key
+                  className="inline-flex items-center rounded-full bg-card border border-border px-3 py-1 text-sm font-medium text-foreground"
+                >
+                  {supplier.supplierName}
+                </span>
             ))}
           </div>
         </div>
@@ -495,7 +525,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
 
           {leadSubmission.isError && (
             <p className="text-center text-sm text-destructive">
-              Une erreur est survenue. Veuillez réessayer.
+              Une erreur est survenue. Veuillez réessayer plus tard.
             </p>
           )}
         </form>

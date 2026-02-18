@@ -41,20 +41,37 @@ function getCharacteristicLabel(
 
 /**
  * Récupère les labels des valeurs pour une caractéristique
- * Gère les types numériques (valeur + unite) et textuels (id_valeur[])
+ * Gère les types numériques (valeur exacte ou plage min/max + unite) et textuels (id_valeur[])
  */
 function getValueLabels(
   characteristicsMap: CharacteristicsMap,
   characteristic: MatchingCharacteristic
 ): string {
-  const { id_caracteristique, type_caracteristique, valeur, unite, id_valeur } = characteristic;
+  const { id_caracteristique, type_caracteristique, valeur, valeur_min, valeur_max, unite, id_valeur } = characteristic;
 
   // Type numérique (1)
   if (type_caracteristique === 1) {
-    if (valeur !== null) {
-      const uniteStr = unite ? ` ${unite}` : '';
+    const uniteStr = unite ? ` ${unite}` : '';
+
+    // Cas 1: Valeur exacte
+    if (valeur !== null && valeur !== undefined) {
       return `${valeur}${uniteStr}`;
     }
+
+    // Cas 2: Plage min/max
+    const hasMin = valeur_min !== null && valeur_min !== undefined;
+    const hasMax = valeur_max !== null && valeur_max !== undefined;
+
+    if (hasMin && hasMax) {
+      return `${valeur_min} - ${valeur_max}${uniteStr}`;
+    }
+    if (hasMin) {
+      return `>= ${valeur_min}${uniteStr}`;
+    }
+    if (hasMax) {
+      return `<= ${valeur_max}${uniteStr}`;
+    }
+
     return '-';
   }
 
@@ -140,15 +157,17 @@ function buildProductSpecs(
     const label = getCharacteristicLabel(characteristicsMap, equivalence.id_caracteristique);
 
     if (matchingChar) {
-      // Si statut_matching === 4, traiter comme "non renseigné" même si présent
+      // Si statut_matching === 4, traiter comme "non renseigné"
       if (matchingChar.statut_matching === 4) {
         const expected = getExpectedValue(characteristicsMap, equivalences, equivalence.id_caracteristique);
         return {
+          id_caracteristique: equivalence.id_caracteristique,
           label,
-          value: '-',
-          matches: false,
+          value: 'Non renseigné',
+          matches: undefined, // ni true ni false pour non renseigné
           expected,
           isRequested: true,
+          matchingStatus: 4 as const,
         };
       }
 
@@ -162,22 +181,26 @@ function buildProductSpecs(
         : undefined;
 
       return {
+        id_caracteristique: equivalence.id_caracteristique,
         label,
         value,
         matches,
         expected,
         isRequested: true,
+        matchingStatus: matchingChar.statut_matching,
       };
     } else {
       // Caractéristique absente du produit → statut "non renseigné"
       const expected = getExpectedValue(characteristicsMap, equivalences, equivalence.id_caracteristique);
 
       return {
+        id_caracteristique: equivalence.id_caracteristique,
         label,
-        value: '-',
-        matches: false,
+        value: 'Non renseigné',
+        matches: undefined, // ni true ni false pour non renseigné
         expected,
         isRequested: true,
+        matchingStatus: 4 as const,
       };
     }
   });
@@ -186,6 +209,7 @@ function buildProductSpecs(
 /**
  * Construit les matchGaps (écarts de matching) pour un produit
  * Statuts 2 (écart) et 3 (bloquant) sont traités comme des écarts dans l'UI
+ * Statut 4 (non renseigné) n'est PAS un écart, il est géré séparément
  */
 function buildMatchGaps(
   matchingCharacteristics: MatchingCharacteristic[],
@@ -195,23 +219,18 @@ function buildMatchGaps(
   const gaps: string[] = [];
 
   for (const mc of matchingCharacteristics) {
-    // Ignorer les matchs parfaits (statut 1)
-    if (mc.statut_matching === 1) continue;
+    // Ignorer les matchs parfaits (statut 1) et les non-renseignés (statut 4)
+    if (mc.statut_matching === 1 || mc.statut_matching === 4) continue;
 
     const label = getCharacteristicLabel(characteristicsMap, mc.id_caracteristique);
     const value = getValueLabels(characteristicsMap, mc);
     const expected = getExpectedValue(characteristicsMap, equivalences, mc.id_caracteristique);
 
-    if (mc.statut_matching === 4) {
-      // Caractéristique non renseignée
-      gaps.push(`${label} : non disponible`);
-    } else if (mc.statut_matching === 2 || mc.statut_matching === 3) {
-      // Écart (2) ou Bloquant (3) - traités de la même façon dans l'UI
-      if (expected) {
-        gaps.push(`${label} : ${value} (demandé ${expected})`);
-      } else {
-        gaps.push(`${label} : ${value}`);
-      }
+    // Écart (2) ou Bloquant (3) - traités de la même façon dans l'UI
+    if (expected) {
+      gaps.push(`${label} : ${value} (demandé ${expected})`);
+    } else {
+      gaps.push(`${label} : ${value}`);
     }
   }
 
@@ -270,10 +289,14 @@ function normalizeProduct(
     debugInfo: {
       coeff_geo: product.coeff_geo,
       coeff_type_frns: product.coeff_type_frns,
+      coeff_caracteristique: product.coeff_caracteristique,
+      coeff_etat_score: product.coeff_etat_score,
+      score: product.score,
       characteristics_debug: product.caracteristique.map(c => ({
         id_caracteristique: c.id_caracteristique,
         bareme: c.bareme,
         poids_question: c.poids_question,
+        poids: c.poids,
       })),
     },
   };
@@ -338,27 +361,53 @@ export function enrichSuppliersWithProductInfo(
 
     const { produit, vendeur } = info;
 
-    // Extraire le nom du fournisseur depuis le domaine
-    const supplierName = vendeur.domaine
-      ? vendeur.domaine.replace(/^www\./, '').split('.')[0].toUpperCase()
-      : PLACEHOLDER_SUPPLIER;
+    // Utiliser le nom réel du vendeur (fallback sur domaine si absent)
+    const supplierName = vendeur.nom || 
+      (vendeur.domaine
+        ? vendeur.domaine.replace(/^www\./, '').split('.')[0].toUpperCase()
+        : PLACEHOLDER_SUPPLIER);
 
-    // Image du produit (peut être vide)
-    const image = produit.image_produit || PLACEHOLDER_IMAGE;
+    // Image du produit (peut contenir plusieurs URLs séparées par <br> ou \n)
+    let images: string[] = [];
+    let mainImage = PLACEHOLDER_IMAGE;
 
+    if (produit.image_produit) {
+      // Nettoyer et séparer les URLs
+      images = produit.image_produit
+        .split(/<br\s*\/?>|\n/i) // Séparer par <br>, <br/>, <br /> ou saut de ligne
+        .map(url => url.trim())
+        .filter(url => url.length > 0 && url.startsWith('http'));
+
+      if (images.length > 0) {
+        mainImage = images[0];
+      } else {
+        // Fallback si aucune URL valide trouvée après split
+        images = [PLACEHOLDER_IMAGE];
+      }
+    } else {
+      images = [PLACEHOLDER_IMAGE];
+    }
+
+    const responseTime = vendeur.temps_reponse || 'Répond en < 48h';
+        
     return {
       ...supplier,
       productName: produit.titre_produit || supplier.productName,
       supplierName,
       description: '', // On n'utilise pas la description HTML brute
       descriptionHtml: produit.description_produit || undefined,
-      image,
-      images: image !== PLACEHOLDER_IMAGE ? [image] : supplier.images,
+      image: mainImage,
+      images: images,
+      logo: vendeur.logo || undefined,
       supplier: {
-        ...supplier.supplier,
+        id: vendeur.id,
         name: supplierName,
-        description: '',
+        description: vendeur.short_description || '',
+        location: vendeur.adresse || '',
+        responseTime,
+        logo: vendeur.logo,
       },
+      priceLabel: produit.prix_produit || undefined,
     };
   });
 }

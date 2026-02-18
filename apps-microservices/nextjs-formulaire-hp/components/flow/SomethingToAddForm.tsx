@@ -10,7 +10,11 @@ import { ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { trackCustomNeedPageView, trackCustomNeedContactView, setFlowType } from "@/lib/analytics";
+import { trackCustomNeedPageView, trackCustomNeedContactView, setFlowType, trackFormValidationErrors } from "@/lib/analytics";
+import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
+import { validatePhoneNumber } from "@/lib/utils/phone-validation";
+import { toast } from "@/hooks/use-toast";
+import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 
 // Mock list of existing buyers in database
 const EXISTING_BUYERS = [
@@ -32,12 +36,16 @@ const STEPS = [
 
 const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
 
-   const {
+  const {    
     setContactData,
     files: filesStore,
     addFilesStore,
     flowType,
-    setFlowType: setStoreFlowType
+    setFlowType: setStoreFlowType,
+    profileData,
+    userAnswers,
+    selectedSupplierIds,
+    categoryId
   } = useFlowStore();
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -55,6 +63,8 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
     id_pays_tel: 1, // France par défaut
     phone: "",
   });
+
+  const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   
@@ -94,10 +104,10 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
   }, [formData.email]);
 
     // Dynamic buyer check via API
-  const { data: buyerCheckResult } = useBuyerCheck(
+  const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
     {
       email     : formData.email,
-      rubriqueId: '2001661',
+      rubriqueId: categoryId?.toString(),
     },
     isEmailValid
   );
@@ -120,7 +130,8 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
           firstName: info.prenom || "",
           lastName : info.nom || "",
           phone    : info.tel || "",
-        
+          civility: info.cv || "",
+          id_acheteur: info.id || undefined,
         };
               
       }else{
@@ -133,6 +144,7 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
           phone      : "",
           countryCode: formData.countryCode || "+33",
           id_pays_tel: formData.id_pays_tel || 1,
+          id_acheteur: undefined,
         };
       }
   
@@ -144,10 +156,14 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
     }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
 
   // Show additional fields only if email is valid and not an existing buyer
-  const showAdditionalFields = isEmailValid && !isKnownBuyer;
+  // AND we are not currently checking (to avoid flickering)
+  const showAdditionalFields = isEmailValid && !isKnownBuyer && !isCheckingBuyer;
 
   // Form is valid only if civility is selected when additional fields are shown
   const isFormValid = !showAdditionalFields || !!formData.civility;
+
+  const leadSubmission = useLeadSubmission();
+  const { trackDbEvent } = useDbTracking();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -164,31 +180,106 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+
+    // Clear error when field is modified
+    if (errors[name as keyof ContactFormData]) {
+      setErrors({ ...errors, [name]: undefined });
+    }
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: Partial<Record<keyof ContactFormData, string>> = {};
+
+    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Email invalide";
+    }
+    if (!formData.civility) {
+      newErrors.civility = "Civilité requise";
+    }
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = "Prénom requis";
+    }
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = "Nom requis";
+    }
+
+    const phoneValidation = validatePhoneNumber(formData.phone, formData.countryCode || "+33");
+    if (!phoneValidation.isValid) {
+      newErrors.phone = phoneValidation.error || "Téléphone invalide";
+    }
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      const errorList = Object.entries(newErrors).map(([field, message]) => ({
+        field,
+        type: field === 'email' || field === 'phone' ? 'invalid_format' : 'required',
+        message: message || '',
+      }));
+      trackFormValidationErrors(errorList.length, errorList);
+
+      if (newErrors.civility) {
+        toast({
+          variant: "destructive",
+          title: "Champ requis",
+          description: newErrors.civility,
+        });
+      }
+    }
+
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFormValid) return;
 
-    console.log("Form submitted:", { description, fileName, ...formData });
+    if (!(isKnownBuyer && buyerCheckResult?.infoBuyer)) {
+      const isValid = validateForm();
+      if (!isValid) return;
+    }
 
-     const finalData = { 
-      ...formData, 
-      files: filesStore, // On s'assure que les fichiers du store sont inclus
+    const userKnownStatus = isKnownBuyer ? 'known' as const : 'unknown' as const;
+
+    const finalData: any = {
+      ...formData,
+      files: filesStore,
       message: description
     };
 
-    finalData.files.forEach((file, index) => {
-      console.log(`Fichier ${index}:`, {
-        nom: file.name,
-        taille: file.size,
-        type: file.type
-      });
-    });
+    // finalData.files.forEach((file: File, index: number) => {
+    //   console.log(`Fichier ${index}:`, {
+    //     nom: file.name,
+    //     taille: file.size,
+    //     type: file.type
+    //   });
+    // });
 
     setContactData(finalData);
-    onNext();
+
+    // Tracking DB - Something to add form submission
+    trackDbEvent('contact', 'form_submit_custom_need', {
+      email: finalData.email,
+      is_known_buyer: isKnownBuyer,
+      has_description: !!description,
+      has_files: (finalData.files?.length || 0) > 0,
+      files_count: finalData.files?.length || 0,
+      flow_type: flowType
+    }, categoryId, 1);
+
+    leadSubmission.mutate({
+      contact: finalData,
+      profile: profileData!,
+      answers: userAnswers,
+      selectedSupplierIds: selectedSupplierIds,
+      submittedAt: new Date().toISOString(),
+      userKnownStatus,
+      categoryId: categoryId?.toString(),
+      source: 1, // AO
+    });
+
+    // onNext();
   };
 
   // Initialize Speech Recognition
@@ -273,7 +364,7 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
               <>
                 {/* Step 1: Votre besoin */}
                 {/* Header with back button */}
-                <div className="flex items-center justify-between">
+                {/* <div className="flex items-center justify-between">
                   <button
                     onClick={onBack}
                     className="flex items-center gap-2 rounded-lg border-2 border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
@@ -281,7 +372,7 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                     <X className="h-4 w-4" />
                     Annuler
                   </button>
-                </div>
+                </div> */}
 
                 {/* Title */}
                 <div className="text-center">
@@ -375,12 +466,12 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
 
                   {/* Actions */}
                   <div className="flex flex-col sm:flex-row items-center gap-3 pt-4">
-                    <button
+                    {/* <button
                       onClick={onBack}
                       className="order-2 sm:order-1 w-full sm:w-auto rounded-lg border-2 border-border bg-background px-6 py-3 text-sm font-medium text-foreground hover:bg-muted transition-colors"
                     >
                       Annuler
-                    </button>
+                    </button> */}
                     <button
                       onClick={goToNextStep}
                       className="order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg bg-accent px-8 py-3 text-base font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2"
@@ -434,9 +525,10 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                       required
                       value={formData.email}
                       onChange={handleChange}
-                      className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                      className={`w-full rounded-lg border ${errors.email ? 'border-destructive' : 'border-input'} bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${errors.email ? 'focus:border-destructive focus:ring-destructive/20' : 'focus:border-primary focus:ring-primary/20'} transition-all`}
                       placeholder="vous@entreprise.com"
                     />
+                    {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email}</p>}
                     {isKnownBuyer && (
                       <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
                         <CheckCircle className="h-4 w-4" />
@@ -465,12 +557,12 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                           className="flex gap-6"
                         >
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="mr" id="civility-mr-staf" />
-                            <Label htmlFor="civility-mr-staf" className="cursor-pointer">Mr</Label>
+                            <RadioGroupItem value="1" id="civility-mr-staf" />
+                            <Label htmlFor="civility-mr-staf" className="cursor-pointer">Monsieur</Label>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <RadioGroupItem value="mme" id="civility-mme-staf" />
-                            <Label htmlFor="civility-mme-staf" className="cursor-pointer">Mme</Label>
+                            <RadioGroupItem value="2" id="civility-mme-staf" />
+                            <Label htmlFor="civility-mme-staf" className="cursor-pointer">Madame</Label>
                           </div>
                         </RadioGroup>
                       </div>
@@ -490,8 +582,9 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                             required
                             value={formData.firstName}
                             onChange={handleChange}
-                            className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                            className={`w-full rounded-lg border ${errors.firstName ? 'border-destructive' : 'border-input'} bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${errors.firstName ? 'focus:border-destructive focus:ring-destructive/20' : 'focus:border-primary focus:ring-primary/20'} transition-all`}
                           />
+                          {errors.firstName && <p className="mt-1 text-sm text-destructive">{errors.firstName}</p>}
                         </div>
                         <div>
                           <label
@@ -507,8 +600,9 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                             required
                             value={formData.lastName}
                             onChange={handleChange}
-                            className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                            className={`w-full rounded-lg border ${errors.lastName ? 'border-destructive' : 'border-input'} bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${errors.lastName ? 'focus:border-destructive focus:ring-destructive/20' : 'focus:border-primary focus:ring-primary/20'} transition-all`}
                           />
+                          {errors.lastName && <p className="mt-1 text-sm text-destructive">{errors.lastName}</p>}
                         </div>
                       </div>
 
@@ -526,6 +620,7 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                           onValueChange={(phone) => setFormData((prev) => ({ ...prev, phone }))}
                           onCountryCodeChange={(code) => setFormData((prev) => ({ ...prev, countryCode: code }))}
                           onCountryIdChange={(id) => setFormData((prev) => ({ ...prev, id_pays_tel: id }))}
+                          error={errors.phone}
                           required
                         />
                       </div>
@@ -547,11 +642,20 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                   {/* Submit button */}
                   <button
                     type="submit"
-                    disabled={!isFormValid}
+                    disabled={!isFormValid || leadSubmission.isPending}
                     className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Send className="h-5 w-5" />
-                    Envoyer ma demande
+                    {leadSubmission.isPending ? (
+                      <>
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent-foreground border-t-transparent" />
+                        Envoi en cours...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-5 w-5" />
+                        Envoyer ma demande
+                      </>
+                    )}
                   </button>
                 </form>
               </>

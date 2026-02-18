@@ -2,8 +2,9 @@
 
 import { X, Check, Plus, Minus, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { ProductSpec, Supplier } from "@/types";
+import { useFlowStore } from "@/lib/stores/flow-store";
 
 interface ProductComparisonModalProps {
   products: Supplier[];
@@ -20,14 +21,26 @@ const ProductComparisonModal = ({
 }: ProductComparisonModalProps) => {
   const [currentProductIndex, setCurrentProductIndex] = useState(0);
 
+  // Récupérer les IDs des critères supprimés depuis le store
+  const { removedCritiqueCriteriaIds, removedSecondaireCriteriaIds } = useFlowStore();
+
+  // Créer un Set des IDs supprimés pour filtrage rapide
+  const removedIdsSet = useMemo(
+    () => new Set([...removedCritiqueCriteriaIds, ...removedSecondaireCriteriaIds]),
+    [removedCritiqueCriteriaIds, removedSecondaireCriteriaIds]
+  );
+
   // Collecter tous les labels uniques des critères demandés (isRequested: true)
-  const allSpecLabels = Array.from(
+  // en excluant les critères supprimés
+  const allSpecLabels: string[] = useMemo(() => Array.from(
     new Set(
       products.flatMap((p) =>
-        p.specs.filter((s) => s.isRequested).map((s) => s.label)
+        p.specs
+          .filter((s) => s.isRequested && (!s.id_caracteristique || !removedIdsSet.has(s.id_caracteristique)))
+          .map((s) => s.label)
       )
     )
-  );
+  ), [products, removedIdsSet]);
 
   const getSpecValue = (product: Supplier, label: string) => {
     const spec = product.specs.find((s) => s.label === label);
@@ -36,13 +49,13 @@ const ProductComparisonModal = ({
 
   const currentProduct = products[currentProductIndex];
 
-  const goToPrevious = () => {
+  const goToPrevious = useCallback(() => {
     setCurrentProductIndex((prev) => (prev > 0 ? prev - 1 : products.length - 1));
-  };
+  }, [products.length]);
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     setCurrentProductIndex((prev) => (prev < products.length - 1 ? prev + 1 : 0));
-  };
+  }, [products.length]);
 
   // Mobile card view for a single product
   const MobileProductCard = ({ product }: { product: Supplier }) => (
@@ -53,7 +66,8 @@ const ProductComparisonModal = ({
           <img
             src={product.image}
             alt={product.productName}
-            className="h-full w-full object-cover"
+            loading="lazy"
+            className="h-full w-full object-contain"
           />
         </div>
         <div className="text-center">
@@ -180,33 +194,38 @@ const ProductComparisonModal = ({
       {/* Mobile view - Card carousel */}
       <div className="flex-1 overflow-auto p-4 md:hidden">
         {/* Navigation indicators */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 mb-4">
           <button
+            type="button"
             onClick={goToPrevious}
-            className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+            className="flex-shrink-0 flex items-center gap-0.5 rounded-lg bg-muted px-2 py-2 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
-            Précédent
+            Préc.
           </button>
-          <div className="flex items-center gap-2">
-            {products.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentProductIndex(idx)}
-                className={cn(
-                  "h-2.5 w-2.5 rounded-full transition-colors",
-                  idx === currentProductIndex
-                    ? "bg-primary"
-                    : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
-                )}
-              />
-            ))}
+          <div className="flex-1 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center justify-center gap-1.5 min-w-max px-1">
+              {products.map((_, idx) => (
+                <button
+                  type="button"
+                  key={idx}
+                  onClick={() => setCurrentProductIndex(idx)}
+                  className={cn(
+                    "h-2 w-2 flex-shrink-0 rounded-full transition-colors",
+                    idx === currentProductIndex
+                      ? "bg-primary"
+                      : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                  )}
+                />
+              ))}
+            </div>
           </div>
           <button
+            type="button"
             onClick={goToNext}
-            className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/80 transition-colors"
+            className="flex-shrink-0 flex items-center gap-0.5 rounded-lg bg-muted px-2 py-2 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors"
           >
-            Suivant
+            Suiv.
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
@@ -221,13 +240,14 @@ const ProductComparisonModal = ({
       </div>
 
       {/* Desktop view - Table */}
-      <div className="hidden md:block flex-1 overflow-auto p-6">
-        <div className="overflow-x-auto">
+      <div className="hidden md:flex flex-1 flex-col overflow-hidden p-6">
+        {/* Table container avec scrollbars natifs */}
+        <div className="flex-1 overflow-x-auto overflow-y-auto relative">
           <table className="w-full border-collapse">
-            <thead>
+            <thead className="sticky top-0 z-20">
               <tr>
                 {/* Fixed column header */}
-                <th className="sticky left-0 z-10 bg-card border-b-2 border-r border-border p-4 text-left text-sm font-semibold text-muted-foreground min-w-[180px]">
+                <th className="sticky left-0 z-30 bg-card border-b-2 border-r border-border p-4 text-left text-sm font-semibold text-muted-foreground min-w-[180px]">
                   Caractéristiques
                 </th>
                 {/* Product headers */}
@@ -235,8 +255,8 @@ const ProductComparisonModal = ({
                   <th
                     key={product.id}
                     className={cn(
-                      "border-b-2 border-border p-4 min-w-[200px] text-center",
-                      selectedIds.has(product.id) && "bg-primary/5"
+                      "border-b-2 border-border p-4 min-w-[200px] text-center bg-card relative",
+                      selectedIds.has(product.id) && "before:absolute before:inset-0 before:bg-primary/5 before:pointer-events-none"
                     )}
                   >
                     <div className="flex flex-col items-center gap-3">
@@ -245,7 +265,8 @@ const ProductComparisonModal = ({
                         <img
                           src={product.image}
                           alt={product.productName}
-                          className="h-full w-full object-cover"
+                          loading="lazy"
+                          className="h-full w-full object-contain"
                         />
                       </div>
                       {/* Product name */}

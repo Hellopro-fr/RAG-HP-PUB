@@ -12,10 +12,14 @@ export interface MatchingCharacteristic {
   id_caracteristique: number;
   /** Type: 1=numérique, 2=textuelle */
   type_caracteristique: 1 | 2;
-  /** Valeur numérique (si type 1) */
-  valeur: number | null;
+  /** Valeur numérique exacte (si type 1) */
+  valeur?: number | string | null;
+  /** Valeur numérique min (si type 1, pour les plages) */
+  valeur_min?: number | string | null;
+  /** Valeur numérique max (si type 1, pour les plages) */
+  valeur_max?: number | string | null;
   /** Unité (si type 1) */
-  unite: string | null;
+  unite?: string | null;
   /** IDs des valeurs (si type 2) */
   id_valeur: number[];
   /** Poids de la caractéristique dans le score */
@@ -42,6 +46,10 @@ export interface MatchingProduct {
   coeff_geo: number;
   /** Coefficient type fournisseur (debug uniquement) */
   coeff_type_frns: number;
+  /** Coefficient caractéristique (debug uniquement) */
+  coeff_caracteristique?: number;
+  /** Coefficient état score (debug uniquement) */
+  coeff_etat_score?: number;
 }
 
 /**
@@ -101,9 +109,27 @@ export interface ProductCategoryInfo {
  * Informations vendeur du produit
  */
 export interface ProductVendorInfo {
+  id: string;
+  nom: string;
+  adresse: string;
+  logo?: string;
+  localisation?: {
+    lat: number;
+    lng: number;
+    addr_md5: string;
+  };
+  annee_creation?: string;
+  temps_reponse?: string;
+  short_description?: string;
+  affichage_complet?: boolean;
+  fiche?: string;
+  annee_hellopro?: number;
+  desc_cutted?: number;
+  neuf_occasion_location?: string;
+  garantie?: string;
+  etat_societe?: string;
+  id_type_societe_contrat?: string;
   domaine: string;
-  etat_societe: string | null;
-  id_type_contrat: string | null;
 }
 
 /**

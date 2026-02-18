@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BASE_URL = process.env.HELLOPRO_API_URL || 'https://dev-api.hellopro.fr';
+const BASE_URL = process.env.HELLOPRO_API_URL || 'https://api.hellopro.fr';
 const URL_API_QUESTION = `${BASE_URL}/v2/index.php`;
 const TOKEN            = process.env.NEXT_TOKEN_API_QUESTION || '';
 
@@ -18,7 +18,6 @@ export async function POST(request: NextRequest) {
     }
 
     const url = new URL(URL_API_QUESTION);
-    console.log('Calling Questionnaire Q1 API:', url.toString());    
     
     const payloadQ1 = {
       etape: "question",
@@ -46,8 +45,6 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-
-    console.log("API Q1", data);
 
     return NextResponse.json(data, { status: 200 });
   } catch (error) {

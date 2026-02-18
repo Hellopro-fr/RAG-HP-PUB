@@ -222,6 +222,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
           data.siren       = selectedCompany?.siren;
           data.siret       = selectedCompany?.siret;
           data.naf         = selectedCompany?.naf;
+          data.address     = selectedCompany?.address;
         }
         info_datalayer = 'pro_france';
         break;
@@ -267,6 +268,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
     // Convertir SirenCompanyData en CompanyResult
     const companyResult: CompanyResult = {
       siren: company.siren,
+      siret: company.siret,
       name: company.name,
       address: company.address,
       postalCode: company.postalCode,
@@ -648,8 +650,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
                                 const newPostalCode = e.target.value.replace(/\D/g, "").slice(0, 5);
                                 setPostalCode(newPostalCode);
                                 setCity("");
-                                setShowPostalCodeSuggestions(newPostalCode.length >= 1);
-                              console.log("New postal code:", showPostalCodeSuggestions);
+                                setShowPostalCodeSuggestions(newPostalCode.length >= 1);                              
                               }}
                               onFocus={() => postalCode.length >= 2 && setShowPostalCodeSuggestions(true)}
                               onBlur={() => {setTimeout(() => setShowPostalCodeSuggestions(false), 200);}}

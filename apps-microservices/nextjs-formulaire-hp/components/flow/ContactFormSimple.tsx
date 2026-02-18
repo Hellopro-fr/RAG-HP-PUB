@@ -1,19 +1,19 @@
 'use client';
 
 import { ArrowLeft, Send, Shield, Clock, CheckCircle } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import ProgressHeader from "./ProgressHeader";
-
-// Mock list of existing buyers in database
-const EXISTING_BUYERS = [
-  "jean.dupont@entreprise.fr",
-  "marie.martin@societe.com",
-  "contact@hellopro.fr",
-  "acheteur@garage-martin.fr",
-];
+import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
+import { useFlowStore } from "@/lib/stores/flow-store";
+import { validatePhoneNumber } from "@/lib/utils/phone-validation";
+import { toast } from "@/hooks/use-toast";
+import { trackFormValidationErrors } from "@/lib/analytics";
+import type { ContactFormData } from "@/types";
+import { useDbTracking } from "@/hooks/tracking/useDbTracking";
+import { useBuyerCheck } from "@/hooks/api";
 
 interface ContactFormSimpleProps {
   onBack: () => void;
@@ -26,24 +26,20 @@ const STEPS = [
 ];
 
 const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ContactFormData>({
     email: "",
+    isKnown: false,
     civility: "",
     firstName: "",
     lastName: "",
+    company: "",
     countryCode: "+33",
     id_pays_tel: 1, // France par défaut
     phone: "",
     message: "",
   });
 
-  // Check if email is from an existing buyer
-  const isExistingBuyer = useMemo(() => {
-    if (!formData.email || formData.email.length < 5) return false;
-    return EXISTING_BUYERS.some(
-      (email) => email.toLowerCase() === formData.email.toLowerCase()
-    );
-  }, [formData.email]);
+  const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
 
   // Check if email is valid format
   const isEmailValid = useMemo(() => {
@@ -51,22 +47,166 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
     return emailRegex.test(formData.email);
   }, [formData.email]);
 
+  const leadSubmission = useLeadSubmission();
+  const { profileData, userAnswers, selectedSupplierIds, setContactData, categoryId } = useFlowStore();
+  const { trackDbEvent } = useDbTracking();
+
+   // Dynamic buyer check via API
+   const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
+    {
+      email     : formData.email,
+      rubriqueId: categoryId?.toString(),
+    },
+    isEmailValid
+  );
+
+  const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
+  const isKnownBuyer    = buyerCheckResult?.isKnown || false;
+
+  useEffect(() => {
+    let updatedData: ContactFormData | null = null;
+
+    // 1. On vérifie si l'acheteur est reconnu et si on a les données
+    if (isKnownBuyer && buyerCheckResult?.infoBuyer) {
+      const info = buyerCheckResult.infoBuyer as any;
+
+      // 2. On prépare l'objet complet avec les clés de votre interface ContactFormData
+      updatedData = {
+        ...formData,                   // On garde le message et les autres champs
+        email    : formData.email,      // L'email déjà saisi
+        isKnown  : true,
+        firstName: info.prenom || "",
+        lastName : info.nom || "",
+        phone    : info.tel || "",
+        civility: info.cv || "",
+        company  : info.societe || formData.company || "",
+        id_acheteur: info.id || undefined,
+      };
+            
+    }else{
+      updatedData = {
+        ...formData,
+        email      : formData.email,
+        isKnown    : false,
+        firstName  : "",
+        lastName   : "",
+        phone      : "",
+        countryCode: formData.countryCode || "+33",
+        id_pays_tel: formData.id_pays_tel || 1,
+        id_acheteur: undefined,
+      };
+    }
+
+    if (updatedData) {
+      setFormData(updatedData);
+    }
+    
+    // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
+  }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
+
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+    // Clear error when field is modified
+    if (errors[name as keyof ContactFormData]) {
+      setErrors({ ...errors, [name]: undefined });
+    }
   };
 
   // Show additional fields only if email is valid and not an existing buyer
-  const showAdditionalFields = isEmailValid && !isExistingBuyer;
+  // AND we are not currently checking (to avoid flickering)
+  const showAdditionalFields = isEmailValid && !isKnownBuyer && !isCheckingBuyer;
 
   const isFormValid = !showAdditionalFields || !!formData.civility;
 
+  const validateForm = (): boolean => {
+    const newErrors: Partial<Record<keyof ContactFormData, string>> = {};
+
+    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Email invalide";
+    }
+    if (!formData.civility) {
+      newErrors.civility = "Civilité requise";
+    }
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = "Prénom requis";
+    }
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = "Nom requis";
+    }
+
+    // Validation téléphone
+    const phoneValidation = validatePhoneNumber(formData.phone, formData.countryCode || "+33");
+    if (!phoneValidation.isValid) {
+      newErrors.phone = phoneValidation.error || "Téléphone invalide";
+    }
+
+    setErrors(newErrors);
+
+    // Track validation errors if any
+    if (Object.keys(newErrors).length > 0) {
+      const errorList = Object.entries(newErrors).map(([field, message]) => ({
+        field,
+        type: field === 'email' || field === 'phone' ? 'invalid_format' : 'required',
+        message: message || '',
+      }));
+      trackFormValidationErrors(errorList.length, errorList);
+
+      // Toast pour les erreurs non visibles (ex: civilité en haut du formulaire)
+      if (newErrors.civility) {
+        toast({
+          variant: "destructive",
+          title: "Champ requis",
+          description: newErrors.civility,
+        });
+      }
+    }
+
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFormValid) return;
-    // Handle form submission
-    console.log("Form submitted:", formData);
+
+    // Si utilisateur connu (reconnu localement), on skip la validation; sinon on valide le formulaire
+    // Note: isExistingBuyer comes from our API check now
+    if (!(isKnownBuyer && buyerCheckResult?.infoBuyer)) {
+      const isValid = validateForm();
+      if (!isValid) return;
+    }
+
+    const userKnownStatus = isKnownBuyer ? 'known' as const : 'unknown' as const;
+
+    const finalData: ContactFormData = {
+      ...formData,
+      isKnown: isKnownBuyer,
+    };
+
+    setContactData(finalData);        
+
+    // Tracking DB - Contact form submission (simple)
+    // On enrichit le payload de tracking comme dans SomethingToAddForm (flags message / fichiers)
+    trackDbEvent('contact', 'form_submit_simple', {
+      email: finalData.email,
+      is_known_buyer: isExistingBuyer,
+      has_message: !!finalData.message,
+      has_files: false,
+      files_count: 0,
+    }, categoryId, 1);
+
+    leadSubmission.mutate({
+      contact: finalData,
+      profile: profileData!,
+      answers: userAnswers,
+      selectedSupplierIds: selectedSupplierIds,
+      submittedAt: new Date().toISOString(),
+      userKnownStatus,
+      categoryId: categoryId?.toString(),
+      source: 1, // AO
+    });
   };
 
   return (
@@ -114,7 +254,7 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
                   htmlFor="email"
                   className="block text-sm font-medium text-foreground mb-1.5"
                 >
-                  Email professionnel *
+                  Email professionnel * (TODO: pré-rempli si connu)
                 </label>
                 <input
                   type="email"
@@ -123,9 +263,10 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  className={`w-full rounded-lg border ${errors.email ? 'border-destructive' : 'border-input'} bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${errors.email ? 'focus:border-destructive focus:ring-destructive/20' : 'focus:border-primary focus:ring-primary/20'} transition-all`}
                   placeholder="vous@entreprise.com"
                 />
+                {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email}</p>}
                 {isExistingBuyer && (
                   <div className="mt-2 flex items-center gap-2 text-sm text-green-600">
                     <CheckCircle className="h-4 w-4" />
@@ -172,8 +313,9 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
                         required
                         value={formData.firstName}
                         onChange={handleChange}
-                        className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                        className={`w-full rounded-lg border ${errors.firstName ? 'border-destructive' : 'border-input'} bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${errors.firstName ? 'focus:border-destructive focus:ring-destructive/20' : 'focus:border-primary focus:ring-primary/20'} transition-all`}
                       />
+                      {errors.firstName && <p className="mt-1 text-sm text-destructive">{errors.firstName}</p>}
                     </div>
                     <div>
                       <label
@@ -189,8 +331,9 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
                         required
                         value={formData.lastName}
                         onChange={handleChange}
-                        className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                        className={`w-full rounded-lg border ${errors.lastName ? 'border-destructive' : 'border-input'} bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 ${errors.lastName ? 'focus:border-destructive focus:ring-destructive/20' : 'focus:border-primary focus:ring-primary/20'} transition-all`}
                       />
+                      {errors.lastName && <p className="mt-1 text-sm text-destructive">{errors.lastName}</p>}
                     </div>
                   </div>
 
@@ -200,11 +343,12 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
                     </label>
                     <PhoneInput
                       value={formData.phone}
-                      countryCode={formData.countryCode}
+                      countryCode={formData.countryCode || "+33"}
                       countryId={formData.id_pays_tel}
                       onValueChange={(value) => setFormData((prev) => ({ ...prev, phone: value }))}
                       onCountryCodeChange={(code) => setFormData((prev) => ({ ...prev, countryCode: code }))}
                       onCountryIdChange={(id) => setFormData((prev) => ({ ...prev, id_pays_tel: id }))}
+                      error={errors.phone}
                       required
                     />
                   </div>
@@ -226,11 +370,20 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
               {/* Submit button */}
               <button
                 type="submit"
-                disabled={!isFormValid}
+                disabled={!isFormValid || leadSubmission.isPending}
                 className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Send className="h-5 w-5" />
-                Envoyer ma demande
+                {leadSubmission.isPending ? (
+                  <>
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent-foreground border-t-transparent" />
+                    Envoi en cours...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-5 w-5" />
+                    Envoyer ma demande
+                  </>
+                )}
               </button>
             </form>
           </div>

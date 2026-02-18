@@ -1,6 +1,7 @@
 'use client';
 
-import { Check, CheckCircle, AlertTriangle, ShieldCheck, HelpCircle } from "lucide-react";
+import { useState } from "react";
+import { Check, CheckCircle, AlertTriangle, ShieldCheck, HelpCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProductSpec, PriceInfo } from "@/types";
 
@@ -22,6 +23,7 @@ interface SupplierCardProps {
   matchGaps?: string[];
   viewMode?: "grid" | "list";
   price?: PriceInfo;
+  priceLabel?: string;
 }
 
 // Format price with French locale
@@ -33,7 +35,16 @@ const formatPrice = (amount: number): string => {
 };
 
 // Price display component
-const PriceDisplay = ({ price }: { price?: PriceInfo }) => {
+const PriceDisplay = ({ price, priceLabel }: { price?: PriceInfo; priceLabel?: string }) => {
+  // Priorité au prix brut retourné par l'API
+  if (priceLabel) {
+    return (
+      <span className="text-sm font-semibold text-foreground">
+        {priceLabel}
+      </span>
+    );
+  }
+
   if (!price || price.amount === undefined || price.amount === null) {
     return (
       <span className="text-muted-foreground text-sm">
@@ -72,7 +83,10 @@ const SupplierCard = ({
   matchGaps = [],
   viewMode = "grid",
   price,
+  priceLabel,
 }: SupplierCardProps) => {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   
   const getMatchBadgeStyle = () => {
     if (matchScore >= 80) return "bg-match-high text-white";
@@ -92,13 +106,16 @@ const SupplierCard = ({
     onToggle(id);
   };
 
+  // matches === true → OK (statut 1)
+  // matches === false → Écart (statut 2/3)
+  // matches === undefined → Non renseigné (statut 4)
   const matchingSpecs = specs.filter((spec) => spec.matches === true);
-  const nonMatchingSpecs = specs.filter((spec) => spec.matches === false);
-  const unknownSpecs = specs.filter((spec) => spec.matches === undefined || spec.matches === null);
+  const gapSpecs = specs.filter((spec) => spec.matches === false); // Vrais écarts
+  const notProvidedSpecs = specs.filter((spec) => spec.matches === undefined || spec.matches === null); // Non renseigné
   const isMobileList = viewMode === "list";
-  
-  // Calculate total gaps (non-matching specs or matchGaps)
-  const totalGaps = nonMatchingSpecs.length > 0 ? nonMatchingSpecs.length : matchGaps.length;
+
+  // Total des écarts (seulement les vrais écarts, pas les non-renseignés)
+  const totalGaps = gapSpecs.length > 0 ? gapSpecs.length : matchGaps.length;
 
   // Mobile List View
   const mobileListView = isMobileList ? (
@@ -113,11 +130,27 @@ const SupplierCard = ({
     >
       {/* Image */}
       <div className="relative w-24 h-24 flex-shrink-0 overflow-hidden bg-muted">
-        <img
-          src={image}
-          alt={productName}
-          className="h-full w-full object-cover"
-        />
+        {!imageLoaded && !imageError && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+          </div>
+        )}
+        {!imageError && image ? (
+          <img
+            src={image}
+            alt={productName}
+            loading="lazy"
+            className={cn(
+              "h-full w-full object-contain transition-opacity duration-300",
+              imageLoaded ? "opacity-100" : "opacity-0"
+            )}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          // TODO: Implement better fallback for missing images
+          <div className="w-full h-full" />
+        )}
         {isRecommended && (
           <div className="absolute top-1 left-1">
             <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
@@ -151,7 +184,7 @@ const SupplierCard = ({
           </div>
         </div>
         <div className="flex items-center justify-between mt-2">
-          <PriceDisplay price={price} />
+          <PriceDisplay price={price} priceLabel={priceLabel} />
         </div>
       </div>
 
@@ -218,11 +251,27 @@ const SupplierCard = ({
 
       {/* Product Image - Fixed height */}
       <div className="relative h-32 sm:h-36 w-full overflow-hidden bg-muted flex-shrink-0">
-        <img
-          src={image}
-          alt={productName}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
+        {!imageLoaded && !imageError && (
+          <div className="absolute inset-0 flex items-center justify-center z-10">
+            <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
+          </div>
+        )}
+        {!imageError && image ? (
+          <img
+            src={image}
+            alt={productName}
+            loading="lazy"
+            className={cn(
+              "h-full w-full object-contain transition-transform duration-300 group-hover:scale-105 transition-opacity",
+              imageLoaded ? "opacity-100" : "opacity-0"
+            )}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          // TODO: Implement better fallback for missing images
+          <div className="w-full h-full" />
+        )}
         {/* Match Score Badge */}
         <div className={cn(
           "absolute bottom-2 right-2 rounded-lg px-2.5 py-1 font-bold text-sm shadow-lg",
@@ -243,7 +292,7 @@ const SupplierCard = ({
 
         {/* Price - Fixed height */}
         <div className="h-6 mb-3 flex items-center">
-          <PriceDisplay price={price} />
+          <PriceDisplay price={price} priceLabel={priceLabel} />
         </div>
 
         {/* Criteria Match - Prominent display */}
@@ -271,7 +320,7 @@ const SupplierCard = ({
           </div>
         </div>
 
-        {/* Gaps + Unknown - More discrete */}
+        {/* Gaps + Non renseigné - More discrete */}
         <div className="flex items-center gap-3 text-xs text-muted-foreground mb-1">
           {totalGaps > 0 && (
             <div className="flex items-center gap-1 opacity-70">
@@ -279,10 +328,10 @@ const SupplierCard = ({
               <span>{totalGaps} écart{totalGaps > 1 ? 's' : ''}</span>
             </div>
           )}
-          {unknownSpecs.length > 0 && (
+          {notProvidedSpecs.length > 0 && (
             <div className="flex items-center gap-1 opacity-70">
               <HelpCircle className="h-3 w-3" />
-              <span>{unknownSpecs.length} N/A</span>
+              <span>{notProvidedSpecs.length} non renseigné{notProvidedSpecs.length > 1 ? 's' : ''}</span>
             </div>
           )}
         </div>
@@ -292,13 +341,13 @@ const SupplierCard = ({
           {totalGaps > 0 ? (
             <>
               <div className="flex flex-wrap gap-1 overflow-hidden flex-1">
-                {(nonMatchingSpecs.length > 0 ? nonMatchingSpecs : matchGaps).slice(0, 1).map((item, idx) => (
+                {(gapSpecs.length > 0 ? gapSpecs : matchGaps).slice(0, 1).map((item, idx) => (
                   <span
                     key={idx}
                     className="inline-flex items-center rounded bg-amber-50 border border-amber-200/50 px-1.5 py-0.5 text-[10px] text-amber-700"
                   >
-                    {typeof item === 'string' 
-                      ? item 
+                    {typeof item === 'string'
+                      ? item
                       : (
                         <>
                           {item.label}: {item.value}
@@ -311,7 +360,7 @@ const SupplierCard = ({
                   </span>
                 ))}
               </div>
-              {(nonMatchingSpecs.length > 1 || matchGaps.length > 1) && (
+              {(gapSpecs.length > 1 || matchGaps.length > 1) && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -319,7 +368,7 @@ const SupplierCard = ({
                   }}
                   className="text-[10px] text-amber-600 hover:text-amber-800 transition-colors ml-2 flex-shrink-0"
                 >
-                  +{Math.max(nonMatchingSpecs.length, matchGaps.length) - 1}
+                  +{Math.max(gapSpecs.length, matchGaps.length) - 1}
                 </button>
               )}
             </>

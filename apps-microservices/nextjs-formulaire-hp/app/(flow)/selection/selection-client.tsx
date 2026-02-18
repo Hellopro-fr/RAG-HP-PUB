@@ -7,11 +7,17 @@ import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { Supplier } from '@/types';
 import { getAssetPath } from "@/lib/utils";
 import { trackSelectionPageView, setFlowType } from '@/lib/analytics';
+import { initDebugMatching } from '@/lib/utils/debug-matching';
 
 export default function SelectionClient() {
   const { userAnswers, flowType, setFlowType: setStoreFlowType } = useFlowStore();
   const { goToQuestionnaire } = useFlowNavigation();
   const hasTrackedView = useRef(false);
+
+  // Initialize debug matching functions (debugInfo, clearDebugInfo)
+  useEffect(() => {
+    initDebugMatching();
+  }, []);
 
   // Track selection page view au montage et définir flowType = 'principal'
   useEffect(() => {

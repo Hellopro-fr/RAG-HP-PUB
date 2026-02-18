@@ -47,6 +47,7 @@ export interface ProfileData {
   siret      ?: string;
   countryID  ?: number;
   naf        ?: string;
+  address     ?: string;
 }
 
 export interface PostalCodeCity {
@@ -58,11 +59,15 @@ export interface PostalCodeCity {
 // SUPPLIER & PRODUCT TYPES
 // ========================================
 export interface ProductSpec {
+  /** ID de la caractéristique (pour filtrage des critères supprimés) */
+  id_caracteristique?: number;
   label: string;
   value: string;
   matches?: boolean;
   expected?: string;
   isRequested?: boolean;
+  /** Statut de matching: 1=match, 2=ecart, 3=bloquant, 4=non_renseigne */
+  matchingStatus?: 1 | 2 | 3 | 4;
 }
 
 export interface MediaItem {
@@ -77,6 +82,7 @@ export interface PriceInfo {
 }
 
 export interface SupplierInfo {
+  id?: string;
   name: string;
   description: string;
   location: string;
@@ -106,13 +112,18 @@ export interface Supplier {
   specs: ProductSpec[];
   supplier: SupplierInfo;
   price?: PriceInfo;
+  priceLabel?: string;  // Prix brut retourné par l'API (ex: "699,00 € HT")
   debugInfo?: {
     coeff_geo: number;
     coeff_type_frns: number;
+    coeff_caracteristique?: number;
+    coeff_etat_score?: number;
+    score?: number;
     characteristics_debug: Array<{
       id_caracteristique: number;
       bareme: number;
       poids_question: number;
+      poids?: number;
     }>;
   };
 }
@@ -131,6 +142,8 @@ export interface ContactFormData {
   id_pays_tel?: number;  // ID du pays pour le téléphone
   phone: string;
   message?: string;
+  files?: File[];  // Pièces jointes (PJ)
+  id_acheteur?: string;  // ID de l'acheteur si le mail est connu
 }
 
 export interface LeadSubmission {
@@ -141,6 +154,7 @@ export interface LeadSubmission {
   submittedAt: string;
   userKnownStatus: 'known' | 'unknown';
   categoryId?: string;
+  source?: number;
 }
 
 export interface LeadResponse {
