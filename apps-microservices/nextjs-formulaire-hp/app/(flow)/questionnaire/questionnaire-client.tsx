@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NeedsQuestionnaire from '@/components/flow/NeedsQuestionnaire';
-import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
+import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type MatchingTestParams } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 
 // Interface pour les données URL (réponse Q1 pré-remplie)
@@ -27,7 +27,7 @@ export default function QuestionnaireClient({
   initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc } = useFlowStore();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
   const { goToProfile } = useFlowNavigation();
   const hasProcessedUrlData = useRef(false);
   const isHydrated = useFlowStoreHydration();
@@ -73,6 +73,39 @@ export default function QuestionnaireClient({
       //console.log('[QuestionnaireClient] Token saved for redirect:', token.substring(0, 20) + '...');
     }
   }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc]);
+
+  // Lire les paramètres de test du matching depuis l'URL (pour tests uniquement)
+  useEffect(() => {
+    const testParamKeys: (keyof MatchingTestParams)[] = [
+      'z_unmatched',
+      'e_unmatched',
+      'g_unknown_score',
+      'c_unknown_score',
+      'v_blocked',
+      'v_different',
+      't_unmatched',
+    ];
+
+    const params: MatchingTestParams = {};
+    let hasAnyParam = false;
+
+    for (const key of testParamKeys) {
+      const value = searchParams.get(key);
+      if (value !== null) {
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue)) {
+          params[key] = numValue;
+          hasAnyParam = true;
+        }
+      }
+    }
+
+    // Stocker seulement si au moins un paramètre est présent
+    if (hasAnyParam) {
+      setMatchingTestParams(params);
+      console.log('[QuestionnaireClient] Matching test params from URL:', params);
+    }
+  }, [searchParams, setMatchingTestParams]);
 
   // Traiter les données URL (réponse Q1 pré-remplie depuis le token)
   // Doit s'exécuter AVANT que le questionnaire ne soit rendu

@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
     const champs_sortie           = body.get('champs_sortie');
     const metadonnee_utilisateurs = body.get('metadonnee_utilisateurs');
     const liste_caracteristique   = body.get('liste_caracteristique');
+    const matching_test_params    = body.get('matching_test_params');
 
     if (!id_categorie) {
       return NextResponse.json(
@@ -21,23 +22,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const url = new URL(URL_API_MATCHING);
-    
     // Reconstruction du payload avec les bons types
-    const payload = {
+    const payload: Record<string, any> = {
       id_categorie: Number(id_categorie), // Conversion en nombre si nécessaire
       top_k: Number(top_k) || 12,        // Conversion en nombre
-      champs_sortie : champs_sortie 
-        ? JSON.parse(champs_sortie.toString()) 
+      champs_sortie : champs_sortie
+        ? JSON.parse(champs_sortie.toString())
         : {},
       // On parse les chaînes JSON pour les transformer en vrais objets/tableaux JS
-      metadonnee_utilisateurs: metadonnee_utilisateurs 
-        ? JSON.parse(metadonnee_utilisateurs.toString()) 
+      metadonnee_utilisateurs: metadonnee_utilisateurs
+        ? JSON.parse(metadonnee_utilisateurs.toString())
         : {},
-      liste_caracteristique: liste_caracteristique 
-        ? JSON.parse(liste_caracteristique.toString()) 
+      liste_caracteristique: liste_caracteristique
+        ? JSON.parse(liste_caracteristique.toString())
         : []
     };
+
+    // Ajouter les paramètres de test du matching (si présents)
+    // Ces paramètres sont passés via l'URL pour les tests uniquement
+    if (matching_test_params) {
+      const testParams = JSON.parse(matching_test_params.toString());
+      // Ajouter chaque paramètre individuellement au payload
+      for (const [key, value] of Object.entries(testParams)) {
+        if (value !== undefined && value !== null) {
+          payload[key] = value;
+        }
+      }
+      console.log('[API Matching] Test params added to payload:', testParams);
+    }
 
     const response = await fetch(URL_API_MATCHING, {
       method: 'POST',

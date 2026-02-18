@@ -124,6 +124,17 @@ export interface UserQuestionAnswer {
   timestamp: number;
 }
 
+// Paramètres de test pour le scoring du matching (passés via URL)
+export interface MatchingTestParams {
+  z_unmatched?: number;
+  e_unmatched?: number;
+  g_unknown_score?: number;
+  c_unknown_score?: number;
+  v_blocked?: number;
+  v_different?: number;
+  t_unmatched?: number;
+}
+
 export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
@@ -182,7 +193,11 @@ export interface FlowState {
   // Historique des questions/réponses de l'utilisateur (pour tracking et debug)
   userQuestionAnswers: UserQuestionAnswer[];
 
+  // Paramètres de test pour le scoring du matching (passés via URL)
+  matchingTestParams: MatchingTestParams | null;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
+  setMatchingTestParams: (params: MatchingTestParams | null) => void;
   setCharacteristicsMap: (characteristics: CharacteristicsMap) => void;
   setOrphanedSelectedSuppliers: (suppliers: Supplier[]) => void;
   setCriteriaHaveChanged: (changed: boolean) => void;
@@ -250,6 +265,7 @@ const initialState = {
   removedCritiqueCriteriaIds: [],
   removedSecondaireCriteriaIds: [],
   userQuestionAnswers: [],
+  matchingTestParams: null,
   ddc: "",
 };
 
@@ -344,6 +360,8 @@ export const useFlowStore = create<FlowState>()(
       setEntryUrl: (url) => set({ entryUrl: url }),     
 
       setMatchingResults: (results) => set({ matchingResults: results }),
+
+      setMatchingTestParams: (params) => set({ matchingTestParams: params }),
 
       setFlowType: (flowType) => set({ flowType }),
 

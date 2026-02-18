@@ -62,6 +62,7 @@ export function useProcessMatchingLogic() {
     characteristicsMap,
     matchingResults,
     selectedSupplierIds,
+    matchingTestParams,
     setEquivalenceCaracteristique,
     setMatchingResults,
     setOrphanedSelectedSuppliers,
@@ -125,12 +126,18 @@ export function useProcessMatchingLogic() {
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
 
+      // Ajouter les paramètres de test du matching (si présents dans l'URL)
+      if (matchingTestParams) {
+        formData.append('matching_test_params', JSON.stringify(matchingTestParams));
+      }
+
       console.log('Payload MATCHING :', {
         id_categorie: categoryId,
         top_k: 12,
         champs_sortie: ["url"],
         metadonnee_utilisateurs,
-        liste_caracteristique: consolidatedEquivalences
+        liste_caracteristique: consolidatedEquivalences,
+        ...(matchingTestParams && { matching_test_params: matchingTestParams })
       });
 
       const apiBase = getApiBasePath();
@@ -310,13 +317,19 @@ export function useProcessMatchingLogic() {
       // Envoyer uniquement les critères actifs (non supprimés) à l'API
       formData.append('liste_caracteristique', JSON.stringify(activeEquivalences));
 
+      // Ajouter les paramètres de test du matching (si présents dans l'URL)
+      if (matchingTestParams) {
+        formData.append('matching_test_params', JSON.stringify(matchingTestParams));
+      }
+
       console.log('Payload MATCHING (client - refetch):', {
         id_categorie: categoryId,
         top_k: 12,
         metadonnee_utilisateurs,
         champs_sortie: ["url"],
         liste_caracteristique: activeEquivalences,
-        removed_criteria_ids: allRemovedIds
+        removed_criteria_ids: allRemovedIds,
+        ...(matchingTestParams && { matching_test_params: matchingTestParams })
       });
 
       const apiBase = getApiBasePath();
