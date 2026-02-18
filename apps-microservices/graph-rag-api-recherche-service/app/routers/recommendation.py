@@ -11,6 +11,7 @@ from app.domain.models import (
     CaracteristiqueMatching,
 )
 from app.services.recommendation_service import recommendation_service
+import logging
 
 router = APIRouter()
 
@@ -115,7 +116,6 @@ async def match_products(request: MatchingPayloadIdProduit):
     Endpoint pour effectuer le matching de produits.
     Recoit un contexte utilisateur et des critères, retourne une liste de produits scorés.
     """
-    # start_time = time.time()
     try:
         if not request.liste_caracteristique:
             return MatchingResponse(
@@ -124,6 +124,7 @@ async def match_products(request: MatchingPayloadIdProduit):
                 temps_de_traitement=0.0,
             )
 
+        logging.warning(f"[DEBUG] - request: {request.model_dump()}")
         results = await recommendation_service.get_products_by_caracteristique_filters(
             request
         )
