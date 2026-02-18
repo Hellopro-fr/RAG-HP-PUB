@@ -1164,44 +1164,14 @@ class RecommendationService:
         //         Limit to $top_k + 4
         WITH [prod IN enriched WHERE 
             prod.supplier_range_rank <= $max_per_supplier_primary
-        ] AS diversity_filtered
+        ] AS diversity_filtered, enriched
         
-        // Step 5: Take top_k + 4
-        WITH diversity_filtered[0..$top_k + 4] AS all_products
+        // Step 5: Build pre-diversity debug + take top_k + 4
+        WITH diversity_filtered[0..$top_k + 4] AS all_products,
+             [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, score_range: e.score_range, supplier_range_rank: e.supplier_range_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
-        WITH all_products,
-             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
-                 head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
-             ] AS top_per_fournisseur
-        
-        // Sort top_per_fournisseur by final_score descending and limit to 4
-        WITH all_products, top_per_fournisseur
-        UNWIND top_per_fournisseur AS p_top
-        WITH all_products, p_top 
-        ORDER BY p_top.final_score DESC 
-        LIMIT 4
-        
-        // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
-        WITH all_products, collect({
-            product_data: top_product_data,
-            score: top_score,
-            details: top_details,
-            zone_score: top_zone_score,
-            global_score: top_global_score,
-            etat_score: top_etat_score,
-            typo_score: top_typo_score,
-            info_soc: top_info_soc
-        }) AS top_p, collect(top_id) AS top_p_ids
-        
-        // Filter out top_p products from all_products and limit to top_k
-        WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
-        
-        UNWIND (CASE WHEN size(filtered_products) = 0 THEN [null] ELSE filtered_products END) AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
+        WITH all_products, pre_diversity_debug,
              [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
                  head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
              ] AS top_per_fournisseur
