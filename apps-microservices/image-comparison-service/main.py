@@ -13,11 +13,9 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Image Comparison Service",
     description="High-performance microservice for batch image similarity detection.",
-    version="1.0.0",
-    # Explicitly serve docs at the prefix path so Gateway can find them
-    openapi_url="/comparator/openapi.json",
-    docs_url="/comparator/docs",
-    redoc_url="/comparator/redoc"
+    version="1.0.0"
+    # Reverted to default docs paths (served at root)
+    # Nginx rewrites /comparator/openapi.json -> /openapi.json
 )
 
 @app.exception_handler(RequestValidationError)
@@ -37,8 +35,8 @@ async def shutdown_event():
     logger.info("Service shutting down.")
     await job_manager.close_redis()
 
-# Include router WITH prefix, matching Nginx's location block
-app.include_router(ComparatorRouter, prefix="/comparator", tags=["Comparator"])
+# Include router WITHOUT prefix. Nginx handles the path stripping.
+app.include_router(ComparatorRouter, tags=["Comparator"])
 
 @app.get("/", tags=["Health Check"])
 def read_root():
