@@ -11,6 +11,7 @@ from app.domain.models import (
     CaracteristiqueMatching,
 )
 from app.services.recommendation_service import recommendation_service
+import logging
 
 router = APIRouter()
 
