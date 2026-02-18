@@ -639,10 +639,6 @@ class RecommendationService:
             else 0.1
         )
 
-        logging.warning(f"[DEBUG] scoring parameters: {request.scoring}")
-        logging.warning(
-            f"[DEBUG] scoring parameters assigné: {blocked_val}, {different_val}, {z_unmatched}, {e_unmatched}, {g_unknown_score}, {c_unknown_score}, {t_unmatched}"
-        )
         # Extract user location data from metadonnee_utilisateurs
         user_meta = request.metadonnee_utilisateurs
         user_cp = user_meta.cp if user_meta else None
