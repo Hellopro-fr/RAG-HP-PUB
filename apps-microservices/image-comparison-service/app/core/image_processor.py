@@ -74,7 +74,6 @@ class ImageProcessor:
         
         # Separate inputs into URL-based (to download) and Content-based (to decode)
         download_tasks = []
-        download_map = {} # Map index in tasks to image ID
 
         for inp in inputs:
             if inp.content:
@@ -102,10 +101,10 @@ class ImageProcessor:
         # Execute downloads if any
         if download_tasks:
             # Configure Proxy if available
-            # httpx accepts proxies={"http://": ..., "https://": ...} or just the string
-            proxies = None
+            # httpx.AsyncClient uses 'proxy' (singular) for a string URL
+            proxy_url = None
             if settings.APIFY_PROXY:
-                proxies = settings.APIFY_PROXY
+                proxy_url = settings.APIFY_PROXY
                 logger.info("Using APIFY_PROXY for image downloads.")
 
             async with httpx.AsyncClient(
@@ -113,7 +112,7 @@ class ImageProcessor:
                 follow_redirects=True, 
                 headers=ImageProcessor.DOWNLOAD_HEADERS,
                 verify=False,
-                proxies=proxies
+                proxy=proxy_url  # Changed from proxies=proxies to proxy=proxy_url
             ) as client:
                 
                 # Create coroutines
