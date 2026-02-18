@@ -13,6 +13,9 @@ class Settings:
     
     # Proxy Configuration
     # Used for downloading images from external URLs to avoid blocking
-    APIFY_PROXY: Optional[str] = os.getenv("APIFY_PROXY")
+    APIFY_PROXY_PASSWORD: Optional[str] = os.getenv("APIFY_PROXY")
+    APIFY_PROXY: Optional[str] = None
+    if APIFY_PROXY_PASSWORD:
+        APIFY_PROXY = f"http://auto:{APIFY_PROXY_PASSWORD}@proxy.apify.com:8000"
 
 settings = Settings()
