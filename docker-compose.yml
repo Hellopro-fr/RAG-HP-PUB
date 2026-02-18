@@ -1145,7 +1145,6 @@ services:
     command: --config.file=/etc/prometheus/prometheus.yml
     networks:
       - services-net
-      - graph-rag-net
     logging: *logging_defaults
 
   grafana:
@@ -1202,7 +1201,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/image-comparison-service/Dockerfile
-    profiles: ["app"]
+    profiles: ["crawling"]
     expose:
       - "8504"
     env_file:
@@ -1246,7 +1245,7 @@ services:
 
   reverse-proxy:
     image: nginx:alpine
-    profiles: ["app"]
+    profiles: ["crawling"]
     ports:
       # The reverse proxy is the ONLY service that maps a port to the host.
       # This is the single entry point for all external traffic.

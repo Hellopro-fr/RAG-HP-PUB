@@ -587,10 +587,12 @@ class RecommendationService:
         c_unknown_score = request.scoring.c_unknown_score or 0.5
         t_unmatched = request.scoring.t_unmatched or 0.2
 
-        logging.warning(f"[DEBUG] scoring parameters: {request.scoring}")
-        logging.warning(
-            f"[DEBUG] scoring parameters assigné: {blocked_val}, {different_val}, {z_unmatched}, {e_unmatched}, {g_unknown_score}, {c_unknown_score}, {t_unmatched}"
-        )
+        absolute_threshold = request.scoring.absolute_threshold
+        relative_tolerance = request.scoring.relative_tolerance
+        max_per_supplier_primary = request.scoring.max_per_supplier_primary
+        max_per_supplier_extended = request.scoring.max_per_supplier_extended
+        score_step = request.scoring.score_step
+
         # Extract user location data from metadonnee_utilisateurs
         user_meta = request.metadonnee_utilisateurs
         user_cp = user_meta.cp if user_meta else None
@@ -1116,28 +1118,71 @@ class RecommendationService:
         WHERE final_score > 0 OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
-        LIMIT $top_k + 4
         
-        // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_products
+        // --- SUPPLIER DIVERSITY ALGORITHM ---
+        // Step 1: Collect all scored products
+        WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_scored
+        
+        // Step 2: Compute supplier average scores and best score
+        WITH all_scored,
+             apoc.map.fromPairs(
+                 [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
+                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid] | acc + item.final_score)
+                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid]))]]
+             ) AS supplier_avg_map,
+             CASE WHEN size(all_scored) > 0 THEN all_scored[0].final_score ELSE 0.0 END AS best_score
+        
+        // Step 3: Enrich with supplier_range_rank (rank within same supplier + same score range)
+        //         Score ranges: [1.0-0.8], [0.8-0.6], [0.6-0.4], [0.4-0.2], [0.2-0.0]
+        //         Max 2 products per supplier per range
+        //         Tie-break between same-score products by supplier_avg_score DESC
+        WITH [prod IN all_scored | {
+            node: prod.node,
+            details: prod.details,
+            global_score: prod.global_score,
+            zone_score: prod.zone_score,
+            etat_score: prod.etat_score,
+            typo_score: prod.typo_score,
+            final_score: prod.final_score,
+            info_soc: prod.info_soc,
+            supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)],
+            score_range: toInteger(floor(prod.final_score / $score_step)),
+            supplier_range_rank: size([other IN all_scored WHERE 
+                toString(other.node.id_fournisseur) = toString(prod.node.id_fournisseur) AND 
+                toInteger(floor(other.final_score / $score_step)) = toInteger(floor(prod.final_score / $score_step)) AND
+                (other.final_score > prod.final_score OR 
+                 (other.final_score = prod.final_score AND toString(other.node.id_produit) < toString(prod.node.id_produit)))
+            ]) + 1
+        }] AS enriched
+        
+        // Step 4: Keep max $max_per_supplier_primary products per supplier per score range
+        //         Sort by final_score DESC, supplier_avg_score DESC (tie-breaker)
+        //         Limit to $top_k + 4
+        WITH [prod IN enriched WHERE 
+            prod.supplier_range_rank <= $max_per_supplier_primary
+        ] AS diversity_filtered, enriched
+        
+        // Step 5: Build pre-diversity debug + take top_k + 4
+        WITH diversity_filtered[0..$top_k + 4] AS all_products,
+             [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, score_range: e.score_range, supplier_range_rank: e.supplier_range_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
         
         // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
-        WITH all_products,
+        WITH all_products, pre_diversity_debug,
              [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
                  head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
              ] AS top_per_fournisseur
         
         // Sort top_per_fournisseur by final_score descending and limit to 4
-        WITH all_products, top_per_fournisseur
+        WITH all_products, pre_diversity_debug, top_per_fournisseur
         UNWIND top_per_fournisseur AS p_top
-        WITH all_products, p_top 
+        WITH all_products, pre_diversity_debug, p_top 
         ORDER BY p_top.final_score DESC 
         LIMIT 4
         
         // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
-        WITH all_products, collect({
+        WITH all_products, pre_diversity_debug, p_top.node AS top_node, p_top.final_score AS top_score, p_top.details AS top_details, p_top.zone_score AS top_zone_score, p_top.global_score AS top_global_score, p_top.etat_score AS top_etat_score, p_top.typo_score AS top_typo_score, p_top.info_soc AS top_info_soc
+        WITH all_products, pre_diversity_debug, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details, top_node.id_produit AS top_id, top_zone_score, top_global_score, top_etat_score, top_typo_score, top_info_soc
+        WITH all_products, pre_diversity_debug, collect({
             product_data: top_product_data,
             score: top_score,
             details: top_details,
@@ -1149,17 +1194,22 @@ class RecommendationService:
         }) AS top_p, collect(top_id) AS top_p_ids
         
         // Filter out top_p products from all_products and limit to top_k
-        WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p
+        WITH [prod IN all_products WHERE NOT prod.node.id_produit IN top_p_ids][0..$top_k] AS filtered_products, top_p, pre_diversity_debug
         
         UNWIND (CASE WHEN size(filtered_products) = 0 THEN [null] ELSE filtered_products END) AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, prod.zone_score AS zone_score, prod.etat_score AS etat_score, prod.typo_score AS typo_score, prod.final_score AS final_score, prod.info_soc AS info_soc, top_p, pre_diversity_debug
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p, pre_diversity_debug
         """
 
         cypher_query = query_step_1 + query_step_2
 
         if len(request.champs_sortie) > 0 and "id_produit" not in request.champs_sortie:
             request.champs_sortie.append("id_produit")
+        if (
+            len(request.champs_sortie) > 0
+            and "id_fournisseur" not in request.champs_sortie
+        ):
+            request.champs_sortie.append("id_fournisseur")
 
         # Determine projection
         if request.champs_sortie:
@@ -1198,6 +1248,11 @@ class RecommendationService:
             "c_unknown_score": c_unknown_score,
             "user_typologie": user_typologie,
             "t_unmatched": t_unmatched,
+            "absolute_threshold": absolute_threshold,
+            "relative_tolerance": relative_tolerance,
+            "max_per_supplier_primary": max_per_supplier_primary,
+            "max_per_supplier_extended": max_per_supplier_extended,
+            "score_step": score_step,
         }
 
         try:

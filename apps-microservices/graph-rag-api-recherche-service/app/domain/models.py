@@ -287,6 +287,21 @@ class ScoringOptions(BaseModel):
         -0.3, description="Score pour les caractéristiques différentes"
     )
     t_unmatched: float = Field(0.2, description="Score pour les typologies non matched")
+    absolute_threshold: float = Field(
+        0.0, description="Seuil absolu de score minimum pour les produits"
+    )
+    relative_tolerance: float = Field(
+        0.15, description="Tolérance relative par rapport au meilleur score"
+    )
+    max_per_supplier_primary: int = Field(
+        2, description="Nombre maximum de produits par fournisseur (passe primaire)"
+    )
+    max_per_supplier_extended: int = Field(
+        3, description="Nombre maximum de produits par fournisseur (passe étendue)"
+    )
+    score_step: float = Field(
+        0.2, description="Pas de score pour les tranches de diversité fournisseur"
+    )
 
 
 class MatchingPayload(BaseModel):

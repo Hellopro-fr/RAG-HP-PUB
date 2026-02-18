@@ -13,6 +13,6 @@ docker compose --profile crawling up -d --no-deps --scale image-comparison-servi
 
 echo "[INFO] Reloading Reverse Proxy Nginx..."
 # 2. Reload Nginx to discover new replicas
-docker compose exec reverse-proxy nginx -s reload
+docker compose --profile crawling exec reverse-proxy nginx -s reload
 
 echo "[SUCCESS] Scaled to $REPLICAS replicas."
