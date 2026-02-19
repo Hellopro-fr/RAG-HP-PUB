@@ -171,22 +171,32 @@ export function useProcessMatchingLogic() {
       const hasInsufficientResults = totalProducts < MIN_PRODUCTS_THRESHOLD;
       setRedirectGoToSomethingToAdd(hasInsufficientResults);
 
-      // Tracking DB - Toujours stocker les résultats du matching
-      // Permet d'analyser les produits qui remontent, notamment pour le flow /something-to-add
+      // Tracking DB - Stocker le payload envoyé ET les résultats du matching
+      // Permet d'analyser et investiguer les requêtes et leurs résultats
       const matchingTrackingData = {
-        results_count: totalProducts,
-        threshold: MIN_PRODUCTS_THRESHOLD,
-        redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
-        top_products: apiData.top_produit?.map((p: any) => ({
-          id: p.id_produit,
-          score: p.score,
-          id_fournisseur: p.id_fournisseur
-        })) || [],
-        liste_products: apiData.liste_produit.map((p: any) => ({
-          id: p.id_produit,
-          score: p.score,
-          id_fournisseur: p.id_fournisseur
-        })),
+        // === REQUÊTE ENVOYÉE ===
+        request: {
+          id_categorie: categoryId,
+          metadonnee_utilisateurs,
+          liste_caracteristique: consolidatedEquivalences,
+          scoring: matchingTestParams || undefined,
+        },
+        // === RÉSULTATS REÇUS ===
+        response: {
+          results_count: totalProducts,
+          threshold: MIN_PRODUCTS_THRESHOLD,
+          redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
+          top_products: apiData.top_produit?.map((p: any) => ({
+            id: p.id_produit,
+            score: p.score,
+            id_fournisseur: p.id_fournisseur
+          })) || [],
+          liste_products: apiData.liste_produit.map((p: any) => ({
+            id: p.id_produit,
+            score: p.score,
+            id_fournisseur: p.id_fournisseur
+          })),
+        },
         equivalences_count: consolidatedEquivalences.length
       };
 
@@ -368,6 +378,36 @@ export function useProcessMatchingLogic() {
         characteristicsMap,
         activeEquivalences
       );
+
+      // Tracking DB - Stocker le payload envoyé ET les résultats du refetch
+      const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
+      const refetchTrackingData = {
+        // === REQUÊTE ENVOYÉE ===
+        request: {
+          id_categorie: categoryId,
+          metadonnee_utilisateurs,
+          liste_caracteristique: activeEquivalences,
+          removed_criteria_ids: allRemovedIds,
+          scoring: matchingTestParams || undefined,
+        },
+        // === RÉSULTATS REÇUS ===
+        response: {
+          results_count: totalProducts,
+          top_products: apiData.top_produit?.map((p: any) => ({
+            id: p.id_produit,
+            score: p.score,
+            id_fournisseur: p.id_fournisseur
+          })) || [],
+          liste_products: apiData.liste_produit.map((p: any) => ({
+            id: p.id_produit,
+            score: p.score,
+            id_fournisseur: p.id_fournisseur
+          })),
+        },
+        equivalences_count: activeEquivalences.length
+      };
+
+      trackDbEvent('matching', 'refetch', refetchTrackingData, categoryId, 1);
 
       // Identifier les produits orphelins (sélectionnés mais plus dans les nouveaux résultats)
       const newProductIds = new Set([
