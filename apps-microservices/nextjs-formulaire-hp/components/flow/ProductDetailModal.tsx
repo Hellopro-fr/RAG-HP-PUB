@@ -1,10 +1,11 @@
 "use client";
 
 import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { trackProductModalView } from "@/lib/analytics";
+import { getProductImageUrl } from "@/lib/utils/image-url";
 import type { ProductSpec, SupplierInfo, MediaItem } from "@/types";
 
 interface ProductDetailProps {
@@ -133,8 +134,22 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
     }
   }, [product.id, product.name, product.supplier.name, product.descriptionHtml, product.description, product.supplier.description]);
 
-  // Build media array from images or media prop
-  const mediaItems: MediaItem[] = product.media || product.images.map(url => ({ type: "image" as const, url }));
+  // Build media array from images or media prop, transforming URLs via proxy
+  const mediaItems: MediaItem[] = useMemo(() => {
+    if (product.media) {
+      // Transform media URLs (images only, keep videos as-is)
+      return product.media.map(m =>
+        m.type === "image"
+          ? { ...m, url: getProductImageUrl(m.url), thumbnail: m.thumbnail ? getProductImageUrl(m.thumbnail) : undefined }
+          : m
+      );
+    }
+    // Transform image URLs
+    return product.images.map(url => ({
+      type: "image" as const,
+      url: getProductImageUrl(url)
+    }));
+  }, [product.media, product.images]);
 
   const nextMedia = () => {
     setCurrentMediaIndex((prev) => (prev + 1) % mediaItems.length);

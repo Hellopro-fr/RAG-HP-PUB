@@ -367,21 +367,27 @@ export function enrichSuppliersWithProductInfo(
         ? vendeur.domaine.replace(/^www\./, '').split('.')[0].toUpperCase()
         : PLACEHOLDER_SUPPLIER);
 
-    // Image du produit (peut contenir plusieurs URLs séparées par <br> ou \n)
+    // Image du produit - peut être un tableau ou une string avec séparateurs
     let images: string[] = [];
     let mainImage = PLACEHOLDER_IMAGE;
 
     if (produit.image_produit) {
-      // Nettoyer et séparer les URLs
-      images = produit.image_produit
-        .split(/<br\s*\/?>|\n/i) // Séparer par <br>, <br/>, <br /> ou saut de ligne
-        .map(url => url.trim())
-        .filter(url => url.length > 0 && url.startsWith('http'));
+      // Nouveau format: tableau de chemins relatifs
+      if (Array.isArray(produit.image_produit)) {
+        images = produit.image_produit
+          .map((path: string) => path.trim())
+          .filter((path: string) => path.length > 0);
+      } else {
+        // Ancien format: string avec URLs séparées par <br> ou \n
+        images = produit.image_produit
+          .split(/<br\s*\/?>|\n/i)
+          .map((url: string) => url.trim())
+          .filter((url: string) => url.length > 0);
+      }
 
       if (images.length > 0) {
         mainImage = images[0];
       } else {
-        // Fallback si aucune URL valide trouvée après split
         images = [PLACEHOLDER_IMAGE];
       }
     } else {

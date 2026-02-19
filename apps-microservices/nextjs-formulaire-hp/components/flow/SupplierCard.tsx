@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Check, CheckCircle, AlertTriangle, ShieldCheck, HelpCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getProductImageUrl } from "@/lib/utils/image-url";
 import type { ProductSpec, PriceInfo } from "@/types";
 
 interface SupplierCardProps {
@@ -87,7 +88,10 @@ const SupplierCard = ({
 }: SupplierCardProps) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  
+
+  // Transform image URL via proxy
+  const imageUrl = useMemo(() => getProductImageUrl(image), [image]);
+
   const getMatchBadgeStyle = () => {
     if (matchScore >= 80) return "bg-match-high text-white";
     if (matchScore >= 60) return "bg-match-medium text-white";
@@ -135,9 +139,9 @@ const SupplierCard = ({
             <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
           </div>
         )}
-        {!imageError && image ? (
+        {!imageError && imageUrl ? (
           <img
-            src={image}
+            src={imageUrl}
             alt={productName}
             loading="lazy"
             className={cn(
@@ -256,9 +260,9 @@ const SupplierCard = ({
             <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
           </div>
         )}
-        {!imageError && image ? (
+        {!imageError && imageUrl ? (
           <img
-            src={image}
+            src={imageUrl}
             alt={productName}
             loading="lazy"
             className={cn(

@@ -90,7 +90,7 @@ export interface ProductInfoData {
   description_produit: string;
   prix_produit: string;
   url_produit: string;
-  image_produit: string;
+  image_produit: string | string[];  // Peut être un tableau de chemins ou une string avec séparateurs
   livraison_produit: string;
   stock_produit: string;
   categorie_produit: string;
