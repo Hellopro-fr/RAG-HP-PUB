@@ -672,7 +672,7 @@ class RecommendationService:
         
         // Match Characteristics for the specific caracteristique ID
         OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
-        WHERE toString(pc.id_source_caracteristique) = f.cid
+        WHERE toString(pc.id_source_caracteristique) = f.cid AND p.est_actif = true
         
         // Bundle Constraints with their matching Characteristics
         WITH p, f, collect(pc) AS pcs
