@@ -1161,27 +1161,24 @@ class RecommendationService:
         // global_score * zone_score * etat_score * typo_score AS final_score
         WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
             global_score * zone_score * etat_score * typo_score AS final_score
-        WHERE final_score > 0 OR $target_product_id IS NOT NULL
+        WHERE (final_score >= $absolute_threshold OR $target_product_id IS NOT NULL) AND (final_score > 0 OR $target_product_id IS NOT NULL)
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         
-        // --- SUPPLIER DIVERSITY ALGORITHM ---
-        // Step 1: Collect all scored products
+        // --- SUPPLIER DIVERSITY ALGORITHM (Two-Pass Selection) ---
+        // Step 1: Collect all scored products (already sorted by final_score DESC)
         WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_scored
         
-        // Step 2: Compute supplier average scores and best score
+        // Step 2: Compute supplier average scores for tie-breaking
+        // "Privilégie celui qui a la meilleure note moyenne sur l'ensemble de ses produits matchés."
         WITH all_scored,
              apoc.map.fromPairs(
                  [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
                   [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid] | acc + item.final_score)
                         / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid]))]]
-             ) AS supplier_avg_map,
-             CASE WHEN size(all_scored) > 0 THEN all_scored[0].final_score ELSE 0.0 END AS best_score
+             ) AS supplier_avg_map
         
-        // Step 3: Enrich with supplier_range_rank (rank within same supplier + same score range)
-        //         Score ranges: [1.0-0.8], [0.8-0.6], [0.6-0.4], [0.4-0.2], [0.2-0.0]
-        //         Max 2 products per supplier per range
-        //         Tie-break between same-score products by supplier_avg_score DESC
+        // Step 3: Enrich products with supplier_avg_score and sort by score DESC, supplier_avg DESC
         WITH [prod IN all_scored | {
             node: prod.node,
             details: prod.details,
@@ -1191,28 +1188,63 @@ class RecommendationService:
             typo_score: prod.typo_score,
             final_score: prod.final_score,
             info_soc: prod.info_soc,
-            supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)],
-            score_range: toInteger(floor(prod.final_score / $score_step)),
-            supplier_range_rank: size([other IN all_scored WHERE 
-                toString(other.node.id_fournisseur) = toString(prod.node.id_fournisseur) AND 
-                toInteger(floor(other.final_score / $score_step)) = toInteger(floor(prod.final_score / $score_step)) AND
-                (other.final_score > prod.final_score OR 
-                 (other.final_score = prod.final_score AND toString(other.node.id_produit) < toString(prod.node.id_produit)))
-            ]) + 1
-        }] AS enriched
+            supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)]
+        }] AS enriched, supplier_avg_map
         
-        // Step 4: Keep max $max_per_supplier_primary products per supplier per score range
-        //         Sort by final_score DESC, supplier_avg_score DESC (tie-breaker)
-        //         Limit to $top_k + 4
-        WITH [prod IN enriched WHERE 
-            prod.supplier_range_rank <= $max_per_supplier_primary
-        ] AS diversity_filtered, enriched
+        // Re-sort by final_score DESC, then supplier_avg_score DESC for tie-breaking
+        UNWIND enriched AS e
+        WITH e, supplier_avg_map
+        ORDER BY e.final_score DESC, e.supplier_avg_score DESC
+        WITH collect(e) AS sorted_candidates, supplier_avg_map
         
-        // Step 5: Build pre-diversity debug + take top_k + 4
-        WITH diversity_filtered[0..$top_k + 4] AS all_products,
-             [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, score_range: e.score_range, supplier_range_rank: e.supplier_range_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
+        // Step 4: PASS 1 - Strict Diversity (Max $max_per_supplier_primary per vendor)
+        // Uses reduce() to iterate sorted candidates with stateful accumulator
+        // Accumulator: {selected: [...], counts: {vendor_id: count, ...}}
+        WITH sorted_candidates, supplier_avg_map,
+             reduce(acc = {selected: [], counts: {}}, prod IN sorted_candidates |
+                 CASE 
+                     WHEN size(acc.selected) >= $top_k + 4 THEN acc
+                     WHEN coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) < $max_per_supplier_primary THEN
+                         {
+                             selected: acc.selected + [prod],
+                             counts: apoc.map.merge(acc.counts, apoc.map.fromPairs([[toString(prod.node.id_fournisseur), coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) + 1]]))
+                         }
+                     ELSE acc
+                 END
+             ) AS pass1_result, sorted_candidates
         
-        // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
+        // Step 5: PASS 2 - Fill Gaps (Relaxed limit to Max $max_per_supplier_extended per vendor)
+        // Only if Pass 1 didn't reach K = $top_k + 4 products
+        // Iterates remaining (unselected) candidates
+        WITH pass1_result.selected AS pass1_selected, 
+             pass1_result.counts AS pass1_counts,
+             [cand IN sorted_candidates WHERE NOT ANY(sel IN pass1_result.selected WHERE toString(sel.node.id_produit) = toString(cand.node.id_produit))] AS remaining,
+             supplier_avg_map
+        
+        WITH pass1_selected, pass1_counts, remaining, supplier_avg_map,
+             CASE 
+                 WHEN size(pass1_selected) >= $top_k + 4 THEN {selected: [], counts: pass1_counts}
+                 ELSE reduce(acc = {selected: [], counts: pass1_counts, total: size(pass1_selected)}, prod IN remaining |
+                     CASE
+                         WHEN acc.total >= $top_k + 4 THEN acc
+                         WHEN coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) < $max_per_supplier_extended THEN
+                             {
+                                 selected: acc.selected + [prod],
+                                 counts: apoc.map.merge(acc.counts, apoc.map.fromPairs([[toString(prod.node.id_fournisseur), coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) + 1]])),
+                                 total: acc.total + 1
+                             }
+                         ELSE acc
+                     END
+                 )
+             END AS pass2_result
+        
+        // Combine Pass 1 + Pass 2 results
+        WITH pass1_selected + pass2_result.selected AS all_products,
+             supplier_avg_map,
+             [p1 IN pass1_selected | {id_produit: toString(p1.node.id_produit), id_fournisseur: toString(p1.node.id_fournisseur), final_score: p1.final_score, supplier_avg_score: p1.supplier_avg_score, pass: 1}] +
+             [p2 IN pass2_result.selected | {id_produit: toString(p2.node.id_produit), id_fournisseur: toString(p2.node.id_fournisseur), final_score: p2.final_score, supplier_avg_score: p2.supplier_avg_score, pass: 2}] AS pre_diversity_debug
+        
+        // --- STEP 6: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products, pre_diversity_debug,
              [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
                  head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
