@@ -18,6 +18,10 @@ from app.infrastructure.clients import clients
 
 # from app.services.unit_normalizer import unit_normalizer
 
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
 
 class RecommendationService:
     """

@@ -8,7 +8,7 @@ from common_utils.metrics.prometheus import start_metrics_server_in_thread
 from app.infrastructure.clients import clients
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 
