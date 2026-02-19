@@ -1211,7 +1211,7 @@ class RecommendationService:
                          }
                      ELSE acc
                  END
-             ) AS pass1_result, sorted_candidates
+             ) AS pass1_result
         
         // Step 5: PASS 2 - Fill Gaps (Relaxed limit to Max $max_per_supplier_extended per vendor)
         // Only if Pass 1 didn't reach K = $top_k + 4 products
