@@ -7,15 +7,20 @@ import redis.asyncio as redis
 import anyio
 
 from app.core.config import settings
-from app.schemas.comparator import ComparisonResult, SimilarityPair, JobStatus
+from app.schemas.comparator import ComparisonResult, SimilarityPair, JobStatus, CapacityResponse
 from app.core.image_processor import ImageProcessor
 
 logger = logging.getLogger(__name__)
+
+# Key for tracking global running jobs across all replicas
+GLOBAL_RUNNING_COUNT_KEY = "comparator:running_count"
 
 class JobManager:
     def __init__(self):
         self.redis: Optional[redis.Redis] = None
         self.semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_JOBS)
+        # Track local active jobs manually since semaphore._value is internal/implementation specific
+        self.local_active_jobs = 0 
 
     async def connect_redis(self):
         self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
@@ -24,6 +29,24 @@ class JobManager:
     async def close_redis(self):
         if self.redis:
             await self.redis.close()
+
+    def is_local_full(self) -> bool:
+        """Check if this specific instance has reached max concurrency."""
+        return self.local_active_jobs >= settings.MAX_CONCURRENT_JOBS
+
+    async def get_capacity(self) -> CapacityResponse:
+        """Get current capacity metrics."""
+        global_count = 0
+        if self.redis:
+            val = await self.redis.get(GLOBAL_RUNNING_COUNT_KEY)
+            global_count = int(val) if val else 0
+            
+        return CapacityResponse(
+            global_running_jobs=global_count,
+            local_running_jobs=self.local_active_jobs,
+            local_max_jobs=settings.MAX_CONCURRENT_JOBS,
+            is_local_full=self.is_local_full()
+        )
 
     async def get_job_status(self, job_id: str) -> Optional[JobStatus]:
         if not self.redis: return None
@@ -65,78 +88,88 @@ class JobManager:
 
     async def process_job_logic(self, job_id: str, inputs: list, threshold: float) -> ComparisonResult:
         """
-        The core processing logic.
-        Can be awaited directly (sync) or wrapped in a task (async).
+        The core processing logic with global counter tracking.
         """
-        async with self.semaphore:
-            try:
-                # Update status to processing
-                await self.redis.set(
-                    f"job:{job_id}:status", 
-                    JobStatus(job_id=job_id, status="processing", progress=10.0).json()
-                )
+        # Increment Global Counter
+        if self.redis:
+            await self.redis.incr(GLOBAL_RUNNING_COUNT_KEY)
+        
+        self.local_active_jobs += 1
+        
+        try:
+            async with self.semaphore:
+                try:
+                    # Update status to processing
+                    await self.redis.set(
+                        f"job:{job_id}:status", 
+                        JobStatus(job_id=job_id, status="processing", progress=10.0).json(),
+                        ex=settings.JOB_RESULT_TTL
+                    )
 
-                logger.info(f"Job {job_id}: Loading {len(inputs)} images...")
-                
-                # Use load_images which handles both URLs and Base64 content
-                images_map, failed_ids = await ImageProcessor.load_images(inputs)
-                
-                if not images_map:
-                    raise Exception("No valid images could be loaded/downloaded.")
+                    logger.info(f"Job {job_id}: Loading {len(inputs)} images...")
+                    
+                    # Use load_images which handles both URLs and Base64 content
+                    images_map, failed_ids = await ImageProcessor.load_images(inputs)
+                    
+                    if not images_map:
+                        raise Exception("No valid images could be loaded/downloaded.")
 
-                await self.redis.set(
-                    f"job:{job_id}:status", 
-                    JobStatus(job_id=job_id, status="processing", progress=40.0).json()
-                )
+                    await self.redis.set(
+                        f"job:{job_id}:status", 
+                        JobStatus(job_id=job_id, status="processing", progress=40.0).json(),
+                        ex=settings.JOB_RESULT_TTL
+                    )
 
-                logger.info(f"Job {job_id}: Processing comparisons for {len(images_map)} images...")
-                
-                # We now pass 'inputs' to compare_batch to allow URL mapping
-                raw_results = await anyio.to_thread.run_sync(
-                    ImageProcessor.compare_batch, 
-                    images_map,
-                    inputs 
-                )
+                    logger.info(f"Job {job_id}: Processing comparisons...")
+                    
+                    # We now pass 'inputs' to compare_batch to allow URL mapping
+                    raw_results = await anyio.to_thread.run_sync(
+                        ImageProcessor.compare_batch, 
+                        images_map,
+                        inputs 
+                    )
 
-                similar_pairs = []
-                for res in raw_results:
-                    if res['score'] >= threshold:
-                        similar_pairs.append(SimilarityPair(**res))
+                    similar_pairs = []
+                    for res in raw_results:
+                        if res['score'] >= threshold:
+                            similar_pairs.append(SimilarityPair(**res))
 
-                result = ComparisonResult(
-                    job_id=job_id,
-                    status="finished",
-                    created_at=datetime.utcnow(),
-                    completed_at=datetime.utcnow(),
-                    total_images=len(inputs),
-                    matches_found=len(similar_pairs),
-                    similar_pairs=similar_pairs,
-                    failed_images=failed_ids
-                )
-                
-                # Use Configurable TTL from Settings
-                ttl = settings.JOB_RESULT_TTL
-                
-                await self.redis.set(f"job:{job_id}:result", result.json(), ex=ttl)
-                await self.redis.set(
-                    f"job:{job_id}:status", 
-                    JobStatus(job_id=job_id, status="finished", progress=100.0).json(),
-                    ex=ttl
-                )
-                logger.info(f"Job {job_id} finished successfully. Results stored for {ttl}s.")
-                
-                return result
+                    result = ComparisonResult(
+                        job_id=job_id,
+                        status="finished",
+                        created_at=datetime.utcnow(),
+                        completed_at=datetime.utcnow(),
+                        total_images=len(inputs),
+                        matches_found=len(similar_pairs),
+                        similar_pairs=similar_pairs,
+                        failed_images=failed_ids
+                    )
+                    
+                    ttl = settings.JOB_RESULT_TTL
+                    await self.redis.set(f"job:{job_id}:result", result.json(), ex=ttl)
+                    await self.redis.set(
+                        f"job:{job_id}:status", 
+                        JobStatus(job_id=job_id, status="finished", progress=100.0).json(),
+                        ex=ttl
+                    )
+                    logger.info(f"Job {job_id} finished successfully.")
+                    
+                    return result
 
-            except Exception as e:
-                logger.error(f"Job {job_id} failed: {e}", exc_info=True)
-                error_status = JobStatus(
-                    job_id=job_id, 
-                    status="failed", 
-                    error=str(e),
-                    progress=0.0
-                )
-                await self.redis.set(f"job:{job_id}:status", error_status.json(), ex=settings.JOB_RESULT_TTL)
-                raise e
+                except Exception as e:
+                    logger.error(f"Job {job_id} failed: {e}", exc_info=True)
+                    error_status = JobStatus(
+                        job_id=job_id, 
+                        status="failed", 
+                        error=str(e),
+                        progress=0.0
+                    )
+                    await self.redis.set(f"job:{job_id}:status", error_status.json(), ex=settings.JOB_RESULT_TTL)
+                    raise e
+        finally:
+            self.local_active_jobs -= 1
+            if self.redis:
+                await self.redis.decr(GLOBAL_RUNNING_COUNT_KEY)
 
     async def submit_job_async(self, job_id: str, images: list, threshold: float):
         """Fire and forget execution."""

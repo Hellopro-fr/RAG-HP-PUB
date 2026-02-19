@@ -60,3 +60,9 @@ class JobStatus(BaseModel):
 class JobListResponse(BaseModel):
     total_jobs: int
     jobs: List[JobStatus]
+
+class CapacityResponse(BaseModel):
+    global_running_jobs: int
+    local_running_jobs: int
+    local_max_jobs: int
+    is_local_full: bool

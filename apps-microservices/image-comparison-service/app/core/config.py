@@ -9,7 +9,7 @@ class Settings:
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379")
     
     # Processing Limits
-    MAX_CONCURRENT_JOBS: int = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
+    MAX_CONCURRENT_JOBS: int = int(os.getenv("MAX_CONCURRENT_JOBS", "2"))
     
     # Proxy Configuration
     # Used for downloading images from external URLs to avoid blocking
