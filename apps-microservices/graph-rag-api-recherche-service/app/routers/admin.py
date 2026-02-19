@@ -59,6 +59,7 @@ async def get_category_counts():
     """
     query = """
     MATCH (p:Produit)-[:EST_PROPOSE_PAR]-(f:Fournisseur)
+    WHERE p.est_actif = true
     RETURN p.id_categorie AS Categorie, count(DISTINCT f) AS Nb_Fournisseurs, count(DISTINCT p) AS Nb_produits
     ORDER BY Categorie ASC
     """
