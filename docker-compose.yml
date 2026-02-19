@@ -1207,7 +1207,7 @@ services:
     env_file:
       - .env
     environment:
-      - MAX_CONCURRENT_JOBS=5
+      - MAX_CONCURRENT_JOBS=2
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     deploy:
       replicas: 1
