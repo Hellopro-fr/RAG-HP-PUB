@@ -22,7 +22,7 @@ function profileTypeToStatut(profileType: ProfileType): StatutAcheteur {
     case 'creation':
       return '4'; // Création d'entreprise
     case 'pro_foreign':
-      return '6'; // Professionnel étranger
+      return '1'; // Professionnel étranger
     case 'particulier':
       return '7'; // Particulier
     default:
