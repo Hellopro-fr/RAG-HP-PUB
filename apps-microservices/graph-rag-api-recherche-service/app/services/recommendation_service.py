@@ -1173,13 +1173,13 @@ class RecommendationService:
         // Step 1: Collect all scored products (already sorted by final_score DESC)
         WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_scored
         
-        // Step 2: Compute supplier average scores for tie-breaking
-        // "Privilégie celui qui a la meilleure note moyenne sur l'ensemble de ses produits matchés."
+        // Step 2: Compute supplier average scores for tie-breaking (top 5 products per vendor)
+        // "Privilégie celui qui a la meilleure note moyenne sur ses 5 meilleurs produits matchés."
         WITH all_scored,
              apoc.map.fromPairs(
                  [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
-                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid] | acc + item.final_score)
-                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid]))]]
+                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid][0..5] | acc + item.final_score)
+                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid][0..5]))]]
              ) AS supplier_avg_map
         
         // Step 3: Enrich products with supplier_avg_score and sort by score DESC, supplier_avg DESC
@@ -1343,85 +1343,85 @@ class RecommendationService:
             query_time = time.perf_counter() - query_start
 
             # --- DEBUG: Diversity Algorithm Output ---
-            # if results:
-            #     pre_diversity_debug = results[0].get("pre_diversity_debug", [])
-            #     raw_top_p_debug = results[0].get("top_p", [])
+            if results:
+                pre_diversity_debug = results[0].get("pre_diversity_debug", [])
+                raw_top_p_debug = results[0].get("top_p", [])
 
-            #     logging.warning("=" * 80)
-            #     logging.warning("DIVERSITY ALGORITHM DEBUG")
-            #     logging.warning("=" * 80)
-            #     logging.warning(
-            #         f"Query time: {query_time:.4f}s | Total results: {len(results)} | absolute_threshold: {absolute_threshold}"
-            #     )
-            #     logging.warning(
-            #         f"Parameters: top_k={int(request.top_k)}, K(target)={int(request.top_k) + 4}, max_per_supplier_primary={max_per_supplier_primary}, max_per_supplier_extended={max_per_supplier_extended}"
-            #     )
+                logging.warning("=" * 80)
+                logging.warning("DIVERSITY ALGORITHM DEBUG")
+                logging.warning("=" * 80)
+                logging.warning(
+                    f"Query time: {query_time:.4f}s | Total results: {len(results)} | absolute_threshold: {absolute_threshold}"
+                )
+                logging.warning(
+                    f"Parameters: top_k={int(request.top_k)}, K(target)={int(request.top_k) + 4}, max_per_supplier_primary={max_per_supplier_primary}, max_per_supplier_extended={max_per_supplier_extended}"
+                )
 
-            #     # Log pre-diversity debug (products selected by the algorithm)
-            #     logging.warning("-" * 40)
-            #     logging.warning(
-            #         "PRE-DIVERSITY SELECTION (sorted by final_score DESC, supplier_avg DESC):"
-            #     )
-            #     pass1_products = [p for p in pre_diversity_debug if p.get("pass") == 1]
-            #     pass2_products = [p for p in pre_diversity_debug if p.get("pass") == 2]
-            #     logging.warning(
-            #         f"  Pass 1 (max {max_per_supplier_primary}/vendor): {len(pass1_products)} products selected"
-            #     )
-            #     logging.warning(
-            #         f"  Pass 2 (max {max_per_supplier_extended}/vendor): {len(pass2_products)} products selected"
-            #     )
-            #     logging.warning(
-            #         f"  Total selected: {len(pre_diversity_debug)} / K={int(request.top_k) + 4}"
-            #     )
+                # Log pre-diversity debug (products selected by the algorithm)
+                logging.warning("-" * 40)
+                logging.warning(
+                    "PRE-DIVERSITY SELECTION (sorted by final_score DESC, supplier_avg DESC):"
+                )
+                pass1_products = [p for p in pre_diversity_debug if p.get("pass") == 1]
+                pass2_products = [p for p in pre_diversity_debug if p.get("pass") == 2]
+                logging.warning(
+                    f"  Pass 1 (max {max_per_supplier_primary}/vendor): {len(pass1_products)} products selected"
+                )
+                logging.warning(
+                    f"  Pass 2 (max {max_per_supplier_extended}/vendor): {len(pass2_products)} products selected"
+                )
+                logging.warning(
+                    f"  Total selected: {len(pre_diversity_debug)} / K={int(request.top_k) + 4}"
+                )
 
-            #     # Log vendor distribution
-            #     vendor_counts = {}
-            #     for p in pre_diversity_debug:
-            #         vid = p.get("id_fournisseur", "?")
-            #         vendor_counts[vid] = vendor_counts.get(vid, 0) + 1
-            #     logging.warning(f"  Vendor distribution: {vendor_counts}")
+                # Log vendor distribution
+                vendor_counts = {}
+                for p in pre_diversity_debug:
+                    vid = p.get("id_fournisseur", "?")
+                    vendor_counts[vid] = vendor_counts.get(vid, 0) + 1
+                logging.warning(f"  Vendor distribution: {vendor_counts}")
 
-            #     # Log each selected product
-            #     for i, p in enumerate(pre_diversity_debug):
-            #         logging.warning(
-            #             f"  [{i+1}] Pass {p.get('pass')} | "
-            #             f"id_produit={p.get('id_produit')} | "
-            #             f"id_fournisseur={p.get('id_fournisseur')} | "
-            #             f"final_score={p.get('final_score', 0):.4f} | "
-            #             f"supplier_avg={p.get('supplier_avg_score', 0):.4f}"
-            #         )
+                # Log each selected product
+                for i, p in enumerate(pre_diversity_debug):
+                    logging.warning(
+                        f"  [{i+1}] Pass {p.get('pass')} | "
+                        f"id_produit={p.get('id_produit')} | "
+                        f"id_fournisseur={p.get('id_fournisseur')} | "
+                        f"final_score={p.get('final_score', 0):.4f} | "
+                        f"supplier_avg={p.get('supplier_avg_score', 0):.4f}"
+                    )
 
-            #     # Log top_p (best per vendor)
-            #     logging.warning("-" * 40)
-            #     logging.warning(
-            #         f"TOP_P (1 per vendor, max 4): {len(raw_top_p_debug)} products"
-            #     )
-            #     for i, entry in enumerate(raw_top_p_debug):
-            #         if isinstance(entry, dict) and "product_data" in entry:
-            #             logging.warning(
-            #                 f"  [top_{i+1}] id_produit={entry['product_data'].get('id_produit')} | "
-            #                 f"id_fournisseur={entry['product_data'].get('id_fournisseur')} | "
-            #                 f"score={entry.get('score', 0):.4f} | "
-            #                 f"zone={entry.get('zone_score', 0):.4f} | "
-            #                 f"etat={entry.get('etat_score', 0):.4f} | "
-            #                 f"typo={entry.get('typo_score', 0):.4f}"
-            #             )
+                # Log top_p (best per vendor)
+                logging.warning("-" * 40)
+                logging.warning(
+                    f"TOP_P (1 per vendor, max 4): {len(raw_top_p_debug)} products"
+                )
+                for i, entry in enumerate(raw_top_p_debug):
+                    if isinstance(entry, dict) and "product_data" in entry:
+                        logging.warning(
+                            f"  [top_{i+1}] id_produit={entry['product_data'].get('id_produit')} | "
+                            f"id_fournisseur={entry['product_data'].get('id_fournisseur')} | "
+                            f"score={entry.get('score', 0):.4f} | "
+                            f"zone={entry.get('zone_score', 0):.4f} | "
+                            f"etat={entry.get('etat_score', 0):.4f} | "
+                            f"typo={entry.get('typo_score', 0):.4f}"
+                        )
 
-            #     # Log final product list
-            #     logging.warning("-" * 40)
-            #     final_count = sum(1 for r in results if r.get("product_data"))
-            #     logging.warning(
-            #         f"FINAL RESULT: {final_count} products in liste_produit (after removing top_p, limited to top_k={int(request.top_k)})"
-            #     )
-            #     for i, rec in enumerate(results):
-            #         pd = rec.get("product_data", {})
-            #         if pd:
-            #             logging.warning(
-            #                 f"  [{i+1}] id_produit={pd.get('id_produit')} | "
-            #                 f"id_fournisseur={pd.get('id_fournisseur')} | "
-            #                 f"final_score={rec.get('final_score', 0):.4f}"
-            #             )
-            #     logging.warning("=" * 80)
+                # Log final product list
+                logging.warning("-" * 40)
+                final_count = sum(1 for r in results if r.get("product_data"))
+                logging.warning(
+                    f"FINAL RESULT: {final_count} products in liste_produit (after removing top_p, limited to top_k={int(request.top_k)})"
+                )
+                for i, rec in enumerate(results):
+                    pd = rec.get("product_data", {})
+                    if pd:
+                        logging.warning(
+                            f"  [{i+1}] id_produit={pd.get('id_produit')} | "
+                            f"id_fournisseur={pd.get('id_fournisseur')} | "
+                            f"final_score={rec.get('final_score', 0):.4f}"
+                        )
+                logging.warning("=" * 80)
 
             # Parse results and convert to MatchingResponse format
             liste_produit = []
