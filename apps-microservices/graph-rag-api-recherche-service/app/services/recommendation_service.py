@@ -1247,8 +1247,8 @@ class RecommendationService:
         // Sort top_per_fournisseur by final_score descending and limit to 4
         WITH all_products, pre_diversity_debug, top_per_fournisseur
         UNWIND top_per_fournisseur AS p_top
-        WITH all_products, pre_diversity_debug, p_top 
         ORDER BY p_top.final_score DESC 
+        WITH all_products, pre_diversity_debug, p_top 
         LIMIT 4
         
         // First alias the node, then project the node data
