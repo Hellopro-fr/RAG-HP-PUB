@@ -646,7 +646,7 @@ class RecommendationService:
         # Extract user location data from metadonnee_utilisateurs
         user_meta = request.metadonnee_utilisateurs
         user_cp = user_meta.cp if user_meta else None
-        user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
+        user_dept = user_cp[:2] if user_cp is not None and len(user_cp) >= 2 else None
         user_id_pays = user_meta.id_pays if user_meta else None
         user_typologie = user_meta.typologie if user_meta else None
 
