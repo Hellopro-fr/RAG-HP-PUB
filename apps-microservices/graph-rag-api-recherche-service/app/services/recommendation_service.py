@@ -650,7 +650,7 @@ class RecommendationService:
         if target_product_id:
             query_step_1 = """
              MATCH (p:Produit)
-             WHERE toString(p.id) = $target_product_id
+             WHERE toString(p.id) = $target_product_id AND p.est_actif = true
              WITH p, $filters AS active_filters
              """
         else:
@@ -660,7 +660,7 @@ class RecommendationService:
              WHERE toString(pc.id_source_caracteristique) = f.cid
              MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
              
-             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie) AND p.est_actif = true
              
              WITH DISTINCT p, $filters AS active_filters
              """
@@ -672,7 +672,7 @@ class RecommendationService:
         
         // Match Characteristics for the specific caracteristique ID
         OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)
-        WHERE toString(pc.id_source_caracteristique) = f.cid AND p.est_actif = true
+        WHERE toString(pc.id_source_caracteristique) = f.cid
         
         // Bundle Constraints with their matching Characteristics
         WITH p, f, collect(pc) AS pcs
