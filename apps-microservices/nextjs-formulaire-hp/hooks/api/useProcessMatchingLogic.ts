@@ -165,27 +165,38 @@ export function useProcessMatchingLogic() {
       
 
       
-      // TODO a dynamiser
-      // setRedirectGoToSomethingToAdd(apiData.liste_produit.length < 10);
-      
-      // Tracking DB - Matching results
-      // TODO a dynamiser tracking si pas assez de produits
-      if (false) {
-        // Insufficient results
-        trackDbEvent('matching', 'insufficient_results', {
-          results_count: apiData.liste_produit.length,
-          threshold: 2,
-          product_ids: apiData.liste_produit.map((p: any) => p.id_produit)
-        }, categoryId, 1);
-      } else {
-        // Sufficient results
-        trackDbEvent('matching', 'success', {
-          results_count: apiData.liste_produit.length,
-          threshold: 2,
-          product_ids: apiData.liste_produit.map((p: any) => p.id_produit),
-          top_product_ids: apiData.top_produit?.map((p: any) => p.id_produit) || []
-        }, categoryId, 1);
-      }
+      // Seuil minimum de produits pour afficher la sélection
+      const MIN_PRODUCTS_THRESHOLD = 10;
+      const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
+      const hasInsufficientResults = totalProducts < MIN_PRODUCTS_THRESHOLD;
+      setRedirectGoToSomethingToAdd(hasInsufficientResults);
+
+      // Tracking DB - Toujours stocker les résultats du matching
+      // Permet d'analyser les produits qui remontent, notamment pour le flow /something-to-add
+      const matchingTrackingData = {
+        results_count: totalProducts,
+        threshold: MIN_PRODUCTS_THRESHOLD,
+        redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
+        top_products: apiData.top_produit?.map((p: any) => ({
+          id: p.id_produit,
+          score: p.score,
+          id_fournisseur: p.id_fournisseur
+        })) || [],
+        liste_products: apiData.liste_produit.map((p: any) => ({
+          id: p.id_produit,
+          score: p.score,
+          id_fournisseur: p.id_fournisseur
+        })),
+        equivalences_count: consolidatedEquivalences.length
+      };
+
+      trackDbEvent(
+        'matching',
+        hasInsufficientResults ? 'insufficient_results' : 'success',
+        matchingTrackingData,
+        categoryId,
+        1
+      );
 
       // ==========================================================================
       // TODO: SUPPRIMER CE BLOC DE TEST - Début du mode test avec IDs fixes
