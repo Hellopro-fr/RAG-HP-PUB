@@ -37,17 +37,18 @@ export interface CompanyResult {
 }
 
 export interface ProfileData {
-  type        : ProfileType;
-  company    ?: CompanyResult;
-  companyName?: string;
-  postalCode ?: string;
-  city       ?: string;
-  country    ?: string;
-  siren      ?: string;
-  siret      ?: string;
-  countryID  ?: number;
-  naf        ?: string;
+  type         : ProfileType;
+  company     ?: CompanyResult;
+  companyName ?: string;
+  postalCode  ?: string;
+  city        ?: string;
+  country     ?: string;
+  siren       ?: string;
+  siret       ?: string;
+  countryID   ?: number;
+  naf         ?: string;
   address     ?: string;
+  type_societe?: number | string;
 }
 
 export interface PostalCodeCity {

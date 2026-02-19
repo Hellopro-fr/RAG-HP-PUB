@@ -47,6 +47,7 @@ export interface AcheteurData {
   code_postal: string;
   ville: string;
   pays: number;
+  type_societe: number | string;
 
   // Profil
   statut: StatutAcheteur;

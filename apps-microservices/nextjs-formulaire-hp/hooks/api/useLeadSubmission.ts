@@ -130,6 +130,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
           id_pays_tel        : data.contact.id_pays_tel || 1,
           id_societe_acheteur: data.contact.isKnown ? data.contact.id_acheteur                                     : 0,
           address            : data.profile.address || '',
+          type_societe       : data.profile.type_societe || '',
         },
         message               : data.contact.message || 'Demande de devis via UX Matching',
         produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data): [],
