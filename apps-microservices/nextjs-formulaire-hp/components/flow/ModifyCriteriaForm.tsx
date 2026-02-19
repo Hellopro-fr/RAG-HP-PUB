@@ -299,15 +299,19 @@ function characteristicToFormState(
   } else {
     // Numérique : toujours min/max
     // Si une valeur exacte est définie, l'utiliser comme min ET max
+    // Note: Forcer la conversion en Number car les valeurs peuvent être des strings (venant de l'API)
     const val = c.valeurs_cibles;
     if (val && !Array.isArray(val)) {
       if (val.exact !== undefined) {
         // Valeur exacte → mettre en min et max identiques
-        state.valeur_numerique_min = val.exact;
-        state.valeur_numerique_max = val.exact;
+        const exactNum = Number(val.exact);
+        state.valeur_numerique_min = isNaN(exactNum) ? undefined : exactNum;
+        state.valeur_numerique_max = isNaN(exactNum) ? undefined : exactNum;
       } else {
-        state.valeur_numerique_min = val.min;
-        state.valeur_numerique_max = val.max;
+        const minNum = val.min !== undefined ? Number(val.min) : undefined;
+        const maxNum = val.max !== undefined ? Number(val.max) : undefined;
+        state.valeur_numerique_min = minNum !== undefined && !isNaN(minNum) ? minNum : undefined;
+        state.valeur_numerique_max = maxNum !== undefined && !isNaN(maxNum) ? maxNum : undefined;
       }
     }
   }
@@ -681,19 +685,26 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
   // RENDU PRINCIPAL
   // =========================================================================
 
+  // Critères actifs (non supprimés) - utilisé pour le bouton "Affiner"
   const hasCriteria = critiqueCriteria.length > 0 || secondaireCriteria.length > 0;
   // Vérifier s'il y a des critères supprimés dans chaque catégorie
   const hasRemovedCritiqueCriteria = removedCritiqueCriteria.length > 0;
   const hasRemovedSecondaireCriteria = removedSecondaireCriteria.length > 0;
+  // Vérifier si on a des critères (actifs OU supprimés qui peuvent être restaurés)
+  const hasAnyCriteria = hasCriteria || hasRemovedCritiqueCriteria || hasRemovedSecondaireCriteria;
   // Vérifier si une section doit être affichée (critères actifs OU critères supprimés à restaurer)
   const showCritiqueSection = critiqueCriteria.length > 0 || hasRemovedCritiqueCriteria;
   const showSecondaireSection = secondaireCriteria.length > 0 || hasRemovedSecondaireCriteria;
 
   // Vérifier si tous les critères numériques ont des valeurs valides (max >= min)
+  // Note: Forcer la conversion en Number car les valeurs peuvent être des strings (venant de l'API)
   const hasNumericValidationErrors = [...critiqueCriteria, ...secondaireCriteria].some(c => {
     if (c.type !== 'numerique') return false;
     if (c.valeur_numerique_min === undefined || c.valeur_numerique_max === undefined) return false;
-    return c.valeur_numerique_max < c.valeur_numerique_min;
+    const minVal = Number(c.valeur_numerique_min);
+    const maxVal = Number(c.valeur_numerique_max);
+    if (isNaN(minVal) || isNaN(maxVal)) return false;
+    return maxVal < minVal;
   });
 
   return (
@@ -723,7 +734,7 @@ const ModifyCriteriaForm = ({ onBack, onApply }: ModifyCriteriaFormProps) => {
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto space-y-4 min-h-0 pb-4">
-          {!hasCriteria ? (
+          {!hasAnyCriteria ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
               Aucun critère disponible. Complétez le questionnaire pour obtenir des critères personnalisés.
             </div>
