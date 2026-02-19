@@ -19,7 +19,7 @@ from app.infrastructure.clients import clients
 # from app.services.unit_normalizer import unit_normalizer
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.warning, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 
@@ -1347,30 +1347,30 @@ class RecommendationService:
                 pre_diversity_debug = results[0].get("pre_diversity_debug", [])
                 raw_top_p_debug = results[0].get("top_p", [])
 
-                logging.debug("=" * 80)
-                logging.debug("DIVERSITY ALGORITHM DEBUG")
-                logging.debug("=" * 80)
-                logging.debug(
+                logging.warning("=" * 80)
+                logging.warning("DIVERSITY ALGORITHM DEBUG")
+                logging.warning("=" * 80)
+                logging.warning(
                     f"Query time: {query_time:.4f}s | Total results: {len(results)} | absolute_threshold: {absolute_threshold}"
                 )
-                logging.debug(
+                logging.warning(
                     f"Parameters: top_k={int(request.top_k)}, K(target)={int(request.top_k) + 4}, max_per_supplier_primary={max_per_supplier_primary}, max_per_supplier_extended={max_per_supplier_extended}"
                 )
 
                 # Log pre-diversity debug (products selected by the algorithm)
-                logging.debug("-" * 40)
-                logging.debug(
+                logging.warning("-" * 40)
+                logging.warning(
                     "PRE-DIVERSITY SELECTION (sorted by final_score DESC, supplier_avg DESC):"
                 )
                 pass1_products = [p for p in pre_diversity_debug if p.get("pass") == 1]
                 pass2_products = [p for p in pre_diversity_debug if p.get("pass") == 2]
-                logging.debug(
+                logging.warning(
                     f"  Pass 1 (max {max_per_supplier_primary}/vendor): {len(pass1_products)} products selected"
                 )
-                logging.debug(
+                logging.warning(
                     f"  Pass 2 (max {max_per_supplier_extended}/vendor): {len(pass2_products)} products selected"
                 )
-                logging.debug(
+                logging.warning(
                     f"  Total selected: {len(pre_diversity_debug)} / K={int(request.top_k) + 4}"
                 )
 
@@ -1379,11 +1379,11 @@ class RecommendationService:
                 for p in pre_diversity_debug:
                     vid = p.get("id_fournisseur", "?")
                     vendor_counts[vid] = vendor_counts.get(vid, 0) + 1
-                logging.debug(f"  Vendor distribution: {vendor_counts}")
+                logging.warning(f"  Vendor distribution: {vendor_counts}")
 
                 # Log each selected product
                 for i, p in enumerate(pre_diversity_debug):
-                    logging.debug(
+                    logging.warning(
                         f"  [{i+1}] Pass {p.get('pass')} | "
                         f"id_produit={p.get('id_produit')} | "
                         f"id_fournisseur={p.get('id_fournisseur')} | "
@@ -1392,13 +1392,13 @@ class RecommendationService:
                     )
 
                 # Log top_p (best per vendor)
-                logging.debug("-" * 40)
-                logging.debug(
+                logging.warning("-" * 40)
+                logging.warning(
                     f"TOP_P (1 per vendor, max 4): {len(raw_top_p_debug)} products"
                 )
                 for i, entry in enumerate(raw_top_p_debug):
                     if isinstance(entry, dict) and "product_data" in entry:
-                        logging.debug(
+                        logging.warning(
                             f"  [top_{i+1}] id_produit={entry['product_data'].get('id_produit')} | "
                             f"id_fournisseur={entry['product_data'].get('id_fournisseur')} | "
                             f"score={entry.get('score', 0):.4f} | "
@@ -1408,20 +1408,20 @@ class RecommendationService:
                         )
 
                 # Log final product list
-                logging.debug("-" * 40)
+                logging.warning("-" * 40)
                 final_count = sum(1 for r in results if r.get("product_data"))
-                logging.debug(
+                logging.warning(
                     f"FINAL RESULT: {final_count} products in liste_produit (after removing top_p, limited to top_k={int(request.top_k)})"
                 )
                 for i, rec in enumerate(results):
                     pd = rec.get("product_data", {})
                     if pd:
-                        logging.debug(
+                        logging.warning(
                             f"  [{i+1}] id_produit={pd.get('id_produit')} | "
                             f"id_fournisseur={pd.get('id_fournisseur')} | "
                             f"final_score={rec.get('final_score', 0):.4f}"
                         )
-                logging.debug("=" * 80)
+                logging.warning("=" * 80)
 
             # Parse results and convert to MatchingResponse format
             liste_produit = []
