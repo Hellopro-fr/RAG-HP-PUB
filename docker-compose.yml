@@ -1165,15 +1165,16 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ==========================================================
+  # CRAWLER & IMAGE COMPARISON STACK
+  # ==========================================================
+  
   crawler-service:
     build:
       context: .
       dockerfile: ./apps-microservices/crawler-service/Dockerfile
     profiles: ["crawling"]
     init: true
-    # The 'ports' mapping has been removed to prevent conflicts.
-    # We now 'expose' the port, making it accessible to other services
-    # on the Docker network (like our reverse-proxy), but NOT to the host.
     expose:
       - "8503"
     volumes:
@@ -1184,15 +1185,14 @@ services:
     environment:
       # Max concurrent crawls for each individual instance.
       - MAX_CONCURRENT_CRAWLS=1
-      # Fallback value if the Redis config key is missing. Set to default replica count.
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     deploy:
-      replicas: 1 # Start with 1, can be scaled up with `docker-compose up --scale crawler-service=N`
+      replicas: 1
       resources:
         limits:
-          cpus: "1.0" # Limit to 1 CPU core
-          memory: 6G # Limit to 6GB of RAM
+          cpus: "1.0"
+          memory: 6G
     networks:
       - services-net
     logging: *logging_defaults
@@ -1201,7 +1201,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/image-comparison-service/Dockerfile
-    profiles: ["crawling"]
+    profiles: ["comparison"]
     expose:
       - "8504"
     env_file:
@@ -1213,12 +1213,29 @@ services:
       replicas: 1
       resources:
         limits:
-          cpus: '1.0'
+          cpus: '2.0'
           memory: 4G
     networks:
       - services-net
     logging: *logging_defaults
 
+  reverse-proxy:
+    image: nginx:alpine
+    # Profile: Included in both stacks to ensure availability
+    profiles: ["crawling", "comparison"]
+    ports:
+      - "8050:8050"
+    volumes:
+      - ./apps-microservices/api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - crawler-service
+      - image-comparison-service
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ==========================================================
+  
   api-chatbot-service:
     profiles: ["app"]
     build:
@@ -1241,23 +1258,6 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_SECRET=${REDIS_SECRET}
-    logging: *logging_defaults
-
-  reverse-proxy:
-    image: nginx:alpine
-    profiles: ["crawling"]
-    ports:
-      # The reverse proxy is the ONLY service that maps a port to the host.
-      # This is the single entry point for all external traffic.
-      - "8050:8050"
-    volumes:
-      # Mount our new nginx configuration file into the container.
-      - ./apps-microservices/api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - crawler-service
-      - image-comparison-service
-    networks:
-      - services-net
     logging: *logging_defaults
 
   crawler-monitor-backend:
