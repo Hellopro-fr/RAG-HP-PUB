@@ -332,7 +332,7 @@ class LanguageDetector:
         
         # Ensuite NLP si activé
         if use_nlp:
-            nlp_result = self.detect_from_text_content(html)
+            nlp_result = self.detect_from_text_content_fasttext(html)
             if nlp_result and nlp_result['confidence'] >= settings.NLP_MIN_CONFIDENCE:
                 return {
                     'detected': True,
