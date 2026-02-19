@@ -302,6 +302,10 @@ class ScoringOptions(BaseModel):
     score_step: float = Field(
         0.2, description="Pas de score pour les tranches de diversité fournisseur"
     )
+    diversity_lambda: float = Field(
+        0.7,
+        description="Lambda MMR: pondération entre pertinence (1.0) et diversité fournisseur (0.0). Valeur par défaut 0.7 = 70% pertinence, 30% diversité",
+    )
 
 
 class MatchingPayload(BaseModel):

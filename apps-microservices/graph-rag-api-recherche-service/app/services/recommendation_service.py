@@ -642,6 +642,11 @@ class RecommendationService:
             if request.scoring.score_step is not None
             else 0.1
         )
+        diversity_lambda = (
+            request.scoring.diversity_lambda
+            if request.scoring.diversity_lambda is not None
+            else 0.7
+        )
 
         # Extract user location data from metadonnee_utilisateurs
         user_meta = request.metadonnee_utilisateurs
@@ -1169,12 +1174,11 @@ class RecommendationService:
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         
-        // --- SUPPLIER DIVERSITY ALGORITHM (Two-Pass Selection) ---
+        // --- SUPPLIER DIVERSITY ALGORITHM (Hybrid MMR + Round-Robin) ---
         // Step 1: Collect all scored products (already sorted by final_score DESC)
         WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_scored
         
         // Step 2: Compute supplier average scores for tie-breaking (top 5 products per vendor)
-        // "Privilégie celui qui a la meilleure note moyenne sur ses 5 meilleurs produits matchés."
         WITH all_scored,
              apoc.map.fromPairs(
                  [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
@@ -1193,60 +1197,46 @@ class RecommendationService:
             final_score: prod.final_score,
             info_soc: prod.info_soc,
             supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)]
-        }] AS enriched, supplier_avg_map
+        }] AS enriched
         
         // Re-sort by final_score DESC, then supplier_avg_score DESC for tie-breaking
         UNWIND enriched AS e
-        WITH e, supplier_avg_map
         ORDER BY e.final_score DESC, e.supplier_avg_score DESC
-        WITH collect(e) AS sorted_candidates, supplier_avg_map
+        WITH collect(e) AS sorted_candidates
         
-        // Step 4: PASS 1 - Strict Diversity (Max $max_per_supplier_primary per vendor)
-        // Uses reduce() to iterate sorted candidates with stateful accumulator
-        // Accumulator: {selected: [...], counts: {vendor_id: count, ...}}
-        WITH sorted_candidates, supplier_avg_map,
+        // Step 4: MMR-INSPIRED SELECTION
+        // mmr_score = λ × final_score - (1-λ) × (vendor_count / MAX_PER_VENDOR)
+        // Accepts product if vendor_count < MAX_PER_VENDOR and total < K
+        WITH sorted_candidates,
              reduce(acc = {selected: [], counts: {}}, prod IN sorted_candidates |
                  CASE 
                      WHEN size(acc.selected) >= $top_k + 4 THEN acc
-                     WHEN coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) < $max_per_supplier_primary THEN
+                     WHEN coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) < $max_per_supplier_extended THEN
                          {
-                             selected: acc.selected + [prod],
+                             selected: acc.selected + [{
+                                 node: prod.node,
+                                 details: prod.details,
+                                 global_score: prod.global_score,
+                                 zone_score: prod.zone_score,
+                                 etat_score: prod.etat_score,
+                                 typo_score: prod.typo_score,
+                                 final_score: prod.final_score,
+                                 info_soc: prod.info_soc,
+                                 supplier_avg_score: prod.supplier_avg_score,
+                                 mmr_score: $diversity_lambda * prod.final_score - (1.0 - $diversity_lambda) * (toFloat(coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0)) / toFloat($max_per_supplier_extended))
+                             }],
                              counts: apoc.map.merge(acc.counts, apoc.map.fromPairs([[toString(prod.node.id_fournisseur), coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) + 1]]))
                          }
                      ELSE acc
                  END
-             ) AS pass1_result
+             ) AS mmr_result
         
-        // Step 5: PASS 2 - Fill Gaps (Relaxed limit to Max $max_per_supplier_extended per vendor)
-        // Only if Pass 1 didn't reach K = $top_k + 4 products
-        // Iterates remaining (unselected) candidates
-        WITH pass1_result.selected AS pass1_selected, 
-             pass1_result.counts AS pass1_counts,
-             [cand IN sorted_candidates WHERE NOT ANY(sel IN pass1_result.selected WHERE toString(sel.node.id_produit) = toString(cand.node.id_produit))] AS remaining,
-             supplier_avg_map
-        
-        WITH pass1_selected, pass1_counts, remaining, supplier_avg_map,
-             CASE 
-                 WHEN size(pass1_selected) >= $top_k + 4 THEN {selected: [], counts: pass1_counts}
-                 ELSE reduce(acc = {selected: [], counts: pass1_counts, total: size(pass1_selected)}, prod IN remaining |
-                     CASE
-                         WHEN acc.total >= $top_k + 4 THEN acc
-                         WHEN coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) < $max_per_supplier_extended THEN
-                             {
-                                 selected: acc.selected + [prod],
-                                 counts: apoc.map.merge(acc.counts, apoc.map.fromPairs([[toString(prod.node.id_fournisseur), coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) + 1]])),
-                                 total: acc.total + 1
-                             }
-                         ELSE acc
-                     END
-                 )
-             END AS pass2_result
-        
-        // Combine Pass 1 + Pass 2 results
-        WITH pass1_selected + pass2_result.selected AS all_products,
-             supplier_avg_map,
-             [p1 IN pass1_selected | {id_produit: toString(p1.node.id_produit), id_fournisseur: toString(p1.node.id_fournisseur), final_score: p1.final_score, supplier_avg_score: p1.supplier_avg_score, pass: 1}] +
-             [p2 IN pass2_result.selected | {id_produit: toString(p2.node.id_produit), id_fournisseur: toString(p2.node.id_fournisseur), final_score: p2.final_score, supplier_avg_score: p2.supplier_avg_score, pass: 2}] AS pre_diversity_debug
+        // Step 5: Re-sort selected products by mmr_score DESC (diversity-adjusted ranking)
+        WITH mmr_result.selected AS mmr_selected
+        UNWIND mmr_selected AS ms
+        ORDER BY ms.mmr_score DESC
+        WITH collect(ms) AS all_products,
+             collect({id_produit: toString(ms.node.id_produit), id_fournisseur: toString(ms.node.id_fournisseur), final_score: ms.final_score, mmr_score: ms.mmr_score, supplier_avg_score: ms.supplier_avg_score}) AS pre_diversity_debug
         
         // --- STEP 6: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products, pre_diversity_debug,
@@ -1340,6 +1330,7 @@ class RecommendationService:
             "max_per_supplier_primary": max_per_supplier_primary,
             "max_per_supplier_extended": max_per_supplier_extended,
             "score_step": score_step,
+            "diversity_lambda": diversity_lambda,
         }
 
         try:
@@ -1359,22 +1350,12 @@ class RecommendationService:
                     f"Query time: {query_time:.4f}s | Total results: {len(results)} | absolute_threshold: {absolute_threshold}"
                 )
                 logging.warning(
-                    f"Parameters: top_k={int(request.top_k)}, K(target)={int(request.top_k) + 4}, max_per_supplier_primary={max_per_supplier_primary}, max_per_supplier_extended={max_per_supplier_extended}"
+                    f"Parameters: top_k={int(request.top_k)}, K(target)={int(request.top_k) + 4}, max_per_supplier_extended={max_per_supplier_extended}, diversity_lambda={diversity_lambda}"
                 )
 
-                # Log pre-diversity debug (products selected by the algorithm)
+                # Log pre-diversity debug (products selected by the MMR algorithm)
                 logging.warning("-" * 40)
-                logging.warning(
-                    "PRE-DIVERSITY SELECTION (sorted by final_score DESC, supplier_avg DESC):"
-                )
-                pass1_products = [p for p in pre_diversity_debug if p.get("pass") == 1]
-                pass2_products = [p for p in pre_diversity_debug if p.get("pass") == 2]
-                logging.warning(
-                    f"  Pass 1 (max {max_per_supplier_primary}/vendor): {len(pass1_products)} products selected"
-                )
-                logging.warning(
-                    f"  Pass 2 (max {max_per_supplier_extended}/vendor): {len(pass2_products)} products selected"
-                )
+                logging.warning("MMR SELECTION (re-sorted by mmr_score DESC):")
                 logging.warning(
                     f"  Total selected: {len(pre_diversity_debug)} / K={int(request.top_k) + 4}"
                 )
@@ -1389,10 +1370,11 @@ class RecommendationService:
                 # Log each selected product
                 for i, p in enumerate(pre_diversity_debug):
                     logging.warning(
-                        f"  [{i+1}] Pass {p.get('pass')} | "
+                        f"  [{i+1}] "
                         f"id_produit={p.get('id_produit')} | "
                         f"id_fournisseur={p.get('id_fournisseur')} | "
                         f"final_score={p.get('final_score', 0):.4f} | "
+                        f"mmr_score={p.get('mmr_score', 0):.4f} | "
                         f"supplier_avg={p.get('supplier_avg_score', 0):.4f}"
                     )
 
