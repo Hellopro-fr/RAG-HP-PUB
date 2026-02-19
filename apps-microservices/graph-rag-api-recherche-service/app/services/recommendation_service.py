@@ -18,6 +18,10 @@ from app.infrastructure.clients import clients
 
 # from app.services.unit_normalizer import unit_normalizer
 
+logging.basicConfig(
+    level=logging.warning, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
 
 class RecommendationService:
     """
@@ -638,11 +642,16 @@ class RecommendationService:
             if request.scoring.score_step is not None
             else 0.1
         )
+        diversity_lambda = (
+            request.scoring.diversity_lambda
+            if request.scoring.diversity_lambda is not None
+            else 0.7
+        )
 
         # Extract user location data from metadonnee_utilisateurs
         user_meta = request.metadonnee_utilisateurs
         user_cp = user_meta.cp if user_meta else None
-        user_dept = user_cp[:2] if user_cp and len(user_cp) >= 2 else None
+        user_dept = user_cp[:2] if user_cp is not None and len(user_cp) >= 2 else None
         user_id_pays = user_meta.id_pays if user_meta else None
         user_typologie = user_meta.typologie if user_meta else None
 
@@ -650,7 +659,7 @@ class RecommendationService:
         if target_product_id:
             query_step_1 = """
              MATCH (p:Produit)
-             WHERE toString(p.id) = $target_product_id
+             WHERE toString(p.id) = $target_product_id AND p.est_actif = true
              WITH p, $filters AS active_filters
              """
         else:
@@ -660,7 +669,7 @@ class RecommendationService:
              WHERE toString(pc.id_source_caracteristique) = f.cid
              MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
              
-             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie) AND p.est_actif = true
              
              WITH DISTINCT p, $filters AS active_filters
              """
@@ -1161,27 +1170,23 @@ class RecommendationService:
         // global_score * zone_score * etat_score * typo_score AS final_score
         WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
             global_score * zone_score * etat_score * typo_score AS final_score
-        WHERE final_score > 0 OR $target_product_id IS NOT NULL
+        WHERE (final_score >= $absolute_threshold OR $target_product_id IS NOT NULL) AND (final_score > 0 OR $target_product_id IS NOT NULL)
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         
-        // --- SUPPLIER DIVERSITY ALGORITHM ---
-        // Step 1: Collect all scored products
+        // --- SUPPLIER DIVERSITY ALGORITHM (Hybrid MMR + Round-Robin) ---
+        // Step 1: Collect all scored products (already sorted by final_score DESC)
         WITH collect({node: p, details: details, global_score: global_score, zone_score: zone_score, etat_score: etat_score, typo_score: typo_score, final_score: final_score, info_soc: info_soc}) AS all_scored
         
-        // Step 2: Compute supplier average scores and best score
+        // Step 2: Compute supplier average scores for tie-breaking (top 5 products per vendor)
         WITH all_scored,
              apoc.map.fromPairs(
                  [sid IN apoc.coll.toSet([si IN all_scored | toString(si.node.id_fournisseur)]) |
-                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid] | acc + item.final_score)
-                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid]))]]
-             ) AS supplier_avg_map,
-             CASE WHEN size(all_scored) > 0 THEN all_scored[0].final_score ELSE 0.0 END AS best_score
+                  [sid, reduce(acc = 0.0, item IN [fi IN all_scored WHERE toString(fi.node.id_fournisseur) = sid][0..5] | acc + item.final_score)
+                        / toFloat(size([sz IN all_scored WHERE toString(sz.node.id_fournisseur) = sid][0..5]))]]
+             ) AS supplier_avg_map
         
-        // Step 3: Enrich with supplier_range_rank (rank within same supplier + same score range)
-        //         Score ranges: [1.0-0.8], [0.8-0.6], [0.6-0.4], [0.4-0.2], [0.2-0.0]
-        //         Max 2 products per supplier per range
-        //         Tie-break between same-score products by supplier_avg_score DESC
+        // Step 3: Enrich products with supplier_avg_score and sort by score DESC, supplier_avg DESC
         WITH [prod IN all_scored | {
             node: prod.node,
             details: prod.details,
@@ -1191,28 +1196,49 @@ class RecommendationService:
             typo_score: prod.typo_score,
             final_score: prod.final_score,
             info_soc: prod.info_soc,
-            supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)],
-            score_range: toInteger(floor(prod.final_score / $score_step)),
-            supplier_range_rank: size([other IN all_scored WHERE 
-                toString(other.node.id_fournisseur) = toString(prod.node.id_fournisseur) AND 
-                toInteger(floor(other.final_score / $score_step)) = toInteger(floor(prod.final_score / $score_step)) AND
-                (other.final_score > prod.final_score OR 
-                 (other.final_score = prod.final_score AND toString(other.node.id_produit) < toString(prod.node.id_produit)))
-            ]) + 1
+            supplier_avg_score: supplier_avg_map[toString(prod.node.id_fournisseur)]
         }] AS enriched
         
-        // Step 4: Keep max $max_per_supplier_primary products per supplier per score range
-        //         Sort by final_score DESC, supplier_avg_score DESC (tie-breaker)
-        //         Limit to $top_k + 4
-        WITH [prod IN enriched WHERE 
-            prod.supplier_range_rank <= $max_per_supplier_primary
-        ] AS diversity_filtered, enriched
+        // Re-sort by final_score DESC, then supplier_avg_score DESC for tie-breaking
+        UNWIND enriched AS e
+        WITH e ORDER BY e.final_score DESC, e.supplier_avg_score DESC
+        WITH collect(e) AS sorted_candidates
         
-        // Step 5: Build pre-diversity debug + take top_k + 4
-        WITH diversity_filtered[0..$top_k + 4] AS all_products,
-             [e IN enriched | {id_produit: toString(e.node.id_produit), id_fournisseur: toString(e.node.id_fournisseur), final_score: e.final_score, score_range: e.score_range, supplier_range_rank: e.supplier_range_rank, supplier_avg_score: e.supplier_avg_score}] AS pre_diversity_debug
+        // Step 4: MMR-INSPIRED SELECTION
+        // mmr_score = λ × final_score - (1-λ) × (vendor_count / MAX_PER_VENDOR)
+        // Accepts product if vendor_count < MAX_PER_VENDOR and total < K
+        WITH sorted_candidates,
+             reduce(acc = {selected: [], counts: {}}, prod IN sorted_candidates |
+                 CASE 
+                     WHEN size(acc.selected) >= $top_k + 4 THEN acc
+                     WHEN coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) < $max_per_supplier_extended THEN
+                         {
+                             selected: acc.selected + [{
+                                 node: prod.node,
+                                 details: prod.details,
+                                 global_score: prod.global_score,
+                                 zone_score: prod.zone_score,
+                                 etat_score: prod.etat_score,
+                                 typo_score: prod.typo_score,
+                                 final_score: prod.final_score,
+                                 info_soc: prod.info_soc,
+                                 supplier_avg_score: prod.supplier_avg_score,
+                                 mmr_score: $diversity_lambda * prod.final_score - (1.0 - $diversity_lambda) * (toFloat(coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0)) / toFloat($max_per_supplier_extended))
+                             }],
+                             counts: apoc.map.merge(acc.counts, apoc.map.fromPairs([[toString(prod.node.id_fournisseur), coalesce(acc.counts[toString(prod.node.id_fournisseur)], 0) + 1]]))
+                         }
+                     ELSE acc
+                 END
+             ) AS mmr_result
         
-        // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
+        // Step 5: Re-sort selected products by mmr_score DESC (diversity-adjusted ranking)
+        WITH mmr_result.selected AS mmr_selected
+        UNWIND mmr_selected AS ms
+        WITH ms ORDER BY ms.mmr_score DESC
+        WITH collect(ms) AS all_products,
+             collect({id_produit: toString(ms.node.id_produit), id_fournisseur: toString(ms.node.id_fournisseur), final_score: ms.final_score, mmr_score: ms.mmr_score, supplier_avg_score: ms.supplier_avg_score}) AS pre_diversity_debug
+        
+        // --- STEP 6: Compute top_p (one top product per fournisseur, limit 4) ---
         WITH all_products, pre_diversity_debug,
              [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
                  head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
@@ -1249,10 +1275,15 @@ class RecommendationService:
 
         cypher_query = query_step_1 + query_step_2
 
-        if len(request.champs_sortie) > 0 and "id_produit" not in request.champs_sortie:
+        if (
+            request.champs_sortie is not None
+            and len(request.champs_sortie) > 0
+            and "id_produit" not in request.champs_sortie
+        ):
             request.champs_sortie.append("id_produit")
         if (
-            len(request.champs_sortie) > 0
+            request.champs_sortie is not None
+            and len(request.champs_sortie) > 0
             and "id_fournisseur" not in request.champs_sortie
         ):
             request.champs_sortie.append("id_fournisseur")
@@ -1299,12 +1330,85 @@ class RecommendationService:
             "max_per_supplier_primary": max_per_supplier_primary,
             "max_per_supplier_extended": max_per_supplier_extended,
             "score_step": score_step,
+            "diversity_lambda": diversity_lambda,
         }
 
         try:
             query_start = time.perf_counter()
             results = await clients.execute_cypher(cypher_query, params)
             query_time = time.perf_counter() - query_start
+
+            # --- DEBUG: Diversity Algorithm Output ---
+            if results:
+                pre_diversity_debug = results[0].get("pre_diversity_debug", [])
+                raw_top_p_debug = results[0].get("top_p", [])
+
+                logging.warning("=" * 80)
+                logging.warning("DIVERSITY ALGORITHM DEBUG")
+                logging.warning("=" * 80)
+                logging.warning(
+                    f"Query time: {query_time:.4f}s | Total results: {len(results)} | absolute_threshold: {absolute_threshold}"
+                )
+                logging.warning(
+                    f"Parameters: top_k={int(request.top_k)}, K(target)={int(request.top_k) + 4}, max_per_supplier_extended={max_per_supplier_extended}, diversity_lambda={diversity_lambda}"
+                )
+
+                # Log pre-diversity debug (products selected by the MMR algorithm)
+                logging.warning("-" * 40)
+                logging.warning("MMR SELECTION (re-sorted by mmr_score DESC):")
+                logging.warning(
+                    f"  Total selected: {len(pre_diversity_debug)} / K={int(request.top_k) + 4}"
+                )
+
+                # Log vendor distribution
+                vendor_counts = {}
+                for p in pre_diversity_debug:
+                    vid = p.get("id_fournisseur", "?")
+                    vendor_counts[vid] = vendor_counts.get(vid, 0) + 1
+                logging.warning(f"  Vendor distribution: {vendor_counts}")
+
+                # Log each selected product
+                for i, p in enumerate(pre_diversity_debug):
+                    logging.warning(
+                        f"  [{i+1}] "
+                        f"id_produit={p.get('id_produit')} | "
+                        f"id_fournisseur={p.get('id_fournisseur')} | "
+                        f"final_score={p.get('final_score', 0):.4f} | "
+                        f"mmr_score={p.get('mmr_score', 0):.4f} | "
+                        f"supplier_avg={p.get('supplier_avg_score', 0):.4f}"
+                    )
+
+                # Log top_p (best per vendor)
+                logging.warning("-" * 40)
+                logging.warning(
+                    f"TOP_P (1 per vendor, max 4): {len(raw_top_p_debug)} products"
+                )
+                for i, entry in enumerate(raw_top_p_debug):
+                    if isinstance(entry, dict) and "product_data" in entry:
+                        logging.warning(
+                            f"  [top_{i+1}] id_produit={entry['product_data'].get('id_produit')} | "
+                            f"id_fournisseur={entry['product_data'].get('id_fournisseur')} | "
+                            f"score={entry.get('score', 0):.4f} | "
+                            f"zone={entry.get('zone_score', 0):.4f} | "
+                            f"etat={entry.get('etat_score', 0):.4f} | "
+                            f"typo={entry.get('typo_score', 0):.4f}"
+                        )
+
+                # Log final product list
+                logging.warning("-" * 40)
+                final_count = sum(1 for r in results if r.get("product_data"))
+                logging.warning(
+                    f"FINAL RESULT: {final_count} products in liste_produit (after removing top_p, limited to top_k={int(request.top_k)})"
+                )
+                for i, rec in enumerate(results):
+                    pd = rec.get("product_data", {})
+                    if pd:
+                        logging.warning(
+                            f"  [{i+1}] id_produit={pd.get('id_produit')} | "
+                            f"id_fournisseur={pd.get('id_fournisseur')} | "
+                            f"final_score={rec.get('final_score', 0):.4f}"
+                        )
+                logging.warning("=" * 80)
 
             # Parse results and convert to MatchingResponse format
             liste_produit = []

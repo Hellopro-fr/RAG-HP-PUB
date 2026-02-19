@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useState, useCallback, useMemo } from "react";
 import type { ProductSpec, Supplier } from "@/types";
 import { useFlowStore } from "@/lib/stores/flow-store";
+import { getProductImageUrl } from "@/lib/utils/image-url";
 
 interface ProductComparisonModalProps {
   products: Supplier[];
@@ -64,7 +65,7 @@ const ProductComparisonModal = ({
       <div className="flex flex-col items-center gap-3 rounded-xl bg-card border border-border p-4">
         <div className="h-24 w-24 overflow-hidden rounded-lg bg-muted">
           <img
-            src={product.image}
+            src={getProductImageUrl(product.image)}
             alt={product.productName}
             loading="lazy"
             className="h-full w-full object-contain"
@@ -263,7 +264,7 @@ const ProductComparisonModal = ({
                       {/* Product image */}
                       <div className="h-20 w-20 overflow-hidden rounded-lg bg-muted">
                         <img
-                          src={product.image}
+                          src={getProductImageUrl(product.image)}
                           alt={product.productName}
                           loading="lazy"
                           className="h-full w-full object-contain"
