@@ -5,6 +5,8 @@ import httpx
 import imagehash
 import asyncio
 import base64
+import gzip
+import zlib
 from PIL import Image, UnidentifiedImageError, ImageOps
 from io import BytesIO
 from typing import List, Dict, Tuple, Any, Optional
@@ -62,6 +64,29 @@ class ImageProcessor:
             return pil_image
 
     @staticmethod
+    def _try_decompress(data: bytes) -> bytes:
+        """
+        Attempts to decompress data if it looks like GZIP or ZLIB.
+        This mimics the legacy PHP gzdecode/gzinflate logic.
+        """
+        # Check for GZIP magic number (1f 8b)
+        if data.startswith(b'\x1f\x8b'):
+            try:
+                return gzip.decompress(data)
+            except Exception:
+                pass
+        
+        # Check for ZLIB magic headers (common ones)
+        # 78 01 (No/Low compression), 78 9C (Default), 78 DA (Best)
+        if data.startswith(b'\x78'):
+            try:
+                return zlib.decompress(data)
+            except Exception:
+                pass
+                
+        return data
+
+    @staticmethod
     async def load_images(inputs: List[ImageInput]) -> Tuple[Dict[str, Image.Image], List[str]]:
         """
         Loads images from URLs (download) or Base64 content (decode).
@@ -85,12 +110,17 @@ class ImageProcessor:
                         content_str = content_str.split(",", 1)[1]
                     
                     image_data = base64.b64decode(content_str)
+                    
+                    # Attempt decompression (GZIP/ZLIB)
+                    image_data = ImageProcessor._try_decompress(image_data)
+                    
                     pil_image = Image.open(BytesIO(image_data)).convert('RGB')
                     
                     # Apply border trimming immediately upon load
                     images[inp.id] = ImageProcessor.trim_borders(pil_image)
                 except Exception as e:
-                    logger.error(f"Failed to decode base64 for image {inp.id}: {e}")
+                    header_hex = image_data[:10].hex() if 'image_data' in locals() else "N/A"
+                    logger.error(f"Failed to decode base64 for image {inp.id}: {e} (Header: {header_hex})")
                     failed.append(inp.id)
             elif inp.url:
                 # Handle URL - Queue for batch download
@@ -138,12 +168,15 @@ class ImageProcessor:
                     
                     try:
                         image_bytes = BytesIO(response.content)
-                        pil_image = Image.open(image_bytes).convert('RGB')
+                        # Attempt decompression for downloads too (just in case content-encoding header was missed)
+                        # Though httpx usually handles this, double safety doesn't hurt if magic bytes match.
+                        image_data = ImageProcessor._try_decompress(response.content)
                         
-                        # Apply border trimming immediately upon load
+                        pil_image = Image.open(BytesIO(image_data)).convert('RGB')
                         images[img_id] = ImageProcessor.trim_borders(pil_image)
                     except Exception as e:
-                        logger.error(f"Processing error for {img_id}: {e}")
+                        header_hex = response.content[:10].hex()
+                        logger.error(f"Processing error for {img_id}: {e} (Header: {header_hex})")
                         failed.append(img_id)
 
         return images, failed
