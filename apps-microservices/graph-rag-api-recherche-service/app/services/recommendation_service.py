@@ -1201,7 +1201,7 @@ class RecommendationService:
         
         // Re-sort by final_score DESC, then supplier_avg_score DESC for tie-breaking
         UNWIND enriched AS e
-        ORDER BY e.final_score DESC, e.supplier_avg_score DESC
+        WITH e ORDER BY e.final_score DESC, e.supplier_avg_score DESC
         WITH collect(e) AS sorted_candidates
         
         // Step 4: MMR-INSPIRED SELECTION
@@ -1234,7 +1234,7 @@ class RecommendationService:
         // Step 5: Re-sort selected products by mmr_score DESC (diversity-adjusted ranking)
         WITH mmr_result.selected AS mmr_selected
         UNWIND mmr_selected AS ms
-        ORDER BY ms.mmr_score DESC
+        WITH ms ORDER BY ms.mmr_score DESC
         WITH collect(ms) AS all_products,
              collect({id_produit: toString(ms.node.id_produit), id_fournisseur: toString(ms.node.id_fournisseur), final_score: ms.final_score, mmr_score: ms.mmr_score, supplier_avg_score: ms.supplier_avg_score}) AS pre_diversity_debug
         
@@ -1247,8 +1247,8 @@ class RecommendationService:
         // Sort top_per_fournisseur by final_score descending and limit to 4
         WITH all_products, pre_diversity_debug, top_per_fournisseur
         UNWIND top_per_fournisseur AS p_top
-        ORDER BY p_top.final_score DESC 
         WITH all_products, pre_diversity_debug, p_top 
+        ORDER BY p_top.final_score DESC 
         LIMIT 4
         
         // First alias the node, then project the node data
