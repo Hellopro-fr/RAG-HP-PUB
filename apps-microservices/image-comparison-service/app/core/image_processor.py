@@ -180,24 +180,42 @@ class ImageProcessor:
     @staticmethod
     def calculate_similarity(feat1: Dict, feat2: Dict) -> Tuple[float, Dict]:
         """
-        Calculates similarity score (0-100) between two feature sets.
+        Calculates similarity score (0-100).
         """
         # 1. pHash Score (Structure)
+        # Using 64-bit hash. Max distance is 64.
+        # Adjusted formula to be more permissive for thumbnails.
         hamming_dist = feat1['phash'] - feat2['phash']
-        phash_score = max(0, (1 - hamming_dist / 30.0)) * 100
+        
+        # New Formula: Linear mapping from distance 0->64 to Score 100->0
+        # A distance of 5 (common for thumbnails) now yields ~92%
+        phash_score = max(0, (1 - hamming_dist / 64.0)) * 100
         
         # 2. Histogram Score (Content/Color)
         hist_score_raw = cv2.compareHist(feat1['hist'], feat2['hist'], cv2.HISTCMP_CORREL)
         hist_score = max(0, hist_score_raw) * 100
 
+        # --- SMART IDENTITY LOGIC ---
+        # If the structure is extremely similar (Hamming distance <= 3),
+        # we treat this as a "Duplicate" or "Miniature" even if compression artifacts 
+        # lower the histogram score slightly.
+        # Distance 0 = Exact
+        # Distance 1-3 = Very likely resized/compressed version
+        if hamming_dist <= 3 and hist_score >= 85:
+            # Force 100% for miniatures/duplicates to satisfy strict thresholds
+            return 100.0, {"phash": phash_score, "hist": hist_score, "forced_match": True}
+
         # Weighted Combination
-        # Increased weight for pHash as it's generally more robust for product matching
-        # provided borders are handled (which we now do).
-        final_score = (phash_score * 0.6) + (hist_score * 0.4)
+        if phash_score >= 90:
+            # 80% Structure, 20% Color
+            final_score = (phash_score * 0.8) + (hist_score * 0.2)
+        else:
+            # Standard: 60% Structure, 40% Color
+            final_score = (phash_score * 0.6) + (hist_score * 0.4)
         
-        # Boost score if both are high
-        if phash_score > 90 and hist_score > 90:
-            final_score = (phash_score + hist_score) / 2
+        # Boost: If both are high match, boost towards 100
+        if phash_score > 92 and hist_score > 90:
+            final_score = (final_score + 100) / 2
             
         return final_score, {"phash": phash_score, "hist": hist_score}
 
@@ -230,9 +248,9 @@ class ImageProcessor:
                 
                 results.append({
                     "image_a_id": id_a,
-                    "image_a_url": url_map.get(id_a), # Inject URL
+                    "image_a_url": url_map.get(id_a),
                     "image_b_id": id_b,
-                    "image_b_url": url_map.get(id_b), # Inject URL
+                    "image_b_url": url_map.get(id_b),
                     "score": round(score, 2),
                     "method_details": details
                 })
