@@ -74,8 +74,13 @@ export function useDbTracking() {
       // Récupérer le flowType depuis le store pour le tracking session
       const storeFlowType = useFlowStore.getState().flowType;
       
-      // type_flow (0: flow demande sur categ | 1: flow produit)
-      const typeFlow = storeFlowType === 'principal' ? 1 : 0;
+      // type_flow (0: default | 1: flow demande categ | 2: flow produit)
+      let typeFlow = 0;
+      if (storeFlowType === 'principal') {
+        typeFlow = 2;
+      } else if (storeFlowType) {
+        typeFlow = 1;
+      }
       
       // Déterminer type_dmd_categ (0: par défaut, 1: produit insuffisant, 2: intentionnelle)
       let typeDmdCateg = 0;
