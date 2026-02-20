@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowLeft, Send, Shield, Clock, CheckCircle } from "lucide-react";
-import { useState, useMemo, useEffect } from "react";
+import { useState } from "react";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import { toast } from "@/hooks/use-toast";
 import { trackFormValidationErrors } from "@/lib/analytics";
 import type { ContactFormData } from "@/types";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
-import { useBuyerCheck } from "@/hooks/api";
+import { useBuyerAutoFill } from "@/hooks/useBuyerAutoFill";
 
 interface ContactFormSimpleProps {
   onBack: () => void;
@@ -41,68 +41,17 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
 
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
 
-  // Check if email is valid format
-  const isEmailValid = useMemo(() => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(formData.email);
-  }, [formData.email]);
-
   const leadSubmission = useLeadSubmission();
   const { profileData, userAnswers, selectedSupplierIds, setContactData, categoryId } = useFlowStore();
   const { trackDbEvent } = useDbTracking();
 
-   // Dynamic buyer check via API
-   const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
-    {
-      email     : formData.email,
-      rubriqueId: categoryId?.toString(),
-    },
-    isEmailValid
-  );
-
-  const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
-  const isKnownBuyer    = buyerCheckResult?.isKnown || false;
-
-  useEffect(() => {
-    let updatedData: ContactFormData | null = null;
-
-    // 1. On vérifie si l'acheteur est reconnu et si on a les données
-    if (isKnownBuyer && buyerCheckResult?.infoBuyer) {
-      const info = buyerCheckResult.infoBuyer as any;
-
-      // 2. On prépare l'objet complet avec les clés de votre interface ContactFormData
-      updatedData = {
-        ...formData,                   // On garde le message et les autres champs
-        email    : formData.email,      // L'email déjà saisi
-        isKnown  : true,
-        firstName: info.prenom || "",
-        lastName : info.nom || "",
-        phone    : info.tel || "",
-        civility: info.cv || "",
-        company  : info.societe || formData.company || "",
-        id_acheteur: info.id || undefined,
-      };
-            
-    }else{
-      updatedData = {
-        ...formData,
-        email      : formData.email,
-        isKnown    : false,
-        firstName  : "",
-        lastName   : "",
-        phone      : "",
-        countryCode: formData.countryCode || "+33",
-        id_pays_tel: formData.id_pays_tel || 1,
-        id_acheteur: undefined,
-      };
-    }
-
-    if (updatedData) {
-      setFormData(updatedData);
-    }
-    
-    // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
-  }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
+  // Buyer check & auto-fill (remplace ~50 lignes de code dupliqué)
+  const { isEmailValid, isCheckingBuyer, isExistingBuyer, isKnownBuyer, buyerInfo } = useBuyerAutoFill({
+    email: formData.email,
+    categoryId,
+    formData,
+    setFormData,
+  });
 
 
   const handleChange = (
@@ -173,7 +122,7 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
 
     // Si utilisateur connu (reconnu localement), on skip la validation; sinon on valide le formulaire
     // Note: isExistingBuyer comes from our API check now
-    if (!(isKnownBuyer && buyerCheckResult?.infoBuyer)) {
+    if (!(isKnownBuyer && buyerInfo)) {
       const isValid = validateForm();
       if (!isValid) return;
     }

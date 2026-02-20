@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowLeft, ArrowRight, Paperclip, Send, UserCheck, X, Mic, MicOff, Shield, Clock, CheckCircle } from "lucide-react";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,7 @@ import { toast } from "@/hooks/use-toast";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 import { ContactFormData } from "@/types";
-import { useBuyerCheck } from "@/hooks/api";
+import { useBuyerAutoFill } from "@/hooks/useBuyerAutoFill";
 
 
 interface CustomNeedFormProps {
@@ -59,65 +59,15 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
-  // Check if email is valid format
-  const isEmailValid = useMemo(() => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(formData.email);
-  }, [formData.email]);
-
-  const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
-    {
-      email: formData.email,
-      rubriqueId: categoryId?.toString(),
-    },
-    isEmailValid
-  );
-
-  const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
-  const isKnownBuyer = buyerCheckResult?.isKnown || false;
-
-  useEffect(() => {
-    let updatedData: ContactFormData | null = null;
-
-    // 1. On vérifie si l'acheteur est reconnu et si on a les données
-    if (isKnownBuyer && buyerCheckResult?.infoBuyer) {
-      const info = buyerCheckResult.infoBuyer as any;
-
-      // 2. On prépare l'objet complet avec les clés de votre interface ContactFormData
-      updatedData = {
-        ...formData,                   // On garde le message et les autres champs
-        email: formData.email,      // L'email déjà saisi
-        isKnown: true,
-        firstName: info.prenom || "",
-        lastName: info.nom || "",
-        phone: info.tel || "",
-        civility: info.cv || "",
-        id_acheteur: info.id || undefined,
-      };
-
-    } else {
-      updatedData = {
-        ...formData,
-        email: formData.email,
-        isKnown: false,
-        firstName: "",
-        lastName: "",
-        phone: "",
-        countryCode: formData.countryCode || "+33",
-        id_pays_tel: formData.id_pays_tel || 1,
-        id_acheteur: undefined,
-      };
-    }
-
-    if (updatedData) {
-      setFormData(updatedData);
-    }
-
-    // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
-  }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);
+  // Buyer check & auto-fill (remplace ~50 lignes de code dupliqué)
+  const { isEmailValid, isCheckingBuyer, isExistingBuyer, isKnownBuyer, buyerInfo, duplicateMessage } = useBuyerAutoFill({
+    email: formData.email,
+    categoryId,
+    formData,
+    setFormData,
+  });
 
   // Show additional fields only if email is valid and not an existing buyer
-  // AND we are not currently checking (to avoid flickering)
   const showAdditionalFields = isEmailValid && !isKnownBuyer && !isCheckingBuyer;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -185,7 +135,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!(isKnownBuyer && buyerCheckResult?.infoBuyer)) {
+    if (!(isKnownBuyer && buyerInfo)) {
       const isValid = validateForm();
       if (!isValid) return;
     }
@@ -496,10 +446,10 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                     <span>Nous vous avons reconnu ! Vos informations sont pré-enregistrées.</span>
                   </div>
                 )}
-                {isExistingBuyer && buyerCheckResult?.message && (
+                {isExistingBuyer && duplicateMessage && (
                   <div className="mt-2 flex items-center gap-2 text-sm text-orange-600">
                     <Shield className="h-4 w-4" />
-                    <span>{buyerCheckResult.message}</span>
+                    <span>{duplicateMessage}</span>
                   </div>
                 )}
               </div>

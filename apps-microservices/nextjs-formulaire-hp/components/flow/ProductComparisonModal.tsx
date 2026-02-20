@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { X, Check, Plus, Minus, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useCallback, useMemo } from "react";
@@ -63,12 +64,14 @@ const ProductComparisonModal = ({
     <div className="flex flex-col gap-4">
       {/* Product header */}
       <div className="flex flex-col items-center gap-3 rounded-xl bg-card border border-border p-4">
-        <div className="h-24 w-24 overflow-hidden rounded-lg bg-muted">
-          <img
+        <div className="relative h-24 w-24 overflow-hidden rounded-lg bg-muted">
+          <Image
             src={getProductImageUrl(product.image)}
             alt={product.productName}
-            loading="lazy"
-            className="h-full w-full object-contain"
+            fill
+            sizes="96px"
+            unoptimized
+            className="object-contain"
           />
         </div>
         <div className="text-center">
@@ -262,12 +265,14 @@ const ProductComparisonModal = ({
                   >
                     <div className="flex flex-col items-center gap-3">
                       {/* Product image */}
-                      <div className="h-20 w-20 overflow-hidden rounded-lg bg-muted">
-                        <img
+                      <div className="relative h-20 w-20 overflow-hidden rounded-lg bg-muted">
+                        <Image
                           src={getProductImageUrl(product.image)}
                           alt={product.productName}
-                          loading="lazy"
-                          className="h-full w-full object-contain"
+                          fill
+                          sizes="80px"
+                          unoptimized
+                          className="object-contain"
                         />
                       </div>
                       {/* Product name */}

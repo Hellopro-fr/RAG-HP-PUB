@@ -1,11 +1,10 @@
 "use client";
 
 import { ArrowLeft, Send, Shield, Clock, CheckCircle, Paperclip, X } from "lucide-react";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
-import { useBuyerCheck } from "@/hooks/api";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import type { Supplier, ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
@@ -13,6 +12,7 @@ import { validatePhoneNumber } from "@/lib/utils/phone-validation";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
+import { useBuyerAutoFill } from "@/hooks/useBuyerAutoFill";
 
 // Analytics imports
 import { trackContactFormView, trackFormValidationErrors } from "@/lib/analytics";
@@ -68,73 +68,19 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
     trackContactFormView(selectedSuppliers.length);
   }, [selectedSuppliers.length]);
 
-  // Check if email is valid format
-  const isEmailValid = useMemo(() => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(formData.email);
-  }, [formData.email]);
-
-  // Dynamic buyer check via API
-  const { data: buyerCheckResult, isLoading: isCheckingBuyer } = useBuyerCheck(
-    {
-      email     : formData.email,
-      rubriqueId: categoryId?.toString(),
-    },
-    isEmailValid
-  );
-
-  const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
-  const isKnownBuyer = buyerCheckResult?.isKnown || false;
-
-  useEffect(() => {
-    let updatedData: ContactFormData | null = null;
-
-    // 1. On vérifie si l'acheteur est reconnu et si on a les données
-    if (isKnownBuyer && buyerCheckResult?.infoBuyer) {
-      const info = buyerCheckResult.infoBuyer as any;
-
-      // 2. On prépare l'objet complet avec les clés de votre interface ContactFormData
-      updatedData = {
-        ...formData,                   // On garde le message et les autres champs
-        email    : formData.email,      // L'email déjà saisi
-        isKnown  : true,
-        firstName: info.prenom || "",
-        lastName : info.nom || "",
-        phone    : info.tel || "",
-        civility: info.cv || "",
-        id_acheteur: info.id || undefined,
-      };
-            
-    }else{
-      updatedData = {
-        ...formData,
-        email      : formData.email,
-        isKnown    : false,
-        firstName  : "",
-        lastName   : "",
-        phone      : "",
-        countryCode: formData.countryCode || "+33",
-        id_pays_tel: formData.id_pays_tel || 1,
-        id_acheteur: undefined,
-      };
-    }
-
-    if (updatedData) {
-      setFormData(updatedData);
-    }
-    
-    // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
-  }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
+  // Buyer check & auto-fill (remplace ~50 lignes de code dupliqué)
+  const { isEmailValid, isCheckingBuyer, isExistingBuyer, isKnownBuyer, buyerInfo, duplicateMessage } = useBuyerAutoFill({
+    email: formData.email,
+    categoryId,
+    formData,
+    setFormData,
+  });
 
   // Show additional fields only if email is valid and not a known buyer
-  // AND we are not currently checking (to avoid flickering)
   useEffect(() => {
-    // Si on est en train de vérifier, on ne change rien (ou on cache)
-    // Si la vérification est terminée, on décide d'afficher ou non
     if (!isCheckingBuyer) {
       setShowAdditionalFields(isEmailValid && !isKnownBuyer);
     } else {
-      // Pendant le chargement, on cache les champs additionnels
       setShowAdditionalFields(false);
     }
   }, [isEmailValid, isKnownBuyer, isCheckingBuyer]);
@@ -218,7 +164,7 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!(isKnownBuyer && buyerCheckResult?.infoBuyer)) {
+    if (!(isKnownBuyer && buyerInfo)) {
       const isValid = validateForm();
       if (!isValid) return;
     }
@@ -330,10 +276,10 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
                 <span>Nous vous avons reconnu ! Vos informations sont pré-enregistrées.</span>
               </div>
             )}
-            {isExistingBuyer && buyerCheckResult?.message && (
+            {isExistingBuyer && duplicateMessage && (
               <div className="mt-2 flex items-center gap-2 text-sm text-orange-600">
                 <Shield className="h-4 w-4" />
-                <span>{buyerCheckResult.message}</span>
+                <span>{duplicateMessage}</span>
               </div>
             )}
             {errors.email && <p className="mt-1 text-sm text-destructive">{errors.email}</p>}

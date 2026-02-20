@@ -168,8 +168,8 @@ export function useProcessMatchingLogic() {
       // Condition pour aller en "selection" :
       // - Au moins 3 produits dans top_produit
       // - Score minimum des top_produit >= 70%
-      const MIN_TOP_PRODUCTS = 3;
-      const MIN_SCORE_THRESHOLD = 0.70;
+      const MIN_TOP_PRODUCTS = 1;
+      const MIN_SCORE_THRESHOLD = 0.01;
 
       const topProducts = apiData.top_produit || [];
       const hasEnoughTopProducts = topProducts.length >= MIN_TOP_PRODUCTS;

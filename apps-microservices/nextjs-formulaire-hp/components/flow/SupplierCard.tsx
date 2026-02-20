@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from "react";
+import Image from "next/image";
 import { Check, CheckCircle, AlertTriangle, ShieldCheck, HelpCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getProductImageUrl } from "@/lib/utils/image-url";
@@ -140,19 +141,20 @@ const SupplierCard = ({
           </div>
         )}
         {!imageError && imageUrl ? (
-          <img
+          <Image
             src={imageUrl}
             alt={productName}
-            loading="lazy"
+            fill
+            sizes="96px"
+            unoptimized
             className={cn(
-              "h-full w-full object-contain transition-opacity duration-300",
+              "object-contain transition-opacity duration-300",
               imageLoaded ? "opacity-100" : "opacity-0"
             )}
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
           />
         ) : (
-          // TODO: Implement better fallback for missing images
           <div className="w-full h-full" />
         )}
         {isRecommended && (
@@ -261,19 +263,20 @@ const SupplierCard = ({
           </div>
         )}
         {!imageError && imageUrl ? (
-          <img
+          <Image
             src={imageUrl}
             alt={productName}
-            loading="lazy"
+            fill
+            sizes="(max-width: 640px) 100vw, 200px"
+            unoptimized
             className={cn(
-              "h-full w-full object-contain transition-transform duration-300 group-hover:scale-105 transition-opacity",
+              "object-contain transition-transform duration-300 group-hover:scale-105 transition-opacity",
               imageLoaded ? "opacity-100" : "opacity-0"
             )}
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
           />
         ) : (
-          // TODO: Implement better fallback for missing images
           <div className="w-full h-full" />
         )}
         {/* Match Score Badge */}

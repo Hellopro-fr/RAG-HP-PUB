@@ -16,8 +16,8 @@ const ROUTE_MAPPING: Record<string, string> = {
 // Routes qui nécessitent un token de catégorie valide
 const PROTECTED_ROUTES = Object.keys(ROUTE_MAPPING);
 
-// URL de redirection pour les tokens invalides (page catégorie externe)
-// TODO: Remplacer par l'URL de la page catégorie réelle
+// URL de redirection pour les tokens invalides
+// Configurable via INVALID_TOKEN_REDIRECT_URL dans .env
 const INVALID_TOKEN_REDIRECT = process.env.INVALID_TOKEN_REDIRECT_URL || 'https://www.hellopro.fr/404.html';
 
 // =============================================================================
@@ -45,22 +45,22 @@ function base64UrlDecodeToBytes(str: string): Uint8Array {
 }
 
 /**
- * Vérifie si la date est valide (7 jours max)
- * TODO: Remettre à 24-48h après les tests (hier <= date < demain)
+ * Vérifie si la date est valide (48h max)
+ * Token valide : hier <= date < demain
  */
 function isDateValid(dateStr: string): boolean {
   const tokenDate = new Date(dateStr);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Token valide pendant 7 jours (pour tests)
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  // Token valide pendant 48h (hier jusqu'à demain)
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
 
   const maxDate = new Date(today);
   maxDate.setDate(maxDate.getDate() + 1);
 
-  return tokenDate >= sevenDaysAgo && tokenDate < maxDate;
+  return tokenDate >= yesterday && tokenDate < maxDate;
 }
 
 /**
@@ -145,24 +145,26 @@ async function validateTokenInMiddleware(
 export async function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
-  // TODO: SUPPRIMER AVANT MISE EN PROD - Bypass pour tests avec ?id_categorie=123
+  // Bypass pour tests locaux avec ?id_categorie=123
   const devCategoryId = searchParams.get('id_categorie');
-  if (devCategoryId) {
-    // En mode dev, réécrire vers la route réelle correspondante
-    const routePrefix = '/' + pathname.split('/').filter(Boolean)[0];
-    const targetRoute = ROUTE_MAPPING[routePrefix] || '/';
 
+  if (devCategoryId) {
+    // Pages internes du flow → laisser passer (la navigation interne utilise id_categorie)
+    const isInternalFlowPage = pathname === '/profile' || pathname === '/selection' || pathname === '/something-to-add' || pathname === '/contact-simple' || pathname === '/confirmation';
+
+    if (isInternalFlowPage) {
+      return NextResponse.next();
+    }
+
+    // Entrée initiale (questionnaire ou autre) → rewrite vers /
     const rewriteUrl = request.nextUrl.clone();
-    rewriteUrl.pathname = targetRoute;
-    // Garder id_categorie pour que les pages puissent l'utiliser
+    rewriteUrl.pathname = '/';
     return NextResponse.rewrite(rewriteUrl);
   }
 
-  // TODO: SUPPRIMER AVANT MISE EN PROD - Bypass complet en dev pour navigation interne
-  // Laisser passer les requêtes RSC (React Server Components) et navigation interne
+  // Laisser passer les requêtes RSC (React Server Components) pour la navigation interne
   const isRscRequest = searchParams.has('_rsc');
-  const hasNoToken = pathname.split('/').filter(Boolean).length === 1; // ex: /selection sans token
-  if (isRscRequest || hasNoToken) {
+  if (isRscRequest) {
     return NextResponse.next();
   }
 

@@ -1,11 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { trackProductModalView } from "@/lib/analytics";
 import { getProductImageUrl } from "@/lib/utils/image-url";
+import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import type { ProductSpec, SupplierInfo, MediaItem } from "@/types";
 
 interface ProductDetailProps {
@@ -217,22 +219,19 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                   </div>
                 )}
                 {currentMedia?.url ? (
-                  <img
+                  <Image
                     src={currentMedia.url}
                     alt={product.name}
-                    loading="lazy"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                    unoptimized
                     className={cn(
-                      "w-full h-full object-contain bg-muted transition-opacity duration-300",
+                      "object-contain bg-muted transition-opacity duration-300",
                       imageLoaded ? "opacity-100" : "opacity-0"
                     )}
                     onLoad={() => setImageLoaded(true)}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      // TODO: Implement better fallback for missing images
-                    }}
                   />
                 ) : (
-                  // TODO: Implement better fallback for missing images
                   <div className="w-full h-full bg-muted" />
                 )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
@@ -301,11 +300,13 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                         : "border-transparent hover:border-primary/50"
                     )}
                   >
-                    <img
+                    <Image
                       src={thumbnailUrl}
                       alt=""
-                      loading="lazy"
-                      className="h-full w-full object-contain"
+                      fill
+                      sizes="96px"
+                      unoptimized
+                      className="object-contain"
                     />
                     {isMediaVideo && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -357,7 +358,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                       "prose-li:text-muted-foreground",
                       !descriptionExpanded && "max-h-[12rem] overflow-hidden"
                     )}
-                    dangerouslySetInnerHTML={{ __html: product.descriptionHtml }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(product.descriptionHtml) }}
                   />
                 ) : (
                   <div
@@ -516,12 +517,14 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
               <div className="flex items-start gap-4">
                 {/* Logo or fallback icon */}
                 {product.supplier.logo ? (
-                  <div className="h-12 w-20 sm:h-14 sm:w-24 shrink-0 overflow-hidden rounded-lg bg-white border flex items-center justify-center p-2">
-                    <img
+                  <div className="relative h-12 w-20 sm:h-14 sm:w-24 shrink-0 overflow-hidden rounded-lg bg-white border p-2">
+                    <Image
                       src={product.supplier.logo}
                       alt={product.supplier.name}
-                      loading="lazy"
-                      className="max-h-full max-w-full object-contain"
+                      fill
+                      sizes="96px"
+                      unoptimized
+                      className="object-contain p-1"
                     />
                   </div>
                 ) : (
@@ -558,7 +561,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                     "prose-li:text-muted-foreground",
                     !vendorDescriptionExpanded && "max-h-[8rem] overflow-hidden"
                   )}
-                  dangerouslySetInnerHTML={{ __html: product.supplier.description }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(product.supplier.description) }}
                 />
 
                 {/* Gradient overlay when truncated */}
@@ -674,13 +677,19 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
             </>
           )}
 
-          <img
-            src={currentMedia?.url}
-            alt={product.name}
-            loading="lazy"
-            className="max-w-full max-h-full object-contain"
+          <div
+            className="relative w-full h-full max-w-[90vw] max-h-[90vh]"
             onClick={(e) => e.stopPropagation()}
-          />
+          >
+            <Image
+              src={currentMedia?.url || ''}
+              alt={product.name}
+              fill
+              sizes="90vw"
+              unoptimized
+              className="object-contain"
+            />
+          </div>
         </div>
       )}
     </div>
