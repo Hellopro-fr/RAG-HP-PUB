@@ -219,12 +219,17 @@ class Downloader:
         """
         Appends product metadata to the domain's manifest.json file.
         This manifest will be included in the archive for the BO to update the database.
+        
+        Uses fcntl.flock (LOCK_EX) for exclusive cross-replica locking 
+        and atomic write (temp file + os.replace) to prevent corruption.
         """
         import json
-        import aiofiles
+        import fcntl
+        import tempfile
         
         manifest_dir = f"/app/storage/images/{domain}"
         manifest_path = f"{manifest_dir}/manifest.json"
+        lock_path = f"{manifest_path}.lock"
         
         # Create directory if needed
         os.makedirs(manifest_dir, exist_ok=True)
@@ -258,29 +263,44 @@ class Downloader:
                 "filename": img.get("filename", "")
             })
         
-        # Load existing manifest or create new one
-        manifest = {"products": [], "last_updated": ""}
-        
+        # --- Exclusive lock + atomic write to prevent concurrent corruption ---
         try:
-            if os.path.exists(manifest_path):
-                async with aiofiles.open(manifest_path, 'r') as f:
-                    content = await f.read()
-                    manifest = json.loads(content) if content else {"products": [], "last_updated": ""}
+            with open(lock_path, 'w') as lock_file:
+                fcntl.flock(lock_file, fcntl.LOCK_EX)
+                try:
+                    # Read existing manifest (under lock)
+                    manifest = {"products": [], "last_updated": ""}
+                    if os.path.exists(manifest_path):
+                        try:
+                            with open(manifest_path, 'r') as f:
+                                content = f.read()
+                                if content.strip():
+                                    manifest = json.loads(content)
+                        except (json.JSONDecodeError, ValueError) as e:
+                            logger.warning(f"Corrupted manifest detected for {domain}, starting fresh: {e}")
+                            manifest = {"products": [], "last_updated": ""}
+                    
+                    # Update or add product entry
+                    existing_idx = next((i for i, p in enumerate(manifest.get("products", [])) if p.get("id_produit") == product_id), None)
+                    if existing_idx is not None:
+                        manifest["products"][existing_idx] = product_entry
+                    else:
+                        manifest.setdefault("products", []).append(product_entry)
+                    
+                    manifest["last_updated"] = datetime.now().isoformat()
+                    
+                    # Write to temp file, then atomic rename
+                    fd, tmp_path = tempfile.mkstemp(dir=manifest_dir, suffix='.tmp')
+                    try:
+                        with os.fdopen(fd, 'w') as tmp_f:
+                            tmp_f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
+                        os.replace(tmp_path, manifest_path)
+                    except Exception:
+                        # Clean up temp file on error
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                        raise
+                finally:
+                    fcntl.flock(lock_file, fcntl.LOCK_UN)
         except Exception as e:
-            logger.warning(f"Could not read manifest: {e}")
-        
-        # Update or add product entry
-        existing_idx = next((i for i, p in enumerate(manifest["products"]) if p["id_produit"] == product_id), None)
-        if existing_idx is not None:
-            manifest["products"][existing_idx] = product_entry
-        else:
-            manifest["products"].append(product_entry)
-        
-        manifest["last_updated"] = datetime.now().isoformat()
-        
-        # Write manifest
-        try:
-            async with aiofiles.open(manifest_path, 'w') as f:
-                await f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
-        except Exception as e:
-            logger.error(f"Could not write manifest: {e}")
+            logger.error(f"Could not write manifest for {domain}: {e}")

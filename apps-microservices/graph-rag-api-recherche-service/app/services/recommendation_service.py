@@ -1484,6 +1484,11 @@ class RecommendationService:
                                     id_valeurs = [int(node.get("id_source_valeur"))]
                                 except (ValueError, TypeError):
                                     id_valeurs = []
+                            elif c_score > 0 and type_donnee in [
+                                "numeric",
+                                "numeric_range",
+                            ]:
+                                statut = 1
 
                         caracteristiques.append(
                             CaracteristiqueMatching(

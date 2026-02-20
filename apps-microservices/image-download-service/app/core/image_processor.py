@@ -1,9 +1,13 @@
 import os
 import io
 from PIL import Image
+import pyvips
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Threshold: above this pixel count, delegate to pyvips for shrink-on-load
+LARGE_IMAGE_THRESHOLD = 50_000_000  # 50M pixels
 
 class ImageProcessor:
     def __init__(self):
@@ -38,23 +42,20 @@ class ImageProcessor:
                 
                 image = Image.open(image_stream)
                 
-                # --- SAFETY CHECK: OOM Protection ---
-                # Increased limit to 200 Million pixels (~600MB) since container has 1GB RAM
-                MAX_PIXELS = 200_000_000 
-                
                 width, height = image.size
                 total_pixels = width * height
+                original_format = image.format.upper() if image.format else "JPEG"
                 
-                if total_pixels > MAX_PIXELS:
-                    logger.warning(f"⛔ Skipping image {product_id}: Too large ({width}x{height} = {total_pixels} px). Limit: {MAX_PIXELS} px.")
-                    return None
+                # --- LARGE IMAGE: Delegate to pyvips (shrink-on-load, ~2-5MB RAM) ---
+                if total_pixels > LARGE_IMAGE_THRESHOLD:
+                    logger.info(f"🔄 Large image detected ({width}x{height} = {total_pixels} px, format={original_format}). Using pyvips shrink-on-load.")
+                    image.close()
+                    return self._process_with_vips(content, original_format, domain, product_id, product_name, base_storage_dir, index)
 
                 # OPTIMIZATION: For JPEGs, we can load a draft (thumbnail) directly
                 if total_pixels > 50_000_000 and image.format == 'JPEG':
                      logger.info(f"⚠️ Large JPEG detected ({width}x{height}). Using draft mode to save RAM.")
                      image.draft('RGB', (800, 800))
-                elif total_pixels > 50_000_000:
-                     logger.info(f"⚠️ Large {image.format} detected ({width}x{height}). Processing with caution (High RAM usage).")
 
                 image.load() # Force load (or load draft)
             except Exception as pil_error:
@@ -99,42 +100,12 @@ class ImageProcessor:
             main_image = image.copy()
             main_image.thumbnail(image_max_size, Image.Resampling.LANCZOS)
             
-            # Create sharded path components
-            product_id_str = str(product_id)
-            if len(product_id_str) < 3:
-                product_id_str = product_id_str.zfill(3)
-                
-            rep1 = product_id_str[-1]
-            rep2 = product_id_str[-2]
-            rep3 = product_id_str[-3]
+            # Build paths
+            paths = self._build_paths(domain, product_id, product_name, base_storage_dir, index, extension)
             
-            # Normalize filename
-            normalized_name = self._normalize_name(product_name)
-            
-            # Suffix with index if provided (e.g., product-123-1.jpg)
-            if index > 0:
-                 filename = f"{normalized_name}-{product_id}-{index}{extension}"
-            else:
-                 if index == 0:
-                      filename = f"{normalized_name}-{product_id}{extension}"
-                 else:
-                      filename = f"{normalized_name}-{product_id}-{index}{extension}"
-            
-            # Define paths
-            # /images/{domain}/produit-2/X/Y/Z/ (Main)
-            main_rel_dir = os.path.join("images", domain, "produit-2", rep1, rep2, rep3)
-            main_full_dir = os.path.join(base_storage_dir, main_rel_dir)
-            
-            # /images/{domain}/produit-3/X/Y/Z/ (Thumbnail)
-            thumb_rel_dir = os.path.join("images", domain, "produit-3", rep1, rep2, rep3)
-            thumb_full_dir = os.path.join(base_storage_dir, thumb_rel_dir)
-            
-            # Create directories
-            os.makedirs(main_full_dir, exist_ok=True)
-            os.makedirs(thumb_full_dir, exist_ok=True)
-            
-            main_file_path = os.path.join(main_full_dir, filename)
-            thumb_file_path = os.path.join(thumb_full_dir, filename)
+            main_file_path = paths["main_file_path"]
+            thumb_file_path = paths["thumb_file_path"]
+            filename = paths["filename"]
             
             # Save Main Image
             save_kwargs = {"optimize": True}
@@ -163,6 +134,119 @@ class ImageProcessor:
         except Exception as e:
             logger.error(f"Error processing image for product {product_id}: {e}")
             raise e
+
+    def _process_with_vips(self, content: bytes, original_format: str, domain: str, product_id: str, product_name: str, base_storage_dir: str, index: int = 0):
+        """
+        Processes large images using pyvips (libvips) with shrink-on-load.
+        Uses streaming decode+resize in a single pass, ~2-5MB RAM regardless of input size.
+        
+        This is used as a fallback for images that would OOM with PIL's full decompression.
+        """
+        try:
+            # Determine output format and extension based on PHP logic
+            if original_format == 'GIF':
+                output_format_suffix = '.gif'
+                extension = '.gif'
+            elif original_format in ('JPEG', 'JPG'):
+                output_format_suffix = '.jpg'
+                extension = '.jpg'
+            elif original_format == 'WEBP':
+                # PHP converts WebP to PNG
+                output_format_suffix = '.png'
+                extension = '.png'
+            else:
+                output_format_suffix = '.png'
+                extension = '.png'
+            
+            # Build paths
+            paths = self._build_paths(domain, product_id, product_name, base_storage_dir, index, extension)
+            
+            main_file_path = paths["main_file_path"]
+            thumb_file_path = paths["thumb_file_path"]
+            filename = paths["filename"]
+
+            # --- Main Image (800x800) using shrink-on-load ---
+            main_vips = pyvips.Image.thumbnail_buffer(content, 800, height=800)
+            
+            if output_format_suffix == '.jpg':
+                main_vips.jpegsave(main_file_path, optimize_coding=True)
+            elif output_format_suffix == '.png':
+                main_vips.pngsave(main_file_path)
+            elif output_format_suffix == '.gif':
+                # pyvips gif support: save as png if gif causes issues
+                main_vips.pngsave(main_file_path)
+            
+            logger.info(f"✅ pyvips: Main image saved for {product_id}: {filename}")
+            
+            # --- Thumbnail (110x110) using shrink-on-load ---
+            thumb_vips = pyvips.Image.thumbnail_buffer(content, 110, height=110)
+            
+            if output_format_suffix == '.jpg':
+                thumb_vips.jpegsave(thumb_file_path, optimize_coding=True)
+            elif output_format_suffix == '.png':
+                thumb_vips.pngsave(thumb_file_path)
+            elif output_format_suffix == '.gif':
+                thumb_vips.pngsave(thumb_file_path)
+            
+            logger.info(f"✅ pyvips: Thumbnail saved for {product_id}: {filename}")
+            
+            return {
+                "main_path": main_file_path,
+                "thumb_path": thumb_file_path,
+                "filename": filename
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing large image with pyvips for product {product_id}: {e}")
+            raise e
+
+    def _build_paths(self, domain: str, product_id: str, product_name: str, base_storage_dir: str, index: int, extension: str):
+        """
+        Builds the sharded directory paths and filename for a product image.
+        Shared between PIL and pyvips processing paths.
+        """
+        # Create sharded path components
+        product_id_str = str(product_id)
+        if len(product_id_str) < 3:
+            product_id_str = product_id_str.zfill(3)
+            
+        rep1 = product_id_str[-1]
+        rep2 = product_id_str[-2]
+        rep3 = product_id_str[-3]
+        
+        # Normalize filename
+        normalized_name = self._normalize_name(product_name)
+        
+        # Suffix with index if provided (e.g., product-123-1.jpg)
+        if index > 0:
+             filename = f"{normalized_name}-{product_id}-{index}{extension}"
+        else:
+             if index == 0:
+                  filename = f"{normalized_name}-{product_id}{extension}"
+             else:
+                  filename = f"{normalized_name}-{product_id}-{index}{extension}"
+        
+        # Define paths
+        # /images/{domain}/produit-2/X/Y/Z/ (Main)
+        main_rel_dir = os.path.join("images", domain, "produit-2", rep1, rep2, rep3)
+        main_full_dir = os.path.join(base_storage_dir, main_rel_dir)
+        
+        # /images/{domain}/produit-3/X/Y/Z/ (Thumbnail)
+        thumb_rel_dir = os.path.join("images", domain, "produit-3", rep1, rep2, rep3)
+        thumb_full_dir = os.path.join(base_storage_dir, thumb_rel_dir)
+        
+        # Create directories
+        os.makedirs(main_full_dir, exist_ok=True)
+        os.makedirs(thumb_full_dir, exist_ok=True)
+        
+        main_file_path = os.path.join(main_full_dir, filename)
+        thumb_file_path = os.path.join(thumb_full_dir, filename)
+        
+        return {
+            "main_file_path": main_file_path,
+            "thumb_file_path": thumb_file_path,
+            "filename": filename
+        }
 
     def _normalize_name(self, name: str) -> str:
         """
