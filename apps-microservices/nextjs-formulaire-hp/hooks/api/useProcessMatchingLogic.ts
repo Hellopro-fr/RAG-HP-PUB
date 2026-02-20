@@ -165,11 +165,23 @@ export function useProcessMatchingLogic() {
       
 
       
-      // Seuil minimum de produits pour afficher la sélection
-      const MIN_PRODUCTS_THRESHOLD = 10;
-      const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
-      const hasInsufficientResults = totalProducts < MIN_PRODUCTS_THRESHOLD;
+      // Condition pour aller en "selection" :
+      // - Au moins 3 produits dans top_produit
+      // - Score minimum des top_produit >= 70%
+      const MIN_TOP_PRODUCTS = 3;
+      const MIN_SCORE_THRESHOLD = 0.70;
+
+      const topProducts = apiData.top_produit || [];
+      const hasEnoughTopProducts = topProducts.length >= MIN_TOP_PRODUCTS;
+      const minTopScore = topProducts.length > 0
+        ? Math.min(...topProducts.map((p: any) => p.score))
+        : 0;
+      const hasGoodEnoughScores = minTopScore >= MIN_SCORE_THRESHOLD;
+
+      // Si les deux conditions sont remplies → "selection", sinon → "something-to-add"
+      const hasInsufficientResults = !(hasEnoughTopProducts && hasGoodEnoughScores);
       setRedirectGoToSomethingToAdd(hasInsufficientResults);
+      const totalProducts = apiData.liste_produit.length + topProducts.length;
 
       // Tracking DB - Stocker le payload envoyé ET les résultats du matching
       // Permet d'analyser et investiguer les requêtes et leurs résultats
@@ -184,7 +196,9 @@ export function useProcessMatchingLogic() {
         // === RÉSULTATS REÇUS ===
         response: {
           results_count: totalProducts,
-          threshold: MIN_PRODUCTS_THRESHOLD,
+          top_products_count: topProducts.length,
+          min_top_score: minTopScore,
+          thresholds: { min_top_products: MIN_TOP_PRODUCTS, min_score: MIN_SCORE_THRESHOLD },
           redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
           top_products: apiData.top_produit?.map((p: any) => ({
             id: p.id_produit,
@@ -207,55 +221,6 @@ export function useProcessMatchingLogic() {
         categoryId,
         1
       );
-
-      // ==========================================================================
-      // TODO: SUPPRIMER CE BLOC DE TEST - Début du mode test avec IDs fixes
-      // ==========================================================================
-      const TEST_MODE = true; // TODO: Mettre à false pour la production
-
-      let finalRecommended = recommended;
-      let finalOthers = others;
-
-      if (TEST_MODE) {
-        // TODO: Supprimer - Créer des suppliers de test avec les IDs 97 et 98
-        const testSuppliers = [
-          {
-            id: '97',
-            productName: 'Produit 97',
-            supplierName: 'Fournisseur Test',
-            image: '/images/product-placeholder.jpg',
-            images: ['/images/product-placeholder.jpg'],
-            description: '',
-            matchScore: 88,
-            matchGaps: [],
-            specs: [],
-            isRecommended: true,
-            rating: 0,
-            distance: 0,
-            supplier: { name: '', description: '', location: '', responseTime: '' }
-          },
-          {
-            id: '98',
-            productName: 'Produit 98',
-            supplierName: 'Fournisseur Test',
-            image: '/images/product-placeholder.jpg',
-            images: ['/images/product-placeholder.jpg'],
-            description: '',
-            matchScore: 75,
-            matchGaps: [],
-            specs: [],
-            isRecommended: true,
-            rating: 0,
-            distance: 0,
-            supplier: { name: '', description: '', location: '', responseTime: '' }
-          },
-        ];
-        finalRecommended = testSuppliers as typeof recommended;
-        finalOthers = [];
-      }
-      // ==========================================================================
-      // TODO: SUPPRIMER CE BLOC DE TEST - Fin du mode test
-      // ==========================================================================
 
       // Stocker les résultats initiaux (avec placeholders)
       setMatchingResults({ recommended, others });
