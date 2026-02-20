@@ -8,3 +8,4 @@ python-dotenv
 prometheus-client
 aio-pika
 Pillow
+pyvips
