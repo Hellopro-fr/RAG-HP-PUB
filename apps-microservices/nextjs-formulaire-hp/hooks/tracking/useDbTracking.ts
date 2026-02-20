@@ -3,7 +3,7 @@
 import { useCallback } from 'react';
 import { getSessionId } from '@/lib/analytics/gtm';
 import { basePath } from '@/lib/utils';
-import { FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
+import { useFlowStore, FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
 
 const getApiBasePath = () => {
   return basePath || '';
@@ -71,12 +71,28 @@ export function useDbTracking() {
         sessionStorage.setItem(metaKey, 'true');
       }
 
+      // Récupérer le flowType depuis le store pour le tracking session
+      const storeFlowType = useFlowStore.getState().flowType;
+      
+      // type_flow (0: flow demande sur categ | 1: flow produit)
+      const typeFlow = storeFlowType === 'principal' ? 1 : 0;
+      
+      // Déterminer type_dmd_categ (0: par défaut, 1: produit insuffisant, 2: intentionnelle)
+      let typeDmdCateg = 0;
+      if (storeFlowType === 'pas_assez_produits') {
+        typeDmdCateg = 1;
+      } else if (storeFlowType === 'pas_trouve_recherchez') {
+        typeDmdCateg = 2;
+      }
+
       // Construire le payload
-      const payload: TrackingPayload = {
+      const payload: any = {
         etape: 'tracking_action',
         data: {
           session_id: sessionId,
           category_id: categoryId,
+          type_flow: typeFlow,
+          type_dmd_categ: typeDmdCateg,
           event: {
             event_type: eventType,
             event_name: eventName,
