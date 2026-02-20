@@ -64,7 +64,7 @@ export function useDbTracking() {
 
         sessionMeta = {
           user_agent: navigator.userAgent,
-          referrer: document.referrer,
+          referrer: document.referrer || '', // 'direct' si vide (ex: accès direct ou favori)
           entry_url: window.location.pathname,
           token: token,
         };

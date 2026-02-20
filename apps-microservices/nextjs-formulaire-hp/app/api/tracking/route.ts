@@ -9,6 +9,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Récupérer le Referrer réel depuis les headers de la requête (équivalent PHP $_SERVER['HTTP_REFERER'])
+    const serverReferrer = request.headers.get('referer') || '';
+
+    // Injection automatique dans session_meta pour garantir la donnée en base
+    if (body.data && body.data.session_meta) {
+      // Si le client n'a pas pu l'envoyer (document.referrer vide), on utilise celui du serveur
+      if (!body.data.session_meta.referrer || body.data.session_meta.referrer === '') {
+        body.data.session_meta.referrer = serverReferrer || '';
+      }
+    }
+
     // Forward to the tracking API
     const response = await fetch(URL_API, {
       method: 'POST',
