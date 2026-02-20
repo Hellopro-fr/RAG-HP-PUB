@@ -105,7 +105,7 @@ export function useProcessMatchingLogic() {
       // Construire metadonnee_utilisateurs avec id_pays et cp si disponibles
       const metadonnee_utilisateurs: Record<string, string | number> = {
         "pays": data?.country || '',
-          "typologie": typologieValue
+        "typologie": typologieValue
       };
 
       // Ajouter id_pays si disponible (vient de l'API geo)
@@ -144,7 +144,7 @@ export function useProcessMatchingLogic() {
 
       const apiBase = getApiBasePath();
       const apiUrl = `${apiBase}/api/matching`;
-      
+
       const res = await fetch(apiUrl, {
         method: 'POST',
         body: formData,
@@ -162,13 +162,13 @@ export function useProcessMatchingLogic() {
         characteristicsMap,
         consolidatedEquivalences
       );
-      
 
-      
+
+
       // Seuil minimum de produits pour afficher la sélection
-      const MIN_PRODUCTS_THRESHOLD = 10;
+      const MIN_PRODUCTS_THRESHOLD = 1;
       const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
-      const hasInsufficientResults = totalProducts < MIN_PRODUCTS_THRESHOLD;
+      const hasInsufficientResults = totalProducts <= MIN_PRODUCTS_THRESHOLD;
       setRedirectGoToSomethingToAdd(hasInsufficientResults);
 
       // Tracking DB - Stocker le payload envoyé ET les résultats du matching
@@ -317,7 +317,7 @@ export function useProcessMatchingLogic() {
       const typologie = profileData?.type;
       const typologieValue = type_typologie[typologie as keyof typeof type_typologie] || "1";
 
-      const metadonnee_utilisateurs: Record<string, string | number> =  {
+      const metadonnee_utilisateurs: Record<string, string | number> = {
         "pays": profileData?.country || '',
         "typologie": typologieValue
       };
