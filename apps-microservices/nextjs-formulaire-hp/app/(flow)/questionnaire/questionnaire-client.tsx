@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import NeedsQuestionnaire from '@/components/flow/NeedsQuestionnaire';
 import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type MatchingTestParams } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
+import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 
 // Interface pour les données URL (réponse Q1 pré-remplie)
 interface UrlData {
@@ -115,6 +116,8 @@ export default function QuestionnaireClient({
 
   // Traiter les données URL (réponse Q1 pré-remplie depuis le token)
   // Doit s'exécuter AVANT que le questionnaire ne soit rendu
+  const { trackDbEvent } = useDbTracking();
+
   useEffect(() => {
     // Attendre l'hydratation du store
     if (!isHydrated) return;
@@ -175,6 +178,17 @@ export default function QuestionnaireClient({
           timestamp: Date.now(),
         });
 
+        // Tracking DB pour la question pré-remplie
+        // Cela permet de garder une trace du début du parcours même si Q1 est invisible
+        const categoryIdNum = parseInt(initialCategoryId || '0', 10);
+        trackDbEvent('questionnaire', 'question_answer', {
+          question_id: urlData.id_question,
+          question_code: 'Q1',
+          answer_ids: [answerCode],
+          equivalences: equivalence,
+          is_prefilled: true // Flag pour indiquer que c'est une injection via URL
+        }, categoryIdNum, 1); // step_index = 1
+
         console.log('[QuestionnaireClient] URL data applied - Q1 pre-filled:', answerCode);
       }
     } catch (error) {
@@ -183,7 +197,7 @@ export default function QuestionnaireClient({
 
     hasProcessedUrlData.current = true;
     setIsReady(true);
-  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer]);
+  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer]);
 
   const handleComplete = () => {
     // Navigate to profile step with GET params preserved
