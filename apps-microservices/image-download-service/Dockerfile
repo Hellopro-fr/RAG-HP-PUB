@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libjpeg-dev \
     zlib1g-dev \
+    libvips-dev \
+    libwebp-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Installer la lib partagée common-utils
