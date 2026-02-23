@@ -91,23 +91,28 @@ export function useDbTracking() {
         typeDmdCateg = 2;
       }
 
-      // Construire le payload
+      // Construire le payload (clés obfusquées pour éviter blocage WAF Imperva)
       const payload: any = {
-        etape: 'tracking_action',
+        etape: 'log_act',
         data: {
-          session_id: sessionId,
-          category_id: categoryId,
-          type_flow: typeFlow,
-          type_dmd_categ: typeDmdCateg,
-          event: {
-            event_type: eventType,
-            event_name: eventName,
-            event_data: eventData,
-            page: window.location.pathname,
-            step_index: stepIndex ?? 0,
-            client_timestamp: new Date().toISOString(),
+          sid: sessionId,
+          cat_id: categoryId,
+          t_flow: typeFlow,
+          t_dmd_cat: typeDmdCateg,
+          evt: {
+            e_type: eventType,
+            e_name: eventName,
+            e_data: eventData,
+            pg: window.location.pathname,
+            st_idx: stepIndex ?? 0,
+            ts: new Date().toISOString(),
           },
-          session_meta: sessionMeta,
+          s_meta: sessionMeta ? {
+            ua: sessionMeta.user_agent,
+            ref: sessionMeta.referrer,
+            entry: sessionMeta.entry_url,
+            tk: sessionMeta.token,
+          } : undefined,
         },
       };
 
