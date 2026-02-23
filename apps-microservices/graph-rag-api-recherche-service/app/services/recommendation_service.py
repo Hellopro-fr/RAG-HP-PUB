@@ -655,6 +655,11 @@ class RecommendationService:
         user_id_pays = user_meta.id_pays if user_meta else None
         user_typologie = user_meta.typologie if user_meta else None
 
+        logging.warning(f"request.scoring {request.scoring}")
+        logging.warning(
+            f"Parametre : absolute_threshold {absolute_threshold}, relative_tolerance {relative_tolerance}, max_per_supplier_primary {max_per_supplier_primary}, max_per_supplier_extended {max_per_supplier_extended}, score_step {score_step}, diversity_lambda {diversity_lambda}"
+        )
+
         # Build Cypher Query Step 1 (Dynamic)
         if target_product_id:
             query_step_1 = """
