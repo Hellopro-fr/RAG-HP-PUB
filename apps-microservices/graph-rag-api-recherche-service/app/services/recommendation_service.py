@@ -594,7 +594,7 @@ class RecommendationService:
         z_unmatched = (
             request.scoring.z_unmatched
             if request.scoring.z_unmatched is not None
-            else 0.2
+            else 0
         )
         e_unmatched = (
             request.scoring.e_unmatched
@@ -609,7 +609,7 @@ class RecommendationService:
         c_unknown_score = (
             request.scoring.c_unknown_score
             if request.scoring.c_unknown_score is not None
-            else 0.5
+            else 0
         )
         t_unmatched = (
             request.scoring.t_unmatched
@@ -620,7 +620,7 @@ class RecommendationService:
         absolute_threshold = (
             request.scoring.absolute_threshold
             if request.scoring.absolute_threshold is not None
-            else 0.0
+            else 0.3
         )
         relative_tolerance = (
             request.scoring.relative_tolerance
@@ -654,6 +654,11 @@ class RecommendationService:
         user_dept = user_cp[:2] if user_cp is not None and len(user_cp) >= 2 else None
         user_id_pays = user_meta.id_pays if user_meta else None
         user_typologie = user_meta.typologie if user_meta else None
+
+        logging.warning(f"request.scoring {request.scoring}")
+        logging.warning(
+            f"Parametre : absolute_threshold {absolute_threshold} c_unknown_score {c_unknown_score} z_unmatched {z_unmatched}"
+        )
 
         # Build Cypher Query Step 1 (Dynamic)
         if target_product_id:
@@ -1170,7 +1175,7 @@ class RecommendationService:
         // global_score * zone_score * etat_score * typo_score AS final_score
         WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
             global_score * zone_score * etat_score * typo_score AS final_score
-        WHERE (final_score >= $absolute_threshold OR $target_product_id IS NOT NULL) AND (final_score > 0 OR $target_product_id IS NOT NULL)
+        WHERE final_score >= $absolute_threshold OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         
