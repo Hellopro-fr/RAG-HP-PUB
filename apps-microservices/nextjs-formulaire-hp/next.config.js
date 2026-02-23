@@ -70,17 +70,17 @@ const nextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains',
           },
-          // CSP - Contrôle des sources autorisées
+          // CSP - Contrôle des sources autorisées (permissif pour tracking)
           {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' www.googletagmanager.com www.google-analytics.com static.hotjar.com script.hotjar.com",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https: *.hellopro.fr www.googletagmanager.com",
-              "font-src 'self' data:",
-              "connect-src 'self' www.google-analytics.com *.hotjar.com *.hellopro.fr",
-              "frame-src 'self' vars.hotjar.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
+              "style-src 'self' 'unsafe-inline' https:",
+              "img-src 'self' data: https: blob:",
+              "font-src 'self' data: https:",
+              "connect-src 'self' https:",
+              "frame-src 'self' https:",
             ].join('; '),
           },
           // Referrer - Limite les infos envoyées aux sites tiers
