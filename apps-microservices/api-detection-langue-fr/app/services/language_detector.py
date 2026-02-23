@@ -153,7 +153,7 @@ class LanguageDetector:
             
             # Supprimer scripts, styles et autres éléments non visibles
             # Note: on garde header, footer, nav car ils peuvent contenir du contenu pertinent
-            for element in soup(['script', 'style', 'meta', 'link', 'noscript']):
+            for element in soup(['script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
                 element.decompose()
             
             text = soup.get_text(separator=' ', strip=True)
@@ -164,6 +164,8 @@ class LanguageDetector:
             
             # Limiter le texte analysé (performance)
             text = text[:5000]
+
+            logger.info(f"Texte analysé: {text}")
             
             # Détection avec langdetect
             langdetect_result = None
@@ -268,7 +270,7 @@ class LanguageDetector:
             
             # Supprimer scripts, styles et autres éléments non visibles
             # Harmonisé avec detect_from_text_content (même liste d'éléments)
-            for element in soup(['script', 'style', 'meta', 'link', 'noscript']):
+            for element in soup(['script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
                 element.decompose()
             
             text = soup.get_text(separator=' ', strip=True)
@@ -279,6 +281,7 @@ class LanguageDetector:
             
             # Limiter le texte analysé (performance)
             text = text[:5000]
+            logger.info(f"Texte analysé: {text}")
             
             # Nettoyer le texte (fastText n'aime pas les sauts de ligne)
             text_clean = ' '.join(text.split())
