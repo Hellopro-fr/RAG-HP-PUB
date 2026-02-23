@@ -657,7 +657,7 @@ class RecommendationService:
 
         logging.warning(f"request.scoring {request.scoring}")
         logging.warning(
-            f"Parametre : absolute_threshold {absolute_threshold}, relative_tolerance {relative_tolerance}, max_per_supplier_primary {max_per_supplier_primary}, max_per_supplier_extended {max_per_supplier_extended}, score_step {score_step}, diversity_lambda {diversity_lambda}"
+            f"Parametre : absolute_threshold {absolute_threshold}, relative_tolerance {relative_tolerance}, max_per_supplier_primary {max_per_supplier_primary}, max_per_supplier_extended {max_per_supplier_extended}, score_step {score_step}, diversity_lambda {diversity_lambda} c_unknown_score {c_unknown_score} z_unmatched {z_unmatched} e_unmatched {e_unmatched} g_unknown_score {g_unknown_score} t_unmatched {t_unmatched} v_blocked {v_blocked} v_different {v_different}"
         )
 
         # Build Cypher Query Step 1 (Dynamic)
