@@ -75,7 +75,7 @@ export function useDbTracking() {
       const storeFlowType = useFlowStore.getState().flowType;
       
       // type_flow (0: default | 1: flow demande categ | 2: flow produit)
-      let typeFlow = 0;
+      let typeFlow = 2;
       if (storeFlowType === 'principal') {
         typeFlow = 2;
       } else if (storeFlowType) {
