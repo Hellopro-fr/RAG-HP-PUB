@@ -66,7 +66,7 @@ const nextConfig = {
             value: 'nosniff',
           },
           // HSTS - Force HTTPS pendant 1 an
-          {
+         /*  {
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains',
           },
@@ -92,7 +92,7 @@ const nextConfig = {
           {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
-          },
+          }, */
         ],
       },
       // Cache long pour les assets statiques (fonts, images publiques)
