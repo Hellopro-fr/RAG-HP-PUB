@@ -381,36 +381,8 @@ export function useProcessMatchingLogic() {
         activeEquivalences
       );
 
-      // Délai pour éviter détection WAF Imperva (succession rapide d'appels)
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Tracking DB - Stocker le payload envoyé ET les résultats du refetch
+      // Calculer totalProducts pour le tracking (utilisé plus tard)
       const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
-      const refetchTrackingData = {
-        request: {
-          id_categorie: categoryId,
-          metadonnee_utilisateurs,
-          liste_caracteristique: activeEquivalences,
-          removed_criteria_ids: allRemovedIds,
-          scoring: matchingTestParams || undefined,
-        },
-        response: {
-          results_count: totalProducts,
-          top_products: apiData.top_produit?.map((p: any) => ({
-            id: p.id_produit,
-            score: Number(Number(p.score).toFixed(2)),
-            id_fournisseur: p.id_fournisseur
-          })) || [],
-          liste_products: apiData.liste_produit.map((p: any) => ({
-            id: p.id_produit,
-            score: Number(Number(p.score).toFixed(2)),
-            id_fournisseur: p.id_fournisseur
-          })),
-        },
-        equivalences_count: activeEquivalences.length
-      };
-
-      trackDbEvent('matching', 'refetch', refetchTrackingData, categoryId, 1);
 
       // Identifier les produits orphelins (sélectionnés mais plus dans les nouveaux résultats)
       const newProductIds = new Set([
@@ -436,26 +408,57 @@ export function useProcessMatchingLogic() {
       // Stocker les résultats initiaux (avec placeholders)
       setMatchingResults({ recommended, others });
 
-      // Enrichir les recommandés avec les infos produit (prioritaire)
+      // Enrichir les recommandés avec les infos produit (await - bloquant)
+      let enrichedRecommended = recommended;
       const recommendedIds = recommended.map((s) => s.id);
       if (recommendedIds.length > 0) {
         const productInfo = await fetchProductInfo(recommendedIds, categoryId, apiBase);
         if (productInfo?.items) {
-          const enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
+          enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
           setMatchingResults({ recommended: enrichedRecommended, others });
-
-          // Ensuite enrichir les "others" en background
-          const othersIds = others.map((s) => s.id);
-          if (othersIds.length > 0) {
-            fetchProductInfo(othersIds, categoryId, apiBase).then((othersInfo) => {
-              if (othersInfo?.items) {
-                const enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
-                setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
-              }
-            });
-          }
         }
       }
+
+      // Enrichir les "others" avec les infos produit (await - bloquant)
+      let enrichedOthers = others;
+      const othersIds = others.map((s) => s.id);
+      if (othersIds.length > 0) {
+        const othersInfo = await fetchProductInfo(othersIds, categoryId, apiBase);
+        if (othersInfo?.items) {
+          enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
+          setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
+        }
+      }
+
+      // Délai pour éviter détection WAF Imperva (succession rapide d'appels)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Tracking DB - Stocker le payload envoyé ET les résultats du refetch
+      const refetchTrackingData = {
+        request: {
+          id_categorie: categoryId,
+          metadonnee_utilisateurs,
+          liste_caracteristique: activeEquivalences,
+          removed_criteria_ids: allRemovedIds,
+          scoring: matchingTestParams || undefined,
+        },
+        response: {
+          results_count: totalProducts,
+          top_products: apiData.top_produit?.map((p: any) => ({
+            id: p.id_produit,
+            score: Number(Number(p.score).toFixed(2)),
+            id_fournisseur: p.id_fournisseur
+          })) || [],
+          liste_products: apiData.liste_produit.map((p: any) => ({
+            id: p.id_produit,
+            score: Number(Number(p.score).toFixed(2)),
+            id_fournisseur: p.id_fournisseur
+          })),
+        },
+        equivalences_count: activeEquivalences.length
+      };
+
+      trackDbEvent('matching', 'refetch', refetchTrackingData, categoryId, 1);
 
       setShowLoader(false);
       return true;
