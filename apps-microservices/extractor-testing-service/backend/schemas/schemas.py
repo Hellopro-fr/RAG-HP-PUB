@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from enum import Enum
 
 
@@ -42,3 +42,15 @@ class ResultItem(BaseModel):
 
 
 ResponseModel = Dict[str, ResultItem]
+
+
+class BoilerplateTestRequest(BaseModel):
+    main_html: str = Field(..., description="The target HTML page to extract header/footer from.")
+    reference_htmls: List[str] = Field(..., description="List of 2 reference HTML pages from the same domain.")
+
+
+class BoilerplateTestResponse(BaseModel):
+    header_content: str
+    header_method: str
+    footer_content: str
+    footer_method: str

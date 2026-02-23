@@ -1,9 +1,10 @@
 import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from schemas.schemas import RequestModel, ResponseModel
+from schemas.schemas import RequestModel, ResponseModel, BoilerplateTestRequest, BoilerplateTestResponse
 from core.preprocessor import preprocess_html
 from core.extractor import run_all_extractors
+from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,6 +76,32 @@ async def test_extractors_endpoint(request: RequestModel):
 
     except Exception as e:
         logger.exception("An unexpected error occurred during processing.")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/test-boilerplate", response_model=BoilerplateTestResponse)
+async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
+    """
+    Tests the HeaderFooterExtractor with the Multi-Page Intersection Fallback algorithm.
+    Accepts a main HTML page and two reference pages from the same domain.
+    """
+    logger.info("Received request for Boilerplate Intersection Test.")
+    
+    if not request.main_html or not request.reference_htmls:
+        raise HTTPException(status_code=400, detail="Both main_html and reference_htmls are required.")
+
+    try:
+        extractor = HeaderFooterExtractor(request.main_html)
+        result = extractor.extract_with_fallback(request.reference_htmls)
+        
+        return BoilerplateTestResponse(
+            header_content=result["header"],
+            header_method=result["header_method"],
+            footer_content=result["footer"],
+            footer_method=result["footer_method"]
+        )
+    except Exception as e:
+        logger.exception("An unexpected error occurred during boilerplate testing.")
         raise HTTPException(status_code=500, detail=str(e))
 
 

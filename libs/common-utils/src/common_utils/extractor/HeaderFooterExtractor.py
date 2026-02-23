@@ -279,3 +279,137 @@ class HeaderFooterExtractor:
         # If no suitable footer was found, return an empty string.
         # print("No suitable footer found.") # Optional: for debugging
         return ""
+
+    def _run_intersection_fallback(self, reference_htmls: list[str]) -> tuple[str, str]:
+        """
+        Analyzes the DOM structure of the main HTML against multiple reference HTMLs 
+        to identify structural boilerplate (Headers and Footers) by finding intersecting content blocks.
+        """
+        if not self.soup or not self.soup.body:
+            return "", ""
+
+        # 1. Clean reference HTMLs and extract word sets for accurate intersection
+        ref_word_sets = []
+        for html in reference_htmls:
+            try:
+                s = BeautifulSoup(html, 'html.parser')
+                for el in s(["script", "style", "noscript", "iframe", "button", "form", "input", "textarea", "select", "option", "svg", "img"]):
+                    el.decompose()
+                for comment in s.find_all(string=lambda text: isinstance(text, Comment)):
+                    comment.extract()
+                text = self.get_cleaned_text(s.body)
+                ref_word_sets.append(set(text.lower().split()))
+            except Exception:
+                pass
+        
+        if not ref_word_sets:
+            return "", ""
+
+        # 2. Score elements in main soup based on word overlap with references
+        candidates = []
+        # We target structural block elements that typically contain boilerplate
+        all_elements = self.soup.body.find_all(['div', 'section', 'nav', 'header', 'footer', 'aside', 'ul'])
+        
+        for index, el in enumerate(all_elements):
+            text = self.get_cleaned_text(el)
+            words = text.lower().split()
+            
+            # Skip empty or very small nodes that might randomly match
+            if len(words) < 5:
+                continue
+            
+            el_word_set = set(words)
+            # Calculate the minimum percentage overlap across all reference pages
+            min_overlap = min(len(el_word_set & rws) / len(el_word_set) for rws in ref_word_sets)
+            
+            # If 70% of the words in this element exist in ALL reference pages, it's boilerplate
+            if min_overlap > 0.70:
+                candidates.append((index, el, text, len(words)))
+
+        # 3. Filter nested candidates (keep the highest-level parent to avoid duplicate blocks)
+        top_level_candidates = []
+        for i, (idx, el, text, word_count) in enumerate(candidates):
+            # If any parent of 'el' is also in the candidate list, 'el' is a child and should be skipped.
+            is_child = any(parent in [c[1] for c in candidates] for parent in el.parents)
+            if not is_child:
+                top_level_candidates.append((idx, el, text, word_count))
+
+        if not top_level_candidates:
+            return "", ""
+
+        # 4. Identify Main Content to split Header and Footer
+        # The main product/article content is likely the element with the most words that has a LOW overlap.
+        main_idx = -1
+        max_main_words = 0
+        for index, el in enumerate(all_elements):
+            if el.name in ['div', 'section', 'main', 'article']:
+                text = self.get_cleaned_text(el)
+                words = text.lower().split()
+                if len(words) > max_main_words:
+                    el_word_set = set(words)
+                    if el_word_set:
+                        # Average overlap with references
+                        avg_overlap = sum(len(el_word_set & rws) / len(el_word_set) for rws in ref_word_sets) / len(ref_word_sets)
+                        if avg_overlap < 0.4: # Low overlap means unique content
+                            max_main_words = len(words)
+                            main_idx = index
+
+        # 5. Classify Header vs Footer based on sequential DOM position
+        # If main_idx is found, candidates BEFORE main_idx are header, AFTER are footer.
+        # If no distinct main content is found, fallback to a 50/50 DOM index split.
+        if main_idx == -1:
+            main_idx = len(all_elements) // 2
+
+        header_texts = []
+        footer_texts = []
+
+        for idx, el, text, wc in top_level_candidates:
+            if idx < main_idx:
+                header_texts.append(text)
+            else:
+                footer_texts.append(text)
+
+        header_result = " ".join(header_texts).strip()
+        footer_result = " ".join(footer_texts).strip()
+
+        # Sanity check: Boilerplates shouldn't be larger than 5000 characters
+        if len(header_result) > 5000: header_result = ""
+        if len(footer_result) > 5000: footer_result = ""
+
+        return header_result, footer_result
+
+    def extract_with_fallback(self, reference_htmls: list[str]) -> dict:
+        """
+        Attempts the original semantic/CSS extraction first. 
+        If it fails, runs the Multi-Page Intersection fallback algorithm.
+        """
+        if not self.soup:
+            return {
+                "header": "", "header_method": "None",
+                "footer": "", "footer_method": "None"
+            }
+
+        header = self.extract_header(self.soup)
+        footer = self.extract_footer(self.soup)
+        
+        header_method = "Original (Semantic/CSS Pattern)" if header else "None"
+        footer_method = "Original (Semantic/CSS Pattern)" if footer else "None"
+
+        # If either is missing, attempt the fallback intersection
+        if not header or not footer:
+            fallback_h, fallback_f = self._run_intersection_fallback(reference_htmls)
+            
+            if not header and fallback_h:
+                header = fallback_h
+                header_method = "Fallback (Multi-Page Intersection)"
+            
+            if not footer and fallback_f:
+                footer = fallback_f
+                footer_method = "Fallback (Multi-Page Intersection)"
+
+        return {
+            "header": header,
+            "header_method": header_method,
+            "footer": footer,
+            "footer_method": footer_method
+        }

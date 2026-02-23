@@ -11,13 +11,21 @@ interface LibraryResult {
   metadata?: Record<string, any>
 }
 
+interface BoilerplateResult {
+  header_content: string
+  header_method: string
+  footer_content: string
+  footer_method: string
+}
+
 interface OutputSectionProps {
   results: Record<string, LibraryResult> | null
+  boilerplateResults?: BoilerplateResult | null
   loading: boolean
   error: string | null
 }
 
-export default function OutputSection({ results, loading, error }: OutputSectionProps) {
+export default function OutputSection({ results, boilerplateResults, loading, error }: OutputSectionProps) {
   if (loading) {
     return (
       <Card className="p-12 flex items-center justify-center flex-1">
@@ -41,6 +49,25 @@ export default function OutputSection({ results, loading, error }: OutputSection
     )
   }
 
+  // Render Boilerplate Results View
+  if (boilerplateResults) {
+    return (
+      <div className="space-y-4 flex-1">
+        <BoilerplateCard 
+          title="Extracted Header" 
+          content={boilerplateResults.header_content} 
+          method={boilerplateResults.header_method} 
+        />
+        <BoilerplateCard 
+          title="Extracted Footer" 
+          content={boilerplateResults.footer_content} 
+          method={boilerplateResults.footer_method} 
+        />
+      </div>
+    )
+  }
+
+  // Render Single Extractor Results View
   if (!results) {
     return (
       <Card className="p-12 flex items-center justify-center flex-1 bg-muted/50">
@@ -63,6 +90,81 @@ export default function OutputSection({ results, loading, error }: OutputSection
         ))
       )}
     </div>
+  )
+}
+
+interface BoilerplateCardProps {
+  title: string
+  content: string
+  method: string
+}
+
+function BoilerplateCard({ title, content, method }: BoilerplateCardProps) {
+  const [copied, setCopied] = useState(false)
+  const isFallback = method.includes("Fallback")
+
+  const handleCopy = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(content)
+      } else {
+        const textArea = document.createElement('textarea')
+        textArea.value = content
+        textArea.style.position = 'fixed'
+        textArea.style.left = '-999999px'
+        textArea.style.top = '-999999px'
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+      alert('Failed to copy to clipboard.')
+    }
+  }
+
+  return (
+    <Card className={`p-4 transition-colors ${isFallback ? "border-primary/50 bg-primary/5" : ""}`}>
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className="font-semibold text-lg">{title}</h3>
+          <p className="text-xs mt-1">
+            Method Used: <span className={`font-semibold px-1.5 py-0.5 rounded ${isFallback ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{method}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors"
+            title="Copy content"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3 w-3" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3 w-3" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground mb-3">
+        Character count: <span className="font-semibold">{content.length}</span>
+      </p>
+
+      <pre className="p-3 bg-muted rounded border border-border text-xs overflow-auto max-h-96">
+        <code>{content || "(No content detected)"}</code>
+      </pre>
+    </Card>
   )
 }
 
