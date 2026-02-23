@@ -126,13 +126,15 @@ export function useProcessMatchingLogic() {
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
 
-      // Ajouter les paramètres de test du matching (si présents dans l'URL)
-      // Lire directement depuis getState() pour éviter les problèmes de stale closure
+      // Paramètres de scoring par défaut + paramètres de test (si présents dans l'URL)
+      const defaultScoringParams = {
+        c_unknown_score: 0,
+        z_unmatched: 0,
+      };
       const matchingTestParams = useFlowStore.getState().matchingTestParams;
-      if (matchingTestParams) {
-        formData.append('scoring', JSON.stringify(matchingTestParams));
-        console.log('[MATCHING] Scoring params from store:', matchingTestParams);
-      }
+      const scoringParams = { ...defaultScoringParams, ...matchingTestParams };
+      formData.append('scoring', JSON.stringify(scoringParams));
+      console.log('[MATCHING] Scoring params:', scoringParams);
 
       console.log('Payload MATCHING :', {
         id_categorie: categoryId,
@@ -140,7 +142,7 @@ export function useProcessMatchingLogic() {
         champs_sortie: ["url"],
         metadonnee_utilisateurs,
         liste_caracteristique: consolidatedEquivalences,
-        ...(matchingTestParams && { scoring: matchingTestParams })
+        scoring: scoringParams
       });
 
       const apiBase = getApiBasePath();
@@ -211,7 +213,7 @@ export function useProcessMatchingLogic() {
           id_categorie: categoryId,
           metadonnee_utilisateurs,
           liste_caracteristique: consolidatedEquivalences,
-          scoring: matchingTestParams || undefined,
+          scoring: scoringParams,
         },
         response: {
           results_count: totalProducts,
@@ -300,13 +302,15 @@ export function useProcessMatchingLogic() {
       // Envoyer uniquement les critères actifs (non supprimés) à l'API
       formData.append('liste_caracteristique', JSON.stringify(activeEquivalences));
 
-      // Ajouter les paramètres de test du matching (si présents dans l'URL)
-      // Lire directement depuis getState() pour éviter les problèmes de stale closure
+      // Paramètres de scoring par défaut + paramètres de test (si présents dans l'URL)
+      const defaultScoringParams = {
+        c_unknown_score: 0,
+        z_unmatched: 0,
+      };
       const matchingTestParams = useFlowStore.getState().matchingTestParams;
-      if (matchingTestParams) {
-        formData.append('scoring', JSON.stringify(matchingTestParams));
-        console.log('[MATCHING REFETCH] Scoring params from store:', matchingTestParams);
-      }
+      const scoringParams = { ...defaultScoringParams, ...matchingTestParams };
+      formData.append('scoring', JSON.stringify(scoringParams));
+      console.log('[MATCHING REFETCH] Scoring params:', scoringParams);
 
       console.log('Payload MATCHING (client - refetch):', {
         id_categorie: categoryId,
@@ -315,7 +319,7 @@ export function useProcessMatchingLogic() {
         champs_sortie: ["url"],
         liste_caracteristique: activeEquivalences,
         removed_criteria_ids: allRemovedIds,
-        ...(matchingTestParams && { scoring: matchingTestParams })
+        scoring: scoringParams
       });
 
       const apiBase = getApiBasePath();
@@ -398,7 +402,7 @@ export function useProcessMatchingLogic() {
           metadonnee_utilisateurs,
           liste_caracteristique: activeEquivalences,
           removed_criteria_ids: allRemovedIds,
-          scoring: matchingTestParams || undefined,
+          scoring: scoringParams,
         },
         response: {
           results_count: totalProducts,
