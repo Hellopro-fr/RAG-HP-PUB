@@ -246,17 +246,30 @@ export function useProcessMatchingLogic() {
         }
       }
 
-      // Tracking DB - Stocker le payload envoyé ET les résultats du matching
-      // DÉPLACÉ À LA FIN : après chargement complet des produits
-      const matchingTrackingData = {
-        // === REQUÊTE ENVOYÉE ===
+      // Tracking DB - Envoi en 2 parties pour éviter blocage WAF Imperva (payload trop gros)
+      // PARTIE 1 : Requête envoyée (metadata, équivalences)
+      const matchingRequestData = {
+        part: 1,
         request: {
           id_categorie: categoryId,
           metadonnee_utilisateurs,
           liste_caracteristique: consolidatedEquivalences,
           scoring: matchingTestParams || undefined,
         },
-        // === RÉSULTATS REÇUS ===
+        equivalences_count: consolidatedEquivalences.length
+      };
+
+      trackDbEvent(
+        'matching',
+        'request',
+        matchingRequestData,
+        categoryId,
+        1
+      );
+
+      // PARTIE 2 : Résultats reçus (produits, scores)
+      const matchingResponseData = {
+        part: 2,
         response: {
           results_count: totalProducts,
           threshold: MIN_PRODUCTS_THRESHOLD,
@@ -272,13 +285,13 @@ export function useProcessMatchingLogic() {
             id_fournisseur: p.id_fournisseur
           })),
         },
-        equivalences_count: consolidatedEquivalences.length
+        status: hasInsufficientResults ? 'insufficient_results' : 'success'
       };
 
       trackDbEvent(
         'matching',
-        hasInsufficientResults ? 'insufficient_results' : 'success',
-        matchingTrackingData,
+        'response',
+        matchingResponseData,
         categoryId,
         1
       );
@@ -381,10 +394,12 @@ export function useProcessMatchingLogic() {
         activeEquivalences
       );
 
-      // Tracking DB - Stocker le payload envoyé ET les résultats du refetch
+      // Tracking DB - Envoi en 2 parties pour éviter blocage WAF Imperva
       const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
-      const refetchTrackingData = {
-        // === REQUÊTE ENVOYÉE ===
+
+      // PARTIE 1 : Requête envoyée (metadata, équivalences)
+      const refetchRequestData = {
+        part: 1,
         request: {
           id_categorie: categoryId,
           metadonnee_utilisateurs,
@@ -392,7 +407,14 @@ export function useProcessMatchingLogic() {
           removed_criteria_ids: allRemovedIds,
           scoring: matchingTestParams || undefined,
         },
-        // === RÉSULTATS REÇUS ===
+        equivalences_count: activeEquivalences.length
+      };
+
+      trackDbEvent('matching', 'refetch_request', refetchRequestData, categoryId, 1);
+
+      // PARTIE 2 : Résultats reçus (produits, scores)
+      const refetchResponseData = {
+        part: 2,
         response: {
           results_count: totalProducts,
           top_products: apiData.top_produit?.map((p: any) => ({
@@ -405,11 +427,10 @@ export function useProcessMatchingLogic() {
             score: p.score,
             id_fournisseur: p.id_fournisseur
           })),
-        },
-        equivalences_count: activeEquivalences.length
+        }
       };
 
-      trackDbEvent('matching', 'refetch', refetchTrackingData, categoryId, 1);
+      trackDbEvent('matching', 'refetch_response', refetchResponseData, categoryId, 1);
 
       // Identifier les produits orphelins (sélectionnés mais plus dans les nouveaux résultats)
       const newProductIds = new Set([
