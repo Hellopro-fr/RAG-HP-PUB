@@ -184,7 +184,13 @@ class LanguageDetector:
             # langid retourne des log-probabilités normalisées entre -inf et 0
             # On utilise un sigmoid pour une normalisation plus réaliste
             import math
-            langid_confidence = 1.0 / (1.0 + math.exp(-langid_score - 10))
+            exp_val = -langid_score - 10
+            if exp_val > 700:
+                langid_confidence = 0.0
+            elif exp_val < -700:
+                langid_confidence = 1.0
+            else:
+                langid_confidence = 1.0 / (1.0 + math.exp(exp_val))
             langid_confidence = max(0.0, min(1.0, langid_confidence))
             
             # Signal français par analyse lexicale
