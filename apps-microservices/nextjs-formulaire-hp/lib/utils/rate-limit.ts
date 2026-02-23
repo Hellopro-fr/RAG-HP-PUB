@@ -3,6 +3,12 @@
 // In-memory, sans dépendance externe
 // ========================================
 
+// IPs whitelistées (exclues du rate limiting)
+const WHITELISTED_IPS = new Set([
+  '129.222.108.162',
+  '102.17.192.102',
+]);
+
 interface RateLimitRecord {
   count: number;
   resetTime: number;
@@ -47,6 +53,11 @@ export function rateLimit(
   limit: number = 10,
   windowMs: number = 60000
 ): RateLimitResult {
+  // Bypass pour IPs whitelistées
+  if (WHITELISTED_IPS.has(identifier)) {
+    return { success: true, limit, remaining: limit };
+  }
+
   const now = Date.now();
   const record = rateLimitStore.get(identifier);
 
