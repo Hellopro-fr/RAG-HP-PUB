@@ -4,7 +4,6 @@
 // ========================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 /**
  * URL du endpoint PHP pour l'insertion des demandes
@@ -67,14 +66,6 @@ function appendObjectToFormData(formData: FormData, obj: any, prefix = ''): void
  * Gère les requêtes JSON (sans fichiers) et multipart/form-data (avec fichiers)
  */
 export async function POST(request: NextRequest) {
-  // Rate limiting - 5 requêtes/minute par IP (anti-spam)
-  const ip = getClientIP(request);
-  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.DEMANDE_INFO.limit, RATE_LIMITS.DEMANDE_INFO.windowMs);
-
-  if (!success) {
-    return rateLimitResponse(resetIn);
-  }
-
   try {
     const contentType = request.headers.get('content-type') || '';
 

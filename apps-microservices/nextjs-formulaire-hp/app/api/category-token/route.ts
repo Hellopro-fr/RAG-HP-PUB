@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateCategoryToken, validateCategoryToken } from '@/lib/category-token';
-import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 /**
  * POST /api/category-token
@@ -10,11 +9,6 @@ import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/ut
  * Response: { token: string, url: string }
  */
 export async function POST(request: NextRequest) {
-  // Rate limiting - 10 requêtes/minute (sensible)
-  const ip = getClientIP(request);
-  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.TOKEN.limit, RATE_LIMITS.TOKEN.windowMs);
-  if (!success) return rateLimitResponse(resetIn);
-
   try {
     const body = await request.json();
     const { categoryId } = body;
@@ -54,11 +48,6 @@ export async function POST(request: NextRequest) {
  * Response: { valid: boolean, categoryId?: number, error?: string }
  */
 export async function GET(request: NextRequest) {
-  // Rate limiting - 10 requêtes/minute
-  const ip = getClientIP(request);
-  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.TOKEN.limit, RATE_LIMITS.TOKEN.windowMs);
-  if (!success) return rateLimitResponse(resetIn);
-
   const { searchParams } = new URL(request.url);
   const token = searchParams.get('token');
 

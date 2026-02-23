@@ -117,7 +117,7 @@ export const RATE_LIMITS = {
   GEO: { limit: 60, windowMs: 60 * 1000 },              // 60/min
 
   // Matching fournisseurs
-  MATCHING: { limit: 10, windowMs: 60 * 1000 },         // 10/min
+  MATCHING: { limit: 1000, windowMs: 60 * 1000 },         // 10/min
 
   // Questionnaire - usage modéré
   QUESTIONNAIRE: { limit: 30, windowMs: 60 * 1000 },    // 30/min
@@ -129,13 +129,13 @@ export const RATE_LIMITS = {
   ASSETS: { limit: 100, windowMs: 60 * 1000 },          // 100/min
 
   // Tracking - usage très élevé
-  TRACKING: { limit: 100, windowMs: 60 * 1000 },        // 100/min
+  TRACKING: { limit: 1000, windowMs: 60 * 1000 },        // 100/min
 
   // Token génération - sensible
   TOKEN: { limit: 10, windowMs: 60 * 1000 },            // 10/min
 
   // Produits
-  PRODUITS: { limit: 20, windowMs: 60 * 1000 },         // 20/min
+  PRODUITS: { limit: 2000, windowMs: 60 * 1000 },         // 20/min
 } as const;
 
 /**
