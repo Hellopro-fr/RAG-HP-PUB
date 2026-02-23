@@ -190,15 +190,34 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * OPTIONS pour CORS
+ * Domaines autorisés pour CORS
  */
-export async function OPTIONS() {
+const ALLOWED_ORIGINS = [
+  'https://www.hellopro.fr',
+  'https://dev-www.hellopro.fr',
+  'https://conseils.hellopro.fr',
+  'https://dev-conseils.hellopro.fr',
+  ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000'] : []),
+];
+
+/**
+ * OPTIONS pour CORS - Domaines autorisés uniquement
+ */
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin');
+
+  // Vérifier si l'origine est autorisée
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+    return new NextResponse(null, { status: 403 });
+  }
+
   return new NextResponse(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400',
     },
   });
 }

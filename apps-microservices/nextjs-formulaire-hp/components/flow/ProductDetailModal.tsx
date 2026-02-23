@@ -2,6 +2,7 @@
 
 import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
+import DOMPurify from "isomorphic-dompurify";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { trackProductModalView } from "@/lib/analytics";
@@ -357,7 +358,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                       "prose-li:text-muted-foreground",
                       !descriptionExpanded && "max-h-[12rem] overflow-hidden"
                     )}
-                    dangerouslySetInnerHTML={{ __html: product.descriptionHtml }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.descriptionHtml) }}
                   />
                 ) : (
                   <div
@@ -558,7 +559,7 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
                     "prose-li:text-muted-foreground",
                     !vendorDescriptionExpanded && "max-h-[8rem] overflow-hidden"
                   )}
-                  dangerouslySetInnerHTML={{ __html: product.supplier.description }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.supplier.description || '') }}
                 />
 
                 {/* Gradient overlay when truncated */}
