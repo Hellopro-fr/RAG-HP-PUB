@@ -1,4 +1,5 @@
 import re
+import logging
 from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
@@ -7,6 +8,8 @@ from app.models.schemas import DetectionMode, DetectionResponse
 from app.services.language_detector import LanguageDetector
 from app.services.redirect_tracker import RedirectTracker, fetch_html
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class DomainFR:
@@ -58,6 +61,21 @@ class DomainFR:
             return urljoin(base_url, url)
         except Exception:
             return None
+    
+    @staticmethod
+    def _is_strong_french_url(url: str) -> bool:
+        """
+        Détermine si l'URL a un signal très fort de site français.
+        
+        Le TLD .fr est un signal extrêmement fiable : seules les entités
+        ayant un lien avec la France peuvent enregistrer un .fr (AFNIC).
+        """
+        try:
+            parsed = urlparse(url)
+            hostname = parsed.hostname or ''
+            return hostname.endswith('.fr')
+        except Exception:
+            return False
     
     @staticmethod
     async def check_url(url: str, track_redirect: bool = True, proxy: Optional[str] = None) -> dict:
@@ -263,8 +281,17 @@ class DomainFR:
         """
         Vérifie si une page est en français ou dispose d'une version française.
         
-        La vérification NLP est OBLIGATOIRE pour confirmer que le contenu
-        est réellement en français, même si les balises HTML l'indiquent.
+        Logique de décision avec niveaux de signal URL :
+        
+        Signal FORT (TLD .fr) :
+          → Accepté comme français sauf si NLP détecte ACTIVEMENT une autre langue
+            avec haute confiance (>0.9)
+        
+        Signal MODÉRÉ (path /fr/, lang=fr, sous-domaine fr.) :
+          → Nécessite que NLP confirme ou au minimum ne contredise pas
+        
+        Signal ABSENT :
+          → NLP obligatoire pour confirmer
         
         Args:
             content: Contenu HTML de la page
@@ -286,6 +313,7 @@ class DomainFR:
         url_check = await self.check_url(url, track_redirect=False)
         url_indicates_french = url_check.get('ok', False)
         url_method = url_check.get('method', '')
+        is_strong_url = self._is_strong_french_url(url)
         
         # Étape 2 : Méthode forcée (si définie)
         if self.forced_method:
@@ -293,6 +321,8 @@ class DomainFR:
             if lang_check and lang_check.get('method') == self.forced_method and lang_check.get('value') == 'fr':
                 # Confirmation NLP obligatoire même avec méthode forcée
                 nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
+                if nlp_result is None:
+                    nlp_result = self.language_detector.detect_from_text_content(content)
 
                 if nlp_result and nlp_result.get('lang') == 'fr':
                     return DetectionResponse(
@@ -312,88 +342,202 @@ class DomainFR:
         html_indicates_french = lang_result.get('detected') and lang_result.get('is_french')
         html_method = lang_result.get('method', '')
         
-        # Étape 4 : Vérification NLP OBLIGATOIRE pour confirmation
+        # Étape 4 : Vérification NLP (fastText prioritaire)
+        # Si fastText échoue (modèle absent), fallback langdetect+langid.
+        # Si fastText détecte non-FR avec faible confiance, cross-check avec langdetect+langid.
         nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
 
-        print("\n======== NLP RESULT ========\n")
-        print(nlp_result)
+        if nlp_result is None:
+            # Fallback : fastText indisponible (modèle absent ou texte trop court)
+            logger.info("fastText indisponible, fallback vers langdetect+langid")
+            nlp_result = self.language_detector.detect_from_text_content(content)
+        elif nlp_result.get('lang') != 'fr' and nlp_result.get('confidence', 0) < 0.75:
+            # fastText détecte non-FR avec faible confiance → cross-check obligatoire
+            # Cas typique : sites e-commerce FR avec noms de produits, termes techniques anglais
+            logger.info(
+                f"fastText peu confiant ({nlp_result.get('lang')}={nlp_result.get('confidence', 0):.3f}), "
+                "cross-check avec langdetect+langid"
+            )
+            secondary_result = self.language_detector.detect_from_text_content(content)
+            if secondary_result and secondary_result.get('lang') == 'fr':
+                # langdetect+langid détecte FR → on fait confiance au cross-check
+                logger.info(
+                    f"Cross-check langdetect+langid confirme FR "
+                    f"(confiance={secondary_result.get('confidence', 0):.3f}) — "
+                    f"fastText avait détecté {nlp_result.get('lang')}"
+                )
+                nlp_result = secondary_result
 
-        nlp_confirms_french = False
-        nlp_confidence = 0.0
+        logger.debug(f"NLP RESULT: {nlp_result}")
+
+        nlp_lang = nlp_result.get('lang') if nlp_result else None
+        nlp_confidence = nlp_result.get('confidence', 0) if nlp_result else 0.0
+        nlp_available = nlp_result is not None
         
-        if nlp_result and nlp_result.get('lang') == 'fr':
-            nlp_confidence = nlp_result.get('confidence', 0)
-            if nlp_confidence >= settings.NLP_MIN_CONFIDENCE:
-                nlp_confirms_french = True
+        # Catégorisation fine du résultat NLP
+        nlp_confirms_french = nlp_available and nlp_lang == 'fr' and nlp_confidence >= settings.NLP_MIN_CONFIDENCE
+        nlp_soft_french = nlp_available and nlp_lang == 'fr' and nlp_confidence < settings.NLP_MIN_CONFIDENCE
+        nlp_contradicts_french = nlp_available and nlp_lang is not None and nlp_lang != 'fr'
+        nlp_strongly_contradicts = nlp_contradicts_french and nlp_confidence > 0.9
         
         # Étape 5 : Recherche liens alternatifs (mode COMPLETE uniquement)
         alternatives = []
         if mode == DetectionMode.COMPLETE:
             alternatives = self.detect_alternative_languages(content)
         
-        # Logique de décision finale
-        # Cas 1 : URL + HTML + NLP confirment le français
-        if url_indicates_french and html_indicates_french and nlp_confirms_french:
-            return DetectionResponse(
-                ok=True,
-                url=url,
-                method=f"{url_method}+{html_method}+nlp_confirmed",
-                confidence=nlp_confidence,
-                alternative_urls=alternatives
-            )
+        # ====================================================================
+        # LOGIQUE DE DÉCISION FINALE
+        # ====================================================================
         
-        # Cas 2 : HTML + NLP confirment le français (URL neutre)
-        if html_indicates_french and nlp_confirms_french:
-            return DetectionResponse(
-                ok=True,
-                url=url,
-                method=f"{html_method}+nlp_confirmed",
-                confidence=nlp_confidence,
-                alternative_urls=alternatives
-            )
-        
-        # Cas 3 : URL + NLP confirment le français (pas de balise HTML)
-        if url_indicates_french and nlp_confirms_french:
-            return DetectionResponse(
-                ok=True,
-                url=url,
-                method=f"{url_method}+nlp_confirmed",
-                confidence=nlp_confidence,
-                alternative_urls=alternatives
-            )
-        
-        # Cas 4 : Seul NLP confirme le français (autres indicateurs absents)
+        # Cas 1 : NLP confirme pleinement le français
         if nlp_confirms_french:
+            methods = []
+            if url_indicates_french:
+                methods.append(url_method)
+            if html_indicates_french:
+                methods.append(html_method)
+            methods.append('nlp_confirmed')
+            
             return DetectionResponse(
                 ok=True,
                 url=url,
-                method='nlp_only',
+                method='+'.join(methods),
                 confidence=nlp_confidence,
                 alternative_urls=alternatives
             )
         
-        # Cas 5 : Liens alternatifs trouvés mais NLP ne confirme pas la page actuelle
-        # On retourne quand même les alternatives pour permettre une vérification
+        # Cas 2 : TLD .fr (signal FORT) — accepté sauf contradiction NLP forte
+        if is_strong_url:
+            # Sous-cas 2a : NLP contredit fortement (>0.9 confiance dans une autre langue)
+            # → Rare mais possible (ex: site .fr en anglais)
+            if nlp_strongly_contradicts:
+                logger.info(
+                    f"TLD .fr mais NLP détecte {nlp_lang} avec confiance {nlp_confidence:.3f} — rejet"
+                )
+                return DetectionResponse(
+                    ok=False,
+                    url=url,
+                    method='nlp_override_tld_fr',
+                    confidence=nlp_confidence,
+                    alternative_urls=alternatives,
+                    error=f"TLD .fr mais contenu détecté comme {nlp_lang} ({nlp_confidence:.0%})"
+                )
+            
+            # Sous-cas 2b : NLP soft-confirme, ou NLP indisponible, ou NLP faiblement contredit
+            # → Le TLD .fr est un signal suffisamment fort pour valider
+            methods = [url_method]
+            if html_indicates_french:
+                methods.append(html_method)
+            
+            if nlp_soft_french:
+                methods.append('nlp_soft_confirmed')
+                confidence = nlp_confidence
+            elif not nlp_available:
+                methods.append('nlp_skipped')
+                confidence = 0.7
+            elif nlp_contradicts_french:
+                methods.append(f'nlp_weak_disagree_{nlp_lang}')
+                confidence = 0.6
+            else:
+                methods.append('tld_trusted')
+                confidence = 0.8
+            
+            return DetectionResponse(
+                ok=True,
+                url=url,
+                method='+'.join(methods),
+                confidence=confidence,
+                alternative_urls=alternatives
+            )
+        
+        # Cas 3 : Signal URL modéré (/fr/, lang=fr, sous-domaine) + NLP soft FR
+        if url_indicates_french and nlp_soft_french:
+            methods = [url_method, 'nlp_soft_confirmed']
+            if html_indicates_french:
+                methods.insert(1, html_method)
+            
+            return DetectionResponse(
+                ok=True,
+                url=url,
+                method='+'.join(methods),
+                confidence=nlp_confidence,
+                alternative_urls=alternatives
+            )
+        
+        # Cas 4 : HTML indique FR + NLP soft FR (mais URL neutre)
+        if html_indicates_french and nlp_soft_french:
+            return DetectionResponse(
+                ok=True,
+                url=url,
+                method=f"{html_method}+nlp_soft_confirmed",
+                confidence=nlp_confidence,
+                alternative_urls=alternatives
+            )
+        
+        # Cas 5 : NLP indisponible + HTML ou URL modéré indique FR
+        if not nlp_available and (html_indicates_french or url_indicates_french):
+            methods = []
+            if url_indicates_french:
+                methods.append(url_method)
+            if html_indicates_french:
+                methods.append(html_method)
+            methods.append('nlp_skipped')
+            
+            return DetectionResponse(
+                ok=True,
+                url=url,
+                method='+'.join(methods),
+                confidence=0.6,
+                alternative_urls=alternatives
+            )
+        
+        # Cas 6 : Liens alternatifs trouvés mais page actuelle pas confirmée FR
         if alternatives:
             return DetectionResponse(
-                ok=True,
-                url=alternatives[0],
+                ok=False,
+                url=url,
                 method='alternative_link_needs_verification',
                 alternative_urls=alternatives,
-                confidence=nlp_confidence if nlp_result else None
+                confidence=nlp_confidence if nlp_result else None,
+                error="Page actuelle non française, mais des liens alternatifs FR existent"
             )
         
-        # Cas 6 : Indicateurs HTML/URL présents mais NLP ne confirme pas
-        if html_indicates_french or url_indicates_french:
+        # Cas 7 : NLP disponible mais ne confirme pas, malgré indicateurs HTML/URL
+        if nlp_available and (html_indicates_french or url_indicates_french):
             return DetectionResponse(
                 ok=False,
                 url=url,
                 method='nlp_not_confirmed',
                 confidence=nlp_confidence if nlp_result else None,
-                error=f"Indicateurs trouvés ({html_method or url_method}) mais NLP non confirmé"
+                error=f"Indicateurs trouvés ({html_method or url_method}) mais NLP détecte: {nlp_lang or 'N/A'}"
             )
         
-        # Cas 7 : Aucun indicateur français trouvé
+        # Cas 8 : Dernier recours — signal lexical français
+        # Si les moteurs NLP échouent (contenu mixte, noms de produits, etc.)
+        # mais que le texte contient clairement des mots français exclusifs,
+        # on accepte avec une confiance réduite.
+        try:
+            soup_check = BeautifulSoup(content, 'lxml')
+            for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                el.decompose()
+            visible_text = soup_check.get_text(separator=' ', strip=True)
+            
+            if len(visible_text) >= 50:
+                french_signal = self.language_detector._compute_french_signal(visible_text)
+                logger.debug(f"Lexical French signal (last resort): {french_signal:.3f}")
+                
+                if french_signal > 0.3:
+                    return DetectionResponse(
+                        ok=True,
+                        url=url,
+                        method='french_lexical_signal',
+                        confidence=round(min(0.7, french_signal), 3),
+                        alternative_urls=alternatives
+                    )
+        except Exception as e:
+            logger.warning(f"Erreur signal lexical: {e}")
+        
+        # Cas 9 : Aucun indicateur français trouvé
         return DetectionResponse(
             ok=False,
             url=url,

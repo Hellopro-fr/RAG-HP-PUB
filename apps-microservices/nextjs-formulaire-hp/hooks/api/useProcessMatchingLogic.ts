@@ -126,13 +126,15 @@ export function useProcessMatchingLogic() {
       formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
       formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
 
-      // Ajouter les paramètres de test du matching (si présents dans l'URL)
-      // Lire directement depuis getState() pour éviter les problèmes de stale closure
+      // Paramètres de scoring par défaut + paramètres de test (si présents dans l'URL)
+      const defaultScoringParams = {
+        c_unknown_score: 0,
+        z_unmatched: 0,
+      };
       const matchingTestParams = useFlowStore.getState().matchingTestParams;
-      if (matchingTestParams) {
-        formData.append('scoring', JSON.stringify(matchingTestParams));
-        console.log('[MATCHING] Scoring params from store:', matchingTestParams);
-      }
+      const scoringParams = { ...defaultScoringParams, ...matchingTestParams };
+      formData.append('scoring', JSON.stringify(scoringParams));
+      console.log('[MATCHING] Scoring params:', scoringParams);
 
       console.log('Payload MATCHING :', {
         id_categorie: categoryId,
@@ -140,7 +142,7 @@ export function useProcessMatchingLogic() {
         champs_sortie: ["url"],
         metadonnee_utilisateurs,
         liste_caracteristique: consolidatedEquivalences,
-        ...(matchingTestParams && { scoring: matchingTestParams })
+        scoring: scoringParams
       });
 
       const apiBase = getApiBasePath();
@@ -167,59 +169,15 @@ export function useProcessMatchingLogic() {
 
 
       // Seuil minimum de produits pour afficher la sélection
-      const MIN_PRODUCTS_THRESHOLD = 1;
+      // Condition : au moins 2 produits dans top_produit avec score >= 0.3 (30%)
+      const MIN_TOP_PRODUCTS = 2;
+      const MIN_SCORE_THRESHOLD = 0.3;
+      const topProductsWithGoodScore = (apiData.top_produit || []).filter(
+        (p: any) => Number(p.score) >= MIN_SCORE_THRESHOLD
+      );
       const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
-      const hasInsufficientResults = totalProducts <= MIN_PRODUCTS_THRESHOLD;
+      const hasInsufficientResults = topProductsWithGoodScore.length < MIN_TOP_PRODUCTS;
       setRedirectGoToSomethingToAdd(hasInsufficientResults);
-
-      // ==========================================================================
-      // TODO: SUPPRIMER CE BLOC DE TEST - Début du mode test avec IDs fixes
-      // ==========================================================================
-      const TEST_MODE = true; // TODO: Mettre à false pour la production
-
-      let finalRecommended = recommended;
-      let finalOthers = others;
-
-      if (TEST_MODE) {
-        // TODO: Supprimer - Créer des suppliers de test avec les IDs 97 et 98
-        const testSuppliers = [
-          {
-            id: '97',
-            productName: 'Produit 97',
-            supplierName: 'Fournisseur Test',
-            image: '/images/product-placeholder.jpg',
-            images: ['/images/product-placeholder.jpg'],
-            description: '',
-            matchScore: 88,
-            matchGaps: [],
-            specs: [],
-            isRecommended: true,
-            rating: 0,
-            distance: 0,
-            supplier: { name: '', description: '', location: '', responseTime: '' }
-          },
-          {
-            id: '98',
-            productName: 'Produit 98',
-            supplierName: 'Fournisseur Test',
-            image: '/images/product-placeholder.jpg',
-            images: ['/images/product-placeholder.jpg'],
-            description: '',
-            matchScore: 75,
-            matchGaps: [],
-            specs: [],
-            isRecommended: true,
-            rating: 0,
-            distance: 0,
-            supplier: { name: '', description: '', location: '', responseTime: '' }
-          },
-        ];
-        finalRecommended = testSuppliers as typeof recommended;
-        finalOthers = [];
-      }
-      // ==========================================================================
-      // TODO: SUPPRIMER CE BLOC DE TEST - Fin du mode test
-      // ==========================================================================
 
       // Stocker les résultats initiaux (avec placeholders)
       setMatchingResults({ recommended, others });
@@ -246,45 +204,44 @@ export function useProcessMatchingLogic() {
         }
       }
 
-      // Tracking DB - Envoi en 4 parties pour éviter blocage WAF Imperva
-      // PARTIE 1 : Request (metadata + équivalences)
-      trackDbEvent('matching', 'part1_request', {
+      // Délai pour éviter détection WAF Imperva (succession rapide d'appels)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Tracking DB - Stocker le payload envoyé ET les résultats du matching
+      const matchingTrackingData = {
         request: {
           id_categorie: categoryId,
           metadonnee_utilisateurs,
           liste_caracteristique: consolidatedEquivalences,
-          scoring: matchingTestParams || undefined,
+          scoring: scoringParams,
         },
-        equivalences_count: consolidatedEquivalences.length
-      }, categoryId, 1);
-
-      // PARTIE 2 : Response summary
-      trackDbEvent('matching', 'part2_summary', {
         response: {
           results_count: totalProducts,
-          threshold: MIN_PRODUCTS_THRESHOLD,
+          top_products_with_good_score: topProductsWithGoodScore.length,
+          min_top_products: MIN_TOP_PRODUCTS,
+          min_score_threshold: MIN_SCORE_THRESHOLD,
           redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
+          top_products: apiData.top_produit?.map((p: any) => ({
+            id: p.id_produit,
+            score: Number(Number(p.score).toFixed(2)),
+            id_fournisseur: p.id_fournisseur
+          })) || [],
+          liste_products: apiData.liste_produit.map((p: any) => ({
+            id: p.id_produit,
+            score: Number(Number(p.score).toFixed(2)),
+            id_fournisseur: p.id_fournisseur
+          })),
         },
-        status: hasInsufficientResults ? 'insufficient_results' : 'success'
-      }, categoryId, 1);
+        equivalences_count: consolidatedEquivalences.length
+      };
 
-      // PARTIE 3 : Top products (scores arrondis 2 décimales)
-      trackDbEvent('matching', 'part3_top', {
-        top_products: apiData.top_produit?.map((p: any) => ({
-          id: p.id_produit,
-          score: Number(Number(p.score).toFixed(2)),
-          id_fournisseur: p.id_fournisseur
-        })) || []
-      }, categoryId, 1);
-
-      // PARTIE 4 : Liste products (scores arrondis 2 décimales)
-      trackDbEvent('matching', 'part4_list', {
-        liste_products: apiData.liste_produit.map((p: any) => ({
-          id: p.id_produit,
-          score: Number(Number(p.score).toFixed(2)),
-          id_fournisseur: p.id_fournisseur
-        }))
-      }, categoryId, 1);
+      trackDbEvent(
+        'matching',
+        hasInsufficientResults ? 'insufficient_results' : 'success',
+        matchingTrackingData,
+        categoryId,
+        1
+      );
 
     } catch (error) {
       console.error('Matching process error:', error);
@@ -345,13 +302,15 @@ export function useProcessMatchingLogic() {
       // Envoyer uniquement les critères actifs (non supprimés) à l'API
       formData.append('liste_caracteristique', JSON.stringify(activeEquivalences));
 
-      // Ajouter les paramètres de test du matching (si présents dans l'URL)
-      // Lire directement depuis getState() pour éviter les problèmes de stale closure
+      // Paramètres de scoring par défaut + paramètres de test (si présents dans l'URL)
+      const defaultScoringParams = {
+        c_unknown_score: 0,
+        z_unmatched: 0,
+      };
       const matchingTestParams = useFlowStore.getState().matchingTestParams;
-      if (matchingTestParams) {
-        formData.append('scoring', JSON.stringify(matchingTestParams));
-        console.log('[MATCHING REFETCH] Scoring params from store:', matchingTestParams);
-      }
+      const scoringParams = { ...defaultScoringParams, ...matchingTestParams };
+      formData.append('scoring', JSON.stringify(scoringParams));
+      console.log('[MATCHING REFETCH] Scoring params:', scoringParams);
 
       console.log('Payload MATCHING (client - refetch):', {
         id_categorie: categoryId,
@@ -360,7 +319,7 @@ export function useProcessMatchingLogic() {
         champs_sortie: ["url"],
         liste_caracteristique: activeEquivalences,
         removed_criteria_ids: allRemovedIds,
-        ...(matchingTestParams && { scoring: matchingTestParams })
+        scoring: scoringParams
       });
 
       const apiBase = getApiBasePath();
@@ -384,45 +343,8 @@ export function useProcessMatchingLogic() {
         activeEquivalences
       );
 
-      // Tracking DB - Envoi en 4 parties pour éviter blocage WAF Imperva
+      // Calculer totalProducts pour le tracking (utilisé plus tard)
       const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
-
-      // PARTIE 1 : Request (metadata + équivalences)
-      trackDbEvent('matching', 'refetch_part1_request', {
-        request: {
-          id_categorie: categoryId,
-          metadonnee_utilisateurs,
-          liste_caracteristique: activeEquivalences,
-          removed_criteria_ids: allRemovedIds,
-          scoring: matchingTestParams || undefined,
-        },
-        equivalences_count: activeEquivalences.length
-      }, categoryId, 1);
-
-      // PARTIE 2 : Response summary
-      trackDbEvent('matching', 'refetch_part2_summary', {
-        response: {
-          results_count: totalProducts,
-        }
-      }, categoryId, 1);
-
-      // PARTIE 3 : Top products (scores arrondis 2 décimales)
-      trackDbEvent('matching', 'refetch_part3_top', {
-        top_products: apiData.top_produit?.map((p: any) => ({
-          id: p.id_produit,
-          score: Number(Number(p.score).toFixed(2)),
-          id_fournisseur: p.id_fournisseur
-        })) || []
-      }, categoryId, 1);
-
-      // PARTIE 4 : Liste products (scores arrondis 2 décimales)
-      trackDbEvent('matching', 'refetch_part4_list', {
-        liste_products: apiData.liste_produit.map((p: any) => ({
-          id: p.id_produit,
-          score: Number(Number(p.score).toFixed(2)),
-          id_fournisseur: p.id_fournisseur
-        }))
-      }, categoryId, 1);
 
       // Identifier les produits orphelins (sélectionnés mais plus dans les nouveaux résultats)
       const newProductIds = new Set([
@@ -448,26 +370,57 @@ export function useProcessMatchingLogic() {
       // Stocker les résultats initiaux (avec placeholders)
       setMatchingResults({ recommended, others });
 
-      // Enrichir les recommandés avec les infos produit (prioritaire)
+      // Enrichir les recommandés avec les infos produit (await - bloquant)
+      let enrichedRecommended = recommended;
       const recommendedIds = recommended.map((s) => s.id);
       if (recommendedIds.length > 0) {
         const productInfo = await fetchProductInfo(recommendedIds, categoryId, apiBase);
         if (productInfo?.items) {
-          const enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
+          enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
           setMatchingResults({ recommended: enrichedRecommended, others });
-
-          // Ensuite enrichir les "others" en background
-          const othersIds = others.map((s) => s.id);
-          if (othersIds.length > 0) {
-            fetchProductInfo(othersIds, categoryId, apiBase).then((othersInfo) => {
-              if (othersInfo?.items) {
-                const enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
-                setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
-              }
-            });
-          }
         }
       }
+
+      // Enrichir les "others" avec les infos produit (await - bloquant)
+      let enrichedOthers = others;
+      const othersIds = others.map((s) => s.id);
+      if (othersIds.length > 0) {
+        const othersInfo = await fetchProductInfo(othersIds, categoryId, apiBase);
+        if (othersInfo?.items) {
+          enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
+          setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
+        }
+      }
+
+      // Délai pour éviter détection WAF Imperva (succession rapide d'appels)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Tracking DB - Stocker le payload envoyé ET les résultats du refetch
+      const refetchTrackingData = {
+        request: {
+          id_categorie: categoryId,
+          metadonnee_utilisateurs,
+          liste_caracteristique: activeEquivalences,
+          removed_criteria_ids: allRemovedIds,
+          scoring: scoringParams,
+        },
+        response: {
+          results_count: totalProducts,
+          top_products: apiData.top_produit?.map((p: any) => ({
+            id: p.id_produit,
+            score: Number(Number(p.score).toFixed(2)),
+            id_fournisseur: p.id_fournisseur
+          })) || [],
+          liste_products: apiData.liste_produit.map((p: any) => ({
+            id: p.id_produit,
+            score: Number(Number(p.score).toFixed(2)),
+            id_fournisseur: p.id_fournisseur
+          })),
+        },
+        equivalences_count: activeEquivalences.length
+      };
+
+      trackDbEvent('matching', 'refetch', refetchTrackingData, categoryId, 1);
 
       setShowLoader(false);
       return true;
