@@ -65,6 +65,34 @@ const nextConfig = {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
+          // HSTS - Force HTTPS pendant 1 an
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains',
+          },
+          // CSP - Contrôle des sources autorisées
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' www.googletagmanager.com www.google-analytics.com static.hotjar.com script.hotjar.com",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: https: *.hellopro.fr www.googletagmanager.com",
+              "font-src 'self' data:",
+              "connect-src 'self' www.google-analytics.com *.hotjar.com *.hellopro.fr",
+              "frame-src 'self' vars.hotjar.com",
+            ].join('; '),
+          },
+          // Referrer - Limite les infos envoyées aux sites tiers
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          // Permissions - Désactive les APIs sensibles non utilisées
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
         ],
       },
       // Cache long pour les assets statiques (fonts, images publiques)

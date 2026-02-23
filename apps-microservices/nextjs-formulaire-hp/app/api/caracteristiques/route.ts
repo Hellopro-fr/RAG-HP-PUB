@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 const BASE_URL = process.env.HELLOPRO_API_URL || 'https://api.hellopro.fr';
 const URL_API = `${BASE_URL}/v2/index.php`;
 const TOKEN = process.env.NEXT_TOKEN_API_QUESTION || '';
 
 export async function POST(request: NextRequest) {
+  // Rate limiting - 30 requêtes/minute
+  const ip = getClientIP(request);
+  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.REFERENCE_DATA.limit, RATE_LIMITS.REFERENCE_DATA.windowMs);
+  if (!success) return rateLimitResponse(resetIn);
+
   try {
     const body = await request.formData();
     const categoryId = body.get('id_categorie');

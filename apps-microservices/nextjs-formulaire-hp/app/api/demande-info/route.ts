@@ -4,6 +4,7 @@
 // ========================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 /**
  * URL du endpoint PHP pour l'insertion des demandes
@@ -66,6 +67,14 @@ function appendObjectToFormData(formData: FormData, obj: any, prefix = ''): void
  * Gère les requêtes JSON (sans fichiers) et multipart/form-data (avec fichiers)
  */
 export async function POST(request: NextRequest) {
+  // Rate limiting - 5 requêtes/minute par IP (anti-spam)
+  const ip = getClientIP(request);
+  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.DEMANDE_INFO.limit, RATE_LIMITS.DEMANDE_INFO.windowMs);
+
+  if (!success) {
+    return rateLimitResponse(resetIn);
+  }
+
   try {
     const contentType = request.headers.get('content-type') || '';
 
@@ -190,15 +199,34 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * OPTIONS pour CORS
+ * Domaines autorisés pour CORS
  */
-export async function OPTIONS() {
+const ALLOWED_ORIGINS = [
+  'https://www.hellopro.fr',
+  'https://dev-www.hellopro.fr',
+  'https://conseils.hellopro.fr',
+  'https://dev-conseils.hellopro.fr',
+  ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000'] : []),
+];
+
+/**
+ * OPTIONS pour CORS - Domaines autorisés uniquement
+ */
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin');
+
+  // Vérifier si l'origine est autorisée
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+    return new NextResponse(null, { status: 403 });
+  }
+
   return new NextResponse(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400',
     },
   });
 }

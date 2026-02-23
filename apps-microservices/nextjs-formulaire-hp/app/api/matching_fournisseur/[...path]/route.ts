@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 const BASE_URL = 'https://api.hellopro.eu';
 const URL_API_FOURNISSEUR = `${BASE_URL}/graph-service/fournisseur`;
@@ -14,6 +15,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  // Rate limiting - 10 requêtes/minute
+  const ip = getClientIP(request);
+  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.MATCHING.limit, RATE_LIMITS.MATCHING.windowMs);
+  if (!success) return rateLimitResponse(resetIn);
+
   try {
     const { path } = await params;
     const pathString = path.join('/');
@@ -57,6 +63,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
+  // Rate limiting - 10 requêtes/minute
+  const ip = getClientIP(request);
+  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.MATCHING.limit, RATE_LIMITS.MATCHING.windowMs);
+  if (!success) return rateLimitResponse(resetIn);
+
   try {
     const { path } = await params;
     const pathString = path.join('/');

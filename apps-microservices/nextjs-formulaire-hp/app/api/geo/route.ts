@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 // Force dynamic rendering (uses searchParams)
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,11 @@ const BASE_URL = process.env.HELLOPRO_FRONTEND_URL || 'https://www.hellopro.fr';
  * - ?t=2&cp=XXXXX  → Villes par code postal
  */
 export async function GET(request: NextRequest) {
+  // Rate limiting - 60 requêtes/minute (autocomplétion villes)
+  const ip = getClientIP(request);
+  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.GEO.limit, RATE_LIMITS.GEO.windowMs);
+  if (!success) return rateLimitResponse(resetIn);
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const t = searchParams.get('t');

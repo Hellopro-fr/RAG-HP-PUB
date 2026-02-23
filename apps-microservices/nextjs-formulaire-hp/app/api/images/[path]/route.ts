@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 // URL interne du CDN d'images (accessible uniquement depuis le réseau Docker)
 const IMAGE_CDN_URL = process.env.IMAGE_CDN_INTERNAL_URL || 'http://image-cdn-service:8580';
@@ -48,6 +49,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string }> }
 ) {
+  // Rate limiting - 100 requêtes/minute (images fréquentes)
+  const ip = getClientIP(request);
+  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.ASSETS.limit, RATE_LIMITS.ASSETS.windowMs);
+  if (!success) return rateLimitResponse(resetIn);
+
   try {
     const { path: encodedPath } = await params;
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 // Force dynamic rendering (uses searchParams)
 export const dynamic = 'force-dynamic';
@@ -6,6 +7,11 @@ export const dynamic = 'force-dynamic';
 const BASE_URL = 'https://www.hellopro.fr';
 
 export async function GET(request: NextRequest) {
+  // Rate limiting - 30 requêtes/minute (autocomplétion)
+  const ip = getClientIP(request);
+  const { success, resetIn } = rateLimit(ip, RATE_LIMITS.SIREN_SEARCH.limit, RATE_LIMITS.SIREN_SEARCH.windowMs);
+  if (!success) return rateLimitResponse(resetIn);
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const soc = searchParams.get('soc');
