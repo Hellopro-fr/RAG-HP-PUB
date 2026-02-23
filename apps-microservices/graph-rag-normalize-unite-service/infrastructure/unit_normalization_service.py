@@ -34,6 +34,15 @@ class UnitNormalizationService:
             cls._instance.ureg.define("Litres = liter")
             cls._instance.ureg.define("Volts = volt")
 
+            # --- FIX 4: Define units from new DLQ messages ---
+            cls._instance.ureg.define(
+                "sélections = count = selections = selection = sélection"
+            )
+            cls._instance.ureg.define("galettes = count = galette = Galettes = Galette")
+            cls._instance.ureg.define("tasses_par_jour = count")
+            cls._instance.ureg.define("Watts = watt")
+            cls._instance.ureg.define("unités = count")
+
             # Base & Common
             cls._instance.ureg.define("tonne = 1000 * kilogram = t")
             cls._instance.ureg.define("mm = millimeter")
@@ -86,11 +95,21 @@ class UnitNormalizationService:
             cls._instance.UNIT_TO_DIMENSION = {
                 # Count / Dimensionless
                 "unité": "count",
+                "unités": "count",
                 "unite": "count",
+                "unites": "count",
                 "nb": "count",
                 "chevaux": "count",
                 "segments": "count",
                 "segment": "count",
+                "sélections": "count",
+                "selections": "count",
+                "sélection": "count",
+                "selection": "count",
+                "galettes": "count",
+                "galette": "count",
+                "tasses/jour": "count",
+                "tasses_par_jour": "count",
                 # Sound
                 "db": "sound_level",
                 "dba": "sound_level",
@@ -112,6 +131,7 @@ class UnitNormalizationService:
                 "mètres": "length",
                 # Power
                 "w": "power",
+                "watts": "power",
                 "kw": "power",
                 "cv": "power",
                 "ch": "power",
@@ -151,6 +171,14 @@ class UnitNormalizationService:
                 "m3/h": "volume / time",
                 "m³/h": "volume / time",
                 "débit": "volume / time",
+                # Mass Flow Rate
+                "g/min": "mass_flow",
+                "kg/min": "mass_flow",
+                "kg/h": "mass_flow",
+                # Count Rate (items per second)
+                "pièces/seconde": "count_rate",
+                "pieces/seconde": "count_rate",
+                "billets/seconde": "count_rate",
                 # Force
                 "n": "force",
                 "kn": "force",
@@ -189,6 +217,10 @@ class UnitNormalizationService:
                 "quantité": "count",
                 "segment": "count",
                 "segments": "count",
+                "sélections": "count",
+                "selections": "count",
+                "capacité de stockage": "count",
+                "capacité totale de stockage": "count",
                 "sonore": "sound_level",
                 "acoustique": "sound_level",
                 "bruit": "sound_level",
@@ -213,6 +245,8 @@ class UnitNormalizationService:
                 "fréquence": "frequency",
                 "vitesse de rotation": "[frequency]",
                 "tours/minute": "[frequency]",
+                "vitesse d'acceptation": "count_rate",
+                "vitesse de distribution": "count_rate",
                 "volume": "volume",
                 "cuve": "volume",
                 "contenance": "volume",
@@ -223,6 +257,7 @@ class UnitNormalizationService:
                 "delai": "time",
                 "mémoire": "information",
                 "stockage": "information",
+                "débit de vapeur": "mass_flow",
                 "débit": "volume / time",
                 "force": "force",
                 "poussée": "force",
@@ -261,6 +296,8 @@ class UnitNormalizationService:
                 "area": "meter ** 2",
                 "area_density": "kilogram / meter ** 2",
                 "angle": "degree",
+                "mass_flow": "gram / minute",
+                "count_rate": "count / second",
             }
         return cls._instance
 
@@ -328,8 +365,32 @@ class UnitNormalizationService:
                 unit = "m**2"
             elif unit_stripped == "m3":
                 unit = "m**3"
+            # --- FIX: Pint cannot handle French composite rate units directly.
+            # Map them to Pint-safe equivalents for mass flow and count rate.
+            elif unit_stripped == "g/min":
+                unit = "gram / minute"
+            elif unit_stripped in ("pièces/seconde", "pieces/seconde"):
+                unit = "count / second"
+            elif unit_stripped == "billets/seconde":
+                unit = "count / second"
+            elif unit_stripped in ("tasses/jour",):
+                # cups/day is purely a count-formatted unit; pass as count
+                unit = "count"
+            elif unit_stripped == "watts":
+                unit = "watt"
 
         dimension = self._get_dimension(original_unit, label)
+
+        # --- FIX: For count-based dimensions, bypass Pint conversion and return value directly.
+        # Pint cannot meaningfully convert between custom dimensionless units like
+        # sélections → count or count / second, so we pass the value through as-is.
+        if dimension in ("count", "count_rate") and dimension is not None:
+            canonical_unit_str = self.CANONICAL_UNITS.get(dimension)
+            if canonical_unit_str:
+                return {
+                    "valeur_canonique": float(value),
+                    "unite_canonique": canonical_unit_str,
+                }
 
         if not dimension:
             return {}

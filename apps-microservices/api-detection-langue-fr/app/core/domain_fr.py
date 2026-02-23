@@ -1,4 +1,5 @@
 import re
+import logging
 from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
@@ -7,6 +8,8 @@ from app.models.schemas import DetectionMode, DetectionResponse
 from app.services.language_detector import LanguageDetector
 from app.services.redirect_tracker import RedirectTracker, fetch_html
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class DomainFR:
@@ -315,11 +318,11 @@ class DomainFR:
         # Étape 4 : Vérification NLP OBLIGATOIRE pour confirmation
         nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
 
-        print("\n======== NLP RESULT ========\n")
-        print(nlp_result)
+        logger.debug(f"NLP RESULT: {nlp_result}")
 
         nlp_confirms_french = False
         nlp_confidence = 0.0
+        nlp_available = nlp_result is not None
         
         if nlp_result and nlp_result.get('lang') == 'fr':
             nlp_confidence = nlp_result.get('confidence', 0)
@@ -332,68 +335,66 @@ class DomainFR:
             alternatives = self.detect_alternative_languages(content)
         
         # Logique de décision finale
-        # Cas 1 : URL + HTML + NLP confirment le français
-        if url_indicates_french and html_indicates_french and nlp_confirms_french:
-            return DetectionResponse(
-                ok=True,
-                url=url,
-                method=f"{url_method}+{html_method}+nlp_confirmed",
-                confidence=nlp_confidence,
-                alternative_urls=alternatives
-            )
-        
-        # Cas 2 : HTML + NLP confirment le français (URL neutre)
-        if html_indicates_french and nlp_confirms_french:
-            return DetectionResponse(
-                ok=True,
-                url=url,
-                method=f"{html_method}+nlp_confirmed",
-                confidence=nlp_confidence,
-                alternative_urls=alternatives
-            )
-        
-        # Cas 3 : URL + NLP confirment le français (pas de balise HTML)
-        if url_indicates_french and nlp_confirms_french:
-            return DetectionResponse(
-                ok=True,
-                url=url,
-                method=f"{url_method}+nlp_confirmed",
-                confidence=nlp_confidence,
-                alternative_urls=alternatives
-            )
-        
-        # Cas 4 : Seul NLP confirme le français (autres indicateurs absents)
+        # Cas 1 : NLP confirme le français → ok=True (avec ou sans indicateurs HTML/URL)
         if nlp_confirms_french:
+            # Construire la méthode combinée
+            methods = []
+            if url_indicates_french:
+                methods.append(url_method)
+            if html_indicates_french:
+                methods.append(html_method)
+            methods.append('nlp_confirmed')
+            
             return DetectionResponse(
                 ok=True,
                 url=url,
-                method='nlp_only',
+                method='+'.join(methods),
                 confidence=nlp_confidence,
                 alternative_urls=alternatives
             )
         
-        # Cas 5 : Liens alternatifs trouvés mais NLP ne confirme pas la page actuelle
-        # On retourne quand même les alternatives pour permettre une vérification
+        # Cas 2 : NLP indisponible (texte trop court) mais HTML+URL indiquent FR
+        # → ok=True avec confiance réduite et flag nlp_skipped
+        if not nlp_available and (html_indicates_french or url_indicates_french):
+            methods = []
+            if url_indicates_french:
+                methods.append(url_method)
+            if html_indicates_french:
+                methods.append(html_method)
+            methods.append('nlp_skipped')
+            
+            return DetectionResponse(
+                ok=True,
+                url=url,
+                method='+'.join(methods),
+                confidence=0.6,  # Confiance réduite car NLP n'a pas pu confirmer
+                alternative_urls=alternatives
+            )
+        
+        # Cas 3 : Liens alternatifs trouvés mais NLP ne confirme pas la page actuelle
+        # → ok=False avec alternatives en info (l'appelant peut les vérifier séparément)
         if alternatives:
             return DetectionResponse(
-                ok=True,
-                url=alternatives[0],
+                ok=False,
+                url=url,
                 method='alternative_link_needs_verification',
                 alternative_urls=alternatives,
-                confidence=nlp_confidence if nlp_result else None
+                confidence=nlp_confidence if nlp_result else None,
+                error="Page actuelle non française, mais des liens alternatifs FR existent"
             )
         
-        # Cas 6 : Indicateurs HTML/URL présents mais NLP ne confirme pas
-        if html_indicates_french or url_indicates_french:
+        # Cas 4 : NLP disponible mais ne confirme pas FR, malgré indicateurs HTML/URL
+        # → ok=False car le contenu réel n'est pas français
+        if nlp_available and (html_indicates_french or url_indicates_french):
             return DetectionResponse(
                 ok=False,
                 url=url,
                 method='nlp_not_confirmed',
                 confidence=nlp_confidence if nlp_result else None,
-                error=f"Indicateurs trouvés ({html_method or url_method}) mais NLP non confirmé"
+                error=f"Indicateurs trouvés ({html_method or url_method}) mais NLP détecte: {nlp_result.get('lang', '?') if nlp_result else 'N/A'}"
             )
         
-        # Cas 7 : Aucun indicateur français trouvé
+        # Cas 5 : Aucun indicateur français trouvé
         return DetectionResponse(
             ok=False,
             url=url,

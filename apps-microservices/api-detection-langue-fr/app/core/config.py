@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     HTTP_RETRY_DELAY: float = 1.0  # secondes
     
     # NLP Detection
-    NLP_MIN_CONFIDENCE: float = 0.85
-    NLP_MIN_TEXT_LENGTH: int = 200  # caractères minimum pour NLP
+    NLP_MIN_CONFIDENCE: float = 0.75  # Réduit de 0.85 pour accepter le FR avec termes techniques EN
+    NLP_MIN_TEXT_LENGTH: int = 100  # Réduit de 200 pour accepter les pages minimalistes
     
     # Batch Processing
     BATCH_MAX_URLS: int = 100

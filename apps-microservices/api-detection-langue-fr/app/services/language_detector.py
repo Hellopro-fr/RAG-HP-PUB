@@ -1,9 +1,12 @@
 import re
+import logging
 from typing import Optional
 from bs4 import BeautifulSoup
 from langdetect import detect, detect_langs, LangDetectException
 import langid
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LanguageDetector:
@@ -12,12 +15,21 @@ class LanguageDetector:
     - Analyse des balises HTML (lang, meta)
     - Détection NLP par contenu textuel (langdetect + langid)
     """
-    # Mots fonctionnels français très fréquents (impossible à confondre)
-    FRENCH_STOPWORDS = {
-        'le', 'la', 'les', 'de', 'des', 'un', 'une', 'du', 'pour', 
-        'sur', 'avec', 'dans', 'par', 'sans', 'est', 'sont', 'et',
-        'ou', 'mais', 'si', 'ce', 'cette', 'ces', 'leur', 'leurs',
-        'au', 'aux', 'qui', 'que', 'dont', 'où'
+    # Mots fonctionnels exclusivement français (à fort poids discriminant)
+    # Ces mots n'existent PAS en espagnol, portugais, italien ou anglais
+    FRENCH_EXCLUSIVE_STOPWORDS = {
+        'nous', 'vous', 'sont', 'avec', 'dans', 'pour', 'mais', 'comme',
+        'entre', 'aussi', 'très', 'cette', 'leurs', 'dont', 'depuis',
+        'encore', 'après', 'sous', 'chez', 'jusqu', 'toujours', 'peut',
+        'même', 'être', 'fait', 'tout', 'tous', 'plus', 'avoir',
+        'notre', 'votre', 'leurs', 'quelques', 'chaque', 'plusieurs'
+    }
+    
+    # Mots partagés avec d'autres langues romanes (à faible poids)
+    FRENCH_SHARED_STOPWORDS = {
+        'le', 'la', 'les', 'de', 'des', 'un', 'une', 'du',
+        'sur', 'par', 'sans', 'est', 'et', 'ou', 'si', 'ce',
+        'ces', 'au', 'aux', 'qui', 'que', 'où'
     }
     
 
@@ -99,6 +111,10 @@ class LanguageDetector:
         """
         Calcule un score basé sur la présence de mots fonctionnels français.
         Retourne un score entre 0 et 1.
+        
+        Utilise deux niveaux de poids :
+        - Mots exclusivement français (poids fort)
+        - Mots partagés avec autres langues romanes (poids faible)
         """
         text_lower = text.lower()
         words = re.findall(r'\b\w+\b', text_lower)
@@ -106,15 +122,21 @@ class LanguageDetector:
         if len(words) < 10:
             return 0.0
         
-        # Compter les mots fonctionnels français
-        french_word_count = sum(1 for word in words if word in self.FRENCH_STOPWORDS)
+        # Compter les mots exclusivement français (poids fort)
+        exclusive_count = sum(1 for word in words if word in self.FRENCH_EXCLUSIVE_STOPWORDS)
         
-        # Ratio de mots français
-        french_ratio = french_word_count / len(words)
+        # Compter les mots partagés (poids faible)
+        shared_count = sum(1 for word in words if word in self.FRENCH_SHARED_STOPWORDS)
         
-        # Normaliser avec une sigmoid pour avoir un score plus exploitable
-        # Si >5% de mots français → signal fort
-        return min(1.0, french_ratio * 20)
+        # Score pondéré : exclusifs comptent double
+        weighted_count = (exclusive_count * 2.0) + (shared_count * 0.5)
+        
+        # Ratio pondéré
+        french_ratio = weighted_count / len(words)
+        
+        # Normaliser avec un multiplicateur réduit (×10 au lieu de ×20)
+        # Si >10% de mots français pondérés → signal fort
+        return min(1.0, french_ratio * 10)
     
     def detect_from_text_content(self, html: str) -> Optional[dict]:
         """
@@ -130,7 +152,8 @@ class LanguageDetector:
             soup = BeautifulSoup(html, 'lxml')
             
             # Supprimer scripts, styles et autres éléments non visibles
-            for element in soup(['script', 'style', 'meta', 'link', 'noscript', 'header', 'footer', 'nav']):
+            # Note: on garde header, footer, nav car ils peuvent contenir du contenu pertinent
+            for element in soup(['script', 'style', 'meta', 'link', 'noscript']):
                 element.decompose()
             
             text = soup.get_text(separator=' ', strip=True)
@@ -155,16 +178,19 @@ class LanguageDetector:
             
             # Détection avec langid
             langid_result, langid_score = langid.classify(text)
-            # Normaliser le score langid (transformation plus douce)
-            # langid retourne des scores négatifs, plus le score est proche de 0, plus c'est confiant
-            langid_confidence = max(0.0, 1 - abs(langid_score) / 100)
+            # Normaliser le score langid avec sigmoid
+            # langid retourne des log-probabilités normalisées entre -inf et 0
+            # On utilise un sigmoid pour une normalisation plus réaliste
+            import math
+            langid_confidence = 1.0 / (1.0 + math.exp(-langid_score - 10))
+            langid_confidence = max(0.0, min(1.0, langid_confidence))
             
             # Signal français par analyse lexicale
             french_signal = self._compute_french_signal(text)
             
-            print(f"French signal: {french_signal:.3f}")
-            print(f"Langdetect: {langdetect_result} ({langdetect_confidence:.3f})")
-            print(f"Langid: {langid_result} ({langid_confidence:.3f})")
+            logger.debug(f"French signal: {french_signal:.3f}")
+            logger.debug(f"Langdetect: {langdetect_result} ({langdetect_confidence:.3f})")
+            logger.debug(f"Langid: {langid_result} ({langid_confidence:.3f})")
             
             # Vote pondéré amélioré
             results = {}
@@ -177,9 +203,10 @@ class LanguageDetector:
             if langid_result:
                 results[langid_result] = results.get(langid_result, 0) + (langid_confidence * 0.6)
             
-            # Bonus français si signal lexical fort
-            if french_signal > 0.3:
-                results['fr'] = results.get('fr', 0) + (french_signal * 0.5)
+            # Bonus français UNIQUEMENT si signal lexical très fort (seuil relevé à 0.5)
+            # et avec un poids réduit (0.3 au lieu de 0.5)
+            if french_signal > 0.5:
+                results['fr'] = results.get('fr', 0) + (french_signal * 0.3)
             
             if not results:
                 return None
@@ -207,7 +234,7 @@ class LanguageDetector:
             }
             
         except Exception as e:
-            print(f"Erreur détection langue: {e}")
+            logger.error(f"Erreur détection langue: {e}")
             return None
     
     def detect_from_text_content_fasttext(self, html: str) -> Optional[dict]:
@@ -232,7 +259,7 @@ class LanguageDetector:
             # Charger le modèle (lazy loading)
             if not hasattr(self, '_fasttext_model'):
                 if not os.path.exists(model_path):
-                    print(f"Modèle fastText non trouvé: {model_path}")
+                    logger.warning(f"Modèle fastText non trouvé: {model_path}")
                     return None
                 self._fasttext_model = fasttext.load_model(model_path)
             
@@ -240,7 +267,8 @@ class LanguageDetector:
             soup = BeautifulSoup(html, 'lxml')
             
             # Supprimer scripts, styles et autres éléments non visibles
-            for element in soup(['script', 'style', 'meta', 'link', 'noscript', 'header', 'footer', 'nav']):
+            # Harmonisé avec detect_from_text_content (même liste d'éléments)
+            for element in soup(['script', 'style', 'meta', 'link', 'noscript']):
                 element.decompose()
             
             text = soup.get_text(separator=' ', strip=True)
@@ -266,8 +294,8 @@ class LanguageDetector:
             # Signal français par analyse lexicale
             french_signal = self._compute_french_signal(text)
             
-            print(f"[FastText] Main lang: {main_lang} ({main_confidence:.3f})")
-            print(f"[FastText] French signal: {french_signal:.3f}")
+            logger.debug(f"[FastText] Main lang: {main_lang} ({main_confidence:.3f})")
+            logger.debug(f"[FastText] French signal: {french_signal:.3f}")
             
             # Détails pour debugging
             details = {
@@ -280,22 +308,15 @@ class LanguageDetector:
                 'french_signal': round(french_signal, 3)
             }
             
-            # Ajuster la confiance si le signal français est fort
+            # Confiance finale basée sur fastText uniquement
+            # Le signal lexical sert UNIQUEMENT à renforcer un résultat français déjà détecté
+            # Il ne doit JAMAIS forcer un changement de langue détectée
             final_confidence = main_confidence
             final_lang = main_lang
             
-            if main_lang == 'fr':
-                # Bonus de confiance si signal lexical confirme
-                if french_signal > 0.3:
-                    final_confidence = min(1.0, main_confidence + french_signal * 0.2)
-            elif french_signal > 0.5 and main_confidence < 0.7:
-                # Si signal français fort mais fastText hésite, reconsidérer
-                # Vérifier si 'fr' est dans les top 3
-                for i, label in enumerate(labels):
-                    if label == '__label__fr':
-                        final_lang = 'fr'
-                        final_confidence = max(float(scores[i]), french_signal * 0.8)
-                        break
+            if main_lang == 'fr' and french_signal > 0.3:
+                # Bonus de confiance modéré si signal lexical confirme le français
+                final_confidence = min(1.0, main_confidence + french_signal * 0.1)
             
             return {
                 'method': 'nlp_detection_fasttext',
@@ -305,43 +326,86 @@ class LanguageDetector:
             }
             
         except ImportError:
-            print("fastText non installé. Installez-le avec: pip install fasttext")
+            logger.error("fastText non installé. Installez-le avec: pip install fasttext")
             return None
         except Exception as e:
-            print(f"Erreur détection fastText: {e}")
+            logger.error(f"Erreur détection fastText: {e}")
             return None
     
     def detect_combined(self, html: str, use_nlp: bool = True) -> dict:
         """
         Combine toutes les méthodes de détection avec priorisation.
         
-        Priorité :
-        1. Balises HTML (plus fiable car déclaratif)
-        2. Détection NLP (si activée)
+        Logique :
+        1. Détecte via balises HTML
+        2. Détecte via NLP (si activé)
+        3. Croisement des résultats :
+           - Si HTML et NLP sont d'accord → résultat avec confiance haute
+           - Si HTML dit FR mais NLP dit non → NLP prime (contenu réel)
+           - Si NLP seul → résultat avec confiance NLP
+           - Si HTML seul (NLP indisponible) → résultat avec confiance réduite
         """
-        # D'abord les balises HTML
+        # Étape 1 : Analyse des balises HTML
         html_result = self.detect_from_html_tags(html)
-        if html_result:
-            return {
-                'detected': True,
-                'is_french': html_result['value'] == 'fr',
-                'method': html_result['method'],
-                'value': html_result['value'],
-                'confidence': 1.0  # Confiance maximale pour les balises
-            }
+        html_lang = html_result['value'] if html_result else None
+        html_method = html_result['method'] if html_result else None
         
-        # Ensuite NLP si activé
+        # Étape 2 : Analyse NLP (si activée)
+        nlp_result = None
         if use_nlp:
             nlp_result = self.detect_from_text_content_fasttext(html)
-            if nlp_result and nlp_result['confidence'] >= settings.NLP_MIN_CONFIDENCE:
+        
+        nlp_lang = nlp_result['lang'] if nlp_result else None
+        nlp_confidence = nlp_result['confidence'] if nlp_result else 0.0
+        
+        # Étape 3 : Croisement des résultats
+        
+        # Cas A : HTML et NLP disponibles
+        if html_lang and nlp_result:
+            if html_lang == nlp_lang:
+                # Accord total → confiance maximale
                 return {
                     'detected': True,
-                    'is_french': nlp_result['lang'] == 'fr',
-                    'method': nlp_result['method'],
-                    'value': nlp_result['lang'],
-                    'confidence': nlp_result['confidence']
+                    'is_french': html_lang == 'fr',
+                    'method': f"{html_method}+nlp_confirmed",
+                    'value': html_lang,
+                    'confidence': max(nlp_confidence, 0.9)
+                }
+            else:
+                # Désaccord → NLP prime car c'est le contenu réel
+                logger.info(
+                    f"Désaccord HTML ({html_lang}) vs NLP ({nlp_lang}). "
+                    f"NLP prime avec confiance {nlp_confidence:.3f}"
+                )
+                return {
+                    'detected': True,
+                    'is_french': nlp_lang == 'fr',
+                    'method': f"nlp_override_{html_method}",
+                    'value': nlp_lang,
+                    'confidence': nlp_confidence
                 }
         
+        # Cas B : NLP seul (pas de balise HTML)
+        if nlp_result and nlp_confidence >= settings.NLP_MIN_CONFIDENCE:
+            return {
+                'detected': True,
+                'is_french': nlp_lang == 'fr',
+                'method': 'nlp_only',
+                'value': nlp_lang,
+                'confidence': nlp_confidence
+            }
+        
+        # Cas C : HTML seul (NLP indisponible — texte trop court ou erreur)
+        if html_lang and not nlp_result:
+            return {
+                'detected': True,
+                'is_french': html_lang == 'fr',
+                'method': f"{html_method}+nlp_skipped",
+                'value': html_lang,
+                'confidence': 0.6  # Confiance réduite car non confirmé par NLP
+            }
+        
+        # Cas D : Rien détecté
         return {
             'detected': False,
             'is_french': False,
