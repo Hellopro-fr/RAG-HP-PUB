@@ -327,10 +327,10 @@ class MatchingPayload(BaseModel):
     )
     scoring: Optional[ScoringOptions] = Field(
         ScoringOptions(
-            z_unmatched=0.2,
+            z_unmatched=0,
             e_unmatched=0.9,
             g_unknown_score=0.8,
-            c_unknown_score=0.5,
+            c_unknown_score=0,
             v_blocked=-2.0,
             v_different=-0.3,
             t_unmatched=0.2,
