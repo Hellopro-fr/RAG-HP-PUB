@@ -321,6 +321,8 @@ class DomainFR:
             if lang_check and lang_check.get('method') == self.forced_method and lang_check.get('value') == 'fr':
                 # Confirmation NLP obligatoire même avec méthode forcée
                 nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
+                if nlp_result is None:
+                    nlp_result = self.language_detector.detect_from_text_content(content)
 
                 if nlp_result and nlp_result.get('lang') == 'fr':
                     return DetectionResponse(
@@ -340,8 +342,31 @@ class DomainFR:
         html_indicates_french = lang_result.get('detected') and lang_result.get('is_french')
         html_method = lang_result.get('method', '')
         
-        # Étape 4 : Vérification NLP
+        # Étape 4 : Vérification NLP (fastText prioritaire)
+        # Si fastText échoue (modèle absent), fallback langdetect+langid.
+        # Si fastText détecte non-FR avec faible confiance, cross-check avec langdetect+langid.
         nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
+
+        if nlp_result is None:
+            # Fallback : fastText indisponible (modèle absent ou texte trop court)
+            logger.info("fastText indisponible, fallback vers langdetect+langid")
+            nlp_result = self.language_detector.detect_from_text_content(content)
+        elif nlp_result.get('lang') != 'fr' and nlp_result.get('confidence', 0) < 0.75:
+            # fastText détecte non-FR avec faible confiance → cross-check obligatoire
+            # Cas typique : sites e-commerce FR avec noms de produits, termes techniques anglais
+            logger.info(
+                f"fastText peu confiant ({nlp_result.get('lang')}={nlp_result.get('confidence', 0):.3f}), "
+                "cross-check avec langdetect+langid"
+            )
+            secondary_result = self.language_detector.detect_from_text_content(content)
+            if secondary_result and secondary_result.get('lang') == 'fr':
+                # langdetect+langid détecte FR → on fait confiance au cross-check
+                logger.info(
+                    f"Cross-check langdetect+langid confirme FR "
+                    f"(confiance={secondary_result.get('confidence', 0):.3f}) — "
+                    f"fastText avait détecté {nlp_result.get('lang')}"
+                )
+                nlp_result = secondary_result
 
         logger.debug(f"NLP RESULT: {nlp_result}")
 
@@ -487,7 +512,32 @@ class DomainFR:
                 error=f"Indicateurs trouvés ({html_method or url_method}) mais NLP détecte: {nlp_lang or 'N/A'}"
             )
         
-        # Cas 8 : Aucun indicateur français trouvé
+        # Cas 8 : Dernier recours — signal lexical français
+        # Si les moteurs NLP échouent (contenu mixte, noms de produits, etc.)
+        # mais que le texte contient clairement des mots français exclusifs,
+        # on accepte avec une confiance réduite.
+        try:
+            soup_check = BeautifulSoup(content, 'lxml')
+            for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                el.decompose()
+            visible_text = soup_check.get_text(separator=' ', strip=True)
+            
+            if len(visible_text) >= 50:
+                french_signal = self.language_detector._compute_french_signal(visible_text)
+                logger.debug(f"Lexical French signal (last resort): {french_signal:.3f}")
+                
+                if french_signal > 0.3:
+                    return DetectionResponse(
+                        ok=True,
+                        url=url,
+                        method='french_lexical_signal',
+                        confidence=round(min(0.7, french_signal), 3),
+                        alternative_urls=alternatives
+                    )
+        except Exception as e:
+            logger.warning(f"Erreur signal lexical: {e}")
+        
+        # Cas 9 : Aucun indicateur français trouvé
         return DetectionResponse(
             ok=False,
             url=url,

@@ -217,5 +217,16 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
     except Exception:
         pass
     
-    logger.error(f"Échec de récupération HTML pour {url} après 3 tentatives")
+    # Stratégie 4 : Scraping avec navigateur headless (Playwright)
+    # Dernier recours pour les sites avec protection anti-bot avancée
+    logger.info(f"Tentative de scraping Playwright pour {url}")
+    try:
+        from app.services.scraper import scrape_html
+        scraped_content = await scrape_html(url)
+        if scraped_content:
+            return scraped_content
+    except Exception as e:
+        logger.warning(f"Erreur scraping Playwright pour {url}: {e}")
+    
+    logger.error(f"Échec de récupération HTML pour {url} après 4 tentatives (HTTP + scraping)")
     return None
