@@ -35,7 +35,7 @@ export default function InputSection({ onCompare, onTestBoilerplate, disabled }:
 
   const handleSubmitBoilerplate = () => {
     if (!mainHtml.trim() || !ref1Html.trim() || !ref2Html.trim()) {
-      alert("Please provide the Main HTML and both Reference HTMLs to run the intersection.")
+      alert("Please provide the Main HTML and both Reference HTMLs to run the intersection test.")
       return
     }
     onTestBoilerplate(mainHtml, ref1Html, ref2Html)

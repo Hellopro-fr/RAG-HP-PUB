@@ -46,7 +46,7 @@ ResponseModel = Dict[str, ResultItem]
 
 class BoilerplateTestRequest(BaseModel):
     main_html: str = Field(..., description="The target HTML page to extract header/footer from.")
-    reference_htmls: List[str] = Field(..., description="List of 2 reference HTML pages from the same domain.")
+    reference_htmls: List[str] = Field(..., description="List of reference HTML pages from the same domain.")
 
 
 class BoilerplateTestResponse(BaseModel):

@@ -1,5 +1,5 @@
 import re
-
+import logging
 from bs4 import BeautifulSoup, Comment
 
 class HeaderFooterExtractor:
@@ -9,6 +9,7 @@ class HeaderFooterExtractor:
     """
 
     def __init__(self, html_content: str):
+        self.raw_html = html_content # Store raw HTML for boilerpy3 fallback
         try:
             self.soup = BeautifulSoup(html_content, 'html.parser')
             
@@ -282,54 +283,75 @@ class HeaderFooterExtractor:
 
     def _run_intersection_fallback(self, reference_htmls: list[str]) -> tuple[str, str]:
         """
-        Analyzes the DOM structure of the main HTML against multiple reference HTMLs 
-        to identify structural boilerplate (Headers and Footers) by finding intersecting content blocks.
+        Uses boilerpy3 to strip noisy elements, then performs a structural tree 
+        intersection across the main HTML and reference HTMLs to identify Boilerplate.
         """
-        if not self.soup or not self.soup.body:
+        if not hasattr(self, 'raw_html') or not self.raw_html or not reference_htmls:
             return "", ""
-
-        # 1. Clean reference HTMLs and extract word sets for accurate intersection
-        ref_word_sets = []
-        for html in reference_htmls:
-            try:
-                s = BeautifulSoup(html, 'html.parser')
-                for el in s(["script", "style", "noscript", "iframe", "button", "form", "input", "textarea", "select", "option", "svg", "img"]):
-                    el.decompose()
-                for comment in s.find_all(string=lambda text: isinstance(text, Comment)):
-                    comment.extract()
-                text = self.get_cleaned_text(s.body)
-                ref_word_sets.append(set(text.lower().split()))
-            except Exception:
-                pass
         
-        if not ref_word_sets:
+        try:
+            from boilerpy3 import extractors as BoilerpyExtractor
+        except ImportError:
+            logging.error("boilerpy3 not installed.")
             return "", ""
 
-        # 2. Score elements in main soup based on word overlap with references
+        try:
+            extractor = BoilerpyExtractor.KeepEverythingExtractor()
+            
+            # 1. Clean the Main HTML
+            clean_main_html = extractor.get_marked_html(self.raw_html)
+            if not clean_main_html:
+                return "", ""
+            main_soup = BeautifulSoup(clean_main_html, 'html.parser')
+            
+            # 2. Clean the Reference HTMLs
+            clean_refs = []
+            for ref_html in reference_htmls:
+                c_ref = extractor.get_marked_html(ref_html)
+                if c_ref:
+                    clean_refs.append(BeautifulSoup(c_ref, 'html.parser'))
+                    
+            if not clean_refs:
+                return "", ""
+        except Exception as e:
+            logging.error(f"Error during boilerpy3 cleaning: {e}")
+            return "", ""
+
+        # 3. Create a unique structural signature for elements based on tag and class
+        def get_signature(el):
+            classes = el.get('class', [])
+            class_str = ".".join(sorted(classes)) if isinstance(classes, list) else classes
+            return f"{el.name}.{class_str}" if class_str else el.name
+
+        # Extract all signatures from the reference pages
+        ref_signatures_sets = []
+        for ref_soup in clean_refs:
+            sig_set = set()
+            for el in ref_soup.find_all(['div', 'header', 'footer', 'nav', 'ul', 'section', 'aside']):
+                if el.get('class'): # Only consider elements with explicit classes
+                     sig_set.add(get_signature(el))
+            ref_signatures_sets.append(sig_set)
+
+        # 4. Find matching nodes in the Main HTML
         candidates = []
-        # We target structural block elements that typically contain boilerplate
-        all_elements = self.soup.body.find_all(['div', 'section', 'nav', 'header', 'footer', 'aside', 'ul'])
+        all_main_elements = main_soup.find_all(['div', 'header', 'footer', 'nav', 'ul', 'section', 'aside'])
         
-        for index, el in enumerate(all_elements):
-            text = self.get_cleaned_text(el)
-            words = text.lower().split()
+        for index, el in enumerate(all_main_elements):
+            sig = get_signature(el)
             
-            # Skip empty or very small nodes that might randomly match
-            if len(words) < 5:
+            # Skip generic tags without classes unless they are strictly semantic
+            if sig in ['div', 'ul', 'section'] and el.name not in ['header', 'footer', 'nav']:
                 continue
-            
-            el_word_set = set(words)
-            # Calculate the minimum percentage overlap across all reference pages
-            min_overlap = min(len(el_word_set & rws) / len(el_word_set) for rws in ref_word_sets)
-            
-            # If 70% of the words in this element exist in ALL reference pages, it's boilerplate
-            if min_overlap > 0.70:
-                candidates.append((index, el, text, len(words)))
+                
+            # If the exact structural signature exists in ALL reference pages, it's boilerplate
+            if all(sig in ref_set for ref_set in ref_signatures_sets):
+                text = self.get_cleaned_text(el)
+                if len(text.split()) >= 2: # Ignore purely empty structures
+                    candidates.append((index, el, text, len(text.split())))
 
-        # 3. Filter nested candidates (keep the highest-level parent to avoid duplicate blocks)
+        # 5. Filter nested candidates (keep the highest-level parent to avoid duplicates)
         top_level_candidates = []
         for i, (idx, el, text, word_count) in enumerate(candidates):
-            # If any parent of 'el' is also in the candidate list, 'el' is a child and should be skipped.
             is_child = any(parent in [c[1] for c in candidates] for parent in el.parents)
             if not is_child:
                 top_level_candidates.append((idx, el, text, word_count))
@@ -337,29 +359,18 @@ class HeaderFooterExtractor:
         if not top_level_candidates:
             return "", ""
 
-        # 4. Identify Main Content to split Header and Footer
-        # The main product/article content is likely the element with the most words that has a LOW overlap.
-        main_idx = -1
-        max_main_words = 0
-        for index, el in enumerate(all_elements):
-            if el.name in ['div', 'section', 'main', 'article']:
-                text = self.get_cleaned_text(el)
-                words = text.lower().split()
-                if len(words) > max_main_words:
-                    el_word_set = set(words)
-                    if el_word_set:
-                        # Average overlap with references
-                        avg_overlap = sum(len(el_word_set & rws) / len(el_word_set) for rws in ref_word_sets) / len(ref_word_sets)
-                        if avg_overlap < 0.4: # Low overlap means unique content
-                            max_main_words = len(words)
-                            main_idx = index
+        # 6. Identify the Main Content split point based on unique word count
+        main_idx = len(all_main_elements) // 2 # Default fallback
+        max_unique_words = 0
+        
+        for index, el in enumerate(all_main_elements):
+            if not any(el == c[1] for c in candidates): # If it's NOT a boilerplate candidate
+                text_length = len(self.get_cleaned_text(el).split())
+                if text_length > max_unique_words and text_length > 10: 
+                    max_unique_words = text_length
+                    main_idx = index
 
-        # 5. Classify Header vs Footer based on sequential DOM position
-        # If main_idx is found, candidates BEFORE main_idx are header, AFTER are footer.
-        # If no distinct main content is found, fallback to a 50/50 DOM index split.
-        if main_idx == -1:
-            main_idx = len(all_elements) // 2
-
+        # 7. Classify into Header and Footer based on DOM sequence
         header_texts = []
         footer_texts = []
 
@@ -372,7 +383,7 @@ class HeaderFooterExtractor:
         header_result = " ".join(header_texts).strip()
         footer_result = " ".join(footer_texts).strip()
 
-        # Sanity check: Boilerplates shouldn't be larger than 5000 characters
+        # Sanity cap
         if len(header_result) > 5000: header_result = ""
         if len(footer_result) > 5000: footer_result = ""
 
@@ -395,17 +406,17 @@ class HeaderFooterExtractor:
         header_method = "Original (Semantic/CSS Pattern)" if header else "None"
         footer_method = "Original (Semantic/CSS Pattern)" if footer else "None"
 
-        # If either is missing, attempt the fallback intersection
+        # If either is missing, attempt the fallback intersection using boilerpy3
         if not header or not footer:
             fallback_h, fallback_f = self._run_intersection_fallback(reference_htmls)
             
             if not header and fallback_h:
                 header = fallback_h
-                header_method = "Fallback (Multi-Page Intersection)"
+                header_method = "Fallback (boilerpy3 Multi-Page Intersection)"
             
             if not footer and fallback_f:
                 footer = fallback_f
-                footer_method = "Fallback (Multi-Page Intersection)"
+                footer_method = "Fallback (boilerpy3 Multi-Page Intersection)"
 
         return {
             "header": header,

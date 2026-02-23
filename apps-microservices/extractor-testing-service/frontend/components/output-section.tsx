@@ -19,13 +19,14 @@ interface BoilerplateResult {
 }
 
 interface OutputSectionProps {
+  activeView: "single" | "boilerplate"
   results: Record<string, LibraryResult> | null
   boilerplateResults?: BoilerplateResult | null
   loading: boolean
   error: string | null
 }
 
-export default function OutputSection({ results, boilerplateResults, loading, error }: OutputSectionProps) {
+export default function OutputSection({ activeView, results, boilerplateResults, loading, error }: OutputSectionProps) {
   if (loading) {
     return (
       <Card className="p-12 flex items-center justify-center flex-1">
@@ -50,7 +51,15 @@ export default function OutputSection({ results, boilerplateResults, loading, er
   }
 
   // Render Boilerplate Results View
-  if (boilerplateResults) {
+  if (activeView === "boilerplate") {
+    if (!boilerplateResults) {
+      return (
+        <Card className="p-12 flex items-center justify-center flex-1 bg-muted/50">
+          <p className="text-muted-foreground text-center">Boilerplate results will be displayed here</p>
+        </Card>
+      )
+    }
+
     return (
       <div className="space-y-4 flex-1">
         <BoilerplateCard 
@@ -68,29 +77,33 @@ export default function OutputSection({ results, boilerplateResults, loading, er
   }
 
   // Render Single Extractor Results View
-  if (!results) {
+  if (activeView === "single") {
+    if (!results) {
+      return (
+        <Card className="p-12 flex items-center justify-center flex-1 bg-muted/50">
+          <p className="text-muted-foreground text-center">Extraction results will be displayed here</p>
+        </Card>
+      )
+    }
+
+    const libraries = Object.entries(results)
+
     return (
-      <Card className="p-12 flex items-center justify-center flex-1 bg-muted/50">
-        <p className="text-muted-foreground text-center">Results will be displayed here</p>
-      </Card>
+      <div className="space-y-4 flex-1">
+        {libraries.length === 0 ? (
+          <Card className="p-12 flex items-center justify-center bg-muted/50">
+            <p className="text-muted-foreground text-center">No results returned from the API</p>
+          </Card>
+        ) : (
+          libraries.map(([libraryName, result]) => (
+            <LibraryCard key={libraryName} libraryName={libraryName} result={result} />
+          ))
+        )}
+      </div>
     )
   }
 
-  const libraries = Object.entries(results)
-
-  return (
-    <div className="space-y-4 flex-1">
-      {libraries.length === 0 ? (
-        <Card className="p-12 flex items-center justify-center bg-muted/50">
-          <p className="text-muted-foreground text-center">No results returned from the API</p>
-        </Card>
-      ) : (
-        libraries.map(([libraryName, result]) => (
-          <LibraryCard key={libraryName} libraryName={libraryName} result={result} />
-        ))
-      )}
-    </div>
-  )
+  return null
 }
 
 interface BoilerplateCardProps {

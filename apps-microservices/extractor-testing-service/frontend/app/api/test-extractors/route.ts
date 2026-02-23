@@ -4,12 +4,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Validate request body
+    // Validate request body structure for the boilerplate test
     if (!body.main_html || !body.reference_htmls || !Array.isArray(body.reference_htmls)) {
       return NextResponse.json({ error: 'Request body must contain main_html and an array of reference_htmls' }, { status: 400 })
     }
 
-    // This URL points to the backend service within the Docker network.
+    // Points to the backend service within the Docker network.
     const backendUrl = "http://backend-extractor-testing-service:8034/test-boilerplate";
     
     const backendResponse = await fetch(backendUrl, {

@@ -9,12 +9,16 @@ export default function Page() {
   const [boilerplateResults, setBoilerplateResults] = useState<any | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Track which view should be active based on what was last submitted
+  const [activeView, setActiveView] = useState<"single" | "boilerplate">("single")
 
   const handleCompare = async (inputType: "raw_html" | "json_data", content: string, strategy: string, extractMetadata: boolean) => {
     setLoading(true)
     setError(null)
     setResults(null)
-    setBoilerplateResults(null) // Reset boilerplate
+    setBoilerplateResults(null) // Reset boilerplate to ensure clean render
+    setActiveView("single")
 
     try {
       const body = {
@@ -45,8 +49,9 @@ export default function Page() {
   const handleTestBoilerplate = async (mainHtml: string, ref1: string, ref2: string) => {
     setLoading(true)
     setError(null)
-    setResults(null) // Reset general extractors
+    setResults(null) // Reset general extractors to ensure clean render
     setBoilerplateResults(null)
+    setActiveView("boilerplate")
 
     try {
       const body = {
@@ -90,6 +95,7 @@ export default function Page() {
         <div className="flex flex-col">
           <h2 className="text-2xl font-bold mb-6">Results</h2>
           <OutputSection 
+            activeView={activeView}
             results={results} 
             boilerplateResults={boilerplateResults}
             loading={loading} 

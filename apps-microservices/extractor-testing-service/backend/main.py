@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from schemas.schemas import RequestModel, ResponseModel, BoilerplateTestRequest, BoilerplateTestResponse
 from core.preprocessor import preprocess_html
 from core.extractor import run_all_extractors
+
+# Ensure this import perfectly matches the shared library path
 from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
 
 logging.basicConfig(level=logging.INFO)
