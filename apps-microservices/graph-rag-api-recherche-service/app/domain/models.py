@@ -271,14 +271,14 @@ class MatchingOptions(BaseModel):
 
 class ScoringOptions(BaseModel):
     z_unmatched: float = Field(
-        0.2, description="Score pour les geolocalisation non matched"
+        0, description="Score pour les geolocalisation non matched"
     )
     e_unmatched: float = Field(0.9, description="Score pour les non client")
     g_unknown_score: float = Field(
         0.8, description="Score pour les géolocalisations inconnues"
     )
     c_unknown_score: float = Field(
-        0.5, description="Score pour les caractéristiques inconnues"
+        0, description="Score pour les caractéristiques inconnues"
     )
     v_blocked: float = Field(
         -2.0, description="Score pour les caractéristiques bloquées"
@@ -288,7 +288,7 @@ class ScoringOptions(BaseModel):
     )
     t_unmatched: float = Field(0.2, description="Score pour les typologies non matched")
     absolute_threshold: float = Field(
-        0.0, description="Seuil absolu de score minimum pour les produits"
+        0.3, description="Seuil absolu de score minimum pour les produits"
     )
     relative_tolerance: float = Field(
         0.15, description="Tolérance relative par rapport au meilleur score"

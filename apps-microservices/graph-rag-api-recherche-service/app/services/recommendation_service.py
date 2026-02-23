@@ -594,7 +594,7 @@ class RecommendationService:
         z_unmatched = (
             request.scoring.z_unmatched
             if request.scoring.z_unmatched is not None
-            else 0.2
+            else 0
         )
         e_unmatched = (
             request.scoring.e_unmatched
@@ -609,7 +609,7 @@ class RecommendationService:
         c_unknown_score = (
             request.scoring.c_unknown_score
             if request.scoring.c_unknown_score is not None
-            else 0.5
+            else 0
         )
         t_unmatched = (
             request.scoring.t_unmatched
@@ -620,7 +620,7 @@ class RecommendationService:
         absolute_threshold = (
             request.scoring.absolute_threshold
             if request.scoring.absolute_threshold is not None
-            else 0.0
+            else 0.3
         )
         relative_tolerance = (
             request.scoring.relative_tolerance
@@ -1170,7 +1170,7 @@ class RecommendationService:
         // global_score * zone_score * etat_score * typo_score AS final_score
         WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
             global_score * zone_score * etat_score * typo_score AS final_score
-        WHERE final_score > 0.3 OR $target_product_id IS NOT NULL
+        WHERE final_score >= $absolute_threshold OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
         
@@ -1325,7 +1325,7 @@ class RecommendationService:
             "c_unknown_score": c_unknown_score,
             "user_typologie": user_typologie,
             "t_unmatched": t_unmatched,
-            # "absolute_threshold": absolute_threshold,
+            "absolute_threshold": absolute_threshold,
             "relative_tolerance": relative_tolerance,
             "max_per_supplier_primary": max_per_supplier_primary,
             "max_per_supplier_extended": max_per_supplier_extended,
