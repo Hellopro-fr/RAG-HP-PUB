@@ -1452,7 +1452,7 @@ services:
       GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
       PROMETHEUS_PORT: 8564
     deploy:
-      replicas: 3
+      replicas: 5
     networks:
       - services-net
 
