@@ -45,22 +45,21 @@ function base64UrlDecodeToBytes(str: string): Uint8Array {
 }
 
 /**
- * Vérifie si la date est valide (7 jours max)
- * TODO: Remettre à 24-48h après les tests (hier <= date < demain)
+ * Vérifie si la date est valide (48 heures max)
  */
 function isDateValid(dateStr: string): boolean {
   const tokenDate = new Date(dateStr);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Token valide pendant 7 jours (pour tests)
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  // Token valide pendant 48 heures (2 jours)
+  const twoDaysAgo = new Date(today);
+  twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
 
   const maxDate = new Date(today);
   maxDate.setDate(maxDate.getDate() + 1);
 
-  return tokenDate >= sevenDaysAgo && tokenDate < maxDate;
+  return tokenDate >= twoDaysAgo && tokenDate < maxDate;
 }
 
 /**

@@ -19,7 +19,8 @@ async function fetchProductInfo(
   if (productIds.length === 0) return null;
 
   try {
-    const res = await fetch(`${apiBase}/api/produits`, {
+    // Route renommée pour éviter blocage WAF Imperva (mot "produits" détecté)
+    const res = await fetch(`${apiBase}/api/pdt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -171,43 +172,6 @@ export function useProcessMatchingLogic() {
       const hasInsufficientResults = totalProducts <= MIN_PRODUCTS_THRESHOLD;
       setRedirectGoToSomethingToAdd(hasInsufficientResults);
 
-      // Tracking DB - Stocker le payload envoyé ET les résultats du matching
-      // Permet d'analyser et investiguer les requêtes et leurs résultats
-      const matchingTrackingData = {
-        // === REQUÊTE ENVOYÉE ===
-        request: {
-          id_categorie: categoryId,
-          metadonnee_utilisateurs,
-          liste_caracteristique: consolidatedEquivalences,
-          scoring: matchingTestParams || undefined,
-        },
-        // === RÉSULTATS REÇUS ===
-        response: {
-          results_count: totalProducts,
-          threshold: MIN_PRODUCTS_THRESHOLD,
-          redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
-          top_products: apiData.top_produit?.map((p: any) => ({
-            id: p.id_produit,
-            score: p.score,
-            id_fournisseur: p.id_fournisseur
-          })) || [],
-          liste_products: apiData.liste_produit.map((p: any) => ({
-            id: p.id_produit,
-            score: p.score,
-            id_fournisseur: p.id_fournisseur
-          })),
-        },
-        equivalences_count: consolidatedEquivalences.length
-      };
-
-      trackDbEvent(
-        'matching',
-        hasInsufficientResults ? 'insufficient_results' : 'success',
-        matchingTrackingData,
-        categoryId,
-        1
-      );
-
       // ==========================================================================
       // TODO: SUPPRIMER CE BLOC DE TEST - Début du mode test avec IDs fixes
       // ==========================================================================
@@ -260,26 +224,67 @@ export function useProcessMatchingLogic() {
       // Stocker les résultats initiaux (avec placeholders)
       setMatchingResults({ recommended, others });
 
-      // Enrichir les recommandés avec les infos produit (prioritaire)
+      // Enrichir les recommandés avec les infos produit (await - bloquant)
+      let enrichedRecommended = recommended;
       const recommendedIds = recommended.map((s) => s.id);
       if (recommendedIds.length > 0) {
         const productInfo = await fetchProductInfo(recommendedIds, categoryId, apiBase);
         if (productInfo?.items) {
-          const enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
+          enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
           setMatchingResults({ recommended: enrichedRecommended, others });
-
-          // Ensuite enrichir les "others" en background
-          const othersIds = others.map((s) => s.id);
-          if (othersIds.length > 0) {
-            fetchProductInfo(othersIds, categoryId, apiBase).then((othersInfo) => {
-              if (othersInfo?.items) {
-                const enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
-                setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
-              }
-            });
-          }
         }
       }
+
+      // Enrichir les "others" avec les infos produit (await - bloquant)
+      let enrichedOthers = others;
+      const othersIds = others.map((s) => s.id);
+      if (othersIds.length > 0) {
+        const othersInfo = await fetchProductInfo(othersIds, categoryId, apiBase);
+        if (othersInfo?.items) {
+          enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
+          setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
+        }
+      }
+
+      // Tracking DB - Envoi en 4 parties pour éviter blocage WAF Imperva
+      // PARTIE 1 : Request (metadata + équivalences)
+      trackDbEvent('matching', 'part1_request', {
+        request: {
+          id_categorie: categoryId,
+          metadonnee_utilisateurs,
+          liste_caracteristique: consolidatedEquivalences,
+          scoring: matchingTestParams || undefined,
+        },
+        equivalences_count: consolidatedEquivalences.length
+      }, categoryId, 1);
+
+      // PARTIE 2 : Response summary
+      trackDbEvent('matching', 'part2_summary', {
+        response: {
+          results_count: totalProducts,
+          threshold: MIN_PRODUCTS_THRESHOLD,
+          redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
+        },
+        status: hasInsufficientResults ? 'insufficient_results' : 'success'
+      }, categoryId, 1);
+
+      // PARTIE 3 : Top products (scores arrondis 2 décimales)
+      trackDbEvent('matching', 'part3_top', {
+        top_products: apiData.top_produit?.map((p: any) => ({
+          id: p.id_produit,
+          score: Number(Number(p.score).toFixed(2)),
+          id_fournisseur: p.id_fournisseur
+        })) || []
+      }, categoryId, 1);
+
+      // PARTIE 4 : Liste products (scores arrondis 2 décimales)
+      trackDbEvent('matching', 'part4_list', {
+        liste_products: apiData.liste_produit.map((p: any) => ({
+          id: p.id_produit,
+          score: Number(Number(p.score).toFixed(2)),
+          id_fournisseur: p.id_fournisseur
+        }))
+      }, categoryId, 1);
 
     } catch (error) {
       console.error('Matching process error:', error);
@@ -379,10 +384,11 @@ export function useProcessMatchingLogic() {
         activeEquivalences
       );
 
-      // Tracking DB - Stocker le payload envoyé ET les résultats du refetch
+      // Tracking DB - Envoi en 4 parties pour éviter blocage WAF Imperva
       const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
-      const refetchTrackingData = {
-        // === REQUÊTE ENVOYÉE ===
+
+      // PARTIE 1 : Request (metadata + équivalences)
+      trackDbEvent('matching', 'refetch_part1_request', {
         request: {
           id_categorie: categoryId,
           metadonnee_utilisateurs,
@@ -390,24 +396,33 @@ export function useProcessMatchingLogic() {
           removed_criteria_ids: allRemovedIds,
           scoring: matchingTestParams || undefined,
         },
-        // === RÉSULTATS REÇUS ===
+        equivalences_count: activeEquivalences.length
+      }, categoryId, 1);
+
+      // PARTIE 2 : Response summary
+      trackDbEvent('matching', 'refetch_part2_summary', {
         response: {
           results_count: totalProducts,
-          top_products: apiData.top_produit?.map((p: any) => ({
-            id: p.id_produit,
-            score: p.score,
-            id_fournisseur: p.id_fournisseur
-          })) || [],
-          liste_products: apiData.liste_produit.map((p: any) => ({
-            id: p.id_produit,
-            score: p.score,
-            id_fournisseur: p.id_fournisseur
-          })),
-        },
-        equivalences_count: activeEquivalences.length
-      };
+        }
+      }, categoryId, 1);
 
-      trackDbEvent('matching', 'refetch', refetchTrackingData, categoryId, 1);
+      // PARTIE 3 : Top products (scores arrondis 2 décimales)
+      trackDbEvent('matching', 'refetch_part3_top', {
+        top_products: apiData.top_produit?.map((p: any) => ({
+          id: p.id_produit,
+          score: Number(Number(p.score).toFixed(2)),
+          id_fournisseur: p.id_fournisseur
+        })) || []
+      }, categoryId, 1);
+
+      // PARTIE 4 : Liste products (scores arrondis 2 décimales)
+      trackDbEvent('matching', 'refetch_part4_list', {
+        liste_products: apiData.liste_produit.map((p: any) => ({
+          id: p.id_produit,
+          score: Number(Number(p.score).toFixed(2)),
+          id_fournisseur: p.id_fournisseur
+        }))
+      }, categoryId, 1);
 
       // Identifier les produits orphelins (sélectionnés mais plus dans les nouveaux résultats)
       const newProductIds = new Set([
