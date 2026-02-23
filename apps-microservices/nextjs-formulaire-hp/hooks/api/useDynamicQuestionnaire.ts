@@ -170,6 +170,8 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     characteristicsMap,
     setCharacteristicsMap,
     addUserQuestionAnswer,
+    updateUserQuestionAnswer,
+    userQuestionAnswers,
     setCategoryName,
     setCategoryStats,
   } = useFlowStore();
@@ -287,6 +289,37 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       prefetchCharacteristics(categoryId, setCharacteristicsMap);
     }
   }, [pathData, categoryId, hasCharacteristics, setCharacteristicsMap]);
+
+  // Mettre à jour Q1 pré-remplie avec les vrais labels une fois les données chargées
+  useEffect(() => {
+    if (!entryData?.entryQuestion) return;
+
+    // Vérifier si Q1 est pré-remplie (existe dans dynamicAnswers)
+    const q1Answers = dynamicAnswers['Q1'];
+    if (!q1Answers || q1Answers.length === 0) return;
+
+    // Vérifier si Q1 existe déjà dans userQuestionAnswers avec un label placeholder
+    const existingQ1 = userQuestionAnswers.find(qa => qa.questionCode === 'Q1');
+    if (!existingQ1 || !existingQ1.questionLabel.includes('pre-remplie')) return;
+
+    // Récupérer les vrais labels des réponses sélectionnées
+    const selectedAnswers = entryData.entryQuestion.answers.filter(
+      a => q1Answers.includes(a.code)
+    );
+    const answerLabels = selectedAnswers.map(a => a.mainText);
+
+    // Mettre à jour avec les vraies informations
+    updateUserQuestionAnswer('Q1', {
+      questionId: entryData.entryQuestion.id,
+      questionLabel: entryData.entryQuestion.title,
+      answerLabel: answerLabels,
+    });
+
+    console.log('[useDynamicQuestionnaire] Q1 pre-filled updated with real labels:', {
+      questionLabel: entryData.entryQuestion.title,
+      answerLabels
+    });
+  }, [entryData, dynamicAnswers, userQuestionAnswers, updateUserQuestionAnswer]);
 
   // Question courante
   const currentQuestion = useMemo(() => {
