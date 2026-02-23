@@ -1585,6 +1585,10 @@ services:
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       NEO4J_DATABASE: ${NEO4J_DATABASE}
+      EMBEDDING_SERVICE_URL: embedding-model-service:50052
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
     networks:
       - services-net
       - services-ext-net
