@@ -1570,6 +1570,26 @@ services:
 
   # --- API ---
 
+  graph-rag-api-admin-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-api-admin-service/Dockerfile
+    profiles: ["graph-rag-api"]
+    ports:
+      - "8527:8527"
+      - "8567:8567"
+    environment:
+      API_PORT: 8527
+      PROMETHEUS_PORT: 8567
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: ${NEO4J_DATABASE}
+    networks:
+      - services-net
+      - services-ext-net
+      - services-global-net
+
   graph-rag-api-recherche-service:
     build:
       context: .
