@@ -507,10 +507,10 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
           {/* Submit button */}
           <button
             type="submit"
-            disabled={leadSubmission.isPending}
+            disabled={leadSubmission.isPending || leadSubmission.isSuccess}
             className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {leadSubmission.isPending ? (
+            {(leadSubmission.isPending || leadSubmission.isSuccess) ? (
               <>
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent-foreground border-t-transparent" />
                 Envoi en cours...
