@@ -43,6 +43,16 @@ class UnitNormalizationService:
             cls._instance.ureg.define("Watts = watt")
             cls._instance.ureg.define("unités = count")
 
+            # --- FIX 5: Define units from live service logs ---
+            cls._instance.ureg.define("billets = count = billet")
+            cls._instance.ureg.define("pièces = count = pièce")
+            cls._instance.ureg.define("personnes = count = personne")
+
+            # --- FIX 6: Define units from batch 3 log analysis ---
+            cls._instance.ureg.define("degré = degree = degre = degrés = degres")
+            cls._instance.ureg.define("Tonnes = tonne")
+            cls._instance.ureg.define("démarrages = count = démarrage")
+
             # Base & Common
             cls._instance.ureg.define("tonne = 1000 * kilogram = t")
             cls._instance.ureg.define("mm = millimeter")
@@ -110,6 +120,12 @@ class UnitNormalizationService:
                 "galette": "count",
                 "tasses/jour": "count",
                 "tasses_par_jour": "count",
+                "billets": "count",
+                "billet": "count",
+                "pièces": "count",
+                "pièce": "count",
+                "personnes": "count",
+                "personne": "count",
                 # Sound
                 "db": "sound_level",
                 "dba": "sound_level",
@@ -144,6 +160,7 @@ class UnitNormalizationService:
                 "rpm": "[frequency]",
                 "tr/min": "[frequency]",
                 "trs/min": "[frequency]",
+                "démarrages/heure": "[frequency]",
                 # Frequency
                 "hz": "frequency",
                 # Volume
@@ -151,6 +168,7 @@ class UnitNormalizationService:
                 "litres": "volume",
                 "ml": "volume",
                 "m3": "volume",
+                "m**3": "volume",
                 # Temperature
                 "°c": "temperature",
                 "c": "temperature",
@@ -201,12 +219,21 @@ class UnitNormalizationService:
                 "stockage": "information",
                 # Energy
                 "énergie": "energy",
+                "kwh": "energy",
+                "wh": "energy",
+                "kwh/24h": "power",
                 "consommation": "energy",
                 "surface": "area",
                 "superficie": "area",
                 # Angle
                 "°": "angle",
                 "deg": "angle",
+                "degré": "angle",
+                "degrés": "angle",
+                "degre": "angle",
+                "degres": "angle",
+                # Volume (per wash cycle = liters per cycle, dimensionless denominator)
+                "l/cycle": "volume",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -219,8 +246,15 @@ class UnitNormalizationService:
                 "segments": "count",
                 "sélections": "count",
                 "selections": "count",
+                "capacité volumique": "volume",
+                "capacité volumétrique": "volume",
+                "capacité de stockage (masse)": "mass",
                 "capacité de stockage": "count",
                 "capacité totale de stockage": "count",
+                "recycleur": "count",
+                "cassette de délestage": "count",
+                "bac de trop-plein": "count",
+                "passagers": "count",
                 "sonore": "sound_level",
                 "acoustique": "sound_level",
                 "bruit": "sound_level",
@@ -242,6 +276,7 @@ class UnitNormalizationService:
                 "courant": "current",
                 "fusible": "current",
                 "branchement": "voltage",
+                "fréquence d'utilisation": "[frequency]",
                 "fréquence": "frequency",
                 "vitesse de rotation": "[frequency]",
                 "tours/minute": "[frequency]",
@@ -258,13 +293,16 @@ class UnitNormalizationService:
                 "mémoire": "information",
                 "stockage": "information",
                 "débit de vapeur": "mass_flow",
+                "consommation d'eau": "volume",
+                "consommation électrique": "power",
+                "batterie": "energy",
+                "consommation": "energy",
                 "débit": "volume / time",
                 "force": "force",
                 "poussée": "force",
                 "traction": "force",
                 "couple": "torque",
                 "énergie": "energy",
-                "consommation": "energy",
                 "surface": "area",
                 "superficie": "area",
                 "angle": "angle",
@@ -378,6 +416,26 @@ class UnitNormalizationService:
                 unit = "count"
             elif unit_stripped == "watts":
                 unit = "watt"
+            elif unit_stripped == "kwh/24h":
+                # Pint rejects '24h' as a scaling factor; convert to equivalent kWh/day.
+                unit = "kilowatt_hour / day"
+            elif unit_stripped == "l/cycle":
+                # 'cycle' is dimensionless; L/cycle = liters per wash cycle = volume.
+                unit = "liter"
+            elif unit_stripped in ("tonnes",):
+                # Pint only knows lowercase 'tonne'; 'Tonnes' (capital) fails.
+                unit = "tonne"
+            elif unit_stripped == "démarrages/heure":
+                # starts per hour = frequency; Pint can't parse 'démarrages'
+                unit = "1 / hour"
+
+        # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
+        # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
+        if unit and unit.strip() == "G" and "facteur" in label.strip().lower():
+            return {
+                "valeur_canonique": float(value),
+                "unite_canonique": "count",
+            }
 
         dimension = self._get_dimension(original_unit, label)
 
