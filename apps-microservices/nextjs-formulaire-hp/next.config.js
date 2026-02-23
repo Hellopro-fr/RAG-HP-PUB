@@ -65,34 +65,6 @@ const nextConfig = {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
-          // HSTS - Force HTTPS pendant 1 an
-         /*  {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=31536000; includeSubDomains',
-          },
-          // CSP - Contrôle des sources autorisées (permissif pour tracking)
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https:",
-              "style-src 'self' 'unsafe-inline' https:",
-              "img-src 'self' data: https: blob:",
-              "font-src 'self' data: https:",
-              "connect-src 'self' https: wss:",
-              "frame-src 'self' https:",
-            ].join('; '),
-          },
-          // Referrer - Limite les infos envoyées aux sites tiers
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          // Permissions - Désactive les APIs sensibles non utilisées
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
-          }, */
         ],
       },
       // Cache long pour les assets statiques (fonts, images publiques)
