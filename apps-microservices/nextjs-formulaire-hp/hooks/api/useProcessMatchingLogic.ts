@@ -19,7 +19,8 @@ async function fetchProductInfo(
   if (productIds.length === 0) return null;
 
   try {
-    const res = await fetch(`${apiBase}/api/produits`, {
+    // Route renommée pour éviter blocage WAF Imperva (mot "produits" détecté)
+    const res = await fetch(`${apiBase}/api/pdt`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

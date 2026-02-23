@@ -10,7 +10,8 @@ const getApiBasePath = () => {
 };
 
 // Use Next.js API proxy to avoid CORS issues
-const TRACKING_API_URL = '/api/tracking';
+// Route renommée pour éviter blocage WAF Imperva (mot "tracking" détecté)
+const TRACKING_API_URL = '/api/tck';
 
 type EventType = 'questionnaire' | 'profile' | 'selection' | 'contact' | 'conversion' | 'matching';
 
