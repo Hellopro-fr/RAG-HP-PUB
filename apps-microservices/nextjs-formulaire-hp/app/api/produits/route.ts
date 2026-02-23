@@ -2,6 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit, getClientIP, rateLimitResponse, RATE_LIMITS } from '@/lib/utils/rate-limit';
 
 const BASE_URL = process.env.HELLOPRO_API_URL || 'https://api.hellopro.fr';
+
+/**
+ * OPTIONS pour CORS preflight
+ */
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
 const URL_API = `${BASE_URL}/api/hp/view/index.php`;
 const TOKEN   = process.env.TOKEN_INFO_PRODUIT || '';
 
