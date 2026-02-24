@@ -343,6 +343,29 @@ class HeaderFooterExtractor:
             
         return False
 
+    def _remove_cookie_banners(self, soup: BeautifulSoup):
+        """
+        Actively finds and destroys elements that look like cookie banners from the DOM.
+        This prevents them from appearing in parent text extractions.
+        """
+        if not soup or not soup.body:
+            return
+
+        # Target potential container tags for banners
+        candidates = soup.body.find_all(['div', 'section', 'aside', 'footer', 'p', 'span'])
+        
+        for el in candidates:
+            # Skip if element has already been decomposed (removed)
+            if el.parent is None:
+                continue
+                
+            text = self.get_cleaned_text(el)
+            
+            # Use stricter criteria for removal to avoid deleting legitimate content
+            if self._is_cookie_banner(text):
+                logging.info(f"Removing cookie banner element: {text[:50]}...")
+                el.decompose()
+
     def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class") -> tuple[str, str, list[dict], dict]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
@@ -374,6 +397,9 @@ class HeaderFooterExtractor:
             if not clean_main_html: return "", "", [], cleaned_htmls
             cleaned_htmls["main"] = clean_main_html
             main_soup = BeautifulSoup(clean_main_html, 'html.parser')
+            
+            # 1.5. Remove Cookie Banners (DESTRUCTIVE PASS)
+            self._remove_cookie_banners(main_soup)
             
             # 2. Clean the Reference HTMLs
             clean_refs = []
@@ -449,12 +475,6 @@ class HeaderFooterExtractor:
                 
                 # Check 1: Similarity
                 if is_content_similar and (len(text_main.split()) >= 2 or "©" in text_main):
-                    
-                    # Check 2: Cookie Banner Filter
-                    if self._is_cookie_banner(text_main):
-                        logging.info(f"Skipping cookie banner candidate: {text_main[:50]}...")
-                        continue
-
                     match_detail = {
                         "signature": sig,
                         "text_main": text_main,
@@ -523,7 +543,7 @@ class HeaderFooterExtractor:
         final_header_indices = []
         final_footer_indices = []
         
-        # Analyze Header Group (Candidates <= header_cutoff_index)
+        # Header Group
         header_group = [t for t in top_level_candidates if t[0] <= header_cutoff_index]
         if header_group:
             # Check for gaps within the header group itself
@@ -569,22 +589,31 @@ class HeaderFooterExtractor:
                 
                 current_cluster.append(t)
                 last_idx = idx
-            
-            final_footer_indices = [t[0] for t in current_cluster] # These are reversed, sort later if needed
+            final_footer_indices = [t[0] for t in current_cluster]
 
-        # 8. Assembly
+        # 8. Assembly with Deduplication
         header_texts = []
         footer_texts = []
+        
+        seen_blocks = set() # (Signature, Text) pair tracker
 
         for idx, el, text, wc in top_level_candidates:
+            # Check deduplication
+            sig = get_sig(el)
+            key = (sig, text)
+            if key in seen_blocks:
+                continue
+            
+            # Check classification
             if idx in final_header_indices:
                 header_texts.append(text)
+                seen_blocks.add(key)
             elif idx in final_footer_indices:
                 footer_texts.append(text)
-            # Candidates not in either list are effectively filtered out (Middle Islands)
+                seen_blocks.add(key)
 
         header_result = " ".join(header_texts).strip()
-        footer_result = " ".join(footer_texts).strip() # Note: Footer order was reversed for logic, but iteration here preserves DOM order
+        footer_result = " ".join(footer_texts).strip()
 
         if len(header_result) > 10000: header_result = header_result[:10000]
         if len(footer_result) > 10000: footer_result = footer_result[:10000]
