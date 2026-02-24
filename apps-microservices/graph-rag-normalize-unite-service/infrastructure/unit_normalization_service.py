@@ -367,6 +367,12 @@ class UnitNormalizationService:
                 "angle": "degree",
                 "mass_flow": "gram / minute",
                 "count_rate": "count / second",
+                # Lighting
+                "luminosity": "lumen",
+                "luminous_efficacy": "lumen / watt",
+                # Dimensionless / ratio (humidity %, CRI Ra index, etc.)
+                "ratio": "count",
+                "dimensionless": "count",
             }
         return cls._instance
 
@@ -481,6 +487,18 @@ class UnitNormalizationService:
             elif unit_stripped in ("kg/m³", "kg/m3"):
                 # Density unit: kilogram per cubic metre
                 unit = "kilogram / meter ** 3"
+            elif unit_stripped == "km/h":
+                # Speed: Pint requires explicit slash notation
+                unit = "kilometer / hour"
+            elif unit_stripped == "lm/w":
+                # Luminous efficacy: Pint-safe form
+                unit = "lumen / watt"
+            elif unit_stripped in ("%", "ra"):
+                # Dimensionless/ratio units (humidity %, CRI Ra index) — bypass Pint entirely
+                return {
+                    "valeur_canonique": float(value),
+                    "unite_canonique": "count",
+                }
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
