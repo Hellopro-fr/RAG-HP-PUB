@@ -309,8 +309,6 @@ class DomainFR:
                 method='info_vide'
             )
 
-        logger.info(f"Content: {content[:5000]}")
-        
         # Étape 1 : Vérification URL (TLD .fr, /fr/, lang=fr)
         url_check = await self.check_url(url, track_redirect=False)
         url_indicates_french = url_check.get('ok', False)
