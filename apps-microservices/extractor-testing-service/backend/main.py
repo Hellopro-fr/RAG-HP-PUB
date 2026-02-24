@@ -1,9 +1,12 @@
 import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from schemas.schemas import RequestModel, ResponseModel
+from schemas.schemas import RequestModel, ResponseModel, BoilerplateTestRequest, BoilerplateTestResponse
 from core.preprocessor import preprocess_html
 from core.extractor import run_all_extractors
+
+# Ensure this import perfectly matches the shared library path
+from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -75,6 +78,38 @@ async def test_extractors_endpoint(request: RequestModel):
 
     except Exception as e:
         logger.exception("An unexpected error occurred during processing.")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/test-boilerplate", response_model=BoilerplateTestResponse)
+async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
+    """
+    Tests the HeaderFooterExtractor with both methods (Old vs New) for debugging.
+    Accepts a main HTML page and two reference pages from the same domain.
+    """
+    logger.info("Received request for Boilerplate Intersection Test.")
+    
+    if not request.main_html or not request.reference_htmls:
+        raise HTTPException(status_code=400, detail="Both main_html and reference_htmls are required.")
+
+    try:
+        extractor = HeaderFooterExtractor(request.main_html)
+        # Use the debug method to get all data
+        result = extractor.extract_all_debug(request.reference_htmls)
+        
+        return BoilerplateTestResponse(
+            header_old=result["header_old"],
+            header_new=result["header_new"],
+            header_selected=result["header_selected"],
+            header_method_used=result["header_method_used"],
+            
+            footer_old=result["footer_old"],
+            footer_new=result["footer_new"],
+            footer_selected=result["footer_selected"],
+            footer_method_used=result["footer_method_used"]
+        )
+    except Exception as e:
+        logger.exception("An unexpected error occurred during boilerplate testing.")
         raise HTTPException(status_code=500, detail=str(e))
 
 

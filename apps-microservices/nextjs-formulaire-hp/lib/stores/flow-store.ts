@@ -213,6 +213,7 @@ export interface FlowState {
 
   setUserQuestionAnswers: (answers: UserQuestionAnswer[]) => void;
   addUserQuestionAnswer: (answer: UserQuestionAnswer) => void;
+  updateUserQuestionAnswer: (questionCode: string, updates: Partial<UserQuestionAnswer>) => void;
   clearUserQuestionAnswers: () => void;
 
   setRemovedCritiqueCriteriaIds: (ids: number[]) => void;
@@ -389,6 +390,13 @@ export const useFlowStore = create<FlowState>()(
       addUserQuestionAnswer: (answer) =>
         set((state) => ({
           userQuestionAnswers: [...state.userQuestionAnswers, answer],
+        })),
+
+      updateUserQuestionAnswer: (questionCode, updates) =>
+        set((state) => ({
+          userQuestionAnswers: state.userQuestionAnswers.map((qa) =>
+            qa.questionCode === questionCode ? { ...qa, ...updates } : qa
+          ),
         })),
 
       clearUserQuestionAnswers: () => set({ userQuestionAnswers: [] }),
