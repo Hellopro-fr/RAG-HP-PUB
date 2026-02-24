@@ -384,8 +384,8 @@ class HeaderFooterExtractor:
         footer_result = " ".join(footer_texts).strip()
 
         # Sanity cap
-        if len(header_result) > 5000: header_result = ""
-        if len(footer_result) > 5000: footer_result = ""
+        # if len(header_result) > 5000: header_result = ""
+        # if len(footer_result) > 5000: footer_result = ""
 
         return header_result, footer_result
 
