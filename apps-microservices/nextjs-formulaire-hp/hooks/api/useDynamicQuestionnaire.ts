@@ -300,7 +300,7 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
 
     // Vérifier si Q1 existe déjà dans userQuestionAnswers avec un label placeholder
     const existingQ1 = userQuestionAnswers.find(qa => qa.questionCode === 'Q1');
-    if (!existingQ1 || !existingQ1.questionLabel.includes('pre-remplie')) return;
+    if (!existingQ1 || !existingQ1.questionLabel?.includes('pre-remplie')) return;
 
     // Récupérer les vrais labels des réponses sélectionnées
     const selectedAnswers = entryData.entryQuestion.answers.filter(
