@@ -248,6 +248,9 @@ class UnitNormalizationService:
                 "degres": "angle",
                 # Volume (per wash cycle = liters per cycle, dimensionless denominator)
                 "l/cycle": "volume",
+                # Signal count (e.g. Raccordement dosage liquide: number of signal ports)
+                "signal": "count",
+                "signaux": "count",
             }
 
             # --- Label-to-Dimension Mapping ---
@@ -256,6 +259,7 @@ class UnitNormalizationService:
                 "charge admissible au sol": "area_density",
                 "charge statique": "area_density",
                 "classe climatique": "count",
+                "régime": "[frequency]",
                 "nombre": "count",
                 "quantité": "count",
                 "segment": "count",
