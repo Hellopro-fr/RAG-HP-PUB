@@ -1,8 +1,14 @@
 import os
 import io
+import time
 from PIL import Image
 import pyvips
 import logging
+from image_download_service.core.metrics import (
+    REPLICA_ID,
+    IMAGES_PROCESSED_TOTAL, IMAGE_PROCESSING_DURATION,
+    LARGE_IMAGES_VIPS_TOTAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +30,8 @@ class ImageProcessor:
         Returns:
             dict: Paths to the saved main image and thumbnail
         """
+        proc_start = time.monotonic()
+        
         try:
             if not content:
                 raise ValueError("Image content is empty")
@@ -50,6 +58,8 @@ class ImageProcessor:
                 if total_pixels > LARGE_IMAGE_THRESHOLD:
                     logger.info(f"🔄 Large image detected ({width}x{height} = {total_pixels} px, format={original_format}). Using pyvips shrink-on-load.")
                     image.close()
+                    # 📊 Metric: large image via vips
+                    LARGE_IMAGES_VIPS_TOTAL.labels(replica_id=REPLICA_ID, domain=domain).inc()
                     return self._process_with_vips(content, original_format, domain, product_id, product_name, base_storage_dir, index)
 
                 # OPTIMIZATION: For JPEGs, we can load a draft (thumbnail) directly
@@ -125,6 +135,14 @@ class ImageProcessor:
             
             thumb_image.save(thumb_file_path, output_format, **save_kwargs)
             
+            # 📊 Metric: image processed
+            format_label = extension.lstrip('.').lower()
+            IMAGES_PROCESSED_TOTAL.labels(replica_id=REPLICA_ID, domain=domain, format=format_label).inc()
+            
+            # 📊 Metric: processing duration (PIL path)
+            duration = time.monotonic() - proc_start
+            IMAGE_PROCESSING_DURATION.labels(replica_id=REPLICA_ID, domain=domain, processor="pil").observe(duration)
+            
             return {
                 "main_path": main_file_path,
                 "thumb_path": thumb_file_path,
@@ -142,6 +160,8 @@ class ImageProcessor:
         
         This is used as a fallback for images that would OOM with PIL's full decompression.
         """
+        proc_start = time.monotonic()
+        
         try:
             # Determine output format and extension based on PHP logic
             if original_format == 'GIF':
@@ -189,6 +209,14 @@ class ImageProcessor:
                 thumb_vips.pngsave(thumb_file_path)
             
             logger.info(f"✅ pyvips: Thumbnail saved for {product_id}: {filename}")
+            
+            # 📊 Metric: image processed (vips path)
+            format_label = extension.lstrip('.').lower()
+            IMAGES_PROCESSED_TOTAL.labels(replica_id=REPLICA_ID, domain=domain, format=format_label).inc()
+            
+            # 📊 Metric: processing duration (vips path)
+            duration = time.monotonic() - proc_start
+            IMAGE_PROCESSING_DURATION.labels(replica_id=REPLICA_ID, domain=domain, processor="vips").observe(duration)
             
             return {
                 "main_path": main_file_path,

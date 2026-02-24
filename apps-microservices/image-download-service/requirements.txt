@@ -3,9 +3,10 @@ uvicorn
 aiohttp
 aiofiles
 pika
-redis
+redis[hiredis]
 python-dotenv
 prometheus-client
 aio-pika
 Pillow
 pyvips
+sse-starlette

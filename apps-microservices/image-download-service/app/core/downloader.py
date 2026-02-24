@@ -5,9 +5,18 @@ import logging
 import asyncio
 import re
 import unicodedata
+import time
 from datetime import datetime
 from typing import Optional, List, Dict
 from image_download_service.core.image_processor import ImageProcessor
+from image_download_service.core.metrics import (
+    REPLICA_ID,
+    DOWNLOADS_TOTAL, DOWNLOADS_IN_PROGRESS, DOWNLOAD_DURATION_SECONDS,
+    DOWNLOAD_BYTES_TOTAL, HTTP_ERRORS_TOTAL, DOWNLOAD_RETRIES_TOTAL,
+    DOWNLOAD_FAILURES_TOTAL, PROXY_REQUESTS_TOTAL, PROXY_ERRORS_TOTAL,
+    PROXY_ACTIVE, IMAGES_SKIPPED_TOTAL,
+)
+from image_download_service.core.event_store import event_store
 import random
 
 logger = logging.getLogger(__name__)
@@ -39,6 +48,9 @@ class Downloader:
              logger.info(f"Configured Apify Proxy (auto/port 8000)")
         elif self.proxy_url:
              logger.info(f"Configured generic Proxy: {self.proxy_url}")
+        
+        # 📊 Metric: proxy active status
+        PROXY_ACTIVE.labels(replica_id=REPLICA_ID).set(1 if self.proxy_url else 0)
 
     def _normalize_name(self, name: str) -> str:
         """
@@ -120,40 +132,134 @@ class Downloader:
         retries = 3
         timeout = aiohttp.ClientTimeout(total=30)
         
-        for attempt in range(retries):
-            try:
-                headers = {"User-Agent": random.choice(USER_AGENTS)}
-                async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-                    kwargs = {}
-                    if self.proxy_url:
-                        kwargs["proxy"] = self.proxy_url
-
-                    async with session.get(url, **kwargs) as response:
-                        logger.info(f"Download status for {url}: {response.status}")
-                        if response.status == 200:
-                            content = await response.read()
-                            
-                            try:
-                                paths = self.image_processor.process_image(
-                                    content=content,
-                                    domain=domain,
-                                    product_id=product_id,
-                                    product_name=product_name,
-                                    base_storage_dir=storage_base,
-                                    index=index 
-                                )
-                                return paths
-                            except Exception as e:
-                                logger.error(f"Image processing failed for {url}: {e}")
-                                return None
-                            
-                        else:
-                            logger.warning(f"Failed to download {url}: Status {response.status}")
-            except Exception as e:
-                logger.warning(f"Error downloading {url} (Attempt {attempt+1}): {e}")
-                await asyncio.sleep(attempt * 1)
+        # 📊 Metric: track in-progress
+        DOWNLOADS_IN_PROGRESS.labels(replica_id=REPLICA_ID).inc()
+        download_start = time.monotonic()
         
-        return None
+        # 📊 Event: active download tracking
+        await event_store.set_active_download(REPLICA_ID, {
+            "url": url,
+            "domain": domain,
+            "product_id": product_id,
+            "index": index,
+            "started_at": datetime.now().isoformat(),
+        })
+        
+        try:
+            for attempt in range(retries):
+                try:
+                    headers = {"User-Agent": random.choice(USER_AGENTS)}
+                    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                        kwargs = {}
+                        if self.proxy_url:
+                            kwargs["proxy"] = self.proxy_url
+                            # 📊 Metric: proxy request
+                            PROXY_REQUESTS_TOTAL.labels(replica_id=REPLICA_ID).inc()
+
+                        async with session.get(url, **kwargs) as response:
+                            logger.info(f"Download status for {url}: {response.status}")
+                            if response.status == 200:
+                                content = await response.read()
+                                
+                                # 📊 Metric: bandwidth
+                                content_size = len(content)
+                                DOWNLOAD_BYTES_TOTAL.labels(replica_id=REPLICA_ID, domain=domain).inc(content_size)
+                                
+                                # 📊 Metric: download duration
+                                duration = time.monotonic() - download_start
+                                DOWNLOAD_DURATION_SECONDS.labels(replica_id=REPLICA_ID, domain=domain).observe(duration)
+                                
+                                try:
+                                    paths = self.image_processor.process_image(
+                                        content=content,
+                                        domain=domain,
+                                        product_id=product_id,
+                                        product_name=product_name,
+                                        base_storage_dir=storage_base,
+                                        index=index 
+                                    )
+                                    
+                                    # 📊 Metric: successful download
+                                    DOWNLOADS_TOTAL.labels(replica_id=REPLICA_ID, domain=domain, status="success").inc()
+                                    
+                                    # 📊 Event: download complete
+                                    await event_store.emit_download_event({
+                                        "action": "image_complete",
+                                        "replica_id": REPLICA_ID,
+                                        "product_id": product_id,
+                                        "domain": domain,
+                                        "url": url,
+                                        "size_bytes": str(content_size),
+                                        "duration_ms": str(int(duration * 1000)),
+                                        "index": str(index),
+                                    })
+                                    
+                                    return paths
+                                except Exception as e:
+                                    logger.error(f"Image processing failed for {url}: {e}")
+                                    # 📊 Event: processing error
+                                    await event_store.emit_error_event({
+                                        "action": "processing_error",
+                                        "replica_id": REPLICA_ID,
+                                        "product_id": product_id,
+                                        "domain": domain,
+                                        "url": url,
+                                        "error": str(e),
+                                    })
+                                    return None
+                                
+                            else:
+                                logger.warning(f"Failed to download {url}: Status {response.status}")
+                                # 📊 Metric: HTTP error
+                                HTTP_ERRORS_TOTAL.labels(
+                                    replica_id=REPLICA_ID,
+                                    domain=domain,
+                                    status_code=str(response.status)
+                                ).inc()
+                                
+                                # 📊 Event: HTTP error
+                                await event_store.emit_error_event({
+                                    "action": "http_error",
+                                    "replica_id": REPLICA_ID,
+                                    "product_id": product_id,
+                                    "domain": domain,
+                                    "url": url,
+                                    "status_code": str(response.status),
+                                })
+                                
+                except Exception as e:
+                    logger.warning(f"Error downloading {url} (Attempt {attempt+1}): {e}")
+                    # 📊 Metric: retry
+                    if attempt < retries - 1:
+                        DOWNLOAD_RETRIES_TOTAL.labels(replica_id=REPLICA_ID, domain=domain).inc()
+                    
+                    # 📊 Metric: proxy error (if proxy is configured)
+                    if self.proxy_url and ("proxy" in str(e).lower() or "connect" in str(e).lower()):
+                        PROXY_ERRORS_TOTAL.labels(replica_id=REPLICA_ID).inc()
+                    
+                    await asyncio.sleep(attempt * 1)
+            
+            # All retries exhausted
+            # 📊 Metric: final failure
+            DOWNLOADS_TOTAL.labels(replica_id=REPLICA_ID, domain=domain, status="failed").inc()
+            DOWNLOAD_FAILURES_TOTAL.labels(replica_id=REPLICA_ID, domain=domain).inc()
+            
+            # 📊 Event: download failed
+            await event_store.emit_error_event({
+                "action": "download_failed",
+                "replica_id": REPLICA_ID,
+                "product_id": product_id,
+                "domain": domain,
+                "url": url,
+                "retries": str(retries),
+            })
+            
+            return None
+        finally:
+            # 📊 Metric: clear in-progress
+            DOWNLOADS_IN_PROGRESS.labels(replica_id=REPLICA_ID).dec()
+            # 📊 Event: clear active download
+            await event_store.set_active_download(REPLICA_ID, None)
 
     async def process_product(self, product_data: dict) -> dict:
         """
@@ -182,6 +288,14 @@ class Downloader:
         
         logger.info(f"Downloading {len(urls)} images for product {product_id} ({domain})")
         
+        # 📊 Event: update replica status
+        await event_store.update_replica_status(REPLICA_ID, {
+            "state": "processing",
+            "current_product": product_id,
+            "current_domain": domain,
+            "total_images": len(urls),
+        })
+        
         for i, url in enumerate(urls):
             if not url: continue
             
@@ -194,6 +308,9 @@ class Downloader:
                 logger.info(f"⏭️  Image {img_index} already exists for product {product_id}: {existing_paths['filename']}")
                 processed_images.append(existing_paths)
                 skipped_count += 1
+                # 📊 Metric: skipped (deduplicated)
+                IMAGES_SKIPPED_TOTAL.labels(replica_id=REPLICA_ID, domain=domain).inc()
+                DOWNLOADS_TOTAL.labels(replica_id=REPLICA_ID, domain=domain, status="skipped").inc()
                 continue
 
             # Local rate limiting: 2 req/s (sleep 0.5s between requests)
@@ -212,6 +329,21 @@ class Downloader:
         # Save to manifest for archive synchronization
         if processed_images:
             await self._save_to_manifest(domain, product_id, product_name, processed_images)
+        
+        # 📊 Event: update replica status to idle
+        await event_store.update_replica_status(REPLICA_ID, {
+            "state": "idle",
+            "last_product": product_id,
+            "last_domain": domain,
+        })
+        
+        # 📊 Event: update domain stats
+        await event_store.update_domain_stats(domain, {
+            "last_product_id": product_id,
+            "last_product_name": product_name,
+            "images_in_last_product": len(processed_images),
+            "skipped_in_last_product": skipped_count,
+        })
         
         return product_data
 

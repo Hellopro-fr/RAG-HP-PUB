@@ -110,3 +110,11 @@ scrape_configs:
   - job_name: 'optimize-service'
     static_configs:
       - targets: ['optimize-service:8563'] # The service name and port from docker-compose
+
+  - job_name: 'image-download-service'
+    # Discover all replicas dynamically via Docker DNS
+    dns_sd_configs:
+    - names:
+      - image-download-service
+      type: 'A'
+      port: 8505

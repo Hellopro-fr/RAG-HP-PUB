@@ -2,6 +2,11 @@ import aio_pika
 import json
 import logging
 from image_download_service.core.downloader import Downloader
+from image_download_service.core.metrics import (
+    REPLICA_ID, MESSAGES_RECEIVED_TOTAL, MESSAGES_PROCESSED_TOTAL,
+    MESSAGES_SKIPPED_TOTAL, MESSAGES_DLQ_TOTAL, MESSAGES_RETRIED_TOTAL,
+)
+from image_download_service.core.event_store import event_store
 from common_utils.autres.DLQProperties import DLQProperties
 
 logger = logging.getLogger(__name__)
@@ -98,6 +103,9 @@ class Consumer:
                 product_data = data.get("data", data)
                 product_id = product_data.get('id_produit', 'unknown')
                 
+                # 📊 Metric: message received
+                MESSAGES_RECEIVED_TOTAL.labels(replica_id=REPLICA_ID).inc()
+                
                 logger.info(f"📥 Message reçu pour le produit '{product_id}'.")
                 
                 # --- FILTER: Process only 'SITEWEB' or 'test_web' source ---
@@ -105,12 +113,28 @@ class Consumer:
                 
                 if source not in ["SITEWEB", "test_web"]:
                     logger.info(f"⏭️ Skipping product {product_id}: Source '{source}' not in allowed list.")
+                    # 📊 Metric: message skipped
+                    MESSAGES_SKIPPED_TOTAL.labels(replica_id=REPLICA_ID).inc()
                     return  # ACK automatique via context manager
                 
                 logger.info(f"🔄 Processing product {product_id} (Source: {source})")
                 
+                # 📊 Event: emit download start
+                domain = product_data.get("domaine", "unknown")
+                await event_store.emit_download_event({
+                    "action": "product_start",
+                    "replica_id": REPLICA_ID,
+                    "product_id": product_id,
+                    "domain": domain,
+                    "source": source,
+                    "image_count": str(len(product_data.get("url_images", []))),
+                })
+                
                 # Appel async natif - pas besoin de wrapper synchrone !
                 result_data = await self.downloader.process_product(product_data)
+                
+                # 📊 Metric: message processed
+                MESSAGES_PROCESSED_TOTAL.labels(replica_id=REPLICA_ID).inc()
                 
                 # Log si l'image existait déjà (déduplication)
                 if result_data.get("skipped"):
@@ -119,10 +143,31 @@ class Consumer:
                     logger.info(f"✅ Downloaded {len(result_data['processed_images'])} image(s) for {product_id}")
                 else:
                     logger.warning(f"⚠️ No images processed for {product_id}")
+                
+                # 📊 Event: emit product complete
+                await event_store.emit_download_event({
+                    "action": "product_complete",
+                    "replica_id": REPLICA_ID,
+                    "product_id": product_id,
+                    "domain": domain,
+                    "processed_count": str(len(result_data.get("processed_images", []))),
+                    "skipped_count": str(result_data.get("skipped_count", 0)),
+                    "total_images": str(result_data.get("total_images", 0)),
+                })
 
             except (json.JSONDecodeError, ValueError) as e:
                 # Erreur permanente: le message est invalide.
                 logger.error(f"❌ Erreur permanente pour {product_id}. Message envoyé à la DLQ finale. Erreur: {e}")
+                # 📊 Metric: DLQ (permanent error)
+                MESSAGES_DLQ_TOTAL.labels(replica_id=REPLICA_ID, error_type="permanent").inc()
+                # 📊 Event: error
+                await event_store.emit_error_event({
+                    "action": "dlq_permanent",
+                    "replica_id": REPLICA_ID,
+                    "product_id": product_id,
+                    "error": str(e),
+                    "error_type": "permanent",
+                })
                 await self._send_to_dlq(message, e, 0)
 
             except Exception as e:
@@ -130,9 +175,31 @@ class Consumer:
                 retry_count = self._get_retry_count(message)
                 if retry_count < MAX_RETRIES:
                     logger.warning(f"❌ Erreur transitoire pour {product_id} (essai {retry_count + 1}/{MAX_RETRIES + 1}). Retrying. Erreur: {e}")
+                    # 📊 Metric: retry
+                    MESSAGES_RETRIED_TOTAL.labels(replica_id=REPLICA_ID).inc()
+                    # 📊 Event: retry
+                    await event_store.emit_error_event({
+                        "action": "retry",
+                        "replica_id": REPLICA_ID,
+                        "product_id": product_id,
+                        "error": str(e),
+                        "retry_count": str(retry_count + 1),
+                        "max_retries": str(MAX_RETRIES + 1),
+                    })
                     await message.nack(requeue=False)  # NACK pour retry via DLX
                 else:
                     logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives pour {product_id}. Envoi à la DLQ. Erreur: {e}")
+                    # 📊 Metric: DLQ (exhausted retries)
+                    MESSAGES_DLQ_TOTAL.labels(replica_id=REPLICA_ID, error_type="exhausted").inc()
+                    # 📊 Event: error
+                    await event_store.emit_error_event({
+                        "action": "dlq_exhausted",
+                        "replica_id": REPLICA_ID,
+                        "product_id": product_id,
+                        "error": str(e),
+                        "error_type": "exhausted",
+                        "retry_count": str(MAX_RETRIES),
+                    })
                     await self._send_to_dlq(message, e, MAX_RETRIES)
     
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):

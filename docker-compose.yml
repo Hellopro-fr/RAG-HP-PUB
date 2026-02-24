@@ -1865,6 +1865,24 @@ services:
       - services-net
     logging: *logging_defaults
 
+  image-download-monitor:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/image-download-monitor/Dockerfile
+    container_name: image-download-monitor
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    ports:
+      - "8591:80"
+    networks:
+      - services-net
+    logging: *logging_defaults
+
 networks:
   services-net:
     driver: bridge
