@@ -405,27 +405,59 @@ class HeaderFooterExtractor:
         if not top_level_candidates:
             return "", "", []
 
-        # 6. Identify Main Content Pivot
-        # Find the element with the most unique words (words NOT in the intersection)
-        main_idx = len(all_main_elements) // 2 
-        max_unique_words = 0
+        # 6. IMPROVED: Identify Main Content Pivot using Weighted Largest Gap
+        # Find the largest gap between candidate indices, weighted by semantic tags.
         
-        for index, el in enumerate(all_main_elements):
-            # Optimization: Skip if this element IS a candidate (it's boilerplate)
-            if any(el == c[1] for c in candidates): 
-                continue
+        # Get indices of top-level candidates
+        candidate_indices = sorted([t[0] for t in top_level_candidates])
+        
+        # Add boundaries to simulate gaps before first and after last candidate
+        # Using -1 ensures gap 0 starts at index 0
+        boundary_indices = [-1] + candidate_indices + [len(all_main_elements)]
+        
+        max_gap_score = -1
+        best_split_index = len(all_main_elements) // 2 # Default fallback
+        
+        # Iterate over gaps
+        for i in range(len(boundary_indices) - 1):
+            start_idx = boundary_indices[i] + 1
+            end_idx = boundary_indices[i+1]
             
-            text_length = len(self.get_cleaned_text(el).split())
-            if text_length > max_unique_words and text_length > 10: 
-                max_unique_words = text_length
-                main_idx = index
+            # Analyze content in this gap
+            gap_score = 0.0
+            
+            # Iterate through elements inside the gap
+            # Note: These elements are NOT candidates (unique content)
+            for gap_el_idx in range(start_idx, end_idx):
+                if gap_el_idx >= len(all_main_elements): break
+                el = all_main_elements[gap_el_idx]
+                
+                # Base score: Text length
+                text_len = len(self.get_cleaned_text(el).split())
+                gap_score += text_len
+                
+                # Semantic Bonuses
+                if el.name in ['main', 'article']:
+                    gap_score += 10000.0
+                if el.find('h1'):
+                    gap_score += 5000.0
+                if el.find('h2'):
+                    gap_score += 1000.0
+                    
+            if gap_score > max_gap_score:
+                max_gap_score = gap_score
+                # The split point is the end of this gap. 
+                # Anything before this gap (<= boundary_indices[i]) is Header.
+                # Anything after this gap (>= boundary_indices[i+1]) is Footer.
+                best_split_index = boundary_indices[i] 
 
         # 7. Split into Header/Footer based on Pivot
         header_texts = []
         footer_texts = []
 
+        # best_split_index is the index of the LAST candidate that belongs to the Header group
         for idx, el, text, wc in top_level_candidates:
-            if idx < main_idx:
+            if idx <= best_split_index:
                 header_texts.append(text)
             else:
                 footer_texts.append(text)
