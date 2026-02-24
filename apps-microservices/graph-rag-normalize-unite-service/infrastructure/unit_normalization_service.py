@@ -251,6 +251,16 @@ class UnitNormalizationService:
                 # Signal count (e.g. Raccordement dosage liquide: number of signal ports)
                 "signal": "count",
                 "signaux": "count",
+                # Luminous flux (lumen)
+                "lm": "luminosity",
+                # Luminous efficacy (lumen per watt)
+                "lm/w": "luminous_efficacy",
+                # Color Rendering Index (CRI/IRC) - dimensionless 0-100 scale
+                "ra": "dimensionless",
+                # Percentage / ratio (humidity, efficiency, etc.)
+                "%": "ratio",
+                # Speed (km/h, e.g. wind resistance)
+                "km/h": "speed",
             }
 
             # --- Label-to-Dimension Mapping ---
