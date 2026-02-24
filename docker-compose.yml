@@ -642,11 +642,10 @@ services:
       # Users whose session email matches one of these will get X-Admin-Key
       # pre-filled in Swagger UI automatically.
       - GATEWAY_DOCS_ADMIN_EMAILS=${GATEWAY_DOCS_ADMIN_EMAILS:-}
-      # - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
-      - REDIS_URL=redis://default:GHzcE3ktzz42HsENOHiigUnV6Uk03z61@redis-18990.c2.eu-west-1-3.ec2.cloud.redislabs.com:18990
-    depends_on:
-      mysql:
-        condition: service_healthy
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
     networks:
       - services-net
     logging: *logging_defaults
@@ -1707,9 +1706,9 @@ services:
        - ./public/robots.txt:/var/www/html/robots.txt:ro
     ports:
       - "${PHPMYADMIN_PORT:-8082}:80"
-    depends_on:
-      mysql:
-        condition: service_healthy
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
     networks:
       - services-net
 
