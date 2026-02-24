@@ -259,6 +259,13 @@ class LanguageDetector:
             import fasttext
             import os
             
+            # Suppression du warning de fasttext: "`load_model` does not return WordVectorModel..."
+            # Fasttext écrit directement sur stderr via eprint, on remplace donc cette fonction
+            try:
+                fasttext.FastText.eprint = lambda x: None
+            except Exception:
+                pass
+            
             # Chemin vers le modèle fastText (à configurer via settings si besoin)
             model_path = getattr(settings, 'FASTTEXT_MODEL_PATH', None) or os.path.join(
                 os.path.dirname(__file__), '..', '..', 'models', 'lid.176.bin'
