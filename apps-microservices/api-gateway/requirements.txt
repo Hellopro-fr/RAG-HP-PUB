@@ -2,3 +2,12 @@ fastapi[all]
 uvicorn
 aio-pika
 websockets==12.0
+python-multipart
+jinja2
+PyJWT
+httpx
+tortoise-orm[asyncmy]
+asyncmy
+aerich
+cryptography
+redis[asyncio]

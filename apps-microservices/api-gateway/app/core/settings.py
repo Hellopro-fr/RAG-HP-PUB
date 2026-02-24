@@ -5,38 +5,48 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 # Load default .env
-env_path = Path('.') / '.env'
+env_path = Path(".") / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # Load extra .env if exists
-extra_env_path = Path('.') / '.env.url'
+extra_env_path = Path(".") / ".env.url"
 if extra_env_path.exists():
     load_dotenv(dotenv_path=extra_env_path, override=True)
+
 
 @dataclass(frozen=True)
 class Service:
     """Represents a microservice with its URL and the API path to access it."""
+
     url: str
     api_path: str
+
 
 class Configuration:
     PROJECT_NAME: str = "API-HP-RAG"
     PROJECT_VERSION: str = "0.0.1"
 
-    # CLEANER: Service = Service(
-    #     url=os.getenv("CLEANER", "http://localhost:8001"), 
-    #     api_path="/cleaner-service"
-    # )
-    # SCRAPING: Service = Service(
-    #     url=os.getenv("SCRAPING", "http://localhost:8002"), 
-    #     api_path="/scraping-service"
-    # )
-    # EMBEDDING: Service = Service(
-    #     url=os.getenv("EMBEDDING", "http://localhost:8003"), 
-    #     api_path="/embedding-service"
-    # )
+    # ─── Auth configuration ────────────────────────────────────────────────
+    JWT_SECRET: str = os.getenv("JWT_SECRET", "changeme-jwt-secret")
+    JWT_ALGO: str = os.getenv("JWT_ALGO", "HS256")
+    JWT_AUDIENCE: str = os.getenv("JWT_AUDIENCE", "hellopro")
 
-    DOCUMENT_ROOT: str = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    # ─── Token security configuration ────────────────────────────────────
+    GATEWAY_ADMIN_KEY: str = os.getenv("GATEWAY_ADMIN_KEY", "changeme-admin-key")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(
+        os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")
+    )
+
+    # ─── MySQL (Gateway DB) configuration ─────────────────────────────────
+    MYSQL_HOST: str = os.getenv("MYSQL_HOST", "gateway-mysql")
+    MYSQL_PORT: str = os.getenv("MYSQL_PORT", "3306")
+    MYSQL_USER: str = os.getenv("MYSQL_USER", "gateway_user")
+    MYSQL_PASS: str = os.getenv("MYSQL_PASS", "gateway_pass")
+    MYSQL_DB: str = os.getenv("MYSQL_DB", "gateway_db")
+
+    DOCUMENT_ROOT: str = os.path.abspath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
 
     # Dynamically add services based on environment keys
     EXTRA_SERVICES: Dict[str, Service] = {}
@@ -44,11 +54,25 @@ class Configuration:
     for key, value in os.environ.items():
         # convention: SERVICE_<NAME>=http://url  --> api_path="/<name>-service"
         if key.startswith("SERVICE_"):
-            service_name = key[len("SERVICE_"):].lower()
+            service_name = key[len("SERVICE_") :].lower()
             EXTRA_SERVICES[service_name] = Service(
-                url=value,
-                api_path=f"/{service_name}-service"
+                url=value, api_path=f"/{service_name}-service"
             )
+
+    # ─── Excluded routes (bypass token verification) ──────────────────────
+    # Convention: EXCLUDED_ROUTES_<SERVICE>=path1,path2,...
+    # Example:    EXCLUDED_ROUTES_DLQ=dlq/queues,dlq/health
+    # Paths are relative (no leading slash).
+    EXCLUDED_ROUTES: Dict[str, list] = {}
+    EXCLUDED_ROUTES_LIST: Dict[str, list] = {
+        "dlq-service": ["/dlq/queues"],
+    }
+
+    for svc_name, route_exclude in EXCLUDED_ROUTES_LIST.items():
+        EXCLUDED_ROUTES[svc_name] = [
+            p.strip().strip("/") for p in route_exclude if p.strip()
+        ]
+
 
 def _create_service_map(config_class: Type[Configuration]) -> Dict[str, str]:
     """
@@ -64,6 +88,7 @@ def _create_service_map(config_class: Type[Configuration]) -> Dict[str, str]:
     for service in config_class.EXTRA_SERVICES.values():
         service_map[service.api_path] = service.url
     return service_map
+
 
 SERVICE_MAP = _create_service_map(Configuration)
 settings = Configuration()

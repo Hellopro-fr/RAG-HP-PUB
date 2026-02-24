@@ -590,6 +590,31 @@ services:
     networks:
       - services-net
 
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    profiles: ["app"]
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${GATEWAY_MYSQL_ROOT_PASSWORD:-gateway_root_pass}
+      - MYSQL_DATABASE=${GATEWAY_MYSQL_DB:-gateway_db}
+      - MYSQL_USER=${GATEWAY_MYSQL_USER:-gateway_user}
+      - MYSQL_PASSWORD=${GATEWAY_MYSQL_PASS:-gateway_pass}
+      - MYSQL_TCP_PORT=${GATEWAY_MYSQL_PORT:-3306}
+    ports:
+      - "${GATEWAY_MYSQL_PORT:-3306}:${GATEWAY_MYSQL_PORT:-3306}"
+    volumes:
+      - gateway_mysql_data:/var/lib/mysql
+    networks:
+      - services-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${GATEWAY_MYSQL_ROOT_PASSWORD:-gateway_root_pass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *logging_defaults
+
   api-gateway-service:
     build:
       context: .
@@ -597,12 +622,31 @@ services:
     container_name: api-gateway-service
     profiles: ["app"] # Profile for the main application stack
     volumes:
-      - ./apps-microservices/api-gateway:/app:rw
+      - ./apps-microservices/api-gateway/.env.url:/app/.env.url:rw
     restart: unless-stopped
     ports:
       - "8500:8500"
     env_file:
       - .env
+    environment:
+      # ── Gateway MySQL (token store) ──────────────────────────────────────
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=${GATEWAY_MYSQL_PORT:-3306}
+      - MYSQL_USER=${GATEWAY_MYSQL_USER:-gateway_user}
+      - MYSQL_PASS=${GATEWAY_MYSQL_PASS:-gateway_pass}
+      - MYSQL_DB=${GATEWAY_MYSQL_DB:-gateway_db}
+      # ── Token security ───────────────────────────────────────────────────
+      - GATEWAY_ADMIN_KEY=${GATEWAY_ADMIN_KEY:-changeme-admin-key}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      # ── Docs admin auto-fill (comma-separated emails) ────────────────────
+      # Users whose session email matches one of these will get X-Admin-Key
+      # pre-filled in Swagger UI automatically.
+      - GATEWAY_DOCS_ADMIN_EMAILS=${GATEWAY_DOCS_ADMIN_EMAILS:-}
+      # - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - REDIS_URL=redis://default:GHzcE3ktzz42HsENOHiigUnV6Uk03z61@redis-18990.c2.eu-west-1-3.ec2.cloud.redislabs.com:18990
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks:
       - services-net
     logging: *logging_defaults
@@ -1648,36 +1692,26 @@ services:
       - services-ext-net
       - services-global-net
 
-  # db:
-  #   image: mysql:8.0
-  #   container_name: mep-db
-  #   environment:
-  #     - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-  #     - MYSQL_DATABASE=${DB_NAME}
-  #     - MYSQL_USER=${DB_USER}
-  #     - MYSQL_PASSWORD=${DB_PASS}
-  #   volumes:
-  #     - mysql_data:/var/lib/mysql
-  #     - ./sql/schema.sql:/docker-entrypoint-initdb.d/init.sql
-  #   ports:
-  #     - "3307:3306"
-  #   networks:
-  #     - services-net
 
-  # phpmyadmin:
-  #   image: phpmyadmin:latest
-  #   container_name: mep-phpmyadmin
-  #   environment:
-  #     - PMA_HOST=db
-  #     - UPLOAD_LIMIT=100M
-  #   volumes:
-  #      - ./public/robots.txt:/var/www/html/robots.txt:ro
-  #   ports:
-  #     - "${PHPMYADMIN_PORT:-8082}:80"
-  #   depends_on:
-  #     - db
-  #   networks:
-  #     - services-net
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: hp-phpmyadmin
+    profiles: ["app"]
+    environment:
+      - PMA_HOST=mysql
+      - PMA_PORT=${GATEWAY_MYSQL_PORT:-3306}
+      - PMA_USER=${GATEWAY_MYSQL_USER:-gateway_user}
+      - PMA_PASSWORD=${GATEWAY_MYSQL_PASS:-gateway_pass}
+      - UPLOAD_LIMIT=100M
+    volumes:
+       - ./public/robots.txt:/var/www/html/robots.txt:ro
+    ports:
+      - "${PHPMYADMIN_PORT:-8082}:80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - services-net
 
   # =====================================================================
   # QC TRACKING SERVICE - Interface de visualisation des fichiers tracking
@@ -1852,3 +1886,4 @@ volumes:
   prometheus_data:
   gr_neo4j_data:
   gr_neo4j_logs:
+  gateway_mysql_data:
