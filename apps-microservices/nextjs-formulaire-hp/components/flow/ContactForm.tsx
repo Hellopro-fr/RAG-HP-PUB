@@ -57,6 +57,27 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
   const [files, setFiles] = useState<File[]>([]);
   const [showAdditionalFields, setShowAdditionalFields] = useState<boolean>(false);
+  const [showFallbackRedirect, setShowFallbackRedirect] = useState<boolean>(false);
+  const fallbackMessageRef = useRef<HTMLParagraphElement>(null);
+
+  // Gérer la redirection fallback si l'API ne retourne pas une URL externe
+  useEffect(() => {
+    if (leadSubmission.isSuccess && leadSubmission.data?.data) {
+      const { isExternalRedirect, fallbackUrl } = leadSubmission.data.data;
+      if (!isExternalRedirect && fallbackUrl) {
+        // Afficher le message d'erreur et rediriger après 2 secondes
+        setShowFallbackRedirect(true);
+        // Scroll vers le message après un court délai pour laisser le rendu se faire
+        setTimeout(() => {
+          fallbackMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+        const timer = setTimeout(() => {
+          window.location.href = fallbackUrl;
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [leadSubmission.isSuccess, leadSubmission.data]);
 
   // Ref pour éviter les doubles appels en StrictMode
   const hasTrackedView = useRef(false);
@@ -526,6 +547,12 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
           {leadSubmission.isError && (
             <p className="text-center text-sm text-destructive">
               Une erreur est survenue. Veuillez réessayer plus tard.
+            </p>
+          )}
+
+          {showFallbackRedirect && (
+            <p ref={fallbackMessageRef} className="text-center text-sm text-destructive">
+              Une erreur est survenue. Vous allez être redirigé vers la catégorie.
             </p>
           )}
         </form>

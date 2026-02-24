@@ -164,6 +164,27 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
 
   const leadSubmission = useLeadSubmission();
   const { trackDbEvent } = useDbTracking();
+  const [showFallbackRedirect, setShowFallbackRedirect] = useState<boolean>(false);
+  const fallbackMessageRef = useRef<HTMLParagraphElement>(null);
+
+  // Gérer la redirection fallback si l'API ne retourne pas une URL externe
+  useEffect(() => {
+    if (leadSubmission.isSuccess && leadSubmission.data?.data) {
+      const { isExternalRedirect, fallbackUrl } = leadSubmission.data.data;
+      if (!isExternalRedirect && fallbackUrl) {
+        // Afficher le message d'erreur et rediriger après 2 secondes
+        setShowFallbackRedirect(true);
+        // Scroll vers le message après un court délai pour laisser le rendu se faire
+        setTimeout(() => {
+          fallbackMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+        const timer = setTimeout(() => {
+          window.location.href = fallbackUrl;
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [leadSubmission.isSuccess, leadSubmission.data]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -657,6 +678,19 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                       </>
                     )}
                   </button>
+
+                  {/* Error message */}
+                  {leadSubmission.isError && (
+                    <p className="text-sm text-destructive text-center">
+                      Une erreur est survenue. Veuillez réessayer plus tard.
+                    </p>
+                  )}
+
+                  {showFallbackRedirect && (
+                    <p ref={fallbackMessageRef} className="text-sm text-destructive text-center">
+                      Une erreur est survenue. Vous allez être redirigé vers la catégorie.
+                    </p>
+                  )}
                 </form>
               </>
             )}
