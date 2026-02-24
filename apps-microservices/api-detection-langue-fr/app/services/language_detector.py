@@ -165,8 +165,6 @@ class LanguageDetector:
             # Limiter le texte analysé (performance)
             text = text[:5000]
 
-            print(f"Texte analysé: {text}")
-            
             # Détection avec langdetect
             langdetect_result = None
             langdetect_confidence = 0.0
@@ -294,7 +292,6 @@ class LanguageDetector:
             
             # Limiter le texte analysé (performance)
             text = text[:5000]
-            print(f"Texte analysé: {text}")
             
             # Nettoyer le texte (fastText n'aime pas les sauts de ligne)
             text_clean = ' '.join(text.split())
