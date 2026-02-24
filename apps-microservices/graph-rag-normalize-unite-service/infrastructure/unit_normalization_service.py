@@ -254,6 +254,8 @@ class UnitNormalizationService:
             cls._instance.LABEL_TO_DIMENSION = {
                 "charge au sol": "area_density",
                 "charge admissible au sol": "area_density",
+                "charge statique": "area_density",
+                "classe climatique": "count",
                 "nombre": "count",
                 "quantité": "count",
                 "segment": "count",
@@ -384,7 +386,11 @@ class UnitNormalizationService:
         if isinstance(value, str):
             try:
                 # Handle lists passed as strings if necessary, though proto should handle this
-                value = float(value)
+                # --- FIX: Strip '+/-' or '±' tolerance prefix (e.g. '+/- 2') before parsing ---
+                value_clean = (
+                    value.strip().lstrip("+").replace("/-", "").replace("±", "").strip()
+                )
+                value = float(value_clean)
             except ValueError:
                 return {}
 
@@ -418,6 +424,12 @@ class UnitNormalizationService:
                 unit = "m**2"
             elif unit_stripped == "m3":
                 unit = "m**3"
+            elif unit_stripped == "kg/m2":
+                # Area density: Pint can't parse 'kg/m2' (m2 is not a native Pint exponent)
+                unit = "kilogram / meter ** 2"
+            elif unit_stripped == "kg/m3":
+                # Density: Pint can't parse 'kg/m3' (m3 is not a native Pint exponent)
+                unit = "kilogram / meter ** 3"
             # --- FIX: Pint cannot handle French composite rate units directly.
             # Map them to Pint-safe equivalents for mass flow and count rate.
             elif unit_stripped == "g/min":
