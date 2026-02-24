@@ -49,6 +49,13 @@ class BoilerplateTestRequest(BaseModel):
     reference_htmls: List[str] = Field(..., description="List of reference HTML pages from the same domain.")
 
 
+class IntersectionDetail(BaseModel):
+    signature: str
+    text_main: str
+    text_ref1: str
+    text_ref2: str
+
+
 class BoilerplateTestResponse(BaseModel):
     # Old Method Results
     header_old: str
@@ -62,9 +69,14 @@ class BoilerplateTestResponse(BaseModel):
     header_structural: str
     footer_structural: str
     
-    # Visualizer Lists
-    intersections_class: List[str]
-    intersections_structural: List[str]
+    # Visualizer Details
+    intersections_class: List[IntersectionDetail]
+    intersections_structural: List[IntersectionDetail]
+    
+    # Cleaned HTMLs
+    cleaned_html_main: str
+    cleaned_html_ref1: str
+    cleaned_html_ref2: str
     
     # Final Decision (Production Simulation)
     header_selected: str

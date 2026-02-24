@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
-import { AlertCircle, ChevronDown, ChevronUp, Copy, Check, Eye } from "lucide-react"
+import { AlertCircle, ChevronDown, ChevronUp, Copy, Check, Eye, FileCode } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -11,6 +11,13 @@ interface LibraryResult {
   char_count: number
   error: string | null
   metadata?: Record<string, any>
+}
+
+interface IntersectionDetail {
+  signature: string
+  text_main: string
+  text_ref1: string
+  text_ref2: string
 }
 
 interface BoilerplateResult {
@@ -23,8 +30,12 @@ interface BoilerplateResult {
   header_structural: string
   footer_structural: string
   
-  intersections_class: string[]
-  intersections_structural: string[]
+  intersections_class: IntersectionDetail[]
+  intersections_structural: IntersectionDetail[]
+  
+  cleaned_html_main: string
+  cleaned_html_ref1: string
+  cleaned_html_ref2: string
   
   header_selected: string
   header_method_used: string
@@ -77,10 +88,11 @@ export default function OutputSection({ activeView, results, boilerplateResults,
     return (
       <div className="space-y-6 flex-1 w-full">
         <Tabs defaultValue="production" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5 h-auto">
             <TabsTrigger value="production">Production</TabsTrigger>
-            <TabsTrigger value="class">Strategy: Class</TabsTrigger>
-            <TabsTrigger value="structural">Strategy: Structural</TabsTrigger>
+            <TabsTrigger value="class">Strat: Class</TabsTrigger>
+            <TabsTrigger value="structural">Strat: Struct</TabsTrigger>
+            <TabsTrigger value="cleaned">Cleaned HTML</TabsTrigger>
             <TabsTrigger value="original">Original</TabsTrigger>
           </TabsList>
           
@@ -111,8 +123,8 @@ export default function OutputSection({ activeView, results, boilerplateResults,
                 method="Fallback (Class)" 
                 />
             </div>
-            <IntersectionList 
-                title="Visualizer: Class-Based Intersections" 
+            <IntersectionTable 
+                title="Detailed Intersection Analysis (Class Strategy)" 
                 items={boilerplateResults.intersections_class} 
             />
           </TabsContent>
@@ -130,9 +142,30 @@ export default function OutputSection({ activeView, results, boilerplateResults,
                 method="Fallback (Structural)" 
                 />
             </div>
-            <IntersectionList 
-                title="Visualizer: Structural Intersections" 
+            <IntersectionTable 
+                title="Detailed Intersection Analysis (Structural Strategy)" 
                 items={boilerplateResults.intersections_structural} 
+            />
+          </TabsContent>
+
+          <TabsContent value="cleaned" className="space-y-6 pt-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <FileCode className="h-5 w-5" /> Boilerpy3 Output (Marked HTML)
+            </h3>
+            <BoilerplateCard 
+              title="Cleaned Main HTML" 
+              content={boilerplateResults.cleaned_html_main} 
+              method="boilerpy3.KeepEverythingExtractor" 
+            />
+            <BoilerplateCard 
+              title="Cleaned Reference HTML 1" 
+              content={boilerplateResults.cleaned_html_ref1} 
+              method="boilerpy3.KeepEverythingExtractor" 
+            />
+            <BoilerplateCard 
+              title="Cleaned Reference HTML 2" 
+              content={boilerplateResults.cleaned_html_ref2} 
+              method="boilerpy3.KeepEverythingExtractor" 
             />
           </TabsContent>
 
@@ -181,6 +214,55 @@ export default function OutputSection({ activeView, results, boilerplateResults,
   }
 
   return null
+}
+
+function IntersectionTable({ title, items }: { title: string, items: IntersectionDetail[] }) {
+    if (!items || items.length === 0) {
+        return (
+            <Card className="p-4 border-dashed border-2">
+                <h4 className="font-semibold text-sm text-muted-foreground">{title} - No intersections found.</h4>
+            </Card>
+        );
+    }
+
+    return (
+        <Card className="p-4 border-dashed border-2">
+            <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                {title} ({items.length} matching blocks)
+            </h4>
+            <ScrollArea className="h-96 rounded-md border bg-muted/10">
+                <div className="min-w-[800px]">
+                    {/* Header */}
+                    <div className="grid grid-cols-10 gap-2 p-3 bg-muted font-semibold text-xs border-b sticky top-0 z-10">
+                        <div className="col-span-2">Signature</div>
+                        <div className="col-span-3">Main Page Content</div>
+                        <div className="col-span-5 grid grid-cols-2 gap-2">
+                            <div>Ref 1 Content</div>
+                            <div>Ref 2 Content</div>
+                        </div>
+                    </div>
+                    {/* Rows */}
+                    <div className="divide-y">
+                        {items.map((item, idx) => (
+                            <div key={idx} className="grid grid-cols-10 gap-2 p-3 text-xs hover:bg-muted/20">
+                                <div className="col-span-2 font-mono text-[10px] break-all text-primary/80">
+                                    {item.signature}
+                                </div>
+                                <div className="col-span-3 max-h-24 overflow-y-auto pr-1 text-muted-foreground">
+                                    {item.text_main}
+                                </div>
+                                <div className="col-span-5 grid grid-cols-2 gap-2 text-muted-foreground/70">
+                                    <div className="max-h-24 overflow-y-auto pr-1 border-r">{item.text_ref1}</div>
+                                    <div className="max-h-24 overflow-y-auto pr-1">{item.text_ref2}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </ScrollArea>
+        </Card>
+    )
 }
 
 interface BoilerplateCardProps {
@@ -256,28 +338,6 @@ function BoilerplateCard({ title, content, method }: BoilerplateCardProps) {
       </pre>
     </Card>
   )
-}
-
-function IntersectionList({ title, items }: { title: string, items: string[] }) {
-    if (!items || items.length === 0) return null;
-
-    return (
-        <Card className="p-4 border-dashed border-2">
-            <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
-                <Eye className="h-4 w-4" />
-                {title} ({items.length} blocks found)
-            </h4>
-            <ScrollArea className="h-64 rounded-md border p-4 bg-muted/30">
-                <ul className="space-y-2">
-                    {items.map((item, idx) => (
-                        <li key={idx} className="text-xs p-2 bg-background rounded border text-muted-foreground break-words">
-                            {item}
-                        </li>
-                    ))}
-                </ul>
-            </ScrollArea>
-        </Card>
-    )
 }
 
 interface LibraryCardProps {

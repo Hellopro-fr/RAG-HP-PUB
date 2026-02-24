@@ -108,6 +108,10 @@ async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
             intersections_class=result["intersections_class"],
             intersections_structural=result["intersections_structural"],
             
+            cleaned_html_main=result["cleaned_html_main"],
+            cleaned_html_ref1=result["cleaned_html_ref1"],
+            cleaned_html_ref2=result["cleaned_html_ref2"],
+            
             header_selected=result["header_selected"],
             header_method_used=result["header_method_used"],
             footer_selected=result["footer_selected"],
