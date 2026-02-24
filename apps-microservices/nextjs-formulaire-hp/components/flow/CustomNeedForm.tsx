@@ -52,9 +52,30 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
 
 
   const [errors, setErrors] = useState<Partial<Record<keyof typeof formData, string>>>({});
-  const [files, setFiles] = useState<File[]>([]);   
+  const [files, setFiles] = useState<File[]>([]);
+  const [showFallbackRedirect, setShowFallbackRedirect] = useState<boolean>(false);
+  const fallbackMessageRef = useRef<HTMLParagraphElement>(null);
 
   const leadSubmission = useLeadSubmission();
+
+  // Gérer la redirection fallback si l'API ne retourne pas une URL externe
+  useEffect(() => {
+    if (leadSubmission.isSuccess && leadSubmission.data?.data) {
+      const { isExternalRedirect, fallbackUrl } = leadSubmission.data.data;
+      if (!isExternalRedirect && fallbackUrl) {
+        // Afficher le message d'erreur et rediriger après 2 secondes
+        setShowFallbackRedirect(true);
+        // Scroll vers le message après un court délai pour laisser le rendu se faire
+        setTimeout(() => {
+          fallbackMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+        const timer = setTimeout(() => {
+          window.location.href = fallbackUrl;
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [leadSubmission.isSuccess, leadSubmission.data]);
   const { trackDbEvent } = useDbTracking();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
@@ -619,6 +640,12 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
               {leadSubmission.isError && (
                 <p className="text-center text-sm text-destructive">
                   Une erreur est survenue. Veuillez réessayer plus tard.
+                </p>
+              )}
+
+              {showFallbackRedirect && (
+                <p ref={fallbackMessageRef} className="text-center text-sm text-destructive">
+                  Une erreur est survenue. Vous allez être redirigé vers la catégorie.
                 </p>
               )}
             </form>

@@ -169,10 +169,19 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
       const redirectUrl = successfulResults.find(r => r.redirect_url)?.redirect_url;
       const leadId = successfulResults.find(r => r.id_demande)?.id_demande || `lead_${Date.now()}`;
 
+      // Vérifier si c'est une vraie URL externe (succès) ou pas (erreur PHP)
+      const isExternalRedirect = redirectUrl?.startsWith('http') ?? false;
+
+      // URL de fallback vers la page catégorie si erreur
+      const categoryId = data.categoryId || '0';
+      const fallbackUrl = `https://www.hellopro.fr/-${categoryId}-fr-1-feuille.html`;
+
       return {
         data: {
           leadId,
-          redirectUrl: redirectUrl || '/confirmation',
+          redirectUrl: isExternalRedirect ? redirectUrl : null,
+          isExternalRedirect,
+          fallbackUrl,
           totalSent: successfulResults.length,
           totalRequested: data.selectedSupplierIds.length,
         },
@@ -197,17 +206,13 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
         tagHotjarUser(HOTJAR_TAGS.CONVERTED);
       }
 
-      // Navigate to confirmation page (avec conservation des paramètres GET)
-      if (response.data?.redirectUrl) {
-        const url = response.data.redirectUrl;
-        // Si c'est une URL relative interne, conserver les paramètres GET
-        if (url.startsWith('/')) {
-          navigateTo(url);
-        } else {
-          // URL externe (redirection PHP) : naviguer directement
-          window.location.href = url;
-        }
+      // Redirection uniquement si URL externe (succès PHP)
+      // Si pas d'URL externe, les formulaires gèrent l'affichage du message d'erreur
+      if (response.data?.isExternalRedirect && response.data?.redirectUrl) {
+        window.location.href = response.data.redirectUrl;
       }
+      // Si isExternalRedirect === false, les formulaires afficheront le message d'erreur
+      // et redirigeront vers fallbackUrl après 2 secondes
     },
     onError: (error) => {
       // Track submission error
