@@ -1,5 +1,6 @@
 import re
 import logging
+from difflib import SequenceMatcher
 from bs4 import BeautifulSoup, Comment, Tag
 
 class HeaderFooterExtractor:
@@ -390,25 +391,49 @@ class HeaderFooterExtractor:
             
             if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
                 continue
-                
-            # Intersection Check: Does this signature exist in ALL reference maps?
+            
+            # CRITICAL CHECK: Does this signature exist in ALL reference maps?
             if all(sig in r_map for r_map in ref_maps):
-                text = self.get_cleaned_text(el)
-                if len(text.split()) >= 2 or "©" in text: 
-                    # Collect detailed comparison data
-                    ref_texts = [r_map[sig] for r_map in ref_maps]
-                    
+                text_main = self.get_cleaned_text(el)
+                
+                # Retrieve texts from refs for comparison
+                ref_texts = [r_map[sig] for r_map in ref_maps]
+                
+                # CRITICAL IMPROVEMENT: Content Similarity Check
+                # Avoid the "Parent Trap". If a container exists on all pages (e.g. 'div.wrapper')
+                # but contains completely different text, it is NOT boilerplate.
+                # True boilerplate (Header/Footer) must have roughly the same content.
+                
+                is_content_similar = True
+                if text_main and len(text_main) > 10: # Only check similarity for significant blocks
+                    for r_text in ref_texts:
+                        if not r_text: 
+                            is_content_similar = False
+                            break
+                        
+                        # Calculate similarity ratio
+                        ratio = SequenceMatcher(None, text_main, r_text).ratio()
+                        
+                        # Threshold: 80% similarity required to be considered "Boilerplate"
+                        # This allows for small changes (e.g. "Page 1" vs "Page 2" in pagination)
+                        # But blocks large changes (Main Content A vs Main Content B)
+                        if ratio < 0.8:
+                            is_content_similar = False
+                            break
+                
+                if is_content_similar and (len(text_main.split()) >= 2 or "©" in text_main):
                     match_detail = {
                         "signature": sig,
-                        "text_main": text,
+                        "text_main": text_main,
                         "text_ref1": ref_texts[0] if len(ref_texts) > 0 else "",
                         "text_ref2": ref_texts[1] if len(ref_texts) > 1 else ""
                     }
-                    
-                    # Add to candidates for processing
-                    candidates.append((index, el, text, len(text.split()), match_detail))
+                    candidates.append((index, el, text_main, len(text_main.split()), match_detail))
 
         # 5. Filter nested candidates (keep highest level)
+        # Note: Since we now filter by Content Similarity, the top-level unique containers 
+        # (like div.body-wrapper) will be rejected, naturally drilling down to the actual 
+        # Header/Footer elements which DO share content.
         top_level_candidates = []
         for i, (idx, el, text, word_count, detail) in enumerate(candidates):
             is_child = any(parent in [c[1] for c in candidates] for parent in el.parents)
