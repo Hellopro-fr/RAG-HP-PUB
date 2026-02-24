@@ -225,14 +225,15 @@ function IntersectionTable({ title, items }: { title: string, items: Intersectio
         );
     }
 
+    // Removed 'overflow-hidden' from Card to fix scroll issue
     return (
-        <Card className="p-4 border-dashed border-2 overflow-hidden">
+        <Card className="p-4 border-dashed border-2">
             <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
                 <Eye className="h-4 w-4" />
                 {title} ({items.length} matching blocks)
             </h4>
             <ScrollArea className="h-96 rounded-md border bg-muted/10 w-full">
-                <div className="min-w-[1000px]"> {/* Force minimum width to trigger scroll */}
+                <div className="min-w-[1000px]"> 
                     {/* Header */}
                     <div className="grid grid-cols-10 gap-2 p-3 bg-muted font-semibold text-xs border-b sticky top-0 z-10">
                         <div className="col-span-2">Signature</div>
@@ -260,7 +261,7 @@ function IntersectionTable({ title, items }: { title: string, items: Intersectio
                         ))}
                     </div>
                 </div>
-                <div className="h-2"></div> {/* Spacer for scrollbar */}
+                <div className="h-2"></div>
             </ScrollArea>
         </Card>
     )

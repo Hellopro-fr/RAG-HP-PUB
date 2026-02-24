@@ -317,6 +317,32 @@ class HeaderFooterExtractor:
         index = len(siblings) + 1
         return f"{el.name}:nth-of-type({index})"
 
+    def _is_cookie_banner(self, text: str) -> bool:
+        """
+        Detects if a text block is likely a cookie/consent banner.
+        """
+        if not text or len(text) > 1000: # Cookie banners are usually concise
+            return False
+            
+        text_lower = text.lower()
+        
+        # High-confidence cookie keywords
+        cookie_keywords = [
+            "cookie", "cookies", "consent", "accept all", "manage preferences", 
+            "privacy policy", "personal data", "tracking", "third-party", 
+            "paramètres des cookies", "accepter", "tout refuser", 
+            "politique de confidentialité", "expérience utilisateur",
+            "we use cookies", "nous utilisons des cookies"
+        ]
+        
+        match_count = sum(1 for kw in cookie_keywords if kw in text_lower)
+        
+        # Heuristic: If it has multiple keywords or starts with "we use cookies"
+        if match_count >= 2 or "use cookies" in text_lower or "utilisons des cookies" in text_lower:
+            return True
+            
+        return False
+
     def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class") -> tuple[str, str, list[dict], dict]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
@@ -392,7 +418,7 @@ class HeaderFooterExtractor:
             if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
                 continue
             
-            # CRITICAL CHECK: Does this signature exist in ALL reference maps?
+            # Intersection Check & Content Similarity
             if all(sig in r_map for r_map in ref_maps):
                 text_main = self.get_cleaned_text(el)
                 
@@ -421,7 +447,14 @@ class HeaderFooterExtractor:
                             is_content_similar = False
                             break
                 
+                # Check 1: Similarity
                 if is_content_similar and (len(text_main.split()) >= 2 or "©" in text_main):
+                    
+                    # Check 2: Cookie Banner Filter
+                    if self._is_cookie_banner(text_main):
+                        logging.info(f"Skipping cookie banner candidate: {text_main[:50]}...")
+                        continue
+
                     match_detail = {
                         "signature": sig,
                         "text_main": text_main,
@@ -444,12 +477,14 @@ class HeaderFooterExtractor:
         if not top_level_candidates:
             return "", "", [], cleaned_htmls
 
-        # 6. Identify Main Content Pivot using Weighted Largest Gap (Order Independent)
+        # 6. Identify Main Content Pivot using Weighted Largest Gap
         candidate_indices = sorted([t[0] for t in top_level_candidates])
         boundary_indices = [-1] + candidate_indices + [len(all_main_elements)]
         
         max_gap_score = -1
-        best_split_index = len(all_main_elements) // 2 
+        # Default split points (fallback)
+        header_cutoff_index = -1 
+        footer_start_index = len(all_main_elements)
         
         for i in range(len(boundary_indices) - 1):
             start_idx = boundary_indices[i] + 1
@@ -467,20 +502,89 @@ class HeaderFooterExtractor:
                     
             if gap_score > max_gap_score:
                 max_gap_score = gap_score
-                best_split_index = boundary_indices[i] 
+                # The "Main Content" is this gap.
+                # The candidate just BEFORE this gap (boundary_indices[i]) is the last Header element.
+                header_cutoff_index = boundary_indices[i]
+                # The candidate just AFTER this gap (boundary_indices[i+1]) is the first Footer element.
+                footer_start_index = boundary_indices[i+1]
 
-        # 7. Split into Header/Footer based on Pivot
+        # 7. Cluster Filtering ("Middle Island" Removal)
+        # We now have a defined Main Content Gap.
+        # Header candidates must be BEFORE the main gap.
+        # Footer candidates must be AFTER the main gap.
+        # Middle Islands are inherently removed because we defined the "Main Gap" as the largest unique block.
+        # Any candidate "inside" the Main Gap is impossible by definition (since candidates break the gap).
+        # However, check for "Secondary Gaps" within the Header group.
+        
+        # Refine Header: It should ideally start near index 0.
+        # If we have [0, 1] ... huge gap ... [50, 51] ... MAIN CONTENT ...
+        # [50, 51] is likely a Sidebar or Floating Widget, not the top Header.
+        
+        final_header_indices = []
+        final_footer_indices = []
+        
+        # Analyze Header Group (Candidates <= header_cutoff_index)
+        header_group = [t for t in top_level_candidates if t[0] <= header_cutoff_index]
+        if header_group:
+            # Check for gaps within the header group itself
+            # If there's a gap of > 500 unique words between header candidates, keep only the top cluster.
+            last_idx = -1
+            current_cluster = []
+            
+            for t in header_group:
+                idx = t[0]
+                # Calculate unique content between previous candidate and this one
+                gap_text_len = 0
+                if last_idx != -1:
+                    for gap_i in range(last_idx + 1, idx):
+                        gap_text_len += len(self.get_cleaned_text(all_main_elements[gap_i]).split())
+                
+                # If gap is huge (e.g., sidebar separates top nav from secondary nav), break cluster
+                # Threshold 300 words suggests significant unique content (like an intro paragraph)
+                if last_idx != -1 and gap_text_len > 300:
+                    break # Stop collecting, we found the "Top" header
+                
+                current_cluster.append(t)
+                last_idx = idx
+            
+            final_header_indices = [t[0] for t in current_cluster]
+
+        # Analyze Footer Group (Candidates >= footer_start_index)
+        footer_group = [t for t in top_level_candidates if t[0] >= footer_start_index]
+        if footer_group:
+            # For footers, we want the bottom-most cluster. Work backwards.
+            footer_group.reverse() # Start from bottom
+            last_idx = len(all_main_elements)
+            current_cluster = []
+            
+            for t in footer_group:
+                idx = t[0]
+                gap_text_len = 0
+                for gap_i in range(idx + 1, last_idx):
+                    if gap_i < len(all_main_elements):
+                        gap_text_len += len(self.get_cleaned_text(all_main_elements[gap_i]).split())
+                
+                if last_idx != len(all_main_elements) and gap_text_len > 300:
+                    break # Stop, we found the "Bottom" footer
+                
+                current_cluster.append(t)
+                last_idx = idx
+            
+            final_footer_indices = [t[0] for t in current_cluster] # These are reversed, sort later if needed
+
+        # 8. Assembly
         header_texts = []
         footer_texts = []
 
         for idx, el, text, wc in top_level_candidates:
-            if idx <= best_split_index:
+            if idx in final_header_indices:
                 header_texts.append(text)
-            else:
+            elif idx in final_footer_indices:
                 footer_texts.append(text)
+            # Candidates not in either list are effectively filtered out (Middle Islands)
 
         header_result = " ".join(header_texts).strip()
-        footer_result = " ".join(footer_texts).strip()
+        footer_result = " ".join(footer_texts).strip() # Note: Footer order was reversed for logic, but iteration here preserves DOM order
 
         if len(header_result) > 10000: header_result = header_result[:10000]
         if len(footer_result) > 10000: footer_result = footer_result[:10000]
