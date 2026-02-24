@@ -10,7 +10,10 @@ import { Suspense } from 'react';
 import FlowStorageReset from '@/components/flow/FlowStorageReset';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap', // Évite le blocage du rendu pendant le chargement de la font
+});
 
 export const metadata: Metadata = {
   title: 'Trouvez votre fournisseur - Demande de devis | HelloPro',
@@ -49,17 +52,25 @@ export default function RootLayout({
   const hotjarId = process.env.NEXT_PUBLIC_HOTJAR_ID;
   const hotjarSv = process.env.NEXT_PUBLIC_HOTJAR_SV || '6';
 
+  // Vérifier si les services analytics sont activés
+  const isGtmEnabled = gtmId && gtmId !== 'GTM-XXXXXXX';
+  const isGaEnabled = gaId && gaId !== 'G-XXXXXXXXXX';
+
   return (
     <html lang="fr" suppressHydrationWarning>
       <head>
-        {/* Preconnect pour performance (Legacy pattern) */}
-        <link rel="preconnect" href="https://www.googletagmanager.com" crossOrigin="anonymous" />
-        <link rel="preconnect" href="https://www.google-analytics.com" crossOrigin="anonymous" />
+        {/* Preconnect conditionnel - uniquement si les services analytics sont activés */}
+        {isGtmEnabled && (
+          <link rel="preconnect" href="https://www.googletagmanager.com" crossOrigin="anonymous" />
+        )}
+        {(isGtmEnabled || isGaEnabled) && (
+          <link rel="preconnect" href="https://www.google-analytics.com" crossOrigin="anonymous" />
+        )}
 
-        {gtmId && gtmId !== 'GTM-XXXXXXX' && <GoogleTagManager gtmId={gtmId} />}
+        {isGtmEnabled && <GoogleTagManager gtmId={gtmId} />}
       </head>
       <body className={inter.className}>
-        {gtmId && gtmId !== 'GTM-XXXXXXX' && <GoogleTagManagerNoScript gtmId={gtmId} />}
+        {isGtmEnabled && <GoogleTagManagerNoScript gtmId={gtmId} />}
 
         <ThemeProvider
           attribute="class"
@@ -80,7 +91,7 @@ export default function RootLayout({
         </ThemeProvider>
 
         {/* Google Analytics 4 */}
-        {gaId && gaId !== 'G-XXXXXXXXXX' && <GoogleAnalytics gaId={gaId} />}
+        {isGaEnabled && <GoogleAnalytics gaId={gaId} />}
 
         {/* Hotjar - Si non renseigné, peut être chargé via GTM */}
         {hotjarId && hotjarId !== '1234567' && hotjarId !== '' && (

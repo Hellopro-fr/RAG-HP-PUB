@@ -11,7 +11,7 @@ export function Hotjar({ hjid, hjsv }: HotjarProps) {
   return (
     <Script
       id="hotjar-script"
-      strategy="afterInteractive"
+      strategy="lazyOnload"
       dangerouslySetInnerHTML={{
         __html: `
           (function(h,o,t,j,a,r){

@@ -9,6 +9,14 @@ const nextConfig = {
   // Build standalone pour Docker
   output: 'standalone',
 
+  // Optimisations expérimentales pour les performances
+  experimental: {
+    // Inline le CSS critique pour réduire le render-blocking
+    optimizeCss: true,
+    // Optimise les imports des packages UI (Radix, Lucide, etc.)
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+  },
+
   // Build ID unique basé sur la version + timestamp
   // Force le navigateur à recharger les fichiers JS/CSS
   generateBuildId: async () => {
