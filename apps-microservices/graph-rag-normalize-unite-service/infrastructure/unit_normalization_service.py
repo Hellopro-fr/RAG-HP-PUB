@@ -53,6 +53,11 @@ class UnitNormalizationService:
             cls._instance.ureg.define("Tonnes = tonne")
             cls._instance.ureg.define("démarrages = count = démarrage")
 
+            # --- FIX 7: Define units from DLQ (graph_rag_normalization_manual_dlq) ---
+            cls._instance.ureg.define("lignes = count = ligne")
+            cls._instance.ureg.define("tours_par_minute_fr = revolutions_per_minute")
+            cls._instance.ureg.define("pouces = 0.0254 * meter = pouce = inch_fr")
+
             # Base & Common
             cls._instance.ureg.define("tonne = 1000 * kilogram = t")
             cls._instance.ureg.define("mm = millimeter")
@@ -126,6 +131,8 @@ class UnitNormalizationService:
                 "pièce": "count",
                 "personnes": "count",
                 "personne": "count",
+                "lignes": "count",
+                "ligne": "count",
                 # Sound
                 "db": "sound_level",
                 "dba": "sound_level",
@@ -145,6 +152,11 @@ class UnitNormalizationService:
                 "pieds": "length",
                 "pied": "length",
                 "mètres": "length",
+                "pouces": "length",
+                "pouce": "length",
+                # Density (mass per volume)
+                "kg/m³": "density",
+                "kg/m3": "density",
                 # Power
                 "w": "power",
                 "watts": "power",
@@ -160,6 +172,8 @@ class UnitNormalizationService:
                 "rpm": "[frequency]",
                 "tr/min": "[frequency]",
                 "trs/min": "[frequency]",
+                "tours/min": "[frequency]",
+                "tour/min": "[frequency]",
                 "démarrages/heure": "[frequency]",
                 # Frequency
                 "hz": "frequency",
@@ -333,6 +347,7 @@ class UnitNormalizationService:
                 "energy": "joule",
                 "area": "meter ** 2",
                 "area_density": "kilogram / meter ** 2",
+                "density": "kilogram / meter ** 3",
                 "angle": "degree",
                 "mass_flow": "gram / minute",
                 "count_rate": "count / second",
@@ -428,6 +443,18 @@ class UnitNormalizationService:
             elif unit_stripped == "démarrages/heure":
                 # starts per hour = frequency; Pint can't parse 'démarrages'
                 unit = "1 / hour"
+            elif unit_stripped in ("tours/min", "tour/min"):
+                # French singular/plural rotational speed; map to Pint-native rpm
+                unit = "rpm"
+            elif unit_stripped in ("lignes", "ligne"):
+                # 'lignes' (lines) is a count unit
+                unit = "count"
+            elif unit_stripped in ("pouces", "pouce"):
+                # French inch; Pint knows 'inch', use that
+                unit = "inch"
+            elif unit_stripped in ("kg/m³", "kg/m3"):
+                # Density unit: kilogram per cubic metre
+                unit = "kilogram / meter ** 3"
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
