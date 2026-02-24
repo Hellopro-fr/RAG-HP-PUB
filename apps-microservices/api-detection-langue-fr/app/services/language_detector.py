@@ -153,7 +153,7 @@ class LanguageDetector:
             
             # Supprimer scripts, styles et autres éléments non visibles
             # Note: on garde header, footer, nav car ils peuvent contenir du contenu pertinent
-            for element in soup(['script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
+            for element in soup(['head','script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
                 element.decompose()
             
             text = soup.get_text(separator=' ', strip=True)
@@ -283,7 +283,7 @@ class LanguageDetector:
             
             # Supprimer scripts, styles et autres éléments non visibles
             # Harmonisé avec detect_from_text_content (même liste d'éléments)
-            for element in soup(['script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
+            for element in soup(['head','script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
                 element.decompose()
             
             text = soup.get_text(separator=' ', strip=True)
