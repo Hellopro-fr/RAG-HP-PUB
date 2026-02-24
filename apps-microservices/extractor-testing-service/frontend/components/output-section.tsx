@@ -2,8 +2,9 @@
 
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
-import { AlertCircle, ChevronDown, ChevronUp, Copy, Check } from "lucide-react"
+import { AlertCircle, ChevronDown, ChevronUp, Copy, Check, Eye } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface LibraryResult {
   content: string
@@ -14,12 +15,19 @@ interface LibraryResult {
 
 interface BoilerplateResult {
   header_old: string
-  header_new: string
+  footer_old: string
+  
+  header_class: string
+  footer_class: string
+  
+  header_structural: string
+  footer_structural: string
+  
+  intersections_class: string[]
+  intersections_structural: string[]
+  
   header_selected: string
   header_method_used: string
-  
-  footer_old: string
-  footer_new: string
   footer_selected: string
   footer_method_used: string
 }
@@ -67,14 +75,17 @@ export default function OutputSection({ activeView, results, boilerplateResults,
     }
 
     return (
-      <div className="space-y-6 flex-1">
+      <div className="space-y-6 flex-1 w-full">
         <Tabs defaultValue="production" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="production">Production Decision</TabsTrigger>
-            <TabsTrigger value="debug">Method Comparison (Debug)</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="production">Production</TabsTrigger>
+            <TabsTrigger value="class">Strategy: Class</TabsTrigger>
+            <TabsTrigger value="structural">Strategy: Structural</TabsTrigger>
+            <TabsTrigger value="original">Original</TabsTrigger>
           </TabsList>
           
           <TabsContent value="production" className="space-y-4 pt-4">
+            <h3 className="text-lg font-semibold">Final Automated Decision</h3>
             <BoilerplateCard 
               title="Selected Header" 
               content={boilerplateResults.header_selected} 
@@ -87,31 +98,55 @@ export default function OutputSection({ activeView, results, boilerplateResults,
             />
           </TabsContent>
           
-          <TabsContent value="debug" className="space-y-6 pt-4">
+          <TabsContent value="class" className="space-y-4 pt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <BoilerplateCard 
-                title="Header (Old: CSS/Semantic)" 
-                content={boilerplateResults.header_old} 
-                method="Original Method" 
-              />
-              <BoilerplateCard 
-                title="Header (New: Intersection)" 
-                content={boilerplateResults.header_new} 
-                method="New Boilerpy3 Method" 
-              />
+                <BoilerplateCard 
+                title="Class Strategy Header" 
+                content={boilerplateResults.header_class} 
+                method="Fallback (Class)" 
+                />
+                <BoilerplateCard 
+                title="Class Strategy Footer" 
+                content={boilerplateResults.footer_class} 
+                method="Fallback (Class)" 
+                />
             </div>
-            <div className="border-t pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <BoilerplateCard 
-                title="Footer (Old: CSS/Semantic)" 
-                content={boilerplateResults.footer_old} 
-                method="Original Method" 
-              />
-              <BoilerplateCard 
-                title="Footer (New: Intersection)" 
-                content={boilerplateResults.footer_new} 
-                method="New Boilerpy3 Method" 
-              />
+            <IntersectionList 
+                title="Visualizer: Class-Based Intersections" 
+                items={boilerplateResults.intersections_class} 
+            />
+          </TabsContent>
+
+          <TabsContent value="structural" className="space-y-4 pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <BoilerplateCard 
+                title="Structural Strategy Header" 
+                content={boilerplateResults.header_structural} 
+                method="Fallback (Structural)" 
+                />
+                <BoilerplateCard 
+                title="Structural Strategy Footer" 
+                content={boilerplateResults.footer_structural} 
+                method="Fallback (Structural)" 
+                />
             </div>
+            <IntersectionList 
+                title="Visualizer: Structural Intersections" 
+                items={boilerplateResults.intersections_structural} 
+            />
+          </TabsContent>
+
+          <TabsContent value="original" className="space-y-4 pt-4">
+            <BoilerplateCard 
+              title="Original Header" 
+              content={boilerplateResults.header_old} 
+              method="Original Semantic/CSS" 
+            />
+            <BoilerplateCard 
+              title="Original Footer" 
+              content={boilerplateResults.footer_old} 
+              method="Original Semantic/CSS" 
+            />
           </TabsContent>
         </Tabs>
       </div>
@@ -156,8 +191,7 @@ interface BoilerplateCardProps {
 
 function BoilerplateCard({ title, content, method }: BoilerplateCardProps) {
   const [copied, setCopied] = useState(false)
-  // Highlight fallback usage or new method in UI
-  const isFallback = method.includes("Fallback") || method.includes("New")
+  const isFallback = method.includes("Fallback")
 
   const handleCopy = async () => {
     try {
@@ -224,6 +258,28 @@ function BoilerplateCard({ title, content, method }: BoilerplateCardProps) {
   )
 }
 
+function IntersectionList({ title, items }: { title: string, items: string[] }) {
+    if (!items || items.length === 0) return null;
+
+    return (
+        <Card className="p-4 border-dashed border-2">
+            <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                {title} ({items.length} blocks found)
+            </h4>
+            <ScrollArea className="h-64 rounded-md border p-4 bg-muted/30">
+                <ul className="space-y-2">
+                    {items.map((item, idx) => (
+                        <li key={idx} className="text-xs p-2 bg-background rounded border text-muted-foreground break-words">
+                            {item}
+                        </li>
+                    ))}
+                </ul>
+            </ScrollArea>
+        </Card>
+    )
+}
+
 interface LibraryCardProps {
   libraryName: string
   result: LibraryResult
@@ -237,11 +293,9 @@ function LibraryCard({ libraryName, result }: LibraryCardProps) {
 
   const handleCopy = async () => {
     try {
-      // Try modern Clipboard API first
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(result.content)
       } else {
-        // Fallback for browsers without Clipboard API or non-HTTPS contexts
         const textArea = document.createElement('textarea')
         textArea.value = result.content
         textArea.style.position = 'fixed'
@@ -250,20 +304,13 @@ function LibraryCard({ libraryName, result }: LibraryCardProps) {
         document.body.appendChild(textArea)
         textArea.focus()
         textArea.select()
-
-        const successful = document.execCommand('copy')
+        document.execCommand('copy')
         document.body.removeChild(textArea)
-
-        if (!successful) {
-          throw new Error('Fallback copy failed')
-        }
       }
-
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
       console.error('Failed to copy:', err)
-      // Show user-friendly error message
       alert('Failed to copy to clipboard. Please copy manually.')
     }
   }

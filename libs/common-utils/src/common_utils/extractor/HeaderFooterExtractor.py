@@ -1,6 +1,6 @@
 import re
 import logging
-from bs4 import BeautifulSoup, Comment
+from bs4 import BeautifulSoup, Comment, Tag
 
 class HeaderFooterExtractor:
     """
@@ -281,27 +281,68 @@ class HeaderFooterExtractor:
         # print("No suitable footer found.") # Optional: for debugging
         return ""
 
-    def run_intersection_logic(self, reference_htmls: list[str]) -> tuple[str, str]:
+    # --- STRATEGY HELPERS ---
+
+    def _get_signature_class(self, el: Tag) -> str:
+        """Original signature strategy: Tag + Sorted Class Names."""
+        classes = el.get('class', [])
+        class_str = ".".join(sorted(classes)) if isinstance(classes, list) else classes
+        return f"{el.name}.{class_str}" if class_str else el.name
+
+    def _get_signature_structural(self, el: Tag) -> str:
+        """
+        ZONE A Improvement: Structural signature based on DOM path.
+        Example: body > div:nth-of-type(1) > header:nth-of-type(1)
+        """
+        path = []
+        
+        # Get path segment for the element itself
+        path.append(self._get_element_path_segment(el))
+        
+        # Traverse up parents to build full path
+        for parent in el.parents:
+            if parent.name == '[document]':
+                break
+            path.append(self._get_element_path_segment(parent))
+            
+        # Reverse to get root -> element order
+        return " > ".join(reversed(path))
+
+    def _get_element_path_segment(self, el: Tag) -> str:
+        """Helper to get 'tag:nth-of-type(i)' string."""
+        if not el.name: return "unknown"
+        # Find previous siblings with the same tag name to determine index
+        siblings = el.find_previous_siblings(el.name)
+        index = len(siblings) + 1
+        return f"{el.name}:nth-of-type({index})"
+
+    def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class") -> tuple[str, str, list[str]]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
-        intersection across the main HTML and reference HTMLs to identify Boilerplate.
+        intersection using the specified signature strategy.
+        
+        Args:
+            reference_htmls: List of HTML strings to compare against.
+            strategy: "class" (Tag+Class) or "structural" (DOM Path).
+            
+        Returns:
+            (Header Text, Footer Text, List of All Intersecting Block Texts)
         """
         if not hasattr(self, 'raw_html') or not self.raw_html or not reference_htmls:
-            return "", ""
+            return "", "", []
         
         try:
             from boilerpy3 import extractors as BoilerpyExtractor
         except ImportError:
             logging.error("boilerpy3 not installed.")
-            return "", ""
+            return "", "", []
 
         try:
             extractor = BoilerpyExtractor.KeepEverythingExtractor()
             
             # 1. Clean the Main HTML
             clean_main_html = extractor.get_marked_html(self.raw_html)
-            if not clean_main_html:
-                return "", ""
+            if not clean_main_html: return "", "", []
             main_soup = BeautifulSoup(clean_main_html, 'html.parser')
             
             # 2. Clean the Reference HTMLs
@@ -310,67 +351,76 @@ class HeaderFooterExtractor:
                 c_ref = extractor.get_marked_html(ref_html)
                 if c_ref:
                     clean_refs.append(BeautifulSoup(c_ref, 'html.parser'))
-                    
-            if not clean_refs:
-                return "", ""
+            if not clean_refs: return "", "", []
         except Exception as e:
             logging.error(f"Error during boilerpy3 cleaning: {e}")
-            return "", ""
+            return "", "", []
 
-        # 3. Create a unique structural signature for elements based on tag and class
-        def get_signature(el):
-            classes = el.get('class', [])
-            class_str = ".".join(sorted(classes)) if isinstance(classes, list) else classes
-            return f"{el.name}.{class_str}" if class_str else el.name
-
-        # Extract all signatures from the reference pages
+        # 3. Build Reference Signatures Dictionary
+        # We need a set of signatures for each reference page
         ref_signatures_sets = []
+        
+        # Decide which signature function to use
+        get_sig = self._get_signature_structural if strategy == "structural" else self._get_signature_class
+        
+        target_tags = ['div', 'header', 'footer', 'nav', 'ul', 'section', 'aside']
+
         for ref_soup in clean_refs:
             sig_set = set()
-            for el in ref_soup.find_all(['div', 'header', 'footer', 'nav', 'ul', 'section', 'aside']):
-                if el.get('class'): # Only consider elements with explicit classes
-                     sig_set.add(get_signature(el))
+            for el in ref_soup.find_all(target_tags):
+                # For class strategy, ignore elements without classes to avoid false positives on generic divs
+                if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
+                    continue
+                sig_set.add(get_sig(el))
             ref_signatures_sets.append(sig_set)
 
-        # 4. Find matching nodes in the Main HTML
+        # 4. Find matching nodes in the Main HTML (The Intersection)
         candidates = []
-        all_main_elements = main_soup.find_all(['div', 'header', 'footer', 'nav', 'ul', 'section', 'aside'])
+        all_main_elements = main_soup.find_all(target_tags)
         
         for index, el in enumerate(all_main_elements):
-            sig = get_signature(el)
+            sig = get_sig(el)
             
-            # Skip generic tags without classes unless they are strictly semantic
-            if sig in ['div', 'ul', 'section'] and el.name not in ['header', 'footer', 'nav']:
+            if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
                 continue
                 
-            # If the exact structural signature exists in ALL reference pages, it's boilerplate
+            # Intersection Check: Does this signature exist in ALL reference sets?
             if all(sig in ref_set for ref_set in ref_signatures_sets):
                 text = self.get_cleaned_text(el)
-                if len(text.split()) >= 2: # Ignore purely empty structures
+                # Ignore tiny fragments unless they look important (like copyright)
+                if len(text.split()) >= 2 or "©" in text: 
                     candidates.append((index, el, text, len(text.split())))
 
-        # 5. Filter nested candidates (keep the highest-level parent to avoid duplicates)
+        # 5. Filter nested candidates (keep highest level)
         top_level_candidates = []
         for i, (idx, el, text, word_count) in enumerate(candidates):
+            # Check if any parent of 'el' is also a candidate (checking object identity in the candidates list)
+            # Note: We compare elements from the same 'main_soup' tree.
             is_child = any(parent in [c[1] for c in candidates] for parent in el.parents)
             if not is_child:
                 top_level_candidates.append((idx, el, text, word_count))
 
-        if not top_level_candidates:
-            return "", ""
+        intersections_list = [t[2] for t in top_level_candidates]
 
-        # 6. Identify the Main Content split point based on unique word count
-        main_idx = len(all_main_elements) // 2 # Default fallback
+        if not top_level_candidates:
+            return "", "", []
+
+        # 6. Identify Main Content Pivot
+        # Find the element with the most unique words (words NOT in the intersection)
+        main_idx = len(all_main_elements) // 2 
         max_unique_words = 0
         
         for index, el in enumerate(all_main_elements):
-            if not any(el == c[1] for c in candidates): # If it's NOT a boilerplate candidate
-                text_length = len(self.get_cleaned_text(el).split())
-                if text_length > max_unique_words and text_length > 10: 
-                    max_unique_words = text_length
-                    main_idx = index
+            # Optimization: Skip if this element IS a candidate (it's boilerplate)
+            if any(el == c[1] for c in candidates): 
+                continue
+            
+            text_length = len(self.get_cleaned_text(el).split())
+            if text_length > max_unique_words and text_length > 10: 
+                max_unique_words = text_length
+                main_idx = index
 
-        # 7. Classify into Header and Footer based on DOM sequence
+        # 7. Split into Header/Footer based on Pivot
         header_texts = []
         footer_texts = []
 
@@ -384,16 +434,16 @@ class HeaderFooterExtractor:
         footer_result = " ".join(footer_texts).strip()
 
         # Sanity cap
-        # if len(header_result) > 5000: header_result = ""
-        # if len(footer_result) > 5000: footer_result = ""
+        if len(header_result) > 10000: header_result = header_result[:10000]
+        if len(footer_result) > 10000: footer_result = footer_result[:10000]
 
-        return header_result, footer_result
+        return header_result, footer_result, intersections_list
 
     def extract_with_fallback(self, reference_htmls: list[str]) -> dict:
         """
         Production Logic:
         Attempts the original semantic/CSS extraction first. 
-        If it fails, runs the Multi-Page Intersection fallback algorithm.
+        If it fails, runs the Multi-Page Intersection fallback algorithm (Class Strategy).
         """
         if not self.soup:
             return {
@@ -409,15 +459,15 @@ class HeaderFooterExtractor:
 
         # If either is missing, attempt the fallback intersection using boilerpy3
         if not header or not footer:
-            fallback_h, fallback_f = self.run_intersection_logic(reference_htmls)
+            fallback_h, fallback_f, _ = self.run_intersection_logic(reference_htmls, strategy="class")
             
             if not header and fallback_h:
                 header = fallback_h
-                header_method = "Fallback (boilerpy3 Multi-Page Intersection)"
+                header_method = "Fallback (boilerpy3 Class Intersection)"
             
             if not footer and fallback_f:
                 footer = fallback_f
-                footer_method = "Fallback (boilerpy3 Multi-Page Intersection)"
+                footer_method = "Fallback (boilerpy3 Class Intersection)"
 
         return {
             "header": header,
@@ -429,26 +479,31 @@ class HeaderFooterExtractor:
     def extract_all_debug(self, reference_htmls: list[str]) -> dict:
         """
         Debug Logic:
-        Runs BOTH the original method and the new intersection method concurrently.
-        Returns the results of both, plus the "selected" result that the production logic would choose.
+        Runs BOTH the original method and BOTH intersection strategies (Class + Structural).
+        Returns comprehensive data for comparison.
         """
-        if not self.soup:
-            return {}
+        if not self.soup: return {}
 
         # 1. Run Old Method
         old_header = self.extract_header(self.soup)
         old_footer = self.extract_footer(self.soup)
 
-        # 2. Run New Method (Unconditionally)
-        new_header, new_footer = self.run_intersection_logic(reference_htmls)
+        # 2. Run Class Strategy
+        class_h, class_f, class_list = self.run_intersection_logic(reference_htmls, strategy="class")
 
-        # 3. Simulate Production Selection Logic
+        # 3. Run Structural Strategy (Zone A Improvement)
+        struct_h, struct_f, struct_list = self.run_intersection_logic(reference_htmls, strategy="structural")
+
+        # 4. Simulate Production Decision (Using Class Strategy as default fallback)
         if old_header:
             selected_header = old_header
             header_method_used = "Original (Semantic/CSS Pattern)"
-        elif new_header:
-            selected_header = new_header
-            header_method_used = "Fallback (boilerpy3 Multi-Page Intersection)"
+        elif class_h:
+            selected_header = class_h
+            header_method_used = "Fallback (boilerpy3 Class Intersection)"
+        elif struct_h:
+             selected_header = struct_h
+             header_method_used = "Fallback (boilerpy3 Structural Intersection)"
         else:
             selected_header = ""
             header_method_used = "None"
@@ -456,21 +511,29 @@ class HeaderFooterExtractor:
         if old_footer:
             selected_footer = old_footer
             footer_method_used = "Original (Semantic/CSS Pattern)"
-        elif new_footer:
-            selected_footer = new_footer
-            footer_method_used = "Fallback (boilerpy3 Multi-Page Intersection)"
+        elif class_f:
+            selected_footer = class_f
+            footer_method_used = "Fallback (boilerpy3 Class Intersection)"
+        elif struct_f:
+            selected_footer = struct_f
+            footer_method_used = "Fallback (boilerpy3 Structural Intersection)"
         else:
             selected_footer = ""
             footer_method_used = "None"
 
         return {
             "header_old": old_header,
-            "header_new": new_header,
+            "header_class": class_h,
+            "header_structural": struct_h,
             "header_selected": selected_header,
             "header_method_used": header_method_used,
             
             "footer_old": old_footer,
-            "footer_new": new_footer,
+            "footer_class": class_f,
+            "footer_structural": struct_f,
             "footer_selected": selected_footer,
-            "footer_method_used": footer_method_used
+            "footer_method_used": footer_method_used,
+
+            "intersections_class": class_list,
+            "intersections_structural": struct_list
         }

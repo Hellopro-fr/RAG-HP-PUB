@@ -54,9 +54,17 @@ class BoilerplateTestResponse(BaseModel):
     header_old: str
     footer_old: str
     
-    # New Method Results
-    header_new: str
-    footer_new: str
+    # Class Strategy Results
+    header_class: str
+    footer_class: str
+    
+    # Structural Strategy Results
+    header_structural: str
+    footer_structural: str
+    
+    # Visualizer Lists
+    intersections_class: List[str]
+    intersections_structural: List[str]
     
     # Final Decision (Production Simulation)
     header_selected: str

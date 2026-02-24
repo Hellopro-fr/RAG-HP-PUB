@@ -84,10 +84,9 @@ async def test_extractors_endpoint(request: RequestModel):
 @app.post("/test-boilerplate", response_model=BoilerplateTestResponse)
 async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
     """
-    Tests the HeaderFooterExtractor with both methods (Old vs New) for debugging.
-    Accepts a main HTML page and two reference pages from the same domain.
+    Tests the HeaderFooterExtractor with both methods (Old vs New) and both intersection strategies.
     """
-    logger.info("Received request for Boilerplate Intersection Test.")
+    logger.info("Received request for Boilerplate Intersection Test (Debug Mode).")
     
     if not request.main_html or not request.reference_htmls:
         raise HTTPException(status_code=400, detail="Both main_html and reference_htmls are required.")
@@ -99,12 +98,18 @@ async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
         
         return BoilerplateTestResponse(
             header_old=result["header_old"],
-            header_new=result["header_new"],
-            header_selected=result["header_selected"],
-            header_method_used=result["header_method_used"],
+            header_class=result["header_class"],
+            header_structural=result["header_structural"],
             
             footer_old=result["footer_old"],
-            footer_new=result["footer_new"],
+            footer_class=result["footer_class"],
+            footer_structural=result["footer_structural"],
+            
+            intersections_class=result["intersections_class"],
+            intersections_structural=result["intersections_structural"],
+            
+            header_selected=result["header_selected"],
+            header_method_used=result["header_method_used"],
             footer_selected=result["footer_selected"],
             footer_method_used=result["footer_method_used"]
         )
