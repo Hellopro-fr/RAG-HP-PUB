@@ -145,7 +145,7 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
         ) as client:
             response = await client.get(url)
             
-            if response.status_code == 200:
+            if response.status_code in (200, 201, 202):
                 content_type = response.headers.get('content-type', '')
                 if 'text/html' not in content_type and 'application/xhtml' not in content_type:
                     return None
@@ -180,7 +180,7 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
         ) as client:
             response = await client.get(url)
             
-            if response.status_code == 200:
+            if response.status_code in (200, 201, 202):
                 content_type = response.headers.get('content-type', '')
                 if 'text/html' not in content_type and 'application/xhtml' not in content_type:
                     return None
@@ -208,7 +208,7 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
         ) as client:
             response = await client.get(url)
             
-            if response.status_code == 200:
+            if response.status_code in (200, 201, 202):
                 content_type = response.headers.get('content-type', '')
                 if 'text/html' not in content_type and 'application/xhtml' not in content_type:
                     return None
