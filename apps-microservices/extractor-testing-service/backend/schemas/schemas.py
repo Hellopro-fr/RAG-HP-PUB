@@ -50,7 +50,16 @@ class BoilerplateTestRequest(BaseModel):
 
 
 class BoilerplateTestResponse(BaseModel):
-    header_content: str
-    header_method: str
-    footer_content: str
-    footer_method: str
+    # Old Method Results
+    header_old: str
+    footer_old: str
+    
+    # New Method Results
+    header_new: str
+    footer_new: str
+    
+    # Final Decision (Production Simulation)
+    header_selected: str
+    header_method_used: str
+    footer_selected: str
+    footer_method_used: str

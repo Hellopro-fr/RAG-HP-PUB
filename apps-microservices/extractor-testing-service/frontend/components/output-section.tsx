@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { AlertCircle, ChevronDown, ChevronUp, Copy, Check } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface LibraryResult {
   content: string
@@ -12,10 +13,15 @@ interface LibraryResult {
 }
 
 interface BoilerplateResult {
-  header_content: string
-  header_method: string
-  footer_content: string
-  footer_method: string
+  header_old: string
+  header_new: string
+  header_selected: string
+  header_method_used: string
+  
+  footer_old: string
+  footer_new: string
+  footer_selected: string
+  footer_method_used: string
 }
 
 interface OutputSectionProps {
@@ -61,17 +67,53 @@ export default function OutputSection({ activeView, results, boilerplateResults,
     }
 
     return (
-      <div className="space-y-4 flex-1">
-        <BoilerplateCard 
-          title="Extracted Header" 
-          content={boilerplateResults.header_content} 
-          method={boilerplateResults.header_method} 
-        />
-        <BoilerplateCard 
-          title="Extracted Footer" 
-          content={boilerplateResults.footer_content} 
-          method={boilerplateResults.footer_method} 
-        />
+      <div className="space-y-6 flex-1">
+        <Tabs defaultValue="production" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="production">Production Decision</TabsTrigger>
+            <TabsTrigger value="debug">Method Comparison (Debug)</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="production" className="space-y-4 pt-4">
+            <BoilerplateCard 
+              title="Selected Header" 
+              content={boilerplateResults.header_selected} 
+              method={boilerplateResults.header_method_used} 
+            />
+            <BoilerplateCard 
+              title="Selected Footer" 
+              content={boilerplateResults.footer_selected} 
+              method={boilerplateResults.footer_method_used} 
+            />
+          </TabsContent>
+          
+          <TabsContent value="debug" className="space-y-6 pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <BoilerplateCard 
+                title="Header (Old: CSS/Semantic)" 
+                content={boilerplateResults.header_old} 
+                method="Original Method" 
+              />
+              <BoilerplateCard 
+                title="Header (New: Intersection)" 
+                content={boilerplateResults.header_new} 
+                method="New Boilerpy3 Method" 
+              />
+            </div>
+            <div className="border-t pt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <BoilerplateCard 
+                title="Footer (Old: CSS/Semantic)" 
+                content={boilerplateResults.footer_old} 
+                method="Original Method" 
+              />
+              <BoilerplateCard 
+                title="Footer (New: Intersection)" 
+                content={boilerplateResults.footer_new} 
+                method="New Boilerpy3 Method" 
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     )
   }
@@ -114,7 +156,8 @@ interface BoilerplateCardProps {
 
 function BoilerplateCard({ title, content, method }: BoilerplateCardProps) {
   const [copied, setCopied] = useState(false)
-  const isFallback = method.includes("Fallback")
+  // Highlight fallback usage or new method in UI
+  const isFallback = method.includes("Fallback") || method.includes("New")
 
   const handleCopy = async () => {
     try {
@@ -141,12 +184,12 @@ function BoilerplateCard({ title, content, method }: BoilerplateCardProps) {
   }
 
   return (
-    <Card className={`p-4 transition-colors ${isFallback ? "border-primary/50 bg-primary/5" : ""}`}>
+    <Card className={`p-4 transition-colors ${isFallback ? "border-primary/30 bg-primary/5" : ""}`}>
       <div className="flex items-start justify-between mb-3">
         <div>
           <h3 className="font-semibold text-lg">{title}</h3>
           <p className="text-xs mt-1">
-            Method Used: <span className={`font-semibold px-1.5 py-0.5 rounded ${isFallback ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{method}</span>
+            Method: <span className={`font-semibold px-1.5 py-0.5 rounded ${isFallback ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{method}</span>
           </p>
         </div>
         <div className="flex items-center gap-2">

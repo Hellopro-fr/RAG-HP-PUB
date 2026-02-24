@@ -84,7 +84,7 @@ async def test_extractors_endpoint(request: RequestModel):
 @app.post("/test-boilerplate", response_model=BoilerplateTestResponse)
 async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
     """
-    Tests the HeaderFooterExtractor with the Multi-Page Intersection Fallback algorithm.
+    Tests the HeaderFooterExtractor with both methods (Old vs New) for debugging.
     Accepts a main HTML page and two reference pages from the same domain.
     """
     logger.info("Received request for Boilerplate Intersection Test.")
@@ -94,13 +94,19 @@ async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
 
     try:
         extractor = HeaderFooterExtractor(request.main_html)
-        result = extractor.extract_with_fallback(request.reference_htmls)
+        # Use the debug method to get all data
+        result = extractor.extract_all_debug(request.reference_htmls)
         
         return BoilerplateTestResponse(
-            header_content=result["header"],
-            header_method=result["header_method"],
-            footer_content=result["footer"],
-            footer_method=result["footer_method"]
+            header_old=result["header_old"],
+            header_new=result["header_new"],
+            header_selected=result["header_selected"],
+            header_method_used=result["header_method_used"],
+            
+            footer_old=result["footer_old"],
+            footer_new=result["footer_new"],
+            footer_selected=result["footer_selected"],
+            footer_method_used=result["footer_method_used"]
         )
     except Exception as e:
         logger.exception("An unexpected error occurred during boilerplate testing.")

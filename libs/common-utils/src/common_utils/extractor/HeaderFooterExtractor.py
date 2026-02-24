@@ -281,7 +281,7 @@ class HeaderFooterExtractor:
         # print("No suitable footer found.") # Optional: for debugging
         return ""
 
-    def _run_intersection_fallback(self, reference_htmls: list[str]) -> tuple[str, str]:
+    def run_intersection_logic(self, reference_htmls: list[str]) -> tuple[str, str]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
         intersection across the main HTML and reference HTMLs to identify Boilerplate.
@@ -391,6 +391,7 @@ class HeaderFooterExtractor:
 
     def extract_with_fallback(self, reference_htmls: list[str]) -> dict:
         """
+        Production Logic:
         Attempts the original semantic/CSS extraction first. 
         If it fails, runs the Multi-Page Intersection fallback algorithm.
         """
@@ -408,7 +409,7 @@ class HeaderFooterExtractor:
 
         # If either is missing, attempt the fallback intersection using boilerpy3
         if not header or not footer:
-            fallback_h, fallback_f = self._run_intersection_fallback(reference_htmls)
+            fallback_h, fallback_f = self.run_intersection_logic(reference_htmls)
             
             if not header and fallback_h:
                 header = fallback_h
@@ -423,4 +424,53 @@ class HeaderFooterExtractor:
             "header_method": header_method,
             "footer": footer,
             "footer_method": footer_method
+        }
+
+    def extract_all_debug(self, reference_htmls: list[str]) -> dict:
+        """
+        Debug Logic:
+        Runs BOTH the original method and the new intersection method concurrently.
+        Returns the results of both, plus the "selected" result that the production logic would choose.
+        """
+        if not self.soup:
+            return {}
+
+        # 1. Run Old Method
+        old_header = self.extract_header(self.soup)
+        old_footer = self.extract_footer(self.soup)
+
+        # 2. Run New Method (Unconditionally)
+        new_header, new_footer = self.run_intersection_logic(reference_htmls)
+
+        # 3. Simulate Production Selection Logic
+        if old_header:
+            selected_header = old_header
+            header_method_used = "Original (Semantic/CSS Pattern)"
+        elif new_header:
+            selected_header = new_header
+            header_method_used = "Fallback (boilerpy3 Multi-Page Intersection)"
+        else:
+            selected_header = ""
+            header_method_used = "None"
+
+        if old_footer:
+            selected_footer = old_footer
+            footer_method_used = "Original (Semantic/CSS Pattern)"
+        elif new_footer:
+            selected_footer = new_footer
+            footer_method_used = "Fallback (boilerpy3 Multi-Page Intersection)"
+        else:
+            selected_footer = ""
+            footer_method_used = "None"
+
+        return {
+            "header_old": old_header,
+            "header_new": new_header,
+            "header_selected": selected_header,
+            "header_method_used": header_method_used,
+            
+            "footer_old": old_footer,
+            "footer_new": new_footer,
+            "footer_selected": selected_footer,
+            "footer_method_used": footer_method_used
         }
