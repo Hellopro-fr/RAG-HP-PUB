@@ -248,12 +248,28 @@ class UnitNormalizationService:
                 "degres": "angle",
                 # Volume (per wash cycle = liters per cycle, dimensionless denominator)
                 "l/cycle": "volume",
+                # Signal count (e.g. Raccordement dosage liquide: number of signal ports)
+                "signal": "count",
+                "signaux": "count",
+                # Luminous flux (lumen)
+                "lm": "luminosity",
+                # Luminous efficacy (lumen per watt)
+                "lm/w": "luminous_efficacy",
+                # Color Rendering Index (CRI/IRC) - dimensionless 0-100 scale
+                "ra": "dimensionless",
+                # Percentage / ratio (humidity, efficiency, etc.)
+                "%": "ratio",
+                # Speed (km/h, e.g. wind resistance)
+                "km/h": "speed",
             }
 
             # --- Label-to-Dimension Mapping ---
             cls._instance.LABEL_TO_DIMENSION = {
                 "charge au sol": "area_density",
                 "charge admissible au sol": "area_density",
+                "charge statique": "area_density",
+                "classe climatique": "count",
+                "régime": "[frequency]",
                 "nombre": "count",
                 "quantité": "count",
                 "segment": "count",
@@ -351,6 +367,12 @@ class UnitNormalizationService:
                 "angle": "degree",
                 "mass_flow": "gram / minute",
                 "count_rate": "count / second",
+                # Lighting
+                "luminosity": "lumen",
+                "luminous_efficacy": "lumen / watt",
+                # Dimensionless / ratio (humidity %, CRI Ra index, etc.)
+                "ratio": "count",
+                "dimensionless": "count",
             }
         return cls._instance
 
@@ -384,7 +406,11 @@ class UnitNormalizationService:
         if isinstance(value, str):
             try:
                 # Handle lists passed as strings if necessary, though proto should handle this
-                value = float(value)
+                # --- FIX: Strip '+/-' or '±' tolerance prefix (e.g. '+/- 2') before parsing ---
+                value_clean = (
+                    value.strip().lstrip("+").replace("/-", "").replace("±", "").strip()
+                )
+                value = float(value_clean)
             except ValueError:
                 return {}
 
@@ -418,6 +444,12 @@ class UnitNormalizationService:
                 unit = "m**2"
             elif unit_stripped == "m3":
                 unit = "m**3"
+            elif unit_stripped == "kg/m2":
+                # Area density: Pint can't parse 'kg/m2' (m2 is not a native Pint exponent)
+                unit = "kilogram / meter ** 2"
+            elif unit_stripped == "kg/m3":
+                # Density: Pint can't parse 'kg/m3' (m3 is not a native Pint exponent)
+                unit = "kilogram / meter ** 3"
             # --- FIX: Pint cannot handle French composite rate units directly.
             # Map them to Pint-safe equivalents for mass flow and count rate.
             elif unit_stripped == "g/min":
@@ -455,6 +487,18 @@ class UnitNormalizationService:
             elif unit_stripped in ("kg/m³", "kg/m3"):
                 # Density unit: kilogram per cubic metre
                 unit = "kilogram / meter ** 3"
+            elif unit_stripped == "km/h":
+                # Speed: Pint requires explicit slash notation
+                unit = "kilometer / hour"
+            elif unit_stripped == "lm/w":
+                # Luminous efficacy: Pint-safe form
+                unit = "lumen / watt"
+            elif unit_stripped in ("%", "ra"):
+                # Dimensionless/ratio units (humidity %, CRI Ra index) — bypass Pint entirely
+                return {
+                    "valeur_canonique": float(value),
+                    "unite_canonique": "count",
+                }
 
         # --- FIX: 'G' (capital) is Pint's gauss. For 'Facteur G' (centrifuge G-factor)
         # it is a dimensionless ratio (multiples of g=9.81 m/s²). Bypass Pint entirely.
