@@ -417,7 +417,7 @@ class HeaderFooterExtractor:
                         # Threshold: 80% similarity required to be considered "Boilerplate"
                         # This allows for small changes (e.g. "Page 1" vs "Page 2" in pagination)
                         # But blocks large changes (Main Content A vs Main Content B)
-                        if ratio < 0.8:
+                        if ratio < 1:
                             is_content_similar = False
                             break
                 
