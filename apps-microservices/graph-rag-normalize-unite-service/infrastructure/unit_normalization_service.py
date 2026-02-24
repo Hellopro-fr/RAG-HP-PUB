@@ -251,6 +251,9 @@ class UnitNormalizationService:
                 # Signal count (e.g. Raccordement dosage liquide: number of signal ports)
                 "signal": "count",
                 "signaux": "count",
+                # Shelves/trays count
+                "plateaux": "count",
+                "plateau": "count",
                 # Luminous flux (lumen)
                 "lm": "luminosity",
                 # Luminous efficacy (lumen per watt)
