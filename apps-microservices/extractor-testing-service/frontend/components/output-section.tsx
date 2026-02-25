@@ -225,14 +225,15 @@ function IntersectionTable({ title, items }: { title: string, items: Intersectio
         );
     }
 
+    // Removed 'overflow-hidden' from Card to fix scroll issue
     return (
         <Card className="p-4 border-dashed border-2">
             <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
                 <Eye className="h-4 w-4" />
                 {title} ({items.length} matching blocks)
             </h4>
-            <ScrollArea className="h-96 rounded-md border bg-muted/10">
-                <div className="min-w-[800px]">
+            <ScrollArea className="h-96 rounded-md border bg-muted/10 w-full">
+                <div className="min-w-[1000px]"> 
                     {/* Header */}
                     <div className="grid grid-cols-10 gap-2 p-3 bg-muted font-semibold text-xs border-b sticky top-0 z-10">
                         <div className="col-span-2">Signature</div>
@@ -249,17 +250,18 @@ function IntersectionTable({ title, items }: { title: string, items: Intersectio
                                 <div className="col-span-2 font-mono text-[10px] break-all text-primary/80">
                                     {item.signature}
                                 </div>
-                                <div className="col-span-3 max-h-24 overflow-y-auto pr-1 text-muted-foreground">
+                                <div className="col-span-3 max-h-24 overflow-y-auto pr-1 text-muted-foreground border-r border-border/50">
                                     {item.text_main}
                                 </div>
                                 <div className="col-span-5 grid grid-cols-2 gap-2 text-muted-foreground/70">
-                                    <div className="max-h-24 overflow-y-auto pr-1 border-r">{item.text_ref1}</div>
+                                    <div className="max-h-24 overflow-y-auto pr-1 border-r border-border/50">{item.text_ref1}</div>
                                     <div className="max-h-24 overflow-y-auto pr-1">{item.text_ref2}</div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
+                <div className="h-2"></div>
             </ScrollArea>
         </Card>
     )

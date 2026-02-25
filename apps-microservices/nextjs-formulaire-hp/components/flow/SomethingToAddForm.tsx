@@ -556,12 +556,6 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                         <span>Nous vous avons reconnu ! Vos informations sont pré-enregistrées.</span>
                       </div>
                     )}
-                    {isExistingBuyer && buyerCheckResult?.message && (
-                      <div className="mt-2 flex items-center gap-2 text-sm text-orange-600">
-                        <Shield className="h-4 w-4" />
-                        <span>{buyerCheckResult.message}</span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Additional fields - only shown if email is valid and not existing buyer */}

@@ -1,5 +1,6 @@
 import re
 import logging
+from difflib import SequenceMatcher
 from bs4 import BeautifulSoup, Comment, Tag
 
 class HeaderFooterExtractor:
@@ -316,6 +317,33 @@ class HeaderFooterExtractor:
         index = len(siblings) + 1
         return f"{el.name}:nth-of-type({index})"
 
+    def _is_cookie_banner(self, text: str) -> bool:
+        """
+        Detects if a text block is likely a cookie/consent banner.
+        """
+        if not text or len(text) > 1000: # Cookie banners are usually concise
+            return False
+            
+        text_lower = text.lower()
+        
+        # High-confidence cookie keywords
+        cookie_keywords = [
+            "cookie", "cookies", "consent", "accept all", "manage preferences", 
+            "privacy policy", "personal data", "tracking", "third-party", 
+            "paramètres des cookies", "accepter", "tout refuser", 
+            "politique de confidentialité", "expérience utilisateur",
+            "we use cookies", "nous utilisons des cookies", "cookie settings",
+            "ce site utilise des cookies", "this website uses cookies"
+        ]
+        
+        match_count = sum(1 for kw in cookie_keywords if kw in text_lower)
+        
+        # Heuristic: If it has multiple keywords or starts with "we use cookies"
+        if match_count >= 2 or "use cookies" in text_lower or "utilisons des cookies" in text_lower:
+            return True
+            
+        return False
+
     def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class") -> tuple[str, str, list[dict], dict]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
@@ -381,8 +409,7 @@ class HeaderFooterExtractor:
             ref_maps.append(sig_map)
 
         # 4. Find matching nodes in the Main HTML (The Intersection)
-        candidates = []
-        detailed_intersections = []
+        potential_candidates = []
         all_main_elements = main_soup.find_all(target_tags)
         
         for index, el in enumerate(all_main_elements):
@@ -390,25 +417,59 @@ class HeaderFooterExtractor:
             
             if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
                 continue
-                
-            # Intersection Check: Does this signature exist in ALL reference maps?
+            
+            # Intersection Check & Content Similarity
             if all(sig in r_map for r_map in ref_maps):
-                text = self.get_cleaned_text(el)
-                if len(text.split()) >= 2 or "©" in text: 
-                    # Collect detailed comparison data
-                    ref_texts = [r_map[sig] for r_map in ref_maps]
-                    
-                    match_detail = {
-                        "signature": sig,
-                        "text_main": text,
-                        "text_ref1": ref_texts[0] if len(ref_texts) > 0 else "",
-                        "text_ref2": ref_texts[1] if len(ref_texts) > 1 else ""
-                    }
-                    
-                    # Add to candidates for processing
-                    candidates.append((index, el, text, len(text.split()), match_detail))
+                potential_candidates.append((index, el, sig))
 
-        # 5. Filter nested candidates (keep highest level)
+        # 4.5. Cookie Purge (DESTRUCTIVE STEP ON DETECTED CANDIDATES)
+        # We perform this BEFORE building the final candidates list to ensure
+        # that parent elements have their text updated (removed cookies)
+        # for index, el, sig in potential_candidates:
+        #     # We must re-get the text because previous decompositions might have altered it
+        #     current_text = self.get_cleaned_text(el)
+        #     if self._is_cookie_banner(current_text):
+        #         logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
+        #         el.decompose() 
+
+        # 5. Build Final Candidates with REFRESHED Text
+        candidates = []
+        detailed_intersections = []
+        
+        # Re-iterate through potential candidates. Some might be decomposed (el.parent is None),
+        # others might have had their children decomposed (text changed).
+        for index, el, sig in potential_candidates:
+            if el.parent is None:
+                continue # Element was decomposed
+            
+            # Get FRESH text (post-purge)
+            text_main = self.get_cleaned_text(el)
+            ref_texts = [r_map.get(sig, "") for r_map in ref_maps]
+            
+            # Re-apply Content Similarity Check on the FRESH text
+            is_content_similar = True
+            if text_main and len(text_main) > 10: # Only check similarity for significant blocks
+                for r_text in ref_texts:
+                    if not r_text: 
+                        is_content_similar = False
+                        break
+
+                    # Calculate similarity ratio
+                    ratio = SequenceMatcher(None, text_main, r_text).ratio()
+                    if ratio < 1:
+                        is_content_similar = False
+                        break
+            
+            if is_content_similar and (len(text_main.split()) >= 2 or "©" in text_main):
+                match_detail = {
+                    "signature": sig,
+                    "text_main": text_main,
+                    "text_ref1": ref_texts[0] if len(ref_texts) > 0 else "",
+                    "text_ref2": ref_texts[1] if len(ref_texts) > 1 else ""
+                }
+                candidates.append((index, el, text_main, len(text_main.split()), match_detail))
+
+        # 6. Filter nested candidates (keep highest level)
         top_level_candidates = []
         for i, (idx, el, text, word_count, detail) in enumerate(candidates):
             is_child = any(parent in [c[1] for c in candidates] for parent in el.parents)
@@ -419,12 +480,14 @@ class HeaderFooterExtractor:
         if not top_level_candidates:
             return "", "", [], cleaned_htmls
 
-        # 6. Identify Main Content Pivot using Weighted Largest Gap (Order Independent)
+        # 7. Identify Main Content Pivot using Weighted Largest Gap
         candidate_indices = sorted([t[0] for t in top_level_candidates])
         boundary_indices = [-1] + candidate_indices + [len(all_main_elements)]
         
         max_gap_score = -1
-        best_split_index = len(all_main_elements) // 2 
+        # Default split points (fallback)
+        header_cutoff_index = -1 
+        footer_start_index = len(all_main_elements)
         
         for i in range(len(boundary_indices) - 1):
             start_idx = boundary_indices[i] + 1
@@ -434,6 +497,9 @@ class HeaderFooterExtractor:
             for gap_el_idx in range(start_idx, end_idx):
                 if gap_el_idx >= len(all_main_elements): break
                 el = all_main_elements[gap_el_idx]
+                # Check if element is still valid (not decomposed)
+                if el.parent is None: continue
+                
                 text_len = len(self.get_cleaned_text(el).split())
                 gap_score += text_len
                 if el.name in ['main', 'article']: gap_score += 10000.0
@@ -442,17 +508,78 @@ class HeaderFooterExtractor:
                     
             if gap_score > max_gap_score:
                 max_gap_score = gap_score
-                best_split_index = boundary_indices[i] 
+                # The "Main Content" is this gap.
+                # The candidate just BEFORE this gap (boundary_indices[i]) is the last Header element.
+                header_cutoff_index = boundary_indices[i]
+                # The candidate just AFTER this gap (boundary_indices[i+1]) is the first Footer element.
+                footer_start_index = boundary_indices[i+1]
 
-        # 7. Split into Header/Footer based on Pivot
+        # 8. Cluster Filtering
+        final_header_indices = []
+        final_footer_indices = []
+        
+        # Header Group
+        header_group = [t for t in top_level_candidates if t[0] <= header_cutoff_index]
+        if header_group:
+            # Check for gaps within the header group itself
+            # If there's a gap of > 500 unique words between header candidates, keep only the top cluster.
+            last_idx = -1
+            current_cluster = []
+            for t in header_group:
+                idx = t[0]
+                # Calculate unique content between previous candidate and this one
+                gap_text_len = 0
+                if last_idx != -1:
+                    for gap_i in range(last_idx + 1, idx):
+                        # Ensure safe access
+                        if gap_i < len(all_main_elements) and all_main_elements[gap_i].parent:
+                            gap_text_len += len(self.get_cleaned_text(all_main_elements[gap_i]).split())
+                if last_idx != -1 and gap_text_len > 300:
+                    break 
+                current_cluster.append(t)
+                last_idx = idx
+            final_header_indices = [t[0] for t in current_cluster]
+
+        # Footer Group
+        footer_group = [t for t in top_level_candidates if t[0] >= footer_start_index]
+        if footer_group:
+            footer_group.reverse()
+            last_idx = len(all_main_elements)
+            current_cluster = []
+            for t in footer_group:
+                idx = t[0]
+                gap_text_len = 0
+                for gap_i in range(idx + 1, last_idx):
+                    if gap_i < len(all_main_elements) and all_main_elements[gap_i].parent:
+                        gap_text_len += len(self.get_cleaned_text(all_main_elements[gap_i]).split())
+                if last_idx != len(all_main_elements) and gap_text_len > 300:
+                    break 
+                current_cluster.append(t)
+                last_idx = idx
+            final_footer_indices = [t[0] for t in current_cluster]
+
+        # 9. Assembly with Deduplication
         header_texts = []
         footer_texts = []
+        seen_blocks = set() # (Signature, Text) pair tracker
 
         for idx, el, text, wc in top_level_candidates:
-            if idx <= best_split_index:
-                header_texts.append(text)
-            else:
-                footer_texts.append(text)
+            # Re-verify text in case it changed (paranoia check)
+            current_text = self.get_cleaned_text(el)
+            if not current_text: continue
+
+            # Get signature for dedup
+            sig = get_sig(el)
+            key = (sig, current_text)
+            if key in seen_blocks:
+                continue
+            
+            if idx in final_header_indices:
+                header_texts.append(current_text)
+                seen_blocks.add(key)
+            elif idx in final_footer_indices:
+                footer_texts.append(current_text)
+                seen_blocks.add(key)
 
         header_result = " ".join(header_texts).strip()
         footer_result = " ".join(footer_texts).strip()

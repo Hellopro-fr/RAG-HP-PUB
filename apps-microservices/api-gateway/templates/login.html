@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Authentification - HELLOPRO</title>
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        .auth-container {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);
+        }
+        .input-field:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+        .btn-primary {
+            background: linear-gradient(to right, #2563eb, #3b82f6);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.6);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="auth-container w-full max-w-md rounded-xl bg-white p-8 shadow-xl" data-aos="fade-up">
+            <div class="mb-8 text-center">
+                <h1 class="mt-4 text-3xl font-bold text-gray-800"><span class="text-blue-600">HELLO</span>PRO</h1>
+                <p class="mt-2 text-gray-500">Connectez-vous à votre compte</p>
+            </div>
+
+            <form class="space-y-6" method="post" action="/login" id="loginForm">
+                <p id="error-auth" class="text-red-500 font-bold text-sm text-center {{ '' if error else 'hidden' }}">{{ error }}</p>
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700">Nom d'utilisateur <span class="text-red-600">*</span></label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="mail" class="h-4 w-4 text-gray-400"></i>
+                        </div>
+                        <input id="username" name="username" type="username" required 
+                            class="input-field block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Votre nom d'utilisateur" value="{{ username if username else '' }}">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">Mot de passe <span class="text-red-600">*</span></label>
+                    <div class="mt-1 relative rounded-md shadow-sm">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="lock" class="h-4 w-4 text-gray-400"></i>
+                        </div>
+                        <input id="password" name="password" type="password" required 
+                            class="input-field block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="••••••••">
+                    </div>
+                </div>
+
+                <div>
+                    <button type="submit" id="submitBtn"
+                        class="btn-primary w-full flex justify-center items-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        <span id="btnText">Se connecter</span>
+                        <span id="spinner" class="ml-2 hidden">
+                            <i data-lucide="loader-2" class="animate-spin h-4 w-4"></i>
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+      // Initialize Lucide icons
+        lucide.createIcons();
+
+        document.querySelectorAll('input').forEach(item => {
+            item.addEventListener('focus', function(e) {
+                document.getElementById('error-auth').classList.add('hidden')
+            })
+        })
+
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            let isValid = true;
+            
+            // Check username
+            const username = document.getElementById('username');
+            if (!username.value.trim()) {
+                isValid = false;
+            }
+
+            // Check password
+            const password = document.getElementById('password');
+            if (!password.value.trim()) {
+                isValid = false;
+            }
+
+            if (isValid) {
+                // Show spinner and disable button
+                document.getElementById('btnText').textContent = 'Connexion...';
+                document.getElementById('spinner').classList.remove('hidden');
+                document.getElementById('submitBtn').disabled = true;
+            } else {
+                e.preventDefault();
+                document.getElementById('error-auth').classList.remove('hidden');
+                document.getElementById('error-auth').textContent="Tous les champs sont obligatoires";
+            }
+        });
+    </script>
+</body>
+</html>
