@@ -93,10 +93,14 @@ class Consumer:
         """
         async with message.process():
             product_id = "unknown"
+            domain = "unknown"
+            product_name = "unknown"
             try:
                 data = json.loads(message.body)
                 product_data = data.get("data", data)
                 product_id = product_data.get('id_produit', 'unknown')
+                domain = product_data.get('domaine', 'unknown')
+                product_name = product_data.get('nom') or product_data.get('nom_produit') or product_data.get('name') or f"produit-{product_id}"
                 
                 logger.info(f"📥 Message reçu pour le produit '{product_id}'.")
                 
@@ -123,6 +127,12 @@ class Consumer:
             except (json.JSONDecodeError, ValueError) as e:
                 # Erreur permanente: le message est invalide.
                 logger.error(f"❌ Erreur permanente pour {product_id}. Message envoyé à la DLQ finale. Erreur: {e}")
+                # Reporter l'erreur dans le fichier errors.json pour le reporting
+                await self.downloader.save_error(
+                    domain, product_id, product_name, "",
+                    f"Message invalide (JSON malformé) — Envoyé en DLQ: {e}",
+                    "dlq", "critical"
+                )
                 await self._send_to_dlq(message, e, 0)
 
             except Exception as e:
@@ -133,6 +143,12 @@ class Consumer:
                     await message.nack(requeue=False)  # NACK pour retry via DLX
                 else:
                     logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives pour {product_id}. Envoi à la DLQ. Erreur: {e}")
+                    # Reporter l'erreur dans le fichier errors.json pour le reporting
+                    await self.downloader.save_error(
+                        domain, product_id, product_name, "",
+                        f"Échec après {MAX_RETRIES + 1} tentatives — Envoyé en DLQ: {e}",
+                        "dlq", "critical"
+                    )
                     await self._send_to_dlq(message, e, MAX_RETRIES)
     
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
