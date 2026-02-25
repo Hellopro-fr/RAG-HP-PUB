@@ -65,12 +65,26 @@ class DetectionResponse(BaseModel):
     )
 
 
+class BatchItem(BaseModel):
+    """Élément unique d'une requête par lot"""
+    url: str = Field(..., description="URL du site à analyser")
+    html_content: Optional[str] = Field(
+        default=None,
+        description="Contenu HTML optionnel déjà récupéré"
+    )
+
+
 class BatchDetectionRequest(BaseModel):
     """Requête de détection pour plusieurs URLs"""
-    urls: list[str] = Field(
-        ...,
+    urls: list[str] | None = Field(
+        default=None,
         max_length=100,
-        description="Liste d'URLs à analyser (max 100)"
+        description="[DEPRECATED] Liste d'URLs simples à analyser"
+    )
+    items: list[BatchItem] | None = Field(
+        default=None,
+        max_length=100,
+        description="Liste d'items contenant l'URL et le HTML optionnel"
     )
     mode: DetectionMode = Field(
         default=DetectionMode.COMPLETE,
@@ -95,9 +109,14 @@ class BatchDetectionRequest(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "urls": [
-                        "https://www.lemonde.fr",
-                        "https://www.bbc.co.uk"
+                    "items": [
+                        {
+                            "url": "https://www.lemonde.fr",
+                            "html_content": "<html lang='fr'>...</html>"
+                        },
+                        {
+                            "url": "https://www.bbc.co.uk"
+                        }
                     ],
                     "mode": "simple",
                     "max_concurrency": 5

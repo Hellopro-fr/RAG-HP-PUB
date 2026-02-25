@@ -8,6 +8,7 @@ from app.models.schemas import (
     DetectionResponse,
     BatchDetectionRequest,
     BatchDetectionResponse,
+    BatchItem,
     UrlCheckResponse,
     DetectionMode
 )
@@ -72,35 +73,48 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     Traitement par lot : détecte plusieurs URLs en parallèle.
     
     **Paramètres:**
-    - `urls`: Liste d'URLs à analyser (max 100 par requête)
-    - `mode`: simple ou complete (appliqué à toutes les URLs)
+    - `urls`: [DEPRECATED] Liste d'URLs simples (max 100)
+    - `items`: Liste d'objets contenant 'url' et optionnellement 'html_content' (recommandé)
+    - `mode`: simple ou complete (appliqué à tous)
     - `max_concurrency`: Nombre de requêtes parallèles (1-50, défaut: 10)
     
-    **Retourne** les résultats dans le même ordre que les URLs fournies.
+    **Retourne** les résultats dans le même ordre que les données fournies.
     """
-    if not request.urls:
-        raise HTTPException(status_code=400, detail="La liste d'URLs ne peut pas être vide")
+    # Unification des entrées (support rétro-compatible)
+    items_to_process: list[BatchItem] = []
     
-    if len(request.urls) > 100:
-        raise HTTPException(status_code=400, detail="Maximum 100 URLs par requête")
+    if request.items:
+        items_to_process.extend(request.items)
+        
+    if request.urls:
+        items_to_process.extend([BatchItem(url=u, html_content=None) for u in request.urls])
+
+    if not items_to_process:
+        raise HTTPException(status_code=400, detail="La liste d'URLs/items ne peut pas être vide")
+    
+    if len(items_to_process) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 items par requête")
     
     start_time = time.time()
     
     # Sémaphore pour limiter la concurrence
     semaphore = asyncio.Semaphore(request.max_concurrency)
     
-    async def process_single(url: str) -> DetectionResponse:
+    async def process_single(item: BatchItem) -> DetectionResponse:
+        url = item.url
         async with semaphore:
             try:
-                # Récupérer le HTML
-                html_content = await fetch_html(url, request.proxy_url)
+                # Utiliser le HTML fourni s'il existe, sinon le télécharger
+                html_content = item.html_content
                 if not html_content:
-                    return DetectionResponse(
-                        ok=False,
-                        url=url,
-                        method='fetch_failed',
-                        error='Impossible de récupérer le contenu HTML'
-                    )
+                    html_content = await fetch_html(url, request.proxy_url)
+                    if not html_content:
+                        return DetectionResponse(
+                            ok=False,
+                            url=url,
+                            method='fetch_failed',
+                            error='Impossible de récupérer le contenu HTML'
+                        )
                 
                 # Créer le détecteur
                 detector = DomainFR(
@@ -119,8 +133,8 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                     error=str(e)
                 )
     
-    # Traiter toutes les URLs en parallèle
-    results = await asyncio.gather(*[process_single(url) for url in request.urls])
+    # Traiter tous les items en parallèle
+    results = await asyncio.gather(*[process_single(item) for item in items_to_process])
     
     # Calculer les statistiques
     success_count = sum(1 for r in results if r.ok)
