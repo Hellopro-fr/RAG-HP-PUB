@@ -422,22 +422,24 @@ class HeaderFooterExtractor:
             if all(sig in r_map for r_map in ref_maps):
                 potential_candidates.append((index, el, sig))
 
-        # 4.5. Cookie Purge (DESTRUCTIVE STEP ON DETECTED CANDIDATES)
+        # 4.5. Cookie Purge (DESTRUCTIVE PASS on potential candidates)
         # We perform this BEFORE building the final candidates list to ensure
         # that parent elements have their text updated (removed cookies)
-        # for index, el, sig in potential_candidates:
-        #     # We must re-get the text because previous decompositions might have altered it
-        #     current_text = self.get_cleaned_text(el)
-        #     if self._is_cookie_banner(current_text):
-        #         logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
-        #         el.decompose() 
+        for index, el, sig in potential_candidates:
+            # We must re-get the text because previous decompositions might have altered it
+            # or the element itself might be a cookie banner
+            if el.parent is None: continue # Already removed (perhaps as child of another removed element)
+
+            current_text = self.get_cleaned_text(el)
+            if self._is_cookie_banner(current_text):
+                logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
+                el.decompose()
 
         # 5. Build Final Candidates with REFRESHED Text
         candidates = []
         detailed_intersections = []
         
-        # Re-iterate through potential candidates. Some might be decomposed (el.parent is None),
-        # others might have had their children decomposed (text changed).
+        # Re-iterate through potential candidates
         for index, el, sig in potential_candidates:
             if el.parent is None:
                 continue # Element was decomposed
@@ -465,7 +467,8 @@ class HeaderFooterExtractor:
                     "signature": sig,
                     "text_main": text_main,
                     "text_ref1": ref_texts[0] if len(ref_texts) > 0 else "",
-                    "text_ref2": ref_texts[1] if len(ref_texts) > 1 else ""
+                    "text_ref2": ref_texts[1] if len(ref_texts) > 1 else "",
+                    "status": "Pending" # Default status
                 }
                 candidates.append((index, el, text_main, len(text_main.split()), match_detail))
 
@@ -476,6 +479,9 @@ class HeaderFooterExtractor:
             if not is_child:
                 top_level_candidates.append((idx, el, text, word_count))
                 detailed_intersections.append(detail)
+            else:
+                # Optional: Mark nested candidates as dropped if you tracked all candidates
+                pass
 
         if not top_level_candidates:
             return "", "", [], cleaned_htmls
@@ -558,28 +564,38 @@ class HeaderFooterExtractor:
                 last_idx = idx
             final_footer_indices = [t[0] for t in current_cluster]
 
-        # 9. Assembly with Deduplication
+        # 9. Assembly with Deduplication and Status Tracking
         header_texts = []
         footer_texts = []
         seen_blocks = set() # (Signature, Text) pair tracker
 
-        for idx, el, text, wc in top_level_candidates:
-            # Re-verify text in case it changed (paranoia check)
+        # top_level_candidates and detailed_intersections are index-aligned
+        for k, (idx, el, text, wc) in enumerate(top_level_candidates):
+            detail = detailed_intersections[k]
+            
+            # Re-verify text
             current_text = self.get_cleaned_text(el)
-            if not current_text: continue
+            if not current_text: 
+                detail['status'] = "Dropped (Empty)"
+                continue
 
-            # Get signature for dedup
+            # Check deduplication
             sig = get_sig(el)
             key = (sig, current_text)
             if key in seen_blocks:
+                detail['status'] = "Dropped (Duplicate)"
                 continue
             
             if idx in final_header_indices:
                 header_texts.append(current_text)
                 seen_blocks.add(key)
+                detail['status'] = "Kept (Header)"
             elif idx in final_footer_indices:
                 footer_texts.append(current_text)
                 seen_blocks.add(key)
+                detail['status'] = "Kept (Footer)"
+            else:
+                detail['status'] = "Dropped (Middle Island)"
 
         header_result = " ".join(header_texts).strip()
         footer_result = " ".join(footer_texts).strip()

@@ -54,6 +54,7 @@ class IntersectionDetail(BaseModel):
     text_main: str
     text_ref1: str
     text_ref2: str
+    status: str
 
 
 class BoilerplateTestResponse(BaseModel):
