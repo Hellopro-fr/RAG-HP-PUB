@@ -369,3 +369,38 @@ class Archiver:
                     logger.error(f"Failed to delete {archive['filename']}: {e}")
         
         return deleted_count
+
+    async def get_errors(self, domain: str, clear: bool = False) -> List[Dict]:
+        """
+        Load and optionally clear the errors for a domain.
+        """
+        errors_path = os.path.join(self.images_base, domain, "errors.json")
+        
+        if not os.path.exists(errors_path):
+            return []
+            
+        try:
+            async with aiofiles.open(errors_path, 'r') as f:
+                content = await f.read()
+                errors = json.loads(content) if content.strip() else []
+            
+            if clear:
+                import fcntl
+                lock_path = f"{errors_path}.lock"
+                # Blocking IO needs to be in executor
+                loop = asyncio.get_running_loop()
+                def _clear():
+                    with open(lock_path, 'w') as lock_file:
+                        fcntl.flock(lock_file, fcntl.LOCK_EX)
+                        try:
+                            if os.path.exists(errors_path):
+                                os.remove(errors_path)
+                        finally:
+                            fcntl.flock(lock_file, fcntl.LOCK_UN)
+                            
+                await loop.run_in_executor(None, _clear)            
+                
+            return errors
+        except Exception as e:
+            logger.error(f"Error reading errors for {domain}: {e}")
+            return []

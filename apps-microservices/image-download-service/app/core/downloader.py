@@ -6,7 +6,7 @@ import asyncio
 import re
 import unicodedata
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from image_download_service.core.image_processor import ImageProcessor
 import random
 
@@ -25,6 +25,59 @@ USER_AGENTS = [
 
 # Local rate limit: delay between requests (seconds)
 LOCAL_RATE_DELAY = float(os.environ.get("IMAGE_DOWNLOAD_DELAY", 0.5))
+
+# =============================================================================
+# Catégories et sévérités d'erreurs pour le reporting
+# =============================================================================
+# Catégories possibles :
+#   no_url           → Aucune URL d'image fournie dans le message
+#   http_client      → Erreur HTTP 4xx côté client (403, 404, etc.)
+#   http_server      → Erreur HTTP 5xx côté serveur source
+#   timeout          → Le serveur source n'a pas répondu à temps
+#   network          → Erreur réseau (DNS, connexion refusée, etc.)
+#   processing       → Image téléchargée mais traitement échoué (corrompue, format invalide)
+#   dlq              → Message envoyé en Dead-Letter Queue après épuisement des retries
+#
+# Sévérités :
+#   warning  → Problème mineur ou potentiellement temporaire
+#   error    → Échec confirmé après retries
+#   critical → Échec fatal (DLQ, message invalide)
+
+def _classify_http_error(status_code: int) -> Tuple[str, str, str]:
+    """
+    Classifie une erreur HTTP en (raison, catégorie, sévérité).
+    """
+    if status_code == 403:
+        return (f"HTTP {status_code} — Accès refusé (anti-bot ou hotlink protection)", "http_client", "error")
+    elif status_code == 404:
+        return (f"HTTP {status_code} — Image introuvable à la source", "http_client", "warning")
+    elif status_code == 429:
+        return (f"HTTP {status_code} — Rate limit atteint sur le serveur source", "http_client", "warning")
+    elif 400 <= status_code < 500:
+        return (f"HTTP {status_code} — Erreur client", "http_client", "warning")
+    elif 500 <= status_code < 600:
+        return (f"HTTP {status_code} — Erreur serveur source", "http_server", "warning")
+    else:
+        return (f"HTTP {status_code} — Code inattendu", "http_client", "warning")
+
+
+def _classify_network_error(error: Exception) -> Tuple[str, str, str]:
+    """
+    Classifie une exception réseau en (raison, catégorie, sévérité).
+    """
+    error_str = str(error).lower()
+    
+    if isinstance(error, asyncio.TimeoutError) or "timeout" in error_str:
+        return (f"Timeout — Le serveur source n'a pas répondu dans le délai imparti", "timeout", "warning")
+    elif "dns" in error_str or "name resolution" in error_str or "getaddrinfo" in error_str:
+        return (f"DNS — Impossible de résoudre le nom de domaine: {error}", "network", "error")
+    elif "connection refused" in error_str or "connect" in error_str:
+        return (f"Connexion refusée par le serveur source: {error}", "network", "warning")
+    elif "ssl" in error_str or "certificate" in error_str:
+        return (f"Erreur SSL/TLS: {error}", "network", "error")
+    else:
+        return (f"Erreur réseau: {error}", "network", "warning")
+
 
 class Downloader:
     def __init__(self):
@@ -113,12 +166,18 @@ class Downloader:
         
         return None
 
-    async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 0) -> Optional[Dict[str, str]]:
+    async def download_and_process(self, url: str, domain: str, product_id: str, product_name: str, storage_base: str = "/app/storage", index: int = 0) -> Dict:
         """
         Downloads image bytes and delegates to ImageProcessor.
+        
+        Returns:
+            dict with either:
+                - {"status": "ok", "paths": {...}}     on success
+                - {"status": "error", "reason": "...", "categorie": "...", "severite": "..."}  on failure
         """
         retries = 3
         timeout = aiohttp.ClientTimeout(total=30)
+        last_error_info = None
         
         for attempt in range(retries):
             try:
@@ -142,18 +201,113 @@ class Downloader:
                                     base_storage_dir=storage_base,
                                     index=index 
                                 )
-                                return paths
+                                return {"status": "ok", "paths": paths}
                             except Exception as e:
                                 logger.error(f"Image processing failed for {url}: {e}")
-                                return None
+                                # Erreur de traitement = pas de retry, l'image est corrompue
+                                return {
+                                    "status": "error",
+                                    "reason": f"Traitement échoué — Image corrompue ou format non supporté: {e}",
+                                    "categorie": "processing",
+                                    "severite": "error"
+                                }
                             
                         else:
+                            reason, categorie, severite = _classify_http_error(response.status)
                             logger.warning(f"Failed to download {url}: Status {response.status}")
+                            last_error_info = {
+                                "status": "error",
+                                "reason": reason,
+                                "categorie": categorie,
+                                "severite": severite
+                            }
+                            # Pour les 4xx (sauf 429), pas de retry car c'est une erreur permanente
+                            if 400 <= response.status < 500 and response.status != 429:
+                                return last_error_info
+
             except Exception as e:
+                reason, categorie, severite = _classify_network_error(e)
                 logger.warning(f"Error downloading {url} (Attempt {attempt+1}): {e}")
+                last_error_info = {
+                    "status": "error",
+                    "reason": reason,
+                    "categorie": categorie,
+                    "severite": severite
+                }
                 await asyncio.sleep(attempt * 1)
         
-        return None
+        # Toutes les tentatives échouées → élever la sévérité à "error"
+        if last_error_info:
+            last_error_info["severite"] = "error"
+            last_error_info["reason"] += f" (après {retries} tentatives)"
+            return last_error_info
+        
+        return {
+            "status": "error",
+            "reason": f"Échec inconnu après {retries} tentatives",
+            "categorie": "network",
+            "severite": "error"
+        }
+
+    async def save_error(self, domain: str, product_id: str, product_name: str, url: str,
+                         error_reason: str, error_category: str = "unknown", error_severity: str = "error"):
+        """
+        Save download and processing errors to a dedicated domain errors.json file.
+        Uses fcntl.flock (LOCK_EX) for exclusive cross-replica locking
+        and atomic write (temp file + os.replace) to prevent corruption.
+        
+        Catégories: no_url, http_client, http_server, timeout, network, processing, dlq
+        Sévérités:  warning, error, critical
+        """
+        import json
+        import fcntl
+        import tempfile
+        
+        errors_dir = f"/app/storage/images/{domain}"
+        errors_path = f"{errors_dir}/errors.json"
+        lock_path = f"{errors_path}.lock"
+        
+        os.makedirs(errors_dir, exist_ok=True)
+        
+        error_entry = {
+            "id_produit": product_id,
+            "nom": product_name,
+            "url": url,
+            "erreur": error_reason,
+            "categorie": error_category,
+            "severite": error_severity,
+            "date": datetime.now().isoformat()
+        }
+        
+        try:
+            with open(lock_path, 'w') as lock_file:
+                fcntl.flock(lock_file, fcntl.LOCK_EX)
+                try:
+                    errors_list = []
+                    if os.path.exists(errors_path):
+                        try:
+                            with open(errors_path, 'r') as f:
+                                content = f.read()
+                                if content.strip():
+                                    errors_list = json.loads(content)
+                        except (json.JSONDecodeError, ValueError) as e:
+                            logger.warning(f"Corrupted errors file detected for {domain}, starting fresh: {e}")
+                    
+                    errors_list.append(error_entry)
+                    
+                    fd, tmp_path = tempfile.mkstemp(dir=errors_dir, suffix='.tmp')
+                    try:
+                        with os.fdopen(fd, 'w') as tmp_f:
+                            tmp_f.write(json.dumps(errors_list, indent=2, ensure_ascii=False))
+                        os.replace(tmp_path, errors_path)
+                    except Exception:
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                        raise
+                finally:
+                    fcntl.flock(lock_file, fcntl.LOCK_UN)
+        except Exception as e:
+            logger.error(f"Could not write error file for {domain}: {e}")
 
     async def process_product(self, product_data: dict) -> dict:
         """
@@ -168,6 +322,11 @@ class Downloader:
         urls = product_data.get("url_images")
         
         if not urls:
+            await self.save_error(
+                domain, product_id, product_name, "",
+                "Aucune URL d'image fournie dans le message produit",
+                "no_url", "warning"
+            )
             return product_data
 
         if isinstance(urls, str):
@@ -201,8 +360,17 @@ class Downloader:
                 await asyncio.sleep(LOCAL_RATE_DELAY)
                 
             result = await self.download_and_process(url, domain, product_id, product_name, index=img_index)
-            if result:
-                processed_images.append(result)
+            
+            if result["status"] == "ok":
+                processed_images.append(result["paths"])
+            else:
+                # Erreur précise remontée par download_and_process
+                await self.save_error(
+                    domain, product_id, product_name, url,
+                    result["reason"],
+                    result.get("categorie", "unknown"),
+                    result.get("severite", "error")
+                )
         
         # Update product data with new structure
         product_data["processed_images"] = processed_images
