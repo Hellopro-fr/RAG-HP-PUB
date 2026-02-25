@@ -9,6 +9,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Récupérer l'IP publique de l'utilisateur
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0].trim()
+      || request.headers.get('x-real-ip')
+      || request.ip
+      || '';
+
     // Récupérer le Referrer réel depuis les headers de la requête (équivalent PHP $_SERVER['HTTP_REFERER'])
     const serverReferrer = request.headers.get('referer') || '';
 
@@ -18,6 +24,11 @@ export async function POST(request: NextRequest) {
       if (!body.data.session_meta.referrer || body.data.session_meta.referrer === '') {
         body.data.session_meta.referrer = serverReferrer || '';
       }
+    }
+
+    // Injecter l'IP client dans les données
+    if (body.data) {
+      body.data.client_ip = clientIp;
     }
 
     // Forward to the tracking API
