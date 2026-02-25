@@ -438,53 +438,45 @@ class HeaderFooterExtractor:
         if not top_level_candidates:
             return "", "", [], cleaned_htmls
 
-        # 7. Identify Main Content Pivot using Weighted Largest Gap
-        candidate_indices = sorted([t[0] for t in top_level_candidates])
-        boundary_indices = [-1] + candidate_indices + [len(all_main_elements)]
+        # 7. Identify Main Content Pivot using Semantic Center of Gravity
+        # Instead of finding the "gap", we find where the "unique content mass" balances.
+        candidate_indices_set = set(t[0] for t in top_level_candidates)
         
-        max_gap_score = -1
-        # Default split points (fallback)
-        header_cutoff_index = -1 
-        footer_start_index = len(all_main_elements)
+        total_unique_mass = 0
+        element_masses = [] # (index, mass)
         
-        for i in range(len(boundary_indices) - 1):
-            start_idx = boundary_indices[i] + 1
-            end_idx = boundary_indices[i+1]
-            gap_score = 0.0
-            
-            for gap_el_idx in range(start_idx, end_idx):
-                if gap_el_idx >= len(all_main_elements): break
-                el = all_main_elements[gap_el_idx]
+        for index, el in enumerate(all_main_elements):
+            # If it's a boilerplate candidate, it has 0 unique mass
+            if index in candidate_indices_set:
+                element_masses.append(0)
+                continue
                 
-                text_len = len(self.get_cleaned_text(el).split())
-                gap_score += text_len
-                if el.name in ['main', 'article']: gap_score += 10000.0
-                if el.find('h1'): gap_score += 5000.0
-                if el.find('h2'): gap_score += 1000.0
-                    
-            if gap_score > max_gap_score:
-                max_gap_score = gap_score
-                # The "Main Content" is this gap.
-                # The candidate just BEFORE this gap (boundary_indices[i]) is the last Header element.
-                header_cutoff_index = boundary_indices[i]
-                # The candidate just AFTER this gap (boundary_indices[i+1]) is the first Footer element.
-                footer_start_index = boundary_indices[i+1]
-
-        # 8. Cluster Filtering (SIMPLIFIED: Removed "Middle Island" filtering)
-        final_header_indices = []
-        final_footer_indices = []
+            # Calculate mass (text length)
+            text_len = len(self.get_cleaned_text(el).split())
+            
+            # Semantic boosting for "Main" tags to pull gravity towards them
+            if el.name in ['main', 'article']:
+                text_len *= 2
+            if el.find('h1'):
+                text_len += 50 # Bonus for titles
+                
+            total_unique_mass += text_len
+            element_masses.append(text_len)
+            
+        # Determine Pivot Index
+        pivot_index = len(all_main_elements) // 2 # Default: Geometric Middle
         
-        # Simply split based on the main gap.
-        # Anything before the main body gap is treated as Header material.
-        # Anything after the main body gap is treated as Footer material.
-        for t in top_level_candidates:
-            idx = t[0]
-            if idx <= header_cutoff_index:
-                final_header_indices.append(idx)
-            elif idx >= footer_start_index:
-                final_footer_indices.append(idx)
+        # Only use Center of Gravity if there is significant unique content
+        if total_unique_mass > 50:
+            current_mass = 0
+            target_mass = total_unique_mass / 2
+            for idx, mass in enumerate(element_masses):
+                current_mass += mass
+                if current_mass >= target_mass:
+                    pivot_index = idx
+                    break
 
-        # 9. Assembly with Deduplication and Status Tracking
+        # 8. Assembly with Deduplication and Status Tracking
         header_texts = []
         footer_texts = []
         seen_blocks = set() # (Signature, Text) pair tracker
@@ -506,17 +498,15 @@ class HeaderFooterExtractor:
                 detail['status'] = "Dropped (Duplicate)"
                 continue
             
-            if idx in final_header_indices:
+            # Classification based on Pivot Index
+            if idx <= pivot_index:
                 header_texts.append(current_text)
                 seen_blocks.add(key)
                 detail['status'] = "Kept (Header)"
-            elif idx in final_footer_indices:
+            else:
                 footer_texts.append(current_text)
                 seen_blocks.add(key)
                 detail['status'] = "Kept (Footer)"
-            else:
-                # Should rarely reach here with simplified logic unless candidate is inside main gap (impossible by def)
-                detail['status'] = "Dropped (Middle Island)"
 
         header_result = " ".join(header_texts).strip()
         footer_result = " ".join(footer_texts).strip()
