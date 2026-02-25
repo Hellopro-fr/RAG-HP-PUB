@@ -98,18 +98,20 @@ async def _log_history(
     duration_ms: int,
 ) -> None:
     """Persist an API call history record; errors are swallowed to not affect clients."""
-    try:
-        await ApiCallHistory.create(
-            service_name=service_name,
-            method=method,
-            path=path,
-            status_code=status_code,
-            client_ip=client_ip,
-            request_headers=json.dumps(request_headers, default=str),
-            duration_ms=duration_ms,
-        )
-    except Exception as exc:
-        logger.warning(f"[history] Failed to log API call: {exc}")
+    exclus_service_name = ["crawling-service", "image_comparator-service"]
+    if service_name not in exclus_service_name:
+        try:
+            await ApiCallHistory.create(
+                service_name=service_name,
+                method=method,
+                path=path,
+                status_code=status_code,
+                client_ip=client_ip,
+                request_headers=json.dumps(request_headers, default=str),
+                duration_ms=duration_ms,
+            )
+        except Exception as exc:
+            logger.warning(f"[history] Failed to log API call: {exc}")
 
 
 # ─── Proxy route ──────────────────────────────────────────────────────────────
