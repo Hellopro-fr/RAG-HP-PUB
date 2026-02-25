@@ -6,6 +6,7 @@ import type { Supplier, ProductSpec } from '@/types';
 import type { CharacteristicsMap } from '@/types/characteristics';
 import type { MatchingProduct, MatchingCharacteristic, ProductInfoItem } from '@/types/matching';
 import type { ConsolidatedCharacteristic } from './equivalence-merger';
+import { fixBrokenEncoding } from './fix-encoding';
 
 // =============================================================================
 // CONSTANTS
@@ -398,17 +399,17 @@ export function enrichSuppliersWithProductInfo(
         
     return {
       ...supplier,
-      productName: produit.titre_produit || supplier.productName,
+      productName: fixBrokenEncoding(produit.titre_produit) || supplier.productName,
       supplierName,
       description: '', // On n'utilise pas la description HTML brute
-      descriptionHtml: produit.description_produit || undefined,
+      descriptionHtml: fixBrokenEncoding(produit.description_produit) || undefined,
       image: mainImage,
       images: images,
       logo: vendeur.logo || undefined,
       supplier: {
         id: vendeur.id,
         name: supplierName,
-        description: vendeur.short_description || '',
+        description: fixBrokenEncoding(vendeur.short_description) || '',
         location: vendeur.adresse || '',
         responseTime,
         logo: vendeur.logo,
