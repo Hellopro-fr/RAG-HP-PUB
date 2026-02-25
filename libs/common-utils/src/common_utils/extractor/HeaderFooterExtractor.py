@@ -374,12 +374,14 @@ class HeaderFooterExtractor:
 
         # Decide which signature function to use
         get_sig = self._get_signature_structural if strategy == "structural" else self._get_signature_class
-        target_tags = ['div', 'header', 'footer', 'nav', 'ul', 'section', 'aside']
+        
+        # Expanded target tags to support Tables, Semantic5, and Definition Lists
+        target_tags = ['div', 'header', 'footer', 'nav', 'ul', 'ol', 'dl', 'dt', 'dd', 'section', 'aside', 'main', 'article', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td']
 
         for ref_soup in clean_refs:
             sig_map = {}
             for el in ref_soup.find_all(target_tags):
-                if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
+                if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav', 'main', 'article']:
                     continue
                 s = get_sig(el)
                 # Store the text. If multiple elements have the same signature, we store the first one found.
@@ -395,7 +397,7 @@ class HeaderFooterExtractor:
         for index, el in enumerate(all_main_elements):
             sig = get_sig(el)
             
-            if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
+            if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav', 'main', 'article']:
                 continue
             
             # Intersection Check & Content Similarity
