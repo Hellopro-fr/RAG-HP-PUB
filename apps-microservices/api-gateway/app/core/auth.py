@@ -132,7 +132,7 @@ async def verify_api_token(request: Request) -> dict:
     if not auth_header.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or malformed Authorization header.",
+            detail="Access token manquant ou invalide.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
