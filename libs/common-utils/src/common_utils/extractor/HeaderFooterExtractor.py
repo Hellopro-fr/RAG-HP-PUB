@@ -317,33 +317,6 @@ class HeaderFooterExtractor:
         index = len(siblings) + 1
         return f"{el.name}:nth-of-type({index})"
 
-    def _is_cookie_banner(self, text: str) -> bool:
-        """
-        Detects if a text block is likely a cookie/consent banner.
-        """
-        if not text or len(text) > 1000: # Cookie banners are usually concise
-            return False
-            
-        text_lower = text.lower()
-        
-        # High-confidence cookie keywords
-        cookie_keywords = [
-            "cookie", "cookies", "consent", "accept all", "manage preferences", 
-            "privacy policy", "personal data", "tracking", "third-party", 
-            "paramètres des cookies", "accepter", "tout refuser", 
-            "politique de confidentialité", "expérience utilisateur",
-            "we use cookies", "nous utilisons des cookies", "cookie settings",
-            "ce site utilise des cookies", "this website uses cookies"
-        ]
-        
-        match_count = sum(1 for kw in cookie_keywords if kw in text_lower)
-        
-        # Heuristic: If it has multiple keywords or starts with "we use cookies"
-        if match_count >= 2 or "use cookies" in text_lower or "utilisons des cookies" in text_lower:
-            return True
-            
-        return False
-
     def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class") -> tuple[str, str, list[dict], dict]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
@@ -422,29 +395,13 @@ class HeaderFooterExtractor:
             if all(sig in r_map for r_map in ref_maps):
                 potential_candidates.append((index, el, sig))
 
-        # 4.5. Cookie Purge (DESTRUCTIVE PASS on potential candidates)
-        # We perform this BEFORE building the final candidates list to ensure
-        # that parent elements have their text updated (removed cookies)
-        # for index, el, sig in potential_candidates:
-        #     # We must re-get the text because previous decompositions might have altered it
-        #     # or the element itself might be a cookie banner
-        #     if el.parent is None: continue # Already removed (perhaps as child of another removed element)
-
-        #     current_text = self.get_cleaned_text(el)
-        #     if self._is_cookie_banner(current_text):
-        #         logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
-        #         el.decompose()
-
         # 5. Build Final Candidates with REFRESHED Text
         candidates = []
         detailed_intersections = []
         
         # Re-iterate through potential candidates
         for index, el, sig in potential_candidates:
-            if el.parent is None:
-                continue # Element was decomposed
-            
-            # Get FRESH text (post-purge)
+            # Get FRESH text
             text_main = self.get_cleaned_text(el)
             ref_texts = [r_map.get(sig, "") for r_map in ref_maps]
             
@@ -455,8 +412,6 @@ class HeaderFooterExtractor:
                     if not r_text: 
                         is_content_similar = False
                         break
-
-                    # Calculate similarity ratio
                     ratio = SequenceMatcher(None, text_main, r_text).ratio()
                     if ratio < 1:
                         is_content_similar = False
@@ -479,9 +434,6 @@ class HeaderFooterExtractor:
             if not is_child:
                 top_level_candidates.append((idx, el, text, word_count))
                 detailed_intersections.append(detail)
-            else:
-                # Optional: Mark nested candidates as dropped if you tracked all candidates
-                pass
 
         if not top_level_candidates:
             return "", "", [], cleaned_htmls
@@ -503,8 +455,6 @@ class HeaderFooterExtractor:
             for gap_el_idx in range(start_idx, end_idx):
                 if gap_el_idx >= len(all_main_elements): break
                 el = all_main_elements[gap_el_idx]
-                # Check if element is still valid (not decomposed)
-                if el.parent is None: continue
                 
                 text_len = len(self.get_cleaned_text(el).split())
                 gap_score += text_len
@@ -520,49 +470,19 @@ class HeaderFooterExtractor:
                 # The candidate just AFTER this gap (boundary_indices[i+1]) is the first Footer element.
                 footer_start_index = boundary_indices[i+1]
 
-        # 8. Cluster Filtering
+        # 8. Cluster Filtering (SIMPLIFIED: Removed "Middle Island" filtering)
         final_header_indices = []
         final_footer_indices = []
         
-        # Header Group
-        header_group = [t for t in top_level_candidates if t[0] <= header_cutoff_index]
-        if header_group:
-            # Check for gaps within the header group itself
-            # If there's a gap of > 500 unique words between header candidates, keep only the top cluster.
-            last_idx = -1
-            current_cluster = []
-            for t in header_group:
-                idx = t[0]
-                # Calculate unique content between previous candidate and this one
-                gap_text_len = 0
-                if last_idx != -1:
-                    for gap_i in range(last_idx + 1, idx):
-                        # Ensure safe access
-                        if gap_i < len(all_main_elements) and all_main_elements[gap_i].parent:
-                            gap_text_len += len(self.get_cleaned_text(all_main_elements[gap_i]).split())
-                if last_idx != -1 and gap_text_len > 300:
-                    break 
-                current_cluster.append(t)
-                last_idx = idx
-            final_header_indices = [t[0] for t in current_cluster]
-
-        # Footer Group
-        footer_group = [t for t in top_level_candidates if t[0] >= footer_start_index]
-        if footer_group:
-            footer_group.reverse()
-            last_idx = len(all_main_elements)
-            current_cluster = []
-            for t in footer_group:
-                idx = t[0]
-                gap_text_len = 0
-                for gap_i in range(idx + 1, last_idx):
-                    if gap_i < len(all_main_elements) and all_main_elements[gap_i].parent:
-                        gap_text_len += len(self.get_cleaned_text(all_main_elements[gap_i]).split())
-                if last_idx != len(all_main_elements) and gap_text_len > 300:
-                    break 
-                current_cluster.append(t)
-                last_idx = idx
-            final_footer_indices = [t[0] for t in current_cluster]
+        # Simply split based on the main gap.
+        # Anything before the main body gap is treated as Header material.
+        # Anything after the main body gap is treated as Footer material.
+        for t in top_level_candidates:
+            idx = t[0]
+            if idx <= header_cutoff_index:
+                final_header_indices.append(idx)
+            elif idx >= footer_start_index:
+                final_footer_indices.append(idx)
 
         # 9. Assembly with Deduplication and Status Tracking
         header_texts = []
@@ -595,6 +515,7 @@ class HeaderFooterExtractor:
                 seen_blocks.add(key)
                 detail['status'] = "Kept (Footer)"
             else:
+                # Should rarely reach here with simplified logic unless candidate is inside main gap (impossible by def)
                 detail['status'] = "Dropped (Middle Island)"
 
         header_result = " ".join(header_texts).strip()
