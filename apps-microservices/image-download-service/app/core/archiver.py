@@ -370,10 +370,17 @@ class Archiver:
         
         return deleted_count
 
-    async def get_errors(self, domain: str, clear: bool = False) -> List[Dict]:
+    async def get_errors(self, domain: str, hours: int = None, clear: bool = False) -> List[Dict]:
         """
         Load and optionally clear the errors for a domain.
+        
+        Args:
+            domain: The domain name
+            hours: If provided, only return errors from the last N hours
+            clear: If True, remove the errors file after reading
         """
+        from datetime import timedelta
+        
         errors_path = os.path.join(self.images_base, domain, "errors.json")
         
         if not os.path.exists(errors_path):
@@ -382,7 +389,23 @@ class Archiver:
         try:
             async with aiofiles.open(errors_path, 'r') as f:
                 content = await f.read()
-                errors = json.loads(content) if content.strip() else []
+                all_errors = json.loads(content) if content.strip() else []
+            
+            # Filtrer par plage horaire si hours est spécifié
+            if hours is not None and hours > 0:
+                cutoff = datetime.now() - timedelta(hours=hours)
+                filtered_errors = []
+                for err in all_errors:
+                    try:
+                        err_date = datetime.fromisoformat(err.get("date", ""))
+                        if err_date >= cutoff:
+                            filtered_errors.append(err)
+                    except (ValueError, TypeError):
+                        # Si la date est invalide, on inclut l'erreur par sécurité
+                        filtered_errors.append(err)
+                errors = filtered_errors
+            else:
+                errors = all_errors
             
             if clear:
                 import fcntl
@@ -404,3 +427,4 @@ class Archiver:
         except Exception as e:
             logger.error(f"Error reading errors for {domain}: {e}")
             return []
+
