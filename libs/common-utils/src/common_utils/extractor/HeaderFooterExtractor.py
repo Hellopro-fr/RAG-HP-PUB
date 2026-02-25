@@ -9,6 +9,21 @@ class HeaderFooterExtractor:
     It uses BeautifulSoup to parse the HTML and extract relevant text.
     """
 
+    # Robust regex patterns based on real-world examples (GDPR, TCF, CMP banners)
+    COOKIE_PATTERNS = [
+        re.compile(r"(?:panneau de gestion|paramétrage|gérer le consentement) (?:des|aux) cookies", re.IGNORECASE),
+        re.compile(r"(?:we use|nous utilisons) (?:des )?cookies", re.IGNORECASE),
+        re.compile(r"(?:ce|this) (?:site|website) (?:utilise|uses) (?:des )?cookies", re.IGNORECASE),
+        re.compile(r"(?:en poursuivant|by continuing) (?:votre|your) (?:navigation|browsing).*?(?:acceptez|accept)", re.IGNORECASE),
+        re.compile(r"stocker et/ou accéder aux informations des appareils", re.IGNORECASE),
+        re.compile(r"store,? access,? and process personal data", re.IGNORECASE),
+        re.compile(r"(?:tout|all) (?:accepter|accept).*?(?:tout|all) (?:refuser|reject)", re.IGNORECASE),
+        re.compile(r"continue without agreeing", re.IGNORECASE),
+        re.compile(r"your privacy is our priority", re.IGNORECASE),
+        re.compile(r"nous respectons votre vie privée", re.IGNORECASE),
+        re.compile(r"cookies.*?(?:necessary|nécessaires).*?(?:functioning|bon fonctionnement)", re.IGNORECASE)
+    ]
+
     def __init__(self, html_content: str):
         self.raw_html = html_content # Store raw HTML for boilerpy3 fallback
         try:
@@ -317,6 +332,20 @@ class HeaderFooterExtractor:
         index = len(siblings) + 1
         return f"{el.name}:nth-of-type({index})"
 
+    def _is_cookie_banner(self, text: str) -> bool:
+        """
+        Detects if a text block is likely a cookie/consent banner using robust regex patterns.
+        """
+        if not text or len(text) > 3000: # Increase limit to catch large banners (Example 1)
+            return False
+            
+        # Check against robust regex patterns
+        for pattern in self.COOKIE_PATTERNS:
+            if pattern.search(text):
+                return True
+            
+        return False
+
     def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class", gap_config: dict = None) -> tuple[str, str, list[dict], dict, list[dict]]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
@@ -404,13 +433,29 @@ class HeaderFooterExtractor:
             if all(sig in r_map for r_map in ref_maps):
                 potential_candidates.append((index, el, sig))
 
+        # 4.5. Cookie Purge (DESTRUCTIVE PASS on potential candidates)
+        # We perform this BEFORE building the final candidates list to ensure
+        # that parent elements have their text updated (removed cookies)
+        for index, el, sig in potential_candidates:
+            # We must re-get the text because previous decompositions might have altered it
+            if el.parent is None: continue 
+
+            current_text = self.get_cleaned_text(el)
+            # Use the new robust regex-based check
+            if self._is_cookie_banner(current_text):
+                logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
+                el.decompose() 
+
         # 5. Build Final Candidates with REFRESHED Text
         candidates = []
         detailed_intersections = []
         
         # Re-iterate through potential candidates
         for index, el, sig in potential_candidates:
-            # Get FRESH text
+            if el.parent is None:
+                continue # Element was decomposed
+            
+            # Get FRESH text (post-purge)
             text_main = self.get_cleaned_text(el)
             ref_texts = [r_map.get(sig, "") for r_map in ref_maps]
             
