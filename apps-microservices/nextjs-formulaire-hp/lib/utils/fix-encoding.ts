@@ -4,6 +4,26 @@
  */
 
 /**
+ * Patterns de mojibake typiques (UTF-8 lu comme Latin-1)
+ * Si ces patterns sont présents, le texte a besoin d'être corrigé
+ */
+const MOJIBAKE_PATTERNS = [
+  /Ã©/,  // é
+  /Ã¨/,  // è
+  /Ãª/,  // ê
+  /Ã /,  // à
+  /Ã¢/,  // â
+  /Ã´/,  // ô
+  /Ã®/,  // î
+  /Ã¹/,  // ù
+  /Ã»/,  // û
+  /Ã§/,  // ç
+  /Ã‰/,  // É
+  /Ã€/,  // À
+  /â¢/,  // • (bullet corrompu)
+];
+
+/**
  * Séquences corrompues et leurs remplacements simples (ASCII)
  */
 const CORRUPTED_SEQUENCES: [RegExp, string][] = [
@@ -16,8 +36,20 @@ const CORRUPTED_SEQUENCES: [RegExp, string][] = [
   [/â€¦/g, '...'],         // Ellipsis
 ];
 
+/**
+ * Vérifie si le texte ressemble à du mojibake (UTF-8 mal décodé)
+ */
+function needsEncodingFix(text: string): boolean {
+  return MOJIBAKE_PATTERNS.some(pattern => pattern.test(text));
+}
+
 export function fixBrokenEncoding(text: string | null | undefined): string {
   if (!text) return '';
+
+  // Si le texte ne ressemble pas à du mojibake, le retourner tel quel
+  if (!needsEncodingFix(text)) {
+    return text;
+  }
 
   try {
     // Étape 1: Remplacer les séquences corrompues par des équivalents ASCII
