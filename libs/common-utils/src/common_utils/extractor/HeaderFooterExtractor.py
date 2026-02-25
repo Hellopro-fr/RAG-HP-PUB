@@ -425,12 +425,12 @@ class HeaderFooterExtractor:
         # 4.5. Cookie Purge (DESTRUCTIVE STEP ON DETECTED CANDIDATES)
         # We perform this BEFORE building the final candidates list to ensure
         # that parent elements have their text updated (removed cookies)
-        for index, el, sig in potential_candidates:
-            # We must re-get the text because previous decompositions might have altered it
-            current_text = self.get_cleaned_text(el)
-            if self._is_cookie_banner(current_text):
-                logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
-                el.decompose() 
+        # for index, el, sig in potential_candidates:
+        #     # We must re-get the text because previous decompositions might have altered it
+        #     current_text = self.get_cleaned_text(el)
+        #     if self._is_cookie_banner(current_text):
+        #         logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
+        #         el.decompose() 
 
         # 5. Build Final Candidates with REFRESHED Text
         candidates = []
