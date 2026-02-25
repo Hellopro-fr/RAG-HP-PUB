@@ -9,8 +9,8 @@ interface ExpertHelpBadgeProps {
 }
 
 const ExpertHelpBadge = ({ variant = "floating", className = "" }: ExpertHelpBadgeProps) => {
-  const phoneNumber = "01 23 45 67 89";
-  const phoneLink = "tel:+33123456789";
+  const phoneNumber = "07 45 88 29 53";
+  const phoneLink = "tel:+33745882953";
 
   if (variant === "inline") {
     return (
