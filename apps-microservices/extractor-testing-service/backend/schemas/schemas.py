@@ -44,9 +44,17 @@ class ResultItem(BaseModel):
 ResponseModel = Dict[str, ResultItem]
 
 
+class GapConfig(BaseModel):
+    text: float = 1.0
+    article: float = 10000.0
+    h1: float = 5000.0
+    h2: float = 1000.0
+
+
 class BoilerplateTestRequest(BaseModel):
     main_html: str = Field(..., description="The target HTML page to extract header/footer from.")
     reference_htmls: List[str] = Field(..., description="List of reference HTML pages from the same domain.")
+    gap_weights: Optional[GapConfig] = None
 
 
 class IntersectionDetail(BaseModel):
@@ -55,6 +63,15 @@ class IntersectionDetail(BaseModel):
     text_ref1: str
     text_ref2: str
     status: str
+
+
+class GapDetail(BaseModel):
+    start_index: int
+    end_index: int
+    score: float
+    text_score: float
+    tag_bonus: float
+    is_winner: bool = False
 
 
 class BoilerplateTestResponse(BaseModel):
@@ -78,6 +95,9 @@ class BoilerplateTestResponse(BaseModel):
     cleaned_html_main: str
     cleaned_html_ref1: str
     cleaned_html_ref2: str
+    
+    # Gap Analysis (Debug)
+    gap_analysis: List[GapDetail]
     
     # Final Decision (Production Simulation)
     header_selected: str

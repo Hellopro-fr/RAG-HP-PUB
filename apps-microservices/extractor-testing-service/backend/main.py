@@ -85,6 +85,7 @@ async def test_extractors_endpoint(request: RequestModel):
 async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
     """
     Tests the HeaderFooterExtractor with both methods (Old vs New) and both intersection strategies.
+    Accepts gap_weights configuration.
     """
     logger.info("Received request for Boilerplate Intersection Test (Debug Mode).")
     
@@ -93,8 +94,12 @@ async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
 
     try:
         extractor = HeaderFooterExtractor(request.main_html)
+        
+        # Convert pydantic model to dict for the extractor
+        gap_config = request.gap_weights.dict() if request.gap_weights else None
+        
         # Use the debug method to get all data
-        result = extractor.extract_all_debug(request.reference_htmls)
+        result = extractor.extract_all_debug(request.reference_htmls, gap_config=gap_config)
         
         return BoilerplateTestResponse(
             header_old=result["header_old"],
@@ -111,6 +116,8 @@ async def test_boilerplate_endpoint(request: BoilerplateTestRequest):
             cleaned_html_main=result["cleaned_html_main"],
             cleaned_html_ref1=result["cleaned_html_ref1"],
             cleaned_html_ref2=result["cleaned_html_ref2"],
+            
+            gap_analysis=result["gap_analysis"],
             
             header_selected=result["header_selected"],
             header_method_used=result["header_method_used"],

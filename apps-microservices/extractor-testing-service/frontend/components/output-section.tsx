@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
-import { AlertCircle, ChevronDown, ChevronUp, Copy, Check, Eye, FileCode } from "lucide-react"
+import { AlertCircle, ChevronDown, ChevronUp, Copy, Check, Eye, FileCode, BarChart3 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +22,15 @@ interface IntersectionDetail {
   status: string
 }
 
+interface GapDetail {
+  start_index: number
+  end_index: number
+  score: number
+  text_score: number
+  tag_bonus: number
+  is_winner: boolean
+}
+
 interface BoilerplateResult {
   header_old: string
   footer_old: string
@@ -38,6 +47,8 @@ interface BoilerplateResult {
   cleaned_html_main: string
   cleaned_html_ref1: string
   cleaned_html_ref2: string
+  
+  gap_analysis: GapDetail[]
   
   header_selected: string
   header_method_used: string
@@ -99,17 +110,27 @@ export default function OutputSection({ activeView, results, boilerplateResults,
           </TabsList>
           
           <TabsContent value="production" className="space-y-4 pt-4">
-            <h3 className="text-lg font-semibold">Final Automated Decision</h3>
-            <BoilerplateCard 
-              title="Selected Header" 
-              content={boilerplateResults.header_selected} 
-              method={boilerplateResults.header_method_used} 
-            />
-            <BoilerplateCard 
-              title="Selected Footer" 
-              content={boilerplateResults.footer_selected} 
-              method={boilerplateResults.footer_method_used} 
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Final Automated Decision</h3>
+                    <BoilerplateCard 
+                    title="Selected Header" 
+                    content={boilerplateResults.header_selected} 
+                    method={boilerplateResults.header_method_used} 
+                    />
+                    <BoilerplateCard 
+                    title="Selected Footer" 
+                    content={boilerplateResults.footer_selected} 
+                    method={boilerplateResults.footer_method_used} 
+                    />
+                </div>
+                <div>
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5"/> Structural Gap Analysis
+                    </h3>
+                    <GapAnalysisTable items={boilerplateResults.gap_analysis} />
+                </div>
+            </div>
           </TabsContent>
           
           <TabsContent value="class" className="space-y-4 pt-4">
@@ -227,6 +248,51 @@ function getStatusBadge(status: string) {
     return <Badge variant="secondary">{status}</Badge>
 }
 
+function GapAnalysisTable({ items }: { items: GapDetail[] }) {
+    if (!items || items.length === 0) {
+        return (
+            <Card className="p-4 border-dashed border-2">
+                <p className="text-sm text-muted-foreground">No gap analysis data available.</p>
+            </Card>
+        )
+    }
+
+    return (
+        <Card className="p-0 border overflow-hidden">
+            <div className="max-h-[500px] overflow-y-auto">
+                <table className="w-full text-xs">
+                    <thead className="bg-muted sticky top-0 z-10">
+                        <tr className="border-b">
+                            <th className="p-2 text-left">Gap Range</th>
+                            <th className="p-2 text-right">Total Score</th>
+                            <th className="p-2 text-right">Text Score</th>
+                            <th className="p-2 text-right">Tag Bonus</th>
+                            <th className="p-2 text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                        {items.map((gap, idx) => (
+                            <tr key={idx} className={gap.is_winner ? "bg-primary/5 font-medium" : "hover:bg-muted/50"}>
+                                <td className="p-2 font-mono text-muted-foreground">
+                                    {gap.start_index} → {gap.end_index}
+                                </td>
+                                <td className="p-2 text-right font-bold">{gap.score.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                <td className="p-2 text-right text-muted-foreground">{gap.text_score.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                <td className="p-2 text-right text-muted-foreground">{gap.tag_bonus.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                <td className="p-2 text-center">
+                                    {gap.is_winner && (
+                                        <Badge className="bg-green-500/20 text-green-700 border-green-500/30">WINNER</Badge>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+    )
+}
+
 function IntersectionTable({ title, items }: { title: string, items: IntersectionDetail[] }) {
     if (!items || items.length === 0) {
         return (
@@ -236,7 +302,6 @@ function IntersectionTable({ title, items }: { title: string, items: Intersectio
         );
     }
 
-    // Removed 'overflow-hidden' from Card to fix scroll issue
     return (
         <Card className="p-4 border-dashed border-2">
             <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">

@@ -317,35 +317,42 @@ class HeaderFooterExtractor:
         index = len(siblings) + 1
         return f"{el.name}:nth-of-type({index})"
 
-    def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class") -> tuple[str, str, list[dict], dict]:
+    def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class", gap_config: dict = None) -> tuple[str, str, list[dict], dict, list[dict]]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
         intersection using the specified signature strategy.
         
         Args:
-            reference_htmls: List of HTML strings to compare against.
-            strategy: "class" (Tag+Class) or "structural" (DOM Path).
-            
-        Returns:
-            (Header, Footer, DetailedIntersections, CleanedHTMLsDict)
+            gap_config: Optional dictionary with weights for gap scoring.
+                        Keys: 'text', 'article', 'h1', 'h2'.
         """
         cleaned_htmls = {"main": "", "refs": []}
+        gap_details = []
+        
+        # Default Weights
+        if not gap_config:
+            gap_config = {
+                'text': 1.0,
+                'article': 10000.0,
+                'h1': 5000.0,
+                'h2': 1000.0
+            }
         
         if not hasattr(self, 'raw_html') or not self.raw_html or not reference_htmls:
-            return "", "", [], cleaned_htmls
+            return "", "", [], cleaned_htmls, gap_details
         
         try:
             from boilerpy3 import extractors as BoilerpyExtractor
         except ImportError:
             logging.error("boilerpy3 not installed.")
-            return "", "", [], cleaned_htmls
+            return "", "", [], cleaned_htmls, gap_details
 
         try:
             extractor = BoilerpyExtractor.KeepEverythingExtractor()
             
             # 1. Clean the Main HTML
             clean_main_html = extractor.get_marked_html(self.raw_html)
-            if not clean_main_html: return "", "", [], cleaned_htmls
+            if not clean_main_html: return "", "", [], cleaned_htmls, gap_details
             cleaned_htmls["main"] = clean_main_html
             main_soup = BeautifulSoup(clean_main_html, 'html.parser')
             
@@ -356,10 +363,10 @@ class HeaderFooterExtractor:
                 if c_ref:
                     cleaned_htmls["refs"].append(c_ref)
                     clean_refs.append(BeautifulSoup(c_ref, 'html.parser'))
-            if not clean_refs: return "", "", [], cleaned_htmls
+            if not clean_refs: return "", "", [], cleaned_htmls, gap_details
         except Exception as e:
             logging.error(f"Error during boilerpy3 cleaning: {e}")
-            return "", "", [], cleaned_htmls
+            return "", "", [], cleaned_htmls, gap_details
 
         # 3. Build Reference Maps (Signature -> Text Content)
         # Allows us to retrieve the actual text content from reference pages for visualization
@@ -413,7 +420,7 @@ class HeaderFooterExtractor:
                         is_content_similar = False
                         break
                     ratio = SequenceMatcher(None, text_main, r_text).ratio()
-                    if ratio < 1:
+                    if ratio < 1: # Strict exact match for stability testing, can revert to 0.8
                         is_content_similar = False
                         break
             
@@ -436,72 +443,104 @@ class HeaderFooterExtractor:
                 detailed_intersections.append(detail)
 
         if not top_level_candidates:
-            return "", "", [], cleaned_htmls
+            return "", "", [], cleaned_htmls, gap_details
 
-        # 7. Identify Main Content Pivot using Maximum Structural Gap
-        # We assume the Header and Footer are clusters of matching nodes separated by a large gap (The Main Content).
-        # We look for the largest index distance between consecutive candidates.
-        
+        # 7. Identify Main Content Pivot using Weighted Largest Gap
         candidate_indices = sorted([t[0] for t in top_level_candidates])
+        boundary_indices = [-1] + candidate_indices + [len(all_main_elements)]
         
-        max_gap = 0
-        header_cutoff_index = -1
+        max_gap_score = -1
+        header_cutoff_index = -1 
+        footer_start_index = len(all_main_elements)
         
-        # If we have candidates, we try to find the split
-        if len(candidate_indices) > 1:
-            for i in range(len(candidate_indices) - 1):
-                current_idx = candidate_indices[i]
-                next_idx = candidate_indices[i+1]
-                gap = next_idx - current_idx
+        for i in range(len(boundary_indices) - 1):
+            start_idx = boundary_indices[i] + 1
+            end_idx = boundary_indices[i+1]
+            gap_score = 0.0
+            
+            # Metadata for visualization
+            gap_meta = {
+                "start_index": start_idx,
+                "end_index": end_idx,
+                "score": 0.0,
+                "text_score": 0.0,
+                "tag_bonus": 0.0
+            }
+            
+            for gap_el_idx in range(start_idx, end_idx):
+                if gap_el_idx >= len(all_main_elements): break
+                el = all_main_elements[gap_el_idx]
+                if el.parent is None: continue
                 
-                # We strictly look for the largest gap. 
-                # This gap represents the Main Content where no boilerplate was found.
-                if gap > max_gap:
-                    max_gap = gap
-                    # The split point is the index of the candidate BEFORE the big gap
-                    header_cutoff_index = current_idx
-                    
-        elif len(candidate_indices) == 1:
-            # Edge Case: Only one candidate found. 
-            # If it's in the first half of the DOM, we call it Header.
-            # If it's in the second half, we call it Footer.
-            idx = candidate_indices[0]
-            if idx < (len(all_main_elements) / 2):
-                header_cutoff_index = idx # It is header
-            else:
-                header_cutoff_index = -1 # It is footer (header cutoff is before it)
+                text_len = len(self.get_cleaned_text(el).split())
+                
+                # Apply weights from config
+                score_increment = text_len * gap_config.get('text', 1.0)
+                gap_score += score_increment
+                gap_meta["text_score"] += score_increment
+                
+                bonus = 0.0
+                if el.name in ['main', 'article']: 
+                    bonus = gap_config.get('article', 10000.0)
+                if el.find('h1'): 
+                    bonus = max(bonus, gap_config.get('h1', 5000.0))
+                if el.find('h2'): 
+                    bonus = max(bonus, gap_config.get('h2', 1000.0))
+                
+                gap_score += bonus
+                gap_meta["tag_bonus"] += bonus
+            
+            gap_meta["score"] = gap_score
+            gap_details.append(gap_meta)
+            
+            if gap_score > max_gap_score:
+                max_gap_score = gap_score
+                header_cutoff_index = boundary_indices[i]
+                footer_start_index = boundary_indices[i+1]
 
-        # 8. Assembly with Deduplication and Status Tracking
+        # Mark winner in gap details
+        for gd in gap_details:
+            gd["is_winner"] = (gd["score"] == max_gap_score)
+
+        # 8. Cluster Filtering (SIMPLIFIED: Removed "Middle Island" filtering)
+        final_header_indices = []
+        final_footer_indices = []
+        
+        for t in top_level_candidates:
+            idx = t[0]
+            if idx <= header_cutoff_index:
+                final_header_indices.append(idx)
+            elif idx >= footer_start_index:
+                final_footer_indices.append(idx)
+
+        # 9. Assembly with Deduplication and Status Tracking
         header_texts = []
         footer_texts = []
-        seen_blocks = set() # (Signature, Text) pair tracker
+        seen_blocks = set()
 
-        # top_level_candidates and detailed_intersections are index-aligned
         for k, (idx, el, text, wc) in enumerate(top_level_candidates):
             detail = detailed_intersections[k]
-            
-            # Re-verify text
             current_text = self.get_cleaned_text(el)
             if not current_text: 
                 detail['status'] = "Dropped (Empty)"
                 continue
 
-            # Check deduplication
             sig = get_sig(el)
             key = (sig, current_text)
             if key in seen_blocks:
                 detail['status'] = "Dropped (Duplicate)"
                 continue
             
-            # Use the gap-based split point
-            if idx <= header_cutoff_index:
+            if idx in final_header_indices:
                 header_texts.append(current_text)
                 seen_blocks.add(key)
                 detail['status'] = "Kept (Header)"
-            else:
+            elif idx in final_footer_indices:
                 footer_texts.append(current_text)
                 seen_blocks.add(key)
                 detail['status'] = "Kept (Footer)"
+            else:
+                detail['status'] = "Dropped (Middle Island)"
 
         header_result = " ".join(header_texts).strip()
         footer_result = " ".join(footer_texts).strip()
@@ -509,7 +548,7 @@ class HeaderFooterExtractor:
         if len(header_result) > 10000: header_result = header_result[:10000]
         if len(footer_result) > 10000: footer_result = footer_result[:10000]
 
-        return header_result, footer_result, detailed_intersections, cleaned_htmls
+        return header_result, footer_result, detailed_intersections, cleaned_htmls, gap_details
 
     def extract_with_fallback(self, reference_htmls: list[str]) -> dict:
         """Production Logic"""
@@ -523,7 +562,8 @@ class HeaderFooterExtractor:
         footer_method = "Original (Semantic/CSS Pattern)" if footer else "None"
 
         if not header or not footer:
-            fallback_h, fallback_f, _, _ = self.run_intersection_logic(reference_htmls, strategy="class")
+            # Use default config in production
+            fallback_h, fallback_f, _, _, _ = self.run_intersection_logic(reference_htmls, strategy="class")
             
             if not header and fallback_h:
                 header = fallback_h
@@ -540,15 +580,21 @@ class HeaderFooterExtractor:
             "footer_method": footer_method
         }
 
-    def extract_all_debug(self, reference_htmls: list[str]) -> dict:
+    def extract_all_debug(self, reference_htmls: list[str], gap_config: dict = None) -> dict:
         """Debug Logic"""
         if not self.soup: return {}
 
         old_header = self.extract_header(self.soup)
         old_footer = self.extract_footer(self.soup)
 
-        class_h, class_f, class_details, cleaned_htmls = self.run_intersection_logic(reference_htmls, strategy="class")
-        struct_h, struct_f, struct_details, _ = self.run_intersection_logic(reference_htmls, strategy="structural")
+        # Pass gap_config to intersection logic
+        class_h, class_f, class_details, cleaned_htmls, gap_analysis = self.run_intersection_logic(
+            reference_htmls, strategy="class", gap_config=gap_config
+        )
+        
+        struct_h, struct_f, struct_details, _, _ = self.run_intersection_logic(
+            reference_htmls, strategy="structural", gap_config=gap_config
+        )
 
         if old_header:
             selected_header = old_header
@@ -595,4 +641,6 @@ class HeaderFooterExtractor:
             "cleaned_html_main": cleaned_htmls.get("main", ""),
             "cleaned_html_ref1": cleaned_htmls.get("refs", ["", ""])[0] if len(cleaned_htmls.get("refs", [])) > 0 else "",
             "cleaned_html_ref2": cleaned_htmls.get("refs", ["", ""])[1] if len(cleaned_htmls.get("refs", [])) > 1 else "",
+            
+            "gap_analysis": gap_analysis
         }
