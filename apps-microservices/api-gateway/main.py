@@ -292,6 +292,14 @@ async def websocket_proxy(service: str, path: str, websocket: WebSocket):
 async def custom_openapi():
     # ── Description publique (visible par tous les utilisateurs) ──────────────
     _PUBLIC_DESCRIPTION = """
+> ⚠️ **Note importante — Authentification désactivée temporairement**
+>
+> Le contrôle d'accès par **Bearer Token** (`access_token`) n'est **pas encore actif**.
+> Vous pouvez appeler tous les endpoints **sans fournir de token** pour le moment.
+> Cette restriction sera activée prochainement.
+
+---
+
 ## 🔐 Authentification — Comment accéder aux services
 
 Tous les appels aux microservices transitent par cette gateway et doivent être authentifiés
