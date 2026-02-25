@@ -111,10 +111,10 @@ async def verify_api_token(request: Request) -> dict:
     Raises HTTP 401 on any failure.
     """
     # TODO:
-    # Test pour toujours exclure toutes les routes → except dlq-service pour le test
+    # Test pour toujours exclure toutes les routes → except graphdlq-service pour le test
     service_name = request.path_params.get("service", "")
     req_path = request.path_params.get("path", "").strip("/")
-    if service_name != "dlq-service":
+    if service_name != "graphdlq-service":
         return {"sub": service_name, "is_excluded": True}
 
     # 1. Check if route is excluded from authentication
