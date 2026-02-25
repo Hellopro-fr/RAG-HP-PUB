@@ -1,31 +1,42 @@
 /**
  * Corrige les problèmes d'encodage UTF-8 mal interprété en Latin-1 (ISO-8859-1)
  * Exemple: "CaractÃ©ristiques" → "Caractéristiques"
- *
- * Ce problème survient quand du texte UTF-8 est stocké/lu comme Latin-1.
- * La solution: réinterpréter les bytes Latin-1 comme UTF-8.
  */
+
+/**
+ * Séquences corrompues et leurs remplacements simples (ASCII)
+ */
+const CORRUPTED_SEQUENCES: [RegExp, string][] = [
+  [/â¢/g, '-'],            // Bullet point → tiret
+  [/â€™/g, "'"],           // Apostrophe typographique
+  [/â€œ/g, '"'],           // Guillemet ouvrant
+  [/â€/g, '"'],            // Guillemet fermant
+  [/â€"/g, '-'],           // Em dash → tiret
+  [/â€"/g, '-'],           // En dash → tiret
+  [/â€¦/g, '...'],         // Ellipsis
+];
+
 export function fixBrokenEncoding(text: string | null | undefined): string {
   if (!text) return '';
 
   try {
-    // Convertir chaque caractère en son code Latin-1 (byte)
-    // puis décoder ces bytes comme UTF-8
-    const bytes = new Uint8Array(
-      [...text].map(char => char.charCodeAt(0) & 0xff)
-    );
-
-    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-
-    // Si le décodage produit des caractères de remplacement (�),
-    // le texte original était probablement correct
-    if (decoded.includes('\uFFFD')) {
-      return text;
+    // Étape 1: Remplacer les séquences corrompues par des équivalents ASCII
+    let result = text;
+    for (const [pattern, replacement] of CORRUPTED_SEQUENCES) {
+      result = result.replace(pattern, replacement);
     }
 
-    return decoded;
+    // Étape 2: Décoder UTF-8/Latin-1 mojibake
+    const bytes = new Uint8Array(
+      [...result].map(char => char.charCodeAt(0) & 0xff)
+    );
+    result = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+
+    // Étape 3: Nettoyer les caractères de remplacement
+    result = result.replace(/�/g, '');
+
+    return result || text;
   } catch {
-    // En cas d'erreur, retourner le texte original
     return text;
   }
 }
