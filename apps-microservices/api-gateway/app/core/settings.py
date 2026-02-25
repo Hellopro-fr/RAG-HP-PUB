@@ -65,7 +65,7 @@ class Configuration:
     # Paths are relative (no leading slash).
     EXCLUDED_ROUTES: Dict[str, list] = {}
     EXCLUDED_ROUTES_LIST: Dict[str, list] = {
-        "dlq-service": ["/dlq/queues"],
+        "graphdlq-service": ["/dlq/queues"],
     }
 
     for svc_name, route_exclude in EXCLUDED_ROUTES_LIST.items():

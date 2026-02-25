@@ -310,7 +310,7 @@ La réponse contient votre `refresh_token`. Conservez-le, il est permanent tant 
 
 ### Étape 2 — Générer un access token
 
-Échangez votre `refresh_token` contre un **access token** à courte durée de vie via `POST /auth/token/refresh` :
+Échangez votre `refresh_token` contre un **access token** avec une durée de vie de 24h via `POST /auth/token/refresh` :
 
 ```json
 {
@@ -319,15 +319,15 @@ La réponse contient votre `refresh_token`. Conservez-le, il est permanent tant 
 }
 ```
 
-La réponse contient un `access_token` valable pour une durée limitée.
+La réponse contient un `access_token` valable pour une durée de 24h.
 
 ### Étape 3 — Appeler les services
 
 ### 🖥️ Utilisation dans Swagger UI
 
 1. Exécutez `GET /auth/token/refresh-tokens` pour obtenir votre `refresh_token`.
-2. Exécutez `POST /auth/token/refresh` — l'`access_token` est automatiquement pré-rempli dans le champ **Bearer Token**.
-3. Cliquez sur **🔒 Authorize**, collez le token manuellement, puis validez.
+2. Exécutez `POST /auth/token/refresh` — pour obtenir l'`access_token`.
+3. Cliquez sur **🔒 Authorize**, collez l'access token dans le champ **Bearer Token**, puis validez.
 
 ### ⚙️ Pour les requêtes APIs
 
