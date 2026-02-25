@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from typing import Any, Dict
 
 import httpx
 import websockets
@@ -84,8 +85,26 @@ logger = logging.getLogger(__name__)
 
 EXCLUDED_HEADERS = {"host", "content-length", "transfer-encoding", "connection"}
 
+# ─── History logging constants ────────────────────────────────────────────────
+# Services whose calls should never be persisted in the history table
+EXCLUDED_SERVICES = {"crawling-service", "image_comparator-service"}
+
+# Headers whose values must be redacted before storage (lowercase, case-insensitive)
+SENSITIVE_HEADERS = {"authorization", "cookie", "x-api-key", "set-cookie"}
+
 
 # ─── Fire-and-forget history logging ──────────────────────────────────────────
+
+
+def _sanitize_headers(headers: Dict[str, Any]) -> Dict[str, Any]:
+    """Creates a copy of headers with sensitive values redacted."""
+    clean_headers = {}
+    for k, v in headers.items():
+        if k.lower() in SENSITIVE_HEADERS:
+            clean_headers[k] = "[REDACTED]"
+        else:
+            clean_headers[k] = v
+    return clean_headers
 
 
 async def _log_history(
@@ -98,20 +117,33 @@ async def _log_history(
     duration_ms: int,
 ) -> None:
     """Persist an API call history record; errors are swallowed to not affect clients."""
-    exclus_service_name = ["crawling-service", "image_comparator-service"]
-    if service_name not in exclus_service_name:
-        try:
-            await ApiCallHistory.create(
-                service_name=service_name,
-                method=method,
-                path=path,
-                status_code=status_code,
-                client_ip=client_ip,
-                request_headers=json.dumps(request_headers, default=str),
-                duration_ms=duration_ms,
-            )
-        except Exception as exc:
-            logger.warning(f"[history] Failed to log API call: {exc}")
+
+    # Fast exit if service is excluded
+    if service_name in EXCLUDED_SERVICES:
+        return
+
+    try:
+        # Sanitize headers before serializing
+        safe_headers = _sanitize_headers(request_headers)
+
+        # Optimize JSON: If available, use 'orjson.dumps' for faster serialization
+        headers_json = json.dumps(safe_headers, default=str)
+
+        await ApiCallHistory.create(
+            service_name=service_name,
+            method=method,
+            path=path,
+            status_code=status_code,
+            client_ip=client_ip,
+            request_headers=headers_json,
+            duration_ms=duration_ms,
+        )
+    except Exception as exc:
+        # Include context in the error log for debugging
+        logger.warning(
+            f"[history] Failed to log API call for {service_name} {path}: {exc}",
+            exc_info=True,
+        )
 
 
 # ─── Proxy route ──────────────────────────────────────────────────────────────
