@@ -438,43 +438,38 @@ class HeaderFooterExtractor:
         if not top_level_candidates:
             return "", "", [], cleaned_htmls
 
-        # 7. Identify Main Content Pivot using Semantic Center of Gravity
-        # Instead of finding the "gap", we find where the "unique content mass" balances.
-        candidate_indices_set = set(t[0] for t in top_level_candidates)
+        # 7. Identify Main Content Pivot using Maximum Structural Gap
+        # We assume the Header and Footer are clusters of matching nodes separated by a large gap (The Main Content).
+        # We look for the largest index distance between consecutive candidates.
         
-        total_unique_mass = 0
-        element_masses = [] # (index, mass)
+        candidate_indices = sorted([t[0] for t in top_level_candidates])
         
-        for index, el in enumerate(all_main_elements):
-            # If it's a boilerplate candidate, it has 0 unique mass
-            if index in candidate_indices_set:
-                element_masses.append(0)
-                continue
+        max_gap = 0
+        header_cutoff_index = -1
+        
+        # If we have candidates, we try to find the split
+        if len(candidate_indices) > 1:
+            for i in range(len(candidate_indices) - 1):
+                current_idx = candidate_indices[i]
+                next_idx = candidate_indices[i+1]
+                gap = next_idx - current_idx
                 
-            # Calculate mass (text length)
-            text_len = len(self.get_cleaned_text(el).split())
-            
-            # Semantic boosting for "Main" tags to pull gravity towards them
-            if el.name in ['main', 'article']:
-                text_len *= 2
-            if el.find('h1'):
-                text_len += 50 # Bonus for titles
-                
-            total_unique_mass += text_len
-            element_masses.append(text_len)
-            
-        # Determine Pivot Index
-        pivot_index = len(all_main_elements) // 2 # Default: Geometric Middle
-        
-        # Only use Center of Gravity if there is significant unique content
-        if total_unique_mass > 50:
-            current_mass = 0
-            target_mass = total_unique_mass / 2
-            for idx, mass in enumerate(element_masses):
-                current_mass += mass
-                if current_mass >= target_mass:
-                    pivot_index = idx
-                    break
+                # We strictly look for the largest gap. 
+                # This gap represents the Main Content where no boilerplate was found.
+                if gap > max_gap:
+                    max_gap = gap
+                    # The split point is the index of the candidate BEFORE the big gap
+                    header_cutoff_index = current_idx
+                    
+        elif len(candidate_indices) == 1:
+            # Edge Case: Only one candidate found. 
+            # If it's in the first half of the DOM, we call it Header.
+            # If it's in the second half, we call it Footer.
+            idx = candidate_indices[0]
+            if idx < (len(all_main_elements) / 2):
+                header_cutoff_index = idx # It is header
+            else:
+                header_cutoff_index = -1 # It is footer (header cutoff is before it)
 
         # 8. Assembly with Deduplication and Status Tracking
         header_texts = []
@@ -498,8 +493,8 @@ class HeaderFooterExtractor:
                 detail['status'] = "Dropped (Duplicate)"
                 continue
             
-            # Classification based on Pivot Index
-            if idx <= pivot_index:
+            # Use the gap-based split point
+            if idx <= header_cutoff_index:
                 header_texts.append(current_text)
                 seen_blocks.add(key)
                 detail['status'] = "Kept (Header)"
