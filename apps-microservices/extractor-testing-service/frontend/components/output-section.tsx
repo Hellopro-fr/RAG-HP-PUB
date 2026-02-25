@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card"
 import { AlertCircle, ChevronDown, ChevronUp, Copy, Check, Eye, FileCode } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 
 interface LibraryResult {
   content: string
@@ -18,6 +19,7 @@ interface IntersectionDetail {
   text_main: string
   text_ref1: string
   text_ref2: string
+  status: string
 }
 
 interface BoilerplateResult {
@@ -216,6 +218,15 @@ export default function OutputSection({ activeView, results, boilerplateResults,
   return null
 }
 
+function getStatusBadge(status: string) {
+    if (status.includes("Kept (Header)")) return <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/20 hover:bg-green-500/25">Header</Badge>
+    if (status.includes("Kept (Footer)")) return <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/25">Footer</Badge>
+    if (status.includes("Duplicate")) return <Badge variant="outline" className="text-yellow-600 border-yellow-500/50">Duplicate</Badge>
+    if (status.includes("Middle Island")) return <Badge variant="outline" className="text-orange-600 border-orange-500/50">Middle Island</Badge>
+    if (status.includes("Empty")) return <Badge variant="outline" className="text-muted-foreground">Empty</Badge>
+    return <Badge variant="secondary">{status}</Badge>
+}
+
 function IntersectionTable({ title, items }: { title: string, items: IntersectionDetail[] }) {
     if (!items || items.length === 0) {
         return (
@@ -233,11 +244,12 @@ function IntersectionTable({ title, items }: { title: string, items: Intersectio
                 {title} ({items.length} matching blocks)
             </h4>
             <ScrollArea className="h-96 rounded-md border bg-muted/10 w-full">
-                <div className="min-w-[1000px]"> 
+                <div className="min-w-[1200px]"> 
                     {/* Header */}
-                    <div className="grid grid-cols-10 gap-2 p-3 bg-muted font-semibold text-xs border-b sticky top-0 z-10">
+                    <div className="grid grid-cols-12 gap-2 p-3 bg-muted font-semibold text-xs border-b sticky top-0 z-10">
                         <div className="col-span-2">Signature</div>
-                        <div className="col-span-3">Main Page Content</div>
+                        <div className="col-span-1">Status</div>
+                        <div className="col-span-4">Main Page Content</div>
                         <div className="col-span-5 grid grid-cols-2 gap-2">
                             <div>Ref 1 Content</div>
                             <div>Ref 2 Content</div>
@@ -246,11 +258,14 @@ function IntersectionTable({ title, items }: { title: string, items: Intersectio
                     {/* Rows */}
                     <div className="divide-y">
                         {items.map((item, idx) => (
-                            <div key={idx} className="grid grid-cols-10 gap-2 p-3 text-xs hover:bg-muted/20">
+                            <div key={idx} className="grid grid-cols-12 gap-2 p-3 text-xs hover:bg-muted/20">
                                 <div className="col-span-2 font-mono text-[10px] break-all text-primary/80">
                                     {item.signature}
                                 </div>
-                                <div className="col-span-3 max-h-24 overflow-y-auto pr-1 text-muted-foreground border-r border-border/50">
+                                <div className="col-span-1 flex items-start">
+                                    {getStatusBadge(item.status)}
+                                </div>
+                                <div className="col-span-4 max-h-24 overflow-y-auto pr-1 text-muted-foreground border-r border-border/50">
                                     {item.text_main}
                                 </div>
                                 <div className="col-span-5 grid grid-cols-2 gap-2 text-muted-foreground/70">
