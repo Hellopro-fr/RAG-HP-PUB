@@ -87,7 +87,11 @@ EXCLUDED_HEADERS = {"host", "content-length", "transfer-encoding", "connection"}
 
 # ─── History logging constants ────────────────────────────────────────────────
 # Services whose calls should never be persisted in the history table
-EXCLUDED_SERVICES = {"crawling-service", "image_comparator-service"}
+EXCLUDED_SERVICES = {
+    "crawling-service",
+    "image_comparator-service",
+    "graphadmin-service",
+}
 
 # Headers whose values must be redacted before storage (lowercase, case-insensitive)
 SENSITIVE_HEADERS = {"authorization", "cookie", "x-api-key", "set-cookie"}
