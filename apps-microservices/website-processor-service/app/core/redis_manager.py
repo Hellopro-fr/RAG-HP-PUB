@@ -51,19 +51,19 @@ class RedisManager:
         except Exception as e:
             logger.error(f"❌ Failed to connect to Redis: {e}")
 
-    def buffer_and_check_batch(self, domain: str, page_type: str, html_content: str, threshold: int = 3, ttl_seconds: int = 86400):
+    def buffer_and_check_batch(self, domain: str, page_type: str, payload: str, threshold: int = 3, ttl_seconds: int = 86400):
         """
-        Buffers a page and checks if the batch is ready.
+        Buffers a page payload and checks if the batch is ready.
         
         Args:
             domain (str): The domain name (e.g., 'google.com').
             page_type (str): 'header' or 'footer'.
-            html_content (str): The raw HTML content.
+            payload (str): The serialized JSON message content.
             threshold (int): Number of pages required to trigger processing.
             ttl_seconds (int): Expiration for the buffer key (default 24h).
             
         Returns:
-            list[str] | None: Returns list of 3 HTML strings if batch is full, else None.
+            list[str] | None: Returns list of 3 JSON strings if batch is full, else None.
         """
         if not self.client:
             logger.warning("Redis client not available. Skipping buffering.")
@@ -76,7 +76,7 @@ class RedisManager:
         
         try:
             # Execute atomic Lua script
-            result = self.batch_script(keys=[key], args=[html_content, threshold, ttl_seconds])
+            result = self.batch_script(keys=[key], args=[payload, threshold, ttl_seconds])
             
             if result:
                 logger.info(f"⚡ Batch ready for {domain} ({page_type})! Processing {len(result)} pages.")
