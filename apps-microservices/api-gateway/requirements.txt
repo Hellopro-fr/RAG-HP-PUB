@@ -11,3 +11,5 @@ asyncmy
 aerich
 cryptography
 redis[asyncio]
+uvloop
+python-dotenv
