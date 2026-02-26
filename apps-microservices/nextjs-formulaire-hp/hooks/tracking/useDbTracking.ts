@@ -47,7 +47,7 @@ export function useDbTracking() {
     categoryId?: number | null,
     stepIndex?: number
   ) => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
 
     try {
       const sessionId = getSessionId();

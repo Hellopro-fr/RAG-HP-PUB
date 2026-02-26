@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from website_processor_service.messaging.publisher import Publisher
 from website_processor_service.core.processor import process_website_data_for_embedding
+from website_processor_service.core.exceptions import BatchProcessingError
 from common_utils.autres.DLQProperties import DLQProperties
 
 from common_utils.metrics.prometheus import measure_processing_time
@@ -101,6 +102,17 @@ class Consumer:
             # We call our new decorated function
             await self._instrumented_processing_logic(message)
             await message.ack()
+        
+        except BatchProcessingError as e:
+            # Special Handling: Batch failed.
+            # 1. Resurrect previous messages (stored in Redis, now lost from RabbitMQ) -> Send to DLQ
+            logging.error(f"❌ Batch Processing Failed for URL: {url}. Resurrecting {len(e.previous_payloads)} buffered messages to DLQ.")
+            await self._resurrect_to_dlq(e.previous_payloads, e.original_error)
+            
+            # 2. Send CURRENT message to DLQ (Standard flow)
+            logging.error(f"❌ Sending triggering message to DLQ. Error: {e.original_error}")
+            await self._send_to_dlq(message, e.original_error or e, 0)
+            await message.ack()
 
         except (json.JSONDecodeError, ValueError) as e:
             # Erreur permanente: le message ne sera jamais valide.
@@ -117,6 +129,36 @@ class Consumer:
                 logging.error(f"❌ Website-Processor: Échec après {MAX_RETRIES + 1} tentatives pour URL: {url}. Message envoyé à la DLQ finale. Erreur: {e}")
                 await self._send_to_dlq(message, e, MAX_RETRIES)
                 await message.ack()
+
+    async def _resurrect_to_dlq(self, payloads: list[dict], error: Exception):
+        """Helper to send resurrected batch payloads to DLQ."""
+        if not payloads: return
+        
+        async with self.connection.channel() as channel:
+            dlx = await channel.get_exchange(self.dead_letter_exchange, ensure=True)
+            
+            for payload in payloads:
+                try:
+                    # Payload is now the full original message structure
+                    # ({"data": website_data, "database": bdd, "collection": "siteweb", "origin": ""}) stored in Redis.
+                    # No reconstruction needed.
+                    body_bytes = json.dumps(payload).encode('utf-8')
+                    
+                    # Use standard DLQ headers for consistency with _send_to_dlq
+                    headers = DLQProperties.create_dlq_headers(error, 'website-processor-service', 0, None)
+                    headers['x-exception-type'] = 'BatchProcessingError (Resurrected)'
+                    
+                    await dlx.publish(
+                        aio_pika.Message(
+                            body=body_bytes,
+                            headers=headers,
+                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                        ),
+                        routing_key=self.routing_key
+                    )
+                    logging.info(f"   -> Resurrected msg for {payload.get('data', {}).get('url')} sent to DLQ.")
+                except Exception as ex:
+                    logging.error(f"Failed to resurrect message to DLQ: {ex}. Payload: {json.dumps(payload)}")
 
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
         async with self.connection.channel() as channel:
