@@ -9,6 +9,7 @@ from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
 from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
 from website_processor_service.core.redis_manager import RedisManager
+from website_processor_service.core.exceptions import BatchProcessingError
 
 # Global Redis Manager instance
 redis_manager = RedisManager()
@@ -24,7 +25,8 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     Prend un dictionnaire de produit, le nettoie et prépare le message
     pour l’étape d’embedding.
 
-    Retourne : Un dictionnaire prêt à être publié, ou NONE si en attente de batch.
+    Retourne : Un dictionnaire prêt à être publié, ou message avec status='PENDING'.
+    Raises : BatchProcessingError si l'extraction batch échoue (pour DLQ).
     """
     # Étape 0: Initialisation
     output_message = {}
@@ -42,28 +44,52 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
     if page_type in ["header", "footer"]:
         log = "l'embedding"
         domain = website_data.get("domaine", get_domain_from_url(url))
-        raw_html = website_data.get("text", "")
+        
+        # Serialize the FULL original message structure to store in Redis.
+        # This preserves 'database' and all outer keys, allowing us to resurrect
+        # complete messages to the DLQ if the batch processing fails later.
+        full_payload = {
+            "data": website_data,
+            "database": bdd,
+            "collection": "siteweb",
+            "origin": ""
+        }
+        payload_str = json.dumps(full_payload)
         
         logging.info(f"[{url}] - Traitement Header/Footer ({page_type}) pour domaine: {domain}")
         
         # Buffer in Redis and check for batch
-        batch_htmls = redis_manager.buffer_and_check_batch(domain, page_type, raw_html)
+        batch_json_strings = redis_manager.buffer_and_check_batch(domain, page_type, payload_str)
         
-        if not batch_htmls:
+        if not batch_json_strings:
             # STATUS: PENDING (Waiting for more pages)
-            # We return a special signal to the consumer to just ACK and do nothing else.
             return {"status": "PENDING"}
         
         # STATUS: READY (Batch returned)
         logging.info(f"[{domain}] - Batch complet détecté. Lancement extraction Multi-Page.")
         
+        # Deserialize the batch
+        # Each item is a full message: {"data": website_data, "database": bdd, "collection": "siteweb", "origin": ""}
+        batch_payloads = []
         try:
-            # Instantiate Extractor with the first page (Main) 
-            # Note: In a batch of 3 homogeneous pages, any can be main, but we use index 0.
-            extractor = HeaderFooterExtractor(batch_htmls[0])
+            batch_payloads = [json.loads(s) for s in batch_json_strings]
+        except json.JSONDecodeError as e:
+            # Critical corruption in Redis data
+            logging.error(f"Failed to decode batch from Redis: {e}")
+            raise ValueError("Corrupted batch data in Redis")
+
+        try:
+            # Extract the inner website_data dicts for processing
+            batch_website_data = [d.get("data", d) for d in batch_payloads]
+            
+            # Extract HTML content from the website_data
+            html_sources = [d.get("text", "") for d in batch_website_data]
+            
+            # Instantiate Extractor with the first page
+            extractor = HeaderFooterExtractor(html_sources[0])
             
             # References are the other pages
-            references = batch_htmls[1:]
+            references = html_sources[1:]
             
             # Run the new robust extraction
             result = extractor.extract_with_fallback(references)
@@ -80,7 +106,24 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
             text_to_embed_clean = extracted_text.strip()
             
         except Exception as e:
-            raise ValueError(f"Erreur lors de l'extraction batch {page_type}: {e}")
+            # Extraction Failed! 
+            # We need to send ALL messages in this batch to the DLQ.
+            # The current message (website_data) will be handled by the consumer's standard exception handler.
+            # But the OTHER messages in the batch were already ACKed. We must return them to the consumer for manual DLQing.
+            
+            # Filter out the current message to avoid double-DLQing
+            # We use URL as a unique identifier (assuming 1 msg per URL per batch)
+            # batch_payloads contains full messages {"data": {...}, "database": ...}
+            previous_payloads = [
+                d for d in batch_payloads 
+                if d.get('data', {}).get('url') != website_data.get('url')
+            ]
+            
+            raise BatchProcessingError(
+                message=f"Échec extraction batch {page_type}: {str(e)}",
+                previous_payloads=previous_payloads,
+                original_error=e
+            )
 
     # Étape 3: STANDARD PAGE TREATMENT (Old Logic)
     else:  
