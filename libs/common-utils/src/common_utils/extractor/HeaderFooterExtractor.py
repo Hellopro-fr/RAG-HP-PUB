@@ -336,7 +336,7 @@ class HeaderFooterExtractor:
         """
         Detects if a text block is likely a cookie/consent banner using robust regex patterns.
         """
-        if not text or len(text) > 3000: # Increase limit to catch large banners (Example 1)
+        if not text or len(text) > 3000: # Increase limit to catch large banners
             return False
             
         # Check against robust regex patterns
@@ -441,7 +441,7 @@ class HeaderFooterExtractor:
             if el.parent is None: continue 
 
             current_text = self.get_cleaned_text(el)
-            # Use the new robust regex-based check
+            # Use the robust regex-based check
             if self._is_cookie_banner(current_text):
                 logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
                 el.decompose() 
@@ -467,7 +467,7 @@ class HeaderFooterExtractor:
                         is_content_similar = False
                         break
                     ratio = SequenceMatcher(None, text_main, r_text).ratio()
-                    if ratio < 1: # Strict exact match for stability testing, can revert to 0.8
+                    if ratio < 1: # Strict exact match for stability testing
                         is_content_similar = False
                         break
             
@@ -549,7 +549,7 @@ class HeaderFooterExtractor:
         for gd in gap_details:
             gd["is_winner"] = (gd["score"] == max_gap_score)
 
-        # 8. Cluster Filtering (SIMPLIFIED: Removed "Middle Island" filtering)
+        # 8. Cluster Filtering
         final_header_indices = []
         final_footer_indices = []
         
@@ -598,27 +598,39 @@ class HeaderFooterExtractor:
         return header_result, footer_result, detailed_intersections, cleaned_htmls, gap_details
 
     def extract_with_fallback(self, reference_htmls: list[str]) -> dict:
-        """Production Logic"""
+        """Production Logic: Structural -> Class -> Original"""
         if not self.soup:
             return {"header": "", "header_method": "None", "footer": "", "footer_method": "None"}
 
-        header = self.extract_header(self.soup)
-        footer = self.extract_footer(self.soup)
+        # Order: 1. Structural, 2. Class, 3. Original
         
-        header_method = "Original (Semantic/CSS Pattern)" if header else "None"
-        footer_method = "Original (Semantic/CSS Pattern)" if footer else "None"
+        # 1. Structural Strategy
+        fallback_h, fallback_f, _, _, _ = self.run_intersection_logic(reference_htmls, strategy="structural")
+        
+        if fallback_h and fallback_f:
+            return {
+                "header": fallback_h, "header_method": "Fallback (boilerpy3 Structural Intersection)",
+                "footer": fallback_f, "footer_method": "Fallback (boilerpy3 Structural Intersection)"
+            }
+            
+        # 2. Class Strategy
+        fallback_h_class, fallback_f_class, _, _, _ = self.run_intersection_logic(reference_htmls, strategy="class")
+        
+        # Partial Merge or Fallback
+        header = fallback_h if fallback_h else fallback_h_class
+        footer = fallback_f if fallback_f else fallback_f_class
+        
+        header_method = "Fallback (Structural)" if fallback_h else ("Fallback (Class)" if fallback_h_class else "None")
+        footer_method = "Fallback (Structural)" if fallback_f else ("Fallback (Class)" if fallback_f_class else "None")
 
-        if not header or not footer:
-            # Use default config in production
-            fallback_h, fallback_f, _, _, _ = self.run_intersection_logic(reference_htmls, strategy="class")
+        # 3. Original Method (Last Resort if completely empty)
+        if not header:
+            header = self.extract_header(self.soup)
+            if header: header_method = "Original (Semantic/CSS Pattern)"
             
-            if not header and fallback_h:
-                header = fallback_h
-                header_method = "Fallback (boilerpy3 Class Intersection)"
-            
-            if not footer and fallback_f:
-                footer = fallback_f
-                footer_method = "Fallback (boilerpy3 Class Intersection)"
+        if not footer:
+            footer = self.extract_footer(self.soup)
+            if footer: footer_method = "Original (Semantic/CSS Pattern)"
 
         return {
             "header": header,

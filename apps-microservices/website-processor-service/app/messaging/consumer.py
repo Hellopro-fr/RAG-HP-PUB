@@ -73,6 +73,13 @@ class Consumer:
             self.executor, process_website_data_for_embedding, website_data, bdd
         )
         
+        # Check specific status from processor
+        if output_message.get("status") == "PENDING":
+            logging.info("⏸️ Message buffered in Redis. Acknowledging RabbitMQ message without publishing output.")
+            # We acknowledge the message because it's safely stored in Redis awaiting batch processing.
+            return
+
+        # Regular processing path
         routing_key = 'data.ready_for_templating' if not output_message.get("data", {}).get("page_type") else 'data.ready_for_embedding'
         output_message['routing_key'] = routing_key
         
