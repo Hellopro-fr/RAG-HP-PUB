@@ -5,11 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ChevronDown, Settings2 } from "lucide-react"
 
 interface InputSectionProps {
   onCompare: (inputType: "raw_html" | "json_data", content: string, strategy: string, extractMetadata: boolean) => void
-  onTestBoilerplate: (mainHtml: string, ref1: string, ref2: string) => void
+  onTestBoilerplate: (mainHtml: string, ref1: string, ref2: string, gapWeights: any) => void
   disabled: boolean
 }
 
@@ -24,6 +27,13 @@ export default function InputSection({ onCompare, onTestBoilerplate, disabled }:
   const [mainHtml, setMainHtml] = useState("")
   const [ref1Html, setRef1Html] = useState("")
   const [ref2Html, setRef2Html] = useState("")
+  
+  // Gap Weights State (Default Values)
+  const [textWeight, setTextWeight] = useState(1.0)
+  const [articleWeight, setArticleWeight] = useState(10000.0)
+  const [h1Weight, setH1Weight] = useState(5000.0)
+  const [h2Weight, setH2Weight] = useState(1000.0)
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
 
   const handleSubmitExtractor = () => {
     if (!content.trim()) {
@@ -38,7 +48,12 @@ export default function InputSection({ onCompare, onTestBoilerplate, disabled }:
       alert("Please provide the Main HTML and both Reference HTMLs to run the intersection test.")
       return
     }
-    onTestBoilerplate(mainHtml, ref1Html, ref2Html)
+    onTestBoilerplate(mainHtml, ref1Html, ref2Html, {
+      text: textWeight,
+      article: articleWeight,
+      h1: h1Weight,
+      h2: h2Weight
+    })
   }
 
   return (
@@ -173,6 +188,59 @@ export default function InputSection({ onCompare, onTestBoilerplate, disabled }:
               className="flex-1 p-3 border border-input rounded-md font-mono text-sm bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring min-h-[120px]"
             />
           </div>
+
+          {/* Advanced Settings */}
+          <Collapsible open={isConfigOpen} onOpenChange={setIsConfigOpen} className="border rounded-md bg-muted/20">
+            <CollapsibleTrigger className="flex items-center justify-between w-full p-3 font-medium text-sm hover:bg-muted/50 transition-colors">
+              <span className="flex items-center gap-2"><Settings2 className="h-4 w-4"/> Advanced Split Configuration</span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${isConfigOpen ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="p-4 space-y-4 border-t">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="text_weight">Text Length Weight</Label>
+                  <Input 
+                    id="text_weight" 
+                    type="number" 
+                    value={textWeight} 
+                    onChange={(e) => setTextWeight(parseFloat(e.target.value))}
+                    step="0.1"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Multiplier for text content length.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="article_weight">Article Tag Bonus</Label>
+                  <Input 
+                    id="article_weight" 
+                    type="number" 
+                    value={articleWeight} 
+                    onChange={(e) => setArticleWeight(parseFloat(e.target.value))}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Score added for &lt;article&gt; or &lt;main&gt; tags.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="h1_weight">H1 Tag Bonus</Label>
+                  <Input 
+                    id="h1_weight" 
+                    type="number" 
+                    value={h1Weight} 
+                    onChange={(e) => setH1Weight(parseFloat(e.target.value))}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Score added for &lt;h1&gt; presence.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="h2_weight">H2 Tag Bonus</Label>
+                  <Input 
+                    id="h2_weight" 
+                    type="number" 
+                    value={h2Weight} 
+                    onChange={(e) => setH2Weight(parseFloat(e.target.value))}
+                  />
+                  <p className="text-[10px] text-muted-foreground">Score added for &lt;h2&gt; presence.</p>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           {/* Submit Button */}
           <Button onClick={handleSubmitBoilerplate} disabled={disabled} className="w-full mt-2" size="lg">

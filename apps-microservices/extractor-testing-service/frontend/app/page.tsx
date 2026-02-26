@@ -46,7 +46,7 @@ export default function Page() {
     }
   }
 
-  const handleTestBoilerplate = async (mainHtml: string, ref1: string, ref2: string) => {
+  const handleTestBoilerplate = async (mainHtml: string, ref1: string, ref2: string, gapWeights: any) => {
     setLoading(true)
     setError(null)
     setResults(null) // Reset general extractors to ensure clean render
@@ -56,7 +56,8 @@ export default function Page() {
     try {
       const body = {
         main_html: mainHtml,
-        reference_htmls: [ref1, ref2]
+        reference_htmls: [ref1, ref2],
+        gap_weights: gapWeights
       }
 
       const response = await fetch("/api/test-boilerplate", {
