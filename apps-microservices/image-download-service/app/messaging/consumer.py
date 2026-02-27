@@ -24,9 +24,13 @@ class Consumer:
         self.exchange_name = 'data_exchange_produits'
         self.routing_key = 'new_data.product'
         self.queue_name = 'image_download_tasks_queue'
-        self.retry_exchange = 'retry_exchange'
+        
+        # Exchange et routing key internes (isolés pour éviter les boucles de retry cross-service)
+        self.internal_exchange = 'image_download_internal_exchange'
+        self.internal_routing_key = 'image_download.retry'
+        self.retry_exchange = 'image_download_retry_exchange'
         self.retry_queue_name = f'{self.queue_name}_retry'
-        self.dead_letter_exchange = 'dead_letter_exchange'
+        self.dead_letter_exchange = 'image_download_dlq_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
         
         logger.info("✅ Consumer initialisé (aio_pika RobustConnection).")
@@ -41,9 +45,17 @@ class Consumer:
             durable=True
         )
         dlq = await channel.declare_queue(self.dead_letter_queue_name, durable=True)
-        await dlq.bind(dlx, self.routing_key)
+        await dlq.bind(dlx, self.internal_routing_key)
 
-        # --- 2. Infrastructure pour les tentatives (Retry Queue) ---
+        # --- 2. Exchange interne (seul ce service y est bindé, pour les retries) ---
+        internal_exchange = await channel.declare_exchange(
+            self.internal_exchange,
+            aio_pika.ExchangeType.TOPIC,
+            durable=True
+        )
+
+        # --- 3. Infrastructure pour les tentatives (Retry Queue) ---
+        # Retry queue dead-letter vers l'exchange INTERNE (pas data_exchange_produits)
         retry_exchange = await channel.declare_exchange(
             self.retry_exchange, 
             aio_pika.ExchangeType.TOPIC, 
@@ -54,13 +66,13 @@ class Consumer:
             durable=True,
             arguments={
                 'x-message-ttl': RETRY_TTL_MS,
-                'x-dead-letter-exchange': self.exchange_name,
-                'x-dead-letter-routing-key': self.routing_key
+                'x-dead-letter-exchange': self.internal_exchange,
+                'x-dead-letter-routing-key': self.internal_routing_key
             }
         )
-        await retry_queue.bind(retry_exchange, self.routing_key)
+        await retry_queue.bind(retry_exchange, self.internal_routing_key)
 
-        # --- 3. Configuration de la Queue Principale ---
+        # --- 4. Configuration de la Queue Principale ---
         exchange = await channel.declare_exchange(
             self.exchange_name, 
             aio_pika.ExchangeType.TOPIC, 
@@ -71,12 +83,15 @@ class Consumer:
             durable=True,
             arguments={
                 'x-dead-letter-exchange': self.retry_exchange,
-                'x-dead-letter-routing-key': self.routing_key
+                'x-dead-letter-routing-key': self.internal_routing_key
             }
         )
+        # Bind à data_exchange_produits pour les NOUVEAUX messages depuis l'ingestion
         await main_queue.bind(exchange, self.routing_key)
+        # Bind à l'exchange interne pour les RETRIES (isolé, pas de contamination cross-service)
+        await main_queue.bind(internal_exchange, self.internal_routing_key)
         
-        logger.info(f"✅ Queue '{self.queue_name}' declared and bound to '{self.exchange_name}'.")
+        logger.info(f"✅ Queue '{self.queue_name}' declared and bound to '{self.exchange_name}' + '{self.internal_exchange}'.")
         return main_queue
 
     def _get_retry_count(self, message: aio_pika.abc.AbstractIncomingMessage) -> int:
@@ -171,7 +186,7 @@ class Consumer:
                         headers=dlq_headers,
                         delivery_mode=aio_pika.DeliveryMode.PERSISTENT
                     ),
-                    routing_key=self.routing_key
+                    routing_key=self.internal_routing_key
                 )
                 logger.info(f"📤 Message envoyé à la DLQ: {self.dead_letter_queue_name}")
         except Exception as dlq_error:
