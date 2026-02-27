@@ -9,6 +9,21 @@ class HeaderFooterExtractor:
     It uses BeautifulSoup to parse the HTML and extract relevant text.
     """
 
+    # Robust regex patterns based on real-world examples (GDPR, TCF, CMP banners)
+    COOKIE_PATTERNS = [
+        re.compile(r"(?:panneau de gestion|paramétrage|gérer le consentement) (?:des|aux) cookies", re.IGNORECASE),
+        re.compile(r"(?:we use|nous utilisons) (?:des )?cookies", re.IGNORECASE),
+        re.compile(r"(?:ce|this) (?:site|website) (?:utilise|uses) (?:des )?cookies", re.IGNORECASE),
+        re.compile(r"(?:en poursuivant|by continuing) (?:votre|your) (?:navigation|browsing).*?(?:acceptez|accept)", re.IGNORECASE),
+        re.compile(r"stocker et/ou accéder aux informations des appareils", re.IGNORECASE),
+        re.compile(r"store,? access,? and process personal data", re.IGNORECASE),
+        re.compile(r"(?:tout|all) (?:accepter|accept).*?(?:tout|all) (?:refuser|reject)", re.IGNORECASE),
+        re.compile(r"continue without agreeing", re.IGNORECASE),
+        re.compile(r"your privacy is our priority", re.IGNORECASE),
+        re.compile(r"nous respectons votre vie privée", re.IGNORECASE),
+        re.compile(r"cookies.*?(?:necessary|nécessaires).*?(?:functioning|bon fonctionnement)", re.IGNORECASE)
+    ]
+
     def __init__(self, html_content: str):
         self.raw_html = html_content # Store raw HTML for boilerpy3 fallback
         try:
@@ -319,60 +334,54 @@ class HeaderFooterExtractor:
 
     def _is_cookie_banner(self, text: str) -> bool:
         """
-        Detects if a text block is likely a cookie/consent banner.
+        Detects if a text block is likely a cookie/consent banner using robust regex patterns.
         """
-        if not text or len(text) > 1000: # Cookie banners are usually concise
+        if not text or len(text) > 3000: # Increase limit to catch large banners
             return False
             
-        text_lower = text.lower()
-        
-        # High-confidence cookie keywords
-        cookie_keywords = [
-            "cookie", "cookies", "consent", "accept all", "manage preferences", 
-            "privacy policy", "personal data", "tracking", "third-party", 
-            "paramètres des cookies", "accepter", "tout refuser", 
-            "politique de confidentialité", "expérience utilisateur",
-            "we use cookies", "nous utilisons des cookies", "cookie settings",
-            "ce site utilise des cookies", "this website uses cookies"
-        ]
-        
-        match_count = sum(1 for kw in cookie_keywords if kw in text_lower)
-        
-        # Heuristic: If it has multiple keywords or starts with "we use cookies"
-        if match_count >= 2 or "use cookies" in text_lower or "utilisons des cookies" in text_lower:
-            return True
+        # Check against robust regex patterns
+        for pattern in self.COOKIE_PATTERNS:
+            if pattern.search(text):
+                return True
             
         return False
 
-    def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class") -> tuple[str, str, list[dict], dict]:
+    def run_intersection_logic(self, reference_htmls: list[str], strategy: str = "class", gap_config: dict = None) -> tuple[str, str, list[dict], dict, list[dict]]:
         """
         Uses boilerpy3 to strip noisy elements, then performs a structural tree 
         intersection using the specified signature strategy.
         
         Args:
-            reference_htmls: List of HTML strings to compare against.
-            strategy: "class" (Tag+Class) or "structural" (DOM Path).
-            
-        Returns:
-            (Header, Footer, DetailedIntersections, CleanedHTMLsDict)
+            gap_config: Optional dictionary with weights for gap scoring.
+                        Keys: 'text', 'article', 'h1', 'h2'.
         """
         cleaned_htmls = {"main": "", "refs": []}
+        gap_details = []
+        
+        # Default Weights
+        if not gap_config:
+            gap_config = {
+                'text': 1.0,
+                'article': 10000.0,
+                'h1': 5000.0,
+                'h2': 1000.0
+            }
         
         if not hasattr(self, 'raw_html') or not self.raw_html or not reference_htmls:
-            return "", "", [], cleaned_htmls
+            return "", "", [], cleaned_htmls, gap_details
         
         try:
             from boilerpy3 import extractors as BoilerpyExtractor
         except ImportError:
             logging.error("boilerpy3 not installed.")
-            return "", "", [], cleaned_htmls
+            return "", "", [], cleaned_htmls, gap_details
 
         try:
             extractor = BoilerpyExtractor.KeepEverythingExtractor()
             
             # 1. Clean the Main HTML
             clean_main_html = extractor.get_marked_html(self.raw_html)
-            if not clean_main_html: return "", "", [], cleaned_htmls
+            if not clean_main_html: return "", "", [], cleaned_htmls, gap_details
             cleaned_htmls["main"] = clean_main_html
             main_soup = BeautifulSoup(clean_main_html, 'html.parser')
             
@@ -383,10 +392,10 @@ class HeaderFooterExtractor:
                 if c_ref:
                     cleaned_htmls["refs"].append(c_ref)
                     clean_refs.append(BeautifulSoup(c_ref, 'html.parser'))
-            if not clean_refs: return "", "", [], cleaned_htmls
+            if not clean_refs: return "", "", [], cleaned_htmls, gap_details
         except Exception as e:
             logging.error(f"Error during boilerpy3 cleaning: {e}")
-            return "", "", [], cleaned_htmls
+            return "", "", [], cleaned_htmls, gap_details
 
         # 3. Build Reference Maps (Signature -> Text Content)
         # Allows us to retrieve the actual text content from reference pages for visualization
@@ -394,12 +403,14 @@ class HeaderFooterExtractor:
 
         # Decide which signature function to use
         get_sig = self._get_signature_structural if strategy == "structural" else self._get_signature_class
-        target_tags = ['div', 'header', 'footer', 'nav', 'ul', 'section', 'aside']
+        
+        # Expanded target tags to support Tables, Semantic5, and Definition Lists
+        target_tags = ['div', 'header', 'footer', 'nav', 'ul', 'ol', 'dl', 'dt', 'dd', 'section', 'aside', 'main', 'article', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td']
 
         for ref_soup in clean_refs:
             sig_map = {}
             for el in ref_soup.find_all(target_tags):
-                if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
+                if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav', 'main', 'article']:
                     continue
                 s = get_sig(el)
                 # Store the text. If multiple elements have the same signature, we store the first one found.
@@ -415,29 +426,31 @@ class HeaderFooterExtractor:
         for index, el in enumerate(all_main_elements):
             sig = get_sig(el)
             
-            if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav']:
+            if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav', 'main', 'article']:
                 continue
             
             # Intersection Check & Content Similarity
             if all(sig in r_map for r_map in ref_maps):
                 potential_candidates.append((index, el, sig))
 
-        # 4.5. Cookie Purge (DESTRUCTIVE STEP ON DETECTED CANDIDATES)
+        # 4.5. Cookie Purge (DESTRUCTIVE PASS on potential candidates)
         # We perform this BEFORE building the final candidates list to ensure
         # that parent elements have their text updated (removed cookies)
-        # for index, el, sig in potential_candidates:
-        #     # We must re-get the text because previous decompositions might have altered it
-        #     current_text = self.get_cleaned_text(el)
-        #     if self._is_cookie_banner(current_text):
-        #         logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
-        #         el.decompose() 
+        for index, el, sig in potential_candidates:
+            # We must re-get the text because previous decompositions might have altered it
+            if el.parent is None: continue 
+
+            current_text = self.get_cleaned_text(el)
+            # Use the robust regex-based check
+            if self._is_cookie_banner(current_text):
+                logging.info(f"Removing cookie banner element during intersection: {current_text[:50]}...")
+                el.decompose() 
 
         # 5. Build Final Candidates with REFRESHED Text
         candidates = []
         detailed_intersections = []
         
-        # Re-iterate through potential candidates. Some might be decomposed (el.parent is None),
-        # others might have had their children decomposed (text changed).
+        # Re-iterate through potential candidates
         for index, el, sig in potential_candidates:
             if el.parent is None:
                 continue # Element was decomposed
@@ -453,10 +466,8 @@ class HeaderFooterExtractor:
                     if not r_text: 
                         is_content_similar = False
                         break
-
-                    # Calculate similarity ratio
                     ratio = SequenceMatcher(None, text_main, r_text).ratio()
-                    if ratio < 1:
+                    if ratio < 1: # Strict exact match for stability testing
                         is_content_similar = False
                         break
             
@@ -465,7 +476,8 @@ class HeaderFooterExtractor:
                     "signature": sig,
                     "text_main": text_main,
                     "text_ref1": ref_texts[0] if len(ref_texts) > 0 else "",
-                    "text_ref2": ref_texts[1] if len(ref_texts) > 1 else ""
+                    "text_ref2": ref_texts[1] if len(ref_texts) > 1 else "",
+                    "status": "Pending" # Default status
                 }
                 candidates.append((index, el, text_main, len(text_main.split()), match_detail))
 
@@ -478,14 +490,13 @@ class HeaderFooterExtractor:
                 detailed_intersections.append(detail)
 
         if not top_level_candidates:
-            return "", "", [], cleaned_htmls
+            return "", "", [], cleaned_htmls, gap_details
 
         # 7. Identify Main Content Pivot using Weighted Largest Gap
         candidate_indices = sorted([t[0] for t in top_level_candidates])
         boundary_indices = [-1] + candidate_indices + [len(all_main_elements)]
         
         max_gap_score = -1
-        # Default split points (fallback)
         header_cutoff_index = -1 
         footer_start_index = len(all_main_elements)
         
@@ -494,92 +505,89 @@ class HeaderFooterExtractor:
             end_idx = boundary_indices[i+1]
             gap_score = 0.0
             
+            # Metadata for visualization
+            gap_meta = {
+                "start_index": start_idx,
+                "end_index": end_idx,
+                "score": 0.0,
+                "text_score": 0.0,
+                "tag_bonus": 0.0
+            }
+            
             for gap_el_idx in range(start_idx, end_idx):
                 if gap_el_idx >= len(all_main_elements): break
                 el = all_main_elements[gap_el_idx]
-                # Check if element is still valid (not decomposed)
                 if el.parent is None: continue
                 
                 text_len = len(self.get_cleaned_text(el).split())
-                gap_score += text_len
-                if el.name in ['main', 'article']: gap_score += 10000.0
-                if el.find('h1'): gap_score += 5000.0
-                if el.find('h2'): gap_score += 1000.0
-                    
+                
+                # Apply weights from config
+                score_increment = text_len * gap_config.get('text', 1.0)
+                gap_score += score_increment
+                gap_meta["text_score"] += score_increment
+                
+                bonus = 0.0
+                if el.name in ['main', 'article']: 
+                    bonus = gap_config.get('article', 10000.0)
+                if el.find('h1'): 
+                    bonus = max(bonus, gap_config.get('h1', 5000.0))
+                if el.find('h2'): 
+                    bonus = max(bonus, gap_config.get('h2', 1000.0))
+                
+                gap_score += bonus
+                gap_meta["tag_bonus"] += bonus
+            
+            gap_meta["score"] = gap_score
+            gap_details.append(gap_meta)
+            
             if gap_score > max_gap_score:
                 max_gap_score = gap_score
-                # The "Main Content" is this gap.
-                # The candidate just BEFORE this gap (boundary_indices[i]) is the last Header element.
                 header_cutoff_index = boundary_indices[i]
-                # The candidate just AFTER this gap (boundary_indices[i+1]) is the first Footer element.
                 footer_start_index = boundary_indices[i+1]
+
+        # Mark winner in gap details
+        for gd in gap_details:
+            gd["is_winner"] = (gd["score"] == max_gap_score)
 
         # 8. Cluster Filtering
         final_header_indices = []
         final_footer_indices = []
         
-        # Header Group
-        header_group = [t for t in top_level_candidates if t[0] <= header_cutoff_index]
-        if header_group:
-            # Check for gaps within the header group itself
-            # If there's a gap of > 500 unique words between header candidates, keep only the top cluster.
-            last_idx = -1
-            current_cluster = []
-            for t in header_group:
-                idx = t[0]
-                # Calculate unique content between previous candidate and this one
-                gap_text_len = 0
-                if last_idx != -1:
-                    for gap_i in range(last_idx + 1, idx):
-                        # Ensure safe access
-                        if gap_i < len(all_main_elements) and all_main_elements[gap_i].parent:
-                            gap_text_len += len(self.get_cleaned_text(all_main_elements[gap_i]).split())
-                if last_idx != -1 and gap_text_len > 300:
-                    break 
-                current_cluster.append(t)
-                last_idx = idx
-            final_header_indices = [t[0] for t in current_cluster]
+        for t in top_level_candidates:
+            idx = t[0]
+            if idx <= header_cutoff_index:
+                final_header_indices.append(idx)
+            elif idx >= footer_start_index:
+                final_footer_indices.append(idx)
 
-        # Footer Group
-        footer_group = [t for t in top_level_candidates if t[0] >= footer_start_index]
-        if footer_group:
-            footer_group.reverse()
-            last_idx = len(all_main_elements)
-            current_cluster = []
-            for t in footer_group:
-                idx = t[0]
-                gap_text_len = 0
-                for gap_i in range(idx + 1, last_idx):
-                    if gap_i < len(all_main_elements) and all_main_elements[gap_i].parent:
-                        gap_text_len += len(self.get_cleaned_text(all_main_elements[gap_i]).split())
-                if last_idx != len(all_main_elements) and gap_text_len > 300:
-                    break 
-                current_cluster.append(t)
-                last_idx = idx
-            final_footer_indices = [t[0] for t in current_cluster]
-
-        # 9. Assembly with Deduplication
+        # 9. Assembly with Deduplication and Status Tracking
         header_texts = []
         footer_texts = []
-        seen_blocks = set() # (Signature, Text) pair tracker
+        seen_blocks = set()
 
-        for idx, el, text, wc in top_level_candidates:
-            # Re-verify text in case it changed (paranoia check)
+        for k, (idx, el, text, wc) in enumerate(top_level_candidates):
+            detail = detailed_intersections[k]
             current_text = self.get_cleaned_text(el)
-            if not current_text: continue
+            if not current_text: 
+                detail['status'] = "Dropped (Empty)"
+                continue
 
-            # Get signature for dedup
             sig = get_sig(el)
             key = (sig, current_text)
             if key in seen_blocks:
+                detail['status'] = "Dropped (Duplicate)"
                 continue
             
             if idx in final_header_indices:
                 header_texts.append(current_text)
                 seen_blocks.add(key)
+                detail['status'] = "Kept (Header)"
             elif idx in final_footer_indices:
                 footer_texts.append(current_text)
                 seen_blocks.add(key)
+                detail['status'] = "Kept (Footer)"
+            else:
+                detail['status'] = "Dropped (Middle Island)"
 
         header_result = " ".join(header_texts).strip()
         footer_result = " ".join(footer_texts).strip()
@@ -587,29 +595,42 @@ class HeaderFooterExtractor:
         if len(header_result) > 10000: header_result = header_result[:10000]
         if len(footer_result) > 10000: footer_result = footer_result[:10000]
 
-        return header_result, footer_result, detailed_intersections, cleaned_htmls
+        return header_result, footer_result, detailed_intersections, cleaned_htmls, gap_details
 
     def extract_with_fallback(self, reference_htmls: list[str]) -> dict:
-        """Production Logic"""
+        """Production Logic: Structural -> Class -> Original"""
         if not self.soup:
             return {"header": "", "header_method": "None", "footer": "", "footer_method": "None"}
 
-        header = self.extract_header(self.soup)
-        footer = self.extract_footer(self.soup)
+        # Order: 1. Structural, 2. Class, 3. Original
         
-        header_method = "Original (Semantic/CSS Pattern)" if header else "None"
-        footer_method = "Original (Semantic/CSS Pattern)" if footer else "None"
+        # 1. Structural Strategy
+        fallback_h, fallback_f, _, _, _ = self.run_intersection_logic(reference_htmls, strategy="structural")
+        
+        if fallback_h and fallback_f:
+            return {
+                "header": fallback_h, "header_method": "Fallback (boilerpy3 Structural Intersection)",
+                "footer": fallback_f, "footer_method": "Fallback (boilerpy3 Structural Intersection)"
+            }
+            
+        # 2. Class Strategy
+        fallback_h_class, fallback_f_class, _, _, _ = self.run_intersection_logic(reference_htmls, strategy="class")
+        
+        # Partial Merge or Fallback
+        header = fallback_h if fallback_h else fallback_h_class
+        footer = fallback_f if fallback_f else fallback_f_class
+        
+        header_method = "Fallback (Structural)" if fallback_h else ("Fallback (Class)" if fallback_h_class else "None")
+        footer_method = "Fallback (Structural)" if fallback_f else ("Fallback (Class)" if fallback_f_class else "None")
 
-        if not header or not footer:
-            fallback_h, fallback_f, _, _ = self.run_intersection_logic(reference_htmls, strategy="class")
+        # 3. Original Method (Last Resort if completely empty)
+        if not header:
+            header = self.extract_header(self.soup)
+            if header: header_method = "Original (Semantic/CSS Pattern)"
             
-            if not header and fallback_h:
-                header = fallback_h
-                header_method = "Fallback (boilerpy3 Class Intersection)"
-            
-            if not footer and fallback_f:
-                footer = fallback_f
-                footer_method = "Fallback (boilerpy3 Class Intersection)"
+        if not footer:
+            footer = self.extract_footer(self.soup)
+            if footer: footer_method = "Original (Semantic/CSS Pattern)"
 
         return {
             "header": header,
@@ -618,15 +639,21 @@ class HeaderFooterExtractor:
             "footer_method": footer_method
         }
 
-    def extract_all_debug(self, reference_htmls: list[str]) -> dict:
+    def extract_all_debug(self, reference_htmls: list[str], gap_config: dict = None) -> dict:
         """Debug Logic"""
         if not self.soup: return {}
 
         old_header = self.extract_header(self.soup)
         old_footer = self.extract_footer(self.soup)
 
-        class_h, class_f, class_details, cleaned_htmls = self.run_intersection_logic(reference_htmls, strategy="class")
-        struct_h, struct_f, struct_details, _ = self.run_intersection_logic(reference_htmls, strategy="structural")
+        # Pass gap_config to intersection logic
+        class_h, class_f, class_details, cleaned_htmls, gap_analysis = self.run_intersection_logic(
+            reference_htmls, strategy="class", gap_config=gap_config
+        )
+        
+        struct_h, struct_f, struct_details, _, _ = self.run_intersection_logic(
+            reference_htmls, strategy="structural", gap_config=gap_config
+        )
 
         if old_header:
             selected_header = old_header
@@ -673,4 +700,6 @@ class HeaderFooterExtractor:
             "cleaned_html_main": cleaned_htmls.get("main", ""),
             "cleaned_html_ref1": cleaned_htmls.get("refs", ["", ""])[0] if len(cleaned_htmls.get("refs", [])) > 0 else "",
             "cleaned_html_ref2": cleaned_htmls.get("refs", ["", ""])[1] if len(cleaned_htmls.get("refs", [])) > 1 else "",
+            
+            "gap_analysis": gap_analysis
         }

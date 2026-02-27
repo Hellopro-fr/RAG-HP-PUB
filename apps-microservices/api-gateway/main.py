@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+from typing import Any, Dict
 
 import httpx
 import websockets
@@ -84,8 +85,30 @@ logger = logging.getLogger(__name__)
 
 EXCLUDED_HEADERS = {"host", "content-length", "transfer-encoding", "connection"}
 
+# ─── History logging constants ────────────────────────────────────────────────
+# Services whose calls should never be persisted in the history table
+EXCLUDED_SERVICES = {
+    "crawling-service",
+    "image_comparator-service",
+    "graphadmin-service",
+}
+
+# Headers whose values must be redacted before storage (lowercase, case-insensitive)
+SENSITIVE_HEADERS = {"authorization", "cookie", "x-api-key", "set-cookie"}
+
 
 # ─── Fire-and-forget history logging ──────────────────────────────────────────
+
+
+def _sanitize_headers(headers: Dict[str, Any]) -> Dict[str, Any]:
+    """Creates a copy of headers with sensitive values redacted."""
+    clean_headers = {}
+    for k, v in headers.items():
+        if k.lower() in SENSITIVE_HEADERS:
+            clean_headers[k] = "[REDACTED]"
+        else:
+            clean_headers[k] = v
+    return clean_headers
 
 
 async def _log_history(
@@ -98,18 +121,33 @@ async def _log_history(
     duration_ms: int,
 ) -> None:
     """Persist an API call history record; errors are swallowed to not affect clients."""
+
+    # Fast exit if service is excluded
+    if service_name in EXCLUDED_SERVICES:
+        return
+
     try:
+        # Sanitize headers before serializing
+        safe_headers = _sanitize_headers(request_headers)
+
+        # Optimize JSON: If available, use 'orjson.dumps' for faster serialization
+        headers_json = json.dumps(safe_headers, default=str)
+
         await ApiCallHistory.create(
             service_name=service_name,
             method=method,
             path=path,
             status_code=status_code,
             client_ip=client_ip,
-            request_headers=json.dumps(request_headers, default=str),
+            request_headers=headers_json,
             duration_ms=duration_ms,
         )
     except Exception as exc:
-        logger.warning(f"[history] Failed to log API call: {exc}")
+        # Include context in the error log for debugging
+        logger.warning(
+            f"[history] Failed to log API call for {service_name} {path}: {exc}",
+            exc_info=True,
+        )
 
 
 # ─── Proxy route ──────────────────────────────────────────────────────────────
@@ -292,6 +330,14 @@ async def websocket_proxy(service: str, path: str, websocket: WebSocket):
 async def custom_openapi():
     # ── Description publique (visible par tous les utilisateurs) ──────────────
     _PUBLIC_DESCRIPTION = """
+> ⚠️ **Note importante — Authentification désactivée temporairement**
+>
+> Le contrôle d'accès par **Bearer Token** (`access_token`) n'est **pas encore actif**.
+> Vous pouvez appeler tous les endpoints **sans fournir de token** pour le moment.
+> Cette restriction sera activée prochainement.
+
+---
+
 ## 🔐 Authentification — Comment accéder aux services
 
 Tous les appels aux microservices transitent par cette gateway et doivent être authentifiés
@@ -310,7 +356,7 @@ La réponse contient votre `refresh_token`. Conservez-le, il est permanent tant 
 
 ### Étape 2 — Générer un access token
 
-Échangez votre `refresh_token` contre un **access token** à courte durée de vie via `POST /auth/token/refresh` :
+Échangez votre `refresh_token` contre un **access token** avec une durée de vie de 24h via `POST /auth/token/refresh` :
 
 ```json
 {
@@ -319,15 +365,15 @@ La réponse contient votre `refresh_token`. Conservez-le, il est permanent tant 
 }
 ```
 
-La réponse contient un `access_token` valable pour une durée limitée.
+La réponse contient un `access_token` valable pour une durée de 24h.
 
 ### Étape 3 — Appeler les services
 
 ### 🖥️ Utilisation dans Swagger UI
 
 1. Exécutez `GET /auth/token/refresh-tokens` pour obtenir votre `refresh_token`.
-2. Exécutez `POST /auth/token/refresh` — l'`access_token` est automatiquement pré-rempli dans le champ **Bearer Token**.
-3. Cliquez sur **🔒 Authorize**, collez le token manuellement, puis validez.
+2. Exécutez `POST /auth/token/refresh` — pour obtenir l'`access_token`.
+3. Cliquez sur **🔒 Authorize**, collez l'access token dans le champ **Bearer Token**, puis validez.
 
 ### ⚙️ Pour les requêtes APIs
 

@@ -369,3 +369,62 @@ class Archiver:
                     logger.error(f"Failed to delete {archive['filename']}: {e}")
         
         return deleted_count
+
+    async def get_errors(self, domain: str, hours: int = None, clear: bool = False) -> List[Dict]:
+        """
+        Load and optionally clear the errors for a domain.
+        
+        Args:
+            domain: The domain name
+            hours: If provided, only return errors from the last N hours
+            clear: If True, remove the errors file after reading
+        """
+        from datetime import timedelta
+        
+        errors_path = os.path.join(self.images_base, domain, "errors.json")
+        
+        if not os.path.exists(errors_path):
+            return []
+            
+        try:
+            async with aiofiles.open(errors_path, 'r') as f:
+                content = await f.read()
+                all_errors = json.loads(content) if content.strip() else []
+            
+            # Filtrer par plage horaire si hours est spécifié
+            if hours is not None and hours > 0:
+                cutoff = datetime.now() - timedelta(hours=hours)
+                filtered_errors = []
+                for err in all_errors:
+                    try:
+                        err_date = datetime.fromisoformat(err.get("date", ""))
+                        if err_date >= cutoff:
+                            filtered_errors.append(err)
+                    except (ValueError, TypeError):
+                        # Si la date est invalide, on inclut l'erreur par sécurité
+                        filtered_errors.append(err)
+                errors = filtered_errors
+            else:
+                errors = all_errors
+            
+            if clear:
+                import fcntl
+                lock_path = f"{errors_path}.lock"
+                # Blocking IO needs to be in executor
+                loop = asyncio.get_running_loop()
+                def _clear():
+                    with open(lock_path, 'w') as lock_file:
+                        fcntl.flock(lock_file, fcntl.LOCK_EX)
+                        try:
+                            if os.path.exists(errors_path):
+                                os.remove(errors_path)
+                        finally:
+                            fcntl.flock(lock_file, fcntl.LOCK_UN)
+                            
+                await loop.run_in_executor(None, _clear)            
+                
+            return errors
+        except Exception as e:
+            logger.error(f"Error reading errors for {domain}: {e}")
+            return []
+

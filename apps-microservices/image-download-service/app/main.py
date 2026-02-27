@@ -348,6 +348,28 @@ async def mark_synced(domain: str, request: SyncRequest = None):
         print(f"Sync error: {e}")
         return JSONResponse(status_code=500, content={"status": "error", "message": "Internal server error"})
 
+@app.get("/sync/{domain}/errors", tags=["Sync"])
+async def get_domain_errors(domain: str, hours: int = None, clear: bool = False):
+    """
+    Get list of image download errors for a specific domain.
+    
+    **Parameters:**
+    - `domain`: The domain name
+    - `hours`: Only return errors from the last N hours (optional, default: all errors)
+    - `clear`: Whether to clear/delete the errors log after reading
+    """
+    try:
+        errors = await archiver.get_errors(domain, hours=hours, clear=clear)
+        return {
+            "domain": domain,
+            "error_count": len(errors),
+            "hours_filter": hours,
+            "errors": errors
+        }
+    except Exception as e:
+        print(f"Get errors status error: {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": "Internal server error"})
+
 @app.get("/sync/{domain}/pending", tags=["Sync"])
 async def get_pending_products(domain: str):
     """

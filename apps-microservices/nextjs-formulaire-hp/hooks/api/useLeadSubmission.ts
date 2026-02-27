@@ -12,6 +12,20 @@ import { trackLeadSubmitted, trackLeadSubmissionError } from '@/lib/analytics/gt
 import { trackGA4LeadSubmitted } from '@/lib/analytics/ga4';
 import { tagHotjarUser, HOTJAR_TAGS } from '@/lib/analytics/hotjar';
 
+interface UserAnswer {
+  questionId: string | number;
+  answerId?: string | string[] | number;
+}
+
+type QAResult = Record<string | number, string | string[] | number>;
+
+function formatUserQuestionAnswers(data: UserAnswer[]): QAResult {
+  return data.reduce<QAResult>((acc, { questionId, answerId }) => {
+    if (answerId !== undefined) acc[questionId] = answerId;
+    return acc;
+  }, {});
+}
+
 /**
  * Convertit le ProfileType vers StatutAcheteur pour le PHP
  */
@@ -103,7 +117,8 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
   const { suppliers = [] } = options;
 
   // Récupérer les réponses Q/R de l'utilisateur depuis le flow store
-  const userQuestionAnswers        = useFlowStore.getState().userQuestionAnswers || [];
+  const userQuestionAnswers        = formatUserQuestionAnswers(useFlowStore.getState().userQuestionAnswers) || [];
+
   const equivalenceCaracteristique = useFlowStore.getState().equivalenceCaracteristique || [];
   const ddc                        = useFlowStore.getState().ddc || '';
 
@@ -132,7 +147,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
           address            : data.profile.address || '',
           type_societe       : data.profile.type_societe || '',
         },
-        message               : data.contact.message || 'Demande de devis via UX Matching',
+        message               : data.contact.message || '',
         produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data): [],
         criteres              : data.answers,
         souhait_devis         : data.source === 2,
@@ -142,7 +157,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
         info_acheteur_matching: construireTabMatchingAcheteur({ values: data }),
         ddc_is_i              : ddc,
         // JSON stringifié des questions/réponses utilisateur (debug / tracking)
-        question_reponse_acheteur: userQuestionAnswers.length > 0 ? JSON.stringify(userQuestionAnswers) : undefined,
+        question_reponse_acheteur: userQuestionAnswers ? JSON.stringify(userQuestionAnswers) : undefined,
         caracteristiques: equivalenceCaracteristique.length > 0 ? JSON.stringify(equivalenceCaracteristique.map(
           function (o) {
             return {

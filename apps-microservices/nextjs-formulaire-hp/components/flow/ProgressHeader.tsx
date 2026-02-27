@@ -76,7 +76,7 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
 
         {/* Expert help - desktop */}
         <a
-          href="tel:+33123456789"
+          href="tel:+33745882953"
           className="hidden lg:flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <Image
@@ -87,12 +87,12 @@ const ProgressHeader = ({ steps, currentStep, progress }: ProgressHeaderProps) =
             className="h-7 w-7 rounded-full object-cover ring-1 ring-border"
           />
           <span className="text-xs">Besoin d'aide ?</span>
-          <span className="font-medium text-foreground">01 23 45 67 89</span>
+          <span className="font-medium text-foreground">07 45 88 29 53</span>
         </a>
 
         {/* Expert help - mobile/tablet (icon only) */}
         <a
-          href="tel:+33123456789"
+          href="tel:+33745882953"
           className="lg:hidden flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
         >
           <Image
