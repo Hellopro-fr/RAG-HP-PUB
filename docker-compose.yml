@@ -589,6 +589,7 @@ services:
     logging: *logging_defaults
     networks:
       - services-net
+    init: true
 
   mysql:
     image: mysql:8.0
