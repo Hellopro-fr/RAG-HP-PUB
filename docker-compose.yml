@@ -223,7 +223,9 @@ services:
       - EMBEDDING_BATCH_SIZE=8
       - TOTAL_MAX_CONCURRENT_REQUESTS=3
       - HIGH_PRIORITY_RATIO=0.2
+      - MEDIUM_PRIORITY_RATIO=0.3
       - HIGH_PRIORITY_SERVICES=api-recherche-service
+      - MEDIUM_PRIORITY_SERVICES=api-classification-service
     # depends_on:
     #   triton-server:
     #     condition: service_healthy
