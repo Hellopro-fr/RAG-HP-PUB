@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     # Assuming input comes from the same exchange as products (data_graph_exchange_produits?) or a dedicated one.
     # In api-ingestion (implied), it likely publishes to specific exchanges per collection.
     # Let's assume standardized exchange/queue names.
-    INPUT_EXCHANGE: str = "data_graph_exchange_categories"
-    INPUT_ROUTING_KEY: str = "new_data.categories"
+    INPUT_EXCHANGE: str = "graph-data_graph_exchange_categories"
+    INPUT_ROUTING_KEY: str = "graph-new_data.categories"
     INPUT_QUEUE: str = "graph_rag_categorie_queue"
 
     # gRPC Services

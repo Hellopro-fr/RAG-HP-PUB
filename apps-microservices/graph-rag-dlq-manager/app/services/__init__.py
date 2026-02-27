@@ -201,13 +201,17 @@ class RabbitMQAMQPClient:
         target_exchange: str,
         target_routing_key: str,
         count: int = 10,
+        use_original_headers: bool = False,
     ) -> Dict[str, Any]:
         """
         Requeue messages from a DLQ queue to another exchange.
 
         This function:
         1. Gets messages from the source queue (with ack to remove them)
-        2. Publishes them to the target exchange with the specified routing key
+        2. For each message, checks for x-original-exchange / x-original-routing-key headers
+           (set by processor services when publishing to DLQ).
+           If found and use_original_headers=True, routes back to the original exchange.
+        3. Falls back to the caller-provided target_exchange / target_routing_key.
         """
         try:
             await self.connect()
@@ -226,28 +230,53 @@ class RabbitMQAMQPClient:
                     "processed_count": 0,
                 }
 
-            # Declare target exchange
-            exchange = await self.channel.declare_exchange(
-                target_exchange,
-                aio_pika.ExchangeType.TOPIC,
-                durable=True,
-            )
+            # Cache of declared exchanges to avoid re-declaring on each message
+            declared_exchanges: Dict[str, aio_pika.abc.AbstractExchange] = {}
+
+            async def get_or_declare_exchange(exchange_name: str):
+                if exchange_name not in declared_exchanges:
+                    declared_exchanges[exchange_name] = (
+                        await self.channel.declare_exchange(
+                            exchange_name,
+                            aio_pika.ExchangeType.TOPIC,
+                            durable=True,
+                        )
+                    )
+                return declared_exchanges[exchange_name]
 
             processed_count = 0
             errors = []
 
             for msg in messages:
                 try:
+                    # Determine routing target from original headers if requested
+                    headers = msg.headers or {}
+                    orig_exchange = headers.get("x-original-exchange")
+                    orig_routing_key = headers.get("x-original-routing-key")
+
+                    if use_original_headers and orig_exchange and orig_routing_key:
+                        route_exchange = orig_exchange
+                        route_routing_key = orig_routing_key
+                        logging.info(
+                            f"📍 Using original headers: exchange={orig_exchange}, routing_key={orig_routing_key}"
+                        )
+                    else:
+                        route_exchange = target_exchange
+                        route_routing_key = target_routing_key
+
+                    # Get or declare the target exchange
+                    exchange = await get_or_declare_exchange(route_exchange)
+
                     # Re-publish the message payload
                     message_body = json.dumps(msg.payload).encode("utf-8")
                     amqp_message = aio_pika.Message(
                         body=message_body,
                         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
                     )
-                    await exchange.publish(amqp_message, routing_key=target_routing_key)
+                    await exchange.publish(amqp_message, routing_key=route_routing_key)
                     processed_count += 1
                     logging.info(
-                        f"📤 Requeued message {msg.message_id} to {target_exchange}/{target_routing_key}"
+                        f"📤 Requeued message {msg.message_id} to {route_exchange}/{route_routing_key}"
                     )
                 except Exception as e:
                     errors.append(
