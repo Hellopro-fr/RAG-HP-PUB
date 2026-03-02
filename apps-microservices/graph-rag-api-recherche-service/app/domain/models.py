@@ -233,7 +233,7 @@ class ResultProduct(BaseModel):
 class MetadonneUtilisateurs(BaseModel):
     pays: Optional[str] = Field(None, description="Localisation de l'acheteur")
     typologie: Optional[int] = Field(
-        ...,
+        None,
         description="Typologie d'entreprise de l'acheteur, 1:professionnel, 2:particulier",
     )
     id_pays: Optional[int] = Field(None, description="ID du pays")
