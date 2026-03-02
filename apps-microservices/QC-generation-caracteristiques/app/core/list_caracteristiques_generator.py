@@ -28,7 +28,7 @@ class ListCaracteristiquesGenerator:
     PROMPT_CARACTERISTIQUE_INITIAL_ID = "95"
     # PROMPT_CARACTERISTIQUE_INITIAL_ID = "103"
     ETAPE = "3"
-    GEMINI_MODEL = "gemini-3-pro-preview"
+    GEMINI_MODEL = "gemini-3.1-pro-preview"
     
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
