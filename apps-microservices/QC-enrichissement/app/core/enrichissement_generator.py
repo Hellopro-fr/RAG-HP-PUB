@@ -28,7 +28,7 @@ class EnrichissementGenerator:
     PROMPT_VERIFICATION_ID = "99"
     # PROMPT_VERIFICATION_ID = "106"
     ETAPE = "5"
-    GEMINI_MODEL = "gemini-3-pro-preview"
+    GEMINI_MODEL = "gemini-3.1-pro-preview "
     
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
