@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # LLM - Gemini (utilisé par ce service)
     GEMINI_API_KEY: str
-    GEMINI_MODEL_NAME: str = "gemini-3-pro-preview"
+    GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
     
     # API HelloPro
     # HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M" #dev

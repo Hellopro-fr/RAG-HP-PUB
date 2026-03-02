@@ -30,7 +30,7 @@ class InfoCaracteristiquesGenerator:
     # PROMPT_CARACTERISTIQUE_TEXTUELLE_ID = "104"
     # PROMPT_CARACTERISTIQUE_NUM_ID = "105"
     ETAPE = "4"
-    GEMINI_MODEL = "gemini-3-pro-preview"
+    GEMINI_MODEL = "gemini-3.1-pro-preview"
     
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
