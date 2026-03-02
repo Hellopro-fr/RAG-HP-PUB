@@ -42,10 +42,10 @@ class CollectionNameGraph(str, Enum):
 
 
 RoutingKeysGraph = {
-    CollectionNameGraph.PRODUIT: "new_data.product",
-    CollectionNameGraph.CATEGORIE: "new_data.categories",
-    CollectionNameGraph.FOURNISSEUR: "new_data.fournisseurs",
-    CollectionNameGraph.QUESTION: "new_data.question",
-    CollectionNameGraph.REPONSE: "new_data.reponse",
-    CollectionNameGraph.CARACTERISTIQUE: "new_data.caracteristique",
+    CollectionNameGraph.PRODUIT: "graph-new_data.product",
+    CollectionNameGraph.CATEGORIE: "graph-new_data.categories",
+    CollectionNameGraph.FOURNISSEUR: "graph-new_data.fournisseurs",
+    CollectionNameGraph.QUESTION: "graph-new_data.question",
+    CollectionNameGraph.REPONSE: "graph-new_data.reponse",
+    CollectionNameGraph.CARACTERISTIQUE: "graph-new_data.caracteristique",
 }

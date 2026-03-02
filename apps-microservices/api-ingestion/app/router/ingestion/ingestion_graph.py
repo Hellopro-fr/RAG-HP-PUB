@@ -46,7 +46,7 @@ async def publish_to_rabbitmq(
                 message="La connexion à RabbitMQ n'est pas disponible.",
             )
 
-    exchange_name = f"data_graph_exchange_{payload.collection}"
+    exchange_name = f"graph-data_graph_exchange_{payload.collection}"
     # if payload.collection == "produits_2":
     #     exchange_name = f"data_graph_exchange_produits"
 
@@ -155,7 +155,7 @@ async def publish_lot_rabbitmq(
                     # Update counter (thread-safe for Counter)
                     collection_counter[str(payload.collection)] += 1
 
-                    exchange_name = f"data_graph_exchange_{payload.collection}"
+                    exchange_name = f"graph-data_graph_exchange_{payload.collection}"
                     routing_key = routing_key_collection_graph(payload.collection)
                     data = payload.model_dump()
 
