@@ -1158,7 +1158,8 @@ class RecommendationService:
              CASE
                 WHEN etat_score = 1.0 THEN
                     CASE
-                        WHEN $user_typologie IS NOT NULL AND ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
+                        WHEN $user_typologie IS NULL THEN 1.0
+                        WHEN ($user_typologie IN coalesce(info_soc.typologie, []) OR toString($user_typologie) IN coalesce(info_soc.typologie, [])) THEN 1.0
                         ELSE $t_unmatched
                     END
                 ELSE 1.0

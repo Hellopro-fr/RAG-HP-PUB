@@ -59,7 +59,7 @@ class Consumer:
         await retry_queue.bind(retry_exchange, routing_key=self.routing_key)
         main_exchange = await self.channel.declare_exchange(self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True)
         self.queue = await self.channel.declare_queue(self.queue_name, durable=True,
-            arguments={"x-dead-letter-exchange": self.retry_exchange, "x-dead-letter-routing-key": self.routing_key})
+            arguments={"x-dead-letter-exchange": self.retry_exchange, "x-dead-letter-routing-key": self.routing_key, "x-consumer-timeout": 7200000})
         await self.queue.bind(main_exchange, routing_key=self.routing_key)
 
     def _get_retry_count(self, message: AbstractIncomingMessage) -> int:
