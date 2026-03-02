@@ -1,74 +1,78 @@
 /**
  * Corrige les problèmes d'encodage UTF-8 mal interprété en Latin-1 (ISO-8859-1)
  * Exemple: "CaractÃ©ristiques" → "Caractéristiques"
+ *
+ * Approche : remplacement direct des séquences mojibake connues
+ * sans toucher aux caractères déjà corrects.
  */
 
 /**
- * Patterns de mojibake typiques (UTF-8 lu comme Latin-1)
- * Si ces patterns sont présents, le texte a besoin d'être corrigé
+ * Map des séquences mojibake → caractères corrects
+ * UTF-8 lu comme Latin-1 (ISO-8859-1)
  */
-const MOJIBAKE_PATTERNS = [
-  /Ã©/,  // é
-  /Ã¨/,  // è
-  /Ãª/,  // ê
-  /Ã /,  // à
-  /Ã¢/,  // â
-  /Ã´/,  // ô
-  /Ã®/,  // î
-  /Ã¹/,  // ù
-  /Ã»/,  // û
-  /Ã§/,  // ç
-  /Ã‰/,  // É
-  /Ã€/,  // À
-  /â¢/,  // • (bullet corrompu)
+const MOJIBAKE_REPLACEMENTS: [string | RegExp, string][] = [
+  // Lettres accentuées minuscules
+  ['Ã©', 'é'],
+  ['Ã¨', 'è'],
+  ['Ãª', 'ê'],
+  ['Ã«', 'ë'],
+  ['Ã ', 'à'],
+  ['Ã¢', 'â'],
+  ['Ã¤', 'ä'],
+  ['Ã´', 'ô'],
+  ['Ã¶', 'ö'],
+  ['Ã®', 'î'],
+  ['Ã¯', 'ï'],
+  ['Ã¹', 'ù'],
+  ['Ã»', 'û'],
+  ['Ã¼', 'ü'],
+  ['Ã§', 'ç'],
+  ['Ã±', 'ñ'],
+  ['Å"', 'œ'],
+
+  // Lettres accentuées majuscules
+  ['Ã‰', 'É'],
+  ['Ã€', 'À'],
+  ['Ã‚', 'Â'],
+  ['Ã"', 'Ô'],
+  ['Ã‡', 'Ç'],
+  ['Ãˆ', 'È'],
+  ['ÃŠ', 'Ê'],
+  ['Ã™', 'Ù'],
+  ['Ã›', 'Û'],
+  ['Ã', 'Í'],   // Í seul
+
+  // Ponctuation et symboles
+  ['â€™', "'"],    // Apostrophe typographique '
+  ['â€˜', "'"],    // Apostrophe ouvrante '
+  ['â€œ', '"'],    // Guillemet ouvrant "
+  ['â€', '"'],     // Guillemet fermant "
+  ['â€"', '–'],    // En dash –
+  ['â€"', '—'],    // Em dash —
+  ['â€¦', '...'],  // Ellipsis …
+  ['â€¢', '•'],    // Bullet •
+  ['â¢', '-'],     // Bullet corrompu → tiret
+  ['Â°', '°'],     // Degré °
+  ['Â«', '«'],     // Guillemet français «
+  ['Â»', '»'],     // Guillemet français »
+  ['Â ', ' '],     // Espace insécable corrompu
+  ['â‚¬', '€'],    // Euro €
 ];
-
-/**
- * Séquences corrompues et leurs remplacements simples (ASCII)
- */
-const CORRUPTED_SEQUENCES: [RegExp, string][] = [
-  [/â¢/g, '-'],            // Bullet point → tiret
-  [/â€™/g, "'"],           // Apostrophe typographique
-  [/â€œ/g, '"'],           // Guillemet ouvrant
-  [/â€/g, '"'],            // Guillemet fermant
-  [/â€"/g, '-'],           // Em dash → tiret
-  [/â€"/g, '-'],           // En dash → tiret
-  [/â€¦/g, '...'],         // Ellipsis
-];
-
-/**
- * Vérifie si le texte ressemble à du mojibake (UTF-8 mal décodé)
- */
-function needsEncodingFix(text: string): boolean {
-  return MOJIBAKE_PATTERNS.some(pattern => pattern.test(text));
-}
 
 export function fixBrokenEncoding(text: string | null | undefined): string {
   if (!text) return '';
 
-  // Si le texte ne ressemble pas à du mojibake, le retourner tel quel
-  if (!needsEncodingFix(text)) {
-    return text;
-  }
+  let result = text;
 
-  try {
-    // Étape 1: Remplacer les séquences corrompues par des équivalents ASCII
-    let result = text;
-    for (const [pattern, replacement] of CORRUPTED_SEQUENCES) {
-      result = result.replace(pattern, replacement);
+  // Remplacer chaque séquence mojibake par son équivalent correct
+  for (const [mojibake, correct] of MOJIBAKE_REPLACEMENTS) {
+    if (typeof mojibake === 'string') {
+      // Remplacement global de la string
+      result = result.split(mojibake).join(correct);
+    } else {
+      result = result.replace(mojibake, correct);
     }
-
-    // Étape 2: Décoder UTF-8/Latin-1 mojibake
-    const bytes = new Uint8Array(
-      [...result].map(char => char.charCodeAt(0) & 0xff)
-    );
-    result = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-
-    // Étape 3: Nettoyer les caractères de remplacement
-    result = result.replace(/�/g, '');
-
-    return result || text;
-  } catch {
-    return text;
   }
+
+  return result;
 }

@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     RABBITMQ_URL: str = "amqp://user:password@localhost:5672/"
 
     # Exchanges and Queues
-    INPUT_EXCHANGE: str = "data_graph_exchange_fournisseurs"
-    INPUT_ROUTING_KEY: str = "new_data.fournisseurs"
+    INPUT_EXCHANGE: str = "graph-data_graph_exchange_fournisseurs"
+    INPUT_ROUTING_KEY: str = "graph-new_data.fournisseurs"
     INPUT_QUEUE: str = "graph_rag_fournisseur_processing_queue"
 
     # gRPC Services

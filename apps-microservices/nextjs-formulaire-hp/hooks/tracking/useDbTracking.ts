@@ -86,8 +86,10 @@ export function useDbTracking() {
       // Déterminer type_dmd_categ (0: par défaut, 1: produit insuffisant, 2: intentionnelle)
       let typeDmdCateg = 0;
       if (storeFlowType === 'pas_assez_produits') {
+        typeFlow = 1;
         typeDmdCateg = 1;
       } else if (storeFlowType === 'pas_trouve_recherchez') {
+        typeFlow = 1;
         typeDmdCateg = 2;
       }
 

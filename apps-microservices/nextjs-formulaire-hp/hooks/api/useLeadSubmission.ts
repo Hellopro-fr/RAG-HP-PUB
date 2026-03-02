@@ -147,7 +147,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
           address            : data.profile.address || '',
           type_societe       : data.profile.type_societe || '',
         },
-        message               : data.contact.message || 'Demande de devis via UX Matching',
+        message               : data.contact.message || '',
         produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data): [],
         criteres              : data.answers,
         souhait_devis         : data.source === 2,

@@ -26,9 +26,9 @@ class Consumer:
         self.exchange_name = settings.INPUT_EXCHANGE
         self.routing_key = settings.INPUT_ROUTING_KEY
         self.queue_name = settings.INPUT_QUEUE
-        self.retry_exchange = "retry_exchange"
+        self.retry_exchange = "graph-retry_exchange"
         self.retry_queue_name = f"{self.queue_name}_retry"
-        self.dead_letter_exchange = "dead_letter_exchange"
+        self.dead_letter_exchange = "graph-dead_letter_exchange"
         self.dead_letter_queue_name = f"{self.queue_name}_dlq"
 
     async def connect(self):
@@ -170,6 +170,9 @@ class Consumer:
                         dlq_headers["x-validation-failed"] = True
                         dlq_headers["x-missing-nodes"] = json.dumps(missing_nodes)
                         dlq_headers["x-extracted-nodes"] = extracted_nodes
+                        dlq_headers["x-original-exchange"] = self.exchange_name
+                        dlq_headers["x-original-routing-key"] = self.routing_key
+                        dlq_headers["x-original-queue"] = self.queue_name
 
                         await self.channel.default_exchange.publish(
                             aio_pika.Message(
@@ -200,6 +203,9 @@ class Consumer:
                     e, "graph-rag-llm-extractor-processor", 0, message
                 )
 
+                headers["x-original-exchange"] = self.exchange_name
+                headers["x-original-routing-key"] = self.routing_key
+                headers["x-original-queue"] = self.queue_name
                 await self.channel.default_exchange.publish(
                     aio_pika.Message(
                         body=message.body,
@@ -228,6 +234,9 @@ class Consumer:
                         message,
                     )
 
+                    headers["x-original-exchange"] = self.exchange_name
+                    headers["x-original-routing-key"] = self.routing_key
+                    headers["x-original-queue"] = self.queue_name
                     await self.channel.default_exchange.publish(
                         aio_pika.Message(
                             body=message.body,

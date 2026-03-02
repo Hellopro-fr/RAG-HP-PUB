@@ -26,9 +26,9 @@ class Consumer:
         self.exchange_name = settings.INPUT_EXCHANGE
         self.routing_key = settings.INPUT_ROUTING_KEY
         self.queue_name = settings.INPUT_QUEUE
-        self.retry_exchange = "retry_exchange"
+        self.retry_exchange = "graph-retry_exchange"
         self.retry_queue_name = f"{self.queue_name}_retry"
-        self.dead_letter_exchange = "dead_letter_exchange"
+        self.dead_letter_exchange = "graph-dead_letter_exchange"
         self.dead_letter_queue_name = f"{self.queue_name}_dlq"
 
         # Retry DLQ for failed normalizations (goes to retry processor)
@@ -160,6 +160,9 @@ class Consumer:
                 headers = DLQProperties.create_dlq_headers(
                     e, "graph-rag-normalize-unite-processor", 0, message
                 )
+                headers["x-original-exchange"] = self.exchange_name
+                headers["x-original-routing-key"] = self.routing_key
+                headers["x-original-queue"] = self.queue_name
                 await self.channel.default_exchange.publish(
                     aio_pika.Message(
                         body=message.body,
