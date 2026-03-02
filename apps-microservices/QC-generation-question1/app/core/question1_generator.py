@@ -30,7 +30,7 @@ class Question1Generator:
     PROMPT_QUESTION1_ID = "97"
     # PROMPT_QUESTION1_ID = "101"
     ETAPE = "1"
-    GEMINI_MODEL = "gemini-3.1-pro-preview "
+    GEMINI_MODEL = "gemini-3-pro-preview"
     
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()

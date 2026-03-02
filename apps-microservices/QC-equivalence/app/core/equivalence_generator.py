@@ -26,7 +26,7 @@ class EquivalenceGenerator:
     PROMPT_EQUIVALENCE_ID = "101"
     # PROMPT_EQUIVALENCE_ID = "107"
     ETAPE = "6"    
-    GEMINI_MODEL = "gemini-3.1-pro-preview "
+    GEMINI_MODEL = "gemini-3-pro-preview"
     
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
