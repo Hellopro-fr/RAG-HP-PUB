@@ -138,6 +138,68 @@ class LanguageDetector:
         # Si >10% de mots français pondérés → signal fort
         return min(1.0, french_ratio * 10)
     
+    def _remove_cookie_consent_elements(self, soup: BeautifulSoup) -> None:
+        """
+        Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD.
+        
+        Ces popups sont souvent en français (conformité RGPD) même sur des sites
+        non-francophones, ce qui biaise la détection de langue.
+        """
+        # Sélecteurs CSS ciblant les patterns courants de bannières cookies/consentement
+        cookie_consent_selectors = [
+            # Cookiebot (ex: CybotCookiebotDialogContentWrapper)
+            '[class*="CybotCookiebot"]', '[id*="CybotCookiebot"]',
+            '[id*="Cookiebot"]', '[class*="Cookiebot"]',
+            # Patterns génériques cookies
+            '[class*="cookie-banner"]', '[id*="cookie-banner"]',
+            '[class*="cookie_banner"]', '[id*="cookie_banner"]',
+            '[class*="cookieBanner"]', '[id*="cookieBanner"]',
+            '[class*="cookie-consent"]', '[id*="cookie-consent"]',
+            '[class*="cookie_consent"]', '[id*="cookie_consent"]',
+            '[class*="cookieConsent"]', '[id*="cookieConsent"]',
+            '[class*="cookie-notice"]', '[id*="cookie-notice"]',
+            '[class*="cookie_notice"]', '[id*="cookie_notice"]',
+            '[class*="cookieNotice"]', '[id*="cookieNotice"]',
+            '[class*="cookie-popup"]', '[id*="cookie-popup"]',
+            '[class*="cookie-modal"]', '[id*="cookie-modal"]',
+            '[class*="cookie-bar"]', '[id*="cookie-bar"]',
+            '[class*="cookie-wall"]', '[id*="cookie-wall"]',
+            # Consent Management Platforms (CMP)
+            '[class*="consent-banner"]', '[id*="consent-banner"]',
+            '[class*="consent_banner"]', '[id*="consent_banner"]',
+            '[class*="consentBanner"]', '[id*="consentBanner"]',
+            '[class*="consent-modal"]', '[id*="consent-modal"]',
+            '[class*="consent-popup"]', '[id*="consent-popup"]',
+            '[class*="cmp-"]', '[id*="cmp-"]',
+            # GDPR / RGPD
+            '[class*="gdpr"]', '[id*="gdpr"]',
+            '[class*="rgpd"]', '[id*="rgpd"]',
+            # Privacy
+            '[class*="privacy-banner"]', '[id*="privacy-banner"]',
+            '[class*="privacy-popup"]', '[id*="privacy-popup"]',
+            '[class*="privacy-notice"]', '[id*="privacy-notice"]',
+            # Bibliothèques spécifiques populaires
+            '[id*="tarteaucitron"]', '[class*="tarteaucitron"]',
+            '[id*="axeptio"]', '[class*="axeptio"]',
+            '[class*="didomi"]', '[id*="didomi"]',
+            '[class*="onetrust"]', '[id*="onetrust"]',
+            '[id*="OneTrust"]', '[class*="OneTrust"]',
+            '[class*="cc-banner"]', '[class*="cc-window"]',  # CookieConsent JS lib
+            '[class*="cc_banner"]',
+            '[id*="cookiescript"]', '[class*="cookiescript"]',
+            '[class*="eupopup"]', '[id*="eupopup"]',
+            '[class*="cookie-law"]', '[id*="cookie-law"]',
+            '[class*="cookielaw"]', '[id*="cookielaw"]',
+        ]
+        
+        for selector in cookie_consent_selectors:
+            try:
+                for el in soup.select(selector):
+                    el.decompose()
+            except Exception:
+                # En cas de sélecteur invalide, on continue
+                pass
+    
     def detect_from_text_content(self, html: str) -> Optional[dict]:
         """
         Détecte la langue par analyse NLP du contenu textuel visible.
@@ -155,6 +217,9 @@ class LanguageDetector:
             # Note: on garde header, footer, nav car ils peuvent contenir du contenu pertinent
             for element in soup(['head','script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
                 element.decompose()
+            
+            # Supprimer les bannières cookies/consentement (souvent en français sur sites non-FR)
+            self._remove_cookie_consent_elements(soup)
             
             text = soup.get_text(separator=' ', strip=True)
             
@@ -283,6 +348,9 @@ class LanguageDetector:
             # Harmonisé avec detect_from_text_content (même liste d'éléments)
             for element in soup(['head','script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
                 element.decompose()
+            
+            # Supprimer les bannières cookies/consentement (souvent en français sur sites non-FR)
+            self._remove_cookie_consent_elements(soup)
             
             text = soup.get_text(separator=' ', strip=True)
             
