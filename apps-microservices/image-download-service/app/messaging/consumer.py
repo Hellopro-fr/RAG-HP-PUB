@@ -105,66 +105,77 @@ class Consumer:
     async def _on_message_callback(self, message: aio_pika.abc.AbstractIncomingMessage):
         """
         Callback asynchrone pour traiter un message avec logique de retry/DLQ.
+        Gestion manuelle de ACK/NACK pour éviter les conflits avec message.process().
         """
-        async with message.process():
-            product_id = "unknown"
-            domain = "unknown"
-            product_name = "unknown"
-            try:
-                data = json.loads(message.body)
-                product_data = data.get("data", data)
-                product_id = product_data.get('id_produit', 'unknown')
-                domain = product_data.get('domaine', 'unknown')
-                product_name = product_data.get('nom') or product_data.get('nom_produit') or product_data.get('name') or f"produit-{product_id}"
-                
-                logger.info(f"📥 Message reçu pour le produit '{product_id}'.")
-                
-                # --- FILTER: Process only 'SITEWEB' or 'test_web' source ---
-                source = product_data.get("source") or data.get("origin")
-                
-                if source not in ["SITEWEB", "test_web"]:
-                    logger.info(f"⏭️ Skipping product {product_id}: Source '{source}' not in allowed list.")
-                    return  # ACK automatique via context manager
-                
-                logger.info(f"🔄 Processing product {product_id} (Source: {source})")
-                
-                # Appel async natif - pas besoin de wrapper synchrone !
-                result_data = await self.downloader.process_product(product_data)
-                
-                # Log si l'image existait déjà (déduplication)
-                if result_data.get("skipped"):
-                    logger.info(f"⏭️ Image already exists for {product_id}, skipped download.")
-                elif result_data.get("processed_images"):
-                    logger.info(f"✅ Downloaded {len(result_data['processed_images'])} image(s) for {product_id}")
-                else:
-                    logger.warning(f"⚠️ No images processed for {product_id}")
+        product_id = "unknown"
+        domain = "unknown"
+        product_name = "unknown"
+        try:
+            data = json.loads(message.body)
+            product_data = data.get("data", data)
+            product_id = product_data.get('id_produit', 'unknown')
+            domain = product_data.get('domaine', 'unknown')
+            product_name = product_data.get('nom') or product_data.get('nom_produit') or product_data.get('name') or f"produit-{product_id}"
+            
+            logger.info(f"📥 Message reçu pour le produit '{product_id}'.")
+            
+            # --- FILTER: Process only 'SITEWEB' or 'test_web' source ---
+            source = product_data.get("source") or data.get("origin")
+            
+            if source not in ["SITEWEB", "test_web"]:
+                logger.info(f"⏭️ Skipping product {product_id}: Source '{source}' not in allowed list.")
+                await message.ack()
+                return
+            
+            logger.info(f"🔄 Processing product {product_id} (Source: {source})")
+            
+            # Appel async natif - pas besoin de wrapper synchrone !
+            result_data = await self.downloader.process_product(product_data)
+            
+            # Guard contre un retour None inattendu
+            if result_data is None:
+                logger.warning(f"⚠️ process_product returned None for {product_id}")
+                await message.ack()
+                return
+            
+            # Log si l'image existait déjà (déduplication)
+            if result_data.get("skipped"):
+                logger.info(f"⏭️ Image already exists for {product_id}, skipped download.")
+            elif result_data.get("processed_images"):
+                logger.info(f"✅ Downloaded {len(result_data['processed_images'])} image(s) for {product_id}")
+            else:
+                logger.warning(f"⚠️ No images processed for {product_id}")
+            
+            await message.ack()
 
-            except (json.JSONDecodeError, ValueError) as e:
-                # Erreur permanente: le message est invalide.
-                logger.error(f"❌ Erreur permanente pour {product_id}. Message envoyé à la DLQ finale. Erreur: {e}")
+        except (json.JSONDecodeError, ValueError) as e:
+            # Erreur permanente: le message est invalide.
+            logger.error(f"❌ Erreur permanente pour {product_id}. Message envoyé à la DLQ finale. Erreur: {e}")
+            # Reporter l'erreur dans le fichier errors.json pour le reporting
+            await self.downloader.save_error(
+                domain, product_id, product_name, "",
+                f"Message invalide (JSON malformé) — Envoyé en DLQ: {e}",
+                "dlq", "critical"
+            )
+            await self._send_to_dlq(message, e, 0)
+            await message.ack()
+
+        except Exception as e:
+            # Erreur potentiellement transitoire.
+            retry_count = self._get_retry_count(message)
+            if retry_count < MAX_RETRIES:
+                logger.warning(f"❌ Erreur transitoire pour {product_id} (essai {retry_count + 1}/{MAX_RETRIES + 1}). Retrying. Erreur: {e}")
+                await message.nack(requeue=False)  # NACK pour retry via DLX
+            else:
+                logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives pour {product_id}. Envoi à la DLQ. Erreur: {e}")
                 # Reporter l'erreur dans le fichier errors.json pour le reporting
                 await self.downloader.save_error(
                     domain, product_id, product_name, "",
-                    f"Message invalide (JSON malformé) — Envoyé en DLQ: {e}",
+                    f"Échec après {MAX_RETRIES + 1} tentatives — Envoyé en DLQ: {e}",
                     "dlq", "critical"
                 )
-                await self._send_to_dlq(message, e, 0)
-
-            except Exception as e:
-                # Erreur potentiellement transitoire.
-                retry_count = self._get_retry_count(message)
-                if retry_count < MAX_RETRIES:
-                    logger.warning(f"❌ Erreur transitoire pour {product_id} (essai {retry_count + 1}/{MAX_RETRIES + 1}). Retrying. Erreur: {e}")
-                    await message.nack(requeue=False)  # NACK pour retry via DLX
-                else:
-                    logger.error(f"❌ Échec après {MAX_RETRIES + 1} tentatives pour {product_id}. Envoi à la DLQ. Erreur: {e}")
-                    # Reporter l'erreur dans le fichier errors.json pour le reporting
-                    await self.downloader.save_error(
-                        domain, product_id, product_name, "",
-                        f"Échec après {MAX_RETRIES + 1} tentatives — Envoyé en DLQ: {e}",
-                        "dlq", "critical"
-                    )
-                    await self._send_to_dlq(message, e, MAX_RETRIES)
+                await self._send_to_dlq(message, e, MAX_RETRIES)
+                await message.ack()
     
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
         """Envoie le message à la Dead-Letter Queue avec les métadonnées d'erreur."""
