@@ -163,7 +163,7 @@ class LanguageDetector:
                 return None
             
             # Limiter le texte analysé (performance)
-            text = text[:5000]
+            text = text[:10000]
 
             # Détection avec langdetect
             langdetect_result = None
@@ -291,7 +291,7 @@ class LanguageDetector:
                 return None
             
             # Limiter le texte analysé (performance)
-            text = text[:5000]
+            text = text[:10000]
             
             # Nettoyer le texte (fastText n'aime pas les sauts de ligne)
             text_clean = ' '.join(text.split())
