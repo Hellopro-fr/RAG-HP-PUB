@@ -11,6 +11,7 @@ import type { GeoData } from '@/lib/stores/flow-store';
 import type { MatchingResponse, ProductInfoResponse } from '@/types/matching';
 import { basePath } from '@/lib/utils';
 import { trackGeoZoneView, trackGeoZoneComplete } from '@/lib/analytics';
+import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 
 
 interface Country {
@@ -65,6 +66,7 @@ export default function GeoZoneClient({
   const [showLoader, setShowLoader] = useState(false);
   const [RedirectGoToSomethingToAdd, setRedirectGoToSomethingToAdd] = useState(false);
   const { goToQuestionnaire, goToProfile, goToSelection , goToSomethingToAdd} = useFlowNavigation();
+  const { trackDbEvent } = useDbTracking();
   const hasTrackedView = useRef(false);
 
   // Track page view au montage
@@ -72,12 +74,27 @@ export default function GeoZoneClient({
     if (!hasTrackedView.current) {
       hasTrackedView.current = true;
       trackGeoZoneView();
+
+      // Track DB - page view
+      const equivalencesCount = Object.keys(dynamicEquivalences).length;
+      trackDbEvent('profile', 'geo_zone_view', {
+        has_dynamic_equivalences: equivalencesCount > 0,
+        equivalences_count: equivalencesCount,
+      }, categoryId, 1);
     }
-  }, []);
+  }, [trackDbEvent, categoryId, dynamicEquivalences]);
 
   const handleComplete = async (data: GeoData) => {
     // Track la complétion de l'étape geo-zone
     trackGeoZoneComplete();
+
+    // Track DB - geo-zone complete
+    trackDbEvent('profile', 'geo_zone_complete', {
+      country: data.country,
+      country_id: data.countryId,
+      has_postal_code: !!data.postalCode,
+      has_city: !!data.city,
+    }, categoryId, 1);
 
     // Sauvegarder les données dans le store
     setGeoData(data);
@@ -201,6 +218,34 @@ export default function GeoZoneClient({
         recommendedCount: enrichedRecommended.length,
         othersCount: enrichedOthers.length
       });
+
+      // Tracking DB - Matching results
+      const matchingTrackingData = {
+        request: {
+          id_categorie: categoryId,
+          metadonnee_utilisateurs,
+          liste_caracteristique: consolidatedEquivalences,
+          scoring: scoringParams,
+        },
+        response: {
+          results_count: totalProducts,
+          top_products: apiData.top_produit?.map((p: any) => ({
+            id: p.id_produit,
+            score: Number(Number(p.score).toFixed(2)),
+            id_fournisseur: p.id_fournisseur
+          })) || [],
+          liste_products: apiData.liste_produit.map((p: any) => ({
+            id: p.id_produit,
+            score: Number(Number(p.score).toFixed(2)),
+            id_fournisseur: p.id_fournisseur
+          })),
+        },
+        equivalences_count: consolidatedEquivalences.length,
+        has_insufficient_results: hasInsufficientResults,
+        will_redirect_to_something_to_add: hasInsufficientResults,
+      };
+
+      trackDbEvent('matching', 'initial', matchingTrackingData, categoryId, 2);
 
       // Délai pour éviter détection WAF
       await new Promise(resolve => setTimeout(resolve, 500));
