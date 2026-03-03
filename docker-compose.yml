@@ -1250,6 +1250,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/image-comparison-service/Dockerfile
     profiles: ["comparison"]
+    restart: unless-stopped
     expose:
       - "8504"
     env_file:
