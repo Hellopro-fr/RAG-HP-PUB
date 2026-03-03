@@ -70,25 +70,25 @@ export function useDbTracking() {
           token: token,
         };
         sessionStorage.setItem(metaKey, 'true');
-      }
-
-      // Récupérer le flowType depuis le store pour le tracking session
-      const storeFlowType = useFlowStore.getState().flowType;
-      
+      }      
       // type_flow (0: Non terminé | 1: flow demande categ | 2: flow produit)
       let typeFlow = 0;
-      if (storeFlowType === 'principal') {
-        typeFlow = 2;
-      } else if (storeFlowType) {
-        typeFlow = 1;
-      }
-      
+
       // Déterminer type_dmd_categ (0: par défaut, 1: produit insuffisant, 2: intentionnelle)
       let typeDmdCateg = 0;
-      if (storeFlowType === 'pas_assez_produits') {
+      if (eventType === "matching") {
+        if ( eventName === "success" || eventName === "initial") {
+          typeFlow = 2;
+        } else {
+          typeFlow = 1;
+        }      
+      }
+
+      if (eventName === "insufficient_results") { 
         typeFlow = 1;
         typeDmdCateg = 1;
-      } else if (storeFlowType === 'pas_trouve_recherchez') {
+      }
+      if (eventName === "form_submit_custom_need") { 
         typeFlow = 1;
         typeDmdCateg = 2;
       }
