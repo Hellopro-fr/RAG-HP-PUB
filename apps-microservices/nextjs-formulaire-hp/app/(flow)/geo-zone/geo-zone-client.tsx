@@ -61,7 +61,7 @@ export default function GeoZoneClient({
   priorityCountries = [],
   otherCountries = []
 }: GeoZoneClientProps) {
-  const { setGeoData, categoryId, dynamicEquivalences, characteristicsMap, setMatchingResults } = useFlowStore();
+  const { setGeoData, categoryId, dynamicEquivalences, characteristicsMap, setMatchingResults, setEquivalenceCaracteristique } = useFlowStore();
   const [showLoader, setShowLoader] = useState(false);
   const [RedirectGoToSomethingToAdd, setRedirectGoToSomethingToAdd] = useState(false);
   const { goToQuestionnaire, goToProfile, goToSelection , goToSomethingToAdd} = useFlowNavigation();
@@ -96,6 +96,9 @@ export default function GeoZoneClient({
     try {
       // Consolider les équivalences du questionnaire
       const consolidatedEquivalences = consolidateEquivalences(dynamicEquivalences);
+
+      // Sauvegarder les équivalences consolidées dans le store pour ModifyCriteriaForm
+      setEquivalenceCaracteristique(consolidatedEquivalences);
 
       // Préparer les métadonnées utilisateur avec les données géo
       // N'ajouter que les champs renseignés
