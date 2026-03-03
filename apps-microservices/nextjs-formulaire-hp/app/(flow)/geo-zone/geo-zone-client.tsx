@@ -229,6 +229,10 @@ export default function GeoZoneClient({
         },
         response: {
           results_count: totalProducts,
+          top_products_with_good_score: topProductsWithGoodScore.length,
+          min_top_products: MIN_TOP_PRODUCTS,
+          min_score_threshold: MIN_SCORE_THRESHOLD,
+          redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
           top_products: apiData.top_produit?.map((p: any) => ({
             id: p.id_produit,
             score: Number(Number(p.score).toFixed(2)),
@@ -245,7 +249,13 @@ export default function GeoZoneClient({
         will_redirect_to_something_to_add: hasInsufficientResults,
       };
 
-      trackDbEvent('matching', 'initial', matchingTrackingData, categoryId, 2);
+      trackDbEvent(
+        'matching',
+        hasInsufficientResults ? 'insufficient_results' : 'success',
+        matchingTrackingData,
+        categoryId,
+        2
+      );
 
       // Délai pour éviter détection WAF
       await new Promise(resolve => setTimeout(resolve, 500));
