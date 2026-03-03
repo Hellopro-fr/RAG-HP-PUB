@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, RotateCcw, ArrowLeft, Send, Search, LayoutGrid,
 import { cn, getAssetPath } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { useFlowStore } from "@/lib/stores/flow-store";
+import { useFlowNavigation } from "@/hooks/useFlowNavigation";
 import {
   getCharacteristicLabel,
   formatSelectedValues,
@@ -42,6 +43,9 @@ interface SupplierSelectionModalProps {
 
 
 const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierSelectionModalProps) => {
+  // Navigation hook
+  const { goToProfile } = useFlowNavigation();
+
   // Récupérer les résultats de matching et les caractéristiques depuis le store
   const {
     matchingResults,
@@ -425,6 +429,15 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
             <ContactForm
               selectedSuppliers={selectedSuppliersList}
               onBack={() => setViewState("selection")}
+              onContactComplete={(isExistingBuyer) => {
+                if (isExistingBuyer) {
+                  // Acheteur connu : le formulaire a déjà soumis le lead et navigue automatiquement
+                  // Pas besoin d'action supplémentaire ici
+                } else {
+                  // Acheteur inconnu : naviguer vers Profile pour compléter les informations
+                  goToProfile();
+                }
+              }}
             />
           )}
 
@@ -443,13 +456,24 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           )}
 
           {viewState === "custom-need" && (
-            <CustomNeedForm onBack={() => {
-              // Remettre flowType à 'principal' quand l'utilisateur annule
-              // depuis le formulaire "pas trouvé ce que vous cherchez"
-              setStoreFlowType('principal');
-              setFlowType('principal');
-              setViewState("selection");
-            }} />
+            <CustomNeedForm
+              onBack={() => {
+                // Remettre flowType à 'principal' quand l'utilisateur annule
+                // depuis le formulaire "pas trouvé ce que vous cherchez"
+                setStoreFlowType('principal');
+                setFlowType('principal');
+                setViewState("selection");
+              }}
+              onContactComplete={(isExistingBuyer) => {
+                if (isExistingBuyer) {
+                  // Acheteur connu : le formulaire a déjà soumis le lead et navigue automatiquement
+                  // Pas besoin d'action supplémentaire ici
+                } else {
+                  // Acheteur inconnu : naviguer vers Profile pour compléter les informations
+                  goToProfile();
+                }
+              }}
+            />
           )}
         </div>
 

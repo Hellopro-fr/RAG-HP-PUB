@@ -25,8 +25,8 @@ const EXISTING_BUYERS = [
 ];
 
 interface SomethingToAddFormProps {
-  onNext: () => void;
   onBack: () => void;
+  onContactComplete?: (isExistingBuyer: boolean) => void;
 }
 
 const STEPS = [
@@ -34,7 +34,7 @@ const STEPS = [
   { id: 2, label: "Vos coordonnées" },
 ];
 
-const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
+const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormProps) => {
 
   const {    
     setContactData,
@@ -269,14 +269,6 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
       message: description
     };
 
-    // finalData.files.forEach((file: File, index: number) => {
-    //   console.log(`Fichier ${index}:`, {
-    //     nom: file.name,
-    //     taille: file.size,
-    //     type: file.type
-    //   });
-    // });
-
     setContactData(finalData);
 
     // Tracking DB - Something to add form submission
@@ -289,18 +281,27 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
       flow_type: flowType
     }, categoryId, 1);
 
-    leadSubmission.mutate({
-      contact: finalData,
-      profile: profileData!,
-      answers: userAnswers,
-      selectedSupplierIds: selectedSupplierIds,
-      submittedAt: new Date().toISOString(),
-      userKnownStatus,
-      categoryId: categoryId?.toString(),
-      source: 1, // AO
-    });
-
-    // onNext();
+    // Si acheteur connu: soumettre le lead directement
+    // Si acheteur inconnu: aller au ProfileTypeStep (le lead sera soumis après)
+    if (isKnownBuyer) {
+      leadSubmission.mutate({
+        contact: finalData,
+        profile: profileData!,
+        answers: userAnswers,
+        selectedSupplierIds: selectedSupplierIds,
+        submittedAt: new Date().toISOString(),
+        userKnownStatus,
+        categoryId: categoryId?.toString(),
+        source: 1, // AO
+      }, {
+        onSuccess: () => {
+          onContactComplete?.(true);
+        }
+      });
+    } else {
+      // Unknown buyer: go to ProfileTypeStep
+      onContactComplete?.(false);
+    }
   };
 
   // Initialize Speech Recognition
@@ -665,10 +666,15 @@ const SomethingToAddForm = ({ onNext, onBack }: SomethingToAddFormProps) => {
                         <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent-foreground border-t-transparent" />
                         Envoi en cours...
                       </>
-                    ) : (
+                    ) : isKnownBuyer ? (
                       <>
                         <Send className="h-5 w-5" />
-                        Envoyer ma demande
+                        Valider ma demande
+                      </>
+                    ) : (
+                      <>
+                        Suivant
+                        <ArrowRight className="h-5 w-5" />
                       </>
                     )}
                   </button>

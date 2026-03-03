@@ -4,6 +4,7 @@ import ProfileTypeStep from '@/components/flow/ProfileTypeStep';
 import MatchingLoader from '@/components/flow/MatchingLoader';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useProcessMatchingLogic } from '@/hooks/api/useProcessMatchingLogic';
+import { useFlowStore } from '@/lib/stores/flow-store';
 
 interface Country {
   id: number;
@@ -19,8 +20,9 @@ export default function ProfileClient({
   priorityCountries,
   otherCountries,
 }: ProfileClientProps) {
-  const { goToSelection, goToQuestionnaire, goToSomethingToAdd } = useFlowNavigation();
+  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { showLoader, submitProfile, redirectGoToSomethingToAdd } = useProcessMatchingLogic();
+  const { geoData } = useFlowStore();
 
   const handleLoaderComplete = () => {
     // Navigate directly - no need to reset loader state
@@ -33,8 +35,8 @@ export default function ProfileClient({
   };
 
   const handleBack = () => {
-    // Navigate back to questionnaire (with GET params preserved)
-    goToQuestionnaire();
+    // Navigate back to selection/contact step
+    goToSelection();
   };
 
   if (showLoader) {
@@ -47,6 +49,7 @@ export default function ProfileClient({
       onBack={handleBack}
       priorityCountries={priorityCountries}
       otherCountries={otherCountries}
+      geoData={geoData || undefined}
     />
   );
 }

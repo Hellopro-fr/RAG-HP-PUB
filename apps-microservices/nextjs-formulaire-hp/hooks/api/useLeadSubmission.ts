@@ -29,7 +29,8 @@ function formatUserQuestionAnswers(data: UserAnswer[]): QAResult {
 /**
  * Convertit le ProfileType vers StatutAcheteur pour le PHP
  */
-function profileTypeToStatut(profileType: ProfileType): StatutAcheteur {
+function profileTypeToStatut(profileType: ProfileType | undefined): StatutAcheteur {
+  if (!profileType) return '1'; // Par défaut entreprise
   switch (profileType) {
     case 'pro_france':
       return '1'; // Entreprise avec SIRET
@@ -91,15 +92,15 @@ function construireTabMatchingAcheteur({
   const type_lead = source == 2 ? "exclusif" : "apo";
 
   const objectInfoAcheteur = {
-    id_acheteur: '',
+    id_acheteur: contact.id_acheteur || '',
     type_lead: type_lead,
     mail: contact.email,
-    cp: profile.postalCode || '',
-    pays: profile.countryID || 1,
-    typologie: profileTypeToStatut(profile.type),
+    cp: profile?.postalCode || '',
+    pays: profile?.countryID || 1,
+    typologie: profileTypeToStatut(profile?.type),
     id_rubrique: categoryId || '0',
     id_produit: id_produit || '',
-    naf_acheteur: profile.naf || '',
+    naf_acheteur: profile?.naf || '',
     societe_originel: id_societe,
   };
 
@@ -135,17 +136,17 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
           isKnown            : data.contact.isKnown ? '1'                                                          : '0',
           telephone          : data.contact.phone,
           indicatif_tel      : data.contact.countryCode || '+33',
-          societe            : data.contact.company || data.profile.company?.name || data.profile.companyName || '',
-          id_siret_insee     : data.profile.siret || '',
-          code_postal        : data.profile.postalCode || '',
-          ville              : data.profile.city || '',
-          pays               : data.profile.countryID || 1,                                                                // 1 = France par défaut
-          statut             : profileTypeToStatut(data.profile.type),
-          naf                : data.profile.naf || '',
+          societe            : data.contact.company || data.profile?.company?.name || data.profile?.companyName || '',
+          id_siret_insee     : data.profile?.siret || '',
+          code_postal        : data.profile?.postalCode || '',
+          ville              : data.profile?.city || '',
+          pays               : data.profile?.countryID || 1,                                                                // 1 = France par défaut
+          statut             : profileTypeToStatut(data.profile?.type),
+          naf                : data.profile?.naf || '',
           id_pays_tel        : data.contact.id_pays_tel || 1,
           id_societe_acheteur: data.contact.isKnown ? data.contact.id_acheteur                                     : 0,
-          address            : data.profile.address || '',
-          type_societe       : data.profile.type_societe || '',
+          address            : data.profile?.address || '',
+          type_societe       : data.profile?.type_societe || '',
         },
         message               : data.contact.message || '',
         produits              : data.source === 2 ? suppliersToProduitsSelection(data.selectedSupplierIds, suppliers, data): [],
@@ -207,7 +208,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
     onSuccess: (response, variables) => {
       // Track successful lead submission
       if (response.data?.leadId) {
-        const profileType = variables.profile.type ?? 'unknown';
+        const profileType = variables.profile?.type ?? 'unknown';
         trackLeadSubmitted(
           variables.selectedSupplierIds.length,
           profileType,

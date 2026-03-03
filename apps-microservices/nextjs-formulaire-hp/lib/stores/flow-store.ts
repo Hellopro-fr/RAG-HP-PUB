@@ -141,6 +141,14 @@ export interface CategoryStats {
   suppliersCount: number;
 }
 
+// Données de géolocalisation (country, postalCode, city)
+export interface GeoData {
+  countryId: number;
+  country: string;
+  postalCode: string;
+  city: string;
+}
+
 export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
@@ -164,6 +172,9 @@ export interface FlowState {
 
   // État du profil
   profileData: ProfileData | null;
+
+  // Données de géolocalisation
+  geoData: GeoData | null;
 
   contactData: ContactFormData | null;
 
@@ -245,6 +256,7 @@ export interface FlowState {
 
   resetDynamicAnswers: () => void;
   setProfileData: (data: ProfileData) => void;
+  setGeoData: (data: GeoData) => void;
   setContactData: (data: ContactFormData) => void;
   setSelectedSupplierIds: (ids: string[]) => void;
   toggleSupplier: (supplierId: string) => void;
@@ -264,6 +276,7 @@ const initialState = {
   dynamicAnswers: {},
   dynamicEquivalences: {},
   profileData: null,
+  geoData: null,
   contactData: null,
   selectedSupplierIds: [],
   startTime: null,
@@ -347,6 +360,8 @@ export const useFlowStore = create<FlowState>()(
         })),
 
       setProfileData: (data) => set({ profileData: data }),
+
+      setGeoData: (data) => set({ geoData: data }),
 
       setContactData: (data) => set({ contactData: data }),
 

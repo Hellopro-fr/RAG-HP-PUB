@@ -4,12 +4,20 @@ import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import SomethingToAddForm from '@/components/flow/SomethingToAddForm';
 
 export default function SomethingToAddClient() {
-  const { goToContactSimple, goToChoice } = useFlowNavigation();
+  const { goToProfile, goToChoice } = useFlowNavigation();
 
   return (
     <SomethingToAddForm
-      onNext={goToContactSimple}
       onBack={goToChoice}
+      onContactComplete={(isExistingBuyer) => {
+        if (isExistingBuyer) {
+          // Acheteur connu : le formulaire a déjà soumis le lead et navigue automatiquement
+          // Pas besoin d'action supplémentaire ici
+        } else {
+          // Acheteur inconnu : naviguer vers Profile pour compléter les informations
+          goToProfile();
+        }
+      }}
     />
   );
 }

@@ -10,6 +10,8 @@ export {
   trackQuestionView,
   trackQuestionNavigation,
   trackQuestionnaireComplete as trackGTMQuestionnaireComplete,
+  trackGeoZoneView,
+  trackGeoZoneComplete,
   trackProfileView,
   trackProfileComplete,
   trackProductSelectionChange,
