@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, RotateCcw, ArrowLeft, Send, Search, LayoutGrid, List, ThumbsUp, ThumbsDown } from "lucide-react";
 import { cn, getAssetPath } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
@@ -121,6 +121,37 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
   const { trackDbEvent } = useDbTracking();
 
+  // Refs pour éviter les stale closures dans le handler popstate
+  const selectedProductIdRef = useRef<string | null>(null);
+  const showComparisonRef = useRef<boolean>(false);
+  const viewStateRef = useRef<ViewState>('selection');
+
+  useEffect(() => { selectedProductIdRef.current = selectedProductId; }, [selectedProductId]);
+  useEffect(() => { showComparisonRef.current = showComparison; }, [showComparison]);
+  useEffect(() => { viewStateRef.current = viewState; }, [viewState]);
+
+  // Push une entrée dans l'historique quand on quitte la vue "selection"
+  useEffect(() => {
+    if (viewState !== 'selection') {
+      history.pushState({ viewState }, '');
+    }
+  }, [viewState]);
+
+  // Intercept bouton "précédent" du navigateur : ferme les modals ou revient à "selection"
+  useEffect(() => {
+    const handlePopState = () => {
+      if (selectedProductIdRef.current !== null) {
+        setSelectedProductId(null);
+      } else if (showComparisonRef.current) {
+        setShowComparison(false);
+      } else if (viewStateRef.current !== 'selection') {
+        setViewState('selection');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // Convertir le tableau en Set pour les opérations
   const selectedIds = useMemo(() => new Set(selectedSupplierIds), [selectedSupplierIds]);
 
@@ -194,6 +225,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
   const handleViewDetails = (id: string) => {
     setSelectedProductId(id);
+    history.pushState({ modal: 'product' }, '');
     // Note: Le tracking est fait dans ProductDetailModal au montage
   };
 
@@ -504,6 +536,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                 onClick={() => {
                   trackComparisonModalView();
                   setShowComparison(true);
+                  history.pushState({ modal: 'comparison' }, '');
                 }}
                 className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-1.5 md:gap-2"
               >
@@ -548,7 +581,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
             matchScore: selectedProduct.matchScore,
             matchReasons: selectedProduct.matchGaps,
           }}
-          onClose={() => setSelectedProductId(null)}
+          onClose={() => history.back()}
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
         />
@@ -559,7 +592,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           products={ALL_SUPPLIERS}
           selectedIds={selectedIds}
           onToggle={toggleSupplier}
-          onClose={() => setShowComparison(false)}
+          onClose={() => history.back()}
         />
       )}
     </div>
