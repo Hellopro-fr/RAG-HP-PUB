@@ -269,7 +269,7 @@ class CaracterisationProduitGenerator:
         
         # Appeler le LLM
         gemini = GeminiProvider(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             thinking_level="low",
             max_retries=10
         )
@@ -336,7 +336,7 @@ class CaracterisationProduitGenerator:
         
         # Appeler le LLM
         gemini = GeminiProvider(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             thinking_level="low",
             max_retries=10
         )
