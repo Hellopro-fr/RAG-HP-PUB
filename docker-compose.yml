@@ -261,6 +261,23 @@ services:
       - services-net
     logging: *logging_defaults
 
+  milvus-collection-duplicator:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/milvus-collection-duplicator/Dockerfile
+    container_name: milvus-collection-duplicator
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "8521:8521"
+    env_file:
+      - .env
+    volumes:
+      - /mnt/data/docker/images/duplication:/app/error_logs
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   nextjs-formulaire-hp:
     build:
       context: .
