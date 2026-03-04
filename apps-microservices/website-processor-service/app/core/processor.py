@@ -9,7 +9,6 @@ from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
 from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
 from common_utils.database.MilvusWebsiteCrud import MilvusWebsiteCrud
-from common_utils.database.QdrantWebsiteCrud import QdrantWebsiteCrud
 from website_processor_service.core.redis_manager import RedisManager
 from website_processor_service.core.exceptions import BatchProcessingError
 
@@ -22,25 +21,21 @@ def get_domain_from_url(url: str) -> str:
     extracted = tldextract.extract(url)
     return f"{extracted.domain}.{extracted.suffix}"
 
-def _check_existing_classification(url: str, domaine: str, bdd: str = "qdrant") -> str | None:
+def _check_existing_classification(url: str, domaine: str) -> str | None:
     """
-    Vérifie si l'URL existe déjà dans la base vectorielle et récupère son page_type.
+    Vérifie si l'URL existe déjà dans la base vectorielle (Milvus) et récupère son page_type.
     Utilisé pour le bypass du template-llm-service : si la page est déjà classifiée,
     on réutilise la classification existante au lieu de refaire un appel LLM.
 
     Args:
         url: L'URL de la page web.
         domaine: Le domaine extrait de l'URL.
-        bdd: Le type de base de données ('milvus' ou 'qdrant').
 
     Returns:
         Le page_type existant (str) si trouvé, None sinon.
     """
     try:
-        if bdd.lower() == "milvus":
-            base_vectorielle = MilvusWebsiteCrud()
-        else:
-            base_vectorielle = QdrantWebsiteCrud()
+        base_vectorielle = MilvusWebsiteCrud()
 
         # On passe un page_type fictif non-header/footer pour déclencher la recherche par URL
         res = base_vectorielle.get_website(url=url, page_type="lookup", domaine=domaine)
@@ -171,7 +166,7 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
         # --- Étape 3.0: Bypass - Vérifier si la page a déjà été classifiée ---
         if not page_type:
             domaine = website_data.get("domaine", get_domain_from_url(url))
-            existing_page_type = _check_existing_classification(url, domaine, bdd)
+            existing_page_type = _check_existing_classification(url, domaine)
             if existing_page_type:
                 # Injecter le page_type existant pour déclencher le bypass
                 # Le consumer routera vers 'data.ready_for_embedding' au lieu de 'data.ready_for_templating'

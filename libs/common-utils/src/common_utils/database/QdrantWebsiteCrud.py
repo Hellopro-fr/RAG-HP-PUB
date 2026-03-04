@@ -178,97 +178,7 @@ class QdrantWebsiteCrud:
         except Exception as e:
             self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la suppression : {e}", exc_info=True)
 
-    def delete_website_by_url(self, url: str) -> Dict[str, Any]:
-        """
-        Supprime tous les chunks associés à une URL donnée.
-        Utilisé pour l'opération d'Upsert des pages standards.
-
-        Args:
-            url: L'URL de la page web à supprimer.
-
-        Returns:
-            Dict avec status success ou error.
-        """
-        model_config = ModelConfig()
-        model_key = model_config.model_id
-
-        try:
-            self._get_or_create_collection(model_config)
-
-            if not url:
-                return {
-                    "status": "error",
-                    "message": "URL requise pour la suppression."
-                }
-
-            delete_filter = Filter(
-                must=[
-                    FieldCondition(key="url", match=MatchValue(value=url))
-                ]
-            )
-
-            self.client.delete(
-                collection_name=self.collection,
-                points_selector=delete_filter
-            )
-
-            self.logger.info(f"[{model_key}] ✓ Suppression par URL terminée pour '{url}'.")
-
-            return {
-                "status": "success",
-                "message": f"Chunks pour l'URL {url} supprimés."
-            }
-        except Exception as e:
-            self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la suppression par URL : {e}", exc_info=True)
-            raise
-
-    def delete_website_by_domain_and_page_type(self, domaine: str, page_type: str) -> Dict[str, Any]:
-        """
-        Supprime tous les chunks associés à un domaine et un type de page (header/footer).
-        Utilisé pour l'opération d'Upsert des headers et footers.
-
-        Args:
-            domaine: Le domaine du site web.
-            page_type: Le type de page ('header' ou 'footer').
-
-        Returns:
-            Dict avec status success ou error.
-        """
-        model_config = ModelConfig()
-        model_key = model_config.model_id
-
-        try:
-            self._get_or_create_collection(model_config)
-
-            if not domaine or not page_type:
-                return {
-                    "status": "error",
-                    "message": "Domaine et page_type requis pour la suppression."
-                }
-
-            delete_filter = Filter(
-                must=[
-                    FieldCondition(key="domaine", match=MatchValue(value=domaine)),
-                    FieldCondition(key="page_type", match=MatchValue(value=page_type))
-                ]
-            )
-
-            self.client.delete(
-                collection_name=self.collection,
-                points_selector=delete_filter
-            )
-
-            self.logger.info(f"[{model_key}] ✓ Suppression {page_type} pour domaine {domaine} terminée.")
-
-            return {
-                "status": "success",
-                "message": f"{page_type} pour le domaine {domaine} supprimé."
-            }
-        except Exception as e:
-            self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la suppression par domaine/page_type : {e}", exc_info=True)
-            raise
-
-    def get_website(self, url: str, page_type: str, domaine: str = None) -> Dict[str, Any]:
+    def get_website(self, url: str, page_type: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -298,5 +208,4 @@ class QdrantWebsiteCrud:
             return {"status": "success", "data": [p.payload for p in scroll_result] if scroll_result else []}
         except Exception as e:
             self.logger.error(f"[{model_key}][website] Erreur Qdrant lors de la récupération : {e}", exc_info=True)
-
 
