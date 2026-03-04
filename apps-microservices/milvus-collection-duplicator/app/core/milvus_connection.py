@@ -237,7 +237,18 @@ def duplicate_collection(
     # Only copy fields that are explicitly in the source schema
     # (exclude 'sparse_embedding' which Milvus BM25 Function fills automatically)
     schema_field_types = {f.name: f.dtype for f in source.schema.fields}
-    field_names = [f.name for f in source.schema.fields if f.name != "sparse_embedding"]
+    # Build the set of fields the TARGET collection expects as input data:
+    #   - all target schema fields MINUS auto-generated ones (sparse_embedding from BM25)
+    target_auto_generated = set()
+    for func in schema.functions:
+        for out_name in func.output_field_names:
+            target_auto_generated.add(out_name)
+    target_input_field_names = [
+        f.name for f in schema.fields if f.name not in target_auto_generated
+    ]
+    # For querying the source, exclude fields that don't exist there
+    source_field_set = {f.name for f in source.schema.fields}
+    field_names = [fn for fn in target_input_field_names if fn in source_field_set]
     total_inserted = 0
     effective_total = limit if limit else total_entities
 
@@ -252,6 +263,9 @@ def duplicate_collection(
     logger.info(f"📋  Fields to copy: {field_names}")
     logger.info(
         f"📋  Field types: { {n: str(t) for n, t in schema_field_types.items()} }"
+    )
+    logger.info(
+        f"📋  Auto-generated fields (excluded from insert): {target_auto_generated}"
     )
 
     iterator = source.query_iterator(
@@ -272,9 +286,14 @@ def duplicate_collection(
         # Log first row of first batch for debugging
         if total_inserted == 0 and batch:
             sample = {k: type(v).__name__ for k, v in batch[0].items()}
-            logger.info(f"🔍  Sample row types: {sample}")
+            logger.info(f"🔍  Sample row keys ({len(sample)}): {sample}")
+            logger.info(
+                f"📋  Target expects {len(target_input_field_names)} fields: {target_input_field_names}"
+            )
 
-        # Sanitize each row: convert list/dict values to JSON for VARCHAR fields
+        # Sanitize each row:
+        #  - only keep fields in target_input_field_names (strict filter)
+        #  - convert list/dict values to JSON for VARCHAR fields
         clean_batch = []
         for row in batch:
             clean_row = {}
