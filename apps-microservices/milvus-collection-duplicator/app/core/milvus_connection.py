@@ -292,7 +292,7 @@ def duplicate_collection(
             )
 
         # Sanitize each row:
-        #  - only keep fields in target_input_field_names (strict filter)
+        #  - only keep fields in field_names (strict filter)
         #  - convert list/dict values to JSON for VARCHAR fields
         clean_batch = []
         for row in batch:
@@ -307,9 +307,22 @@ def duplicate_collection(
                     clean_row[field] = val
             clean_batch.append(clean_row)
 
+        # Build column-based data from clean rows.
+        # Using column format (list of lists) prevents pymilvus from adding
+        # an implicit $meta column that causes "more fieldData" errors.
+        col_data = []
+        for field in field_names:
+            col_data.append([row[field] for row in clean_batch])
+
+        if total_inserted == 0:
+            logger.info(
+                f"📋  Inserting {len(field_names)} columns × {len(clean_batch)} rows. "
+                f"Columns: {field_names}"
+            )
+
         # Insert batch — if it fails, fall back to row-by-row to identify bad rows
         try:
-            target.insert(clean_batch)
+            target.insert(col_data)
             total_inserted += len(clean_batch)
         except Exception as batch_err:
             logger.warning(
@@ -318,7 +331,8 @@ def duplicate_collection(
             )
             for i, row in enumerate(clean_batch):
                 try:
-                    target.insert([row])
+                    single_col = [[row[field]] for field in field_names]
+                    target.insert(single_col)
                     total_inserted += 1
                 except Exception as row_err:
                     pk_value = row.get(pk_field, "unknown") if pk_field else "unknown"
@@ -438,7 +452,17 @@ def retry_failed_rows(
     target.load()
 
     schema_field_types = {f.name: f.dtype for f in source.schema.fields}
-    field_names = [f.name for f in source.schema.fields if f.name != "sparse_embedding"]
+    # Build field list from target schema, excluding BM25 auto-generated fields
+    target_auto_generated = set()
+    for func in target.schema.functions:
+        for out_name in func.output_field_names:
+            target_auto_generated.add(out_name)
+    source_field_set = {f.name for f in source.schema.fields}
+    field_names = [
+        f.name
+        for f in target.schema.fields
+        if f.name not in target_auto_generated and f.name in source_field_set
+    ]
     pk_field = next((f.name for f in source.schema.fields if f.is_primary), None)
 
     # ── Prepare new error file for rows that still fail ──
@@ -467,7 +491,9 @@ def retry_failed_rows(
                 clean_row[field] = val
 
         try:
-            target.insert([clean_row])
+            # Use column-based insert to avoid pymilvus adding implicit $meta column
+            single_col = [[clean_row.get(field)] for field in field_names]
+            target.insert(single_col)
             total_succeeded += 1
             logger.info(f"   ✅ Retried row (pk={pk_value}) — success")
         except Exception as e:
