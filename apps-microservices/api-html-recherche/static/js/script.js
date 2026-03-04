@@ -20,7 +20,7 @@ $(function () {
     useReranker: true,
     rerankerModel: "BAAI/bge-reranker-v2-m3",
     // selectedModel: "google/gemini-flash-1.5", // Mis à jour avec la nouvelle valeur par défaut
-    selectedModel: "gemini-3-pro-preview", // Mis à jour avec la nouvelle valeur par défaut
+    selectedModel: "gemini-3.1-pro-preview", // Mis à jour avec la nouvelle valeur par défaut
     selectedThinking: "high",
     selectedProvider: "gemini",
     isFilterOpen: true,

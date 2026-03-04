@@ -21,7 +21,7 @@ class GeminiClient:
     ) -> dict:
         try:
             model_name = kwargs.get("model") or os.getenv(
-                "GEMINI_MODEL_NAME", "gemini-3-pro-preview"
+                "GEMINI_MODEL_NAME", "gemini-3.1-pro-preview"
             )
 
             # Convert message history to Gemini format
@@ -128,7 +128,7 @@ class GeminiClient:
     ):
         try:
             model_name = kwargs.get("model") or os.getenv(
-                "GEMINI_MODEL_NAME", "gemini-3-pro-preview"
+                "GEMINI_MODEL_NAME", "gemini-3.1-pro-preview"
             )
 
             contents = []
