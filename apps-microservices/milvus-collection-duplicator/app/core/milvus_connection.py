@@ -243,6 +243,11 @@ def duplicate_collection(
     for func in schema.functions:
         for out_name in func.output_field_names:
             target_auto_generated.add(out_name)
+    # Also exclude PK field when auto_id=True (Milvus generates it)
+    if schema.auto_id:
+        pk_name = next((f.name for f in schema.fields if f.is_primary), None)
+        if pk_name:
+            target_auto_generated.add(pk_name)
     target_input_field_names = [
         f.name for f in schema.fields if f.name not in target_auto_generated
     ]
@@ -457,6 +462,11 @@ def retry_failed_rows(
     for func in target.schema.functions:
         for out_name in func.output_field_names:
             target_auto_generated.add(out_name)
+    # Also exclude PK field when auto_id=True (Milvus generates it)
+    if target.schema.auto_id:
+        pk_name = next((f.name for f in target.schema.fields if f.is_primary), None)
+        if pk_name:
+            target_auto_generated.add(pk_name)
     source_field_set = {f.name for f in source.schema.fields}
     field_names = [
         f.name
