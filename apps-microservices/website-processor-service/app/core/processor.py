@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
 from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
+from common_utils.database.MilvusWebsiteCrud import MilvusWebsiteCrud
+from common_utils.database.QdrantWebsiteCrud import QdrantWebsiteCrud
 from website_processor_service.core.redis_manager import RedisManager
 from website_processor_service.core.exceptions import BatchProcessingError
 
@@ -20,10 +22,49 @@ def get_domain_from_url(url: str) -> str:
     extracted = tldextract.extract(url)
     return f"{extracted.domain}.{extracted.suffix}"
 
+def _check_existing_classification(url: str, domaine: str, bdd: str = "qdrant") -> str | None:
+    """
+    Vérifie si l'URL existe déjà dans la base vectorielle et récupère son page_type.
+    Utilisé pour le bypass du template-llm-service : si la page est déjà classifiée,
+    on réutilise la classification existante au lieu de refaire un appel LLM.
+
+    Args:
+        url: L'URL de la page web.
+        domaine: Le domaine extrait de l'URL.
+        bdd: Le type de base de données ('milvus' ou 'qdrant').
+
+    Returns:
+        Le page_type existant (str) si trouvé, None sinon.
+    """
+    try:
+        if bdd.lower() == "milvus":
+            base_vectorielle = MilvusWebsiteCrud()
+        else:
+            base_vectorielle = QdrantWebsiteCrud()
+
+        # On passe un page_type fictif non-header/footer pour déclencher la recherche par URL
+        res = base_vectorielle.get_website(url=url, page_type="lookup", domaine=domaine)
+        
+        if res and res.get("status") == "success":
+            data = res.get("data", [])
+            if data and len(data) > 0:
+                # Récupérer le page_type du premier résultat
+                existing_page_type = data[0].get("page_type")
+                if existing_page_type and existing_page_type not in ["header", "footer"]:
+                    logging.info(f"[{url}] - ⚡ Bypass: Classification existante trouvée: '{existing_page_type}'")
+                    return existing_page_type
+
+    except Exception as e:
+        # En cas d'erreur, on ne bloque pas le flux normal.
+        # On laisse le message passer par le template-llm-service.
+        logging.warning(f"[{url}] - Bypass check échoué (non-bloquant): {e}")
+    
+    return None
+
 def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") -> dict:
     """
     Prend un dictionnaire de produit, le nettoie et prépare le message
-    pour l’étape d’embedding.
+    pour l'étape d'embedding.
 
     Retourne : Un dictionnaire prêt à être publié, ou message avec status='PENDING'.
     Raises : BatchProcessingError si l'extraction batch échoue (pour DLQ).
@@ -125,8 +166,20 @@ def process_website_data_for_embedding(website_data: dict, bdd: str = "qdrant") 
                 original_error=e
             )
 
-    # Étape 3: STANDARD PAGE TREATMENT (Old Logic)
-    else:  
+    # Étape 3: STANDARD PAGE TREATMENT
+    else:
+        # --- Étape 3.0: Bypass - Vérifier si la page a déjà été classifiée ---
+        if not page_type:
+            domaine = website_data.get("domaine", get_domain_from_url(url))
+            existing_page_type = _check_existing_classification(url, domaine, bdd)
+            if existing_page_type:
+                # Injecter le page_type existant pour déclencher le bypass
+                # Le consumer routera vers 'data.ready_for_embedding' au lieu de 'data.ready_for_templating'
+                website_data["page_type"] = existing_page_type
+                page_type = existing_page_type
+                log = "l'embedding (bypass template-llm)"
+                logging.info(f"[{url}] - ⚡ Bypass activé: réutilisation de la classification '{existing_page_type}'.")
+
         logging.info(f"[{url}] - Chemin de traitement: Contenu Principal (Trafilatura).")
         # Étape 3.1: Construction du dictionnaire d'entrée pour le nettoyage
         info = {
