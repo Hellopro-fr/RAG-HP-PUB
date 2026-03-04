@@ -261,8 +261,9 @@ export default function GeoZoneClient({
       await new Promise(resolve => setTimeout(resolve, 500));
 
     } catch (error) {
+      // En cas d'erreur, On bascule vers la demande sur catégorie
+      setRedirectGoToSomethingToAdd(true);
       console.error('[GeoZone] Matching error:', error);
-      // En cas d'erreur, on continue quand même vers la sélection
     }
   };
 

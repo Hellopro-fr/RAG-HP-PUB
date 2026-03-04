@@ -347,7 +347,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       <ProgressHeader
         steps={STEPS}
-        currentStep={1}
+        currentStep={3}
         progress={90}
       />
 
