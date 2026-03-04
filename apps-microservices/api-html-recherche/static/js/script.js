@@ -1347,7 +1347,11 @@ $(function () {
     let title = meta.id_produit || 'Titre non disponible';
     let categorie = meta.categorie || meta.id_categorie || 'N/A';
     switch (result.source) {
-      case "produits_3":
+      // case "produits_3":
+      //   title = meta.nom_produit || title;
+      //   result.source = "Produits"
+      //   break;
+      case "produits_4":
         title = meta.nom_produit || title;
         result.source = "Produits"
         break;
@@ -1491,7 +1495,8 @@ $(function () {
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
             case 'produits':
-              sourceName = 'produits_3';
+              // sourceName = 'produits_3';
+              sourceName = 'produits_4';
               const produitsSource = $('#produitsSource').val();
               if (produitsSource.length > 0) {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
@@ -1581,7 +1586,8 @@ $(function () {
 
       // Si aucune source n'est sélectionnée, utiliser la valeur par défaut du schéma
       if (sourcesAvecFiltres.length === 0) {
-        sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
+        // sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
+        sourcesAvecFiltres = [{ source: "produits_4", filtre: {} }];
       }
 
       // 2. Construire le filtre global (filtre principal)
