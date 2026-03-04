@@ -12,6 +12,8 @@ import copy
 import json
 import logging
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, List
 
 from pymilvus import (
@@ -180,6 +182,7 @@ def duplicate_collection(
     batch_size: int = 500,
     analyzer_language: str = "english",
     limit: Optional[int] = None,
+    parallel_workers: int = 1,
     job_id: Optional[str] = None,
     job_state: Optional[dict] = None,
 ):
@@ -196,6 +199,7 @@ def duplicate_collection(
         batch_size: Number of records per insert batch
         analyzer_language: Language for the BM25 text analyzer
         limit: Optional max number of rows to migrate (for testing)
+        parallel_workers: Number of parallel insert workers (default=1, sequential)
         job_id: Unique job ID used to name the error log file
         job_state: Mutable dict to track progress (updated in-place)
     """
@@ -272,6 +276,7 @@ def duplicate_collection(
     logger.info(
         f"📋  Auto-generated fields (excluded from insert): {target_auto_generated}"
     )
+    logger.info(f"🚀  Parallel workers: {parallel_workers}")
 
     iterator = source.query_iterator(
         expr="",
@@ -279,88 +284,127 @@ def duplicate_collection(
         batch_size=batch_size,
     )
 
-    while True:
-        batch = iterator.next()
-        if not batch:
-            break
+    # ── Thread-safe counters ──
+    lock = threading.Lock()
 
-        # Trim batch if limit would be exceeded
-        if limit and total_inserted + len(batch) > limit:
-            batch = batch[: limit - total_inserted]
+    def _insert_batch(clean_batch: list, batch_num: int) -> dict:
+        """Insert a single batch into target. Returns stats dict."""
+        inserted = 0
+        skipped = 0
 
-        # Log first row of first batch for debugging
-        if total_inserted == 0 and batch:
-            sample = {k: type(v).__name__ for k, v in batch[0].items()}
-            logger.info(f"🔍  Sample row keys ({len(sample)}): {sample}")
-            logger.info(
-                f"📋  Target expects {len(target_input_field_names)} fields: {target_input_field_names}"
-            )
-
-        # Sanitize each row:
-        #  - only keep fields in field_names (strict filter)
-        #  - convert list/dict values to JSON for VARCHAR fields
-        clean_batch = []
-        for row in batch:
-            clean_row = {}
-            for field in field_names:
-                val = row.get(field)
-                if schema_field_types.get(field) == DataType.VARCHAR and isinstance(
-                    val, (list, dict)
-                ):
-                    clean_row[field] = json.dumps(val, ensure_ascii=False)
-                else:
-                    clean_row[field] = val
-            clean_batch.append(clean_row)
-
-        # Build column-based data from clean rows.
-        # Using column format (list of lists) prevents pymilvus from adding
-        # an implicit $meta column that causes "more fieldData" errors.
+        # Build column-based data from clean rows
         col_data = []
         for field in field_names:
             col_data.append([row[field] for row in clean_batch])
 
-        if total_inserted == 0:
-            logger.info(
-                f"📋  Inserting {len(field_names)} columns × {len(clean_batch)} rows. "
-                f"Columns: {field_names}"
-            )
-
-        # Insert batch — if it fails, fall back to row-by-row to identify bad rows
         try:
             target.insert(col_data)
-            total_inserted += len(clean_batch)
+            inserted = len(clean_batch)
         except Exception as batch_err:
             logger.warning(
-                f"⚠️  Batch insert failed ({len(clean_batch)} rows): {batch_err}. "
-                f"Falling back to row-by-row insert…"
+                f"⚠️  Batch #{batch_num} insert failed ({len(clean_batch)} rows): "
+                f"{batch_err}. Falling back to row-by-row insert…"
             )
             for i, row in enumerate(clean_batch):
                 try:
                     single_col = [[row[field]] for field in field_names]
                     target.insert(single_col)
-                    total_inserted += 1
+                    inserted += 1
                 except Exception as row_err:
                     pk_value = row.get(pk_field, "unknown") if pk_field else "unknown"
-                    total_skipped += 1
-                    logger.error(f"❌  Skipped row #{i} (pk={pk_value}): {row_err}")
-                    # Log the problematic row's field values for debugging
+                    skipped += 1
+                    logger.error(
+                        f"❌  Batch #{batch_num} row #{i} (pk={pk_value}): {row_err}"
+                    )
                     for field_name, field_val in row.items():
                         logger.error(
                             f"      {field_name}: type={type(field_val).__name__}, "
                             f"value={repr(field_val)[:200]}"
                         )
-                    # Write to error file
                     _write_error_line(error_file_path, pk_value, row, str(row_err))
 
-        if job_state is not None:
-            job_state["records_copied"] = total_inserted
+        return {"inserted": inserted, "skipped": skipped}
 
-        logger.info(f"   ↳ Copied {total_inserted}/{effective_total} records…")
+    batch_num = 0
 
-        # Stop early if limit is reached
-        if limit and total_inserted >= limit:
-            logger.info(f"🛑  Limit of {limit} rows reached – stopping migration.")
-            break
+    with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
+        futures = []
+
+        while True:
+            batch = iterator.next()
+            if not batch:
+                break
+
+            # Trim batch if limit would be exceeded
+            if limit and total_inserted + len(batch) > limit:
+                batch = batch[: limit - total_inserted]
+
+            # Log first row of first batch for debugging
+            if total_inserted == 0 and batch and batch_num == 0:
+                sample = {k: type(v).__name__ for k, v in batch[0].items()}
+                logger.info(f"🔍  Sample row keys ({len(sample)}): {sample}")
+                logger.info(
+                    f"📋  Target expects {len(target_input_field_names)} fields: "
+                    f"{target_input_field_names}"
+                )
+
+            # Sanitize each row:
+            #  - only keep fields in field_names (strict filter)
+            #  - convert list/dict values to JSON for VARCHAR fields
+            clean_batch = []
+            for row in batch:
+                clean_row = {}
+                for field in field_names:
+                    val = row.get(field)
+                    if schema_field_types.get(field) == DataType.VARCHAR and isinstance(
+                        val, (list, dict)
+                    ):
+                        clean_row[field] = json.dumps(val, ensure_ascii=False)
+                    else:
+                        clean_row[field] = val
+                clean_batch.append(clean_row)
+
+            if batch_num == 0:
+                logger.info(
+                    f"📋  Inserting {len(field_names)} columns × {len(clean_batch)} rows. "
+                    f"Columns: {field_names}"
+                )
+
+            # Submit batch to thread pool for parallel insertion
+            future = executor.submit(_insert_batch, clean_batch, batch_num)
+            futures.append(future)
+            batch_num += 1
+
+            # Collect completed futures to update progress
+            done_futures = [f for f in futures if f.done()]
+            for f in done_futures:
+                result = f.result()
+                total_inserted += result["inserted"]
+                total_skipped += result["skipped"]
+                futures.remove(f)
+
+            if job_state is not None:
+                job_state["records_copied"] = total_inserted
+
+            logger.info(
+                f"   ↳ Submitted {batch_num} batches, "
+                f"copied {total_inserted}/{effective_total} records… "
+                f"({len(futures)} batches in-flight)"
+            )
+
+            # Stop early if limit is reached
+            if limit and total_inserted >= limit:
+                logger.info(f"🛑  Limit of {limit} rows reached – stopping migration.")
+                break
+
+        # Wait for remaining in-flight batches to complete
+        for future in as_completed(futures):
+            result = future.result()
+            total_inserted += result["inserted"]
+            total_skipped += result["skipped"]
+            if job_state is not None:
+                job_state["records_copied"] = total_inserted
+            logger.info(f"   ↳ Copied {total_inserted}/{effective_total} records…")
 
     iterator.close()
 

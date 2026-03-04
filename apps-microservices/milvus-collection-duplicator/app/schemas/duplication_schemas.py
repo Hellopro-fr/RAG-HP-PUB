@@ -40,6 +40,12 @@ class DuplicationRequest(BaseModel):
         ge=1,
         description="Optional max number of rows to migrate (for testing). If None, all rows are copied.",
     )
+    parallel_workers: int = Field(
+        default=1,
+        ge=1,
+        le=10,
+        description="Number of parallel insert workers (1=sequential, higher=faster but more resource-intensive)",
+    )
 
 
 class DuplicationResponse(BaseModel):

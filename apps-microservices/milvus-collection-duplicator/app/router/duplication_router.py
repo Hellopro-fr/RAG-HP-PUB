@@ -39,6 +39,7 @@ def _run_duplication_job(job_id: str, request: DuplicationRequest):
             batch_size=request.batch_size,
             analyzer_language=request.analyzer_language,
             limit=request.limit,
+            parallel_workers=request.parallel_workers,
             job_id=job_id,
             job_state=job,
         )
