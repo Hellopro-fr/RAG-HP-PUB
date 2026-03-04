@@ -436,7 +436,7 @@ class MilvusClient:
 
             results = collection.hybrid_search(
                 reqs=[dense_request, sparse_request],
-                ranker=ranker,
+                rerank=ranker,
                 limit=top_k,
                 output_fields=fields_without_embedding,
             )
