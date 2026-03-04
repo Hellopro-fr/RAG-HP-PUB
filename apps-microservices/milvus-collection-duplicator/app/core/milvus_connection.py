@@ -48,12 +48,12 @@ def connect_milvus():
 
             connections.connect(
                 alias,
-                # host=MILVUS_HOST,
-                # port=MILVUS_PORT,
-                # user=MILVUS_USER,
-                # password=MILVUS_PASSWORD,
-                uri=MILVUS_HOST,
-                token=MILVUS_TOKEN if MILVUS_TOKEN else None,
+                host=MILVUS_HOST,
+                port=MILVUS_PORT,
+                user=MILVUS_USER,
+                password=MILVUS_PASSWORD,
+                # uri=MILVUS_HOST,
+                # token=MILVUS_TOKEN if MILVUS_TOKEN else None,
             )
             logger.info("✅  Connected to Milvus")
     except Exception as e:
