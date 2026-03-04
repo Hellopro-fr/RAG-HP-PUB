@@ -823,14 +823,22 @@ class SearchOrchestrator:
         if context_mode == "none":
             context_mode = None
 
-        return await database_client.hybrid_search_vector(
+        return await database_client.search_vector(
             collection=source_name,
-            dense_vector=query_vector,
-            query_text=self.request.prompt,
+            vector=query_vector,
             k=k,
             filter_expr=final_filter_expr,
             context_mode=context_mode,
         )
+
+        # return await database_client.hybrid_search_vector(
+        #     collection=source_name,
+        #     dense_vector=query_vector,
+        #     query_text=self.request.prompt,
+        #     k=k,
+        #     filter_expr=final_filter_expr,
+        #     context_mode=context_mode,
+        # )
 
     async def _build_filter_expression(self, filtre: dict, source_name: str) -> str:
         filters = []
