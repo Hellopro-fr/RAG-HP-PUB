@@ -481,10 +481,9 @@ class SearchOrchestrator:
                 )
                 final_filter_expr_str = final_filter_expr
 
-                source_results = await database_client.hybrid_search_vector(
+                source_results = await database_client.search_vector(
                     collection=source_name,
-                    dense_vector=query_vector,
-                    query_text=self.request.prompt,
+                    vector=query_vector,
                     k=top_k_retrieval,
                     filter_expr=final_filter_expr,
                     output_fields=(
@@ -493,6 +492,18 @@ class SearchOrchestrator:
                         else None
                     ),
                 )
+                # source_results = await database_client.hybrid_search_vector(
+                #     collection=source_name,
+                #     dense_vector=query_vector,
+                #     query_text=self.request.prompt,
+                #     k=top_k_retrieval,
+                #     filter_expr=final_filter_expr,
+                #     output_fields=(
+                #         self.request.fields
+                #         if self.request.fields and self.request.action == 1
+                #         else None
+                #     ),
+                # )
                 all_results[source_name] = [
                     MessageToDict(res) for res in source_results
                 ]
