@@ -19,9 +19,8 @@ class SearchRequest(BaseModel):
     chat_model: str = "gpt-4.1-2025-04-14"
     params: Optional[Dict[str, Any]] = {}
     use_reranker: Optional[bool] = True
-    reranker_model: Optional[str] = "BAAI/bge-reranker-v2-m3",
-    get_n_chunks_pj: bool = False,
-
+    reranker_model: Optional[str] = ("BAAI/bge-reranker-v2-m3",)
+    get_n_chunks_pj: bool = (False,)
 
 
 class SourcesFiltre(BaseModel):
@@ -58,8 +57,9 @@ class SearchRequestWs(BaseModel):
     )
     options: Optional[RerankerOptions] = RerankerOptions()
     type: int = 1
-    cache: bool = True,
-    get_n_chunks_pj: bool = False,
+    cache: bool = (True,)
+    get_n_chunks_pj: bool = (False,)
+    hybrid: bool = False
 
 
 # Schéma de réponse détaillé
