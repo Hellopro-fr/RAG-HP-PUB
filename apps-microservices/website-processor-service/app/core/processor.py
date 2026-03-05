@@ -8,7 +8,6 @@ from bs4 import BeautifulSoup
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.TrafilaturaCleaning import TrafilaturaHp
 from common_utils.extractor.HeaderFooterExtractor import HeaderFooterExtractor
-from common_utils.database.MilvusWebsiteCrud import MilvusWebsiteCrud
 from website_processor_service.core.redis_manager import RedisManager
 from website_processor_service.core.exceptions import BatchProcessingError
 
@@ -27,6 +26,10 @@ def _check_existing_classification(url: str, domaine: str) -> str | None:
     Utilisé pour le bypass du template-llm-service : si la page est déjà classifiée,
     on réutilise la classification existante au lieu de refaire un appel LLM.
 
+    Note: L'import de MilvusWebsiteCrud est fait en lazy car pymilvus n'est pas
+    installé dans le conteneur website-processor-service. Si le module est absent,
+    le bypass est simplement désactivé et la page suit le flux normal.
+
     Args:
         url: L'URL de la page web.
         domaine: Le domaine extrait de l'URL.
@@ -34,6 +37,12 @@ def _check_existing_classification(url: str, domaine: str) -> str | None:
     Returns:
         Le page_type existant (str) si trouvé, None sinon.
     """
+    try:
+        from common_utils.database.MilvusWebsiteCrud import MilvusWebsiteCrud
+    except ImportError:
+        logging.warning(f"[{url}] - pymilvus non disponible, bypass désactivé.")
+        return None
+
     try:
         base_vectorielle = MilvusWebsiteCrud()
 
