@@ -5,8 +5,11 @@ from common_utils.autres.CollectionName import CollectionName
 
 def insertion_data(website_data: dict) -> dict:
     """
-    Inserts website data into the specified vector database after checking for duplicates.
-    This function now raises exceptions on failure for the consumer to handle.
+    Inserts or updates (upserts) website data into the specified vector database.
+    For pages that already exist, old chunks are deleted before inserting new ones.
+    - Pages standard : suppression par URL
+    - Headers/Footers : suppression par domaine + page_type
+    This function raises exceptions on failure for the consumer to handle.
 
     Args:
         website_data (dict): The message payload containing website data.
@@ -51,29 +54,20 @@ def insertion_data(website_data: dict) -> dict:
     else:
         base_vectorielle = QdrantWebsiteCrud()
 
-    # --- Étape 1: Vérifier si l'URL existe déjà ---
+    # --- Étape 1: Upsert - Supprimer l'ancien contenu si existant ---
     try:
-        print(f"Vérification de l'existence de l'URL '{url}' avec page_type '{page_type}' dans {bdd}...")
-        res = base_vectorielle.get_website(url=url, page_type=page_type, domaine=domaine)
-        status = res.get("status")
-        data = res.get("data", [])
-
-        if status == "error":
-            raise Exception(f"Erreur lors de la vérification de l'existence de l'URL: {res.get('message')}")
-        
-        if data:
-            print(f"L'URL {url} existe déjà dans la base de données. Insertion ignorée.")
-            return {
-                "status": "skipped",
-                "message": f"L'URL {url} existe déjà.",
-                "url": url,
-                "already_in_bdd": True
-                }
+        if page_type in ["header", "footer"]:
+            # Headers/Footers : supprimer par domaine + page_type
+            print(f"🔄 Upsert {page_type}: Suppression des anciens chunks pour domaine '{domaine}'...")
+            base_vectorielle.delete_website_by_domain_and_page_type(domaine=domaine, page_type=page_type)
+        else:
+            # Pages standard : supprimer par URL
+            print(f"🔄 Upsert: Suppression des anciens chunks pour l'URL '{url}'...")
+            base_vectorielle.delete_website_by_url(url=url)
     except Exception as e:
-        print(f"Échec de la vérification de l'URL {url}: {e}")
-        raise # Propage l'exception pour que le consumer la gère (retry/DLQ)
+        print(f"⚠️ Avertissement lors de la suppression pré-upsert pour '{url}': {e}. Poursuite avec l'insertion...")
 
-    # --- Étape 2: Insérer les données si elles n'existent pas ---
+    # --- Étape 2: Insérer les nouvelles données ---
     try:
         print(f"Insertion de {len(websites)} chunk(s) pour l'URL {url} dans {bdd}...")
         func = base_vectorielle.insert_website
@@ -82,7 +76,7 @@ def insertion_data(website_data: dict) -> dict:
         if not result or result.get("status") != "success":
             raise Exception(f"L'insertion a échoué pour l'URL {url}. Réponse de la BDD: {result}")
 
-        print(f"✓ Insertion réussie pour l'URL {url}.")
+        print(f"✓ Upsert réussi pour l'URL {url}.")
         
         return {
             "status": "success",
