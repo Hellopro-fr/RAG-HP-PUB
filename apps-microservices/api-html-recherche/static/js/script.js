@@ -1841,11 +1841,11 @@ $(function () {
       `;
       let price = "";
       if (result.price.length > 0) {
-        result.price.forEach(element => {
+        result.price.forEach(type, element => {
           price += `
             <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
               <i data-lucide="tag" class="h-3 w-3"></i>
-              <span>${element}</span>
+              <span>Prix ${type} : ${element}</span>
             </span>
         `;
         });
