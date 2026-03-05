@@ -1840,22 +1840,15 @@ $(function () {
       Texte : ${result.snippet || ""}
       `;
       let price = "";
-      console.log(result.price, result.price.length)
-      if (result.price.length > 0) {
-        result.price.forEach(type, element => {
-          price += `
-            <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
-              <i data-lucide="tag" class="h-3 w-3"></i>
-              <span>Prix ${type} : ${element}</span>
-            </span>
-        `;
-        });
-      }
+      result.price.forEach(type, element => {
+        price += ` - Prix ${type} : ${element}`;
+      });
+      
       const resultCardHtml = `
         <div class="${class_bg_other_chunks} rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
               <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${result.title}</h3>
+                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${result.title}${price}</h3>
                   <a href="${result.url}" target="_blank" rel="noopener noreferrer" class="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-blue-100">
                     <i data-lucide="external-link" class="h-4 w-4 text-custom-gris group-hover:text-blue-700"></i>
                   </a>
@@ -1874,7 +1867,6 @@ $(function () {
                     <i data-lucide="building-2" class="h-3 w-3"></i>
                     <span>Chunk : ${result.chunk_info}</span>
                   </span>
-                  ${price}
               </div>
               <div>
                 <p id="snippet-${result.id}" class="data-texte-ws text-sm text-custom-gris leading-relaxed line-clamp-3 transition-all duration-300">${result.snippet || ""}</p>
