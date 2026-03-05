@@ -1356,6 +1356,7 @@ $(function () {
 
     let title = meta.id_produit || 'Titre non disponible';
     let categorie = meta.categorie || meta.id_categorie || 'N/A';
+    let price = {}
     switch (result.source) {
       // case "produits_3":
       //   title = meta.nom_produit || title;
@@ -1364,6 +1365,8 @@ $(function () {
       case "produits_4":
         title = meta.nom_produit || title;
         result.source = "Produits"
+        price.ht = meta.prix_ht || 'N/A';
+        price.ttc = meta.prix_ttc || 'N/A';
         break;
       case "devis":
         title = meta.lead_id || title;
@@ -1424,7 +1427,8 @@ $(function () {
       id_produit: meta.id_produit,
       chunk_info: `${meta.chunk_id}/${meta.total_chunks}`,
       is_pre_chunks: result._isContext == "pre",
-      is_post_chunks: result._isContext == "post"
+      is_post_chunks: result._isContext == "post",
+      price: price
     };
   }
 
@@ -1835,6 +1839,17 @@ $(function () {
       Catégorie : ${result.category}
       Texte : ${result.snippet || ""}
       `;
+      let price = "";
+      if (result.price.length > 0) {
+        result.price.forEach(element => {
+          price += `
+            <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
+              <i data-lucide="tag" class="h-3 w-3"></i>
+              <span>${element}</span>
+            </span>
+        `;
+        });
+      }
       const resultCardHtml = `
         <div class="${class_bg_other_chunks} rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
@@ -1858,6 +1873,7 @@ $(function () {
                     <i data-lucide="building-2" class="h-3 w-3"></i>
                     <span>Chunk : ${result.chunk_info}</span>
                   </span>
+                  ${price}
               </div>
               <div>
                 <p id="snippet-${result.id}" class="data-texte-ws text-sm text-custom-gris leading-relaxed line-clamp-3 transition-all duration-300">${result.snippet || ""}</p>
