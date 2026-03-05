@@ -209,6 +209,12 @@ class FilterBuilder:
                 key = "categorie"
             elif key == "id_categorie" and source == "siteweb":
                 continue
+            elif key == "avec_prix" and source == "produits_4":
+                clauses.append(f"(prix_ht != '' OR prix_ttc != '')")
+                continue
+            elif key == "avec_prix" and source == "produits_3":
+                clauses.append(f" (prix_ht != '' OR prix_ttc != '') ")
+                continue
 
             if not dtype:
                 continue

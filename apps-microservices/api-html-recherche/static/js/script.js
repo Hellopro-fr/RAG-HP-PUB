@@ -97,7 +97,8 @@ $(function () {
     fournisseurFilter: $("#fournisseurDropdown"),
     btnTranscription: $("#btn-transcription"),
     typeRecherche: $("input[name='type-recherche']"),
-    idsProduit: $(`#ids_produit`)
+    idsProduit: $(`#ids_produit`),
+    avecPrix: $(`#avecPrix`)
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -945,6 +946,10 @@ $(function () {
       }).get();
     });
 
+    elements.avecPrix.on("change", function () {
+      state.avecPrix = $(this).is(":checked");
+    });
+
     elements.typeRecherche.on("change", function (e) {
       e.preventDefault();
       state.typeRecherche = $(this).val();
@@ -1496,6 +1501,18 @@ $(function () {
           if (autreChunks.length > 0 && state.typeRecherche == 1) {
             filtreSpecifique.autre_chunks = autreChunks;
           }
+          
+          let onlyProduits = true;
+
+          $.each(state.selectedSources, function(key, value) {
+              if (key === 'produits') {
+                  if (value !== true) onlyProduits = false;
+              }
+              else {
+                  if (value !== false) onlyProduits = false;
+              }
+          });
+          state.hybrid = onlyProduits;
 
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
@@ -1507,20 +1524,10 @@ $(function () {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
                 filtreSpecifique.source = produitsSource;
               }
+              if (state.avecPrix) filtreSpecifique.avec_prix = state.avecPrix;
               if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
               if (state.selectedIdsProduits && state.selectedIdsProduits.length > 0) filtreSpecifique.id_produit = state.selectedIdsProduits;
-              console.log(state.hybrid, state.selectedSources)
-              let onlyProduits = true;
-
-              $.each(state.selectedSources, function(key, value) {
-                  if (key === 'produits') {
-                      if (value !== true) onlyProduits = false;
-                  }
-                  else {
-                      if (value !== false) onlyProduits = false;
-                  }
-              });
-              state.hybrid = onlyProduits;
+              // console.log(state.hybrid, state.selectedSources)
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
