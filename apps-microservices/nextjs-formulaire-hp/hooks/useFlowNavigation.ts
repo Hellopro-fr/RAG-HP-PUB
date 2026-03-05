@@ -2,37 +2,23 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
-import { FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
 
 /**
  * Hook pour la navigation dans le flow avec conservation des paramètres GET.
  *
  * Les paramètres comme id_categorie ou token sont conservés lors des navigations
  * entre les étapes du funnel (/questionnaire -> /profile -> /selection).
- *
- * Fallback: Si le token n'est pas dans l'URL actuelle, on le recupere depuis sessionStorage.
  */
 export function useFlowNavigation() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   /**
-   * Construit une URL avec les paramètres GET actuels conservés.
-   * Si le token n'est pas present dans l'URL, on le recupere depuis sessionStorage.
+   * Construit une URL avec les paramètres GET actuels conservés
    */
   const buildUrl = useCallback((path: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-
-    // Fallback: Si pas de token dans l'URL, recuperer depuis sessionStorage
-    if (!params.has('token') && typeof window !== 'undefined') {
-      const savedToken = sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY);
-      if (savedToken) {
-        params.set('token', savedToken);
-      }
-    }
-
-    const paramsString = params.toString();
-    return paramsString ? `${path}?${paramsString}` : path;
+    const params = searchParams.toString();
+    return params ? `${path}?${params}` : path;
   }, [searchParams]);
 
   /**
