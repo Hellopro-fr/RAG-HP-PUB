@@ -49,7 +49,8 @@ $(function () {
     copiedContent: "",
     selectedCategoriesRubrique: {},
     typeRecherche: 1,
-    hybrid: false
+    hybrid: false,
+    reranking: true
   };
 
   // DOM elements
@@ -1022,6 +1023,9 @@ $(function () {
       updateSearchButtons();
     });
     $("#generateAI").on("click", executeSearch);
+    $("#use-reranking").on("change", function () {
+      state.reranking = $(this).is(":checked");
+    });
   }
 
   function setupIndependentCollapsible(
