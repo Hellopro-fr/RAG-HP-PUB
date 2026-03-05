@@ -48,7 +48,9 @@ $(function () {
     expandedSections: { sources: true, categories: false, insights: true },
     copiedContent: "",
     selectedCategoriesRubrique: {},
-    typeRecherche: 1
+    typeRecherche: 1,
+    hybrid: false,
+    reranking: true
   };
 
   // DOM elements
@@ -1021,6 +1023,9 @@ $(function () {
       updateSearchButtons();
     });
     $("#generateAI").on("click", executeSearch);
+    $("#use-reranking").on("change", function () {
+      state.reranking = $(this).is(":checked");
+    });
   }
 
   function setupIndependentCollapsible(
@@ -1347,7 +1352,11 @@ $(function () {
     let title = meta.id_produit || 'Titre non disponible';
     let categorie = meta.categorie || meta.id_categorie || 'N/A';
     switch (result.source) {
-      case "produits_3":
+      // case "produits_3":
+      //   title = meta.nom_produit || title;
+      //   result.source = "Produits"
+      //   break;
+      case "produits_4":
         title = meta.nom_produit || title;
         result.source = "Produits"
         break;
@@ -1491,7 +1500,8 @@ $(function () {
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
             case 'produits':
-              sourceName = 'produits_3';
+              // sourceName = 'produits_3';
+              sourceName = 'produits_4';
               const produitsSource = $('#produitsSource').val();
               if (produitsSource.length > 0) {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
@@ -1499,6 +1509,18 @@ $(function () {
               }
               if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
               if (state.selectedIdsProduits && state.selectedIdsProduits.length > 0) filtreSpecifique.id_produit = state.selectedIdsProduits;
+              console.log(state.hybrid, state.selectedSources)
+              let onlyProduits = true;
+
+              $.each(state.selectedSources, function(key, value) {
+                  if (key === 'produits') {
+                      if (value !== true) onlyProduits = false;
+                  }
+                  else {
+                      if (value !== false) onlyProduits = false;
+                  }
+              });
+              state.hybrid = onlyProduits;
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
@@ -1581,7 +1603,9 @@ $(function () {
 
       // Si aucune source n'est sélectionnée, utiliser la valeur par défaut du schéma
       if (sourcesAvecFiltres.length === 0) {
-        sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
+        // sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
+        sourcesAvecFiltres = [{ source: "produits_4", filtre: {} }];
+        state.hybrid = true;
       }
 
       // 2. Construire le filtre global (filtre principal)
@@ -1625,7 +1649,8 @@ $(function () {
           reranker_model: state.rerankerModel,
           rrf: GetURLParameter("rrf") == 1
         },
-        type: $("input[name='type-recherche']:checked").val()
+        type: $("input[name='type-recherche']:checked").val(),
+        hybrid: state.hybrid
       };
 
       // --- FIN DE LA MODIFICATION ---

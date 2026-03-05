@@ -109,7 +109,8 @@ class MilvusClient:
 
     def _ef_search(self, nb_chunk: int) -> int:
         """Calcule la valeur ef_search pour Qdrant/Milvus en fonction du nombre de chunks."""
-        return 300 if nb_chunk <= 150 else nb_chunk * 2
+        # return 300 if nb_chunk <= 150 else nb_chunk * 2
+        return 32000
 
     def classic_search(
         self, collection_name: str, expr: str, limit: int, output_fields: list[str]
@@ -126,7 +127,9 @@ class MilvusClient:
             # Si output_fields n'est pas spécifié, on récupère tout sauf l'embedding
             if not output_fields:
                 all_fields = [field.name for field in collection.schema.fields]
-                output_fields = [f for f in all_fields if f != "embedding"]
+                output_fields = [
+                    f for f in all_fields if f not in ("embedding", "sparse_embedding")
+                ]
 
             if "text" not in output_fields:
                 output_fields.append("text")
@@ -173,11 +176,15 @@ class MilvusClient:
             fields_without_embedding = []
             if kwargs.get("output_fields"):
                 fields_without_embedding = [
-                    f for f in kwargs.get("output_fields") if f != "embedding"
+                    f
+                    for f in kwargs.get("output_fields")
+                    if f not in ("embedding", "sparse_embedding")
                 ]
             else:
                 all_fields = [field.name for field in collection.schema.fields]
-                fields_without_embedding = [f for f in all_fields if f != "embedding"]
+                fields_without_embedding = [
+                    f for f in all_fields if f not in ("embedding", "sparse_embedding")
+                ]
 
             if "text" not in fields_without_embedding:
                 fields_without_embedding.append("text")

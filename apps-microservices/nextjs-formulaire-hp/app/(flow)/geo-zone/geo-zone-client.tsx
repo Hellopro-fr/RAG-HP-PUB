@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import GeoZoneStep from '@/components/flow/GeoZoneStep';
 import MatchingLoader from '@/components/flow/MatchingLoader';
-import { useFlowStore } from '@/lib/stores/flow-store';
+import { useFlowStore, FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
+import { useSearchParams } from 'next/navigation';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { consolidateEquivalences } from '@/lib/utils/equivalence-merger';
 import { normalizeMatchingToSuppliers, enrichSuppliersWithProductInfo } from '@/lib/utils/matching-normalizer';
@@ -65,7 +66,8 @@ export default function GeoZoneClient({
   const { setGeoData, categoryId, dynamicEquivalences, characteristicsMap, setMatchingResults, setEquivalenceCaracteristique } = useFlowStore();
   const [showLoader, setShowLoader] = useState(false);
   const [RedirectGoToSomethingToAdd, setRedirectGoToSomethingToAdd] = useState(false);
-  const { goToQuestionnaire, goToProfile, goToSelection , goToSomethingToAdd} = useFlowNavigation();
+  const searchParams = useSearchParams();
+  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { trackDbEvent } = useDbTracking();
   const hasTrackedView = useRef(false);
 
@@ -278,7 +280,22 @@ export default function GeoZoneClient({
 
   const handleBack = () => {
     // Retourner au questionnaire
-    goToQuestionnaire();
+    const token = sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY);
+    const devCategoryId = searchParams.get('id_categorie');
+
+    let url: string;
+    if (token) {
+      // Mode prod : /questionnaire/TOKEN
+      url = `/formulaire/questionnaire/${token}`;
+    } else if (devCategoryId) {
+      // Mode dev : page racine avec id_categorie
+      url = `/formulaire/?id_categorie=${devCategoryId}`;
+    } else {
+      url = '/formulaire/';
+    }
+    
+    // Force navigation (router.push ne fonctionne pas)
+    window.location.assign(url);
   };
 
   // Afficher le loader pendant le matching
