@@ -266,7 +266,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     }
   };
 
-  
+
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -584,6 +584,15 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           onClose={() => history.back()}
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
+          onProceed={() => setViewState("contact")}
+          onRequestSingleQuote={() => {
+            // S'assurer que ce produit est sélectionné avant d'aller au formulaire
+            if (!selectedIds.has(selectedProduct.id)) {
+              toggleSupplier(selectedProduct.id);
+            }
+            setViewState("contact");
+          }}
+          selectedCount={selectedCount}
         />
       )}
       {/* Comparison Modal */}
