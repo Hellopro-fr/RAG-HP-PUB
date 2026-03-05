@@ -48,7 +48,8 @@ $(function () {
     expandedSections: { sources: true, categories: false, insights: true },
     copiedContent: "",
     selectedCategoriesRubrique: {},
-    typeRecherche: 1
+    typeRecherche: 1,
+    hybrid: false
   };
 
   // DOM elements
@@ -1504,6 +1505,21 @@ $(function () {
               }
               if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
               if (state.selectedIdsProduits && state.selectedIdsProduits.length > 0) filtreSpecifique.id_produit = state.selectedIdsProduits;
+              filtreSpecifique.hybrid = false;
+              console.log(state.hybrid, state.selectedSources)
+              let onlyProduits = true;
+
+              $.each(data, function(key, value) {
+                  // If the key is 'produits', value MUST be true
+                  if (key === 'produits') {
+                      if (value !== true) onlyProduits = false;
+                  } 
+                  // If key is ANYTHING else, value MUST be false
+                  else {
+                      if (value !== false) onlyProduits = false;
+                  }
+              });
+              if (onlyProduits) filtreSpecifique.hybrid = true;
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
@@ -1588,6 +1604,7 @@ $(function () {
       if (sourcesAvecFiltres.length === 0) {
         // sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
         sourcesAvecFiltres = [{ source: "produits_4", filtre: {} }];
+        state.hybrid = true;
       }
 
       // 2. Construire le filtre global (filtre principal)
@@ -1631,7 +1648,8 @@ $(function () {
           reranker_model: state.rerankerModel,
           rrf: GetURLParameter("rrf") == 1
         },
-        type: $("input[name='type-recherche']:checked").val()
+        type: $("input[name='type-recherche']:checked").val(),
+        hybrid: state.hybrid
       };
 
       // --- FIN DE LA MODIFICATION ---
