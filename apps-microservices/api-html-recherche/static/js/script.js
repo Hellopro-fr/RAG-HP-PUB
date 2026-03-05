@@ -1367,7 +1367,7 @@ $(function () {
         result.source = "Produits"
         price_ht = meta.prix_ht || 'N/A';
         price_ttc = meta.prix_ttc || 'N/A';
-        price += ` - Prix HT : ${price_ht} - Prix TTC : ${price_ttc}`;
+        price += `<span class='text-sm'>Prix HT : ${price_ht}</span><span class='text-sm'>Prix TTC : ${price_ttc}</span>`;
         break;
       case "devis":
         title = meta.lead_id || title;
@@ -1852,7 +1852,7 @@ $(function () {
                   </a>
               </div>
               <div class="flex items-start justify-between gap-2">
-                  <h4 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${price}</h4>
+                  ${price}
               </div>
               <div class="flex flex-wrap gap-2">
                   ${sourceBadgeHtml}
