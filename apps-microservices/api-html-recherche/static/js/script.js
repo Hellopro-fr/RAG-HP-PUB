@@ -1356,7 +1356,7 @@ $(function () {
 
     let title = meta.id_produit || 'Titre non disponible';
     let categorie = meta.categorie || meta.id_categorie || 'N/A';
-    let price = {}
+    let price = "";
     switch (result.source) {
       // case "produits_3":
       //   title = meta.nom_produit || title;
@@ -1365,8 +1365,9 @@ $(function () {
       case "produits_4":
         title = meta.nom_produit || title;
         result.source = "Produits"
-        price.ht = meta.prix_ht || 'N/A';
-        price.ttc = meta.prix_ttc || 'N/A';
+        price_ht = meta.prix_ht || 'N/A';
+        price_ttc = meta.prix_ttc || 'N/A';
+        price += ` - Prix HT : ${price_ht} - Prix TTC : ${price_ttc}`;
         break;
       case "devis":
         title = meta.lead_id || title;
@@ -1839,10 +1840,7 @@ $(function () {
       Catégorie : ${result.category}
       Texte : ${result.snippet || ""}
       `;
-      let price = "";
-      result.price.forEach(_, element => {
-        price += ` - Prix ${_} : ${element}`;
-      });
+      let price = result.price;
       
       const resultCardHtml = `
         <div class="${class_bg_other_chunks} rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
