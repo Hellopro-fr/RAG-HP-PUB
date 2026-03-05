@@ -1668,7 +1668,16 @@ $(function () {
           rrf: GetURLParameter("rrf") == 1
         },
         type: $("input[name='type-recherche']:checked").val(),
-        hybrid: state.hybrid
+        hybrid: state.hybrid,
+          hybrid_options: {
+          ef: GetURLParameter("ef") || 5000,
+          dense_limit_multiplier: GetURLParameter("dense_limit_multiplier") || 5,
+          ranker_type: GetURLParameter("ranker_type") || "rrf",
+          rrf_k: GetURLParameter("rrf_k") || 60,
+          drop_ratio_search: GetURLParameter("drop_ratio_search") || 0.0,
+          radius: GetURLParameter("radius") || null,
+          range_filter: GetURLParameter("range_filter") || null
+        }
       };
 
       // --- FIN DE LA MODIFICATION ---
@@ -1853,7 +1862,7 @@ $(function () {
         <div class="${class_bg_other_chunks} rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
               <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${result.title}$</h3>
+                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${result.title}</h3>
                   <a href="${result.url}" target="_blank" rel="noopener noreferrer" class="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-blue-100">
                     <i data-lucide="external-link" class="h-4 w-4 text-custom-gris group-hover:text-blue-700"></i>
                   </a>
