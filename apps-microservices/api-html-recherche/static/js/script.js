@@ -1357,6 +1357,7 @@ $(function () {
     let title = meta.id_produit || 'Titre non disponible';
     let categorie = meta.categorie || meta.id_categorie || 'N/A';
     let price = "";
+    let price_copy = ""
     switch (result.source) {
       // case "produits_3":
       //   title = meta.nom_produit || title;
@@ -1368,6 +1369,10 @@ $(function () {
         price_ht = meta.prix_ht || 'N/A';
         price_ttc = meta.prix_ttc || 'N/A';
         price += `<span class='text-sm'>Prix HT : ${price_ht}</span><span class='text-sm'>Prix TTC : ${price_ttc}</span>`;
+        price_copy = `
+          Prix HT : ${price_ht}
+          Prix TTC : ${price_ttc}
+        `;
         break;
       case "devis":
         title = meta.lead_id || title;
@@ -1429,7 +1434,8 @@ $(function () {
       chunk_info: `${meta.chunk_id}/${meta.total_chunks}`,
       is_pre_chunks: result._isContext == "pre",
       is_post_chunks: result._isContext == "post",
-      price: price
+      price: price,
+      price_copy: price_copy
     };
   }
 
@@ -1839,6 +1845,7 @@ $(function () {
       Fournisseur : ${result.supplier}
       Catégorie : ${result.category}
       Texte : ${result.snippet || ""}
+      ${result.price_copy || ""}
       `;
       let price = result.price;
       
