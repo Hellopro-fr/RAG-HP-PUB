@@ -1840,8 +1840,8 @@ $(function () {
       Texte : ${result.snippet || ""}
       `;
       let price = "";
-      result.price.forEach(type, element => {
-        price += ` - Prix ${type} : ${element}`;
+      result.price.forEach(_, element => {
+        price += ` - Prix ${_} : ${element}`;
       });
       
       const resultCardHtml = `
