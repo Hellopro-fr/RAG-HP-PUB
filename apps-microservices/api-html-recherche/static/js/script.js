@@ -1851,7 +1851,7 @@ $(function () {
                     <i data-lucide="external-link" class="h-4 w-4 text-custom-gris group-hover:text-blue-700"></i>
                   </a>
               </div>
-              <div class="flex items-start justify-between gap-2">
+              <div class="flex items-start gap-2 flex-col">
                   ${price}
               </div>
               <div class="flex flex-wrap gap-2">
