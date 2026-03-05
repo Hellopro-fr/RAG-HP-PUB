@@ -19,3 +19,4 @@ boilerpy3
 jpype1
 redis
 tldextract
+pymilvus
