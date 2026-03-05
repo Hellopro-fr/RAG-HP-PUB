@@ -1507,7 +1507,19 @@ $(function () {
               if (state.selectedIdsProduits && state.selectedIdsProduits.length > 0) filtreSpecifique.id_produit = state.selectedIdsProduits;
               filtreSpecifique.hybrid = false;
               console.log(state.hybrid, state.selectedSources)
-              if (state.hybrid && state.sourcesAvecFiltres.length < 2 && state.sourcesAvecFiltres[0].source == "produits_4") filtreSpecifique.hybrid = true;
+              let onlyProduits = true;
+
+              $.each(data, function(key, value) {
+                  // If the key is 'produits', value MUST be true
+                  if (key === 'produits') {
+                      if (value !== true) onlyProduits = false;
+                  } 
+                  // If key is ANYTHING else, value MUST be false
+                  else {
+                      if (value !== false) onlyProduits = false;
+                  }
+              });
+              if (onlyProduits) filtreSpecifique.hybrid = true;
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
