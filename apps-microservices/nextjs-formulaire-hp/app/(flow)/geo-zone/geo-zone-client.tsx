@@ -65,7 +65,7 @@ export default function GeoZoneClient({
   const { setGeoData, categoryId, dynamicEquivalences, characteristicsMap, setMatchingResults, setEquivalenceCaracteristique } = useFlowStore();
   const [showLoader, setShowLoader] = useState(false);
   const [RedirectGoToSomethingToAdd, setRedirectGoToSomethingToAdd] = useState(false);
-  const { goToQuestionnaire, goToProfile, goToSelection , goToSomethingToAdd} = useFlowNavigation();
+  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { trackDbEvent } = useDbTracking();
   const hasTrackedView = useRef(false);
 
@@ -277,8 +277,8 @@ export default function GeoZoneClient({
   };
 
   const handleBack = () => {
-    // Retourner au questionnaire
-    goToQuestionnaire();
+    // Retourner a la page precedente (questionnaire avec son token)
+    window.history.back();
   };
 
   // Afficher le loader pendant le matching
