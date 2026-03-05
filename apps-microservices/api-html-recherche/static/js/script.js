@@ -1505,7 +1505,6 @@ $(function () {
               }
               if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
               if (state.selectedIdsProduits && state.selectedIdsProduits.length > 0) filtreSpecifique.id_produit = state.selectedIdsProduits;
-              filtreSpecifique.hybrid = false;
               console.log(state.hybrid, state.selectedSources)
               let onlyProduits = true;
 
@@ -1517,7 +1516,7 @@ $(function () {
                       if (value !== false) onlyProduits = false;
                   }
               });
-              if (onlyProduits) filtreSpecifique.hybrid = true;
+              state.hybrid = onlyProduits;
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
