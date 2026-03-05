@@ -57,6 +57,10 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
   // Ref pour éviter les doubles appels en StrictMode
   const hasTrackedStart = useRef(false);
   const lastTrackedQuestionIndex = useRef(-1);
+  // Ref pour savoir si le questionnaire etait deja complet au montage (retour navigateur)
+  const wasAlreadyCompleteOnMount = useRef<boolean | null>(null);
+  // Ref pour bloquer la redirection apres un reset (evite la race condition)
+  const hasJustReset = useRef(false);
 
   // Initialiser le timestamp de début du funnel et tracker le début
   useEffect(() => {
@@ -88,12 +92,33 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
 
   // Quand le questionnaire dynamique est terminé
   useEffect(() => {
+    // Premier rendu: memoriser si le questionnaire etait deja complet (retour navigateur)
+    if (wasAlreadyCompleteOnMount.current === null) {
+      wasAlreadyCompleteOnMount.current = dynamicQuestionnaire.isComplete;
+      // Si deja complet au montage, aller a la derniere question (retour navigateur)
+      // Les reponses sont conservees dans le store
+      if (wasAlreadyCompleteOnMount.current) {
+        hasJustReset.current = true;
+        dynamicQuestionnaire.goToLastQuestion();
+        // Reinitialiser le flag pour permettre la prochaine completion
+        wasAlreadyCompleteOnMount.current = false;
+        return;
+      }
+    }
+
+    // Bloquer la redirection juste apres un goToLastQuestion (evite race condition)
+    if (hasJustReset.current) {
+      hasJustReset.current = false;
+      return;
+    }
+
+    // Rediriger quand le questionnaire est termine
     if (dynamicQuestionnaire.isComplete) {
       const timeSpent = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
       trackGTMQuestionnaireComplete(dynamicQuestionnaire.progress.total, timeSpent);
       onComplete(dynamicAnswers);
     }
-  }, [dynamicQuestionnaire.isComplete, dynamicQuestionnaire.progress.total, dynamicAnswers, onComplete, startTime]);
+  }, [dynamicQuestionnaire.isComplete, dynamicQuestionnaire.progress.total, dynamicAnswers, onComplete, startTime, dynamicQuestionnaire.goToLastQuestion]);
 
   // Hook de tracking de vue de question
   useEffect(() => {
@@ -113,6 +138,35 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     goBack,
     canGoBack,
   } = dynamicQuestionnaire;
+
+  // Ref pour tracker l'index precedent et eviter les pushState en double
+  const prevIndexRef = useRef(currentIndex);
+
+  // Intercepter le bouton retour navigateur pour revenir a la question precedente
+  useEffect(() => {
+    // Pousser un etat dans l'historique seulement quand on avance (pas quand on recule)
+    if (currentIndex > prevIndexRef.current) {
+      window.history.pushState({ questionIndex: currentIndex }, '');
+    }
+    prevIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  // Ecouter les evenements popstate separement
+  useEffect(() => {
+    const handlePopState = () => {
+      // Si on peut revenir en arriere dans le questionnaire, le faire
+      if (currentIndex > 0) {
+        goBack();
+      }
+      // Sinon, laisser le navigateur faire son comportement par defaut (quitter)
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [currentIndex, goBack]);
 
   const LoadingScreen = ({ progress = 0 }: { progress?: number }) => (
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
