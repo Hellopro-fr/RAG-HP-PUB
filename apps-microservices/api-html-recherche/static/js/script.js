@@ -1840,6 +1840,7 @@ $(function () {
       Texte : ${result.snippet || ""}
       `;
       let price = "";
+      console.log(result.price, result.price.length)
       if (result.price.length > 0) {
         result.price.forEach(type, element => {
           price += `
