@@ -1668,7 +1668,16 @@ $(function () {
           rrf: GetURLParameter("rrf") == 1
         },
         type: $("input[name='type-recherche']:checked").val(),
-        hybrid: state.hybrid
+        hybrid: state.hybrid,
+          hybrid_options: {
+          ef: GetURLParameter("ef") || 5000,
+          dense_limit_multiplier: GetURLParameter("dense_limit_multiplier") || 5,
+          ranker_type: GetURLParameter("ranker_type") || "rrf",
+          rrf_k: GetURLParameter("rrf_k") || 60,
+          drop_ratio_search: GetURLParameter("drop_ratio_search") || 0.0,
+          radius: GetURLParameter("radius") || null,
+          range_filter: GetURLParameter("range_filter") || null
+        }
       };
 
       // --- FIN DE LA MODIFICATION ---
