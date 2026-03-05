@@ -389,7 +389,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                         Autres résultats ({unselectedSuppliersList.length})
                         <span className="h-px flex-1 bg-border" />
                       </h3>
-                      
+
 
                       {unselectedSuppliersList.length > 0 ? (
                         <div className={cn(
@@ -436,8 +436,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   onClick={() => setIsExpanded(!isExpanded)}
                   className={cn(
                     "flex w-full items-center justify-center gap-2 py-3 text-sm transition-colors rounded-lg border",
-                    isExpanded 
-                      ? "text-muted-foreground hover:text-foreground border-transparent" 
+                    isExpanded
+                      ? "text-muted-foreground hover:text-foreground border-transparent"
                       : "text-foreground font-medium border-border hover:bg-muted"
                   )}
                 >
@@ -584,15 +584,6 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           onClose={() => history.back()}
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
-          onProceed={() => setViewState("contact")}
-          onRequestSingleQuote={() => {
-            // S'assurer que ce produit est sélectionné avant d'aller au formulaire
-            if (!selectedIds.has(selectedProduct.id)) {
-              toggleSupplier(selectedProduct.id);
-            }
-            setViewState("contact");
-          }}
-          selectedCount={selectedCount}
         />
       )}
       {/* Comparison Modal */}
