@@ -209,10 +209,10 @@ class FilterBuilder:
                 key = "categorie"
             elif key == "id_categorie" and source == "siteweb":
                 continue
-            elif key == "avec_prix" and source == "produits_4":
+            elif key == "avec_prix" and source == "produits_4" and val == True:
                 clauses.append(f"(prix_ht != '' OR prix_ttc != '')")
                 continue
-            elif key == "avec_prix" and source == "produits_3":
+            elif key == "avec_prix" and source == "produits_3" and val == True:
                 clauses.append(f" (prix_ht != '' OR prix_ttc != '') ")
                 continue
 
