@@ -9,6 +9,7 @@ from pymilvus import (
     utility,
     AnnSearchRequest,
     WeightedRanker,
+    RRFRanker,
 )
 from domain.search_result import SearchResultEntity
 
@@ -381,6 +382,14 @@ class MilvusClient:
         top_k: int,
         dense_weight: float = 0.7,
         sparse_weight: float = 0.3,
+        # --- Paramètres d'exploration pour optimiser la pertinence ---
+        ef: int | None = None,
+        radius: float | None = None,
+        range_filter: float | None = None,
+        drop_ratio_search: float = 0.0,
+        dense_limit_multiplier: int = 1,
+        ranker_type: str = "weighted",
+        rrf_k: int = 60,
         **kwargs,
     ) -> list[SearchResultEntity]:
         """
@@ -391,6 +400,55 @@ class MilvusClient:
         - Champ 'embedding' (FLOAT_VECTOR) pour la recherche dense
         - Champ 'sparse_embedding' (SPARSE_FLOAT_VECTOR) avec Function(BM25)
           liée au champ 'text' (VARCHAR)
+
+        Paramètres d'exploration (sacrifier le temps calcul pour la pertinence):
+        ----------
+        ef : int | None
+            Contrôle la largeur d'exploration du graphe HNSW.
+            - None  → utilise _ef_search(top_k) [défaut actuel, ~300]
+            - 2000+ → explore bien plus de nœuds, meilleur rappel
+            - 10000+→ rappel quasi-exhaustif, latence élevée
+            IMPORTANT: C'est le levier principal pour la pertinence sur 1.8M docs.
+            Avec ef=300, HNSW ne considère que ~300 candidats depuis le point
+            d'entrée du graphe, ce qui explique pourquoi des résultats pertinents
+            plus profonds dans le graphe ne remontent pas.
+
+        radius : float | None
+            Seuil de similarité minimum (COSINE: 0.0 à 1.0).
+            Seuls les résultats avec score >= radius sont retournés.
+            Ex: radius=0.5 élimine les résultats peu similaires.
+
+        range_filter : float | None
+            Seuil de similarité maximum (COSINE: 0.0 à 1.0).
+            Combiné avec radius, crée une bande de scores [radius, range_filter].
+            Pour COSINE: range_filter > radius requis.
+            Ex: radius=0.3, range_filter=0.9 → résultats entre 0.3 et 0.9.
+
+        drop_ratio_search : float
+            Pour la recherche BM25 sparse : proportion des poids de termes les
+            plus faibles à ignorer dans le vecteur de requête.
+            - 0.0 → garde tous les termes (précision max, défaut)
+            - 0.1 → ignore les 10% de termes les plus faibles (plus rapide)
+
+        dense_limit_multiplier : int
+            Facteur de sur-récupération pour chaque sous-requête.
+            Chaque AnnSearchRequest récupère top_k * multiplier candidats.
+            Le résultat final est toujours limité à top_k après fusion.
+            - 1  → comportement actuel
+            - 3+ → donne au ranker plus de candidats pour une meilleure fusion
+
+        ranker_type : str
+            Stratégie de fusion des résultats:
+            - "weighted" → WeightedRanker (fusion par scores pondérés, défaut)
+            - "rrf"      → RRFRanker (Reciprocal Rank Fusion, fusion par rangs,
+                           souvent plus robuste quand on mélange des métriques
+                           hétérogènes comme COSINE + BM25)
+
+        rrf_k : int
+            Constante de lissage pour RRFRanker (utilisé seulement si ranker_type="rrf").
+            - 60  → défaut, bon équilibre
+            - 10  → favorise fortement les résultats en haut de chaque liste
+            - 100 → lissage plus fort, poids plus égal entre les rangs
         """
         try:
             if not connections.has_connection("default"):
@@ -415,31 +473,70 @@ class MilvusClient:
             if "text" not in fields_without_embedding:
                 fields_without_embedding.append("text")
 
+            # Calcul du limit pour les sous-requêtes (sur-récupération)
+            sub_limit = top_k * dense_limit_multiplier
+
             # --- 1. Requête de recherche dense (COSINE sur le champ 'embedding') ---
+            # ef: si explicitement fourni, on l'utilise ; sinon fallback sur _ef_search
+            effective_ef = ef if ef is not None else self._ef_search(top_k)
+
+            dense_hnsw_params = {"ef": effective_ef}
+
             dense_search_params = {
                 "metric_type": "COSINE",
-                "params": {"ef": self._ef_search(top_k)},
+                "params": dense_hnsw_params,
             }
+
+            # radius / range_filter : seuils de similarité pour filtrer par score
+            # Pour COSINE : range_filter > radius (les deux entre 0.0 et 1.0)
+            if radius is not None:
+                dense_search_params["radius"] = radius
+            if range_filter is not None:
+                dense_search_params["range_filter"] = range_filter
+
+            logging.info(
+                f"[hybrid_search] Dense params: ef={effective_ef}, "
+                f"radius={radius}, range_filter={range_filter}, "
+                f"sub_limit={sub_limit}"
+            )
+
             dense_request = AnnSearchRequest(
                 data=[dense_vector],
                 anns_field="embedding",
                 param=dense_search_params,
-                limit=top_k,
+                limit=sub_limit,
                 expr=kwargs.get("expr", None),
             )
 
             # --- 2. Requête de recherche sparse / full-text BM25 ---
-            sparse_search_params = {"metric_type": "BM25"}
+            sparse_search_params = {
+                "metric_type": "BM25",
+                "params": {"drop_ratio_search": drop_ratio_search},
+            }
+
+            logging.info(
+                f"[hybrid_search] Sparse params: drop_ratio_search={drop_ratio_search}, "
+                f"sub_limit={sub_limit}"
+            )
+
             sparse_request = AnnSearchRequest(
                 data=[query_text],
                 anns_field="sparse_embedding",
                 param=sparse_search_params,
-                limit=top_k,
+                limit=sub_limit,
                 expr=kwargs.get("expr", None),
             )
 
-            # --- 3. Recherche hybride avec fusion pondérée ---
-            ranker = WeightedRanker(dense_weight, sparse_weight)
+            # --- 3. Recherche hybride avec fusion ---
+            if ranker_type == "rrf":
+                ranker = RRFRanker(k=rrf_k)
+                logging.info(f"[hybrid_search] Ranker: RRFRanker(k={rrf_k})")
+            else:
+                ranker = WeightedRanker(dense_weight, sparse_weight)
+                logging.info(
+                    f"[hybrid_search] Ranker: WeightedRanker("
+                    f"dense={dense_weight}, sparse={sparse_weight})"
+                )
 
             results = collection.hybrid_search(
                 reqs=[dense_request, sparse_request],
@@ -459,6 +556,11 @@ class MilvusClient:
                         source=collection_name,
                     )
                 )
+
+            logging.info(
+                f"[hybrid_search] Returned {len(domain_results)} results "
+                f"(requested top_k={top_k})"
+            )
 
             return domain_results
 

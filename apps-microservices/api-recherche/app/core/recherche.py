@@ -511,6 +511,7 @@ class SearchOrchestrator:
                             if self.request.fields and self.request.action == 1
                             else None
                         ),
+                        **self.request.hybrid_options.model_dump(),
                     )
                     if self.request.hybrid
                     else await database_client.search_vector(
@@ -860,6 +861,7 @@ class SearchOrchestrator:
                 k=k,
                 filter_expr=final_filter_expr,
                 context_mode=context_mode,
+                **self.request.hybrid_options.model_dump(),
             )
             if self.request.hybrid
             else await database_client.search_vector(
