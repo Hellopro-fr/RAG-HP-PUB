@@ -1506,7 +1506,7 @@ $(function () {
               if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
               if (state.selectedIdsProduits && state.selectedIdsProduits.length > 0) filtreSpecifique.id_produit = state.selectedIdsProduits;
               filtreSpecifique.hybrid = false;
-              console.log(state.hybrid, state.sourcesAvecFiltres)
+              console.log(state.hybrid, state.selectedSources)
               if (state.hybrid && state.sourcesAvecFiltres.length < 2 && state.sourcesAvecFiltres[0].source == "produits_4") filtreSpecifique.hybrid = true;
               break;
             case 'devis':
