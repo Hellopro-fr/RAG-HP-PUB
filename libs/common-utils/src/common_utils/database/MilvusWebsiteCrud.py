@@ -298,7 +298,6 @@ class MilvusWebsiteCrud:
             print(f"[{model_key}][siteweb] Suppression des anciens chunks avec expression: {expr}")
 
             self.collection.delete(expr, timeout=30)
-            self.collection.flush(timeout=30)
 
             print(f"[{model_key}] ✓ Suppression par URL terminée avec succès.")
 
@@ -350,7 +349,6 @@ class MilvusWebsiteCrud:
             print(f"[{model_key}][siteweb] Suppression des anciens {page_type} avec expression: {expr}")
 
             self.collection.delete(expr, timeout=30)
-            self.collection.flush(timeout=30)
 
             print(f"[{model_key}] ✓ Suppression {page_type} pour domaine {domaine} terminée avec succès.")
 
