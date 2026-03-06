@@ -11,7 +11,7 @@ class RequestProcessus(BaseModel):
 class ItemResult(BaseModel):
     """Result of processing a single data item"""
     item_id: str = Field(..., description="Chunk ID in Milvus or BO base ID")
-    source: str = Field(default="siteweb", description="Source of the chunk")
+    source: str = Field(default="devis", description="Source of the chunk")
     content: str = Field(default="", description="Full text content of the data")
     prix_data: Optional[Dict[str, Any]] = Field(None, description="Price data extracted by the LLM")
     status: str = Field(default="pending", description="Status: pending, success, error")
