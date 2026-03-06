@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
+import { X, Clock, ChevronLeft, ChevronRight, Check, Trash2, HelpCircle, Truck, Play, Building2, ZoomIn, ChevronDown, ChevronUp, Loader2, Copy, Send } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import DOMPurify from "isomorphic-dompurify";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,9 @@ interface ProductDetailProps {
   onClose: () => void;
   onSelect: () => void;
   isSelected: boolean;
+  onProceed?: () => void;
+  onRequestSingleQuote?: () => void;
+  selectedCount?: number;
 }
 
 // Helper to extract YouTube video ID
@@ -39,7 +42,7 @@ const getYouTubeThumbnail = (videoId: string): string => {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 };
 
-const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductDetailProps) => {
+const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed, onRequestSingleQuote, selectedCount = 0 }: ProductDetailProps) => {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -593,46 +596,89 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected }: ProductD
 
         {/* Footer - Fixed at bottom on mobile */}
         <div className="border-t bg-background p-4 pb-6 sm:pb-4 flex-shrink-0 safe-area-inset-bottom">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
-            <button
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Back */}
+            <Button
+              variant="ghost"
               onClick={onClose}
-              className="hidden sm:block text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="gap-1 text-muted-foreground hover:text-foreground shrink-0"
+              size="sm"
             >
-              ← Retour à la liste
-            </button>
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline">Retour</span>
+            </Button>
+
+            <div className="flex-1" />
 
             {isSelected ? (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-                {/* Selected state badge */}
-                <div className="flex items-center justify-center gap-2 rounded-full bg-match-high/15 border border-match-high/30 px-4 py-2">
-                  <div className="flex items-center justify-center h-5 w-5 rounded-full bg-match-high">
-                    <Check className="h-3 w-3 text-white" />
-                  </div>
-                  <span className="text-sm font-semibold text-match-high">Produit sélectionné</span>
-                </div>
-
-                {/* Remove button - clearly destructive */}
+              <>
                 <Button
-                  variant="outline"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     onSelect();
                   }}
-                  className="gap-2 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50"
+                  className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Retirer de la sélection
+                  <span className="hidden sm:inline">Retirer</span>
                 </Button>
-              </div>
+
+                {onRequestSingleQuote && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      onClose();
+                      onRequestSingleQuote();
+                    }}
+                    className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Devis sur ce produit →
+                  </Button>
+                )}
+
+                {onProceed && selectedCount > 1 && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      onClose();
+                      onProceed();
+                    }}
+                    className="gap-1.5 bg-accent hover:bg-accent/90 text-accent-foreground shrink-0"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Devis sur ma sélection ({selectedCount} produits)
+                  </Button>
+                )}
+              </>
             ) : (
-              <Button
-                onClick={() => {
-                  onSelect();
-                  onClose();
-                }}
-                className="w-full sm:w-auto px-6 bg-accent hover:bg-accent/90 text-accent-foreground"
-              >
-                Ajouter à ma sélection
-              </Button>
+              <>
+                {onRequestSingleQuote && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (!isSelected) onSelect();
+                      onClose();
+                      onRequestSingleQuote();
+                    }}
+                    className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    Devis sur ce produit →
+                  </Button>
+                )}
+
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    onSelect();
+                  }}
+                  className="bg-accent hover:bg-accent/90 text-accent-foreground shrink-0"
+                >
+                  Ajouter à ma sélection
+                </Button>
+              </>
             )}
           </div>
         </div>
