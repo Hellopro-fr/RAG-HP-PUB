@@ -217,7 +217,11 @@ export interface FlowState {
   // Paramètres de test pour le scoring du matching (passés via URL)
   matchingTestParams: MatchingTestParams | null;
 
+  // IDs des produits à soumettre (pour le devis unique vs sélection multiple)
+  supplierIdsToSubmit: string[] | null;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
+  setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
   setCharacteristicsMap: (characteristics: CharacteristicsMap) => void;
   setOrphanedSelectedSuppliers: (suppliers: Supplier[]) => void;
@@ -293,6 +297,7 @@ const initialState = {
   userQuestionAnswers: [],
   matchingTestParams: null,
   ddc: "",
+  supplierIdsToSubmit: null,
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -372,6 +377,8 @@ export const useFlowStore = create<FlowState>()(
       })),
 
       setSelectedSupplierIds: (ids) => set({ selectedSupplierIds: ids }),
+
+      setSupplierIdsToSubmit: (ids) => set({ supplierIdsToSubmit: ids }),
 
       toggleSupplier: (supplierId) =>
         set((state) => {

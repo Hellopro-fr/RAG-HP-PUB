@@ -30,13 +30,17 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
     categoryId,
     userAnswers,
     profileData,
-    selectedSupplierIds,
     setContactData,
-    files: filesStore, 
+    files: filesStore,
     setFilesStore,
-    addFilesStore
+    addFilesStore,
+    supplierIdsToSubmit: storeSupplierIdsToSubmit,
+    selectedSupplierIds
 
   } = useFlowStore();
+
+  // Utiliser les IDs du store (définis lors de l'entrée dans contact), avec fallback sur les IDs sélectionnés
+  const supplierIdsToSubmit = storeSupplierIdsToSubmit ?? selectedSupplierIds;
   
 
   const leadSubmission = useLeadSubmission({ suppliers: selectedSuppliers });
@@ -260,7 +264,7 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
       is_known_buyer: isKnownBuyer,
       has_files: (finalData.files?.length || 0) > 0,
       files_count: finalData.files?.length || 0,
-      selected_suppliers_count: selectedSupplierIds.length
+      selected_suppliers_count: supplierIdsToSubmit.length
     }, categoryId, 1);
 
     // Si acheteur connu: soumettre le lead directement
@@ -272,7 +276,7 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
         contact: finalData,
         profile: profileData!,
         answers: userAnswers,
-        selectedSupplierIds: selectedSupplierIds,
+        selectedSupplierIds: supplierIdsToSubmit,
         submittedAt: new Date().toISOString(),
         userKnownStatus,
         categoryId: categoryId?.toString(),

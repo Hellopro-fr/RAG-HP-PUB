@@ -114,6 +114,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   const {
     selectedSupplierIds,
     setSelectedSupplierIds,
+    setSupplierIdsToSubmit,
     setFlowType: setStoreFlowType,
     setEquivalenceCaracteristique,
     setOrphanedSelectedSuppliers,
@@ -148,6 +149,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
         setShowComparison(false);
       } else if (viewStateRef.current !== 'selection') {
         setSingleQuoteProductId(null); // Réinitialiser le devis unique au retour
+        setSupplierIdsToSubmit(null); // Réinitialiser les IDs à soumettre
         setViewState('selection');
       }
     };
@@ -470,10 +472,12 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
               }
               onBack={() => {
                 setSingleQuoteProductId(null); // Réinitialiser le devis unique au retour
+                setSupplierIdsToSubmit(null); // Réinitialiser les IDs à soumettre
                 setViewState("selection");
               }}
               onContactComplete={(isExistingBuyer) => {
                 setSingleQuoteProductId(null); // Réinitialiser après soumission
+                setSupplierIdsToSubmit(null); // Réinitialiser les IDs à soumettre
                 if (isExistingBuyer) {
                   // Acheteur connu : le formulaire a déjà soumis le lead et navigue automatiquement
                   // Pas besoin d'action supplémentaire ici
@@ -528,7 +532,10 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
             {/* Primary CTA - on top for mobile */}
             <button
               disabled={selectedCount === 0}
-              onClick={() => setViewState("contact")}
+              onClick={() => {
+                setSupplierIdsToSubmit(selectedSupplierIds); // Tous les produits sélectionnés
+                setViewState("contact");
+              }}
               className={cn(
                 "order-1 lg:order-2 rounded-lg px-6 py-3 text-base font-semibold transition-all duration-200 w-full lg:w-auto",
                 selectedCount > 0
@@ -597,10 +604,12 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
           onProceed={() => {
+            setSupplierIdsToSubmit(selectedSupplierIds); // Tous les produits sélectionnés
             setSelectedProductId(null); // Ferme la modale
             setViewState("contact");
           }}
           onRequestSingleQuote={() => {
+            setSupplierIdsToSubmit([selectedProduct.id]); // Uniquement ce produit
             setSingleQuoteProductId(selectedProduct.id); // Garde la sélection, juste marque le produit pour devis unique
             setSelectedProductId(null); // Ferme la modale
             setViewState("contact");
