@@ -584,12 +584,13 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           onClose={() => history.back()}
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
-          onProceed={() => setViewState("contact")}
+          onProceed={() => {
+            setSelectedProductId(null); // Ferme la modale
+            setViewState("contact");
+          }}
           onRequestSingleQuote={() => {
-            // S'assurer que ce produit est sélectionné avant d'aller au formulaire
-            if (!selectedIds.has(selectedProduct.id)) {
-              toggleSupplier(selectedProduct.id);
-            }
+            setSelectedSupplierIds([selectedProduct.id]);
+            setSelectedProductId(null); // Ferme la modale
             setViewState("contact");
           }}
           selectedCount={selectedCount}

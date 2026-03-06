@@ -628,7 +628,6 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
                   <Button
                     size="sm"
                     onClick={() => {
-                      onClose();
                       onRequestSingleQuote();
                     }}
                     className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
@@ -642,7 +641,6 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
                   <Button
                     size="sm"
                     onClick={() => {
-                      onClose();
                       onProceed();
                     }}
                     className="gap-1.5 bg-accent hover:bg-accent/90 text-accent-foreground shrink-0"
@@ -658,8 +656,6 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
                   <Button
                     size="sm"
                     onClick={() => {
-                      if (!isSelected) onSelect();
-                      onClose();
                       onRequestSingleQuote();
                     }}
                     className="gap-1.5 shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
