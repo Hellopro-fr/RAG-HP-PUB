@@ -398,6 +398,19 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     setCurrentIndex(0);
   };
 
+  // Aller à la dernière question (pour retour navigateur)
+  const goToLastQuestion = () => {
+    if (!pathData) {
+      // Si pathData pas encore chargé, on reste sur Q1 (sera recalculé après chargement)
+      setCurrentIndex(0);
+      return;
+    }
+    // La dernière question du parcours est à l'index pathData.questions.length
+    // (Q1 est index 0, Q2 est index 1, etc.)
+    const lastIndex = pathData.questions.length;
+    setCurrentIndex(lastIndex);
+  };
+
   return {
     // État
     currentQuestion,
@@ -416,6 +429,7 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     submitAnswer,
     goBack,
     reset,
+    goToLastQuestion,
 
     // Flags
     canGoBack: currentIndex > 0,

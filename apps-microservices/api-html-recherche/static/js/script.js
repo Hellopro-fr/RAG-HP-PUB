@@ -97,7 +97,9 @@ $(function () {
     fournisseurFilter: $("#fournisseurDropdown"),
     btnTranscription: $("#btn-transcription"),
     typeRecherche: $("input[name='type-recherche']"),
-    idsProduit: $(`#ids_produit`)
+    idsProduit: $(`#ids_produit`),
+    avecPrix: $(`#avecPrix`),
+    rechercheHybride: $(`#rechercheHybride`)
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -945,6 +947,12 @@ $(function () {
       }).get();
     });
 
+    elements.avecPrix.on("change", function () {
+      state.avecPrix = $(this).is(":checked");
+    });
+    elements.rechercheHybride.on('input', function () {
+      state.rechercheHybride = $(this).is(":checked");
+    });
     elements.typeRecherche.on("change", function (e) {
       e.preventDefault();
       state.typeRecherche = $(this).val();
@@ -1351,6 +1359,8 @@ $(function () {
 
     let title = meta.id_produit || 'Titre non disponible';
     let categorie = meta.categorie || meta.id_categorie || 'N/A';
+    let price = "";
+    let price_copy = ""
     switch (result.source) {
       // case "produits_3":
       //   title = meta.nom_produit || title;
@@ -1359,6 +1369,13 @@ $(function () {
       case "produits_4":
         title = meta.nom_produit || title;
         result.source = "Produits"
+        price_ht = meta.prix_ht || 'N/A';
+        price_ttc = meta.prix_ttc || 'N/A';
+        price += `<span class='text-sm'>Prix HT : ${price_ht}</span><span class='text-sm'>Prix TTC : ${price_ttc}</span>`;
+        price_copy = `
+          Prix HT : ${price_ht}
+          Prix TTC : ${price_ttc}
+        `;
         break;
       case "devis":
         title = meta.lead_id || title;
@@ -1419,7 +1436,9 @@ $(function () {
       id_produit: meta.id_produit,
       chunk_info: `${meta.chunk_id}/${meta.total_chunks}`,
       is_pre_chunks: result._isContext == "pre",
-      is_post_chunks: result._isContext == "post"
+      is_post_chunks: result._isContext == "post",
+      price: price,
+      price_copy: price_copy
     };
   }
 
@@ -1496,6 +1515,18 @@ $(function () {
           if (autreChunks.length > 0 && state.typeRecherche == 1) {
             filtreSpecifique.autre_chunks = autreChunks;
           }
+          
+          let onlyProduits = true;
+
+          $.each(state.selectedSources, function(key, value) {
+              if (key === 'produits') {
+                  if (value !== true) onlyProduits = false;
+              }
+              else {
+                  if (value !== false) onlyProduits = false;
+              }
+          });
+          state.hybrid = onlyProduits;
 
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
@@ -1507,20 +1538,10 @@ $(function () {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
                 filtreSpecifique.source = produitsSource;
               }
+              if (state.avecPrix) filtreSpecifique.avec_prix = state.avecPrix;
               if (state.selectedFournisseurs && state.selectedFournisseurs.length > 0) filtreSpecifique.id_fournisseur = state.selectedFournisseurs;
               if (state.selectedIdsProduits && state.selectedIdsProduits.length > 0) filtreSpecifique.id_produit = state.selectedIdsProduits;
-              console.log(state.hybrid, state.selectedSources)
-              let onlyProduits = true;
-
-              $.each(state.selectedSources, function(key, value) {
-                  if (key === 'produits') {
-                      if (value !== true) onlyProduits = false;
-                  }
-                  else {
-                      if (value !== false) onlyProduits = false;
-                  }
-              });
-              state.hybrid = onlyProduits;
+              // console.log(state.hybrid, state.selectedSources)
               break;
             case 'devis':
               const devisNaf = $('#devisNaf').val();
@@ -1650,7 +1671,16 @@ $(function () {
           rrf: GetURLParameter("rrf") == 1
         },
         type: $("input[name='type-recherche']:checked").val(),
-        hybrid: state.hybrid
+        hybrid: GetURLParameter("hybrid") == 1 ? true : false,
+        hybrid_options: {
+          ef: GetURLParameter("ef") || 5000,
+          dense_limit_multiplier: GetURLParameter("dense_limit_multiplier") || 5,
+          ranker_type: GetURLParameter("ranker_type") || "rrf",
+          rrf_k: GetURLParameter("rrf_k") || 60,
+          drop_ratio_search: GetURLParameter("drop_ratio_search") || 0.0,
+          radius: GetURLParameter("radius") || null,
+          range_filter: GetURLParameter("range_filter") || null
+        }
       };
 
       // --- FIN DE LA MODIFICATION ---
@@ -1809,6 +1839,7 @@ $(function () {
   function renderSearchResults() {
     elements.searchResultsList.empty();
     state.copiedContent = "";
+    let i = 1;
     state.searchResults.forEach((result) => {
       const relevanceHtml = (state.typeRecherche == 1) ? getRelevanceCard(result.confidence / 100) : "";
       const sourceBadgeHtml = getSourceBadge(result.source);
@@ -1827,15 +1858,21 @@ $(function () {
       Fournisseur : ${result.supplier}
       Catégorie : ${result.category}
       Texte : ${result.snippet || ""}
+      ${result.price_copy || ""}
       `;
+      let price = result.price;
+      
       const resultCardHtml = `
         <div class="${class_bg_other_chunks} rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
               <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${result.title}</h3>
+                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${i}. ${result.title}</h3>
                   <a href="${result.url}" target="_blank" rel="noopener noreferrer" class="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-blue-100">
                     <i data-lucide="external-link" class="h-4 w-4 text-custom-gris group-hover:text-blue-700"></i>
                   </a>
+              </div>
+              <div class="flex items-start gap-2 flex-col">
+                  ${price}
               </div>
               <div class="flex flex-wrap gap-2">
                   ${sourceBadgeHtml}
@@ -1868,6 +1905,7 @@ $(function () {
         </div>`;
 
       elements.searchResultsList.append(resultCardHtml);
+      i++;
     });
 
     // Vérifier après rendu si le texte est tronqué

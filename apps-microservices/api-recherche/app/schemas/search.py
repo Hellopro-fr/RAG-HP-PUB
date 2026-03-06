@@ -43,6 +43,24 @@ class RerankerOptions(BaseModel):
     ponderation: float = 1.1
 
 
+class HybridSearchOptions(BaseModel):
+    """Paramètres d'exploration pour la recherche hybride (dense + BM25)."""
+
+    ef: Optional[int] = (
+        None  # HNSW search breadth (None = auto ~300, 2000+ = meilleur rappel)
+    )
+    radius: Optional[float] = None  # Seuil de similarité minimum (COSINE: 0.0 à 1.0)
+    range_filter: Optional[float] = None  # Seuil de similarité maximum
+    drop_ratio_search: float = (
+        0.0  # BM25: proportion des termes faibles à ignorer (0.0 = max précision)
+    )
+    dense_limit_multiplier: int = (
+        1  # Facteur de sur-récupération (3+ = plus de candidats pour fusion)
+    )
+    ranker_type: str = "weighted"  # "weighted" ou "rrf" (Reciprocal Rank Fusion)
+    rrf_k: int = 60  # Constante de lissage RRF (10-100)
+
+
 class SearchRequestWs(BaseModel):
     prompt: str
     source: Optional[List[SourcesFiltre]] = [
@@ -60,6 +78,7 @@ class SearchRequestWs(BaseModel):
     cache: bool = (True,)
     get_n_chunks_pj: bool = (False,)
     hybrid: bool = False
+    hybrid_options: Optional[HybridSearchOptions] = HybridSearchOptions()
 
 
 # Schéma de réponse détaillé

@@ -209,6 +209,13 @@ class FilterBuilder:
                 key = "categorie"
             elif key == "id_categorie" and source == "siteweb":
                 continue
+            elif key == "avec_prix" and source == "produits_4":
+                logger.info(f"avec_prix produits_4 : {val}")
+                clauses.append(f"(prix_ht != '' OR prix_ttc != '')")
+                continue
+            elif key == "avec_prix" and source == "produits_3" and val == True:
+                clauses.append(f" (prix_ht != '' OR prix_ttc != '') ")
+                continue
 
             if not dtype:
                 continue
@@ -504,6 +511,7 @@ class SearchOrchestrator:
                             if self.request.fields and self.request.action == 1
                             else None
                         ),
+                        **self.request.hybrid_options.model_dump(),
                     )
                     if self.request.hybrid
                     else await database_client.search_vector(
@@ -853,6 +861,7 @@ class SearchOrchestrator:
                 k=k,
                 filter_expr=final_filter_expr,
                 context_mode=context_mode,
+                **self.request.hybrid_options.model_dump(),
             )
             if self.request.hybrid
             else await database_client.search_vector(

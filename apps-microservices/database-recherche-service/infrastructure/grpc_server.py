@@ -160,6 +160,36 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 request.sparse_weight if request.HasField("sparse_weight") else 0.3
             )
 
+            # Extraction des paramètres d'exploration depuis les options
+            ef = kwargs.pop("ef", None)
+            if ef is not None:
+                ef = int(ef)
+            radius = kwargs.pop("radius", None)
+            if radius is not None:
+                radius = float(radius)
+            range_filter = kwargs.pop("rangeFilter", kwargs.pop("range_filter", None))
+            if range_filter is not None:
+                range_filter = float(range_filter)
+            drop_ratio_search = float(
+                kwargs.pop("dropRatioSearch", kwargs.pop("drop_ratio_search", 0.0))
+            )
+            dense_limit_multiplier = int(
+                kwargs.pop(
+                    "denseLimitMultiplier", kwargs.pop("dense_limit_multiplier", 1)
+                )
+            )
+            ranker_type = str(
+                kwargs.pop("rankerType", kwargs.pop("ranker_type", "weighted"))
+            )
+            rrf_k = int(kwargs.pop("rrfK", kwargs.pop("rrf_k", 60)))
+
+            logging.info(
+                f"[HybridSearch] Params: ef={ef}, radius={radius}, "
+                f"range_filter={range_filter}, drop_ratio_search={drop_ratio_search}, "
+                f"dense_limit_multiplier={dense_limit_multiplier}, "
+                f"ranker_type={ranker_type}, rrf_k={rrf_k}"
+            )
+
             results = self.use_case.execute_hybrid_search(
                 collection_name=request.collection_name,
                 dense_vector=list(request.dense_vector),
@@ -175,6 +205,13 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 output_fields=(
                     list(request.output_fields) if request.output_fields else None
                 ),
+                ef=ef,
+                radius=radius,
+                range_filter=range_filter,
+                drop_ratio_search=drop_ratio_search,
+                dense_limit_multiplier=dense_limit_multiplier,
+                ranker_type=ranker_type,
+                rrf_k=rrf_k,
                 **kwargs,
             )
 

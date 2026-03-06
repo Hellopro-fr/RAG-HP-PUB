@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NeedsQuestionnaire from '@/components/flow/NeedsQuestionnaire';
+import MatchingLoader from '@/components/flow/MatchingLoader';
 import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type MatchingTestParams } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
+import { useProcessMatching } from '@/hooks/api/useProcessMatching';
 
 // Interface pour les données URL (réponse Q1 pré-remplie)
 interface UrlData {
@@ -29,15 +31,18 @@ export default function QuestionnaireClient({
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
   const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
-  const { goToGeoZone } = useFlowNavigation();
+  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
+  const { processMatching } = useProcessMatching();
   const hasProcessedUrlData = useRef(false);
   const isHydrated = useFlowStoreHydration();
-
-  // console.log('[QuestionnaireClient] Initial ddc :', { initialDdc });
 
   // État pour contrôler le rendu du questionnaire
   // On attend que les données URL soient traitées avant de rendre
   const [isReady, setIsReady] = useState(false);
+
+  // État pour le loader de matching et la destination après
+  const [showLoader, setShowLoader] = useState(false);
+  const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | null>(null);
 
   // Récupérer et stocker le categoryId + sauvegarder le token original
   // Priorité : props du Server Component > searchParams client
@@ -199,10 +204,26 @@ export default function QuestionnaireClient({
     setIsReady(true);
   }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer]);
 
-  const handleComplete = () => {
-    // Navigate to geo-zone step with GET params preserved
-    goToGeoZone();
+  const handleComplete = async () => {
+    // Afficher le loader et lancer le matching
+    setShowLoader(true);
+    const destination = await processMatching();
+    setRedirectDestination(destination);
   };
+
+  const handleLoaderComplete = () => {
+    // Navigation après le loader
+    if (redirectDestination === 'something-to-add') {
+      goToSomethingToAdd();
+    } else {
+      goToSelection();
+    }
+  };
+
+  // Afficher le loader pendant le matching
+  if (showLoader) {
+    return <MatchingLoader onComplete={handleLoaderComplete} duration={5000} />;
+  }
 
   // Attendre que les données URL soient traitées avant de rendre le questionnaire
   // Cela garantit que le hook useDynamicQuestionnaire s'initialise avec les bonnes données
