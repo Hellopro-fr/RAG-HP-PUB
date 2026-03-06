@@ -98,7 +98,8 @@ $(function () {
     btnTranscription: $("#btn-transcription"),
     typeRecherche: $("input[name='type-recherche']"),
     idsProduit: $(`#ids_produit`),
-    avecPrix: $(`#avecPrix`)
+    avecPrix: $(`#avecPrix`),
+    rechercheHybride: $(`#rechercheHybride`)
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -949,7 +950,9 @@ $(function () {
     elements.avecPrix.on("change", function () {
       state.avecPrix = $(this).is(":checked");
     });
-
+    elements.rechercheHybride.on('change', function () {
+      state.hybrid = $(this).is(":checked");
+    });
     elements.typeRecherche.on("change", function (e) {
       e.preventDefault();
       state.typeRecherche = $(this).val();
@@ -1523,7 +1526,10 @@ $(function () {
                   if (value !== false) onlyProduits = false;
               }
           });
-          state.hybrid = onlyProduits;
+
+          if (!state.hybrid) {
+            state.hybrid = onlyProduits;
+          }
 
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
@@ -1668,7 +1674,8 @@ $(function () {
           rrf: GetURLParameter("rrf") == 1
         },
         type: $("input[name='type-recherche']:checked").val(),
-        hybrid: state.hybrid,
+        // hybrid: state.hybrid,
+        hybrid: false,
           hybrid_options: {
           ef: GetURLParameter("ef") || 5000,
           dense_limit_multiplier: GetURLParameter("dense_limit_multiplier") || 5,
