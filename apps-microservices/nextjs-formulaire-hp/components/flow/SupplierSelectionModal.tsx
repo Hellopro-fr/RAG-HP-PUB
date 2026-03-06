@@ -107,6 +107,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   const [showComparison, setShowComparison] = useState(false);
   const [criteriaModified, setCriteriaModified] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState<"grid" | "list">("list");
+  // État pour le devis unique (ne modifie pas la sélection principale)
+  const [singleQuoteProductId, setSingleQuoteProductId] = useState<string | null>(null);
 
   // Zustand store pour la sélection des fournisseurs et le flowType
   const {
@@ -145,6 +147,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
       } else if (showComparisonRef.current) {
         setShowComparison(false);
       } else if (viewStateRef.current !== 'selection') {
+        setSingleQuoteProductId(null); // Réinitialiser le devis unique au retour
         setViewState('selection');
       }
     };
@@ -266,7 +269,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     }
   };
 
-  
+
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -459,9 +462,18 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
           {viewState === "contact" && (
             <ContactForm
-              selectedSuppliers={selectedSuppliersList}
-              onBack={() => setViewState("selection")}
+              selectedSuppliers={
+                // Si devis unique, passer seulement ce produit; sinon, la sélection complète
+                singleQuoteProductId
+                  ? ALL_SUPPLIERS.filter((s) => s.id === singleQuoteProductId)
+                  : selectedSuppliersList
+              }
+              onBack={() => {
+                setSingleQuoteProductId(null); // Réinitialiser le devis unique au retour
+                setViewState("selection");
+              }}
               onContactComplete={(isExistingBuyer) => {
+                setSingleQuoteProductId(null); // Réinitialiser après soumission
                 if (isExistingBuyer) {
                   // Acheteur connu : le formulaire a déjà soumis le lead et navigue automatiquement
                   // Pas besoin d'action supplémentaire ici
@@ -584,6 +596,16 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           onClose={() => history.back()}
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
+          onProceed={() => {
+            setSelectedProductId(null); // Ferme la modale
+            setViewState("contact");
+          }}
+          onRequestSingleQuote={() => {
+            setSingleQuoteProductId(selectedProduct.id); // Garde la sélection, juste marque le produit pour devis unique
+            setSelectedProductId(null); // Ferme la modale
+            setViewState("contact");
+          }}
+          selectedCount={selectedCount}
         />
       )}
       {/* Comparison Modal */}
