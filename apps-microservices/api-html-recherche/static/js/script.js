@@ -98,7 +98,8 @@ $(function () {
     btnTranscription: $("#btn-transcription"),
     typeRecherche: $("input[name='type-recherche']"),
     idsProduit: $(`#ids_produit`),
-    avecPrix: $(`#avecPrix`)
+    avecPrix: $(`#avecPrix`),
+    rechercheHybride: $(`#rechercheHybride`)
   };
 
   // (Le reste de vos fonctions d'initialisation comme CONFIG_SELECT2, OPTIONS_SELECT2, etc. reste ici)
@@ -949,7 +950,9 @@ $(function () {
     elements.avecPrix.on("change", function () {
       state.avecPrix = $(this).is(":checked");
     });
-
+    elements.rechercheHybride.on('input', function () {
+      state.rechercheHybride = $(this).is(":checked");
+    });
     elements.typeRecherche.on("change", function (e) {
       e.preventDefault();
       state.typeRecherche = $(this).val();
@@ -1668,8 +1671,8 @@ $(function () {
           rrf: GetURLParameter("rrf") == 1
         },
         type: $("input[name='type-recherche']:checked").val(),
-        hybrid: state.hybrid,
-          hybrid_options: {
+        hybrid: GetURLParameter("hybrid") == 1 ? true : false,
+        hybrid_options: {
           ef: GetURLParameter("ef") || 5000,
           dense_limit_multiplier: GetURLParameter("dense_limit_multiplier") || 5,
           ranker_type: GetURLParameter("ranker_type") || "rrf",
@@ -1836,6 +1839,7 @@ $(function () {
   function renderSearchResults() {
     elements.searchResultsList.empty();
     state.copiedContent = "";
+    let i = 1;
     state.searchResults.forEach((result) => {
       const relevanceHtml = (state.typeRecherche == 1) ? getRelevanceCard(result.confidence / 100) : "";
       const sourceBadgeHtml = getSourceBadge(result.source);
@@ -1862,7 +1866,7 @@ $(function () {
         <div class="${class_bg_other_chunks} rounded-lg border border-custom-clair-2 hover:shadow-lg transition-all duration-300 hover:border-custom-bleu group p-4 flex flex-col justify-between">
           <div class="space-y-3 mb-4">
               <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${result.title}</h3>
+                  <h3 class="font-semibold text-base leading-tight text-custom-noir transition-colors" data-id_produit="${result.id_produit}">${i}. ${result.title}</h3>
                   <a href="${result.url}" target="_blank" rel="noopener noreferrer" class="h-8 w-8 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-blue-100">
                     <i data-lucide="external-link" class="h-4 w-4 text-custom-gris group-hover:text-blue-700"></i>
                   </a>
@@ -1901,6 +1905,7 @@ $(function () {
         </div>`;
 
       elements.searchResultsList.append(resultCardHtml);
+      i++;
     });
 
     // Vérifier après rendu si le texte est tronqué

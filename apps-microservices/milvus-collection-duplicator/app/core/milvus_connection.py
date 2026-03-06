@@ -226,10 +226,12 @@ def duplicate_collection(
     schema = build_target_schema(source, text_field, analyzer_language)
     logger.info(f"📋  Schema built with {len(schema.fields)} fields + BM25 Function")
 
-    # ── 3. Create target collection (drop if exists) ──
+    # ── 3. Create target collection (error if exists) ──
     if utility.has_collection(target_name):
-        logger.warning(f"⚠️  '{target_name}' already exists – dropping it first.")
-        utility.drop_collection(target_name)
+        raise ValueError(
+            f"Target collection '{target_name}' already exists. "
+            f"Please drop it manually or choose a different target name."
+        )
 
     target = Collection(name=target_name, schema=schema)
     logger.info(f"✅  Created collection '{target_name}'")
