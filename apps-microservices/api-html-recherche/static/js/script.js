@@ -950,8 +950,8 @@ $(function () {
     elements.avecPrix.on("change", function () {
       state.avecPrix = $(this).is(":checked");
     });
-    elements.rechercheHybride.on('change', function () {
-      state.hybrid = $(this).is(":checked");
+    elements.rechercheHybride.on('input', function () {
+      state.rechercheHybride = $(this).is(":checked");
     });
     elements.typeRecherche.on("change", function (e) {
       e.preventDefault();
@@ -1526,10 +1526,7 @@ $(function () {
                   if (value !== false) onlyProduits = false;
               }
           });
-
-          if (!state.hybrid) {
-            state.hybrid = onlyProduits;
-          }
+          state.hybrid = onlyProduits;
 
           // Appliquer les filtres spécifiques à chaque source en se basant sur les IDs des inputs
           switch (sourceName) {
@@ -1674,9 +1671,8 @@ $(function () {
           rrf: GetURLParameter("rrf") == 1
         },
         type: $("input[name='type-recherche']:checked").val(),
-        // hybrid: state.hybrid,
-        hybrid: false,
-          hybrid_options: {
+        hybrid: GetURLParameter("hybrid") == 1 ? true : false,
+        hybrid_options: {
           ef: GetURLParameter("ef") || 5000,
           dense_limit_multiplier: GetURLParameter("dense_limit_multiplier") || 5,
           ranker_type: GetURLParameter("ranker_type") || "rrf",
