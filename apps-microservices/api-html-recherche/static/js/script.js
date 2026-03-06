@@ -1902,6 +1902,7 @@ $(function () {
         </div>`;
 
       elements.searchResultsList.append(resultCardHtml);
+      i++;
     });
 
     // Vérifier après rendu si le texte est tronqué
