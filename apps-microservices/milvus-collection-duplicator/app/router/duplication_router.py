@@ -42,6 +42,8 @@ def _run_duplication_job(job_id: str, request: DuplicationRequest):
             parallel_workers=request.parallel_workers,
             job_id=job_id,
             job_state=job,
+            float_vector_index_type=request.float_vector_index_type,
+            float_vector_index_params=request.float_vector_index_params,
         )
         job["status"] = JobStatus.COMPLETED
         job["error_file"] = result.get("error_file")

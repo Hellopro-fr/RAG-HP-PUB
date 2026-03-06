@@ -46,6 +46,22 @@ class DuplicationRequest(BaseModel):
         le=10,
         description="Number of parallel insert workers (1=sequential, higher=faster but more resource-intensive)",
     )
+    float_vector_index_type: Optional[str] = Field(
+        default=None,
+        description=(
+            "Override the index type for all FLOAT_VECTOR fields in the target collection. "
+            "Accepted values: FLAT, IVF_FLAT, IVF_SQ8, IVF_PQ, HNSW, DISKANN, AUTOINDEX. "
+            "If None, the source index is copied as-is."
+        ),
+        examples=["HNSW", "IVF_FLAT", "DISKANN"],
+    )
+    float_vector_index_params: Optional[dict] = Field(
+        default=None,
+        description=(
+            "Extra index build parameters for FLOAT_VECTOR fields (used only when "
+            'float_vector_index_type is set). Example: {"M": 16, "efConstruction": 256} for HNSW.'
+        ),
+    )
 
 
 class DuplicationResponse(BaseModel):

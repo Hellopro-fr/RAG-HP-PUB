@@ -20,7 +20,7 @@ RETRY_TTL_MS = 30000
 
 
 class Consumer:
-    """Async Consumer en mode streaming pour le service prix-extraction-siteweb."""
+    """Async Consumer en mode streaming pour le service prix-extraction-produits."""
 
     def __init__(self, publisher: Publisher):
         self.publisher = publisher
@@ -33,8 +33,8 @@ class Consumer:
         self._categories_lock = asyncio.Lock()
 
         self.exchange_name = 'prix_pipeline_exchange'
-        self.routing_key = 'prix.extraction_siteweb.start'
-        self.queue_name = 'prix_extraction_siteweb_queue'
+        self.routing_key = 'prix.extraction_produits.start'
+        self.queue_name = 'prix_extraction_produits_queue'
         self.retry_exchange = 'prix_retry_exchange'
         self.retry_queue_name = f'{self.queue_name}_retry'
         self.dead_letter_exchange = 'prix_dead_letter_exchange'
@@ -47,7 +47,7 @@ class Consumer:
         await self.channel.set_qos(prefetch_count=settings.MAX_CONCURRENCY)
         await self.publisher.setup(self.channel)
         await self._setup_infrastructure()
-        logger.info("✅ Prix-Extraction-Siteweb Consumer initialized (streaming mode)")
+        logger.info("✅ Prix-Extraction-Produits Consumer initialized (streaming mode)")
 
     async def _setup_infrastructure(self):
         dlq_exchange = await self.channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
@@ -92,34 +92,34 @@ class Consumer:
         async with message.process(ignore_processed=True):
             id_categorie = None
             category_locked = False
-            
+
             try:
                 data = json.loads(message.body.decode())
                 id_categorie = data.get('id_categorie')
                 is_reset = data.get('is_reset', False)
-                
+
                 if not id_categorie:
                     raise ValueError("id_categorie manquant dans le message.")
-                
+
                 if await self._is_duplicate_category(str(id_categorie)):
                     logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie déjà en cours - ignoré")
                     await message.ack()
                     return
-                
+
                 category_locked = True
-                logger.info(f"[CAT-{id_categorie}] 📥 Début traitement extraction prix siteweb")
-                
+                logger.info(f"[CAT-{id_categorie}] 📥 Début traitement extraction prix produits")
+
                 request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
                 api_client = HelloProAPIClient()
                 extractor = PrixExtractor(api_client)
-                
+
                 try:
                     result = await extractor.extract_prix_for_category(request)
                     if extractor.tracking_file:
                         logger.info(f"[CAT-{id_categorie}] 📁 Tracking: {extractor.tracking_file}")
                 finally:
                     await extractor.close()
-                
+
                 # Publier chaque item réussi individuellement vers prix-normalisation
                 published_count = 0
                 for item_result in result.item_results:
@@ -132,32 +132,32 @@ class Consumer:
                         }
                         await self.publisher.publish_message(publish_message)
                         published_count += 1
-                
+
                 logger.info(f"[CAT-{id_categorie}] 📊 Bilan: {result.success}/{result.total_chunks} succès, {result.errors} erreurs, {published_count} messages publiés")
                 await message.ack()
                 logger.info(f"[CAT-{id_categorie}] ✅ Terminé")
-                
+
             except (json.JSONDecodeError, ValueError) as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
                 logger.error(f"{cat_prefix}❌ Erreur permanente: {e}")
-                headers = DLQProperties.create_dlq_headers(e, "prix-extraction-siteweb", 0, message)
+                headers = DLQProperties.create_dlq_headers(e, "prix-extraction-produits", 0, message)
                 await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
                 await message.ack()
-                
+
             except Exception as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
                 retry_count = self._get_retry_count(message)
                 logger.error(f"{cat_prefix}❌ Exception: {e}")
-                
+
                 if self._is_transient_error(e) and retry_count < MAX_RETRIES:
                     logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}), retry")
                     await message.nack(requeue=False)
                 else:
                     logger.error(f"{cat_prefix}❌ Échec définitif après {retry_count + 1} tentative(s)")
-                    headers = DLQProperties.create_dlq_headers(e, "prix-extraction-siteweb", retry_count, message)
+                    headers = DLQProperties.create_dlq_headers(e, "prix-extraction-produits", retry_count, message)
                     await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
                     await message.ack()
-                    
+
             finally:
                 if category_locked and id_categorie:
                     await self._release_category(str(id_categorie))
@@ -173,7 +173,7 @@ class Consumer:
 
     async def start_consuming(self):
         await self.connect()
-        logger.info(f"👂 Prix-Extraction-Siteweb: En attente sur {self.queue_name} (streaming)")
+        logger.info(f"👂 Prix-Extraction-Produits: En attente sur {self.queue_name} (streaming)")
         logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
         async with self.queue.iterator() as queue_iter:
             async for message in queue_iter:
