@@ -1165,12 +1165,12 @@ class RecommendationService:
                 ELSE 1.0
              END AS typo_score
         
-        // Calculate final_score = global_score * zone_score * etat_score * typo_score
+        // Calculate final_score = global_score * 1 * etat_score * 1
         // Filter out products with negative final_score
-        // forcer zone_geo à 1
+        // forcer zone_geo et typo_score à 1
         // global_score * zone_score * etat_score * typo_score AS final_score
-        WITH p, details, global_score, zone_score, etat_score, typo_score, info_soc,
-            global_score * zone_score * etat_score * typo_score AS final_score
+        WITH p, details, global_score, 1 AS zone_score, etat_score, 1 AS typo_score, info_soc,
+            global_score * 1 * etat_score * 1 AS final_score
         WHERE final_score >= $absolute_threshold OR $target_product_id IS NOT NULL
         WITH p, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc
         ORDER BY final_score DESC
