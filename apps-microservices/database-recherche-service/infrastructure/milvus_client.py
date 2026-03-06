@@ -110,8 +110,8 @@ class MilvusClient:
 
     def _ef_search(self, nb_chunk: int) -> int:
         """Calcule la valeur ef_search pour Qdrant/Milvus en fonction du nombre de chunks."""
-        # return 300 if nb_chunk <= 150 else nb_chunk * 2
-        return 5000
+        return 300 if nb_chunk <= 150 else nb_chunk * 2
+        # return 5000
 
     def classic_search(
         self, collection_name: str, expr: str, limit: int, output_fields: list[str]
