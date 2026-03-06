@@ -92,6 +92,9 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
 
   // Quand le questionnaire dynamique est terminé
   useEffect(() => {
+    // Attendre que les données soient chargées avant d'évaluer l'état de complétion
+    if (dynamicQuestionnaire.isLoading) return;
+
     // Premier rendu: memoriser si le questionnaire etait deja complet (retour navigateur)
     if (wasAlreadyCompleteOnMount.current === null) {
       wasAlreadyCompleteOnMount.current = dynamicQuestionnaire.isComplete;
@@ -118,7 +121,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
       trackGTMQuestionnaireComplete(dynamicQuestionnaire.progress.total, timeSpent);
       onComplete(dynamicAnswers);
     }
-  }, [dynamicQuestionnaire.isComplete, dynamicQuestionnaire.progress.total, dynamicAnswers, onComplete, startTime, dynamicQuestionnaire.goToLastQuestion]);
+  }, [dynamicQuestionnaire.isComplete, dynamicQuestionnaire.isLoading, dynamicQuestionnaire.progress.total, dynamicAnswers, onComplete, startTime, dynamicQuestionnaire.goToLastQuestion]);
 
   // Hook de tracking de vue de question
   useEffect(() => {
