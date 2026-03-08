@@ -95,7 +95,7 @@ services:
       - xpack.security.enabled=true
       - xpack.security.audit.enabled=true
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
-      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
       - http.host=0.0.0.0
       - path.repo=/usr/share/elasticsearch/snapshots
     ports:
