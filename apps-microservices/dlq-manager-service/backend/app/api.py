@@ -249,7 +249,8 @@ async def requeue_by_filter(
         try:
             print(f"Background Task {task_id}: Starting bulk requeue by filter...")
             total_requeued = 0
-            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term):
+            # Reduced batch size to 50 to prevent memory pressure when loading heavy payloads
+            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term, batch_size=50):
                 def do_batch_publish(current_batch):
                     batch_requeued = 0
                     with get_rabbitmq_channel() as channel:
@@ -292,7 +293,8 @@ async def archive_by_filter(
         try:
             print(f"Background Task {task_id}: Starting bulk archive by filter...")
             total_archived = 0
-            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term):
+            # source=False disables payload fetching, allowing us to safely process 500 IDs at a time with near-zero RAM usage
+            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term, batch_size=500, source=False):
                 message_ids = [msg['_id'] for msg in batch]
                 archived_in_batch = await es_client.update_message_status_bulk(message_ids, "Archived")
                 total_archived += archived_in_batch

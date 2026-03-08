@@ -499,17 +499,25 @@ class ElasticsearchClient:
         response = await self.client.bulk(body=actions)
         return len([item for item in response['items'] if not item['update'].get('error')])
         
-    async def scroll_messages(self, filters: Dict, search_term: str):
-        """Scrolls through all messages matching a query, yielding them in batches."""
+    async def scroll_messages(self, filters: Dict, search_term: str, batch_size: int = 100, source: Any = True):
+        """
+        Scrolls through all messages matching a query, yielding them in batches.
+        :param batch_size: Number of documents to fetch per batch.
+        :param source: Pass False to exclude fetching _source fields entirely (saves massive memory).
+        """
         query = self._build_query(filters, search_term)
         pit = await self.client.open_point_in_time(index=ELASTIC_INDEX_NAME, keep_alive="1m")
         
         body = {
-            "size": 100,
+            "size": batch_size,
             "query": query,
             "sort": [{"@timestamp": "asc"}],
             "pit": {"id": pit['id'], "keep_alive": "1m"}
         }
+        
+        # If source is False, we tell ES not to fetch the heavy payload body.
+        if source is not True:
+            body["_source"] = source
         
         try:
             while True:
