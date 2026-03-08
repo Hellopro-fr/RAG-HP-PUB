@@ -156,7 +156,11 @@ export default function SearchPage() {
       try {
         const res = await apiGetTaskStatus(taskId);
         if (res.data.completed) {
-          alert(successMessage);
+          if (res.data.status === "completed") {
+              alert(successMessage);
+          } else if (res.data.status === "error") {
+              alert("The background task encountered an error and stopped prematurely. Please check the backend logs.");
+          }
           fetchMessages(1);
           setLoadingAction(null);
         } else {

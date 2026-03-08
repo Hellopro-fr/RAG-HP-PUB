@@ -439,13 +439,22 @@ class ElasticsearchClient:
 
 @lru_cache()
 def get_es_client() -> ElasticsearchClient:
-    # Use credentials if they are provided
+    # Adding generous timeouts to allow massive bulk operations in background tasks
+    # to complete without severing the HTTP connection between Python and the cluster.
     if ES_USERNAME and ES_PASSWORD:
         es_instance = AsyncElasticsearch(
             ELASTICSEARCH_URL,
-            basic_auth=(ES_USERNAME, ES_PASSWORD)
+            basic_auth=(ES_USERNAME, ES_PASSWORD),
+            request_timeout=120,
+            max_retries=3,
+            retry_on_timeout=True
         )
     else:
-        es_instance = AsyncElasticsearch(ELASTICSEARCH_URL)
+        es_instance = AsyncElasticsearch(
+            ELASTICSEARCH_URL,
+            request_timeout=120,
+            max_retries=3,
+            retry_on_timeout=True
+        )
         
     return ElasticsearchClient(es_instance)
