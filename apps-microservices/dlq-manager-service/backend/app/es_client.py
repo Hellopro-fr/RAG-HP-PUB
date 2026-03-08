@@ -1,4 +1,5 @@
 import os
+import json
 from elasticsearch import AsyncElasticsearch
 from functools import lru_cache
 from typing import List, Dict, Any, Tuple, Optional
@@ -15,6 +16,26 @@ RULES_INDEX_NAME = "dlq_auto_archive_rules"
 class ElasticsearchClient:
     def __init__(self, client: AsyncElasticsearch):
         self.client = client
+
+    def _rehydrate_document(self, hit: Dict) -> Dict:
+        """
+        Restores the original_payload from the payload_conflict_fallback string 
+        if a mapping conflict occurred during archiving. This makes the fallback 
+        completely transparent to the frontend and the requeuing processes.
+        """
+        if not hit or '_source' not in hit:
+            return hit
+            
+        source = hit['_source']
+        if 'payload_conflict_fallback' in source and source['payload_conflict_fallback']:
+            try:
+                # Reconstruct the original object from the serialized fallback string
+                source['original_payload'] = json.loads(source['payload_conflict_fallback'])
+                # Remove it so we don't send duplicate heavy data to the frontend
+                del source['payload_conflict_fallback']
+            except Exception as e:
+                print(f"Warning: Failed to rehydrate fallback document {hit.get('_id')}: {e}")
+        return hit
 
     async def ensure_rules_index(self):
         """Ensures the auto-archive rules index exists with proper mappings."""
@@ -407,7 +428,7 @@ class ElasticsearchClient:
                 "from": (page - 1) * page_size,
                 "size": page_size,
                 "sort": [{"@timestamp": "desc"}],
-                "_source": {"excludes": ["original_payload"]}
+                "_source": {"excludes":["original_payload", "payload_conflict_fallback"]}
             },
             track_total_hits=True
         )
@@ -445,11 +466,12 @@ class ElasticsearchClient:
         response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
         return response['aggregations']['grouped_errors']['buckets']
     
-    async def get_message(self, message_id: str) -> Dict:
+    async def get_message(self, message_id: str) -> Optional[Dict]:
         """Gets the full document for a single message, including the payload."""
         try:
             response = await self.client.get(index=ELASTIC_INDEX_NAME, id=message_id)
-            return response
+            raw_hit = dict(response.body) if hasattr(response, "body") else dict(response)
+            return self._rehydrate_document(raw_hit)
         except:
             return None
             
@@ -457,7 +479,8 @@ class ElasticsearchClient:
         if not message_ids:
             return []
         response = await self.client.mget(index=ELASTIC_INDEX_NAME, body={"ids": message_ids})
-        return [doc for doc in response['docs'] if doc['found']]
+        hits = [doc for doc in response['docs'] if doc['found']]
+        return[self._rehydrate_document(hit) for hit in hits]
 
     async def update_message_status(self, message_id: str, status: str):
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -512,6 +535,10 @@ class ElasticsearchClient:
                 if not hits:
                     break
                 
+                # Rehydrate only if we actually fetched the _source payloads
+                if source is not False:
+                    hits = [self._rehydrate_document(hit) for hit in hits]
+                    
                 yield hits
                 
                 body['pit']['id'] = response['pit_id']
