@@ -2,6 +2,7 @@ import os
 from elasticsearch import AsyncElasticsearch
 from functools import lru_cache
 from typing import List, Dict, Any, Tuple, Optional
+from datetime import datetime, timezone
 
 # Read connection details from environment variables
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
@@ -357,13 +358,14 @@ class ElasticsearchClient:
         return [doc for doc in response['docs'] if doc['found']]
 
     async def update_message_status(self, message_id: str, status: str):
+        now_iso = datetime.now(timezone.utc).isoformat()
         await self.client.update(
             index=ELASTIC_INDEX_NAME,
             id=message_id,
             body={
                 "doc": {
                     "status": status,
-                    "status_updated_at": "now/s"
+                    "status_updated_at": now_iso
                 }
             }
         )
@@ -373,9 +375,10 @@ class ElasticsearchClient:
             return 0
         
         actions = []
+        now_iso = datetime.now(timezone.utc).isoformat()
         for msg_id in message_ids:
             actions.append({"update": {"_index": ELASTIC_INDEX_NAME, "_id": msg_id}})
-            actions.append({"doc": {"status": status, "status_updated_at": "now/s"}})
+            actions.append({"doc": {"status": status, "status_updated_at": now_iso}})
             
         response = await self.client.bulk(body=actions)
         return len([item for item in response['items'] if not item['update'].get('error')])
@@ -423,27 +426,6 @@ class ElasticsearchClient:
         hits = [hit for hit in response['hits']['hits']]
         total = response['hits']['total']['value']
         return hits, total
-
-    async def archive_by_filter(self, filters: Dict, search_term: str) -> Dict[str, Any]:
-        """Archives all messages matching a filter efficiently using _update_by_query in the background."""
-        query = self._build_query(filters, search_term)
-        body = {
-            "query": query,
-            "script": {
-                "source": "ctx._source.status = 'Archived'; ctx._source.status_updated_at = 'now/s';",
-                "lang": "painless"
-            }
-        }
-        
-        # wait_for_completion=False instantly returns a task ID. The cluster handles the bulk update.
-        response = await self.client.update_by_query(
-            index=ELASTIC_INDEX_NAME,
-            body=body,
-            wait_for_completion=False,
-            conflicts="proceed"
-        )
-        # Safely convert ObjectApiResponse to standard Python dict for broader compatibility
-        return dict(response.body) if hasattr(response, "body") else dict(response)
 
     async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Gets the status of an Elasticsearch background task."""

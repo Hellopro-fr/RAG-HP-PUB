@@ -242,41 +242,56 @@ async def requeue_by_filter(
     return {"status": "success", "message": "Re-queue process successfully started in the background.", "task_id": task_id}
 
 @router.post("/messages/archive-by-filter")
-async def archive_by_filter(request: ArchiveByFilterRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
+async def archive_by_filter(
+    request: ArchiveByFilterRequest, 
+    background_tasks: BackgroundTasks, 
+    es_client: ElasticsearchClient = Depends(get_es_client)
+):
     """
-    Finds all messages matching a filter and archives them efficiently using ES cluster background task.
+    Finds all messages matching a filter and archives them utilizing the background 
+    task engine and reliable scroll methodology to prevent mapping issues.
     """
-    try:
-        task_info = await es_client.archive_by_filter(filters=request.filters, search_term=request.search_term)
-        
-        # We explicitly rely on the guaranteed dictionary from es_client
-        task_id = task_info.get("task") if task_info else None
-        
-        return {"status": "success", "message": "Archive process successfully started in the cluster.", "task_id": task_id}
-    except Exception as e:
-        print(f"Error starting background archive: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    task_id = f"archive_{uuid.uuid4().hex}"
+    TASK_STORE[task_id] = "processing"
+
+    async def process_archive():
+        try:
+            print(f"Background Task {task_id}: Starting bulk archive by filter...")
+            total_archived = 0
+            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term):
+                message_ids = [msg['_id'] for msg in batch]
+                archived_in_batch = await es_client.update_message_status_bulk(message_ids, "Archived")
+                total_archived += archived_in_batch
+                
+            print(f"Background Task {task_id}: Finished bulk archive. Total: {total_archived} messages.")
+            TASK_STORE[task_id] = "completed"
+        except Exception as e:
+            print(f"Background Task {task_id}: Error in bulk archive: {e}")
+            TASK_STORE[task_id] = "error"
+
+    background_tasks.add_task(process_archive)
+    return {"status": "success", "message": "Archive process successfully started in the background.", "task_id": task_id}
 
 @router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str, es_client: ElasticsearchClient = Depends(get_es_client)):
     """
     Checks the status of an asynchronous task (either ES internal or Python background task).
     """
-    # 1. Check if it's a python background task (e.g. requeue logic)
-    if task_id.startswith("requeue_"):
+    # 1. Check if it's a python background task
+    if task_id.startswith("requeue_") or task_id.startswith("archive_"):
         if task_id in TASK_STORE:
             status = TASK_STORE[task_id]
             return {"task_id": task_id, "completed": status in ["completed", "error"], "status": status}
         else:
             raise HTTPException(status_code=404, detail="Background task not found")
             
-    # 2. Assume it's an Elasticsearch background task
+    # 2. Assume it's an Elasticsearch background task (legacy fallback)
     es_task = await es_client.get_task_status(task_id)
     if es_task:
         completed = es_task.get("completed", False)
         return {"task_id": task_id, "completed": completed, "status": "completed" if completed else "processing"}
     
-    raise HTTPException(status_code=404, detail="Elasticsearch task not found")
+    raise HTTPException(status_code=404, detail="Task not found")
 
 @router.put("/messages/{message_id}/edit-and-requeue")
 async def edit_and_requeue(message_id: str, request: EditAndRequeueRequest, es_client: ElasticsearchClient = Depends(get_es_client), rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)):
