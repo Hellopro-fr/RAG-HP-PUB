@@ -10,7 +10,7 @@ MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 
 class Consumer:
-    def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher, **kwargs):
+    def __init__(self, connection: aio_pika.Connection, publisher: Publisher, **kwargs):
         """
         Initialise le consumer avec une logique de retry et DLQ.
         """
@@ -145,42 +145,20 @@ class Consumer:
     async def start_consuming(self):
         """
         Démarre la boucle d'écoute des messages.
-        Utilise queue.consume() avec un asyncio.Event lié à un callback de fermeture
-        du canal. Quand le canal est fermé (ex: INTERNAL_ERROR 541), l'event est déclenché,
-        ce qui propage une AMQPConnectionError vers la boucle de reconnexion de main.py.
+        Utilise queue.iterator() pour itérer sur les messages de manière explicite.
+        Quand la connexion/le canal meurt, l'itérateur lève une exception qui
+        se propage naturellement vers la boucle de reconnexion de main.py.
         """
         channel = await self.connection.channel()
         await channel.set_qos(prefetch_count=10)
         
         queue = await self._setup_queues(channel)
         
-        # Event qui sera déclenché lorsque le canal est fermé de manière inattendue
-        closed_event = asyncio.Event()
-        close_reason = None
-
-        def on_channel_closed(closing, *args):
-            nonlocal close_reason
-            close_reason = closing
-            logging.warning(f"⚠️ Canal RabbitMQ fermé: {closing}. Déclenchement de la reconnexion...")
-            closed_event.set()
-
-        # Enregistre le callback sur le canal pour détecter les fermetures
-        channel.close_callbacks.add(on_channel_closed)
-        
         print("👂 Embedding-Service: En attente de messages...")
         
-        # Consume attache le callback au canal et gère la concurrence en arrière-plan
-        await queue.consume(self._process_message_task)
-        
-        # Attend que le canal soit fermé (au lieu d'un Future infini)
-        try:
-            await closed_event.wait()
-        except asyncio.CancelledError:
-            print("🛑 Embedding-Service: Arrêt du consumer demandé.")
-            return
-
-        # Le canal a été fermé — on propage une erreur pour déclencher la reconnexion
-        logging.error(f"🔴 Canal fermé de manière inattendue: {close_reason}. Propagation vers la boucle de reconnexion.")
-        raise aio_pika.exceptions.AMQPConnectionError(
-            f"Canal fermé: {close_reason}"
-        )
+        # L'itérateur bloque en attendant les messages.
+        # Si la connexion/le canal est perdu, l'itérateur lève une exception
+        # (ex: ChannelInvalidStateError) qui remonte vers main.py.
+        async with queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                await self._process_message_task(message)
