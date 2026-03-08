@@ -424,7 +424,7 @@ class ElasticsearchClient:
         total = response['hits']['total']['value']
         return hits, total
 
-    async def archive_by_filter(self, filters: Dict, search_term: str) -> Dict:
+    async def archive_by_filter(self, filters: Dict, search_term: str) -> Dict[str, Any]:
         """Archives all messages matching a filter efficiently using _update_by_query in the background."""
         query = self._build_query(filters, search_term)
         body = {
@@ -442,13 +442,15 @@ class ElasticsearchClient:
             wait_for_completion=False,
             conflicts="proceed"
         )
-        return response
+        # Safely convert ObjectApiResponse to standard Python dict for broader compatibility
+        return dict(response.body) if hasattr(response, "body") else dict(response)
 
     async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Gets the status of an Elasticsearch background task."""
         try:
             response = await self.client.tasks.get(task_id=task_id)
-            return response
+            # Safely convert ObjectApiResponse to standard Python dict
+            return dict(response.body) if hasattr(response, "body") else dict(response)
         except Exception as e:
             print(f"Error fetching task status for {task_id}: {e}")
             return None

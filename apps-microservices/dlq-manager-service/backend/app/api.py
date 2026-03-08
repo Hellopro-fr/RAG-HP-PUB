@@ -248,9 +248,13 @@ async def archive_by_filter(request: ArchiveByFilterRequest, es_client: Elastics
     """
     try:
         task_info = await es_client.archive_by_filter(filters=request.filters, search_term=request.search_term)
-        task_id = task_info.get("task") if isinstance(task_info, dict) else None
+        
+        # We explicitly rely on the guaranteed dictionary from es_client
+        task_id = task_info.get("task") if task_info else None
+        
         return {"status": "success", "message": "Archive process successfully started in the cluster.", "task_id": task_id}
     except Exception as e:
+        print(f"Error starting background archive: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/tasks/{task_id}")
