@@ -5,7 +5,8 @@ import asyncio
 class Publisher:
     def __init__(self, connection: aio_pika.RobustConnection):
         """
-        Initialise le publisher asynchrone.
+        Initialise le publisher asynchrone avec sa connexion DÉDIÉE
+        afin d'éviter les collisions de frames avec le consumer.
         """
         self.connection = connection
         self.channel = None
@@ -25,7 +26,7 @@ class Publisher:
     async def publish_message(self, message_dict: dict):
         """
         Publie un message (dictionnaire) sur le topic configuré de manière asynchrone.
-        Utilise un canal dédié pour ne pas interférer avec le canal de consommation.
+        Utilise une connexion et un canal dédiés pour ne pas interférer avec la consommation.
         """
         collection = message_dict.get("collection", "inconnu").lower()
         exchange_name = f"{collection}_embedded_data_exchange"

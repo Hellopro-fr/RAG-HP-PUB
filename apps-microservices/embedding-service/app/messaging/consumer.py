@@ -73,60 +73,63 @@ class Consumer:
         """
         Traite un seul message avec logique de retry/dlq.
         """
-        try:
-            input_data = json.loads(message.body)
-            print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
-
-            async def process_and_publish():
-                # 1. Appelle la logique métier PURE
-                output_message = await embed_input_data(input_data)
-                # 2. Utilise le publisher (qui possède maintenant son propre canal dédié)
-                await self.publisher.publish_message(output_message)
-
-            # Exécute l'embedding et le publishing avec un timeout global
-            await asyncio.wait_for(
-                process_and_publish(),
-                timeout=120.0
-            )
-
-            # 3. Acquitte le message original explicitement
-            await message.ack()
-
-        except (json.JSONDecodeError, ValueError) as e:
-            # Erreur permanente: le message est invalide.
-            print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
-            await self._send_to_dlq(message, e, 0)
-            await message.ack()
-
-        except asyncio.TimeoutError as e:
-            # Timeout spécifique pour éviter le gel du loop
-            retry_count = self._get_retry_count(message)
-            if retry_count < MAX_RETRIES:
-                print(f"⏱️ Timeout après 120s (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative.")
-                await message.nack(requeue=False) # NACK pour retry via DLX
-            else:
-                print(f"⏱️ Échec (Timeout) après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale.")
-                await self._send_to_dlq(message, Exception("Timeout de traitement (>120s)"), MAX_RETRIES)
-                await message.ack()
-
-        except Exception as e:
-            # Erreur potentiellement transitoire.
-            retry_count = self._get_retry_count(message)
-            if retry_count < MAX_RETRIES:
-                print(f"❌ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
-                await message.nack(requeue=False) # NACK pour retry via DLX
-            else:
-                print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
-                await self._send_to_dlq(message, e, MAX_RETRIES)
-                await message.ack()
-
-        except BaseException as e:
-            # Filet de sécurité ultime
-            print(f"🔴 ERREUR CRITIQUE inattendue dans le traitement du message. NACK avec requeue. Erreur: {e}")
+        # Utilisation de message.process pour garantir une gestion saine du message
+        # même en cas de crash inattendu du worker (évite les blocages silencieux)
+        async with message.process(ignore_processed=True):
             try:
-                await message.nack(requeue=True)
-            except Exception:
-                pass  # Rien de plus à faire
+                input_data = json.loads(message.body)
+                print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
+
+                async def process_and_publish():
+                    # 1. Appelle la logique métier PURE
+                    output_message = await embed_input_data(input_data)
+                    # 2. Utilise le publisher (qui possède maintenant sa propre connexion dédiée)
+                    await self.publisher.publish_message(output_message)
+
+                # Exécute l'embedding et le publishing avec un timeout global
+                await asyncio.wait_for(
+                    process_and_publish(),
+                    timeout=120.0
+                )
+
+                # 3. Acquitte le message original explicitement
+                await message.ack()
+
+            except (json.JSONDecodeError, ValueError) as e:
+                # Erreur permanente: le message est invalide.
+                print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
+                await self._send_to_dlq(message, e, 0)
+                await message.ack()
+
+            except asyncio.TimeoutError as e:
+                # Timeout spécifique pour éviter le gel du loop
+                retry_count = self._get_retry_count(message)
+                if retry_count < MAX_RETRIES:
+                    print(f"⏱️ Timeout après 120s (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative.")
+                    await message.nack(requeue=False) # NACK pour retry via DLX
+                else:
+                    print(f"⏱️ Échec (Timeout) après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale.")
+                    await self._send_to_dlq(message, Exception("Timeout de traitement (>120s)"), MAX_RETRIES)
+                    await message.ack()
+
+            except Exception as e:
+                # Erreur potentiellement transitoire.
+                retry_count = self._get_retry_count(message)
+                if retry_count < MAX_RETRIES:
+                    print(f"❌ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                    await message.nack(requeue=False) # NACK pour retry via DLX
+                else:
+                    print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                    await self._send_to_dlq(message, e, MAX_RETRIES)
+                    await message.ack()
+
+            except BaseException as e:
+                # Filet de sécurité ultime
+                print(f"🔴 ERREUR CRITIQUE inattendue dans le traitement du message. NACK avec requeue. Erreur: {e}")
+                try:
+                    await message.nack(requeue=True)
+                except Exception:
+                    pass  # Rien de plus à faire
     
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
         # C'est OK d'ouvrir un canal temporaire pour la DLQ car c'est un chemin d'erreur rare
