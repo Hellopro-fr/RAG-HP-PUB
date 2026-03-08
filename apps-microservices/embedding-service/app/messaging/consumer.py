@@ -71,8 +71,9 @@ class Consumer:
 
     async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
         """
-        Tâche pour traiter un seul message, y compris la logique de retry/dlq.
-        Utilise un pattern ACK/NACK manuel pour éviter les conflits avec message.process().
+        Traite un seul message avec logique de retry/dlq.
+        Utilise un pattern ACK/NACK manuel avec un filet de sécurité
+        garantissant que chaque message est toujours acquitté ou rejeté.
         """
         try:
             input_data = json.loads(message.body)
@@ -104,6 +105,15 @@ class Consumer:
                 print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
                 await self._send_to_dlq(message, e, MAX_RETRIES)
                 await message.ack()
+
+        except BaseException as e:
+            # Filet de sécurité: si même les handlers d'erreurs échouent,
+            # on NACK le message pour libérer le slot prefetch et éviter le blocage.
+            print(f"🔴 ERREUR CRITIQUE inattendue dans le traitement du message. NACK avec requeue. Erreur: {e}")
+            try:
+                await message.nack(requeue=True)
+            except Exception:
+                pass  # Rien de plus à faire
     
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
         async with self.connection.channel() as channel:
@@ -121,15 +131,16 @@ class Consumer:
     async def start_consuming(self):
         """
         Démarre la boucle d'écoute des messages.
+        Traite les messages séquentiellement (inline await) pour garantir
+        que chaque message est entièrement traité avant de passer au suivant.
+        Avec prefetch_count=10, RabbitMQ pré-livre les messages dans le buffer du canal.
         """
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=10) # Traiter jusqu'à 10 messages en parallèle
+        await channel.set_qos(prefetch_count=10)
         
         queue = await self._setup_queues(channel)
         
         print("👂 Embedding-Service: En attente de messages...")
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
-                # Lance le traitement de chaque message comme une tâche de fond
-                # Le service peut ainsi continuer à recevoir des messages pendant que les autres sont traités.
-                asyncio.create_task(self._process_message_task(message))
+                await self._process_message_task(message)
