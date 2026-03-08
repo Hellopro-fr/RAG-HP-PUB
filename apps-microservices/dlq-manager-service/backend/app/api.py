@@ -267,6 +267,9 @@ async def requeue_by_filter(
                 message_ids = [msg['_id'] for msg in batch]
                 await es_client.update_message_status_bulk(message_ids, "Re-queued")
                 
+                # Pressure relief valve: give ES Garbage Collector time to clean up
+                await asyncio.sleep(0.5)
+                
             print(f"Background Task {task_id}: Finished bulk requeue. Total: {total_requeued} messages.")
             TASK_STORE[task_id] = "completed"
         except Exception as e:
@@ -293,11 +296,14 @@ async def archive_by_filter(
         try:
             print(f"Background Task {task_id}: Starting bulk archive by filter...")
             total_archived = 0
-            # source=False disables payload fetching, allowing us to safely process 500 IDs at a time with near-zero RAM usage
-            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term, batch_size=500, source=False):
+            # source=False disables payload fetching, batch_size=50 prevents OOM
+            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term, batch_size=50, source=False):
                 message_ids = [msg['_id'] for msg in batch]
                 archived_in_batch = await es_client.update_message_status_bulk(message_ids, "Archived")
                 total_archived += archived_in_batch
+                
+                # Pressure relief valve: give ES Garbage Collector time to clean up
+                await asyncio.sleep(0.5)
                 
             print(f"Background Task {task_id}: Finished bulk archive. Total: {total_archived} messages.")
             TASK_STORE[task_id] = "completed"

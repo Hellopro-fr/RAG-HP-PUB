@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from elasticsearch import AsyncElasticsearch
 from functools import lru_cache
 from typing import List, Dict, Any, Tuple, Optional
@@ -127,12 +128,15 @@ class ElasticsearchClient:
         
         total_archived = 0
         try:
-            # source=False disables payload fetching, allowing us to safely process 500 IDs at a time with near-zero RAM usage
-            async for batch in self.scroll_messages(filters=active_filters, search_term=search_term, batch_size=500, source=False):
+            # source=False disables payload fetching. batch_size=50 prevents OOM during bulk updates.
+            async for batch in self.scroll_messages(filters=active_filters, search_term=search_term, batch_size=50, source=False):
                 message_ids = [msg['_id'] for msg in batch]
                 if message_ids:
                     archived_in_batch = await self.update_message_status_bulk(message_ids, "Auto-Archived")
                     total_archived += archived_in_batch
+                    
+                    # Pressure relief valve: give ES Garbage Collector time to clean up
+                    await asyncio.sleep(0.5)
             return total_archived
         except Exception as e:
             print(f"Error applying auto-archive rule {rule.get('name')}: {e}")
