@@ -31,8 +31,9 @@ class Publisher:
         exchange_name = f"{collection}_embedded_data_exchange"
         routing_key = f"data.{collection}.ready_for_insertion"
 
-        # On verrouille la récupération du canal et la déclaration de l'exchange
-        # pour éviter les conflits lors de la publication concurrente.
+        # On verrouille la récupération du canal, la déclaration de l'exchange,
+        # ET la publication elle-même pour éviter les conflits et l'entrelacement
+        # des frames AMQP lors de la publication concurrente de gros messages.
         async with self._lock:
             channel = await self._get_channel()
 
@@ -47,12 +48,12 @@ class Publisher:
             else:
                 exchange = self._exchanges[exchange_name]
 
-        await exchange.publish(
-            aio_pika.Message(
-                body=json.dumps(message_dict).encode('utf-8'),
-                delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-            ),
-            routing_key=routing_key
-        )
+            await exchange.publish(
+                aio_pika.Message(
+                    body=json.dumps(message_dict).encode('utf-8'),
+                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+                ),
+                routing_key=routing_key
+            )
         
         print(f"    📤 Message avec embedding pour la collection '{collection}' publié avec la clé '{routing_key}'.")
