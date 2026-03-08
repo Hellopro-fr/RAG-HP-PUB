@@ -79,8 +79,12 @@ class Consumer:
             input_data = json.loads(message.body)
             print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
 
-            # 1. Appelle la logique métier PURE
-            output_message = await embed_input_data(input_data)
+            # 1. Appelle la logique métier PURE avec un timeout global
+            # pour éviter de bloquer indéfiniment le consumer
+            output_message = await asyncio.wait_for(
+                embed_input_data(input_data),
+                timeout=120.0
+            )
             
             # 2. Utilise le publisher pour envoyer le résultat
             async with self.connection.channel() as channel:
@@ -94,6 +98,17 @@ class Consumer:
             print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
             await self._send_to_dlq(message, e, 0)
             await message.ack()
+
+        except asyncio.TimeoutError as e:
+            # Timeout spécifique pour éviter le gel du loop
+            retry_count = self._get_retry_count(message)
+            if retry_count < MAX_RETRIES:
+                print(f"⏱️ Timeout après 120s (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative.")
+                await message.nack(requeue=False) # NACK pour retry via DLX
+            else:
+                print(f"⏱️ Échec (Timeout) après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale.")
+                await self._send_to_dlq(message, Exception("Timeout de traitement (>120s)"), MAX_RETRIES)
+                await message.ack()
 
         except Exception as e:
             # Erreur potentiellement transitoire.
