@@ -2,6 +2,16 @@
 
 import * as React from "react";
 import { LayoutDashboard, Search } from "lucide-react"
+import {
+  Sidebar as ShadcnSidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarHeader,
+} from "@/components/ui/sidebar"
 
 interface SidebarProps {
   currentPage: "dashboard" | "search"
@@ -15,35 +25,44 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   ] as const
 
   return (
-    <aside className="w-64 bg-white-primary border-r border-gris-blanc flex flex-col">
-      {/* Logo Area */}
-      <div className="h-16 border-b border-gris-blanc flex items-center px-6">
-        <div className="flex items-center gap-2">
-          <img src="https://www.hellopro.fr/hellopro_fr/images/hp-logo.svg" alt="Hellopro Logo" className="h-6 w-auto" />
-          <span className="font-semibold text-noir-primary">DLQ Manager</span>
+    <ShadcnSidebar collapsible="icon" className="bg-white-primary border-r border-gris-blanc">
+      <SidebarHeader className="h-16 border-b border-gris-blanc flex justify-center px-4">
+        <div className="flex items-center gap-2 overflow-hidden h-full">
+          <img src="https://www.hellopro.fr/hellopro_fr/images/hp-logo.svg" alt="Hellopro Logo" className="h-6 w-auto shrink-0" />
+          <span className="font-semibold text-noir-primary truncate group-data-[collapsible=icon]:hidden">DLQ Manager</span>
         </div>
-      </div>
+      </SidebarHeader>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-4 py-6 space-y-2">
-        {navItems.map((item) => {
-          const Icon = item.icon
-          const isActive = currentPage === item.id
-          return (
-            <button
-              key={item.id}
-              onClick={() => onPageChange(item.id as "dashboard" | "search")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                isActive ? "bg-bleu-light text-bleu-primary" : "text-gris-primary hover:bg-clair-3"
-              }`}
-              style={isActive ? { color: "var(--bleu-primary)", backgroundColor: "var(--bleu-light)" } : {}}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
-            </button>
-          )
-        })}
-      </nav>
-    </aside>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const Icon = item.icon
+                const isActive = currentPage === item.id
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      tooltip={item.label}
+                      isActive={isActive}
+                      onClick={() => onPageChange(item.id as "dashboard" | "search")}
+                      className={`transition-colors ${
+                        isActive 
+                          ? "bg-bleu-light text-bleu-primary hover:bg-bleu-light hover:text-bleu-primary" 
+                          : "text-gris-primary hover:bg-clair-3 hover:text-noir-primary"
+                      }`}
+                      style={isActive ? { color: "var(--bleu-primary)", backgroundColor: "var(--bleu-light)" } : {}}
+                    >
+                      <Icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </ShadcnSidebar>
   )
 }

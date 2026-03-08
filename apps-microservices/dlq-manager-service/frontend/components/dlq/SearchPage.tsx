@@ -240,9 +240,9 @@ export default function SearchPage() {
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Filter Bar */}
-      <form onSubmit={handleSearch} className="bg-white-primary rounded-lg border border-gris-blanc p-6 space-y-4">
+      <form onSubmit={handleSearch} className="bg-white-primary rounded-lg border border-gris-blanc p-4 md:p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Search Input */}
             <div className="md:col-span-2">
@@ -327,8 +327,8 @@ export default function SearchPage() {
       </form>
 
       {/* Action Bar */}
-      <div className="flex justify-between items-center bg-white-primary rounded-lg border border-gris-blanc p-4">
-        <div className="flex items-center gap-4 text-sm text-gris-primary">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white-primary rounded-lg border border-gris-blanc p-4 gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-sm text-gris-primary w-full md:w-auto">
             <span>
                 {selectedIds.size > 0 ? (
                     <><strong>{selectedIds.size}</strong> of <strong>{totalResults.toLocaleString()}</strong> selected</>
@@ -336,10 +336,10 @@ export default function SearchPage() {
                     <><strong>{totalResults.toLocaleString()}</strong> results found</>
                 )}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                 <label htmlFor="pageSize" className="text-sm font-medium">Per Page:</label>
                 <Select value={pageSize.toString()} onValueChange={(val) => { setPageSize(Number(val)); setCurrentPage(1); }}>
-                    <SelectTrigger className="w-20 h-8">
+                    <SelectTrigger className="w-20 h-8 bg-white-primary">
                         <SelectValue placeholder="Page size" />
                     </SelectTrigger>
                     <SelectContent>
@@ -353,13 +353,13 @@ export default function SearchPage() {
         </div>
 
 
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full md:w-auto">
           {selectedIds.size > 0 ? (
             <>
               <Button 
                 onClick={() => handleBulkAction('requeue')} 
                 style={{ backgroundColor: "var(--vert-primary)", color: "white" }} 
-                className="hover:opacity-90 w-40"
+                className="hover:opacity-90 w-full sm:w-auto"
                 disabled={!!loadingAction}
               >
                 {loadingAction === 'requeue-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -368,7 +368,7 @@ export default function SearchPage() {
               <Button 
                 onClick={() => handleBulkAction('archive')} 
                 style={{ backgroundColor: "var(--gris-primary)", color: "white" }} 
-                className="hover:opacity-90 w-40"
+                className="hover:opacity-90 w-full sm:w-auto"
                 disabled={!!loadingAction}
               >
                 {loadingAction === 'archive-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -381,7 +381,7 @@ export default function SearchPage() {
                 onClick={handleArchiveByFilter}
                 style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
                 disabled={totalResults === 0 || !!loadingAction}
-                className="hover:opacity-90 disabled:opacity-50 w-48"
+                className="hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
               >
                 {loadingAction === 'archive-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Archive All Matching
@@ -390,7 +390,7 @@ export default function SearchPage() {
                 onClick={handleRequeueByFilter}
                 style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
                 disabled={totalResults === 0 || !!loadingAction}
-                className="hover:opacity-90 disabled:opacity-50 w-48"
+                className="hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
               >
                 {loadingAction === 'requeue-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Re-queue All Matching
