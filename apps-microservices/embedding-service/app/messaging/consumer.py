@@ -69,7 +69,7 @@ class Consumer:
                     return death.get('count', 0)
         return 0
 
-    async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
+    async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage, channel: aio_pika.abc.AbstractChannel):
         """
         Traite un seul message avec logique de retry/dlq.
         Utilise un pattern ACK/NACK manuel avec un filet de sécurité
@@ -79,16 +79,18 @@ class Consumer:
             input_data = json.loads(message.body)
             print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
 
-            # 1. Appelle la logique métier PURE avec un timeout global
-            # pour éviter de bloquer indéfiniment le consumer
-            output_message = await asyncio.wait_for(
-                embed_input_data(input_data),
+            async def process_and_publish():
+                # 1. Appelle la logique métier PURE
+                output_message = await embed_input_data(input_data)
+                # 2. Utilise le publisher pour envoyer le résultat en réutilisant le canal du consumer
+                await self.publisher.publish_message(output_message, channel)
+
+            # Exécute l'embedding et le publishing avec un timeout global pour éviter 
+            # de bloquer indéfiniment (à cause du gRPC ou du flow control RabbitMQ)
+            await asyncio.wait_for(
+                process_and_publish(),
                 timeout=120.0
             )
-            
-            # 2. Utilise le publisher pour envoyer le résultat
-            async with self.connection.channel() as channel:
-                await self.publisher.publish_message(output_message, channel)
 
             # 3. Acquitte le message original
             await message.ack()
@@ -158,4 +160,4 @@ class Consumer:
         print("👂 Embedding-Service: En attente de messages...")
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
-                await self._process_message_task(message)
+                await self._process_message_task(message, channel)
