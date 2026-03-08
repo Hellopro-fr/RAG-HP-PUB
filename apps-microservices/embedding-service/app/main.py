@@ -28,16 +28,16 @@ async def main():
 
     while True:
         try:
-            connection = await aio_pika.connect(rabbitmq_url, heartbeat=60)
+            connection = await aio_pika.connect_robust(rabbitmq_url, heartbeat=60)
             print("✅ Embedding-Service: Connecté à RabbitMQ.")
             
             async with connection:
                 publisher = Publisher(connection)
                 consumer = Consumer(connection, publisher)
                 
-                # Lancer le consumer. start_consuming() bloque en itérant sur
-                # les messages. Si la connexion est perdue, l'itérateur lève
-                # une exception qui déclenche la reconnexion.
+                # Lancer le consumer. start_consuming() bloque indéfiniment.
+                # Avec connect_robust, aio-pika gère la reconnexion automatiquement
+                # en arrière-plan sans lever d'exception ici.
                 await consumer.start_consuming()
 
         except aio_pika.exceptions.AMQPConnectionError as e:

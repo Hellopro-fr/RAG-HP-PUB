@@ -145,9 +145,8 @@ class Consumer:
     async def start_consuming(self):
         """
         Démarre la boucle d'écoute des messages.
-        Utilise queue.iterator() pour itérer sur les messages de manière explicite.
-        Quand la connexion/le canal meurt, l'itérateur lève une exception qui
-        se propage naturellement vers la boucle de reconnexion de main.py.
+        Utilise queue.consume() pour itérer sur les messages de manière concurrente et résiliente.
+        Aio-pika gère la reconnexion de manière transparente grâce à connect_robust.
         """
         channel = await self.connection.channel()
         await channel.set_qos(prefetch_count=10)
@@ -156,9 +155,12 @@ class Consumer:
         
         print("👂 Embedding-Service: En attente de messages...")
         
-        # L'itérateur bloque en attendant les messages.
-        # Si la connexion/le canal est perdu, l'itérateur lève une exception
-        # (ex: ChannelInvalidStateError) qui remonte vers main.py.
-        async with queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                await self._process_message_task(message)
+        # queue.consume enregistre le callback et ne bloque pas.
+        # Le traitement est concurrent jusqu'à la limite du prefetch_count.
+        await queue.consume(self._process_message_task)
+
+        # On maintient la coroutine active pour que le consumer continue de vivre
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            pass
