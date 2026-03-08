@@ -18,7 +18,11 @@ class Publisher:
     async def _get_channel(self) -> aio_pika.abc.AbstractChannel:
         """Retourne un canal persistant dédié à la publication."""
         if self.channel is None or self.channel.is_closed:
-            self.channel = await self.connection.channel()
+            # Activation EXPLICITE de publisher_confirms=True.
+            # Cela force aio_pika à attendre que RabbitMQ confirme la réception
+            # du message avant de libérer le verrou, évitant ainsi le buffer overflow
+            # et l'entrelacement des frames AMQP (cause de l'erreur 541).
+            self.channel = await self.connection.channel(publisher_confirms=True)
             # On vide le cache des exchanges si le canal a été réouvert
             self._exchanges.clear()
         return self.channel

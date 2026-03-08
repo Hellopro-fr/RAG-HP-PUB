@@ -71,11 +71,13 @@ class Consumer:
 
     async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
         """
-        Traite un seul message avec logique de retry/dlq.
+        Traite un seul message avec logique de retry/dlq native d'aio_pika.
         """
-        # Utilisation de message.process pour garantir une gestion saine du message
-        # même en cas de crash inattendu du worker (évite les blocages silencieux)
-        async with message.process(ignore_processed=True):
+        # Utilisation de message.process(requeue=False) pour gérer les acks automatiquement :
+        # - Si le bloc se termine avec succès -> aio_pika envoie automatiquement un ACK.
+        # - Si une exception est levée -> aio_pika envoie automatiquement un NACK(requeue=False),
+        #   ce qui route le message vers la Retry Queue via le DLX configuré.
+        async with message.process(requeue=False):
             try:
                 input_data = json.loads(message.body)
                 print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
@@ -83,7 +85,7 @@ class Consumer:
                 async def process_and_publish():
                     # 1. Appelle la logique métier PURE
                     output_message = await embed_input_data(input_data)
-                    # 2. Utilise le publisher (qui possède maintenant sa propre connexion dédiée)
+                    # 2. Utilise le publisher (qui possède maintenant sa propre connexion dédiée et lock)
                     await self.publisher.publish_message(output_message)
 
                 # Exécute l'embedding et le publishing avec un timeout global
@@ -91,45 +93,38 @@ class Consumer:
                     process_and_publish(),
                     timeout=120.0
                 )
-
-                # 3. Acquitte le message original explicitement
-                await message.ack()
+                # Succès: on sort du try, le bloc `with` envoie l'ACK.
 
             except (json.JSONDecodeError, ValueError) as e:
                 # Erreur permanente: le message est invalide.
                 print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
                 await self._send_to_dlq(message, e, 0)
-                await message.ack()
+                # En ne levant pas d'exception ici, aio_pika considèrera le traitement "réussi" 
+                # et enverra un ACK pour supprimer le message de la file principale.
 
             except asyncio.TimeoutError as e:
                 # Timeout spécifique pour éviter le gel du loop
                 retry_count = self._get_retry_count(message)
                 if retry_count < MAX_RETRIES:
-                    print(f"⏱️ Timeout après 120s (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative.")
-                    await message.nack(requeue=False) # NACK pour retry via DLX
+                    print(f"⏱️ Timeout après 120s (essai {retry_count + 1}/{MAX_RETRIES + 1}). Redirection vers Retry Queue.")
+                    # Levée d'exception pour déclencher le NACK(requeue=False) automatique vers la Retry Queue
+                    raise Exception("Timeout de traitement (>120s)")
                 else:
                     print(f"⏱️ Échec (Timeout) après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale.")
                     await self._send_to_dlq(message, Exception("Timeout de traitement (>120s)"), MAX_RETRIES)
-                    await message.ack()
+                    # Pas de levée d'exception -> le message est ACK et supprimé
 
             except Exception as e:
                 # Erreur potentiellement transitoire.
                 retry_count = self._get_retry_count(message)
                 if retry_count < MAX_RETRIES:
-                    print(f"❌ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
-                    await message.nack(requeue=False) # NACK pour retry via DLX
+                    print(f"⚠️ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Redirection vers Retry Queue. Erreur: {e}")
+                    # Levée d'exception pour déclencher le NACK(requeue=False) automatique vers la Retry Queue
+                    raise
                 else:
                     print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
                     await self._send_to_dlq(message, e, MAX_RETRIES)
-                    await message.ack()
-
-            except BaseException as e:
-                # Filet de sécurité ultime
-                print(f"🔴 ERREUR CRITIQUE inattendue dans le traitement du message. NACK avec requeue. Erreur: {e}")
-                try:
-                    await message.nack(requeue=True)
-                except Exception:
-                    pass  # Rien de plus à faire
+                    # Pas de levée d'exception -> le message est ACK et supprimé
     
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
         # C'est OK d'ouvrir un canal temporaire pour la DLQ car c'est un chemin d'erreur rare
