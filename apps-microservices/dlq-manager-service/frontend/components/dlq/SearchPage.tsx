@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, SearchIcon, Loader2, Info } from "lucide-react"
+import { Calendar, SearchIcon, Loader2, Info, BookmarkPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import MessageList from "./MessageList"
 import Pagination from "./Pagination"
 import MessageDetailModal from "./MessageDetailModal";
+import CreateRuleModal from "./CreateRuleModal";
 import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, Message } from "@/lib/api";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,6 +53,7 @@ const statusOptions: MultiSelectOption[] = [
     { value: 'New', label: 'New' },
     { value: 'Re-queued', label: 'Re-queued' },
     { value: 'Archived', label: 'Archived' },
+    { value: 'Auto-Archived', label: 'Auto-Archived' },
 ];
 
 export default function SearchPage() {
@@ -65,6 +67,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [showCreateRuleModal, setShowCreateRuleModal] = useState(false);
   const [serviceOptions, setServiceOptions] = useState<MultiSelectOption[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -81,24 +84,28 @@ export default function SearchPage() {
     })
   }, []);
 
+  // Construct standard JSON filter payload to use consistently
+  const getActiveFiltersPayload = () => {
+    const activeFilters: Record<string, any> = {};
+    (Object.keys(filters) as Array<keyof Filters>).forEach(key => {
+      const value = filters[key];
+      if (key === 'date_start' || key === 'date_end') {
+        if (value instanceof Date) {
+          activeFilters[key] = value.toISOString();
+        }
+      } else if (Array.isArray(value) && value.length > 0) {
+        activeFilters[key] = value;
+      }
+    });
+    return activeFilters;
+  };
+
   const fetchMessages = useCallback(async (page = 1) => {
     setLoading(true);
     setError(null);
     setSelectedIds(new Set());
     try {
-      const activeFilters: Record<string, any> = {};
-      
-      (Object.keys(filters) as Array<keyof Filters>).forEach(key => {
-        const value = filters[key];
-        if (key === 'date_start' || key === 'date_end') {
-          if (value instanceof Date) {
-            activeFilters[key] = value.toISOString();
-          }
-        } else if (Array.isArray(value) && value.length > 0) {
-          activeFilters[key] = value;
-        }
-      });
-
+      const activeFilters = getActiveFiltersPayload();
       const response = await apiSearchMessages({
           filters: activeFilters, 
           searchTerm, 
@@ -232,7 +239,8 @@ export default function SearchPage() {
               setLoadingAction(null);
               return;
           }
-          const response = await apiRequeueByFilter(filters, searchTerm, rate);
+          const activeFilters = getActiveFiltersPayload();
+          const response = await apiRequeueByFilter(activeFilters, searchTerm, rate);
           
           if (response.data.task_id) {
               pollTaskStatus(response.data.task_id, 'Re-queue by filter process completed successfully.');
@@ -259,7 +267,8 @@ export default function SearchPage() {
       setLoadingAction('archive-all');
 
       try {
-          const response = await apiArchiveByFilter(filters, searchTerm);
+          const activeFilters = getActiveFiltersPayload();
+          const response = await apiArchiveByFilter(activeFilters, searchTerm);
           
           if (response.data.task_id) {
               pollTaskStatus(response.data.task_id, 'Archive by filter process completed successfully.');
@@ -351,15 +360,28 @@ export default function SearchPage() {
             </div>
         </div>
 
-        <Button
-          type="submit"
-          style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
-          className="w-full hover:opacity-90"
-          disabled={!!loadingAction}
-        >
-          <SearchIcon className="w-4 h-4 mr-2" />
-          Search
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Button
+                type="submit"
+                style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
+                className="w-full sm:flex-1 hover:opacity-90"
+                disabled={!!loadingAction}
+            >
+                <SearchIcon className="w-4 h-4 mr-2" />
+                Search
+            </Button>
+            <Button
+                type="button"
+                variant="outline"
+                style={{ borderColor: "var(--bleu-primary)", color: "var(--bleu-primary)" }}
+                className="w-full sm:w-auto hover:bg-bleu-light"
+                disabled={!!loadingAction || (!searchTerm && Object.keys(getActiveFiltersPayload()).length === 0)}
+                onClick={() => setShowCreateRuleModal(true)}
+            >
+                <BookmarkPlus className="w-4 h-4 mr-2" />
+                Save Search as Rule
+            </Button>
+        </div>
       </form>
 
       {/* Action Bar */}
@@ -463,6 +485,14 @@ export default function SearchPage() {
           messageId={selectedMessageId}
           onClose={() => setSelectedMessageId(null)}
           onActionSuccess={() => fetchMessages(currentPage)}
+        />
+      )}
+
+      {showCreateRuleModal && (
+        <CreateRuleModal 
+          currentSearchTerm={searchTerm}
+          currentFilters={getActiveFiltersPayload()}
+          onClose={() => setShowCreateRuleModal(false)}
         />
       )}
     </div>

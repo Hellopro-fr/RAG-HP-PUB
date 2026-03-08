@@ -9,13 +9,47 @@ from .es_client import ElasticsearchClient, get_es_client
 from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client, get_rabbitmq_channel
 from .models import (
     SearchRequest, RequeueBulkRequest, UpdateStatusBulkRequest,
-    EditAndRequeueRequest, RequeueByFilterRequest, ArchiveByFilterRequest, CheckUrlsBatchRequest
+    EditAndRequeueRequest, RequeueByFilterRequest, ArchiveByFilterRequest, CheckUrlsBatchRequest,
+    AutoArchiveRuleCreate
 )
 
 router = APIRouter()
 
 # In-memory tracking for background tasks initiated by FastAPI
 TASK_STORE: Dict[str, str] = {}
+
+# --- AUTO-ARCHIVE RULES ENDPOINTS ---
+
+@router.get("/rules")
+async def get_rules(es_client: ElasticsearchClient = Depends(get_es_client)):
+    return await es_client.get_rules()
+
+@router.post("/rules")
+async def create_rule(rule: AutoArchiveRuleCreate, es_client: ElasticsearchClient = Depends(get_es_client)):
+    try:
+        rule_id = await es_client.create_rule(rule.model_dump())
+        return {"status": "success", "rule_id": rule_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/rules/{rule_id}/toggle")
+async def toggle_rule(rule_id: str, is_active: bool = Body(..., embed=True), es_client: ElasticsearchClient = Depends(get_es_client)):
+    try:
+        await es_client.update_rule_status(rule_id, is_active)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/rules/{rule_id}")
+async def delete_rule(rule_id: str, es_client: ElasticsearchClient = Depends(get_es_client)):
+    try:
+        await es_client.delete_rule(rule_id)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- EXISTING ENDPOINTS ---
 
 @router.get("/check-url")
 async def check_url_in_dlq(url: str, es_client: ElasticsearchClient = Depends(get_es_client)):

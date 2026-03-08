@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { format } from 'date-fns';
 
 const api = axios.create({
     baseURL: '/api', // This will be proxied by Next.js dev server and served by FastAPI in production
@@ -34,7 +33,7 @@ export interface MessageSource {
     '@timestamp': string;
     service_name: string;
     error_reason: string;
-    status?: 'Re-queued' | 'Re-queued (Edited)' | 'Archived' | 'Re-queued (Legacy)';
+    status?: 'Re-queued' | 'Re-queued (Edited)' | 'Archived' | 'Re-queued (Legacy)' | 'Auto-Archived';
     requeued_at?: string;
     original_payload: Record<string, any>;
     [key: string]: any; // Allow other fields
@@ -67,6 +66,17 @@ export interface TaskStatusResponse {
     task_id: string;
     completed: boolean;
     status: string;
+}
+
+export interface AutoArchiveRule {
+    _id?: string;
+    name: string;
+    description?: string;
+    search_term?: string;
+    filters?: Record<string, any>;
+    is_active: boolean;
+    created_at?: string;
+    execution_count?: number;
 }
 
 // --- API FUNCTIONS ---
@@ -126,6 +136,23 @@ export const apiGetTaskStatus = (taskId: string) => {
 
 export const apiEditAndRequeueMessage = (messageId: string, newPayload: Record<string, any>) => {
     return api.put(`/messages/${messageId}/edit-and-requeue`, { new_payload: newPayload });
+};
+
+// Auto-Archive Rules
+export const apiGetRules = () => {
+    return api.get<AutoArchiveRule[]>('/rules');
+};
+
+export const apiCreateRule = (rule: AutoArchiveRule) => {
+    return api.post<{status: string, rule_id: string}>('/rules', rule);
+};
+
+export const apiToggleRule = (ruleId: string, isActive: boolean) => {
+    return api.patch(`/rules/${ruleId}/toggle`, { is_active: isActive });
+};
+
+export const apiDeleteRule = (ruleId: string) => {
+    return api.delete(`/rules/${ruleId}`);
 };
 
 // --- UTILITY ---

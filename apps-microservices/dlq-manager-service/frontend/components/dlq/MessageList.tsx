@@ -32,6 +32,7 @@ export default function MessageList({
       "Re-queued (Edited)": { bg: "var(--vert-light)", text: "var(--vert-primary)" },
       "Re-queued (Legacy)": { bg: "var(--clair-3)", text: "var(--noir-primary)" },
       Archived: { bg: "var(--clair-4)", text: "var(--gris-primary)" },
+      "Auto-Archived": { bg: "var(--orange-light)", text: "var(--orange-heavy)" },
     }
     return styles[s] || { bg: "var(--clair-3)", text: "var(--noir-primary)" }
   }

@@ -29,3 +29,10 @@ class ArchiveByFilterRequest(BaseModel):
 class CheckUrlsBatchRequest(BaseModel):
     """Modèle pour la vérification batch d'URLs dans les DLQ."""
     urls: List[str]
+
+class AutoArchiveRuleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    search_term: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+    is_active: bool = True

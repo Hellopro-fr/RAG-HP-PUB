@@ -10,10 +10,126 @@ ES_USERNAME = os.environ.get("ES_USERNAME")
 ES_PASSWORD = os.environ.get("ES_PASSWORD")
 
 ELASTIC_INDEX_NAME = "failed_messages_archive"
+RULES_INDEX_NAME = "dlq_auto_archive_rules"
 
 class ElasticsearchClient:
     def __init__(self, client: AsyncElasticsearch):
         self.client = client
+
+    async def ensure_rules_index(self):
+        """Ensures the auto-archive rules index exists with proper mappings."""
+        try:
+            if not await self.client.indices.exists(index=RULES_INDEX_NAME):
+                await self.client.indices.create(
+                    index=RULES_INDEX_NAME,
+                    body={
+                        "mappings": {
+                            "properties": {
+                                "name": {"type": "keyword"},
+                                "description": {"type": "text"},
+                                "search_term": {"type": "text"},
+                                "filters": {"type": "object", "enabled": False}, # Do not index inner structure
+                                "is_active": {"type": "boolean"},
+                                "created_at": {"type": "date"},
+                                "execution_count": {"type": "integer"}
+                            }
+                        }
+                    }
+                )
+        except Exception as e:
+            print(f"Failed to ensure rules index: {e}")
+
+    async def get_rules(self, only_active: bool = False) -> List[Dict[str, Any]]:
+        """Retrieves all rules or only active rules."""
+        await self.ensure_rules_index()
+        query = {"match_all": {}} if not only_active else {"term": {"is_active": True}}
+        try:
+            res = await self.client.search(
+                index=RULES_INDEX_NAME,
+                body={"query": query, "size": 1000, "sort": [{"created_at": "desc"}]}
+            )
+            rules = []
+            for hit in res['hits']['hits']:
+                r = hit['_source']
+                r['_id'] = hit['_id']
+                rules.append(r)
+            return rules
+        except Exception as e:
+            print(f"Error getting rules: {e}")
+            return[]
+
+    async def create_rule(self, rule_data: Dict) -> str:
+        """Creates a new auto-archive rule."""
+        await self.ensure_rules_index()
+        rule_data['created_at'] = datetime.now(timezone.utc).isoformat()
+        rule_data['execution_count'] = 0
+        res = await self.client.index(index=RULES_INDEX_NAME, body=rule_data)
+        return res['_id']
+
+    async def update_rule_status(self, rule_id: str, is_active: bool):
+        """Toggles a rule on or off."""
+        await self.client.update(
+            index=RULES_INDEX_NAME,
+            id=rule_id,
+            body={"doc": {"is_active": is_active}}
+        )
+
+    async def delete_rule(self, rule_id: str):
+        """Deletes a rule."""
+        await self.client.delete(index=RULES_INDEX_NAME, id=rule_id)
+
+    async def increment_rule_execution(self, rule_id: str, count: int):
+        """Safely increments the execution count of a rule."""
+        try:
+            await self.client.update(
+                index=RULES_INDEX_NAME,
+                id=rule_id,
+                body={
+                    "script": {
+                        "source": "ctx._source.execution_count += params.count",
+                        "params": {"count": count}
+                    }
+                },
+                retry_on_conflict=3
+            )
+        except Exception as e:
+            print(f"Error incrementing execution count for rule {rule_id}: {e}")
+
+    async def apply_auto_archive_rule(self, rule: Dict) -> int:
+        """Executes an auto-archive rule strictly against 'New' messages."""
+        raw_filters = rule.get('filters', {})
+        search_term = rule.get('search_term', "")
+        
+        # Override the status filter to ONLY target "New" messages to be safe.
+        active_filters = dict(raw_filters) if raw_filters else {}
+        active_filters["status"] =["New"] 
+        
+        query = self._build_query(active_filters, search_term)
+        body = {
+            "query": query,
+            "script": {
+                "source": "ctx._source.status = 'Auto-Archived'; ctx._source.status_updated_at = params.now;",
+                "lang": "painless",
+                "params": {
+                    "now": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        }
+        
+        try:
+            # We use wait_for_completion=True because this is a background thread and we want the 'updated' count
+            response = await self.client.update_by_query(
+                index=ELASTIC_INDEX_NAME,
+                body=body,
+                wait_for_completion=True,
+                conflicts="proceed"
+            )
+            # Standardize object extraction safely
+            res_dict = dict(response.body) if hasattr(response, "body") else dict(response)
+            return res_dict.get('updated', 0)
+        except Exception as e:
+            print(f"Error applying auto-archive rule {rule.get('name')}: {e}")
+            return 0
 
     async def check_url_in_dlq(self, url: str) -> Dict[str, Any]:
         """

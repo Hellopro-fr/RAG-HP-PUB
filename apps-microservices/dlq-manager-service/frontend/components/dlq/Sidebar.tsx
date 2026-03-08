@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react";
-import { LayoutDashboard, Search } from "lucide-react"
+import { LayoutDashboard, Search, Filter } from "lucide-react"
 import {
   Sidebar as ShadcnSidebar,
   SidebarContent,
@@ -14,14 +14,15 @@ import {
 } from "@/components/ui/sidebar"
 
 interface SidebarProps {
-  currentPage: "dashboard" | "search"
-  onPageChange: (page: "dashboard" | "search") => void
+  currentPage: "dashboard" | "search" | "rules"
+  onPageChange: (page: "dashboard" | "search" | "rules") => void
 }
 
 export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
-  const navItems = [
+  const navItems =[
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "search", label: "Search & Re-queue", icon: Search },
+    { id: "rules", label: "Auto-Archive Rules", icon: Filter },
   ] as const
 
   return (
@@ -45,7 +46,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                     <SidebarMenuButton
                       tooltip={item.label}
                       isActive={isActive}
-                      onClick={() => onPageChange(item.id as "dashboard" | "search")}
+                      onClick={() => onPageChange(item.id as "dashboard" | "search" | "rules")}
                       className={`transition-colors ${
                         isActive 
                           ? "bg-bleu-light text-bleu-primary hover:bg-bleu-light hover:text-bleu-primary" 
