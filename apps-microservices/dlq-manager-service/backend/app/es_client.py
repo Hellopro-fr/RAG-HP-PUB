@@ -74,6 +74,8 @@ class ElasticsearchClient:
             for hit in res['hits']['hits']:
                 r = hit['_source']
                 r['_id'] = hit['_id']
+                # Safely fallback to 0 if the field is missing or null
+                r['execution_count'] = r.get('execution_count') or 0
                 rules.append(r)
             return rules
         except Exception as e:
@@ -108,7 +110,7 @@ class ElasticsearchClient:
                 id=rule_id,
                 body={
                     "script": {
-                        "source": "ctx._source.execution_count += params.count",
+                        "source": "if (ctx._source.execution_count == null) { ctx._source.execution_count = params.count } else { ctx._source.execution_count += params.count }",
                         "params": {"count": count}
                     }
                 },
