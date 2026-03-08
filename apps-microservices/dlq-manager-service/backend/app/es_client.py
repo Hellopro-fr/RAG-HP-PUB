@@ -123,10 +123,11 @@ class ElasticsearchClient:
         """Executes an auto-archive rule strictly against 'New' messages using memory-safe scrolling."""
         raw_filters = rule.get('filters', {})
         search_term = rule.get('search_term', "")
+        rule_id = rule.get('_id')
         
         # Override the status filter to ONLY target "New" messages to be safe.
         active_filters = dict(raw_filters) if raw_filters else {}
-        active_filters["status"] =["New"] 
+        active_filters["status"] = ["New"] 
         
         total_archived = 0
         try:
@@ -136,6 +137,10 @@ class ElasticsearchClient:
                 if message_ids:
                     archived_in_batch = await self.update_message_status_bulk(message_ids, "Auto-Archived")
                     total_archived += archived_in_batch
+                    
+                    # Live update the execution counter progressively
+                    if archived_in_batch > 0 and rule_id:
+                        await self.increment_rule_execution(rule_id, archived_in_batch)
                     
                     # Pressure relief valve: give ES Garbage Collector time to clean up
                     await asyncio.sleep(0.5)

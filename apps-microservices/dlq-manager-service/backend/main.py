@@ -41,8 +41,7 @@ async def background_rule_processor():
                 # Apply the rule and get how many documents were updated
                 updated_count = await es_client.apply_auto_archive_rule(rule)
                 if updated_count > 0:
-                    print(f"🤖 Rule '{rule.get('name')}' auto-archived {updated_count} messages.")
-                    await es_client.increment_rule_execution(rule['_id'], updated_count)
+                    print(f"🤖 Rule '{rule.get('name')}' completed an auto-archive pass. Total processed this cycle: {updated_count} messages.")
                     
         except Exception as e:
             print(f"Background rule processor encountered an error: {e}")
