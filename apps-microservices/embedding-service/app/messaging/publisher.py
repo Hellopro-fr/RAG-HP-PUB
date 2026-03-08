@@ -1,5 +1,6 @@
 import aio_pika
 import json
+import asyncio
 
 class Publisher:
     def __init__(self, connection: aio_pika.RobustConnection):
@@ -9,6 +10,8 @@ class Publisher:
         self.connection = connection
         self.channel = None
         self._exchanges = {}
+        # Un verrou pour s'assurer que les accès concurrents au canal ne créent pas de race conditions
+        self._lock = asyncio.Lock()
         print("✅ Publisher initialisé.")
 
     async def _get_channel(self) -> aio_pika.abc.AbstractChannel:
@@ -28,18 +31,21 @@ class Publisher:
         exchange_name = f"{collection}_embedded_data_exchange"
         routing_key = f"data.{collection}.ready_for_insertion"
 
-        channel = await self._get_channel()
+        # On verrouille la récupération du canal et la déclaration de l'exchange
+        # pour éviter les conflits lors de la publication concurrente.
+        async with self._lock:
+            channel = await self._get_channel()
 
-        # Cache des exchanges pour éviter de redéclarer à chaque message (optimisation réseau)
-        if exchange_name not in self._exchanges:
-            exchange = await channel.declare_exchange(
-                exchange_name, 
-                aio_pika.ExchangeType.TOPIC, 
-                durable=True
-            )
-            self._exchanges[exchange_name] = exchange
-        else:
-            exchange = self._exchanges[exchange_name]
+            # Cache des exchanges pour éviter de redéclarer à chaque message (optimisation réseau)
+            if exchange_name not in self._exchanges:
+                exchange = await channel.declare_exchange(
+                    exchange_name, 
+                    aio_pika.ExchangeType.TOPIC, 
+                    durable=True
+                )
+                self._exchanges[exchange_name] = exchange
+            else:
+                exchange = self._exchanges[exchange_name]
 
         await exchange.publish(
             aio_pika.Message(
