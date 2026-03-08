@@ -519,7 +519,10 @@ class ElasticsearchClient:
                     body['search_after'] = hits[-1]['sort']
                 
         finally:
-            await self.client.close_point_in_time(body={"id": pit['id']})
+            try:
+                await self.client.close_point_in_time(body={"id": pit['id']})
+            except Exception as e:
+                print(f"Silently ignored error closing PIT (likely connection drop): {e}")
 
     async def get_history(self, page: int, page_size: int) -> Tuple[List[Dict], int]:
         """Gets messages that have been actioned upon."""
