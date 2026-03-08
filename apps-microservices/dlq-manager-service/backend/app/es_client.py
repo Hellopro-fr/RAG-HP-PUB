@@ -96,7 +96,7 @@ class ElasticsearchClient:
             print(f"Error incrementing execution count for rule {rule_id}: {e}")
 
     async def apply_auto_archive_rule(self, rule: Dict) -> int:
-        """Executes an auto-archive rule strictly against 'New' messages."""
+        """Executes an auto-archive rule strictly against 'New' messages using memory-safe scrolling."""
         raw_filters = rule.get('filters', {})
         search_term = rule.get('search_term', "")
         
@@ -104,32 +104,18 @@ class ElasticsearchClient:
         active_filters = dict(raw_filters) if raw_filters else {}
         active_filters["status"] =["New"] 
         
-        query = self._build_query(active_filters, search_term)
-        body = {
-            "query": query,
-            "script": {
-                "source": "ctx._source.status = 'Auto-Archived'; ctx._source.status_updated_at = params.now;",
-                "lang": "painless",
-                "params": {
-                    "now": datetime.now(timezone.utc).isoformat()
-                }
-            }
-        }
-        
+        total_archived = 0
         try:
-            # We use wait_for_completion=True because this is a background thread and we want the 'updated' count
-            response = await self.client.update_by_query(
-                index=ELASTIC_INDEX_NAME,
-                body=body,
-                wait_for_completion=True,
-                conflicts="proceed"
-            )
-            # Standardize object extraction safely
-            res_dict = dict(response.body) if hasattr(response, "body") else dict(response)
-            return res_dict.get('updated', 0)
+            # source=False disables payload fetching, allowing us to safely process 500 IDs at a time with near-zero RAM usage
+            async for batch in self.scroll_messages(filters=active_filters, search_term=search_term, batch_size=500, source=False):
+                message_ids = [msg['_id'] for msg in batch]
+                if message_ids:
+                    archived_in_batch = await self.update_message_status_bulk(message_ids, "Auto-Archived")
+                    total_archived += archived_in_batch
+            return total_archived
         except Exception as e:
             print(f"Error applying auto-archive rule {rule.get('name')}: {e}")
-            return 0
+            return total_archived
 
     async def check_url_in_dlq(self, url: str) -> Dict[str, Any]:
         """
