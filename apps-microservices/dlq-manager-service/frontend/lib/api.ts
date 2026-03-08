@@ -57,6 +57,18 @@ export interface SearchParams {
     pageSize: number;
 }
 
+export interface TaskResponse {
+    status: string;
+    message: string;
+    task_id?: string;
+}
+
+export interface TaskStatusResponse {
+    task_id: string;
+    completed: boolean;
+    status: string;
+}
+
 // --- API FUNCTIONS ---
 
 export const apiGetDashboardStats = (filters?: { date_start?: string; date_end?: string }) => {
@@ -94,7 +106,7 @@ export const apiBulkArchive = (messageIds: string[]) => {
 };
 
 export const apiRequeueByFilter = (filters: Record<string, any>, searchTerm: string, rateLimit?: number) => {
-    return api.post('/messages/requeue-by-filter', {
+    return api.post<TaskResponse>('/messages/requeue-by-filter', {
         filters,
         search_term: searchTerm,
         rate_limit_per_second: rateLimit || null,
@@ -102,11 +114,15 @@ export const apiRequeueByFilter = (filters: Record<string, any>, searchTerm: str
 };
 
 export const apiArchiveByFilter = (filters: Record<string, any>, searchTerm: string) => {
-    return api.post('/messages/archive-by-filter', {
+    return api.post<TaskResponse>('/messages/archive-by-filter', {
         filters,
         search_term: searchTerm,
     });
 };
+
+export const apiGetTaskStatus = (taskId: string) => {
+    return api.get<TaskStatusResponse>(`/tasks/${taskId}`);
+}
 
 export const apiEditAndRequeueMessage = (messageId: string, newPayload: Record<string, any>) => {
     return api.put(`/messages/${messageId}/edit-and-requeue`, { new_payload: newPayload });

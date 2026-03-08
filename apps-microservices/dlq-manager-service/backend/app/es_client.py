@@ -1,7 +1,7 @@
 import os
 from elasticsearch import AsyncElasticsearch
 from functools import lru_cache
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
 # Read connection details from environment variables
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
@@ -424,14 +424,34 @@ class ElasticsearchClient:
         total = response['hits']['total']['value']
         return hits, total
 
-    async def archive_by_filter(self, filters: Dict, search_term: str) -> int:
-        """Archives all messages matching a filter."""
-        total_archived = 0
-        async for batch in self.scroll_messages(filters=filters, search_term=search_term):
-            message_ids = [msg['_id'] for msg in batch]
-            archived_in_batch = await self.update_message_status_bulk(message_ids, "Archived")
-            total_archived += archived_in_batch
-        return total_archived
+    async def archive_by_filter(self, filters: Dict, search_term: str) -> Dict:
+        """Archives all messages matching a filter efficiently using _update_by_query in the background."""
+        query = self._build_query(filters, search_term)
+        body = {
+            "query": query,
+            "script": {
+                "source": "ctx._source.status = 'Archived'; ctx._source.status_updated_at = 'now/s';",
+                "lang": "painless"
+            }
+        }
+        
+        # wait_for_completion=False instantly returns a task ID. The cluster handles the bulk update.
+        response = await self.client.update_by_query(
+            index=ELASTIC_INDEX_NAME,
+            body=body,
+            wait_for_completion=False,
+            conflicts="proceed"
+        )
+        return response
+
+    async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Gets the status of an Elasticsearch background task."""
+        try:
+            response = await self.client.tasks.get(task_id=task_id)
+            return response
+        except Exception as e:
+            print(f"Error fetching task status for {task_id}: {e}")
+            return None
 
 @lru_cache()
 def get_es_client() -> ElasticsearchClient:

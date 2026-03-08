@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import MessageList from "./MessageList"
 import Pagination from "./Pagination"
 import MessageDetailModal from "./MessageDetailModal";
-import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, Message } from "@/lib/api";
+import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, Message } from "@/lib/api";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateTimePicker } from "./DateTimePicker";
@@ -151,6 +151,27 @@ export default function SearchPage() {
     setSelectedIds(newSelected)
   }
 
+  const pollTaskStatus = (taskId: string, successMessage: string) => {
+    const checkStatus = async () => {
+      try {
+        const res = await apiGetTaskStatus(taskId);
+        if (res.data.completed) {
+          alert(successMessage);
+          fetchMessages(1);
+          setLoadingAction(null);
+        } else {
+          setTimeout(checkStatus, 2000); // Check again in 2 seconds
+        }
+      } catch (err) {
+        console.error("Polling failed", err);
+        alert("Failed to confirm task completion. The task might still be running.");
+        setLoadingAction(null);
+      }
+    };
+    
+    checkStatus();
+  };
+
   const handleBulkAction = async (action: 'requeue' | 'archive') => {
     if (loadingAction) {
         alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
@@ -172,13 +193,14 @@ export default function SearchPage() {
             const rate = rateStr ? parseInt(rateStr, 10) : undefined;
             if (rateStr && isNaN(rate)) {
                 alert("Invalid number for rate limit.");
+                setLoadingAction(null);
                 return;
             }
             await apiBulkRequeue(ids, rate);
         } else if (action === 'archive') {
             await apiBulkArchive(ids);
         }
-        alert(`Successfully started to ${actionVerb} messages.`);
+        alert(`Successfully processed selected messages.`);
         fetchMessages(currentPage);
     } catch (err) {
         alert(`Failed to ${actionVerb} messages.`);
@@ -203,16 +225,21 @@ export default function SearchPage() {
           const rate = rateStr ? parseInt(rateStr, 10) : undefined;
           if (rateStr && isNaN(rate)) {
               alert("Invalid number for rate limit.");
-              setLoadingAction(null); // Reset on user error
+              setLoadingAction(null);
               return;
           }
-          await apiRequeueByFilter(filters, searchTerm, rate);
-          alert('Re-queue by filter process started successfully.');
-          fetchMessages(1);
+          const response = await apiRequeueByFilter(filters, searchTerm, rate);
+          
+          if (response.data.task_id) {
+              pollTaskStatus(response.data.task_id, 'Re-queue by filter process completed successfully.');
+          } else {
+              alert('Re-queue by filter process started successfully.');
+              fetchMessages(1);
+              setLoadingAction(null);
+          }
       } catch (err) {
           alert('Failed to start re-queue by filter.');
           console.error(err);
-      } finally {
           setLoadingAction(null);
       }
   };
@@ -228,13 +255,18 @@ export default function SearchPage() {
       setLoadingAction('archive-all');
 
       try {
-          await apiArchiveByFilter(filters, searchTerm);
-          alert('Archive by filter process started successfully.');
-          fetchMessages(1);
+          const response = await apiArchiveByFilter(filters, searchTerm);
+          
+          if (response.data.task_id) {
+              pollTaskStatus(response.data.task_id, 'Archive by filter process completed successfully.');
+          } else {
+              alert('Archive by filter process started successfully.');
+              fetchMessages(1);
+              setLoadingAction(null);
+          }
       } catch (err) {
           alert('Failed to start archive by filter.');
           console.error(err);
-      } finally {
           setLoadingAction(null);
       }
   };
