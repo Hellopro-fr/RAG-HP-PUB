@@ -73,6 +73,21 @@ class Consumer:
         """
         Traite un seul message avec logique de retry/dlq native d'aio_pika.
         """
+        # --- POISON MESSAGE SHIELD ---
+        # Protège RabbitMQ contre les crashs de file d'attente (INTERNAL_ERROR 541) causés
+        # par des headers x-death devenus gigantesques suite à une boucle infinie.
+        if message.headers and 'x-death' in message.headers:
+            # Vérifie si le message a des métadonnées de rebond anormales (> 10)
+            if len(message.headers['x-death']) > 10 or self._get_retry_count(message) > 10:
+                print(f"☠️ Poison Message détecté (boucle infinie). Destruction immédiate pour protéger RabbitMQ.")
+                try:
+                    # L'acquittement explicite supprime le message SANS l'envoyer dans la DLX,
+                    # évitant ainsi la réécriture des headers qui fait crasher le serveur Erlang.
+                    await message.ack()
+                except Exception as e:
+                    print(f"Erreur lors de la destruction du poison message: {e}")
+                return
+
         # Utilisation de message.process(requeue=False) pour gérer les acks automatiquement :
         # - Si le bloc se termine avec succès -> aio_pika envoie automatiquement un ACK.
         # - Si une exception est levée -> aio_pika envoie automatiquement un NACK(requeue=False),
