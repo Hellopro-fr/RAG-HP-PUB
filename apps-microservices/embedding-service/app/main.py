@@ -1,5 +1,3 @@
-import pika
-import time
 import os
 import asyncio
 import aio_pika
@@ -21,22 +19,18 @@ async def main():
     # --- Start Prometheus metrics server ---
     start_metrics_server_in_thread(port=8530)
 
-    loop = asyncio.get_event_loop()
-    
     while True:
         try:
-            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
+            connection = await aio_pika.connect_robust(rabbitmq_url)
             print("✅ Embedding-Service: Connecté à RabbitMQ.")
             
             async with connection:
                 publisher = Publisher(connection)
                 consumer = Consumer(connection, publisher)
                 
-                # Lancer le consumer, qui va démarrer ses propres tâches de fond
+                # Lancer le consumer. Avec queue.iterator(), cette coroutine
+                # reste active tant que des messages sont consommés.
                 await consumer.start_consuming()
-                
-                # Garder le service en vie pour que les tâches de fond continuent de tourner
-                await asyncio.Future()
 
         except aio_pika.exceptions.AMQPConnectionError as e:
             print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")

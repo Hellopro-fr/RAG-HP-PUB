@@ -1,6 +1,7 @@
 import aio_pika
 import json
 import asyncio
+import logging
 from embedding_service.messaging.publisher import Publisher
 from embedding_service.core.processor import embed_input_data
 from common_utils.autres.DLQProperties import DLQProperties
@@ -68,36 +69,41 @@ class Consumer:
                     return death.get('count', 0)
         return 0
 
-    async def _on_message_callback(self, message: aio_pika.abc.AbstractIncomingMessage):
+    async def _process_message_task(self, message: aio_pika.abc.AbstractIncomingMessage):
         """
-        Callback asynchrone qui orchestre le traitement d'un message avec logique de retry/DLQ.
+        Tâche pour traiter un seul message, y compris la logique de retry/dlq.
+        Utilise un pattern ACK/NACK manuel pour éviter les conflits avec message.process().
         """
-        async with message.process():
-            try:
-                input_data = json.loads(message.body)
-                print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
+        try:
+            input_data = json.loads(message.body)
+            print(f"\n📥 Embedding-Service: Message reçu pour la collection '{input_data.get('collection', 'inconnue')}'.")
 
-                # 1. Appelle la logique métier PURE
-                output_message = await embed_input_data(input_data)
-                
-                # 2. Utilise le publisher pour envoyer le résultat
-                async with self.connection.channel() as channel:
-                    await self.publisher.publish_message(output_message, channel)
+            # 1. Appelle la logique métier PURE
+            output_message = await embed_input_data(input_data)
+            
+            # 2. Utilise le publisher pour envoyer le résultat
+            async with self.connection.channel() as channel:
+                await self.publisher.publish_message(output_message, channel)
 
-            except (json.JSONDecodeError, ValueError) as e:
-                # Erreur permanente: le message est invalide.
-                print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
-                await self._send_to_dlq(message, e, 0)
+            # 3. Acquitte le message original
+            await message.ack()
 
-            except Exception as e:
-                # Erreur potentiellement transitoire.
-                retry_count = self._get_retry_count(message)
-                if retry_count < MAX_RETRIES:
-                    print(f"❌ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
-                    await message.nack(requeue=False) # NACK pour retry via DLX
-                else:
-                    print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
-                    await self._send_to_dlq(message, e, MAX_RETRIES)
+        except (json.JSONDecodeError, ValueError) as e:
+            # Erreur permanente: le message est invalide.
+            print(f"❌ Erreur permanente. Message envoyé à la DLQ finale. Erreur: {e}")
+            await self._send_to_dlq(message, e, 0)
+            await message.ack()
+
+        except Exception as e:
+            # Erreur potentiellement transitoire.
+            retry_count = self._get_retry_count(message)
+            if retry_count < MAX_RETRIES:
+                print(f"❌ Erreur transitoire (essai {retry_count + 1}/{MAX_RETRIES + 1}). Message renvoyé pour une nouvelle tentative. Erreur: {e}")
+                await message.nack(requeue=False) # NACK pour retry via DLX
+            else:
+                print(f"❌ Échec après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale. Erreur: {e}")
+                await self._send_to_dlq(message, e, MAX_RETRIES)
+                await message.ack()
     
     async def _send_to_dlq(self, message: aio_pika.abc.AbstractIncomingMessage, error: Exception, retry_count: int):
         async with self.connection.channel() as channel:
@@ -122,4 +128,8 @@ class Consumer:
         queue = await self._setup_queues(channel)
         
         print("👂 Embedding-Service: En attente de messages...")
-        await queue.consume(self._on_message_callback)
+        async with queue.iterator() as queue_iter:
+            async for message in queue_iter:
+                # Lance le traitement de chaque message comme une tâche de fond
+                # Le service peut ainsi continuer à recevoir des messages pendant que les autres sont traités.
+                asyncio.create_task(self._process_message_task(message))
