@@ -22,6 +22,9 @@ class RequeueByFilterRequest(BaseModel):
     search_term: Optional[str] = None
     rate_limit_per_second: Optional[int] = None
 
+class ArchiveByFilterRequest(BaseModel):
+    filters: Optional[Dict[str, Any]] = None
+    search_term: Optional[str] = None
 
 class CheckUrlsBatchRequest(BaseModel):
     """Modèle pour la vérification batch d'URLs dans les DLQ."""

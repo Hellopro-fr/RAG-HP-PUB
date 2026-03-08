@@ -23,6 +23,16 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
   const [isCopied, setIsCopied] = useState(false)
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
     const fetchDetails = async () => {
       if (!messageId) return;
       try {
@@ -117,12 +127,15 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
 
   return (
     <>
-      {/* Overlay */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={onClose} />
-
-      {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white-primary rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
+      {/* Overlay + Modal Container combined to catch clicks outside properly */}
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" 
+        onClick={onClose}
+      >
+        <div 
+          className="bg-white-primary rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <div className="border-b border-gris-blanc p-6 flex justify-between items-start">
             <div>

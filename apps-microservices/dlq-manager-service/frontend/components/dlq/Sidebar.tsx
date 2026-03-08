@@ -19,7 +19,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
       {/* Logo Area */}
       <div className="h-16 border-b border-gris-blanc flex items-center px-6">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: "var(--bleu-primary)" }} />
+          <img src="https://www.hellopro.fr/hellopro_fr/images/hp-logo.svg" alt="Hellopro Logo" className="h-6 w-auto" />
           <span className="font-semibold text-noir-primary">DLQ Manager</span>
         </div>
       </div>

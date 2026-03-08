@@ -424,6 +424,15 @@ class ElasticsearchClient:
         total = response['hits']['total']['value']
         return hits, total
 
+    async def archive_by_filter(self, filters: Dict, search_term: str) -> int:
+        """Archives all messages matching a filter."""
+        total_archived = 0
+        async for batch in self.scroll_messages(filters=filters, search_term=search_term):
+            message_ids = [msg['_id'] for msg in batch]
+            archived_in_batch = await self.update_message_status_bulk(message_ids, "Archived")
+            total_archived += archived_in_batch
+        return total_archived
+
 @lru_cache()
 def get_es_client() -> ElasticsearchClient:
     # Use credentials if they are provided

@@ -2,15 +2,16 @@
 
 import * as React from "react";
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, SearchIcon, Loader2 } from "lucide-react"
+import { Calendar, SearchIcon, Loader2, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import MessageList from "./MessageList"
 import Pagination from "./Pagination"
 import MessageDetailModal from "./MessageDetailModal";
-import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, Message } from "@/lib/api";
+import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, Message } from "@/lib/api";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateTimePicker } from "./DateTimePicker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Filters {
     service_names: string[];
@@ -216,6 +217,28 @@ export default function SearchPage() {
       }
   };
 
+  const handleArchiveByFilter = async () => {
+      if (loadingAction) {
+          alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
+          return;
+      }
+
+      if (!window.confirm(`Are you sure you want to archive all messages matching the current filter? This could be up to ${totalResults} messages.`)) return;
+
+      setLoadingAction('archive-all');
+
+      try {
+          await apiArchiveByFilter(filters, searchTerm);
+          alert('Archive by filter process started successfully.');
+          fetchMessages(1);
+      } catch (err) {
+          alert('Failed to start archive by filter.');
+          console.error(err);
+      } finally {
+          setLoadingAction(null);
+      }
+  };
+
   return (
     <div className="p-8 space-y-6">
       {/* Filter Bar */}
@@ -224,15 +247,33 @@ export default function SearchPage() {
             {/* Search Input */}
             <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-noir-primary mb-2">Search Term</label>
-                <div className="relative">
-                <SearchIcon className="absolute left-3 top-3 w-4 h-4 text-gris-primary" />
-                <input
-                    type="text"
-                    placeholder="Search in payload, error, service..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gris-blanc rounded-lg bg-white-primary text-noir-primary"
-                />
+                <div className="relative flex items-center">
+                    <SearchIcon className="absolute left-3 w-4 h-4 text-gris-primary pointer-events-none" />
+                    <input
+                        type="text"
+                        placeholder="Search in payload, error, service..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-10 py-2 border border-gris-blanc rounded-lg bg-white-primary text-noir-primary"
+                    />
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button type="button" className="absolute right-3 text-gris-primary hover:text-bleu-primary transition-colors focus:outline-none">
+                                <Info className="w-4 h-4" />
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-4 text-sm bg-white-primary border-gris-blanc shadow-lg" align="end">
+                            <h4 className="font-semibold mb-3 text-noir-primary">Search Syntax Guide</h4>
+                            <ul className="space-y-2 text-gris-primary">
+                                <li><strong>Basic:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">timeout</code></li>
+                                <li><strong>Exact Phrase:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">"connection refused"</code></li>
+                                <li><strong>Wildcard:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">*timeout*</code> or <code className="bg-clair-4 px-1 rounded text-noir-primary">serv*</code></li>
+                                <li><strong>Specific Field:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">service_name:api-recherche-service</code></li>
+                                <li><strong>Logical Operators:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">AND</code>, <code className="bg-clair-4 px-1 rounded text-noir-primary">OR</code>, <code className="bg-clair-4 px-1 rounded text-noir-primary">NOT</code></li>
+                                <li><strong>Payload Search:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">original_payload.id:123</code></li>
+                            </ul>
+                        </PopoverContent>
+                    </Popover>
                 </div>
             </div>
 
@@ -335,15 +376,26 @@ export default function SearchPage() {
               </Button>
             </>
           ) : (
-            <Button
-              onClick={handleRequeueByFilter}
-              style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
-              disabled={totalResults === 0 || !!loadingAction}
-              className="hover:opacity-90 disabled:opacity-50 w-48"
-            >
-              {loadingAction === 'requeue-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Re-queue All Matching
-            </Button>
+            <>
+              <Button
+                onClick={handleArchiveByFilter}
+                style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
+                disabled={totalResults === 0 || !!loadingAction}
+                className="hover:opacity-90 disabled:opacity-50 w-48"
+              >
+                {loadingAction === 'archive-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Archive All Matching
+              </Button>
+              <Button
+                onClick={handleRequeueByFilter}
+                style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
+                disabled={totalResults === 0 || !!loadingAction}
+                className="hover:opacity-90 disabled:opacity-50 w-48"
+              >
+                {loadingAction === 'requeue-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Re-queue All Matching
+              </Button>
+            </>
           )}
         </div>
       </div>

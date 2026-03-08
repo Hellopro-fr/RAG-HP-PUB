@@ -8,7 +8,7 @@ from .es_client import ElasticsearchClient, get_es_client
 from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client, get_rabbitmq_channel
 from .models import (
     SearchRequest, RequeueBulkRequest, UpdateStatusBulkRequest,
-    EditAndRequeueRequest, RequeueByFilterRequest, CheckUrlsBatchRequest
+    EditAndRequeueRequest, RequeueByFilterRequest, ArchiveByFilterRequest, CheckUrlsBatchRequest
 )
 
 router = APIRouter()
@@ -222,6 +222,16 @@ async def requeue_by_filter(request: RequeueByFilterRequest, es_client: Elastics
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/messages/archive-by-filter")
+async def archive_by_filter(request: ArchiveByFilterRequest, es_client: ElasticsearchClient = Depends(get_es_client)):
+    """
+    Finds all messages matching a filter and archives them.
+    """
+    try:
+        total_archived = await es_client.archive_by_filter(filters=request.filters, search_term=request.search_term)
+        return {"status": "success", "total_archived": total_archived}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/messages/{message_id}/edit-and-requeue")
 async def edit_and_requeue(message_id: str, request: EditAndRequeueRequest, es_client: ElasticsearchClient = Depends(get_es_client), rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)):

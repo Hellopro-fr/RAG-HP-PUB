@@ -101,6 +101,13 @@ export const apiRequeueByFilter = (filters: Record<string, any>, searchTerm: str
     });
 };
 
+export const apiArchiveByFilter = (filters: Record<string, any>, searchTerm: string) => {
+    return api.post('/messages/archive-by-filter', {
+        filters,
+        search_term: searchTerm,
+    });
+};
+
 export const apiEditAndRequeueMessage = (messageId: string, newPayload: Record<string, any>) => {
     return api.put(`/messages/${messageId}/edit-and-requeue`, { new_payload: newPayload });
 };
