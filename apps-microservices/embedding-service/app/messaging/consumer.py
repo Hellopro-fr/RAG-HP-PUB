@@ -145,22 +145,42 @@ class Consumer:
     async def start_consuming(self):
         """
         Démarre la boucle d'écoute des messages.
-        Utilise queue.consume() au lieu d'un itérateur. Ceci garantit que
-        si la RobustConnection recrée le canal (ex: suite à une erreur 541), 
-        le callback restera attaché et le worker continuera de traiter les messages.
+        Utilise queue.consume() avec un asyncio.Event lié à un callback de fermeture
+        du canal. Quand le canal est fermé (ex: INTERNAL_ERROR 541), l'event est déclenché,
+        ce qui propage une AMQPConnectionError vers la boucle de reconnexion de main.py.
         """
         channel = await self.connection.channel()
         await channel.set_qos(prefetch_count=10)
         
         queue = await self._setup_queues(channel)
         
+        # Event qui sera déclenché lorsque le canal est fermé de manière inattendue
+        closed_event = asyncio.Event()
+        close_reason = None
+
+        def on_channel_closed(closing, *args):
+            nonlocal close_reason
+            close_reason = closing
+            logging.warning(f"⚠️ Canal RabbitMQ fermé: {closing}. Déclenchement de la reconnexion...")
+            closed_event.set()
+
+        # Enregistre le callback sur le canal pour détecter les fermetures
+        channel.close_callbacks.add(on_channel_closed)
+        
         print("👂 Embedding-Service: En attente de messages...")
         
         # Consume attache le callback au canal et gère la concurrence en arrière-plan
         await queue.consume(self._process_message_task)
         
-        # Maintient la coroutine active indéfiniment
+        # Attend que le canal soit fermé (au lieu d'un Future infini)
         try:
-            await asyncio.Future()
+            await closed_event.wait()
         except asyncio.CancelledError:
             print("🛑 Embedding-Service: Arrêt du consumer demandé.")
+            return
+
+        # Le canal a été fermé — on propage une erreur pour déclencher la reconnexion
+        logging.error(f"🔴 Canal fermé de manière inattendue: {close_reason}. Propagation vers la boucle de reconnexion.")
+        raise aio_pika.exceptions.AMQPConnectionError(
+            f"Canal fermé: {close_reason}"
+        )

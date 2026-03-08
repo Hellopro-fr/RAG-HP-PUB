@@ -1,11 +1,18 @@
 import os
 import asyncio
+import logging
 import aio_pika
 
 # Importer les modules locaux
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("embedding-service")
 
 async def main():
     """
@@ -28,18 +35,19 @@ async def main():
                 publisher = Publisher(connection)
                 consumer = Consumer(connection, publisher)
                 
-                # Lancer le consumer. Avec queue.iterator(), cette coroutine
-                # reste active tant que des messages sont consommés.
+                # Lancer le consumer. start_consuming() bloque jusqu'à ce que
+                # le canal soit fermé, puis lève AMQPConnectionError pour
+                # déclencher la reconnexion.
                 await consumer.start_consuming()
 
         except aio_pika.exceptions.AMQPConnectionError as e:
-            print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
+            logger.warning(f"🔴 Connexion RabbitMQ perdue: {e}. Tentative de reconnexion dans 10 secondes...")
             await asyncio.sleep(10)
         except KeyboardInterrupt:
             print("\n🛑 Embedding-Service: Arrêt demandé.")
             break
         except Exception as e:
-            print(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
+            logger.error(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...", exc_info=True)
             await asyncio.sleep(10)
     
     print("✅ Embedding-Service: Service arrêté.")
