@@ -633,3 +633,51 @@ def retry_failed_rows(
             f"{total_succeeded} succeeded, {total_still_failed} still failed."
         ),
     }
+
+
+def rename_collection(
+    old_collection_name: str,
+    new_collection_name: str,
+):
+    """
+    Rename a Milvus collection.
+
+    Uses the native utility.rename_collection() API to rename a collection
+    without any data migration.
+
+    Args:
+        old_collection_name: Current name of the collection
+        new_collection_name: New name for the collection
+
+    Returns:
+        dict with old_collection_name, new_collection_name, and message
+    """
+    # ── Validate names are different ──
+    if old_collection_name == new_collection_name:
+        raise ValueError(
+            "old_collection_name and new_collection_name must be different."
+        )
+
+    # ── Validate source collection exists ──
+    if not utility.has_collection(old_collection_name):
+        raise ValueError(f"Collection '{old_collection_name}' does not exist.")
+
+    # ── Validate new name is not already taken ──
+    if utility.has_collection(new_collection_name):
+        raise ValueError(
+            f"A collection with the name '{new_collection_name}' already exists. "
+            f"Please drop it manually or choose a different name."
+        )
+
+    # ── Rename ──
+    logger.info(
+        f"🔄  Renaming collection: '{old_collection_name}' → '{new_collection_name}'"
+    )
+    utility.rename_collection(old_collection_name, new_collection_name)
+    logger.info(f"✅  Collection renamed to '{new_collection_name}'")
+
+    return {
+        "old_collection_name": old_collection_name,
+        "new_collection_name": new_collection_name,
+        "message": f"Collection '{old_collection_name}' has been renamed to '{new_collection_name}'.",
+    }
