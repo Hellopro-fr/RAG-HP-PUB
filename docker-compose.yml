@@ -740,6 +740,23 @@ services:
       replicas: 4
     logging: *logging_defaults
 
+  prix-milvus-processor-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-milvus-processor/Dockerfile
+    profiles: ["app"] # Profile for the main application stack
+    # container_name: prix-milvus-processor-service
+    restart: unless-stopped
+    expose:
+      - "8010"
+    env_file:
+      - .env
+    networks:
+      - services-net
+    deploy:
+      replicas: 4
+    logging: *logging_defaults
+
   categories-processor-service:
     build:
       context: .
