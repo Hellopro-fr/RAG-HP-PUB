@@ -1377,6 +1377,17 @@ $(function () {
           Prix TTC : ${price_ttc}
         `;
         break;
+      case "produits_5":
+        title = meta.nom_produit || title;
+        result.source = "Produits"
+        price_ht = meta.prix_ht || 'N/A';
+        price_ttc = meta.prix_ttc || 'N/A';
+        price += `<span class='text-sm'>Prix HT : ${price_ht}</span><span class='text-sm'>Prix TTC : ${price_ttc}</span>`;
+        price_copy = `
+          Prix HT : ${price_ht}
+          Prix TTC : ${price_ttc}
+        `;
+        break;
       case "devis":
         title = meta.lead_id || title;
         break;
@@ -1532,7 +1543,7 @@ $(function () {
           switch (sourceName) {
             case 'produits':
               // sourceName = 'produits_3';
-              sourceName = 'produits_4';
+              sourceName = GetURLParameter("source") || 'produits_4';
               const produitsSource = $('#produitsSource').val();
               if (produitsSource.length > 0) {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
@@ -1625,7 +1636,7 @@ $(function () {
       // Si aucune source n'est sélectionnée, utiliser la valeur par défaut du schéma
       if (sourcesAvecFiltres.length === 0) {
         // sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
-        sourcesAvecFiltres = [{ source: "produits_4", filtre: {} }];
+        sourcesAvecFiltres = [{ source: GetURLParameter("source") || "produits_4", filtre: {} }];
         state.hybrid = true;
       }
 
