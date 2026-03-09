@@ -88,9 +88,15 @@ export function useDbTracking() {
         typeFlow = 1;
         typeDmdCateg = 1;
       }
+
       if (eventName === "form_submit_custom_need") { 
         typeFlow = 1;
         typeDmdCateg = 2;
+      } 
+
+      if (eventName === "form_submit") { 
+        typeFlow = 2;
+        typeDmdCateg = 0;
       }
 
       // Construire le payload
