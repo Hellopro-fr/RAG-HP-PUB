@@ -111,3 +111,22 @@ class RetryResponse(BaseModel):
     total_still_failed: int
     new_error_file: Optional[str] = None
     message: str
+
+
+class RenameCollectionRequest(BaseModel):
+    old_collection_name: str = Field(
+        ...,
+        description="Current name of the Milvus collection to rename",
+        examples=["produits_3"],
+    )
+    new_collection_name: str = Field(
+        ...,
+        description="New name for the collection",
+        examples=["produits_4"],
+    )
+
+
+class RenameCollectionResponse(BaseModel):
+    old_collection_name: str
+    new_collection_name: str
+    message: str

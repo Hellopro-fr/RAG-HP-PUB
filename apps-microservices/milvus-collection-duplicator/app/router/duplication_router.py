@@ -12,8 +12,14 @@ from app.schemas.duplication_schemas import (
     JobStatus,
     RetryRequest,
     RetryResponse,
+    RenameCollectionRequest,
+    RenameCollectionResponse,
 )
-from app.core.milvus_connection import duplicate_collection, retry_failed_rows
+from app.core.milvus_connection import (
+    duplicate_collection,
+    retry_failed_rows,
+    rename_collection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,3 +182,30 @@ def retry_duplication(request: RetryRequest):
     except Exception as e:
         logger.error(f"❌ Retry failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Retry failed: {e}")
+
+
+@duplication_router.post(
+    "/rename",
+    response_model=RenameCollectionResponse,
+    summary="Rename a Milvus collection",
+    description=(
+        "Renames a Milvus collection using the native utility.rename_collection() API. "
+        "No data migration is performed — this is a metadata-only operation."
+    ),
+)
+def rename_collection_endpoint(request: RenameCollectionRequest):
+    try:
+        result = rename_collection(
+            old_collection_name=request.old_collection_name,
+            new_collection_name=request.new_collection_name,
+        )
+        return RenameCollectionResponse(
+            old_collection_name=result["old_collection_name"],
+            new_collection_name=result["new_collection_name"],
+            message=result["message"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Rename failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Rename failed: {e}")
