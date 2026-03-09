@@ -113,6 +113,107 @@ class MilvusClient:
         return 300 if nb_chunk <= 150 else nb_chunk * 2
         # return 5000
 
+    @lru_cache(maxsize=32)
+    def _get_embedding_index_type(
+        self, collection_name: str, field_name: str = "embedding"
+    ) -> str:
+        """
+        Retrieves the index type for the specified vector field of a collection.
+        Returns the index type string (e.g., 'HNSW', 'IVF_FLAT', 'FLAT', 'AUTOINDEX', 'DISKANN', 'SCANN').
+        Returns 'UNKNOWN' if the index type cannot be determined.
+        """
+        try:
+            collection = Collection(name=collection_name)
+            indexes = collection.indexes
+            for index in indexes:
+                if index.field_name == field_name:
+                    index_type = index.params.get("index_type", "UNKNOWN")
+                    logging.info(
+                        f"[_get_embedding_index_type] Collection '{collection_name}', "
+                        f"field '{field_name}': index_type='{index_type}'"
+                    )
+                    return index_type
+            logging.warning(
+                f"[_get_embedding_index_type] No index found for field '{field_name}' "
+                f"in collection '{collection_name}'"
+            )
+            return "UNKNOWN"
+        except Exception as e:
+            logging.error(
+                f"[_get_embedding_index_type] Error retrieving index type for "
+                f"'{collection_name}.{field_name}': {e}",
+                exc_info=True,
+            )
+            return "UNKNOWN"
+
+    def _build_dense_search_params(
+        self,
+        collection_name: str,
+        top_k: int,
+        ef: int | None = None,
+        radius: float | None = None,
+        range_filter: float | None = None,
+    ) -> dict:
+        """
+        Builds the dense search params dict based on the detected index type
+        of the 'embedding' field.
+
+        Supported index types and their params:
+        - HNSW       → {"ef": value}
+        - IVF_FLAT / IVF_SQ8 / IVF_PQ → {"nprobe": value}
+        - FLAT       → {} (brute-force, no special params)
+        - AUTOINDEX  → {} (Milvus/Zilliz auto-tunes)
+        - DISKANN    → {"search_list": value}
+        - SCANN      → {"nprobe": value, "reorder_k": value}
+        - GPU_CAGRA  → {"itopk_size": value, "search_width": 4}
+        """
+        index_type = self._get_embedding_index_type(collection_name, "embedding")
+
+        if index_type == "HNSW":
+            effective_ef = ef if ef is not None else self._ef_search(top_k)
+            inner_params = {"ef": effective_ef}
+        elif index_type in ("IVF_FLAT", "IVF_SQ8", "IVF_PQ"):
+            # nprobe: number of clusters to search. Higher = better recall, slower.
+            nprobe = ef if ef is not None else max(16, min(top_k * 2, 1024))
+            inner_params = {"nprobe": nprobe}
+        elif index_type == "SCANN":
+            nprobe = ef if ef is not None else max(16, min(top_k * 2, 1024))
+            reorder_k = max(top_k * 10, 200)
+            inner_params = {"nprobe": nprobe, "reorder_k": reorder_k}
+        elif index_type == "DISKANN":
+            search_list = ef if ef is not None else max(top_k * 2, 100)
+            inner_params = {"search_list": search_list}
+        elif index_type == "GPU_CAGRA":
+            itopk_size = ef if ef is not None else max(top_k * 2, 128)
+            inner_params = {"itopk_size": itopk_size, "search_width": 4}
+        elif index_type in ("FLAT", "AUTOINDEX"):
+            inner_params = {}
+        else:
+            # UNKNOWN or unsupported: default to HNSW-like params as safe fallback
+            logging.warning(
+                f"[_build_dense_search_params] Unknown index type '{index_type}' "
+                f"for collection '{collection_name}'. Falling back to HNSW params."
+            )
+            effective_ef = ef if ef is not None else self._ef_search(top_k)
+            inner_params = {"ef": effective_ef}
+
+        dense_search_params = {
+            "metric_type": "COSINE",
+            "params": inner_params,
+        }
+
+        if radius is not None:
+            dense_search_params["radius"] = radius
+        if range_filter is not None:
+            dense_search_params["range_filter"] = range_filter
+
+        logging.info(
+            f"[_build_dense_search_params] Collection '{collection_name}', "
+            f"index_type='{index_type}', params={dense_search_params}"
+        )
+
+        return dense_search_params
+
     def classic_search(
         self, collection_name: str, expr: str, limit: int, output_fields: list[str]
     ) -> list[SearchResultEntity]:
@@ -191,10 +292,10 @@ class MilvusClient:
                 fields_without_embedding.append("text")
 
             # --- 1. Recherche Vectorielle ---
-            search_params = {
-                "metric_type": "COSINE",
-                "params": {"ef": self._ef_search(top_k)},
-            }
+            search_params = self._build_dense_search_params(
+                collection_name=collection_name,
+                top_k=top_k,
+            )
 
             results = collection.search(
                 data=[vector],
@@ -477,26 +578,16 @@ class MilvusClient:
             sub_limit = top_k * dense_limit_multiplier
 
             # --- 1. Requête de recherche dense (COSINE sur le champ 'embedding') ---
-            # ef: si explicitement fourni, on l'utilise ; sinon fallback sur _ef_search
-            effective_ef = ef if ef is not None else self._ef_search(top_k)
-
-            dense_hnsw_params = {"ef": effective_ef}
-
-            dense_search_params = {
-                "metric_type": "COSINE",
-                "params": dense_hnsw_params,
-            }
-
-            # radius / range_filter : seuils de similarité pour filtrer par score
-            # Pour COSINE : range_filter > radius (les deux entre 0.0 et 1.0)
-            if radius is not None:
-                dense_search_params["radius"] = radius
-            if range_filter is not None:
-                dense_search_params["range_filter"] = range_filter
+            dense_search_params = self._build_dense_search_params(
+                collection_name=collection_name,
+                top_k=sub_limit,
+                ef=ef,
+                radius=radius,
+                range_filter=range_filter,
+            )
 
             logging.info(
-                f"[hybrid_search] Dense params: ef={effective_ef}, "
-                f"radius={radius}, range_filter={range_filter}, "
+                f"[hybrid_search] Dense params: {dense_search_params}, "
                 f"sub_limit={sub_limit}"
             )
 
