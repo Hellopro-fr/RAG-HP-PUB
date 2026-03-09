@@ -16,7 +16,7 @@ services:
         max-file: "3"
   vllm-server:
     image: vllm/vllm-openai:latest
-    profiles: ["app"] # Profile for the main application stack
+    profiles: ["disabled"] # Profile for the main application stack
     command: >
       --model ${MODEL_NAME}
       --tensor-parallel-size 2
@@ -400,7 +400,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/api-recherche-service/Dockerfile
-    profiles: ["app"] # Profile for the main application stack
+    profiles: ["disabled"] # Profile for the main application stack
     restart: unless-stopped
     ports:
       - "8511:8511"
@@ -517,7 +517,7 @@ services:
       context: .
       dockerfile: ./apps-microservices/api-classification-v2/Dockerfile
     #container_name: api-classification-v2-service
-    profiles: ["app"] # Profile for the main application stack
+    profiles: ["disabled"] # Profile for the main application stack
     restart: unless-stopped
     environment:
       - LLM_SERVICE_URL=llm-service:50051
@@ -546,7 +546,7 @@ services:
   api-classification-v2-lb:
     image: nginx:alpine
     container_name: api-classification-v2-lb
-    profiles: ["app"]
+    profiles: ["disabled"]
     ports:
       - "8578:80"
     volumes:
@@ -744,7 +744,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/categories-processor-service/Dockerfile
-    profiles: ["app"] # Profile for the main application stack
+    profiles: ["disabled"] # Profile for the main application stack
     # container_name: categories-processor-service
     restart: unless-stopped
     env_file:
@@ -757,7 +757,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/fournisseurs-processor-service/Dockerfile
-    profiles: ["app"] # Profile for the main application stack
+    profiles: ["disabled"] # Profile for the main application stack
     # container_name: fournisseurs-processor-service
     restart: unless-stopped
     env_file:
@@ -1005,7 +1005,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/categories-database-qdrant-service/Dockerfile
-    profiles: ["app"] # Profile for the main application stack
+    profiles: ["disabled"] # Profile for the main application stack
     # container_name: categories-database-qdrant-service
     restart: unless-stopped
     env_file:
@@ -1018,7 +1018,7 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/fournisseurs-database-qdrant-service/Dockerfile
-    profiles: ["app"] # Profile for the main application stack
+    profiles: ["disabled"] # Profile for the main application stack
     # container_name: fournisseurs-database-qdrant-service
     restart: unless-stopped
     env_file:
@@ -1300,7 +1300,7 @@ services:
   # ==========================================================
   
   api-chatbot-service:
-    profiles: ["app"]
+    profiles: ["disabled"]
     build:
       context: ./apps-microservices/api-chatbot-html-service
       dockerfile: Dockerfile
@@ -1691,7 +1691,7 @@ services:
     build:
       context: .
       dockerfile: apps-microservices/graph-rag-api-recherche-service-debug/Dockerfile
-    profiles: ["graph-rag-api"]
+    profiles: ["disabled"]
     ports:
       - "8526:8526"
       - "8566:8566"
