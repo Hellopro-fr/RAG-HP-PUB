@@ -142,8 +142,16 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     canGoBack,
   } = dynamicQuestionnaire;
 
-  // Ref pour tracker l'index precedent et eviter les pushState en double
+  // Refs pour eviter les stale closures dans le handler popstate (pattern comme SupplierSelectionModal)
   const prevIndexRef = useRef(currentIndex);
+  const currentIndexRef = useRef(currentIndex);
+  const goBackRef = useRef(goBack);
+  const isHandlingPopstateRef = useRef(false); // Debounce pour Safari
+  const isMountedRef = useRef(false); // Flag pour ignorer les popstate pendant le montage
+
+  // Garder les refs synchronisees
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => { goBackRef.current = goBack; }, [goBack]);
 
   // Intercepter le bouton retour navigateur pour revenir a la question precedente
   useEffect(() => {
@@ -154,22 +162,41 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     prevIndexRef.current = currentIndex;
   }, [currentIndex]);
 
-  // Ecouter les evenements popstate separement
+  // Ecouter les evenements popstate separement (une seule fois, utilise les refs)
   useEffect(() => {
+    // Delai avant d'activer le handler pour eviter les popstate parasites au montage (Safari)
+    const mountTimeout = setTimeout(() => {
+      isMountedRef.current = true;
+    }, 50);
+
     const handlePopState = () => {
+      // Ignorer les popstate pendant le montage initial
+      if (!isMountedRef.current) return;
+
+      // Debounce pour eviter les double-declenchements sur Safari
+      if (isHandlingPopstateRef.current) return;
+      isHandlingPopstateRef.current = true;
+
       // Si on peut revenir en arriere dans le questionnaire, le faire
-      if (currentIndex > 0) {
-        goBack();
+      if (currentIndexRef.current > 0) {
+        goBackRef.current();
       }
       // Sinon, laisser le navigateur faire son comportement par defaut (quitter)
+
+      // Reset le debounce apres un court delai
+      setTimeout(() => {
+        isHandlingPopstateRef.current = false;
+      }, 100);
     };
 
     window.addEventListener('popstate', handlePopState);
 
     return () => {
+      clearTimeout(mountTimeout);
+      isMountedRef.current = false;
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [currentIndex, goBack]);
+  }, []); // Dependency array vide - le listener ne se reinstalle plus
 
   const LoadingScreen = ({ progress = 0 }: { progress?: number }) => (
       <div className="fixed inset-0 z-50 flex flex-col bg-background">
