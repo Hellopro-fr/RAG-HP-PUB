@@ -71,30 +71,24 @@ export function useDbTracking() {
         };
         sessionStorage.setItem(metaKey, 'true');
       }      
-      // type_flow (0: Non terminé | 1: flow demande categ | 2: flow produit)
-      let typeFlow = 0;
+      // type_flow et type_dmd_categ (On ne les initialise plus à 0 par défaut pour éviter d'écraser la base)
+      let typeFlow: number | null = null;
+      let typeDmdCateg: number | null = null;
 
-      // Déterminer type_dmd_categ (0: par défaut, 1: produit insuffisant, 2: intentionnelle)
-      let typeDmdCateg = 0;
       if (eventType === "matching") {
         if ( eventName === "success" || eventName === "initial") {
           typeFlow = 2;
         } else {
           typeFlow = 1;
-        }      
-      }
-
-      if (eventName === "insufficient_results") { 
+        } 
+        typeDmdCateg = 0;     
+      } else if (eventName === "insufficient_results") { 
         typeFlow = 1;
         typeDmdCateg = 1;
-      }
-
-      if (eventName === "form_submit_custom_need") { 
+      } else if (eventName === "form_submit_custom_need") { 
         typeFlow = 1;
         typeDmdCateg = 2;
-      } 
-
-      if (eventName === "form_submit") { 
+      } else if (eventName === "form_submit") { 
         typeFlow = 2;
         typeDmdCateg = 0;
       }
@@ -105,8 +99,6 @@ export function useDbTracking() {
         data: {
           session_id: sessionId,
           category_id: categoryId,
-          type_flow: typeFlow,
-          type_dmd_categ: typeDmdCateg,
           event: {
             event_type: eventType,
             event_name: eventName,
@@ -118,6 +110,12 @@ export function useDbTracking() {
           session_meta: sessionMeta,
         },
       };
+
+      // N'ajouter les champs de qualification que s'ils ont été définis ci-dessus
+      if (typeFlow !== null) {
+        payload.data.type_flow = typeFlow;
+        payload.data.type_dmd_categ = typeDmdCateg;
+      }
 
       const apiBase = getApiBasePath();
       // Envoyer avec fetch (sendBeacon ne supporte pas bien les proxies Next.js)
