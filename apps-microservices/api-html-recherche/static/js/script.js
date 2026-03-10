@@ -1362,10 +1362,10 @@ $(function () {
     let price = "";
     let price_copy = ""
     switch (result.source) {
-      // case "produits_3":
-      //   title = meta.nom_produit || title;
-      //   result.source = "Produits"
-      //   break;
+      case "produits_3":
+        title = meta.nom_produit || title;
+        result.source = "Produits"
+        break;
       case "produits_4":
         title = meta.nom_produit || title;
         result.source = "Produits"
