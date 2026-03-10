@@ -109,6 +109,7 @@ class PrixExtractor:
                 nom_produit=str(produit.get("nom_produit", "")).strip(),
                 structure_prix=produit.get("structure_prix") or None,
                 valeur_prix=str(produit.get("valeur_prix", "")).strip(),
+                prix_original=str(produit.get("prix_original", "")).strip(),
                 unite=None,                                         # non disponible dans get_produit_prix
                 devise=produit.get("devise") or None,
                 taxe=produit.get("taxe") or None,
