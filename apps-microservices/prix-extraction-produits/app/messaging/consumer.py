@@ -98,7 +98,8 @@ class Consumer:
             category_locked = False
 
             try:
-                data = json.loads(message.body.decode())
+                all_data = json.loads(message.body.decode())
+                data = all_data.get('data')
                 id_categorie = data.get('id_categorie')
                 is_reset = data.get('is_reset', False)
 
