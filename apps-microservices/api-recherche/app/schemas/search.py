@@ -75,8 +75,8 @@ class SearchRequestWs(BaseModel):
     )
     options: Optional[RerankerOptions] = RerankerOptions()
     type: int = 1
-    cache: bool = (True,)
-    get_n_chunks_pj: bool = (False,)
+    cache: bool = True
+    get_n_chunks_pj: bool = False
     hybrid: bool = False
     hybrid_options: Optional[HybridSearchOptions] = HybridSearchOptions()
 
