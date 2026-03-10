@@ -1944,7 +1944,7 @@ services:
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking
     deploy:
-      replicas: 2
+      replicas: 1
     networks:
       - services-net
     logging: *logging_defaults
@@ -1964,7 +1964,7 @@ services:
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking
     deploy:
-      replicas: 2
+      replicas: 1
     networks:
       - services-net
     logging: *logging_defaults
@@ -1984,7 +1984,7 @@ services:
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking
     deploy:
-      replicas: 2
+      replicas: 1
     networks:
       - services-net
     logging: *logging_defaults
