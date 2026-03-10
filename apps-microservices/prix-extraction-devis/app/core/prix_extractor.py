@@ -195,7 +195,7 @@ class PrixExtractor:
                 self._log(f"[{item_index + 1}/{total_items}] Réponse LLM reçue ({len(response_text)} chars)")
 
                 # Tenter d'extraire le JSON de la réponse
-                prix_data = utils.extract_json_from_text(response_text)
+                prix_data = utils.extract_json_from_text(response_text)                
 
                 # 4. Stocker le résultat via l'API HelloPro (item ID + résultat du prompt)
                 save_data = {

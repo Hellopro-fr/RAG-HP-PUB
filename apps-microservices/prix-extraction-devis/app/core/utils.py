@@ -172,3 +172,81 @@ def to_json_string(data: Any) -> str:
     except Exception as e:
         logger.error(f"Erreur lors de la conversion en JSON: {e}")
         return "{}"
+
+
+def process_product_data_for_embedding(
+    prix_data: dict,
+    id_categorie: str = "",
+    source: str = "devis",
+    database: str = "qdrant",
+    origin: str = "prix-extraction"
+) -> dict:
+    """
+    Formate et prépare les données de prix d'un item avant publication
+    dans la queue ready_for_embedding (collection PRIX).
+
+    Le texte à embedder est structuré avec des libellés explicites pour maximiser
+    la pertinence des recherches RAG vectorielles sur les questions/réponses acheteur.
+
+    Args:
+        prix_data   : Dictionnaire de données de prix
+        id_categorie: ID de la catégorie de traitement
+        source      : Source de l'item (devis par défaut pour ce service)
+        database    : Base vectorielle cible (défaut: qdrant)
+        origin      : Origine du message pour le tracking
+
+    Returns:
+        Dictionnaire prêt à être publié sur l'exchange d'embedding.
+        Structure compatible avec le pipeline embedding de la collection PRIX.
+    """
+    from common_utils.autres.CollectionName import CollectionName
+
+    if not isinstance(prix_data, dict):
+        raise ValueError("prix_data doit être un dictionnaire.")
+
+    def _v(key: str) -> str:
+        """Retourne la valeur sous forme de chaîne propre, ou chaîne vide."""
+        val = prix_data.get(key)
+        return str(val).strip() if val else ""
+
+    # Construire le texte à embedder au format standardisé
+    parts = []
+    if _v("nom_produit"):
+        parts.append(f"Produit: {_v('nom_produit')}")
+    if _v("nom_categorie"):
+        parts.append(f"Catégorie: {_v('nom_categorie')}")
+    if _v("description_produit"):
+        parts.append(f"Description: {_v('description_produit')}")
+    if _v("fournisseur"):
+        parts.append(f"Fournisseur: {_v('fournisseur')}")
+
+    # Ligne prix: valeur + devise + taxe + unité
+    valeur = _v("valeur_prix")
+    if valeur:
+        prix_line = f"Prix: {valeur}"
+        for extra in [_v("devise"), _v("taxe"), _v("unite")]:
+            if extra:
+                prix_line += f" {extra}"
+        parts.append(prix_line)
+
+    if _v("valeur_reponse_q1"):
+        parts.append(f"Valeur réponse q1: {_v('valeur_reponse_q1')}")
+
+    text_to_embed = "\n".join(parts)
+
+    output_message = {
+        "data": {
+            "text": text_to_embed,
+            **prix_data,
+        },
+        "collection": CollectionName.PRIX,
+        "database":   database,
+        "origin":     origin,
+    }
+
+    logger.info(
+        f"📦 process_product_data_for_embedding: item prêt pour embedding "
+        f"(source={source}, id_categorie={id_categorie}, "
+        f"text_len={len(text_to_embed)})"
+    )
+    return output_message
