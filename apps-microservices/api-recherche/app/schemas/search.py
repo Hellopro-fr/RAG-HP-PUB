@@ -57,7 +57,7 @@ class HybridSearchOptions(BaseModel):
     dense_limit_multiplier: int = (
         1  # Facteur de sur-récupération (3+ = plus de candidats pour fusion)
     )
-    ranker_type: str = "weighted"  # "weighted" ou "rrf" (Reciprocal Rank Fusion)
+    ranker_type: str = "rrf"  # "weighted" ou "rrf" (Reciprocal Rank Fusion)
     rrf_k: int = 60  # Constante de lissage RRF (10-100)
 
 
