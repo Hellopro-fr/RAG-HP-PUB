@@ -7,34 +7,29 @@ logger = logging.getLogger(__name__)
 
 
 class Publisher:
-    """Async Publisher: prix-extraction-siteweb → Publie vers prix-normalisation"""
+    """
+    Async Publisher pour prix-extraction-produits.
+    Publie exclusivement vers data.ready_for_embedding.
+    """
+
+    EMBED_EXCHANGE = 'processed_data_exchange'
+    EMBED_ROUTING  = 'data.ready_for_embedding'
 
     def __init__(self):
-        self.exchange = None
-        self.exchange_name = 'prix_pipeline_exchange'
-        self.routing_key = 'prix.normalisation.start'
+        self._exchange = None
 
     async def setup(self, channel: aio_pika.abc.AbstractChannel):
-        """Setup l'exchange sur le channel fourni."""
-        self.exchange = await channel.declare_exchange(
-            self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
+        """Déclare l'exchange sur le channel fourni."""
+        self._exchange = await channel.declare_exchange(
+            self.EMBED_EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True
         )
-        logger.info(f"✅ Prix-Extraction-Siteweb Publisher initialized: {self.exchange_name}")
+        logger.info(f"✅ Prix-Extraction-Produits Publisher initialized → {self.EMBED_EXCHANGE}")
 
     async def publish_message(self, message_dict: dict):
-        """Publie un message vers l'étape suivante du pipeline (prix-normalisation)."""
-        if not self.exchange:
+        """Publie un message vers data.ready_for_embedding."""
+        if not self._exchange:
             raise RuntimeError("Publisher not initialized. Call setup() first.")
-
-        try:
-            message_body = json.dumps(message_dict).encode("utf-8")
-            message = aio_pika.Message(
-                body=message_body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT
-            )
-
-            await self.exchange.publish(message, routing_key=self.routing_key)
-            logger.info(f"📤 Prix-Extraction-Siteweb: Message publié vers {self.routing_key}")
-
-        except Exception as e:
-            logger.error(f"⚠️ Échec publication message: {e}")
-            raise e
+        body = json.dumps(message_dict, default=str).encode("utf-8")
+        msg  = aio_pika.Message(body=body, delivery_mode=aio_pika.DeliveryMode.PERSISTENT)
+        await self._exchange.publish(msg, routing_key=self.EMBED_ROUTING)
+        logger.info(f"📤 Publié vers {self.EMBED_ROUTING}")

@@ -5,16 +5,16 @@ import logging
 
 from app.core.processor import insertion_data
 
-EXCHANGE_NAME = "prix_produits_embedded_data_exchange"
-ROUTING_KEY = "data.prix_produits.ready_for_insertion"
-QUEUE_NAME = "insertion_prix_produits_queue"
+EXCHANGE_NAME = "prix_embedded_data_exchange"
+ROUTING_KEY = "data.prix.ready_for_insertion"
+QUEUE_NAME = "insertion_prix_queue"
 
-RETRY_EXCHANGE = "prix_produits_retry_exchange"
-RETRY_QUEUE = "insertion_prix_produits_retry_queue"
+RETRY_EXCHANGE = "prix_retry_exchange"
+RETRY_QUEUE = "insertion_prix_retry_queue"
 RETRY_TTL = 30000  # 30 secondes
 
-DLQ_EXCHANGE = "prix_produits_dlq_exchange"
-DLQ_QUEUE = "insertion_prix_produits_dlq_queue"
+DLQ_EXCHANGE = "prix_dlq_exchange"
+DLQ_QUEUE = "insertion_prix_dlq_queue"
 
 MAX_RETRIES = 3
 

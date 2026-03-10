@@ -14,7 +14,7 @@ def insertion_data(produits_data: dict) -> dict:
     Retourne: Un dictionnaire prêt à être publié.
     """
     produits = produits_data.get("data", [])
-    collection = produits_data.get("collection", CollectionName.PRIX_PRODUIT)
+    collection = produits_data.get("collection", CollectionName.PRIX)
     origin = produits_data.get("origin", "extraction")
 
     try:
@@ -23,7 +23,7 @@ def insertion_data(produits_data: dict) -> dict:
         logging.error("'%s' n'est pas un nom de collection valide.", collection)
         raise ValueError(f"'{collection}' n'est pas un nom de collection valide.")
 
-    if collection_enum != CollectionName.PRIX_PRODUIT:
+    if collection_enum != CollectionName.PRIX:
         raise ValueError(
             f"Collection '{collection}' non supportée par le prix-milvus-processor. Seule 'prix_produits' est acceptée."
         )
