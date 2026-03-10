@@ -23,6 +23,7 @@ class ProduitPrixPayload(BaseModel):
     domaine: Optional[str] = Field(None, description="Domaine web d'origine du scrapping")
     id_societe_ia: Optional[str] = Field(None, description="ID interne IA du fournisseur (id_societe_ia)")
     valeur_reponse_q1: Optional[str] = Field(None, description="Valeur de la réponse Q1 associée à la catégorie")
+    prix_original: Optional[str] = Field(None, description="Prix original tel qu'il apparaît dans les données brutes")
     structure_prix: Optional[str] = Field(None, description="Type de structure de prix: fixe, promotionnel, fourchette, à_partir_de")
     unite: Optional[str] = Field(None, description="Unité du prix (ex: 'par unité', 'par mois')")
     devise: Optional[str] = Field(None, description="Devise du prix (ex: '€', '$', '£')")
