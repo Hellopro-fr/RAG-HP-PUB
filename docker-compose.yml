@@ -1904,6 +1904,91 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # =====================================================================
+  # PIPELINE EXTRACTION PRIX
+  # Lancez avec: docker-compose --profile prix-service up -d
+  # =====================================================================
+
+  prix-extraction-produits:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-extraction-produits/Dockerfile
+    profiles: ["prix-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      MAX_CONCURRENCY: 3
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking
+    deploy:
+      replicas: 1
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  prix-extraction-siteweb:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-extraction-siteweb/Dockerfile
+    profiles: ["prix-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      MAX_CONCURRENCY: 3
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking
+    deploy:
+      replicas: 2
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  prix-extraction-message:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-extraction-message/Dockerfile
+    profiles: ["prix-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      MAX_CONCURRENCY: 3
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking
+    deploy:
+      replicas: 2
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  prix-extraction-devis:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-extraction-devis/Dockerfile
+    profiles: ["prix-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      MAX_CONCURRENCY: 3
+    volumes:
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking
+    deploy:
+      replicas: 2
+    networks:
+      - services-net
+    logging: *logging_defaults
+
 networks:
   services-net:
     driver: bridge
