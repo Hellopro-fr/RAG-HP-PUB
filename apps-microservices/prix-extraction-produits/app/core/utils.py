@@ -172,3 +172,69 @@ def to_json_string(data: Any) -> str:
     except Exception as e:
         logger.error(f"Erreur lors de la conversion en JSON: {e}")
         return "{}"
+
+
+def process_product_data_for_embedding(
+    prix_data: dict,
+    id_categorie: str = "",
+    source: str = "produits",
+    database: str = "qdrant",
+    origin: str = "prix-extraction"
+) -> dict:
+    """
+    Formate et prépare les données de prix d'un item avant publication
+    dans la queue ready_for_embedding (collection PRIX).
+
+    Args:
+        prix_data   : Dictionnaire de données de prix (ProduitPrixPayload.dict() ou équivalent)
+        id_categorie: ID de la catégorie de traitement
+        source      : Source de l'item (produits par défaut pour ce service)
+        database    : Base vectorielle cible (défaut: qdrant)
+        origin      : Origine du message pour le tracking
+
+    Returns:
+        Dictionnaire prêt à être publié sur l'exchange d'embedding.
+        Structure compatible avec le pipeline embedding de la collection PRIX.
+    """
+    from common_utils.autres.CollectionName import CollectionName
+
+    if not isinstance(prix_data, dict):
+        raise ValueError("prix_data doit être un dictionnaire.")
+
+    # Construire le texte principal à embedder à partir des champs descriptifs
+    text_parts = []
+    if prix_data.get("nom_produit"):
+        text_parts.append(str(prix_data["nom_produit"]))
+    if prix_data.get("description_produit"):
+        text_parts.append(str(prix_data["description_produit"]))
+    if prix_data.get("valeur_prix"):
+        devise  = prix_data.get("devise", "")
+        taxe    = prix_data.get("taxe", "")
+        unite   = prix_data.get("unite", "")
+        val_str = f"Prix: {prix_data['valeur_prix']}"
+        if devise:
+            val_str += f" {devise}"
+        if taxe:
+            val_str += f" {taxe}"
+        if unite:
+            val_str += f" / {unite}"
+        text_parts.append(val_str)
+
+    text_to_embed = " | ".join(filter(None, text_parts))
+
+    output_message = {
+        "data": {
+            "text": text_to_embed,
+            **prix_data,
+        },
+        "collection": CollectionName.PRIX,
+        "database":   database,
+        "origin":     origin,
+    }
+
+    logger.info(
+        f"📦 process_product_data_for_embedding: item prêt pour embedding "
+        f"(source={source}, id_categorie={id_categorie}, "
+        f"text_len={len(text_to_embed)})"
+    )
+    return output_message
