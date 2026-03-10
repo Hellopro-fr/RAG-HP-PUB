@@ -78,12 +78,12 @@ class MilvusPrixProduitsCrud:
                 FieldSchema(
                     name="nom_produit", dtype=DataType.VARCHAR, max_length=65535
                 ),
-                FieldSchema(
-                    name="valeur_prix", dtype=DataType.VARCHAR, max_length=255
-                ),
+                FieldSchema(name="valeur_prix", dtype=DataType.VARCHAR, max_length=255),
                 # --- Champs optionnels ---
                 FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=255),
-                FieldSchema(name="id_categorie", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(
+                    name="id_categorie", dtype=DataType.VARCHAR, max_length=255
+                ),
                 FieldSchema(
                     name="nom_categorie", dtype=DataType.VARCHAR, max_length=65535
                 ),
@@ -116,6 +116,13 @@ class MilvusPrixProduitsCrud:
                 FieldSchema(
                     name="fournisseur", dtype=DataType.VARCHAR, max_length=65535
                 ),
+                FieldSchema(
+                    name="source_chunk_id", dtype=DataType.VARCHAR, max_length=255
+                ),
+                # --- Champs chunking ---
+                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="chunk_number", dtype=DataType.INT64),
+                FieldSchema(name="total_chunks", dtype=DataType.INT64),
                 # --- Champ texte pour embedding et BM25 ---
                 FieldSchema(
                     name="text",
@@ -157,14 +164,16 @@ class MilvusPrixProduitsCrud:
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
             # Index HNSW pour le champ embedding (dense vector)
-            index_params = {
-                "metric_type": "COSINE",
-                "index_type": "HNSW",
-                "params": {
-                    "M": settings.M_PARAMS,
-                    "efConstruction": settings.EF_PARAMS,
-                },
-            }
+            # index_params = {
+            #     "metric_type": "COSINE",
+            #     "index_type": "HNSW",
+            #     "params": {
+            #         "M": settings.M_PARAMS,
+            #         "efConstruction": settings.EF_PARAMS,
+            #     },
+            # }
+            # collection.create_index(field_name="embedding", index_params=index_params)
+            index_params = {"metric_type": "COSINE", "index_type": "FLAT", "params": {}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # Index pour le champ sparse_embedding (BM25)
@@ -213,10 +222,26 @@ class MilvusPrixProduitsCrud:
                 f"[{model_key}][PrixProduits] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'..."
             )
 
+            # Champs autorisés dans le schéma de la collection (hors auto_id et vecteurs)
+            # allowed_fields = {
+            #     "description_produit", "nom_produit", "valeur_prix",
+            #     "source", "id_categorie", "nom_categorie", "date_prix",
+            #     "id_lead", "id_produit", "domaine", "id_societe_ia",
+            #     "valeur_reponse_q1", "prix_original", "structure_prix",
+            #     "unite", "devise", "taxe", "type_transaction", "perimetre",
+            #     "id_fournisseur", "fournisseur",
+            #     "chunk_id", "chunk_number", "total_chunks",
+            #     "text", "embedding",
+            #     "date_ajout", "date_maj",
+            # }
+
             sanitized_batch = []
             for data in datas:
                 data["date_ajout"] = datetime.now().isoformat()
                 data["date_maj"] = None
+
+                # Filtrer les champs non présents dans le schéma
+                # data = {k: v for k, v in data.items()}
 
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
