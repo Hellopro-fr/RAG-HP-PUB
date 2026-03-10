@@ -216,6 +216,7 @@ class PrixExtractor:
                     "save",
                     save_data
                 )
+
                 
                 if save_result:
                     self._log(f"[{chunk_index + 1}/{total_chunks}] ✅ Résultat sauvegardé pour chunk {chunk_id}")

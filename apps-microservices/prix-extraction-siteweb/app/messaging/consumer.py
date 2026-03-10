@@ -6,10 +6,12 @@ import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
 from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
+from common_utils.autres.CollectionName import CollectionName, RoutingKeys
 from app.core.credentials import settings
 from app.messaging.publisher import Publisher
 from app.core.prix_extractor import PrixExtractor
 from app.core.api_client import HelloProAPIClient
+from app.core.utils import process_product_data_for_embedding
 from app.schemas.prix_extraction import RequestProcessus
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -32,13 +34,15 @@ class Consumer:
         self._processing_categories: Set[str] = set()
         self._categories_lock = asyncio.Lock()
 
-        self.exchange_name = 'prix_pipeline_exchange'
-        self.routing_key = 'prix.extraction_siteweb.start'
-        self.queue_name = 'prix_extraction_siteweb_queue'
-        self.retry_exchange = 'prix_retry_exchange'
-        self.retry_queue_name = f'{self.queue_name}_retry'
-        self.dead_letter_exchange = 'prix_dead_letter_exchange'
-        self.dead_letter_queue_name = f'{self.queue_name}_dlq'
+        # Nomenclature centralisée — CollectionName.PRIX_SITEWEB
+        _collection          = CollectionName.PRIX_SITEWEB          # "prix_siteweb"
+        self.exchange_name   = f'data_exchange_{_collection}'       # data_exchange_prix_siteweb
+        self.routing_key     = RoutingKeys[_collection]             # new_data.prix_siteweb
+        self.queue_name      = f'{_collection}_processing_queue'    # prix_siteweb_processing_queue
+        self.retry_exchange  = f'retry_exchange_{_collection}'      # retry_exchange_prix_siteweb
+        self.retry_queue_name        = f'{self.queue_name}_retry'
+        self.dead_letter_exchange    = f'dead_letter_exchange_{_collection}'
+        self.dead_letter_queue_name  = f'{self.queue_name}_dlq'
 
     async def connect(self):
         logger.info(f"Connecting to RabbitMQ at {settings.RABBITMQ_URL}")
@@ -59,7 +63,7 @@ class Consumer:
         await retry_queue.bind(retry_exchange, routing_key=self.routing_key)
         main_exchange = await self.channel.declare_exchange(self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True)
         self.queue = await self.channel.declare_queue(self.queue_name, durable=True,
-            arguments={"x-dead-letter-exchange": self.retry_exchange, "x-dead-letter-routing-key": self.routing_key})
+            arguments={"x-dead-letter-exchange": self.retry_exchange, "x-dead-letter-routing-key": self.routing_key, "x-consumer-timeout": 7200000})
         await self.queue.bind(main_exchange, routing_key=self.routing_key)
 
     def _get_retry_count(self, message: AbstractIncomingMessage) -> int:
@@ -94,7 +98,8 @@ class Consumer:
             category_locked = False
             
             try:
-                data = json.loads(message.body.decode())
+                all_data = json.loads(message.body.decode())
+                data = all_data.get('data')
                 id_categorie = data.get('id_categorie')
                 is_reset = data.get('is_reset', False)
                 
@@ -120,20 +125,23 @@ class Consumer:
                 finally:
                     await extractor.close()
                 
-                # Publier chaque item réussi individuellement vers prix-normalisation
+                # Publier chaque item réussi vers data.ready_for_embedding
                 published_count = 0
                 for item_result in result.item_results:
-                    if item_result.status == "success":
-                        publish_message = {
-                            "id_categorie": id_categorie,
-                            "item_id": item_result.item_id,
-                            "source": item_result.source,
-                            "prix_data": item_result.prix_data,
-                        }
-                        await self.publisher.publish_message(publish_message)
-                        published_count += 1
+                    if item_result.status == "success" and item_result.prix_data:
+                        try:
+                            embedding_message = process_product_data_for_embedding(
+                                prix_data=item_result.prix_data,
+                                id_categorie=id_categorie,
+                                source=item_result.source,
+                                origin="prix-extraction-siteweb"
+                            )
+                            await self.publisher.publish_message(embedding_message)
+                            published_count += 1
+                        except Exception as pub_err:
+                            logger.warning(f"[CAT-{id_categorie}] ⚠️ Publication skip item {item_result.item_id}: {pub_err}")
                 
-                logger.info(f"[CAT-{id_categorie}] 📊 Bilan: {result.success}/{result.total_chunks} succès, {result.errors} erreurs, {published_count} messages publiés")
+                logger.info(f"[CAT-{id_categorie}] 📊 Bilan: {result.success}/{result.total_chunks} succès, {result.errors} erreurs, {published_count} messages publiés vers embedding")
                 await message.ack()
                 logger.info(f"[CAT-{id_categorie}] ✅ Terminé")
                 

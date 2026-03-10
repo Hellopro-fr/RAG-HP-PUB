@@ -21,6 +21,7 @@ class ProduitPrixPayload(BaseModel):
     date_prix: Optional[str] = Field(None, description="Date du prix au format YYYY-MM-DD, ex: '2025-11-15'")
     id_lead: Optional[str] = Field(None, description="ID du lead / demande d'information associé")
     id_produit: Optional[str] = Field(None, description="ID du produit dans la base IA (scrapping_fiche_produit_ia)")
+    source_chunk_id: Optional[str] = Field(None, description="ID du chunk source pour devis et siteweb")
     domaine: Optional[str] = Field(None, description="Domaine web d'origine du scrapping")
     id_societe_ia: Optional[str] = Field(None, description="ID interne IA du fournisseur (id_societe_ia)")
     valeur_reponse_q1: Optional[str] = Field(None, description="Valeur de la réponse Q1 associée à la catégorie")

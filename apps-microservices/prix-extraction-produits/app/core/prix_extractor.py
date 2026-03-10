@@ -103,6 +103,7 @@ class PrixExtractor:
                 nom_categorie=category_name,
                 id_lead=None,                                       # non disponible pour les produits
                 id_produit=str(produit.get("id_produit", "")),
+                source_chunk_id=None,
                 domaine=produit.get("domaine") or None,
                 id_societe_ia=str(produit.get("id_societe_ia", "")) or None,
                 valeur_reponse_q1=None,                             # non applicable ici
