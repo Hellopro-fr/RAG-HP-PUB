@@ -22,7 +22,7 @@ from pymilvus import (
 @dataclass
 class PrixModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "prix_produits"
+    collection_name: str = "prix"
     dimension: int = 1024
 
 
@@ -65,7 +65,7 @@ class MilvusPrixProduitsCrud:
         if not utility.has_collection(collection_name):
             self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
 
-            # Définition du schéma pour la collection prix_produits
+            # Définition du schéma pour la collection prix
             fields = [
                 # --- Champs identifiants ---
                 FieldSchema(

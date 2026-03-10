@@ -5,10 +5,10 @@ import logging
 
 def insertion_data(produits_data: dict) -> dict:
     """
-    Prend les résultats de l'embedding puis insère les chunks dans la collection Milvus prix_produits.
+    Prend les résultats de l'embedding puis insère les chunks dans la collection Milvus prix.
 
     Logique d'insertion :
-    - Insertion simple (insert-only) des données de prix dans la collection prix_produits.
+    - Insertion simple (insert-only) des données de prix dans la collection prix.
     - Pas de logique de déduplication pour le moment.
 
     Retourne: Un dictionnaire prêt à être publié.
@@ -25,7 +25,7 @@ def insertion_data(produits_data: dict) -> dict:
 
     if collection_enum != CollectionName.PRIX:
         raise ValueError(
-            f"Collection '{collection}' non supportée par le prix-milvus-processor. Seule 'prix_produits' est acceptée."
+            f"Collection '{collection}' non supportée par le prix-milvus-processor. Seule 'prix' est acceptée."
         )
 
     base_vectorielle = MilvusPrixProduitsCrud()
