@@ -185,6 +185,9 @@ def process_product_data_for_embedding(
     Formate et prépare les données de prix d'un item avant publication
     dans la queue ready_for_embedding (collection PRIX).
 
+    Le texte à embedder est structuré avec des libellés explicites pour maximiser
+    la pertinence des recherches RAG vectorielles sur les questions/réponses acheteur.
+
     Args:
         prix_data   : Dictionnaire de données de prix (ProduitPrixPayload.dict() ou équivalent)
         id_categorie: ID de la catégorie de traitement
@@ -201,26 +204,35 @@ def process_product_data_for_embedding(
     if not isinstance(prix_data, dict):
         raise ValueError("prix_data doit être un dictionnaire.")
 
-    # Construire le texte principal à embedder à partir des champs descriptifs
-    text_parts = []
-    if prix_data.get("nom_produit"):
-        text_parts.append(str(prix_data["nom_produit"]))
-    if prix_data.get("description_produit"):
-        text_parts.append(str(prix_data["description_produit"]))
-    if prix_data.get("valeur_prix"):
-        devise  = prix_data.get("devise", "")
-        taxe    = prix_data.get("taxe", "")
-        unite   = prix_data.get("unite", "")
-        val_str = f"Prix: {prix_data['valeur_prix']}"
-        if devise:
-            val_str += f" {devise}"
-        if taxe:
-            val_str += f" {taxe}"
-        if unite:
-            val_str += f" / {unite}"
-        text_parts.append(val_str)
+    def _v(key: str) -> str:
+        """Retourne la valeur sous forme de chaîne propre, ou chaîne vide."""
+        val = prix_data.get(key)
+        return str(val).strip() if val else ""
 
-    text_to_embed = " | ".join(filter(None, text_parts))
+    # Construire le texte à embedder au format standardisé
+    parts = []
+    if _v("nom_produit"):
+        parts.append(f"Nom Produit: {_v('nom_produit')}")
+    if _v("nom_categorie"):
+        parts.append(f"Catégorie: {_v('nom_categorie')}")
+    if _v("description_produit"):
+        parts.append(f"Description: {_v('description_produit')}")
+    if _v("fournisseur"):
+        parts.append(f"Fournisseur: {_v('fournisseur')}")
+
+    # Ligne prix: valeur + devise + taxe + unité
+    valeur = _v("valeur_prix")
+    if valeur:
+        prix_line = f"Prix: {valeur}"
+        for extra in [_v("devise"), _v("taxe"), _v("unite")]:
+            if extra:
+                prix_line += f" {extra}"
+        parts.append(prix_line)
+
+    if _v("valeur_reponse_q1"):
+        parts.append(f"Valeur réponse q1: {_v('valeur_reponse_q1')}")
+
+    text_to_embed = "\n".join(parts)
 
     output_message = {
         "data": {
