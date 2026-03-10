@@ -97,6 +97,7 @@ class PrixExtractor:
         """
         try:
             payload = ProduitPrixPayload(
+                source="produit",
                 date_prix=produit.get("date_prix") or None,
                 id_categorie=id_categorie,
                 nom_categorie=category_name,
