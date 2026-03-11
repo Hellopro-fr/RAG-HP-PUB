@@ -8,6 +8,7 @@ import os
 import sys
 import asyncio
 import io
+import gc
 import tempfile
 from typing import List, Optional, Tuple
 from pathlib import Path
@@ -225,6 +226,12 @@ class DynamicBatchProcessor:
             
             results.append(result)
         
+        # Libération mémoire après inférence
+        del outputs
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
         print(f"[DEBUG] vLLM generation complete: {len(results)} results")
         return results
 
@@ -247,9 +254,10 @@ def initialize_model():
             hf_overrides={"architectures": ["DeepseekOCRForCausalLM"]},
             block_size=256,
             enforce_eager=False,
+            # NOTE: swap_space passé de 0 à 4 pour permettre au KV-cache de paginer en swap
             trust_remote_code=True,
             max_model_len=8192,
-            swap_space=0,
+            swap_space=4,
             max_num_seqs=MAX_CONCURRENCY,
             tensor_parallel_size=1,
             gpu_memory_utilization=0.85,
@@ -292,6 +300,7 @@ def pdf_to_images_high_quality(pdf_data: bytes, dpi: int = 144) -> List[Image.Im
             img_data = pixmap.tobytes("png")
             img = Image.open(io.BytesIO(img_data))
             images.append(img)
+            del pixmap, img_data  # Libérer immédiatement les données brutes
         
         pdf_document.close()
     finally:
@@ -399,6 +408,10 @@ async def process_image_endpoint(file: UploadFile = File(...), prompt: Optional[
         results = await process_images([image], use_prompt)
         result = results[0]
         
+        # Fermeture explicite de l'image PIL
+        image.close()
+        del image
+        
         print(f"[DEBUG] OCR complete, output length: {len(result)}")
         
         return OCRResponse(
@@ -446,6 +459,12 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         results_text = await process_images(images, use_prompt)
         
         # Convert to response format
+        # Fermeture explicite des images PIL
+        for img in images:
+            img.close()
+        del images
+        gc.collect()
+        
         results = [
             OCRResponse(
                 success=True,
