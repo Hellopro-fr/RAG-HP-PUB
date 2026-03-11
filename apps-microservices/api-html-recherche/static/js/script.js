@@ -1638,6 +1638,10 @@ $(function () {
               }
               break;
             case 'prix':
+              const prixSource = $('#prixSource').val() || [];
+              if (prixSource.length > 0) {
+                filtreSpecifique.source = prixSource;
+              }
               sourceName = 'prix';
               break;
           }
