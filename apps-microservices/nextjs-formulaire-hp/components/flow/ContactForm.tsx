@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
 import { useBuyerCheck } from "@/hooks/api";
-import { useFlowStore } from "@/lib/stores/flow-store";
+import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from "@/lib/stores/flow-store";
 import type { Supplier, ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
 import { validatePhoneNumber } from "@/lib/utils/phone-validation";
@@ -69,7 +69,29 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
   useEffect(() => {
     if (leadSubmission.isSuccess && leadSubmission.data?.data) {
       const { isExternalRedirect, fallbackUrl } = leadSubmission.data.data;
+
       if (!isExternalRedirect && fallbackUrl) {
+        // Marquer la soumission comme complétée IMMÉDIATEMENT (pas dans le setTimeout!)
+        try {
+          const originalToken = typeof window !== 'undefined'
+            ? sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY)
+            : undefined;
+
+          const submissionData = {
+            timestamp: Date.now(),
+            originalToken: originalToken || undefined,
+            categoryId: categoryId,
+            expiresAt: Date.now() + (48 * 60 * 60 * 1000), // 48h (sécurité)
+          };
+
+          localStorage.setItem(
+            FLOW_SUBMISSION_COMPLETED_KEY,
+            JSON.stringify(submissionData)
+          );
+        } catch (e) {
+          console.error('[ContactForm] ❌ Failed to set submission flag:', e);
+        }
+
         // Afficher le message d'erreur et rediriger après 2 secondes
         setShowFallbackRedirect(true);
         // Scroll vers le message après un court délai pour laisser le rendu se faire
@@ -77,12 +99,13 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
           fallbackMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
         const timer = setTimeout(() => {
+          // Redirection vers page feuille (quitte Next.js)
           window.location.href = fallbackUrl;
         }, 2000);
         return () => clearTimeout(timer);
       }
     }
-  }, [leadSubmission.isSuccess, leadSubmission.data]);
+  }, [leadSubmission.isSuccess, leadSubmission.data, categoryId]);
 
   // Ref pour éviter les doubles appels en StrictMode
   const hasTrackedView = useRef(false);
@@ -271,7 +294,6 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
     // Si acheteur inconnu: aller au ProfileTypeStep (le lead sera soumis après)
     if (isKnownBuyer) {
       // Submit lead for known buyers
-      console.log(leadSubmission);
       leadSubmission.mutate({
         contact: finalData,
         profile: profileData!,
