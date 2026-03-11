@@ -30,6 +30,7 @@ import {
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
+import { UpdateChecker } from "./class/UpdateChecker.js";
 import { context } from "./context.js";
 
 const execAsync = promisify(exec);
@@ -623,6 +624,13 @@ if (crawlMode === 'update') {
         console.log(`   - Limits: MinSample=${context.config.circuitBreaker.minSample}, ErrorRate=${(context.config.circuitBreaker.maxErrorRate * 100).toFixed(1)}%, RedirectRate=${(context.config.circuitBreaker.maxRedirectRate * 100).toFixed(1)}%, GrowthRate=${(context.config.circuitBreaker.maxGrowthRate * 100).toFixed(1)}%`);
     }
     console.log(`----------------------------------------\n`);
+
+    // --- INSTANTIATE UPDATE CHECKER (Epic 2) ---
+    if (context.statsManager && context.urlConsolidator) {
+        const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
+        context.updateChecker = new UC(context.urlConsolidator, context.statsManager);
+        console.log(`✅ UpdateChecker initialized for update mode.`);
+    }
 
 } else if (await requestQueue.isEmpty()) {
     console.log("RequestQueueEmpty - Adding standard seed");
