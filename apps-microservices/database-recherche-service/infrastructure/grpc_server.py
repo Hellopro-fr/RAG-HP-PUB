@@ -1,6 +1,7 @@
 import grpc
 import logging
 import os
+import collections
 import asyncio
 from concurrent import futures
 from google.protobuf import struct_pb2
@@ -12,76 +13,186 @@ from grpc_stubs import database_pb2_grpc
 
 from application.search_use_case import SearchUseCase
 
-TOTAL_MAX_CONCURRENT_REQUESTS = int(os.getenv("TOTAL_MAX_CONCURRENT_REQUESTS", "50"))
-HIGH_PRIORITY_RATIO = float(os.getenv("HIGH_PRIORITY_RATIO", "0.2"))
-MEDIUM_PRIORITY_RATIO = float(os.getenv("MEDIUM_PRIORITY_RATIO", "0.3"))
+TOTAL_MAX_CONCURRENT_REQUESTS = int(os.getenv("TOTAL_MAX_CONCURRENT_REQUESTS", "100"))
 
-high_priority_services_str = os.getenv("HIGH_PRIORITY_SERVICES", "api-recherche-service, api-chat-llm-service")
-HIGH_PRIORITY_SERVICES = {s.strip() for s in high_priority_services_str.split(',') if s.strip()}
+high_priority_services_str = os.getenv(
+    "HIGH_PRIORITY_SERVICES", "api-recherche-service, api-chat-llm-service"
+)
+HIGH_PRIORITY_SERVICES = {
+    s.strip() for s in high_priority_services_str.split(",") if s.strip()
+}
 
-medium_priority_services_str = os.getenv("MEDIUM_PRIORITY_SERVICES", "api-classification-service")
-MEDIUM_PRIORITY_SERVICES = {s.strip() for s in medium_priority_services_str.split(',') if s.strip()}
+medium_priority_services_str = os.getenv(
+    "MEDIUM_PRIORITY_SERVICES", "api-classification-service"
+)
+MEDIUM_PRIORITY_SERVICES = {
+    s.strip() for s in medium_priority_services_str.split(",") if s.strip()
+}
 
 
 class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer):
     def __init__(self, use_case: SearchUseCase):
         self.use_case = use_case
-        
-        high_prio_slots = int(TOTAL_MAX_CONCURRENT_REQUESTS * HIGH_PRIORITY_RATIO)
-        medium_prio_slots = int(TOTAL_MAX_CONCURRENT_REQUESTS * MEDIUM_PRIORITY_RATIO)
-        
-        if high_prio_slots == 0 and TOTAL_MAX_CONCURRENT_REQUESTS > 0 and HIGH_PRIORITY_SERVICES:
-            high_prio_slots = 1
-        if medium_prio_slots == 0 and TOTAL_MAX_CONCURRENT_REQUESTS > high_prio_slots and MEDIUM_PRIORITY_SERVICES:
-            medium_prio_slots = 1
-            
-        low_prio_slots = TOTAL_MAX_CONCURRENT_REQUESTS - high_prio_slots - medium_prio_slots
-        if low_prio_slots < 0:
-            low_prio_slots = 0
-            
-        if TOTAL_MAX_CONCURRENT_REQUESTS == 0:
-            high_prio_slots = 0
-            medium_prio_slots = 0
-            low_prio_slots = 0
-            
-        self.high_prio_semaphore = asyncio.Semaphore(high_prio_slots) if high_prio_slots > 0 else None
-        self.medium_prio_semaphore = asyncio.Semaphore(medium_prio_slots) if medium_prio_slots > 0 else None
-        self.low_prio_semaphore = asyncio.Semaphore(low_prio_slots) if low_prio_slots > 0 else None
 
-        logging.info(f"Database Concurrency Config: Total={TOTAL_MAX_CONCURRENT_REQUESTS}")
-        logging.info(f"High Priority Slots: {high_prio_slots} | Medium Priority Slots: {medium_prio_slots} | Low Priority Slots: {low_prio_slots}")
+        self.max_concurrent_requests = TOTAL_MAX_CONCURRENT_REQUESTS
+        self.workers = []
+
+        self.high_queue = collections.deque()
+        self.medium_queue = collections.deque()
+        self.low_queue = collections.deque()
+        self.queue_cond = asyncio.Condition()
+
+        logging.info(
+            f"Database Priority Queue Config: Total Slots={self.max_concurrent_requests}"
+        )
+        logging.info(f"High Priority Services: {HIGH_PRIORITY_SERVICES}")
+        logging.info(f"Medium Priority Services: {MEDIUM_PRIORITY_SERVICES}")
+
+    async def start_workers(self):
+        """Démarre les workers en arrière-plan pour exécuter les tâches Milvus avec garanties anti-starvation."""
+        if not self.workers and self.max_concurrent_requests > 0:
+            total = self.max_concurrent_requests
+
+            if total >= 3:
+                low_workers = max(1, int(total * 0.1))
+                medium_workers = max(1, int(total * 0.1))
+                shared_workers = total - low_workers - medium_workers
+            else:
+                shared_workers = total
+                medium_workers = 0
+                low_workers = 0
+
+            for i in range(shared_workers):
+                self.workers.append(
+                    asyncio.create_task(self._shared_worker_loop(f"shared-{i}"))
+                )
+            for i in range(medium_workers):
+                self.workers.append(
+                    asyncio.create_task(self._medium_worker_loop(f"medium-{i}"))
+                )
+            for i in range(low_workers):
+                self.workers.append(
+                    asyncio.create_task(self._low_worker_loop(f"low-{i}"))
+                )
+
+            logging.info(
+                f"✅ {total} workers de base de données démarrés (Shared: {shared_workers}, Medium: {medium_workers}, Low: {low_workers})."
+            )
+
+    async def _execute_task(self, func, args, kwargs, future):
+        try:
+            if not future.cancelled():
+                result = await asyncio.to_thread(func, *args, **kwargs)
+                future.set_result(result)
+        except Exception as e:
+            if not future.cancelled():
+                future.set_exception(e)
+
+    async def _shared_worker_loop(self, worker_id: str):
+        while True:
+            try:
+                async with self.queue_cond:
+                    while not (self.high_queue or self.medium_queue or self.low_queue):
+                        await self.queue_cond.wait()
+                    if self.high_queue:
+                        func, args, kwargs, future = self.high_queue.popleft()
+                    elif self.medium_queue:
+                        func, args, kwargs, future = self.medium_queue.popleft()
+                    else:
+                        func, args, kwargs, future = self.low_queue.popleft()
+
+                await self._execute_task(func, args, kwargs, future)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logging.error(
+                    f"Erreur inattendue dans le DB worker {worker_id}: {e}",
+                    exc_info=True,
+                )
+
+    async def _medium_worker_loop(self, worker_id: str):
+        while True:
+            try:
+                async with self.queue_cond:
+                    while not (self.medium_queue or self.low_queue):
+                        await self.queue_cond.wait()
+                    if self.medium_queue:
+                        func, args, kwargs, future = self.medium_queue.popleft()
+                    else:
+                        func, args, kwargs, future = self.low_queue.popleft()
+
+                await self._execute_task(func, args, kwargs, future)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logging.error(
+                    f"Erreur inattendue dans le DB worker {worker_id}: {e}",
+                    exc_info=True,
+                )
+
+    async def _low_worker_loop(self, worker_id: str):
+        while True:
+            try:
+                async with self.queue_cond:
+                    while not self.low_queue:
+                        await self.queue_cond.wait()
+                    func, args, kwargs, future = self.low_queue.popleft()
+
+                await self._execute_task(func, args, kwargs, future)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logging.error(
+                    f"Erreur inattendue dans le DB worker {worker_id}: {e}",
+                    exc_info=True,
+                )
 
     async def _execute_with_priority(self, source_service: str, func, *args, **kwargs):
         """
-        Wraps the synchronous database call into an async background thread 
-        and guards it with the appropriate priority semaphore.
+        Gère la priorité et met en file d'attente la requête Milvus.
         """
+        if self.max_concurrent_requests <= 0:
+            return await asyncio.to_thread(func, *args, **kwargs)
+
         is_high_priority = source_service in HIGH_PRIORITY_SERVICES
         is_medium_priority = source_service in MEDIUM_PRIORITY_SERVICES
 
-        if is_high_priority and self.high_prio_semaphore:
-            semaphore = self.high_prio_semaphore
+        if is_high_priority:
+            priority = 1
             priority_label = "HAUTE"
-        elif is_medium_priority and self.medium_prio_semaphore:
-            semaphore = self.medium_prio_semaphore
+        elif is_medium_priority:
+            priority = 2
             priority_label = "MOYENNE"
-        elif self.low_prio_semaphore:
-            semaphore = self.low_prio_semaphore
+        else:
+            priority = 3
             priority_label = "BASSE"
-        else:
-            semaphore = None
-            priority_label = "ILLIMITEE (Aucun sémaphore)"
 
-        logging.info(f"Requête DB reçue de '{source_service}'. Priorité: {priority_label}.")
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
 
-        if semaphore:
-            async with semaphore:
-                return await asyncio.to_thread(func, *args, **kwargs)
-        else:
-            return await asyncio.to_thread(func, *args, **kwargs)
+        async with self.queue_cond:
+            item = (func, args, kwargs, future)
+            if priority == 1:
+                self.high_queue.append(item)
+            elif priority == 2:
+                self.medium_queue.append(item)
+            else:
+                self.low_queue.append(item)
+
+            logging.info(
+                f"Requête DB reçue de '{source_service}'. Priorité: {priority_label}.[Queues -> H:{len(self.high_queue)}, M:{len(self.medium_queue)}, L:{len(self.low_queue)}]"
+            )
+
+            self.queue_cond.notify_all()
+
+        return await future
 
     async def Search(self, request, context):
-        source_service = request.source_service if request.HasField("source_service") else "unknown-service"
+        source_service = (
+            request.source_service
+            if request.HasField("source_service")
+            else "unknown-service"
+        )
         logging.info(
             f"Requête de recherche reçue de '{source_service}' pour la collection '{request.collection_name}' avec top_k={request.top_k}"
         )
@@ -108,7 +219,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 **kwargs,
             )
 
-            proto_results =[]
+            proto_results = []
             for res in results:
                 # Conversion du dictionnaire de métadonnées en Struct protobuf
                 metadata_struct = struct_pb2.Struct()
@@ -152,7 +263,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         """
         Implémentation de la méthode RPC GetSchema.
         """
-        source_service = request.source_service if request.HasField("source_service") else "unknown-service"
+        source_service = (
+            request.source_service
+            if request.HasField("source_service")
+            else "unknown-service"
+        )
         logging.info(
             f"Requête GetSchema reçue de '{source_service}' pour la collection '{request.collection_name}'"
         )
@@ -160,7 +275,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             schema_map = await self._execute_with_priority(
                 source_service,
                 self.use_case.get_collection_schema,
-                request.collection_name
+                request.collection_name,
             )
             return database_pb2.GetSchemaResponse(fields=schema_map)
         except Exception as e:
@@ -170,7 +285,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             return database_pb2.GetSchemaResponse()
 
     async def ClassicSearch(self, request, context):
-        source_service = request.source_service if request.HasField("source_service") else "unknown-service"
+        source_service = (
+            request.source_service
+            if request.HasField("source_service")
+            else "unknown-service"
+        )
         logging.info(
             f"Requête de recherche classique reçue de '{source_service}' pour '{request.collection_name}' avec le filtre '{request.filter_expression}'"
         )
@@ -186,7 +305,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 ),
             )
 
-            proto_results =[]
+            proto_results = []
             for res in results:
                 metadata_struct = struct_pb2.Struct()
                 if res.metadata:
@@ -220,7 +339,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             return database_pb2.SearchResponse()
 
     async def HybridSearch(self, request, context):
-        source_service = request.source_service if request.HasField("source_service") else "unknown-service"
+        source_service = (
+            request.source_service
+            if request.HasField("source_service")
+            else "unknown-service"
+        )
         logging.info(
             f"Requête de recherche hybride reçue de '{source_service}' pour la collection '{request.collection_name}' avec top_k={request.top_k}"
         )
@@ -294,7 +417,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 **kwargs,
             )
 
-            proto_results =[]
+            proto_results = []
             for res in results:
                 metadata_struct = struct_pb2.Struct()
                 if res.metadata:
@@ -329,10 +452,12 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
 
 
 async def serve(use_case: SearchUseCase):
-    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=50))
-    database_pb2_grpc.add_DatabaseSearchServiceServicer_to_server(
-        DatabaseSearchServiceImpl(use_case), server
-    )
+    # Nous augmentons le thread pool gRPC pour accepter plus de requêtes, le bottleneck réel est géré par nos workers
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=200))
+    servicer = DatabaseSearchServiceImpl(use_case)
+    await servicer.start_workers()
+
+    database_pb2_grpc.add_DatabaseSearchServiceServicer_to_server(servicer, server)
     server.add_insecure_port("[::]:50054")
     logging.info("Serveur gRPC Database Search démarré sur le port 50054...")
     await server.start()
