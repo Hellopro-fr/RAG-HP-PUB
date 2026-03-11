@@ -422,6 +422,15 @@
               </div>
             </div>
 
+            <div class="space-y-2">
+              <!-- <label class="text-sm font-medium text-custom-noir">Utiliser reranking</label> -->
+              <div class="px-2 flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                <input type="checkbox" id="useReranker" class="checkbox-custom" checked value="1" />
+                <label for="useReranker"
+                  class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Utiliser reranking</label>
+              </div>
+            </div>
+
             <hr class="border-custom-clair-2" />
 
             <!-- Data Sources -->
@@ -459,6 +468,13 @@
                           data-url="https://www.hellopro.fr/partenaires_externes/info_produit/filtre_categorie.php"
                           data-pagination="true" data-payload="recup_fournisseur_produits">
                         </select>
+                      </div>
+                    </div>
+                    <div class="space-y-2">
+                      <div class="px-2 flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                        <input type="checkbox" id="avecPrix" class="checkbox-custom" value="1" />
+                        <label for="avecPrix"
+                          class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Produit avec prix seulement</label>
                       </div>
                     </div>
                     <div class="space-y-2">
@@ -644,6 +660,28 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Prix -->
+                <div class="space-y-2 pl-2">
+                  <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                    <input type="checkbox" id="prix" class="checkbox-custom" />
+                    <label for="prix" class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Prix</label>
+                  </div>
+                  <div id="prixSubfilters" class="pl-6 space-y-2 hidden">
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Source</label>
+                      <select id="prixSource"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple="">
+                        <option disabled>Rechercher...</option>
+                        <option value="produit">Produit</option>
+                        <option value="messages">Messages</option>
+                        <option value="site_web">Site web</option>
+                        <option value="devis">Devis</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -749,9 +787,9 @@
                 <!-- <option value="qwen/qwen3-coder:free">
                     Qwen3 Coder:free
                   </option> -->
-                <option value="gemini-3.1-pro-preview-high" data-thinking="high">Gemini 3 Pro (High thinking)
+                <option value="gemini-3.1-pro-preview-high" data-thinking="high">Gemini 3.1 Pro (High thinking)
                 </option>
-                <option value="gemini-3.1-pro-preview-low" data-thinking="low">Gemini 3 Pro (Low thinking)
+                <option value="gemini-3.1-pro-preview-low" data-thinking="low">Gemini 3.1 Pro (Low thinking)
                 </option>
                 <option value="qwen/qwen3-coder">Qwen3 Coder</option>
                 <option value="gpt-4.1-2025-04-14">gpt-4.1-2025-04-14</option>

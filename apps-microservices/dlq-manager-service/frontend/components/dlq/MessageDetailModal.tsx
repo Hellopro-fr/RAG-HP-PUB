@@ -23,6 +23,16 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
   const [isCopied, setIsCopied] = useState(false)
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
     const fetchDetails = async () => {
       if (!messageId) return;
       try {
@@ -117,33 +127,36 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
 
   return (
     <>
-      {/* Overlay */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={onClose} />
-
-      {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white-primary rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
+      {/* Overlay + Modal Container combined to catch clicks outside properly */}
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" 
+        onClick={onClose}
+      >
+        <div 
+          className="bg-white-primary rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
-          <div className="border-b border-gris-blanc p-6 flex justify-between items-start">
-            <div>
-              <h2 className="text-xl font-semibold text-noir-primary">Message Details</h2>
-              <p className="text-sm text-gris-primary mt-1 truncate">ID: {messageId}</p>
+          <div className="border-b border-gris-blanc p-4 sm:p-6 flex justify-between items-start gap-4">
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-semibold text-noir-primary truncate">Message Details</h2>
+              <p className="text-xs sm:text-sm text-gris-primary mt-1 truncate">ID: {messageId}</p>
             </div>
-            <button onClick={onClose} className="text-gris-primary hover:text-noir-primary">
-              <X className="w-6 h-6" />
+            <button onClick={onClose} className="text-gris-primary hover:text-noir-primary shrink-0">
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-auto p-6 space-y-6">
+          <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-5 sm:space-y-6">
             {loading && <div className="text-center">Loading...</div>}
             {error && <div className="text-center text-rouge-primary">{error}</div>}
             {message && (
               <>
                 {/* Metadata Section */}
                 <div>
-                  <h3 className="text-sm font-semibold text-noir-primary mb-4">Metadata</h3>
-                  <div className="grid grid-cols-2 gap-4 bg-clair-4 p-4 rounded-lg">
+                  <h3 className="text-sm font-semibold text-noir-primary mb-3 sm:mb-4">Metadata</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 bg-clair-4 p-3 sm:p-4 rounded-lg">
                     <div>
                       <p className="text-xs text-gris-primary font-medium mb-1">Service</p>
                       <p className="text-sm text-noir-primary">{message._source.service_name}</p>
@@ -154,7 +167,7 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
                         <ClientDate timestamp={message._source['@timestamp']} />
                       </p>
                     </div>
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <p className="text-xs text-gris-primary font-medium mb-1">Error Reason</p>
                       <p className="text-sm text-noir-primary">{message._source.error_reason}</p>
                     </div>
@@ -163,7 +176,7 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
 
                 {/* Payload Section */}
                 <div>
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex justify-between items-center mb-3 sm:mb-4">
                     <h3 className="text-sm font-semibold text-noir-primary">Payload</h3>
                     <Button
                       variant="ghost"
@@ -195,20 +208,21 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
 
           {/* Footer */}
           {message && (
-            <div className="border-t border-gris-blanc p-6 flex justify-end gap-3">
+            <div className="border-t border-gris-blanc p-4 sm:p-6 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
               {isEditMode ? (
                 <>
                   <Button
                     variant="outline"
                     onClick={() => setIsEditMode(false)}
                     style={{ borderColor: "var(--gris-primary)" }}
+                    className="w-full sm:w-auto"
                   >
                     Cancel Edit
                   </Button>
                   <Button
                     style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
                     onClick={handleEditAndRequeue}
-                    className="hover:opacity-90"
+                    className="hover:opacity-90 w-full sm:w-auto"
                     disabled={isRequeuing}
                   >
                     {isRequeuing ? "Processing..." : "Save & Re-queue"}
@@ -216,20 +230,20 @@ export default function MessageDetailModal({ messageId, onClose, onActionSuccess
                 </>
               ) : (
                 <>
-                  <Button variant="outline" onClick={onClose}>
+                  <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
                     Close
                   </Button>
                   <Button
                     style={{ backgroundColor: "var(--orange-secondary)", color: "white" }}
                     onClick={() => setIsEditMode(true)}
-                    className="hover:opacity-90"
+                    className="hover:opacity-90 w-full sm:w-auto"
                   >
                     Edit Payload
                   </Button>
                     <Button
                       onClick={handleRequeue}
                       style={{ backgroundColor: "var(--vert-primary)", color: "white" }}
-                      className="hover:opacity-90"
+                      className="hover:opacity-90 w-full sm:w-auto"
                       disabled={isRequeuing}
                     >
                       {isRequeuing ? "Processing..." : "Re-queue Original"}

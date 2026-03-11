@@ -1,13 +1,18 @@
-import pika
-import time
 import os
 import asyncio
+import logging
 import aio_pika
 
 # Importer les modules locaux
 from embedding_service.messaging.consumer import Consumer
 from embedding_service.messaging.publisher import Publisher
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("embedding-service")
 
 async def main():
     """
@@ -21,31 +26,30 @@ async def main():
     # --- Start Prometheus metrics server ---
     start_metrics_server_in_thread(port=8530)
 
-    loop = asyncio.get_event_loop()
-    
     while True:
         try:
-            connection = await aio_pika.connect_robust(rabbitmq_url, loop=loop)
-            print("✅ Embedding-Service: Connecté à RabbitMQ.")
+            # Création de deux connexions séparées pour éviter l'entrelacement des frames AMQP
+            consume_connection = await aio_pika.connect_robust(rabbitmq_url, heartbeat=60)
+            publish_connection = await aio_pika.connect_robust(rabbitmq_url, heartbeat=60)
+            print("✅ Embedding-Service: Connecté à RabbitMQ (2 connexions séparées).")
             
-            async with connection:
-                publisher = Publisher(connection)
-                consumer = Consumer(connection, publisher)
+            async with consume_connection, publish_connection:
+                publisher = Publisher(publish_connection)
+                consumer = Consumer(consume_connection, publisher)
                 
-                # Lancer le consumer, qui va démarrer ses propres tâches de fond
+                # Lancer le consumer. start_consuming() bloque indéfiniment.
+                # Avec connect_robust, aio-pika gère la reconnexion automatiquement
+                # en arrière-plan sans lever d'exception ici.
                 await consumer.start_consuming()
-                
-                # Garder le service en vie pour que les tâches de fond continuent de tourner
-                await asyncio.Future()
 
         except aio_pika.exceptions.AMQPConnectionError as e:
-            print(f"🔴 Erreur de connexion RabbitMQ: {e}. Tentative de reconnexion dans 10 secondes...")
+            logger.warning(f"🔴 Connexion RabbitMQ perdue: {e}. Tentative de reconnexion dans 10 secondes...")
             await asyncio.sleep(10)
         except KeyboardInterrupt:
             print("\n🛑 Embedding-Service: Arrêt demandé.")
             break
         except Exception as e:
-            print(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...")
+            logger.error(f"❌ Erreur inattendue dans main: {e}. Redémarrage dans 10 secondes...", exc_info=True)
             await asyncio.sleep(10)
     
     print("✅ Embedding-Service: Service arrêté.")

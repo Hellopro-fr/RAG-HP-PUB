@@ -65,22 +65,30 @@ export default function GeoZoneClient({
   const { setGeoData, categoryId, dynamicEquivalences, characteristicsMap, setMatchingResults, setEquivalenceCaracteristique } = useFlowStore();
   const [showLoader, setShowLoader] = useState(false);
   const [RedirectGoToSomethingToAdd, setRedirectGoToSomethingToAdd] = useState(false);
-  const { goToQuestionnaire, goToProfile, goToSelection , goToSomethingToAdd} = useFlowNavigation();
+  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { trackDbEvent } = useDbTracking();
   const hasTrackedView = useRef(false);
 
-  // Track page view au montage
+  // Track page view au montage (sauf si retour navigateur)
   useEffect(() => {
     if (!hasTrackedView.current) {
       hasTrackedView.current = true;
-      trackGeoZoneView();
 
-      // Track DB - page view
-      const equivalencesCount = Object.keys(dynamicEquivalences).length;
-      trackDbEvent('profile', 'geo_zone_view', {
-        has_dynamic_equivalences: equivalencesCount > 0,
-        equivalences_count: equivalencesCount,
-      }, categoryId, 1);
+      // Ne pas tracker si c'est un retour navigateur (evite le pushState GTM)
+      const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+      const navType = navEntries.length > 0 ? navEntries[0].type : 'navigate';
+      const isBackForward = navType === 'back_forward';
+
+      if (!isBackForward) {
+        trackGeoZoneView();
+
+        // Track DB - page view
+        const equivalencesCount = Object.keys(dynamicEquivalences).length;
+        trackDbEvent('profile', 'geo_zone_view', {
+          has_dynamic_equivalences: equivalencesCount > 0,
+          equivalences_count: equivalencesCount,
+        }, categoryId, 1);
+      }
     }
   }, [trackDbEvent, categoryId, dynamicEquivalences]);
 
@@ -277,8 +285,9 @@ export default function GeoZoneClient({
   };
 
   const handleBack = () => {
-    // Retourner au questionnaire
-    goToQuestionnaire();
+    // Utiliser history.back() pour declencher une vraie navigation "retour"
+    // Cela permet au questionnaire de detecter le retour et afficher la derniere question
+    window.history.back();
   };
 
   // Afficher le loader pendant le matching

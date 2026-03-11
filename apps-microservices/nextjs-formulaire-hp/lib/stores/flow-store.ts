@@ -45,8 +45,9 @@ if (typeof window !== 'undefined') {
       reason = 'reload';
     } else if (navType === 'back_forward') {
       // Bouton retour/avancer du navigateur
-      shouldClear = true;
-      needsRedirect = true;
+      // Permettre la navigation naturelle dans le flow (pas de reset ni redirection)
+      shouldClear = false;
+      needsRedirect = false;
       reason = 'back-forward';
     } else if (navType === 'navigate' && wasSessionActive) {
       // Changement manuel d'URL (la session existait déjà)
@@ -216,7 +217,11 @@ export interface FlowState {
   // Paramètres de test pour le scoring du matching (passés via URL)
   matchingTestParams: MatchingTestParams | null;
 
+  // IDs des produits à soumettre (pour le devis unique vs sélection multiple)
+  supplierIdsToSubmit: string[] | null;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
+  setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
   setCharacteristicsMap: (characteristics: CharacteristicsMap) => void;
   setOrphanedSelectedSuppliers: (suppliers: Supplier[]) => void;
@@ -292,6 +297,7 @@ const initialState = {
   userQuestionAnswers: [],
   matchingTestParams: null,
   ddc: "",
+  supplierIdsToSubmit: null,
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -371,6 +377,8 @@ export const useFlowStore = create<FlowState>()(
       })),
 
       setSelectedSupplierIds: (ids) => set({ selectedSupplierIds: ids }),
+
+      setSupplierIdsToSubmit: (ids) => set({ supplierIdsToSubmit: ids }),
 
       toggleSupplier: (supplierId) =>
         set((state) => {

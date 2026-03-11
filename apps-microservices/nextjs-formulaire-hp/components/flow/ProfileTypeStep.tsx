@@ -48,11 +48,15 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
     categoryId,
     userAnswers,
     selectedSupplierIds,
+    supplierIdsToSubmit: storeSupplierIdsToSubmit,
     contactData,
     matchingResults,
     setProfileData,
     geoData: geoDataFS
   } = useFlowStore();
+
+  // Utiliser les IDs du store (définis lors de l'entrée dans contact), avec fallback sur les IDs sélectionnés
+  const supplierIdsToSubmit = storeSupplierIdsToSubmit ?? selectedSupplierIds;
 
   // On récupère tous les fournisseurs du matching pour les passer au hook
   const allSuppliers = useMemo(() => {
@@ -316,7 +320,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
       contact: contactData!,
       profile: data,
       answers: userAnswers,
-      selectedSupplierIds: selectedSupplierIds,
+      selectedSupplierIds: supplierIdsToSubmit,
       submittedAt: new Date().toISOString(),
       userKnownStatus: 'unknown', // Si on est ici, c'est que l'acheteur était inconnu au ContactForm
       categoryId: categoryId?.toString(),

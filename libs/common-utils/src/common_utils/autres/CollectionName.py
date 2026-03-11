@@ -7,13 +7,18 @@ class CollectionName(str, Enum):
     The values correspond to the string that the API will accept.
     """
 
-    PRODUIT = "produits"
-    DEVIS = "devis"
-    CATEGORIE = "categories"
-    ECHANGE = "echanges"
-    FOURNISSEUR = "fournisseurs"
-    SITEWEB = "siteweb"
-    DOCUMENT = "document"
+    PRODUIT      = "produits"
+    DEVIS        = "devis"
+    CATEGORIE    = "categories"
+    ECHANGE      = "echanges"
+    FOURNISSEUR  = "fournisseurs"
+    SITEWEB      = "siteweb"
+    DOCUMENT     = "document"
+    PRIX         = "prix"
+    PRIX_PRODUIT = "prix_produits"
+    PRIX_DEVIS   = "prix_devis"
+    PRIX_MESSAGE = "prix_message"
+    PRIX_SITEWEB = "prix_siteweb"
 
 
 RoutingKeys = {
@@ -24,6 +29,11 @@ RoutingKeys = {
     CollectionName.FOURNISSEUR: "new_data.fournisseurs",
     CollectionName.SITEWEB: "new_data.website",
     CollectionName.DOCUMENT: "new_data.document",
+    CollectionName.PRIX: "new_data.prix",
+    CollectionName.PRIX_PRODUIT: "new_data.prix_produit",
+    CollectionName.PRIX_DEVIS: "new_data.prix_devis",
+    CollectionName.PRIX_MESSAGE: "new_data.prix_message",
+    CollectionName.PRIX_SITEWEB: "new_data.prix_siteweb",
 }
 
 

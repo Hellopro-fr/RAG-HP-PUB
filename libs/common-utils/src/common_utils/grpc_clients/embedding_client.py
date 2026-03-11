@@ -8,6 +8,7 @@ from grpc_stubs import  embedding_pb2_grpc
 
 EMBEDDING_SERVICE_URL = os.getenv("EMBEDDING_SERVICE_URL", "embedding-model-service:50052")
 SERVICE_NAME = os.getenv("SERVICE_NAME", "unknown-service")
+GRPC_TIMEOUT = float(os.getenv("GRPC_TIMEOUT", "60.0"))
 
 # MODIFIÉ: La fonction est renommée et prend une liste de textes.
 async def get_embeddings(texts: List[str]) -> List[List[float]]:
@@ -21,7 +22,7 @@ async def get_embeddings(texts: List[str]) -> List[List[float]]:
             stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
             # Utilise la nouvelle méthode RPC et le nouveau message de requête
             request = embedding_pb2.EmbeddingsRequest(texts=texts, source_service=SERVICE_NAME)
-            response = await stub.GetEmbeddings(request)
+            response = await stub.GetEmbeddings(request, timeout=GRPC_TIMEOUT)
             # Déballe la liste de messages EmbeddingVector en une liste de listes de floats
             return [list(e.vector) for e in response.embeddings]
     except grpc.aio.AioRpcError as e:
@@ -50,7 +51,7 @@ async def tokenize(texts: List[str]) -> List[List[int]]:
         async with grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL) as channel:
             stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
             request = embedding_pb2.TokenizeRequest(texts=texts)
-            response = await stub.Tokenize(request)
+            response = await stub.Tokenize(request, timeout=GRPC_TIMEOUT)
             return [list(t.tokens) for t in response.tokenized_texts]
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service de Tokenization: {e.details()}")
@@ -69,7 +70,7 @@ async def detokenize(token_lists: List[List[int]]) -> List[str]:
             tokenized_outputs = [embedding_pb2.TokenizedOutput(tokens=tokens) for tokens in token_lists]
             request = embedding_pb2.DetokenizeRequest(tokenized_texts=tokenized_outputs)
             
-            response = await stub.Detokenize(request)
+            response = await stub.Detokenize(request, timeout=GRPC_TIMEOUT)
             return list(response.texts)
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service de Detokenization: {e.details()}")
@@ -90,7 +91,7 @@ async def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap
             )
-            response = await stub.ChunkText(request)
+            response = await stub.ChunkText(request, timeout=GRPC_TIMEOUT)
             return list(response.chunks)
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service de Chunking: {e.details()}")

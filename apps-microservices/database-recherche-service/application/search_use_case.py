@@ -62,6 +62,15 @@ class SearchUseCase:
         filter_expression: Optional[str] = None,
         output_fields: Optional[List[str]] = None,
         context_mode: Optional[str] = None,
+        # --- Paramètres d'exploration pour optimiser la pertinence ---
+        ef: Optional[int] = None,
+        radius: Optional[float] = None,
+        range_filter: Optional[float] = None,
+        drop_ratio_search: float = 0.0,
+        dense_limit_multiplier: int = 1,
+        ranker_type: str = "weighted",
+        rrf_k: int = 60,
+        **kwargs,
     ) -> List[SearchResultEntity]:
         """
         Cas d'utilisation pour exécuter une recherche hybride (dense + full-text BM25).
@@ -80,5 +89,12 @@ class SearchUseCase:
             top_k=top_k,
             dense_weight=dense_weight,
             sparse_weight=sparse_weight,
-            **search_kwargs
+            ef=ef,
+            radius=radius,
+            range_filter=range_filter,
+            drop_ratio_search=drop_ratio_search,
+            dense_limit_multiplier=dense_limit_multiplier,
+            ranker_type=ranker_type,
+            rrf_k=rrf_k,
+            **search_kwargs,
         )

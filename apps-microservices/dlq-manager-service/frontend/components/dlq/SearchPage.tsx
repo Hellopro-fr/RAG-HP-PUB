@@ -2,15 +2,17 @@
 
 import * as React from "react";
 import { useState, useEffect, useCallback } from "react"
-import { Calendar, SearchIcon, Loader2 } from "lucide-react"
+import { Calendar, SearchIcon, Loader2, Info, BookmarkPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import MessageList from "./MessageList"
 import Pagination from "./Pagination"
 import MessageDetailModal from "./MessageDetailModal";
-import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, Message } from "@/lib/api";
+import CreateRuleModal from "./CreateRuleModal";
+import { apiGetDashboardStats, apiSearchMessages, apiBulkRequeue, apiBulkArchive, apiRequeueByFilter, apiArchiveByFilter, apiGetTaskStatus, Message } from "@/lib/api";
 import { MultiSelect, MultiSelectOption } from "./MultiSelect";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateTimePicker } from "./DateTimePicker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Filters {
     service_names: string[];
@@ -51,6 +53,7 @@ const statusOptions: MultiSelectOption[] = [
     { value: 'New', label: 'New' },
     { value: 'Re-queued', label: 'Re-queued' },
     { value: 'Archived', label: 'Archived' },
+    { value: 'Auto-Archived', label: 'Auto-Archived' },
 ];
 
 export default function SearchPage() {
@@ -64,6 +67,7 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [showCreateRuleModal, setShowCreateRuleModal] = useState(false);
   const [serviceOptions, setServiceOptions] = useState<MultiSelectOption[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
@@ -80,24 +84,28 @@ export default function SearchPage() {
     })
   }, []);
 
+  // Construct standard JSON filter payload to use consistently
+  const getActiveFiltersPayload = () => {
+    const activeFilters: Record<string, any> = {};
+    (Object.keys(filters) as Array<keyof Filters>).forEach(key => {
+      const value = filters[key];
+      if (key === 'date_start' || key === 'date_end') {
+        if (value instanceof Date) {
+          activeFilters[key] = value.toISOString();
+        }
+      } else if (Array.isArray(value) && value.length > 0) {
+        activeFilters[key] = value;
+      }
+    });
+    return activeFilters;
+  };
+
   const fetchMessages = useCallback(async (page = 1) => {
     setLoading(true);
     setError(null);
     setSelectedIds(new Set());
     try {
-      const activeFilters: Record<string, any> = {};
-      
-      (Object.keys(filters) as Array<keyof Filters>).forEach(key => {
-        const value = filters[key];
-        if (key === 'date_start' || key === 'date_end') {
-          if (value instanceof Date) {
-            activeFilters[key] = value.toISOString();
-          }
-        } else if (Array.isArray(value) && value.length > 0) {
-          activeFilters[key] = value;
-        }
-      });
-
+      const activeFilters = getActiveFiltersPayload();
       const response = await apiSearchMessages({
           filters: activeFilters, 
           searchTerm, 
@@ -150,6 +158,31 @@ export default function SearchPage() {
     setSelectedIds(newSelected)
   }
 
+  const pollTaskStatus = (taskId: string, successMessage: string) => {
+    const checkStatus = async () => {
+      try {
+        const res = await apiGetTaskStatus(taskId);
+        if (res.data.completed) {
+          if (res.data.status === "completed") {
+              alert(successMessage);
+          } else if (res.data.status === "error") {
+              alert("The background task encountered an error and stopped prematurely. Please check the backend logs.");
+          }
+          fetchMessages(1);
+          setLoadingAction(null);
+        } else {
+          setTimeout(checkStatus, 2000); // Check again in 2 seconds
+        }
+      } catch (err) {
+        console.error("Polling failed", err);
+        alert("Failed to confirm task completion. The task might still be running.");
+        setLoadingAction(null);
+      }
+    };
+    
+    checkStatus();
+  };
+
   const handleBulkAction = async (action: 'requeue' | 'archive') => {
     if (loadingAction) {
         alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
@@ -171,13 +204,14 @@ export default function SearchPage() {
             const rate = rateStr ? parseInt(rateStr, 10) : undefined;
             if (rateStr && isNaN(rate)) {
                 alert("Invalid number for rate limit.");
+                setLoadingAction(null);
                 return;
             }
             await apiBulkRequeue(ids, rate);
         } else if (action === 'archive') {
             await apiBulkArchive(ids);
         }
-        alert(`Successfully started to ${actionVerb} messages.`);
+        alert(`Successfully processed selected messages.`);
         fetchMessages(currentPage);
     } catch (err) {
         alert(`Failed to ${actionVerb} messages.`);
@@ -202,37 +236,89 @@ export default function SearchPage() {
           const rate = rateStr ? parseInt(rateStr, 10) : undefined;
           if (rateStr && isNaN(rate)) {
               alert("Invalid number for rate limit.");
-              setLoadingAction(null); // Reset on user error
+              setLoadingAction(null);
               return;
           }
-          await apiRequeueByFilter(filters, searchTerm, rate);
-          alert('Re-queue by filter process started successfully.');
-          fetchMessages(1);
+          const activeFilters = getActiveFiltersPayload();
+          const response = await apiRequeueByFilter(activeFilters, searchTerm, rate);
+          
+          if (response.data.task_id) {
+              pollTaskStatus(response.data.task_id, 'Re-queue by filter process completed successfully.');
+          } else {
+              alert('Re-queue by filter process started successfully.');
+              fetchMessages(1);
+              setLoadingAction(null);
+          }
       } catch (err) {
           alert('Failed to start re-queue by filter.');
           console.error(err);
-      } finally {
+          setLoadingAction(null);
+      }
+  };
+
+  const handleArchiveByFilter = async () => {
+      if (loadingAction) {
+          alert(`An action (${loadingAction.replace('-', ' ')}) is already in progress. Please wait for it to complete.`);
+          return;
+      }
+
+      if (!window.confirm(`Are you sure you want to archive all messages matching the current filter? This could be up to ${totalResults} messages.`)) return;
+
+      setLoadingAction('archive-all');
+
+      try {
+          const activeFilters = getActiveFiltersPayload();
+          const response = await apiArchiveByFilter(activeFilters, searchTerm);
+          
+          if (response.data.task_id) {
+              pollTaskStatus(response.data.task_id, 'Archive by filter process completed successfully.');
+          } else {
+              alert('Archive by filter process started successfully.');
+              fetchMessages(1);
+              setLoadingAction(null);
+          }
+      } catch (err) {
+          alert('Failed to start archive by filter.');
+          console.error(err);
           setLoadingAction(null);
       }
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Filter Bar */}
-      <form onSubmit={handleSearch} className="bg-white-primary rounded-lg border border-gris-blanc p-6 space-y-4">
+      <form onSubmit={handleSearch} className="bg-white-primary rounded-lg border border-gris-blanc p-4 md:p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Search Input */}
             <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-noir-primary mb-2">Search Term</label>
-                <div className="relative">
-                <SearchIcon className="absolute left-3 top-3 w-4 h-4 text-gris-primary" />
-                <input
-                    type="text"
-                    placeholder="Search in payload, error, service..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gris-blanc rounded-lg bg-white-primary text-noir-primary"
-                />
+                <div className="relative flex items-center">
+                    <SearchIcon className="absolute left-3 w-4 h-4 text-gris-primary pointer-events-none" />
+                    <input
+                        type="text"
+                        placeholder="Search in payload, error, service..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-10 py-2 border border-gris-blanc rounded-lg bg-white-primary text-noir-primary"
+                    />
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <button type="button" className="absolute right-3 text-gris-primary hover:text-bleu-primary transition-colors focus:outline-none">
+                                <Info className="w-4 h-4" />
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-4 text-sm bg-white-primary border-gris-blanc shadow-lg" align="end">
+                            <h4 className="font-semibold mb-3 text-noir-primary">Search Syntax Guide</h4>
+                            <ul className="space-y-2 text-gris-primary">
+                                <li><strong>Basic:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">timeout</code></li>
+                                <li><strong>Exact Phrase:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">"connection refused"</code></li>
+                                <li><strong>Wildcard:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">*timeout*</code> or <code className="bg-clair-4 px-1 rounded text-noir-primary">serv*</code></li>
+                                <li><strong>Specific Field:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">service_name:api-recherche-service</code></li>
+                                <li><strong>Logical Operators:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">AND</code>, <code className="bg-clair-4 px-1 rounded text-noir-primary">OR</code>, <code className="bg-clair-4 px-1 rounded text-noir-primary">NOT</code></li>
+                                <li><strong>Payload Search:</strong> <code className="bg-clair-4 px-1 rounded text-noir-primary">original_payload.id:123</code></li>
+                            </ul>
+                        </PopoverContent>
+                    </Popover>
                 </div>
             </div>
 
@@ -274,20 +360,33 @@ export default function SearchPage() {
             </div>
         </div>
 
-        <Button
-          type="submit"
-          style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
-          className="w-full hover:opacity-90"
-          disabled={!!loadingAction}
-        >
-          <SearchIcon className="w-4 h-4 mr-2" />
-          Search
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Button
+                type="submit"
+                style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
+                className="w-full sm:flex-1 hover:opacity-90"
+                disabled={!!loadingAction}
+            >
+                <SearchIcon className="w-4 h-4 mr-2" />
+                Search
+            </Button>
+            <Button
+                type="button"
+                variant="outline"
+                style={{ borderColor: "var(--bleu-primary)", color: "var(--bleu-primary)" }}
+                className="w-full sm:w-auto hover:bg-bleu-light"
+                disabled={!!loadingAction || (!searchTerm && Object.keys(getActiveFiltersPayload()).length === 0)}
+                onClick={() => setShowCreateRuleModal(true)}
+            >
+                <BookmarkPlus className="w-4 h-4 mr-2" />
+                Save Search as Rule
+            </Button>
+        </div>
       </form>
 
       {/* Action Bar */}
-      <div className="flex justify-between items-center bg-white-primary rounded-lg border border-gris-blanc p-4">
-        <div className="flex items-center gap-4 text-sm text-gris-primary">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white-primary rounded-lg border border-gris-blanc p-4 gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-sm text-gris-primary w-full md:w-auto">
             <span>
                 {selectedIds.size > 0 ? (
                     <><strong>{selectedIds.size}</strong> of <strong>{totalResults.toLocaleString()}</strong> selected</>
@@ -295,10 +394,10 @@ export default function SearchPage() {
                     <><strong>{totalResults.toLocaleString()}</strong> results found</>
                 )}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                 <label htmlFor="pageSize" className="text-sm font-medium">Per Page:</label>
                 <Select value={pageSize.toString()} onValueChange={(val) => { setPageSize(Number(val)); setCurrentPage(1); }}>
-                    <SelectTrigger className="w-20 h-8">
+                    <SelectTrigger className="w-20 h-8 bg-white-primary">
                         <SelectValue placeholder="Page size" />
                     </SelectTrigger>
                     <SelectContent>
@@ -312,13 +411,13 @@ export default function SearchPage() {
         </div>
 
 
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full md:w-auto">
           {selectedIds.size > 0 ? (
             <>
               <Button 
                 onClick={() => handleBulkAction('requeue')} 
                 style={{ backgroundColor: "var(--vert-primary)", color: "white" }} 
-                className="hover:opacity-90 w-40"
+                className="hover:opacity-90 w-full sm:w-auto"
                 disabled={!!loadingAction}
               >
                 {loadingAction === 'requeue-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -327,7 +426,7 @@ export default function SearchPage() {
               <Button 
                 onClick={() => handleBulkAction('archive')} 
                 style={{ backgroundColor: "var(--gris-primary)", color: "white" }} 
-                className="hover:opacity-90 w-40"
+                className="hover:opacity-90 w-full sm:w-auto"
                 disabled={!!loadingAction}
               >
                 {loadingAction === 'archive-selected' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -335,15 +434,26 @@ export default function SearchPage() {
               </Button>
             </>
           ) : (
-            <Button
-              onClick={handleRequeueByFilter}
-              style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
-              disabled={totalResults === 0 || !!loadingAction}
-              className="hover:opacity-90 disabled:opacity-50 w-48"
-            >
-              {loadingAction === 'requeue-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Re-queue All Matching
-            </Button>
+            <>
+              <Button
+                onClick={handleArchiveByFilter}
+                style={{ backgroundColor: "var(--gris-primary)", color: "white" }}
+                disabled={totalResults === 0 || !!loadingAction}
+                className="hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
+              >
+                {loadingAction === 'archive-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Archive All Matching
+              </Button>
+              <Button
+                onClick={handleRequeueByFilter}
+                style={{ backgroundColor: "var(--bleu-primary)", color: "white" }}
+                disabled={totalResults === 0 || !!loadingAction}
+                className="hover:opacity-90 disabled:opacity-50 w-full sm:w-auto"
+              >
+                {loadingAction === 'requeue-all' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Re-queue All Matching
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -375,6 +485,14 @@ export default function SearchPage() {
           messageId={selectedMessageId}
           onClose={() => setSelectedMessageId(null)}
           onActionSuccess={() => fetchMessages(currentPage)}
+        />
+      )}
+
+      {showCreateRuleModal && (
+        <CreateRuleModal 
+          currentSearchTerm={searchTerm}
+          currentFilters={getActiveFiltersPayload()}
+          onClose={() => setShowCreateRuleModal(false)}
         />
       )}
     </div>

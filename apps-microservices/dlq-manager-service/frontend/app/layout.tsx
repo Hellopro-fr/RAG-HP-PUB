@@ -7,25 +7,16 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'DLQ Manager Service',
+  title: 'Hellopro DLQ Manager',
   description: 'Manage and monitor your Dead Letter Queues with ease.',
   generator: 'Next.js',
+  robots: {
+    index: false,
+    follow: false,
+  },
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: 'https://www.hellopro.fr/hellopro_fr/images/hp-logo.svg',
+    apple: 'https://www.hellopro.fr/hellopro_fr/images/hp-logo.svg',
   },
 }
 

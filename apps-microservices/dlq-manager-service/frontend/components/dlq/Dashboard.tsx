@@ -63,30 +63,30 @@ export default function Dashboard() {
 
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8">
       {/* Date Range Filter */}
-      <div className="flex flex-wrap gap-4 items-end">
-        <div className="flex-1 min-w-[250px]">
+      <div className="flex flex-col sm:flex-row flex-wrap gap-4 items-start sm:items-end">
+        <div className="w-full sm:flex-1 min-w-[200px]">
           <label className="block text-sm font-medium text-noir-primary mb-2">From Date</label>
           <DateTimePicker 
             date={filters.date_start}
             setDate={(date) => setFilters(prev => ({ ...prev, date_start: date }))}
           />
         </div>
-        <div className="flex-1 min-w-[250px]">
+        <div className="w-full sm:flex-1 min-w-[200px]">
           <label className="block text-sm font-medium text-noir-primary mb-2">To Date</label>
           <DateTimePicker
             date={filters.date_end}
             setDate={(date) => setFilters(prev => ({ ...prev, date_end: date }))}
           />
         </div>
-        <Button onClick={handleApplyFilter} style={{ backgroundColor: "var(--bleu-primary)", color: "white" }} className="hover:opacity-90">
+        <Button onClick={handleApplyFilter} style={{ backgroundColor: "var(--bleu-primary)", color: "white" }} className="w-full sm:w-auto hover:opacity-90">
           Apply Filter
         </Button>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         {/* Total Pending Messages */}
         <div className="p-6 rounded-lg border border-gris-blanc" style={{ backgroundColor: "var(--bleu-light)" }}>
           <p className="text-sm font-medium text-gris-primary mb-2">Total Pending Messages</p>
@@ -115,39 +115,43 @@ export default function Dashboard() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Service Breakdown Chart */}
-        <div className="p-6 rounded-lg border border-gris-blanc bg-white-primary">
+        <div className="p-4 md:p-6 rounded-lg border border-gris-blanc bg-white-primary overflow-hidden w-full">
           <p className="text-sm font-medium text-noir-primary mb-4">Messages by Service</p>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={serviceData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--gris-blanc)" />
-              <XAxis dataKey="name" fontSize={12} />
-              <YAxis fontSize={12} />
-              <Tooltip contentStyle={{ backgroundColor: "#fff", border: "1px solid var(--gris-blanc)" }} />
-              <Bar dataKey="count" fill="var(--bleu-primary)" />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="w-full h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={serviceData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--gris-blanc)" />
+                <XAxis dataKey="name" fontSize={12} tickFormatter={(value) => value.substring(0, 10) + '...'} />
+                <YAxis fontSize={12} />
+                <Tooltip contentStyle={{ backgroundColor: "#fff", border: "1px solid var(--gris-blanc)" }} />
+                <Bar dataKey="count" fill="var(--bleu-primary)" />
+                </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Messages Over Time Chart */}
-        <div className="p-6 rounded-lg border border-gris-blanc bg-white-primary">
+        <div className="p-4 md:p-6 rounded-lg border border-gris-blanc bg-white-primary overflow-hidden w-full">
           <p className="text-sm font-medium text-noir-primary mb-4">Pending Messages Over Time</p>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={timeData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--gris-blanc)" />
-              <XAxis dataKey="time" fontSize={12} />
-              <YAxis fontSize={12} />
-              <Tooltip contentStyle={{ backgroundColor: "#fff", border: "1px solid var(--gris-blanc)" }} />
-              <Line
-                type="monotone"
-                dataKey="count"
-                stroke="var(--bleu-primary)"
-                dot={{ fill: "var(--bleu-primary)" }}
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="w-full h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={timeData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--gris-blanc)" />
+                <XAxis dataKey="time" fontSize={12} />
+                <YAxis fontSize={12} />
+                <Tooltip contentStyle={{ backgroundColor: "#fff", border: "1px solid var(--gris-blanc)" }} />
+                <Line
+                    type="monotone"
+                    dataKey="count"
+                    stroke="var(--bleu-primary)"
+                    dot={{ fill: "var(--bleu-primary)" }}
+                    strokeWidth={2}
+                />
+                </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>

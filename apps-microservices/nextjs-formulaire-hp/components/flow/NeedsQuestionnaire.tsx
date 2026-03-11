@@ -57,6 +57,10 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
   // Ref pour éviter les doubles appels en StrictMode
   const hasTrackedStart = useRef(false);
   const lastTrackedQuestionIndex = useRef(-1);
+  // Ref pour savoir si le questionnaire etait deja complet au montage (retour navigateur)
+  const wasAlreadyCompleteOnMount = useRef<boolean | null>(null);
+  // Ref pour bloquer la redirection apres un reset (evite la race condition)
+  const hasJustReset = useRef(false);
 
   // Initialiser le timestamp de début du funnel et tracker le début
   useEffect(() => {
@@ -88,12 +92,36 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
 
   // Quand le questionnaire dynamique est terminé
   useEffect(() => {
+    // Attendre que les données soient chargées avant d'évaluer l'état de complétion
+    if (dynamicQuestionnaire.isLoading) return;
+
+    // Premier rendu: memoriser si le questionnaire etait deja complet (retour navigateur)
+    if (wasAlreadyCompleteOnMount.current === null) {
+      wasAlreadyCompleteOnMount.current = dynamicQuestionnaire.isComplete;
+      // Si deja complet au montage, aller a la derniere question (retour navigateur)
+      // Les reponses sont conservees dans le store
+      if (wasAlreadyCompleteOnMount.current) {
+        hasJustReset.current = true;
+        dynamicQuestionnaire.goToLastQuestion();
+        // Reinitialiser le flag pour permettre la prochaine completion
+        wasAlreadyCompleteOnMount.current = false;
+        return;
+      }
+    }
+
+    // Bloquer la redirection juste apres un goToLastQuestion (evite race condition)
+    if (hasJustReset.current) {
+      hasJustReset.current = false;
+      return;
+    }
+
+    // Rediriger quand le questionnaire est termine
     if (dynamicQuestionnaire.isComplete) {
       const timeSpent = startTime ? Math.round((Date.now() - startTime) / 1000) : 0;
       trackGTMQuestionnaireComplete(dynamicQuestionnaire.progress.total, timeSpent);
       onComplete(dynamicAnswers);
     }
-  }, [dynamicQuestionnaire.isComplete, dynamicQuestionnaire.progress.total, dynamicAnswers, onComplete, startTime]);
+  }, [dynamicQuestionnaire.isComplete, dynamicQuestionnaire.isLoading, dynamicQuestionnaire.progress.total, dynamicAnswers, onComplete, startTime, dynamicQuestionnaire.goToLastQuestion]);
 
   // Hook de tracking de vue de question
   useEffect(() => {
@@ -113,6 +141,62 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     goBack,
     canGoBack,
   } = dynamicQuestionnaire;
+
+  // Refs pour eviter les stale closures dans le handler popstate (pattern comme SupplierSelectionModal)
+  const prevIndexRef = useRef(currentIndex);
+  const currentIndexRef = useRef(currentIndex);
+  const goBackRef = useRef(goBack);
+  const isHandlingPopstateRef = useRef(false); // Debounce pour Safari
+  const isMountedRef = useRef(false); // Flag pour ignorer les popstate pendant le montage
+
+  // Garder les refs synchronisees
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => { goBackRef.current = goBack; }, [goBack]);
+
+  // Intercepter le bouton retour navigateur pour revenir a la question precedente
+  useEffect(() => {
+    // Pousser un etat dans l'historique seulement quand on avance (pas quand on recule)
+    if (currentIndex > prevIndexRef.current) {
+      window.history.pushState({ questionIndex: currentIndex }, '');
+    }
+    prevIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  // Ecouter les evenements popstate separement (une seule fois, utilise les refs)
+  useEffect(() => {
+    // Delai avant d'activer le handler pour eviter les popstate parasites au montage (Safari)
+    const mountTimeout = setTimeout(() => {
+      isMountedRef.current = true;
+    }, 50);
+
+    const handlePopState = () => {
+      // Ignorer les popstate pendant le montage initial
+      if (!isMountedRef.current) return;
+
+      // Debounce pour eviter les double-declenchements sur Safari
+      if (isHandlingPopstateRef.current) return;
+      isHandlingPopstateRef.current = true;
+
+      // Si on peut revenir en arriere dans le questionnaire, le faire
+      if (currentIndexRef.current > 0) {
+        goBackRef.current();
+      }
+      // Sinon, laisser le navigateur faire son comportement par defaut (quitter)
+
+      // Reset le debounce apres un court delai
+      setTimeout(() => {
+        isHandlingPopstateRef.current = false;
+      }, 100);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      clearTimeout(mountTimeout);
+      isMountedRef.current = false;
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []); // Dependency array vide - le listener ne se reinstalle plus
 
   const LoadingScreen = ({ progress = 0 }: { progress?: number }) => (
       <div className="fixed inset-0 z-50 flex flex-col bg-background">

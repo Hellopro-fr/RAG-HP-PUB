@@ -23,6 +23,11 @@ INDEX_MAPPING = {
                 "index": False,
                 "doc_values": False
             },
+            "payload_conflict_fallback": {
+                "type": "keyword",
+                "index": False,
+                "doc_values": False
+            },
             "service_name": {
                 "type": "keyword"
             },

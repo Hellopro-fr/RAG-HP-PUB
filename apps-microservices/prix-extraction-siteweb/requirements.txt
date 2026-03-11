@@ -1,0 +1,12 @@
+aio_pika>=9.0.0
+python-dotenv
+pydantic-settings
+requests
+httpx
+grpcio
+grpcio-tools
+protobuf
+googleapis-common-protos
+google-genai
+tenacity
+openai

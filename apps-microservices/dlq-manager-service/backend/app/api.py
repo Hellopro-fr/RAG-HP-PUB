@@ -1,17 +1,55 @@
-from fastapi import APIRouter, HTTPException, Depends, Body
+from fastapi import APIRouter, HTTPException, Depends, Body, BackgroundTasks
 from typing import List, Dict, Any, Optional
 import asyncio
 import traceback
 import time
+import uuid
 
 from .es_client import ElasticsearchClient, get_es_client
 from .rabbitmq_client import RabbitMQClient, get_rabbitmq_client, get_rabbitmq_channel
 from .models import (
     SearchRequest, RequeueBulkRequest, UpdateStatusBulkRequest,
-    EditAndRequeueRequest, RequeueByFilterRequest, CheckUrlsBatchRequest
+    EditAndRequeueRequest, RequeueByFilterRequest, ArchiveByFilterRequest, CheckUrlsBatchRequest,
+    AutoArchiveRuleCreate
 )
 
 router = APIRouter()
+
+# In-memory tracking for background tasks initiated by FastAPI
+TASK_STORE: Dict[str, str] = {}
+
+# --- AUTO-ARCHIVE RULES ENDPOINTS ---
+
+@router.get("/rules")
+async def get_rules(es_client: ElasticsearchClient = Depends(get_es_client)):
+    return await es_client.get_rules()
+
+@router.post("/rules")
+async def create_rule(rule: AutoArchiveRuleCreate, es_client: ElasticsearchClient = Depends(get_es_client)):
+    try:
+        rule_id = await es_client.create_rule(rule.model_dump())
+        return {"status": "success", "rule_id": rule_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/rules/{rule_id}/toggle")
+async def toggle_rule(rule_id: str, is_active: bool = Body(..., embed=True), es_client: ElasticsearchClient = Depends(get_es_client)):
+    try:
+        await es_client.update_rule_status(rule_id, is_active)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/rules/{rule_id}")
+async def delete_rule(rule_id: str, es_client: ElasticsearchClient = Depends(get_es_client)):
+    try:
+        await es_client.delete_rule(rule_id)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- EXISTING ENDPOINTS ---
 
 @router.get("/check-url")
 async def check_url_in_dlq(url: str, es_client: ElasticsearchClient = Depends(get_es_client)):
@@ -194,34 +232,108 @@ async def bulk_archive(request: UpdateStatusBulkRequest, es_client: Elasticsearc
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/messages/requeue-by-filter")
-async def requeue_by_filter(request: RequeueByFilterRequest, es_client: ElasticsearchClient = Depends(get_es_client), rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)):
+async def requeue_by_filter(
+    request: RequeueByFilterRequest, 
+    background_tasks: BackgroundTasks, 
+    es_client: ElasticsearchClient = Depends(get_es_client), 
+    rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)
+):
     """
-    Finds all messages matching a filter and re-queues them.
+    Finds all messages matching a filter and re-queues them as a background task
+    to prevent HTTP timeout limits on massive queues.
     """
-    try:
-        total_requeued = 0
-        async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term):
-            
-            def do_batch_publish(current_batch):
-                batch_requeued = 0
-                with get_rabbitmq_channel() as channel:
-                    for msg in current_batch:
-                        rmq_client.publish_message(channel, msg)
-                        batch_requeued += 1
-                        if request.rate_limit_per_second and request.rate_limit_per_second > 0:
-                            time.sleep(1.0 / request.rate_limit_per_second)
-                return batch_requeued
-            
-            requeued_in_batch = await asyncio.to_thread(do_batch_publish, batch)
-            total_requeued += requeued_in_batch
+    task_id = f"requeue_{uuid.uuid4().hex}"
+    TASK_STORE[task_id] = "processing"
 
-            message_ids = [msg['_id'] for msg in batch]
-            await es_client.update_message_status_bulk(message_ids, "Re-queued")
-            
-        return {"status": "success", "total_requeued": total_requeued}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    async def process_requeue():
+        try:
+            print(f"Background Task {task_id}: Starting bulk requeue by filter...")
+            total_requeued = 0
+            # Reduced batch size to 50 to prevent memory pressure when loading heavy payloads
+            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term, batch_size=50):
+                def do_batch_publish(current_batch):
+                    batch_requeued = 0
+                    with get_rabbitmq_channel() as channel:
+                        for msg in current_batch:
+                            rmq_client.publish_message(channel, msg)
+                            batch_requeued += 1
+                            if request.rate_limit_per_second and request.rate_limit_per_second > 0:
+                                time.sleep(1.0 / request.rate_limit_per_second)
+                    return batch_requeued
+                
+                requeued_in_batch = await asyncio.to_thread(do_batch_publish, batch)
+                total_requeued += requeued_in_batch
 
+                message_ids = [msg['_id'] for msg in batch]
+                await es_client.update_message_status_bulk(message_ids, "Re-queued")
+                
+                # Pressure relief valve: give ES Garbage Collector time to clean up
+                await asyncio.sleep(0.5)
+                
+            print(f"Background Task {task_id}: Finished bulk requeue. Total: {total_requeued} messages.")
+            TASK_STORE[task_id] = "completed"
+        except Exception as e:
+            print(f"Background Task {task_id}: Error in bulk requeue: {e}")
+            TASK_STORE[task_id] = "error"
+
+    background_tasks.add_task(process_requeue)
+    return {"status": "success", "message": "Re-queue process successfully started in the background.", "task_id": task_id}
+
+@router.post("/messages/archive-by-filter")
+async def archive_by_filter(
+    request: ArchiveByFilterRequest, 
+    background_tasks: BackgroundTasks, 
+    es_client: ElasticsearchClient = Depends(get_es_client)
+):
+    """
+    Finds all messages matching a filter and archives them utilizing the background 
+    task engine and reliable scroll methodology to prevent mapping issues.
+    """
+    task_id = f"archive_{uuid.uuid4().hex}"
+    TASK_STORE[task_id] = "processing"
+
+    async def process_archive():
+        try:
+            print(f"Background Task {task_id}: Starting bulk archive by filter...")
+            total_archived = 0
+            # source=False disables payload fetching, batch_size=50 prevents OOM
+            async for batch in es_client.scroll_messages(filters=request.filters, search_term=request.search_term, batch_size=50, source=False):
+                message_ids = [msg['_id'] for msg in batch]
+                archived_in_batch = await es_client.update_message_status_bulk(message_ids, "Archived")
+                total_archived += archived_in_batch
+                
+                # Pressure relief valve: give ES Garbage Collector time to clean up
+                await asyncio.sleep(0.5)
+                
+            print(f"Background Task {task_id}: Finished bulk archive. Total: {total_archived} messages.")
+            TASK_STORE[task_id] = "completed"
+        except Exception as e:
+            print(f"Background Task {task_id}: Error in bulk archive: {e}")
+            TASK_STORE[task_id] = "error"
+
+    background_tasks.add_task(process_archive)
+    return {"status": "success", "message": "Archive process successfully started in the background.", "task_id": task_id}
+
+@router.get("/tasks/{task_id}")
+async def get_task_status(task_id: str, es_client: ElasticsearchClient = Depends(get_es_client)):
+    """
+    Checks the status of an asynchronous task (either ES internal or Python background task).
+    """
+    # 1. Check if it's a python background task
+    if task_id.startswith("requeue_") or task_id.startswith("archive_"):
+        if task_id in TASK_STORE:
+            status = TASK_STORE[task_id]
+            return {"task_id": task_id, "completed": status in ["completed", "error"], "status": status}
+        else:
+            raise HTTPException(status_code=404, detail="Background task not found")
+            
+    # 2. Assume it's an Elasticsearch background task (legacy fallback)
+    es_task = await es_client.get_task_status(task_id)
+    if es_task:
+        completed = es_task.get("completed", False)
+        return {"task_id": task_id, "completed": completed, "status": "completed" if completed else "processing"}
+    
+    raise HTTPException(status_code=404, detail="Task not found")
 
 @router.put("/messages/{message_id}/edit-and-requeue")
 async def edit_and_requeue(message_id: str, request: EditAndRequeueRequest, es_client: ElasticsearchClient = Depends(get_es_client), rmq_client: RabbitMQClient = Depends(get_rabbitmq_client)):

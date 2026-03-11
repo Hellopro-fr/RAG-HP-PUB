@@ -126,3 +126,4 @@ docker-compose.override.yml
 .next
 package-lock.json
 .gitignore
+apps-microservices/nextjs-formulaire-hp/package-lock.json
