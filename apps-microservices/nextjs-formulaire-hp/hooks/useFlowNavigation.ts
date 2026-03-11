@@ -36,6 +36,13 @@ export function useFlowNavigation() {
   }, [navigateTo]);
 
   /**
+   * Navigation vers la zone géographique
+   */
+  const goToGeoZone = useCallback(() => {
+    navigateTo('/geo-zone');
+  }, [navigateTo]);
+
+  /**
    * Navigation vers le profil
    */
   const goToProfile = useCallback(() => {
@@ -80,6 +87,7 @@ export function useFlowNavigation() {
   return {
     navigateTo,
     goToQuestionnaire,
+    goToGeoZone,
     goToProfile,
     goToSelection,
     goToChoice,

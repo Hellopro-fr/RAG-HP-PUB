@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "deepseek"
 
     GEMINI_API_KEY: str
-    GEMINI_MODEL_NAME: str = "gemini-3-pro-preview"
+    GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
 
     MILVUS_OUTPUT_FIELDS_CONFIG: Dict[str, List[str]] = {
         "devis_poc": [

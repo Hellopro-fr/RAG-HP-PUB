@@ -263,6 +263,107 @@ class MilvusWebsiteCrud:
             self.logger.error(f"[{model_key}][siteweb] Suppression : {e}", exc_info=True)
             raise
 
+    def delete_website_by_url(self, url: str) -> Dict[str, Any]:
+        """
+        Supprime tous les chunks associés à une URL donnée.
+        Utilisé pour l'opération d'Upsert des pages standards.
+
+        Args:
+            url: L'URL de la page web à supprimer.
+
+        Returns:
+            Dict avec status success ou error.
+        """
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not url:
+                print(f"[{model_key}][siteweb] Suppression par URL sans URL fournie.")
+                return {
+                    "status": "error",
+                    "message": "URL requise pour la suppression."
+                }
+
+            expr = f'url == "{url}"'
+            print(f"[{model_key}][siteweb] Suppression des anciens chunks avec expression: {expr}")
+
+            self.collection.delete(expr, timeout=30)
+
+            print(f"[{model_key}] ✓ Suppression par URL terminée avec succès.")
+
+            return {
+                "status": "success",
+                "message": f"Chunks pour l'URL {url} supprimés."
+            }
+
+        except MilvusException as e:
+            print(f"[{model_key}][siteweb] Erreur Milvus lors de la suppression par URL : {e}")
+            raise
+        except Exception as e:
+            self.logger.error(f"[{model_key}][siteweb] Suppression par URL : {e}", exc_info=True)
+            raise
+
+    def delete_website_by_domain_and_page_type(self, domaine: str, page_type: str) -> Dict[str, Any]:
+        """
+        Supprime tous les chunks associés à un domaine et un type de page (header/footer).
+        Utilisé pour l'opération d'Upsert des headers et footers.
+
+        Args:
+            domaine: Le domaine du site web.
+            page_type: Le type de page ('header' ou 'footer').
+
+        Returns:
+            Dict avec status success ou error.
+        """
+        model_config = ModelConfig()
+        model_key = model_config.model_id
+
+        try:
+            self._connect_to_milvus()
+            self.collection = self._get_or_create_collection(model_config)
+
+            if not self.collection:
+                return {
+                    "status": "error",
+                    "message": "Collection non initialisée."
+                }
+
+            if not domaine or not page_type:
+                print(f"[{model_key}][siteweb] Suppression sans domaine ou page_type.")
+                return {
+                    "status": "error",
+                    "message": "Domaine et page_type requis pour la suppression."
+                }
+
+            expr = f'domaine == "{domaine}" && page_type == "{page_type}"'
+            print(f"[{model_key}][siteweb] Suppression des anciens {page_type} avec expression: {expr}")
+
+            self.collection.delete(expr, timeout=30)
+
+            print(f"[{model_key}] ✓ Suppression {page_type} pour domaine {domaine} terminée avec succès.")
+
+            return {
+                "status": "success",
+                "message": f"{page_type} pour le domaine {domaine} supprimé."
+            }
+
+        except MilvusException as e:
+            print(f"[{model_key}][siteweb] Erreur Milvus lors de la suppression par domaine/page_type : {e}")
+            raise
+        except Exception as e:
+            self.logger.error(f"[{model_key}][siteweb] Suppression par domaine/page_type : {e}", exc_info=True)
+            raise
+
     def get_website(self, url: str, page_type: str, domaine: str) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
@@ -304,7 +405,7 @@ class MilvusWebsiteCrud:
                 print(f"[{model_key}] AVERTISSEMENT: Le type de page fourni '{page_type}' n'est pas standard (header/footer).")
                 result = self.collection.query(
                     expr=f'url == "{url}"',
-                    output_fields=["id"],
+                    output_fields=["id", "page_type"],
                     timeout=20
                 )
             else:

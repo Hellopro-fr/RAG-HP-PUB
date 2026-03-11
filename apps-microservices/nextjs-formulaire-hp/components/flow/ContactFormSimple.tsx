@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Send, Shield, Clock, CheckCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Send, Shield, Clock, CheckCircle } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -17,6 +17,7 @@ import { useBuyerCheck } from "@/hooks/api";
 
 interface ContactFormSimpleProps {
   onBack: () => void;
+  onContactComplete?: (isExistingBuyer: boolean) => void;
 }
 
 const STEPS = [
@@ -25,7 +26,7 @@ const STEPS = [
   { id: 3, label: "Vos coordonnées" },
 ];
 
-const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
+const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps) => {
   const [formData, setFormData] = useState<ContactFormData>({
     email: "",
     isKnown: false,
@@ -172,7 +173,6 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
     e.preventDefault();
 
     // Si utilisateur connu (reconnu localement), on skip la validation; sinon on valide le formulaire
-    // Note: isExistingBuyer comes from our API check now
     if (!(isKnownBuyer && buyerCheckResult?.infoBuyer)) {
       const isValid = validateForm();
       if (!isValid) return;
@@ -185,28 +185,38 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
       isKnown: isKnownBuyer,
     };
 
-    setContactData(finalData);        
+    setContactData(finalData);
 
     // Tracking DB - Contact form submission (simple)
-    // On enrichit le payload de tracking comme dans SomethingToAddForm (flags message / fichiers)
     trackDbEvent('contact', 'form_submit_simple', {
       email: finalData.email,
-      is_known_buyer: isExistingBuyer,
+      is_known_buyer: isKnownBuyer,
       has_message: !!finalData.message,
       has_files: false,
       files_count: 0,
     }, categoryId, 1);
 
-    leadSubmission.mutate({
-      contact: finalData,
-      profile: profileData!,
-      answers: userAnswers,
-      selectedSupplierIds: selectedSupplierIds,
-      submittedAt: new Date().toISOString(),
-      userKnownStatus,
-      categoryId: categoryId?.toString(),
-      source: 1, // AO
-    });
+    // Si acheteur connu: soumettre le lead directement
+    // Si acheteur inconnu: aller au ProfileTypeStep (le lead sera soumis après)
+    if (isKnownBuyer) {
+      leadSubmission.mutate({
+        contact: finalData,
+        profile: profileData!,
+        answers: userAnswers,
+        selectedSupplierIds: selectedSupplierIds,
+        submittedAt: new Date().toISOString(),
+        userKnownStatus,
+        categoryId: categoryId?.toString(),
+        source: 1, // AO
+      }, {
+        onSuccess: () => {
+          onContactComplete?.(true);
+        }
+      });
+    } else {
+      // Unknown buyer: go to ProfileTypeStep
+      onContactComplete?.(false);
+    }
   };
 
   return (
@@ -370,7 +380,7 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
               {/* Submit button */}
               <button
                 type="submit"
-                disabled={!isFormValid ||   leadSubmission.isPending || leadSubmission.isSuccess}
+                disabled={!isFormValid || leadSubmission.isPending || leadSubmission.isSuccess}
                 className="w-full rounded-xl bg-accent py-4 text-lg font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {(leadSubmission.isPending || leadSubmission.isSuccess) ? (
@@ -378,10 +388,15 @@ const ContactFormSimple = ({ onBack }: ContactFormSimpleProps) => {
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent-foreground border-t-transparent" />
                     Envoi en cours...
                   </>
-                ) : (
+                ) : isKnownBuyer ? (
                   <>
                     <Send className="h-5 w-5" />
-                    Envoyer ma demande
+                    Valider ma demande
+                  </>
+                ) : (
+                  <>
+                    Suivant
+                    <ArrowRight className="h-5 w-5" />
                   </>
                 )}
               </button>

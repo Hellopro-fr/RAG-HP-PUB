@@ -17,9 +17,10 @@ import { useBuyerCheck } from "@/hooks/api";
 
 interface CustomNeedFormProps {
   onBack: () => void;
+  onContactComplete?: (isExistingBuyer: boolean) => void;
 }
 
-const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
+const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
   const {
     setContactData,
     flowType,
@@ -211,7 +212,7 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
       if (!isValid) return;
     }
 
-    const userKnownStatus = isExistingBuyer ? 'known' as const : 'unknown' as const;
+    const userKnownStatus = isKnownBuyer ? 'known' as const : 'unknown' as const;
 
     const finalData: any = {
       ...formData,
@@ -221,38 +222,39 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
 
     finalData.files = finalData.files || files;
 
-    // finalData.files.forEach((file: File, index: number) => {
-    //   console.log(`Fichier ${index}:`, {
-    //     nom: file.name,
-    //     taille: file.size,
-    //     type: file.type
-    //   });
-    // });
-
     setContactData(finalData);
 
     // Tracking DB - Something to add form submission
     trackDbEvent('contact', 'form_submit_custom_need', {
       email: finalData.email,
-      is_known_buyer: isExistingBuyer,
+      is_known_buyer: isKnownBuyer,
       has_description: !!description,
       has_files: (finalData.files?.length || 0) > 0,
       files_count: finalData.files?.length || 0,
       flow_type: flowType
     }, categoryId, 1);
 
-    leadSubmission.mutate({
-      contact: finalData,
-      profile: profileData!,
-      answers: userAnswers,
-      selectedSupplierIds: selectedSupplierIds,
-      submittedAt: new Date().toISOString(),
-      userKnownStatus,
-      categoryId: categoryId?.toString(),
-      source: 1, // AO
-    });
-
-    // onBack();
+    // Si acheteur connu: soumettre le lead directement
+    // Si acheteur inconnu: aller au ProfileTypeStep (le lead sera soumis après)
+    if (isKnownBuyer) {
+      leadSubmission.mutate({
+        contact: finalData,
+        profile: profileData!,
+        answers: userAnswers,
+        selectedSupplierIds: selectedSupplierIds,
+        submittedAt: new Date().toISOString(),
+        userKnownStatus,
+        categoryId: categoryId?.toString(),
+        source: 1, // AO
+      }, {
+        onSuccess: () => {
+          onContactComplete?.(true);
+        }
+      });
+    } else {
+      // Unknown buyer: go to ProfileTypeStep
+      onContactComplete?.(false);
+    }
   };
 
   // Ref pour éviter les doubles appels en StrictMode
@@ -623,10 +625,15 @@ const CustomNeedForm = ({ onBack }: CustomNeedFormProps) => {
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent-foreground border-t-transparent" />
                     Envoi en cours...
                   </>
-                ) : (
+                ) : isKnownBuyer ? (
                   <>
                     <Send className="h-5 w-5" />
-                    Envoyer ma demande
+                    Valider ma demande
+                  </>
+                ) : (
+                  <>
+                    Suivant
+                    <ArrowRight className="h-5 w-5" />
                   </>
                 )}
               </button>

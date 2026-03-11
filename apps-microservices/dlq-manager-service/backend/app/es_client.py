@@ -1,7 +1,10 @@
 import os
+import json
+import asyncio
 from elasticsearch import AsyncElasticsearch
 from functools import lru_cache
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
+from datetime import datetime, timezone
 
 # Read connection details from environment variables
 ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://localhost:9200")
@@ -9,10 +12,142 @@ ES_USERNAME = os.environ.get("ES_USERNAME")
 ES_PASSWORD = os.environ.get("ES_PASSWORD")
 
 ELASTIC_INDEX_NAME = "failed_messages_archive"
+RULES_INDEX_NAME = "dlq_auto_archive_rules"
 
 class ElasticsearchClient:
     def __init__(self, client: AsyncElasticsearch):
         self.client = client
+
+    def _rehydrate_document(self, hit: Dict) -> Dict:
+        """
+        Restores the original_payload from the payload_conflict_fallback string 
+        if a mapping conflict occurred during archiving. This makes the fallback 
+        completely transparent to the frontend and the requeuing processes.
+        """
+        if not hit or '_source' not in hit:
+            return hit
+            
+        source = hit['_source']
+        if 'payload_conflict_fallback' in source and source['payload_conflict_fallback']:
+            try:
+                # Reconstruct the original object from the serialized fallback string
+                source['original_payload'] = json.loads(source['payload_conflict_fallback'])
+                # Remove it so we don't send duplicate heavy data to the frontend
+                del source['payload_conflict_fallback']
+            except Exception as e:
+                print(f"Warning: Failed to rehydrate fallback document {hit.get('_id')}: {e}")
+        return hit
+
+    async def ensure_rules_index(self):
+        """Ensures the auto-archive rules index exists with proper mappings."""
+        try:
+            if not await self.client.indices.exists(index=RULES_INDEX_NAME):
+                await self.client.indices.create(
+                    index=RULES_INDEX_NAME,
+                    body={
+                        "mappings": {
+                            "properties": {
+                                "name": {"type": "keyword"},
+                                "description": {"type": "text"},
+                                "search_term": {"type": "text"},
+                                "filters": {"type": "object", "enabled": False}, # Do not index inner structure
+                                "is_active": {"type": "boolean"},
+                                "created_at": {"type": "date"},
+                                "execution_count": {"type": "integer"}
+                            }
+                        }
+                    }
+                )
+        except Exception as e:
+            print(f"Failed to ensure rules index: {e}")
+
+    async def get_rules(self, only_active: bool = False) -> List[Dict[str, Any]]:
+        """Retrieves all rules or only active rules."""
+        await self.ensure_rules_index()
+        query = {"match_all": {}} if not only_active else {"term": {"is_active": True}}
+        try:
+            res = await self.client.search(
+                index=RULES_INDEX_NAME,
+                body={"query": query, "size": 1000, "sort": [{"created_at": "desc"}]}
+            )
+            rules = []
+            for hit in res['hits']['hits']:
+                r = hit['_source']
+                r['_id'] = hit['_id']
+                # Safely fallback to 0 if the field is missing or null
+                r['execution_count'] = r.get('execution_count') or 0
+                rules.append(r)
+            return rules
+        except Exception as e:
+            print(f"Error getting rules: {e}")
+            return[]
+
+    async def create_rule(self, rule_data: Dict) -> str:
+        """Creates a new auto-archive rule."""
+        await self.ensure_rules_index()
+        rule_data['created_at'] = datetime.now(timezone.utc).isoformat()
+        rule_data['execution_count'] = 0
+        res = await self.client.index(index=RULES_INDEX_NAME, body=rule_data)
+        return res['_id']
+
+    async def update_rule_status(self, rule_id: str, is_active: bool):
+        """Toggles a rule on or off."""
+        await self.client.update(
+            index=RULES_INDEX_NAME,
+            id=rule_id,
+            body={"doc": {"is_active": is_active}}
+        )
+
+    async def delete_rule(self, rule_id: str):
+        """Deletes a rule."""
+        await self.client.delete(index=RULES_INDEX_NAME, id=rule_id)
+
+    async def increment_rule_execution(self, rule_id: str, count: int):
+        """Safely increments the execution count of a rule."""
+        try:
+            await self.client.update(
+                index=RULES_INDEX_NAME,
+                id=rule_id,
+                body={
+                    "script": {
+                        "source": "if (ctx._source.execution_count == null) { ctx._source.execution_count = params.count } else { ctx._source.execution_count += params.count }",
+                        "params": {"count": count}
+                    }
+                },
+                retry_on_conflict=3
+            )
+        except Exception as e:
+            print(f"Error incrementing execution count for rule {rule_id}: {e}")
+
+    async def apply_auto_archive_rule(self, rule: Dict) -> int:
+        """Executes an auto-archive rule strictly against 'New' messages using memory-safe scrolling."""
+        raw_filters = rule.get('filters', {})
+        search_term = rule.get('search_term', "")
+        rule_id = rule.get('_id')
+        
+        # Override the status filter to ONLY target "New" messages to be safe.
+        active_filters = dict(raw_filters) if raw_filters else {}
+        active_filters["status"] = ["New"] 
+        
+        total_archived = 0
+        try:
+            # source=False disables payload fetching. batch_size=50 prevents OOM during bulk updates.
+            async for batch in self.scroll_messages(filters=active_filters, search_term=search_term, batch_size=50, source=False):
+                message_ids = [msg['_id'] for msg in batch]
+                if message_ids:
+                    archived_in_batch = await self.update_message_status_bulk(message_ids, "Auto-Archived")
+                    total_archived += archived_in_batch
+                    
+                    # Live update the execution counter progressively
+                    if archived_in_batch > 0 and rule_id:
+                        await self.increment_rule_execution(rule_id, archived_in_batch)
+                    
+                    # Pressure relief valve: give ES Garbage Collector time to clean up
+                    await asyncio.sleep(0.5)
+            return total_archived
+        except Exception as e:
+            print(f"Error applying auto-archive rule {rule.get('name')}: {e}")
+            return total_archived
 
     async def check_url_in_dlq(self, url: str) -> Dict[str, Any]:
         """
@@ -304,7 +439,7 @@ class ElasticsearchClient:
                 "from": (page - 1) * page_size,
                 "size": page_size,
                 "sort": [{"@timestamp": "desc"}],
-                "_source": {"excludes": ["original_payload"]}
+                "_source": {"excludes":["original_payload", "payload_conflict_fallback"]}
             },
             track_total_hits=True
         )
@@ -342,11 +477,12 @@ class ElasticsearchClient:
         response = await self.client.search(index=ELASTIC_INDEX_NAME, body=body)
         return response['aggregations']['grouped_errors']['buckets']
     
-    async def get_message(self, message_id: str) -> Dict:
+    async def get_message(self, message_id: str) -> Optional[Dict]:
         """Gets the full document for a single message, including the payload."""
         try:
             response = await self.client.get(index=ELASTIC_INDEX_NAME, id=message_id)
-            return response
+            raw_hit = dict(response.body) if hasattr(response, "body") else dict(response)
+            return self._rehydrate_document(raw_hit)
         except:
             return None
             
@@ -354,16 +490,18 @@ class ElasticsearchClient:
         if not message_ids:
             return []
         response = await self.client.mget(index=ELASTIC_INDEX_NAME, body={"ids": message_ids})
-        return [doc for doc in response['docs'] if doc['found']]
+        hits = [doc for doc in response['docs'] if doc['found']]
+        return[self._rehydrate_document(hit) for hit in hits]
 
     async def update_message_status(self, message_id: str, status: str):
+        now_iso = datetime.now(timezone.utc).isoformat()
         await self.client.update(
             index=ELASTIC_INDEX_NAME,
             id=message_id,
             body={
                 "doc": {
                     "status": status,
-                    "status_updated_at": "now/s"
+                    "status_updated_at": now_iso
                 }
             }
         )
@@ -373,24 +511,33 @@ class ElasticsearchClient:
             return 0
         
         actions = []
+        now_iso = datetime.now(timezone.utc).isoformat()
         for msg_id in message_ids:
             actions.append({"update": {"_index": ELASTIC_INDEX_NAME, "_id": msg_id}})
-            actions.append({"doc": {"status": status, "status_updated_at": "now/s"}})
+            actions.append({"doc": {"status": status, "status_updated_at": now_iso}})
             
         response = await self.client.bulk(body=actions)
         return len([item for item in response['items'] if not item['update'].get('error')])
         
-    async def scroll_messages(self, filters: Dict, search_term: str):
-        """Scrolls through all messages matching a query, yielding them in batches."""
+    async def scroll_messages(self, filters: Dict, search_term: str, batch_size: int = 100, source: Any = True):
+        """
+        Scrolls through all messages matching a query, yielding them in batches.
+        :param batch_size: Number of documents to fetch per batch.
+        :param source: Pass False to exclude fetching _source fields entirely (saves massive memory).
+        """
         query = self._build_query(filters, search_term)
         pit = await self.client.open_point_in_time(index=ELASTIC_INDEX_NAME, keep_alive="1m")
         
         body = {
-            "size": 100,
+            "size": batch_size,
             "query": query,
             "sort": [{"@timestamp": "asc"}],
             "pit": {"id": pit['id'], "keep_alive": "1m"}
         }
+        
+        # If source is False, we tell ES not to fetch the heavy payload body.
+        if source is not True:
+            body["_source"] = source
         
         try:
             while True:
@@ -399,6 +546,10 @@ class ElasticsearchClient:
                 if not hits:
                     break
                 
+                # Rehydrate only if we actually fetched the _source payloads
+                if source is not False:
+                    hits = [self._rehydrate_document(hit) for hit in hits]
+                    
                 yield hits
                 
                 body['pit']['id'] = response['pit_id']
@@ -406,7 +557,10 @@ class ElasticsearchClient:
                     body['search_after'] = hits[-1]['sort']
                 
         finally:
-            await self.client.close_point_in_time(body={"id": pit['id']})
+            try:
+                await self.client.close_point_in_time(body={"id": pit['id']})
+            except Exception as e:
+                print(f"Silently ignored error closing PIT (likely connection drop): {e}")
 
     async def get_history(self, page: int, page_size: int) -> Tuple[List[Dict], int]:
         """Gets messages that have been actioned upon."""
@@ -424,15 +578,34 @@ class ElasticsearchClient:
         total = response['hits']['total']['value']
         return hits, total
 
+    async def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """Gets the status of an Elasticsearch background task."""
+        try:
+            response = await self.client.tasks.get(task_id=task_id)
+            # Safely convert ObjectApiResponse to standard Python dict
+            return dict(response.body) if hasattr(response, "body") else dict(response)
+        except Exception as e:
+            print(f"Error fetching task status for {task_id}: {e}")
+            return None
+
 @lru_cache()
 def get_es_client() -> ElasticsearchClient:
-    # Use credentials if they are provided
+    # Adding generous timeouts to allow massive bulk operations in background tasks
+    # to complete without severing the HTTP connection between Python and the cluster.
     if ES_USERNAME and ES_PASSWORD:
         es_instance = AsyncElasticsearch(
             ELASTICSEARCH_URL,
-            basic_auth=(ES_USERNAME, ES_PASSWORD)
+            basic_auth=(ES_USERNAME, ES_PASSWORD),
+            request_timeout=120,
+            max_retries=3,
+            retry_on_timeout=True
         )
     else:
-        es_instance = AsyncElasticsearch(ELASTICSEARCH_URL)
+        es_instance = AsyncElasticsearch(
+            ELASTICSEARCH_URL,
+            request_timeout=120,
+            max_retries=3,
+            retry_on_timeout=True
+        )
         
     return ElasticsearchClient(es_instance)

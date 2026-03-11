@@ -22,7 +22,17 @@ class RequeueByFilterRequest(BaseModel):
     search_term: Optional[str] = None
     rate_limit_per_second: Optional[int] = None
 
+class ArchiveByFilterRequest(BaseModel):
+    filters: Optional[Dict[str, Any]] = None
+    search_term: Optional[str] = None
 
 class CheckUrlsBatchRequest(BaseModel):
     """Modèle pour la vérification batch d'URLs dans les DLQ."""
     urls: List[str]
+
+class AutoArchiveRuleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    search_term: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+    is_active: bool = True

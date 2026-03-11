@@ -46,12 +46,12 @@ const getApiBasePath = () => {
   return basePath || '';
 };
 
-const type_typologie = {
-  "pro_france": "1",      // Professionnel
-  "pro_foreign": "1",     // Professionnel
-  "particulier": "2",     // Particulier
-  "creation": "1",        // Professionnel
-};
+// const type_typologie = {
+//   "pro_france": "1",      // Professionnel
+//   "pro_foreign": "1",     // Professionnel
+//   "particulier": "2",     // Particulier
+//   "creation": "1",        // Professionnel
+// };
 
 export function useProcessMatchingLogic() {
   const [showLoader, setShowLoader] = useState(false);
@@ -89,7 +89,7 @@ export function useProcessMatchingLogic() {
     const consolidatedEquivalences = processEquivalences();
     setEquivalenceCaracteristique(consolidatedEquivalences);
 
-    setShowLoader(true);
+    // setShowLoader(true);
 
     // Tracking DB - Profile completion
     trackDbEvent('profile', 'complete', {
@@ -98,155 +98,156 @@ export function useProcessMatchingLogic() {
       equivalences_count: consolidatedEquivalences.length
     }, categoryId, 1); // step_index = 1 (une seule étape pour le profil)
 
-    try {
+    // try {
+    //   // const typologie = data?.type;
+    //   // const typologieValue = type_typologie[typologie as keyof typeof type_typologie] || "1";
 
-      const typologie = data?.type;
-      const typologieValue = type_typologie[typologie as keyof typeof type_typologie] || "1";
+    //   // Construire metadonnee_utilisateurs avec les données disponibles
+    //   const metadonnee_utilisateurs: Record<string, string | number> = {};
 
-      // Construire metadonnee_utilisateurs avec id_pays et cp si disponibles
-      const metadonnee_utilisateurs: Record<string, string | number> = {
-        "pays": data?.country || '',
-        "typologie": typologieValue
-      };
+    //   // Ajouter pays si disponible
+    //   if (data?.country) {
+    //     metadonnee_utilisateurs["pays"] = data.country;
+    //   }
 
-      // Ajouter id_pays si disponible (vient de l'API geo)
-      if (data?.countryID) {
-        metadonnee_utilisateurs["id_pays"] = data.countryID;
-      }
+    //   // Ajouter id_pays si disponible (vient de l'API geo)
+    //   if (data?.countryID) {
+    //     metadonnee_utilisateurs["id_pays"] = data.countryID;
+    //   }
 
-      // Ajouter cp (code postal) si disponible
-      if (data?.postalCode) {
-        metadonnee_utilisateurs["cp"] = data.postalCode;
-      }
+    //   // Ajouter cp (code postal) si disponible
+    //   if (data?.postalCode) {
+    //     metadonnee_utilisateurs["cp"] = data.postalCode;
+    //   }
 
-      const formData = new FormData();
-      formData.append('id_categorie', categoryId?.toString() || '');
-      formData.append('top_k', '12');
-      formData.append('champs_sortie', JSON.stringify(["url"]));
-      formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
-      formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
+    //   const formData = new FormData();
+    //   formData.append('id_categorie', categoryId?.toString() || '');
+    //   formData.append('top_k', '12');
+    //   formData.append('champs_sortie', JSON.stringify(["url"]));
+    //   formData.append('metadonnee_utilisateurs', JSON.stringify(metadonnee_utilisateurs));
+    //   formData.append('liste_caracteristique', JSON.stringify(consolidatedEquivalences));
 
-      // Paramètres de scoring par défaut + paramètres de test (si présents dans l'URL)
-      const defaultScoringParams = {
-        c_unknown_score: 0,
-        z_unmatched: 0,
-      };
-      const matchingTestParams = useFlowStore.getState().matchingTestParams;
-      const scoringParams = { ...defaultScoringParams, ...matchingTestParams };
-      formData.append('scoring', JSON.stringify(scoringParams));
-      console.log('[MATCHING] Scoring params:', scoringParams);
+    //   // Paramètres de scoring par défaut + paramètres de test (si présents dans l'URL)
+    //   const defaultScoringParams = {
+    //     c_unknown_score: 0,
+    //     z_unmatched: 0,
+    //   };
+    //   const matchingTestParams = useFlowStore.getState().matchingTestParams;
+    //   const scoringParams = { ...defaultScoringParams, ...matchingTestParams };
+    //   formData.append('scoring', JSON.stringify(scoringParams));
+    //   console.log('[MATCHING] Scoring params:', scoringParams);
 
-      console.log('Payload MATCHING :', {
-        id_categorie: categoryId,
-        top_k: 12,
-        champs_sortie: ["url"],
-        metadonnee_utilisateurs,
-        liste_caracteristique: consolidatedEquivalences,
-        scoring: scoringParams
-      });
+    //   console.log('Payload MATCHING :', {
+    //     id_categorie: categoryId,
+    //     top_k: 12,
+    //     champs_sortie: ["url"],
+    //     metadonnee_utilisateurs,
+    //     liste_caracteristique: consolidatedEquivalences,
+    //     scoring: scoringParams
+    //   });
 
-      const apiBase = getApiBasePath();
-      const apiUrl = `${apiBase}/api/matching`;
+    //   const apiBase = getApiBasePath();
+    //   const apiUrl = `${apiBase}/api/matching`;
 
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        body: formData,
-      });
+    //   const res = await fetch(apiUrl, {
+    //     method: 'POST',
+    //     body: formData,
+    //   });
 
-      if (!res.ok) throw new Error('Failed to fetch matching');
+    //   if (!res.ok) throw new Error('Failed to fetch matching');
 
-      const apiData: MatchingResponse = await res.json();
+    //   const apiData: MatchingResponse = await res.json();
 
-      // Normaliser les données de matching vers le format Supplier
-      // L'API retourne maintenant deux listes séparées : top_produit et liste_produit
-      const { recommended, others } = normalizeMatchingToSuppliers(
-        apiData.top_produit,
-        apiData.liste_produit,
-        characteristicsMap,
-        consolidatedEquivalences
-      );
-
+    //   // Normaliser les données de matching vers le format Supplier
+    //   // L'API retourne maintenant deux listes séparées : top_produit et liste_produit
+    //   const { recommended, others } = normalizeMatchingToSuppliers(
+    //     apiData.top_produit,
+    //     apiData.liste_produit,
+    //     characteristicsMap,
+    //     consolidatedEquivalences
+    //   );
 
 
-      // Seuil minimum de produits pour afficher la sélection
-      // Condition : au moins 2 produits dans top_produit avec score >= 0.3 (30%)
-      const MIN_TOP_PRODUCTS = 2;
-      const MIN_SCORE_THRESHOLD = 0.3;
-      const topProductsWithGoodScore = (apiData.top_produit || []).filter(
-        (p: any) => Number(p.score) >= MIN_SCORE_THRESHOLD
-      );
-      const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
-      const hasInsufficientResults = topProductsWithGoodScore.length < MIN_TOP_PRODUCTS;
-      setRedirectGoToSomethingToAdd(hasInsufficientResults);
 
-      // Stocker les résultats initiaux (avec placeholders)
-      setMatchingResults({ recommended, others });
+    //   // Seuil minimum de produits pour afficher la sélection
+    //   // Condition : au moins 2 produits dans top_produit avec score >= 0.3 (30%)
+    //   const MIN_TOP_PRODUCTS = 2;
+    //   const MIN_SCORE_THRESHOLD = 0.3;
+    //   const topProductsWithGoodScore = (apiData.top_produit || []).filter(
+    //     (p: any) => Number(p.score) >= MIN_SCORE_THRESHOLD
+    //   );
+    //   const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
+    //   const hasInsufficientResults = topProductsWithGoodScore.length < MIN_TOP_PRODUCTS;
+    //   setRedirectGoToSomethingToAdd(hasInsufficientResults);
 
-      // Enrichir les recommandés avec les infos produit (await - bloquant)
-      let enrichedRecommended = recommended;
-      const recommendedIds = recommended.map((s) => s.id);
-      if (recommendedIds.length > 0) {
-        const productInfo = await fetchProductInfo(recommendedIds, categoryId, apiBase);
-        if (productInfo?.items) {
-          enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
-          setMatchingResults({ recommended: enrichedRecommended, others });
-        }
-      }
+    //   // Stocker les résultats initiaux (avec placeholders)
+    //   setMatchingResults({ recommended, others });
 
-      // Enrichir les "others" avec les infos produit (await - bloquant)
-      let enrichedOthers = others;
-      const othersIds = others.map((s) => s.id);
-      if (othersIds.length > 0) {
-        const othersInfo = await fetchProductInfo(othersIds, categoryId, apiBase);
-        if (othersInfo?.items) {
-          enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
-          setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
-        }
-      }
+    //   // Enrichir les recommandés avec les infos produit (await - bloquant)
+    //   let enrichedRecommended = recommended;
+    //   const recommendedIds = recommended.map((s) => s.id);
+    //   if (recommendedIds.length > 0) {
+    //     const productInfo = await fetchProductInfo(recommendedIds, categoryId, apiBase);
+    //     if (productInfo?.items) {
+    //       enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
+    //       setMatchingResults({ recommended: enrichedRecommended, others });
+    //     }
+    //   }
 
-      // Délai pour éviter détection WAF Imperva (succession rapide d'appels)
-      await new Promise(resolve => setTimeout(resolve, 500));
+    //   // Enrichir les "others" avec les infos produit (await - bloquant)
+    //   let enrichedOthers = others;
+    //   const othersIds = others.map((s) => s.id);
+    //   if (othersIds.length > 0) {
+    //     const othersInfo = await fetchProductInfo(othersIds, categoryId, apiBase);
+    //     if (othersInfo?.items) {
+    //       enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
+    //       setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
+    //     }
+    //   }
 
-      // Tracking DB - Stocker le payload envoyé ET les résultats du matching
-      const matchingTrackingData = {
-        request: {
-          id_categorie: categoryId,
-          metadonnee_utilisateurs,
-          liste_caracteristique: consolidatedEquivalences,
-          scoring: scoringParams,
-        },
-        response: {
-          results_count: totalProducts,
-          top_products_with_good_score: topProductsWithGoodScore.length,
-          min_top_products: MIN_TOP_PRODUCTS,
-          min_score_threshold: MIN_SCORE_THRESHOLD,
-          redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
-          top_products: apiData.top_produit?.map((p: any) => ({
-            id: p.id_produit,
-            score: Number(Number(p.score).toFixed(2)),
-            id_fournisseur: p.id_fournisseur
-          })) || [],
-          liste_products: apiData.liste_produit.map((p: any) => ({
-            id: p.id_produit,
-            score: Number(Number(p.score).toFixed(2)),
-            id_fournisseur: p.id_fournisseur
-          })),
-        },
-        equivalences_count: consolidatedEquivalences.length
-      };
+    //   // Délai pour éviter détection WAF Imperva (succession rapide d'appels)
+    //   await new Promise(resolve => setTimeout(resolve, 500));
 
-      trackDbEvent(
-        'matching',
-        hasInsufficientResults ? 'insufficient_results' : 'success',
-        matchingTrackingData,
-        categoryId,
-        1
-      );
+    //   // Tracking DB - Stocker le payload envoyé ET les résultats du matching
+    //   const matchingTrackingData = {
+    //     request: {
+    //       id_categorie: categoryId,
+    //       metadonnee_utilisateurs,
+    //       liste_caracteristique: consolidatedEquivalences,
+    //       scoring: scoringParams,
+    //     },
+    //     response: {
+    //       results_count: totalProducts,
+    //       top_products_with_good_score: topProductsWithGoodScore.length,
+    //       min_top_products: MIN_TOP_PRODUCTS,
+    //       min_score_threshold: MIN_SCORE_THRESHOLD,
+    //       redirect_to: hasInsufficientResults ? 'something-to-add' : 'selection',
+    //       top_products: apiData.top_produit?.map((p: any) => ({
+    //         id: p.id_produit,
+    //         score: Number(Number(p.score).toFixed(2)),
+    //         id_fournisseur: p.id_fournisseur
+    //       })) || [],
+    //       liste_products: apiData.liste_produit.map((p: any) => ({
+    //         id: p.id_produit,
+    //         score: Number(Number(p.score).toFixed(2)),
+    //         id_fournisseur: p.id_fournisseur
+    //       })),
+    //     },
+    //     equivalences_count: consolidatedEquivalences.length
+    //   };
 
-    } catch (error) {
-      console.error('Matching process error:', error);
-      setShowLoader(false);
-    }
+    //   trackDbEvent(
+    //     'matching',
+    //     hasInsufficientResults ? 'insufficient_results' : 'success',
+    //     matchingTrackingData,
+    //     categoryId,
+    //     1
+    //   );
+
+    // } catch (error) {
+    //   console.error('Matching process error:', error);
+    //   setShowLoader(false);
+    // }
   };
 
   /**
@@ -275,14 +276,13 @@ export function useProcessMatchingLogic() {
     setShowLoader(true);
 
     try {
-      // Récupérer les métadonnées utilisateur du profileData
-      const typologie = profileData?.type;
-      const typologieValue = type_typologie[typologie as keyof typeof type_typologie] || "1";
+      // Construire metadonnee_utilisateurs avec les données disponibles
+      const metadonnee_utilisateurs: Record<string, string | number> = {};
 
-      const metadonnee_utilisateurs: Record<string, string | number> = {
-        "pays": profileData?.country || '',
-        "typologie": typologieValue
-      };
+      // Ajouter pays si disponible
+      if (profileData?.country) {
+        metadonnee_utilisateurs["pays"] = profileData.country;
+      }
 
       // Ajouter id_pays si disponible (vient de l'API geo)
       if (profileData?.countryID) {

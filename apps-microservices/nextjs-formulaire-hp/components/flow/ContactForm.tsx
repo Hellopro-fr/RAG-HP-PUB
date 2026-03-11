@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Send, Shield, Clock, CheckCircle, Paperclip, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Send, Shield, Clock, CheckCircle, Paperclip, X } from "lucide-react";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -21,21 +21,26 @@ import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 interface ContactFormProps {
   selectedSuppliers: Supplier[];
   onBack: () => void;
+  onContactComplete?: (isExistingBuyer: boolean) => void;
 }
 
-const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
+const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFormProps) => {
   const router = useRouter();
   const {
     categoryId,
     userAnswers,
     profileData,
-    selectedSupplierIds,
     setContactData,
-    files: filesStore, 
+    files: filesStore,
     setFilesStore,
-    addFilesStore
+    addFilesStore,
+    supplierIdsToSubmit: storeSupplierIdsToSubmit,
+    selectedSupplierIds
 
   } = useFlowStore();
+
+  // Utiliser les IDs du store (définis lors de l'entrée dans contact), avec fallback sur les IDs sélectionnés
+  const supplierIdsToSubmit = storeSupplierIdsToSubmit ?? selectedSupplierIds;
   
 
   const leadSubmission = useLeadSubmission({ suppliers: selectedSuppliers });
@@ -246,18 +251,10 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
 
     const userKnownStatus = isKnownBuyer ? 'known' as const : 'unknown' as const;
 
-    const finalData = { 
-      ...formData, 
+    const finalData = {
+      ...formData,
       files: filesStore // On s'assure que les fichiers du store sont inclus
     };
-
-    // finalData.files.forEach((file, index) => {
-    //   console.log(`Fichier ${index}:`, {
-    //     nom: file.name,
-    //     taille: file.size,
-    //     type: file.type
-    //   });
-    // });
 
     setContactData(finalData);
 
@@ -267,20 +264,32 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
       is_known_buyer: isKnownBuyer,
       has_files: (finalData.files?.length || 0) > 0,
       files_count: finalData.files?.length || 0,
-      selected_suppliers_count: selectedSupplierIds.length
+      selected_suppliers_count: supplierIdsToSubmit.length
     }, categoryId, 1);
 
-    // Submit lead
-    leadSubmission.mutate({
-      contact: finalData,
-      profile: profileData!,
-      answers: userAnswers,
-      selectedSupplierIds: selectedSupplierIds,
-      submittedAt: new Date().toISOString(),
-      userKnownStatus,
-      categoryId: categoryId?.toString(),
-      source: 2, // produit
-    });
+    // Si acheteur connu: soumettre le lead directement
+    // Si acheteur inconnu: aller au ProfileTypeStep (le lead sera soumis après)
+    if (isKnownBuyer) {
+      // Submit lead for known buyers
+      console.log(leadSubmission);
+      leadSubmission.mutate({
+        contact: finalData,
+        profile: profileData!,
+        answers: userAnswers,
+        selectedSupplierIds: supplierIdsToSubmit,
+        submittedAt: new Date().toISOString(),
+        userKnownStatus,
+        categoryId: categoryId?.toString(),
+        source: 2, // produit
+      }, {
+        onSuccess: () => {
+          onContactComplete?.(true);
+        }
+      });
+    } else {
+      // Unknown buyer: go to ProfileTypeStep
+      onContactComplete?.(false);
+    }
   };
 
   return (
@@ -530,10 +539,15 @@ const ContactForm = ({ selectedSuppliers, onBack }: ContactFormProps) => {
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent-foreground border-t-transparent" />
                 Envoi en cours...
               </>
-            ) : (
+            ) : isKnownBuyer ? (
               <>
                 <Send className="h-5 w-5" />
-                Envoyer ma demande
+                Valider ma demande
+              </>
+            ) : (
+              <>
+                Suivant
+                <ArrowRight className="h-5 w-5" />
               </>
             )}
           </button>

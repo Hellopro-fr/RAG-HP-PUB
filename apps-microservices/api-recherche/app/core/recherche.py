@@ -209,6 +209,13 @@ class FilterBuilder:
                 key = "categorie"
             elif key == "id_categorie" and source == "siteweb":
                 continue
+            elif key == "avec_prix" and source == "produits_4":
+                logger.info(f"avec_prix produits_4 : {val}")
+                clauses.append(f"(prix_ht != '' OR prix_ttc != '')")
+                continue
+            elif key == "avec_prix" and source == "produits_3" and val == True:
+                clauses.append(f" (prix_ht != '' OR prix_ttc != '') ")
+                continue
 
             if not dtype:
                 continue
@@ -481,16 +488,43 @@ class SearchOrchestrator:
                 )
                 final_filter_expr_str = final_filter_expr
 
-                source_results = await database_client.search_vector(
-                    collection=source_name,
-                    vector=query_vector,
-                    k=top_k_retrieval,
-                    filter_expr=final_filter_expr,
-                    output_fields=(
-                        self.request.fields
-                        if self.request.fields and self.request.action == 1
-                        else None
-                    ),
+                # source_results = await database_client.search_vector(
+                #     collection=source_name,
+                #     vector=query_vector,
+                #     k=top_k_retrieval,
+                #     filter_expr=final_filter_expr,
+                #     output_fields=(
+                #         self.request.fields
+                #         if self.request.fields and self.request.action == 1
+                #         else None
+                #     ),
+                # )
+                source_results = (
+                    await database_client.hybrid_search_vector(
+                        collection=source_name,
+                        dense_vector=query_vector,
+                        query_text=self.request.prompt,
+                        k=top_k_retrieval,
+                        filter_expr=final_filter_expr,
+                        output_fields=(
+                            self.request.fields
+                            if self.request.fields and self.request.action == 1
+                            else None
+                        ),
+                        **self.request.hybrid_options.model_dump(),
+                    )
+                    if self.request.hybrid
+                    else await database_client.search_vector(
+                        collection=source_name,
+                        vector=query_vector,
+                        k=top_k_retrieval,
+                        filter_expr=final_filter_expr,
+                        output_fields=(
+                            self.request.fields
+                            if self.request.fields and self.request.action == 1
+                            else None
+                        ),
+                    )
                 )
                 all_results[source_name] = [
                     MessageToDict(res) for res in source_results
@@ -806,17 +840,37 @@ class SearchOrchestrator:
     async def _create_search_task(self, source_name, filtre, query_vector, k):
         final_filter_expr = await self._build_filter_expression(filtre, source_name)
 
-        #todo à supprimer après test
-        context_mode = filtre.get("autre_chunks",None)
+        # todo à supprimer après test
+        context_mode = filtre.get("autre_chunks", None)
         if context_mode == "none":
             context_mode = None
 
-        return await database_client.search_vector(
-            collection=source_name,
-            vector=query_vector,
-            k=k,
-            filter_expr=final_filter_expr,
-            context_mode=context_mode,
+        # return await database_client.search_vector(
+        #     collection=source_name,
+        #     vector=query_vector,
+        #     k=k,
+        #     filter_expr=final_filter_expr,
+        #     context_mode=context_mode,
+        # )
+
+        return (
+            await database_client.hybrid_search_vector(
+                collection=source_name,
+                dense_vector=query_vector,
+                query_text=self.request.prompt,
+                k=k,
+                filter_expr=final_filter_expr,
+                context_mode=context_mode,
+                **self.request.hybrid_options.model_dump(),
+            )
+            if self.request.hybrid
+            else await database_client.search_vector(
+                collection=source_name,
+                vector=query_vector,
+                k=k,
+                filter_expr=final_filter_expr,
+                context_mode=context_mode,
+            )
         )
 
     async def _build_filter_expression(self, filtre: dict, source_name: str) -> str:

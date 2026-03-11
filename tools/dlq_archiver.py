@@ -214,20 +214,62 @@ class DLQArchiver:
                 self.channel.basic_ack(delivery_tag=last_delivery_tag, multiple=True)
                 print(f"   -> Batch entièrement archivé et acquitté avec succès (jusqu'au tag {last_delivery_tag}).")
             else:
-                print(f"   -> ❌ Erreurs d'indexation détectées. Traitement individuel des acquittements.")
+                print(f"   -> ❌ Erreurs d'indexation détectées. Analyse des conflits de mapping...")
                 # Create a set of failed document IDs for quick lookup
                 failed_doc_ids = {err['index']['_id']: err['index']['error'] for err in errors}
                 
+                retry_docs = []
+                retry_tags = []
+                final_failed_tags =[]
+
                 for delivery_tag, doc in buffer_copy:
                     doc_id = doc['_id']
                     if doc_id in failed_doc_ids:
                         error_details = failed_doc_ids[doc_id]
-                        print(f"     -> NACK du message (tag: {delivery_tag}) car l'archivage a échoué.")
-                        print(f"     -> Raison de l'échec pour ID {doc_id}: {error_details.get('type')}: {error_details.get('reason')[:500]}...")
-                        self.channel.basic_nack(delivery_tag=delivery_tag, requeue=True)
+                        err_type = error_details.get('type', '')
+                        err_reason = error_details.get('reason', '')
+                        
+                        # Identify mapping conflicts (e.g., field was text, but now it's an object)
+                        is_mapping_error = any(x in err_type for x in['mapper_parsing_exception', 'document_parsing_exception', 'illegal_argument_exception']) or 'failed to parse field' in err_reason
+                        
+                        if is_mapping_error:
+                            print(f"     ⚠️ Conflit de mapping détecté pour le document {doc_id}. Application du Fallback...")
+                            # Fallback Strategy: Serialize payload to string, insert dummy object.
+                            original_payload = doc['_source'].get('original_payload', {})
+                            doc['_source']['payload_conflict_fallback'] = json.dumps(original_payload)
+                            doc['_source']['original_payload'] = {"_fallback": "Conflit de mapping résolu. Structure originale conservée en fallback."}
+                            
+                            retry_docs.append(doc)
+                            retry_tags.append(delivery_tag)
+                        else:
+                            # Not a mapping error, it's a real failure
+                            final_failed_tags.append((delivery_tag, doc_id, error_details))
                     else:
+                        # Success
                         self.channel.basic_ack(delivery_tag=delivery_tag)
-                print("   -> Les messages échoués ont été routés vers l'infrastructure de retry/DLQ.")
+                
+                # Re-attempt inserting the fallback documents
+                if retry_docs:
+                    print(f"   -> Tentative de ré-indexation de {len(retry_docs)} documents avec le Fallback de mapping...")
+                    retry_success, retry_errors = helpers.bulk(self.es_client, retry_docs, raise_on_error=False)
+                    retry_failed_ids = {err['index']['_id']: err['index']['error'] for err in retry_errors} if retry_errors else {}
+                    
+                    for tag, doc in zip(retry_tags, retry_docs):
+                        if doc['_id'] in retry_failed_ids:
+                            # Still failed even after fallback
+                            final_failed_tags.append((tag, doc['_id'], retry_failed_ids[doc['_id']]))
+                        else:
+                            # Fallback successful!
+                            self.channel.basic_ack(delivery_tag=tag)
+                            print(f"     ✅ Document {doc['_id']} sauvé grâce au Fallback.")
+                            
+                # NACK the messages that completely failed so RabbitMQ can handle them
+                for tag, doc_id, err in final_failed_tags:
+                    print(f"     -> NACK du message (tag: {tag}) car l'archivage a échoué. Raison: {err.get('type')}: {err.get('reason')[:500]}...")
+                    self.channel.basic_nack(delivery_tag=tag, requeue=True)
+                    
+                if final_failed_tags:
+                    print("   -> Les messages échoués ont été routés vers l'infrastructure de retry/DLQ.")
 
         except Exception as e:
             print(f"❌ ERREUR CRITIQUE lors de la communication avec Elasticsearch: {e}. NACK de tout le batch (requeue=True).")

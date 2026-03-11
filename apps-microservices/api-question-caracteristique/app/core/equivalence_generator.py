@@ -181,7 +181,7 @@ class EquivalenceGenerator:
         
         # Appeler le LLM Gemini
         gemini = GeminiProvider(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             thinking_level="high",
             max_retries=10
         )

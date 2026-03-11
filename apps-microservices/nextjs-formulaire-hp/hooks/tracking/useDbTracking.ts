@@ -70,27 +70,27 @@ export function useDbTracking() {
           token: token,
         };
         sessionStorage.setItem(metaKey, 'true');
-      }
+      }      
+      // type_flow et type_dmd_categ (On ne les initialise plus à 0 par défaut pour éviter d'écraser la base)
+      let typeFlow: number | null = null;
+      let typeDmdCateg: number | null = null;
 
-      // Récupérer le flowType depuis le store pour le tracking session
-      const storeFlowType = useFlowStore.getState().flowType;
-      
-      // type_flow (0: Non terminé | 1: flow demande categ | 2: flow produit)
-      let typeFlow = 0;
-      if (storeFlowType === 'principal') {
-        typeFlow = 2;
-      } else if (storeFlowType) {
-        typeFlow = 1;
-      }
-      
-      // Déterminer type_dmd_categ (0: par défaut, 1: produit insuffisant, 2: intentionnelle)
-      let typeDmdCateg = 0;
-      if (storeFlowType === 'pas_assez_produits') {
+      if (eventType === "matching") {
+        if ( eventName === "success" || eventName === "initial") {
+          typeFlow = 2;
+        } else {
+          typeFlow = 1;
+        } 
+        typeDmdCateg = 0;     
+      } else if (eventName === "insufficient_results") { 
         typeFlow = 1;
         typeDmdCateg = 1;
-      } else if (storeFlowType === 'pas_trouve_recherchez') {
+      } else if (eventName === "form_submit_custom_need") { 
         typeFlow = 1;
         typeDmdCateg = 2;
+      } else if (eventName === "form_submit") { 
+        typeFlow = 2;
+        typeDmdCateg = 0;
       }
 
       // Construire le payload
@@ -99,8 +99,6 @@ export function useDbTracking() {
         data: {
           session_id: sessionId,
           category_id: categoryId,
-          type_flow: typeFlow,
-          type_dmd_categ: typeDmdCateg,
           event: {
             event_type: eventType,
             event_name: eventName,
@@ -112,6 +110,12 @@ export function useDbTracking() {
           session_meta: sessionMeta,
         },
       };
+
+      // N'ajouter les champs de qualification que s'ils ont été définis ci-dessus
+      if (typeFlow !== null) {
+        payload.data.type_flow = typeFlow;
+        payload.data.type_dmd_categ = typeDmdCateg;
+      }
 
       const apiBase = getApiBasePath();
       // Envoyer avec fetch (sendBeacon ne supporte pas bien les proxies Next.js)

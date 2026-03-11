@@ -8,6 +8,7 @@ service DatabaseSearchService {
   rpc Search(SearchRequest) returns (SearchResponse);
   rpc ClassicSearch(ClassicSearchRequest) returns (SearchResponse);
   rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+  rpc HybridSearch(HybridSearchRequest) returns (SearchResponse);
 }
 
 message SearchRequest {
@@ -17,6 +18,7 @@ message SearchRequest {
   optional string filter_expression = 4;
   repeated string output_fields = 5;
   optional google.protobuf.Struct options = 6;
+  optional string source_service = 7;
 }
 
 message ClassicSearchRequest {
@@ -24,6 +26,21 @@ message ClassicSearchRequest {
   string filter_expression = 2; // Le filtre "expr" de Milvus
   int32 top_k = 3;
   repeated string output_fields = 4;
+  optional string source_service = 5;
+}
+
+// Requête de recherche hybride combinant recherche vectorielle dense et recherche full-text BM25
+message HybridSearchRequest {
+  string collection_name = 1;         // Nom de la collection Milvus
+  repeated float dense_vector = 2;    // Vecteur dense (embedding) pour la recherche sémantique
+  string query_text = 3;              // Texte brut pour la recherche full-text BM25
+  int32 top_k = 4;                    // Nombre de résultats souhaités
+  optional float dense_weight = 5;    // Poids de la recherche dense (défaut: 0.7)
+  optional float sparse_weight = 6;   // Poids de la recherche sparse/BM25 (défaut: 0.3)
+  optional string filter_expression = 7; // Filtre Milvus optionnel
+  repeated string output_fields = 8;    // Champs de sortie optionnels
+  optional google.protobuf.Struct options = 9; // Options supplémentaires (ex: context_mode)
+  optional string source_service = 10;
 }
 
 message SearchResult {
@@ -39,6 +56,7 @@ message SearchResponse {
 
 message GetSchemaRequest {
   string collection_name = 1;
+  optional string source_service = 2;
 }
 
 message GetSchemaResponse {

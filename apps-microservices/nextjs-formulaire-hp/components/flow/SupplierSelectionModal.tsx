@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { ChevronDown, ChevronUp, RotateCcw, ArrowLeft, Send, Search, LayoutGrid, List, ThumbsUp, ThumbsDown } from "lucide-react";
 import { cn, getAssetPath } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { useFlowStore } from "@/lib/stores/flow-store";
+import { useFlowNavigation } from "@/hooks/useFlowNavigation";
 import {
   getCharacteristicLabel,
   formatSelectedValues,
@@ -42,6 +43,9 @@ interface SupplierSelectionModalProps {
 
 
 const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierSelectionModalProps) => {
+  // Navigation hook
+  const { goToProfile } = useFlowNavigation();
+
   // Récupérer les résultats de matching et les caractéristiques depuis le store
   const {
     matchingResults,
@@ -103,11 +107,14 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   const [showComparison, setShowComparison] = useState(false);
   const [criteriaModified, setCriteriaModified] = useState(false);
   const [mobileViewMode, setMobileViewMode] = useState<"grid" | "list">("list");
+  // État pour le devis unique (ne modifie pas la sélection principale)
+  const [singleQuoteProductId, setSingleQuoteProductId] = useState<string | null>(null);
 
   // Zustand store pour la sélection des fournisseurs et le flowType
   const {
     selectedSupplierIds,
     setSelectedSupplierIds,
+    setSupplierIdsToSubmit,
     setFlowType: setStoreFlowType,
     setEquivalenceCaracteristique,
     setOrphanedSelectedSuppliers,
@@ -116,6 +123,39 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
+
+  // Refs pour éviter les stale closures dans le handler popstate
+  const selectedProductIdRef = useRef<string | null>(null);
+  const showComparisonRef = useRef<boolean>(false);
+  const viewStateRef = useRef<ViewState>('selection');
+
+  useEffect(() => { selectedProductIdRef.current = selectedProductId; }, [selectedProductId]);
+  useEffect(() => { showComparisonRef.current = showComparison; }, [showComparison]);
+  useEffect(() => { viewStateRef.current = viewState; }, [viewState]);
+
+  // Push une entrée dans l'historique quand on quitte la vue "selection"
+  useEffect(() => {
+    if (viewState !== 'selection') {
+      history.pushState({ viewState }, '');
+    }
+  }, [viewState]);
+
+  // Intercept bouton "précédent" du navigateur : ferme les modals ou revient à "selection"
+  useEffect(() => {
+    const handlePopState = () => {
+      if (selectedProductIdRef.current !== null) {
+        setSelectedProductId(null);
+      } else if (showComparisonRef.current) {
+        setShowComparison(false);
+      } else if (viewStateRef.current !== 'selection') {
+        setSingleQuoteProductId(null); // Réinitialiser le devis unique au retour
+        setSupplierIdsToSubmit(null); // Réinitialiser les IDs à soumettre
+        setViewState('selection');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Convertir le tableau en Set pour les opérations
   const selectedIds = useMemo(() => new Set(selectedSupplierIds), [selectedSupplierIds]);
@@ -190,6 +230,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
   const handleViewDetails = (id: string) => {
     setSelectedProductId(id);
+    history.pushState({ modal: 'product' }, '');
     // Note: Le tracking est fait dans ProductDetailModal au montage
   };
 
@@ -230,7 +271,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     }
   };
 
-  
+
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -353,7 +394,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                         Autres résultats ({unselectedSuppliersList.length})
                         <span className="h-px flex-1 bg-border" />
                       </h3>
-                      
+
 
                       {unselectedSuppliersList.length > 0 ? (
                         <div className={cn(
@@ -400,8 +441,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   onClick={() => setIsExpanded(!isExpanded)}
                   className={cn(
                     "flex w-full items-center justify-center gap-2 py-3 text-sm transition-colors rounded-lg border",
-                    isExpanded 
-                      ? "text-muted-foreground hover:text-foreground border-transparent" 
+                    isExpanded
+                      ? "text-muted-foreground hover:text-foreground border-transparent"
                       : "text-foreground font-medium border-border hover:bg-muted"
                   )}
                 >
@@ -423,8 +464,28 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
           {viewState === "contact" && (
             <ContactForm
-              selectedSuppliers={selectedSuppliersList}
-              onBack={() => setViewState("selection")}
+              selectedSuppliers={
+                // Si devis unique, passer seulement ce produit; sinon, la sélection complète
+                singleQuoteProductId
+                  ? ALL_SUPPLIERS.filter((s) => s.id === singleQuoteProductId)
+                  : selectedSuppliersList
+              }
+              onBack={() => {
+                setSingleQuoteProductId(null); // Réinitialiser le devis unique au retour
+                setSupplierIdsToSubmit(null); // Réinitialiser les IDs à soumettre
+                setViewState("selection");
+              }}
+              onContactComplete={(isExistingBuyer) => {
+                setSingleQuoteProductId(null); // Réinitialiser après soumission
+                setSupplierIdsToSubmit(null); // Réinitialiser les IDs à soumettre
+                if (isExistingBuyer) {
+                  // Acheteur connu : le formulaire a déjà soumis le lead et navigue automatiquement
+                  // Pas besoin d'action supplémentaire ici
+                } else {
+                  // Acheteur inconnu : naviguer vers Profile pour compléter les informations
+                  goToProfile();
+                }
+              }}
             />
           )}
 
@@ -443,13 +504,24 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           )}
 
           {viewState === "custom-need" && (
-            <CustomNeedForm onBack={() => {
-              // Remettre flowType à 'principal' quand l'utilisateur annule
-              // depuis le formulaire "pas trouvé ce que vous cherchez"
-              setStoreFlowType('principal');
-              setFlowType('principal');
-              setViewState("selection");
-            }} />
+            <CustomNeedForm
+              onBack={() => {
+                // Remettre flowType à 'principal' quand l'utilisateur annule
+                // depuis le formulaire "pas trouvé ce que vous cherchez"
+                setStoreFlowType('principal');
+                setFlowType('principal');
+                setViewState("selection");
+              }}
+              onContactComplete={(isExistingBuyer) => {
+                if (isExistingBuyer) {
+                  // Acheteur connu : le formulaire a déjà soumis le lead et navigue automatiquement
+                  // Pas besoin d'action supplémentaire ici
+                } else {
+                  // Acheteur inconnu : naviguer vers Profile pour compléter les informations
+                  goToProfile();
+                }
+              }}
+            />
           )}
         </div>
 
@@ -460,7 +532,10 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
             {/* Primary CTA - on top for mobile */}
             <button
               disabled={selectedCount === 0}
-              onClick={() => setViewState("contact")}
+              onClick={() => {
+                setSupplierIdsToSubmit(selectedSupplierIds); // Tous les produits sélectionnés
+                setViewState("contact");
+              }}
               className={cn(
                 "order-1 lg:order-2 rounded-lg px-6 py-3 text-base font-semibold transition-all duration-200 w-full lg:w-auto",
                 selectedCount > 0
@@ -480,6 +555,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                 onClick={() => {
                   trackComparisonModalView();
                   setShowComparison(true);
+                  history.pushState({ modal: 'comparison' }, '');
                 }}
                 className="flex-1 min-w-[120px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center gap-1.5 md:gap-2"
               >
@@ -524,9 +600,21 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
             matchScore: selectedProduct.matchScore,
             matchReasons: selectedProduct.matchGaps,
           }}
-          onClose={() => setSelectedProductId(null)}
+          onClose={() => history.back()}
           onSelect={() => toggleSupplier(selectedProduct.id)}
           isSelected={selectedIds.has(selectedProduct.id)}
+          onProceed={() => {
+            setSupplierIdsToSubmit(selectedSupplierIds); // Tous les produits sélectionnés
+            setSelectedProductId(null); // Ferme la modale
+            setViewState("contact");
+          }}
+          onRequestSingleQuote={() => {
+            setSupplierIdsToSubmit([selectedProduct.id]); // Uniquement ce produit
+            setSingleQuoteProductId(selectedProduct.id); // Garde la sélection, juste marque le produit pour devis unique
+            setSelectedProductId(null); // Ferme la modale
+            setViewState("contact");
+          }}
+          selectedCount={selectedCount}
         />
       )}
       {/* Comparison Modal */}
@@ -535,7 +623,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
           products={ALL_SUPPLIERS}
           selectedIds={selectedIds}
           onToggle={toggleSupplier}
-          onClose={() => setShowComparison(false)}
+          onClose={() => history.back()}
         />
       )}
     </div>

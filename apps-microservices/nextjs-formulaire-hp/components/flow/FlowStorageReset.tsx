@@ -41,7 +41,6 @@ export default function FlowStorageReset() {
     sessionStorage.removeItem(FLOW_NEEDS_REDIRECT_KEY);
 
     if (!needsRedirect) {
-      //console.log('[FlowStorageReset] No redirect needed');
       return;
     }
 

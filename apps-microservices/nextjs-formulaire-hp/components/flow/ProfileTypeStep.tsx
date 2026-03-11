@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { ArrowLeft, ArrowRight, Search, Building2, Sparkles, Globe, User, MapPin, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Building2, Sparkles, Globe, User, MapPin, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ProgressHeader from "./ProgressHeader";
 import { useSirenSearch } from "@/hooks/api";
@@ -9,10 +9,12 @@ import { usePostalCodeSearch } from "@/hooks/usePostalCodeSearch";
 import { useFlowStore } from "@/lib/stores/flow-store";
 import type { ProfileType, CompanyResult, ProfileData } from "@/types";
 import type { SirenCompanyData } from "@/lib/api/services/siret.service";
+import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
 import {
   trackProfileView,
   trackProfileComplete,
 } from "@/lib/analytics";
+import { Send, Clock, Shield, CheckCircle } from "lucide-react";
 
 
 interface Country {
@@ -20,11 +22,18 @@ interface Country {
   libelle: string;
 }
 
+interface GeoData {
+  country: string;
+  postalCode: string;
+  city: string;
+}
+
 interface ProfileTypeStepProps {
   priorityCountries: Country[];
   otherCountries: Country[];
   onComplete: (data: ProfileData) => void;
   onBack: () => void;
+  geoData?: GeoData;
 }
 
 const STEPS = [
@@ -33,9 +42,50 @@ const STEPS = [
   { id: 3, label: "Demande de devis" },
 ];
 
-const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack }: ProfileTypeStepProps) => {
+const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack, geoData }: ProfileTypeStepProps) => {
   // Store Zustand pour persistance dans sessionStorage
-  const { setProfileData } = useFlowStore();
+  const {
+    categoryId,
+    userAnswers,
+    selectedSupplierIds,
+    supplierIdsToSubmit: storeSupplierIdsToSubmit,
+    contactData,
+    matchingResults,
+    setProfileData,
+    geoData: geoDataFS
+  } = useFlowStore();
+
+  // Utiliser les IDs du store (définis lors de l'entrée dans contact), avec fallback sur les IDs sélectionnés
+  const supplierIdsToSubmit = storeSupplierIdsToSubmit ?? selectedSupplierIds;
+
+  // On récupère tous les fournisseurs du matching pour les passer au hook
+  const allSuppliers = useMemo(() => {
+    return [
+      ...(matchingResults?.recommended || []),
+      ...(matchingResults?.others || [])
+    ];
+  }, [matchingResults]);
+
+  const leadSubmission = useLeadSubmission({ suppliers: allSuppliers });
+  const [showFallbackRedirect, setShowFallbackRedirect] = useState<boolean>(false);
+  const fallbackMessageRef = useRef<HTMLParagraphElement>(null);
+
+  // Gérer la redirection fallback si l'API ne retourne pas une URL externe
+  useEffect(() => {
+    if (leadSubmission.isSuccess && leadSubmission.data?.data) {
+      const { isExternalRedirect, fallbackUrl } = leadSubmission.data.data;
+      if (!isExternalRedirect && fallbackUrl) {
+        setShowFallbackRedirect(true);
+        setTimeout(() => {
+          fallbackMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+        const timer = setTimeout(() => {
+          window.location.href = fallbackUrl;
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [leadSubmission.isSuccess, leadSubmission.data]);
 
   // Ref pour éviter les doubles appels en StrictMode
   const hasTrackedView = useRef(false);
@@ -52,29 +102,29 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCompany, setSelectedCompany] = useState<CompanyResult | null>(null);
   const [companyName, setCompanyName] = useState("");
-  const [postalCode, setPostalCode] = useState("");
-  const [city, setCity] = useState("");
-  const [particulierCity, setParticulierCity] = useState("");
-  const [country, setCountry] = useState("");
-  const [countryID, setCountryID] = useState(0);
+  const [postalCode, setPostalCode] = useState(geoDataFS?.postalCode || "");
+  const [city, setCity] = useState(geoDataFS?.city || "");
+  const [particulierCity, setParticulierCity] = useState(geoDataFS?.city || "");
+  const [country, setCountry] = useState((geoDataFS?.countryId != 1 ? geoDataFS?.country : "") || "");
+  const [countryID, setCountryID] = useState(geoDataFS?.countryId != 1 ? geoDataFS?.countryId : 0);
   const [showCountryDropdown, setShowCountryDropdown] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
   const [showPostalCodeSuggestions, setShowPostalCodeSuggestions] = useState(false);
   const [particulierShowPostalCodeSuggestions, setShowParticulierPostalCodeSuggestions] = useState(false);
   const [showManualCompanyForm, setShowManualCompanyForm] = useState(false);
   const [manualCompanyName, setManualCompanyName] = useState("");
-  const [manualPostalCode, setManualPostalCode] = useState("");
-  const [manualCity, setManualCity] = useState("");
+  const [manualPostalCode, setManualPostalCode] = useState(geoDataFS?.postalCode || "");
+  const [manualCity, setManualCity] = useState(geoDataFS?.city || "");
   const [showManualPostalCodeSuggestions, setShowManualPostalCodeSuggestions] = useState(false);
   // Pour particulier - sélection du pays
-  const [particulierCountry, setParticulierCountry] = useState("France");
-  const [particulierCountryID, setParticulierCountryID] = useState(1);
+  const [particulierCountry, setParticulierCountry] = useState(geoDataFS?.country || "France");
+  const [particulierCountryID, setParticulierCountryID] = useState(geoDataFS?.countryId || 1);
   const [showParticulierCountryDropdown, setShowParticulierCountryDropdown] = useState(false);
   const [particulierCountrySearch, setParticulierCountrySearch] = useState("");
-  const [particulierPostalCode, setParticulierPostalCode] = useState("");
+  const [particulierPostalCode, setParticulierPostalCode] = useState(geoDataFS?.postalCode || "");
   // Pour création - sélection du pays
-  const [creationCountry, setCreationCountry] = useState("France");
-  const [creationCountryID, setCreationCountryID] = useState(1);
+  const [creationCountry, setCreationCountry] = useState(geoDataFS?.country || "France");
+  const [creationCountryID, setCreationCountryID] = useState(geoDataFS?.countryId || 1);
   const [showCreationCountryDropdown, setShowCreationCountryDropdown] = useState(false);
   const [creationCountrySearch, setCreationCountrySearch] = useState("");
 
@@ -265,7 +315,21 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
     // Track profile complete
     trackProfileComplete(info_datalayer || 'unknown');
 
-    onComplete(data);
+    // Soumettre le lead
+    leadSubmission.mutate({
+      contact: contactData!,
+      profile: data,
+      answers: userAnswers,
+      selectedSupplierIds: supplierIdsToSubmit,
+      submittedAt: new Date().toISOString(),
+      userKnownStatus: 'unknown', // Si on est ici, c'est que l'acheteur était inconnu au ContactForm
+      categoryId: categoryId?.toString(),
+      source: 2, // produit
+    }, {
+      onSuccess: () => {
+        onComplete(data);
+      }
+    });
   };
 
   const handleSelectCompany = (company: SirenCompanyData) => {
@@ -287,7 +351,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       <ProgressHeader
         steps={STEPS}
-        currentStep={1}
+        currentStep={3}
         progress={90}
       />
 
@@ -331,8 +395,8 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
                       setSearchQuery("");
                       setShowManualCompanyForm(false);
                       setManualCompanyName("");
-                      setManualPostalCode("");
-                      setManualCity("");
+                      // setManualPostalCode("");
+                      // setManualCity("");
                     }}
                     className="w-full text-left"
                   >
@@ -434,9 +498,9 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
                             <button
                               onClick={() => {
                                 setShowManualCompanyForm(false);
-                                setManualCompanyName("");
-                                setManualPostalCode("");
-                                setManualCity("");
+                                //setManualCompanyName("");
+                                // setManualPostalCode("");
+                                // setManualCity("");
                               }}
                               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                             >
@@ -894,6 +958,7 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
                                   setParticulierCountry("France");
                                   setShowParticulierCountryDropdown(false);
                                   setParticulierCountrySearch("");
+                                  setParticulierCountryID(1);
                                 }}
                                 className={cn(
                                   "w-full text-left px-4 py-2 text-sm hover:bg-muted/50 transition-colors",
@@ -995,6 +1060,18 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
                 </div>
               </div>
 
+              {leadSubmission.isError && (
+                <p className="text-center text-sm text-destructive">
+                  Une erreur est survenue lors de l'envoi de votre demande. Veuillez réessayer.
+                </p>
+              )}
+
+              {showFallbackRedirect && (
+                <p ref={fallbackMessageRef} className="text-center text-sm text-destructive">
+                  Une erreur est survenue. Vous allez être redirigé vers la catégorie.
+                </p>
+              )}
+
               {/* Desktop navigation */}
               <div className="hidden sm:flex items-center justify-between pt-4">
                 <button
@@ -1007,16 +1084,25 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
 
                 <button
                   onClick={handleNext}
-                  disabled={!isValid}
+                  disabled={!isValid || leadSubmission.isPending || leadSubmission.isSuccess}
                   className={cn(
                     "flex items-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold transition-all",
-                    isValid
+                    isValid && !leadSubmission.isPending && !leadSubmission.isSuccess
                       ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
                       : "bg-muted text-muted-foreground cursor-not-allowed"
                   )}
                 >
-                  Suivant
-                  <ArrowRight className="h-4 w-4" />
+                  {leadSubmission.isPending || leadSubmission.isSuccess ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Envoi en cours...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Valider ma demande
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -1034,16 +1120,25 @@ const ProfileTypeStep = ({ priorityCountries, otherCountries, onComplete, onBack
 
               <button
                 onClick={handleNext}
-                disabled={!isValid}
+                disabled={!isValid || leadSubmission.isPending || leadSubmission.isSuccess}
                 className={cn(
                   "flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-base font-semibold transition-all",
-                  isValid
+                  isValid && !leadSubmission.isPending && !leadSubmission.isSuccess
                     ? "bg-accent text-accent-foreground shadow-lg shadow-accent/25"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
               >
-                Suivant
-                <ArrowRight className="h-5 w-5" />
+                {leadSubmission.isPending || leadSubmission.isSuccess ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Envoi...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-5 w-5" />
+                    Valider ma demande
+                  </>
+                )}
               </button>
             </div>
           </div>

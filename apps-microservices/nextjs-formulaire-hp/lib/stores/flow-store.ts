@@ -45,8 +45,9 @@ if (typeof window !== 'undefined') {
       reason = 'reload';
     } else if (navType === 'back_forward') {
       // Bouton retour/avancer du navigateur
-      shouldClear = true;
-      needsRedirect = true;
+      // Permettre la navigation naturelle dans le flow (pas de reset ni redirection)
+      shouldClear = false;
+      needsRedirect = false;
       reason = 'back-forward';
     } else if (navType === 'navigate' && wasSessionActive) {
       // Changement manuel d'URL (la session existait déjà)
@@ -141,6 +142,14 @@ export interface CategoryStats {
   suppliersCount: number;
 }
 
+// Données de géolocalisation (country, postalCode, city)
+export interface GeoData {
+  countryId: number;
+  country: string;
+  postalCode: string;
+  city: string;
+}
+
 export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
@@ -164,6 +173,9 @@ export interface FlowState {
 
   // État du profil
   profileData: ProfileData | null;
+
+  // Données de géolocalisation
+  geoData: GeoData | null;
 
   contactData: ContactFormData | null;
 
@@ -205,7 +217,11 @@ export interface FlowState {
   // Paramètres de test pour le scoring du matching (passés via URL)
   matchingTestParams: MatchingTestParams | null;
 
+  // IDs des produits à soumettre (pour le devis unique vs sélection multiple)
+  supplierIdsToSubmit: string[] | null;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
+  setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
   setCharacteristicsMap: (characteristics: CharacteristicsMap) => void;
   setOrphanedSelectedSuppliers: (suppliers: Supplier[]) => void;
@@ -245,6 +261,7 @@ export interface FlowState {
 
   resetDynamicAnswers: () => void;
   setProfileData: (data: ProfileData) => void;
+  setGeoData: (data: GeoData) => void;
   setContactData: (data: ContactFormData) => void;
   setSelectedSupplierIds: (ids: string[]) => void;
   toggleSupplier: (supplierId: string) => void;
@@ -264,6 +281,7 @@ const initialState = {
   dynamicAnswers: {},
   dynamicEquivalences: {},
   profileData: null,
+  geoData: null,
   contactData: null,
   selectedSupplierIds: [],
   startTime: null,
@@ -279,6 +297,7 @@ const initialState = {
   userQuestionAnswers: [],
   matchingTestParams: null,
   ddc: "",
+  supplierIdsToSubmit: null,
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -348,6 +367,8 @@ export const useFlowStore = create<FlowState>()(
 
       setProfileData: (data) => set({ profileData: data }),
 
+      setGeoData: (data) => set({ geoData: data }),
+
       setContactData: (data) => set({ contactData: data }),
 
       setFilesStore: (files) => set({ files }),
@@ -356,6 +377,8 @@ export const useFlowStore = create<FlowState>()(
       })),
 
       setSelectedSupplierIds: (ids) => set({ selectedSupplierIds: ids }),
+
+      setSupplierIdsToSubmit: (ids) => set({ supplierIdsToSubmit: ids }),
 
       toggleSupplier: (supplierId) =>
         set((state) => {
