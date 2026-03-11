@@ -15,6 +15,7 @@ from app.schemas.prix_extraction import (
     ItemResult,
     PrixExtractionResult
 )
+from app.schemas.produit_prix_payload import ProduitPrixPayload
 from app.core.credentials import settings
 
 
@@ -35,6 +36,8 @@ class PrixExtractor:
     
     # Nombre max de traitements parallèles pour les chunks
     MAX_PARALLEL_CHUNKS = 5
+
+    ETAPE = "11"
     
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
@@ -147,100 +150,155 @@ class PrixExtractor:
         else:
             raise ValueError(f"Provider LLM inconnu: {provider}. Utilisez 'gemini' ou 'deepseek'.")
 
+    def _validate_and_build_payload(
+        self,
+        prix_data: dict,
+        chunk_id: str,
+        id_categorie: str,
+        category_name: str,
+        chunk_metadata: dict
+    ):
+        """
+        Valide les données extraites par le LLM et construit un ProduitPrixPayload.
+
+        Args:
+            prix_data     : Données JSON extraites par le LLM depuis le chunk siteweb
+            chunk_id      : ID du chunk Milvus source (stocké en tant que source_chunk_id)
+            id_categorie  : ID de la catégorie
+            category_name : Nom de la catégorie
+            chunk_metadata: Métadonnées du chunk (peut contenir domaine, fournisseur, etc.)
+
+        Returns:
+            ProduitPrixPayload validé, ou None si les données sont insuffisantes.
+        """
+        if not prix_data or not isinstance(prix_data, dict):
+            self._log(f"⚠️ Pas de données prix pour chunk {chunk_id}")
+            return None
+        try:
+            payload = ProduitPrixPayload(
+                source="siteweb",
+                source_chunk_id=chunk_id,
+                id_categorie=id_categorie,
+                nom_categorie=category_name,
+                # Champs obligatoires attendus dans la réponse LLM
+                nom_produit=str(prix_data.get("nom_produit", "")).strip(),
+                description_produit=str(prix_data.get("description_produit", "")).strip(),
+                valeur_prix=str(prix_data.get("valeur_prix", "")).strip(),
+                # Champs optionnels extraits par le LLM
+                date_prix=prix_data.get("date_prix") or None,
+                id_lead=prix_data.get("id_lead") or None,
+                id_produit=str(prix_data.get("id_produit", "")) or None,
+                domaine=prix_data.get("domaine") or chunk_metadata.get("domaine") or None,
+                id_societe_ia=str(prix_data.get("id_societe_ia", "")) or None,
+                valeur_reponse_q1=prix_data.get("valeur_reponse_q1") or None,
+                prix_original=str(prix_data.get("prix_original", "")).strip() or None,
+                structure_prix=prix_data.get("structure_prix") or None,
+                unite=prix_data.get("unite") or None,
+                devise=prix_data.get("devise") or None,
+                taxe=prix_data.get("taxe") or None,
+                type_transaction=prix_data.get("type_transaction") or None,
+                perimetre=prix_data.get("perimetre") or None,
+                id_fournisseur=str(prix_data.get("id_fournisseur", "")) or None,
+                fournisseur=prix_data.get("fournisseur") or chunk_metadata.get("fournisseur") or None,
+            )
+            return payload
+        except Exception as e:
+            self._log(f"⚠️ Validation échouée pour chunk {chunk_id}: {e}")
+            return None
+
     async def _process_single_chunk(
-        self, 
-        chunk: Dict[str, Any], 
+        self,
+        chunk: Dict[str, Any],
         chunk_index: int,
         total_chunks: int,
         id_categorie: str,
         category_name: str = ""
     ) -> ItemResult:
         """
-        Traite un seul chunk Milvus: LLM call + stockage.
-        
+        Traite un seul chunk Milvus siteweb: LLM call + validation payload.
+
+        En cas d'erreur (LLM, JSON, validation), une exception est levée
+        afin d'interrompre immédiatement le traitement de la catégorie.
+
         Args:
-            chunk: Les données du chunk Milvus
-            chunk_index: Index du chunk (pour les logs)
-            total_chunks: Nombre total de chunks (pour les logs)
-            id_categorie: ID de la catégorie
+            chunk        : Les données du chunk Milvus
+            chunk_index  : Index du chunk (pour les logs)
+            total_chunks : Nombre total de chunks
+            id_categorie : ID de la catégorie
             category_name: Nom de la catégorie
-            
+
         Returns:
-            ItemResult avec le résultat du traitement
+            ItemResult avec status="success" et prix_data validé.
+
+        Raises:
+            Exception si le LLM échoue, si le JSON est illisible ou si la
+            validation du payload échoue.
         """
         async with self._semaphore:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
             chunk_content = chunk.get("content", chunk.get("text", chunk.get("document", "")))
             chunk_metadata = chunk.get("metadata", {})
-            
-            self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
-            
-            try:
-                # 1. Construire le prompt avec le contenu du chunk
-                prompt_text = self._build_prompt(chunk_content, category_name)
-                
-                # 2. Appeler le LLM
-                result = await self._call_llm(prompt_text, id_categorie)
-                
-                # Vérifier si c'est une erreur (format Gemini avec "code")
-                if "code" in result:
-                    self._log(f"[{chunk_index + 1}/{total_chunks}] ❌ Erreur LLM chunk {chunk_id}: {result.get('error')}")
-                    return ItemResult(
-                        item_id=chunk_id,
-                        source=settings.MILVUS_SOURCE,
-                        content=chunk_content,
-                        status="error",
-                        error_message=str(result.get("error", "Erreur LLM inconnue"))
-                    )
-                
-                # 3. Extraire la réponse
-                response_text = result.get("message", "")
-                self._log(f"[{chunk_index + 1}/{total_chunks}] Réponse LLM reçue ({len(response_text)} chars)")
-                
-                # Tenter d'extraire le JSON de la réponse
-                prix_data = utils.extract_json_from_text(response_text)
-                
-                # 4. Stocker le résultat via l'API HelloPro (chunk ID + résultat du prompt)
-                save_data = {
-                    "id_categorie": id_categorie,
-                    "chunk_id": chunk_id,
-                    "source": settings.MILVUS_SOURCE,
-                    "llm_response": response_text,
-                    "prix_data": prix_data,
-                    "chunk_metadata": chunk_metadata
-                }
-                
-                save_result = await self.api_client.post(
-                    "prix",
-                    "extraction_siteweb",
-                    "save",
-                    save_data
-                )
-                
-                if save_result:
-                    self._log(f"[{chunk_index + 1}/{total_chunks}] ✅ Résultat sauvegardé pour chunk {chunk_id}")
-                else:
-                    self._log(f"[{chunk_index + 1}/{total_chunks}] ⚠️ Échec sauvegarde chunk {chunk_id}")
-                
 
-                
-                return ItemResult(
-                    item_id=chunk_id,
-                    source=settings.MILVUS_SOURCE,
-                    content=chunk_content,
-                    prix_data=prix_data,
-                    status="success"
+            self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
+
+            # 1. Construire le prompt avec le contenu du chunk
+            prompt_text = self._build_prompt(chunk_content, category_name)
+
+            # 2. Appeler le LLM
+            result = await self._call_llm(prompt_text, id_categorie)
+
+            # Vérifier si c'est une erreur (format Gemini avec "code")
+            if "code" in result:
+                error_msg = str(result.get("error", "Erreur LLM inconnue"))
+                self._log(f"[{chunk_index + 1}/{total_chunks}] ❌ Erreur LLM chunk {chunk_id}: {error_msg}")
+                raise Exception(f"Erreur LLM pour chunk {chunk_id}: {error_msg}")
+
+            # 3. Extraire la réponse
+            response_text = result.get("message", "")
+            self._log(f"[{chunk_index + 1}/{total_chunks}] Réponse LLM reçue ({len(response_text)} chars)")
+
+            # Tenter d'extraire le JSON de la réponse
+            prix_data_raw = utils.extract_json_from_text(response_text)
+            if not prix_data_raw:
+                self._log("ERREUR: Impossible d'extraire le JSON")
+                await self.api_client.post(
+                    "prix",
+                    "mail",
+                    "error",
+                    {
+                        "id_categorie" : id_categorie,
+                        "error_message": "Erreur extraction JSON",
+                        "etape"        : self.ETAPE,
+                        "error_detail" : {"response_text": response_text},
+                        "tracking_file": self.tracking_file
+                    }
                 )
-                
-            except Exception as e:
-                self._log(f"[{chunk_index + 1}/{total_chunks}] ❌ Exception chunk {chunk_id}: {e}")
-                return ItemResult(
-                    item_id=chunk_id,
-                    source=settings.MILVUS_SOURCE,
-                    content=chunk_content if chunk_content else "",
-                    status="error",
-                    error_message=str(e)
+                raise Exception(f"Impossible d'extraire le JSON de la réponse LLM pour chunk {chunk_id}")
+
+            # 3b. Valider et construire le payload structuré
+            payload = self._validate_and_build_payload(
+                prix_data=prix_data_raw,
+                chunk_id=chunk_id,
+                id_categorie=id_categorie,
+                category_name=category_name,
+                chunk_metadata=chunk_metadata
+            )
+            if payload is None:
+                raise ValueError(
+                    f"Validation du payload échouée (champs obligatoires manquants) : "
+                    f"Catégorie {id_categorie} - Chunk {chunk_id} - Data : {prix_data_raw}"
                 )
+
+            prix_data = payload.dict()
+
+            self._log(f"[{chunk_index + 1}/{total_chunks}] ✅ Chunk {chunk_id} validé")
+            return ItemResult(
+                item_id=chunk_id,
+                source=settings.MILVUS_SOURCE,
+                content=chunk_content,
+                prix_data=prix_data,
+                status="success"
+            )
 
     async def extract_prix_for_category(
         self,
@@ -345,26 +403,54 @@ class PrixExtractor:
             for i, chunk in enumerate(chunks)
         ]
         
-        results: List[ChunkResult] = await asyncio.gather(*tasks, return_exceptions=True)
-        
+        results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+
         elapsed = time.time() - start_time
-        
-        # Collecter et compter les résultats
+
+        # Collecter et compter les résultats — toute exception lève immédiatement
         success_count = 0
         error_count = 0
         item_results: List[ItemResult] = []
         for r in results:
             if isinstance(r, Exception):
-                error_count += 1
-                self._log(f"❌ Exception non gérée: {r}")
+                # Propager l'exception : arrêt immédiat du traitement de la catégorie
+                self._log(f"❌ Exception critique: {r}")
+                raise r
             elif isinstance(r, ItemResult):
                 item_results.append(r)
                 if r.status == "success":
                     success_count += 1
                 else:
                     error_count += 1
+                    self._log(f"❌ Chunk en erreur: {r.item_id} — {r.error_message}")
+                    raise Exception(f"Chunk {r.item_id} en erreur: {r.error_message}")
             else:
-                error_count += 1
+                raise Exception(f"Résultat inattendu: {type(r)} — {r}")
+
+        # Sauvegarde batch des IDs traités avec succès
+        # type_extraction = 4 pour le siteweb
+        successful_ids = [r.item_id for r in item_results if r.status == "success"]
+
+        if successful_ids:
+            self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) siteweb ---")
+            save_result = await self.api_client.post(
+                "prix",
+                "process",
+                "save",
+                {
+                    "id_categorie":    id_categorie,
+                    "type_extraction": "4",           # 4 = siteweb
+                    "id_cibles":       successful_ids  # liste d'IDs (batch)
+                }
+            )
+            if save_result and not save_result.get("erreur"):
+                nb = save_result.get("nb_insere", len(successful_ids))
+                self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s) dans extraction_prix_ia")
+            else:
+                self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                raise Exception(f"Batch save: réponse inattendue: {save_result}")
+        else:
+            self._log("ℹ️ Aucun ID siteweb à sauvegarder (aucun succès)")
         
         self._log("\n" + "=" * 60)
         self._log("EXTRACTION TERMINÉE")
@@ -373,6 +459,17 @@ class PrixExtractor:
         self._log(f"Erreurs: {error_count}")
         self._log(f"Durée: {elapsed:.1f}s")
         self._log("=" * 60)
+
+        await self.api_client.post(
+            "prix",
+            "mail",
+            "success",
+            {
+                "id_categorie": id_categorie,
+                "etape": self.ETAPE,
+                "tracking_file": self.tracking_file
+            }
+        )
         
         return PrixExtractionResult(
             id_categorie=id_categorie,

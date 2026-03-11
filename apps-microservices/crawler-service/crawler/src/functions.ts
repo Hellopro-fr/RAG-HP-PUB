@@ -937,7 +937,8 @@ export const generateUpdateReport = async (domain: string) => {
                 max_growth_rate: cb.maxGrowthRate,
                 max_abs_errors: cb.maxAbsErrors,
                 max_abs_redirects: cb.maxAbsRedirects
-            }
+            },
+            jsonl_files: context.jsonlWriter ? context.jsonlWriter.getAllCounts() : {},
         };
 
         const reportPath = path.join(process.cwd(), "_update_report.json");

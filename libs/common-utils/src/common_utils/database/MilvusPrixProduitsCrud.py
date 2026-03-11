@@ -22,7 +22,7 @@ from pymilvus import (
 @dataclass
 class PrixModelConfig:
     model_id: str = settings.MODEL
-    collection_name: str = "prix_produits"
+    collection_name: str = "prix"
     dimension: int = 1024
 
 
@@ -65,41 +65,64 @@ class MilvusPrixProduitsCrud:
         if not utility.has_collection(collection_name):
             self.logger.info(f"Collection '{collection_name}' non trouvée. Création...")
 
-            # Définition du schéma pour la collection prix_produits
+            # Définition du schéma pour la collection prix
             fields = [
-                # --- Champs identifiants ---
+                # --- Champ clé primaire ---
                 FieldSchema(
                     name="id", dtype=DataType.INT64, is_primary=True, auto_id=True
                 ),
-                FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=255),
-                FieldSchema(name="fiabilite", dtype=DataType.VARCHAR, max_length=255),
-                FieldSchema(name="id_lead", dtype=DataType.INT64),
-                FieldSchema(name="id_produit", dtype=DataType.INT64),
-                FieldSchema(name="id_chunk", dtype=DataType.VARCHAR, max_length=255),
+                # --- Champs obligatoires ---
                 FieldSchema(
-                    name="url_source", dtype=DataType.VARCHAR, max_length=65535
+                    name="description_produit", dtype=DataType.VARCHAR, max_length=65535
+                ),
+                FieldSchema(
+                    name="nom_produit", dtype=DataType.VARCHAR, max_length=65535
+                ),
+                FieldSchema(name="valeur_prix", dtype=DataType.VARCHAR, max_length=255),
+                # --- Champs optionnels ---
+                FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(
+                    name="id_categorie", dtype=DataType.VARCHAR, max_length=255
+                ),
+                FieldSchema(
+                    name="nom_categorie", dtype=DataType.VARCHAR, max_length=65535
+                ),
+                FieldSchema(name="date_prix", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="id_lead", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="id_produit", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="domaine", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(
+                    name="id_societe_ia", dtype=DataType.VARCHAR, max_length=255
+                ),
+                FieldSchema(
+                    name="valeur_reponse_q1", dtype=DataType.VARCHAR, max_length=65535
+                ),
+                FieldSchema(
+                    name="prix_original", dtype=DataType.VARCHAR, max_length=65535
+                ),
+                FieldSchema(
+                    name="structure_prix", dtype=DataType.VARCHAR, max_length=255
+                ),
+                FieldSchema(name="unite", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="devise", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="taxe", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(
+                    name="type_transaction", dtype=DataType.VARCHAR, max_length=255
+                ),
+                FieldSchema(name="perimetre", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(
+                    name="id_fournisseur", dtype=DataType.VARCHAR, max_length=255
                 ),
                 FieldSchema(
                     name="fournisseur", dtype=DataType.VARCHAR, max_length=65535
                 ),
                 FieldSchema(
-                    name="id_fournisseur", dtype=DataType.VARCHAR, max_length=255
+                    name="source_chunk_id", dtype=DataType.VARCHAR, max_length=255
                 ),
-                FieldSchema(name="id_categorie", dtype=DataType.INT64),
-                FieldSchema(
-                    name="nom_categorie", dtype=DataType.VARCHAR, max_length=65535
-                ),
-                FieldSchema(
-                    name="titre_produit", dtype=DataType.VARCHAR, max_length=65535
-                ),
-                FieldSchema(
-                    name="descriptif_produit", dtype=DataType.VARCHAR, max_length=65535
-                ),
-                FieldSchema(
-                    name="caracteristique_produit",
-                    dtype=DataType.VARCHAR,
-                    max_length=65535,
-                ),
+                # --- Champs chunking ---
+                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=255),
+                FieldSchema(name="chunk_number", dtype=DataType.INT64),
+                FieldSchema(name="total_chunks", dtype=DataType.INT64),
                 # --- Champ texte pour embedding et BM25 ---
                 FieldSchema(
                     name="text",
@@ -116,38 +139,6 @@ class MilvusPrixProduitsCrud:
                 FieldSchema(
                     name="sparse_embedding", dtype=DataType.SPARSE_FLOAT_VECTOR
                 ),
-                # --- Champs prix / transaction ---
-                FieldSchema(
-                    name="valeur_reponse_q1", dtype=DataType.VARCHAR, max_length=65535
-                ),
-                FieldSchema(
-                    name="structure_prix", dtype=DataType.VARCHAR, max_length=255
-                ),
-                FieldSchema(name="valeur_min", dtype=DataType.DOUBLE),
-                FieldSchema(name="valeur_max", dtype=DataType.DOUBLE),
-                FieldSchema(name="devise", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="taxe", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(name="taux_tva", dtype=DataType.DOUBLE),
-                FieldSchema(name="unite", dtype=DataType.VARCHAR, max_length=255),
-                FieldSchema(name="quantite_lot", dtype=DataType.DOUBLE),
-                FieldSchema(name="duree_mois", dtype=DataType.DOUBLE),
-                FieldSchema(
-                    name="type_transaction", dtype=DataType.VARCHAR, max_length=255
-                ),
-                FieldSchema(name="perimetre", dtype=DataType.VARCHAR, max_length=255),
-                FieldSchema(
-                    name="contexte_prix", dtype=DataType.VARCHAR, max_length=255
-                ),
-                FieldSchema(name="prix_avant_remise", dtype=DataType.DOUBLE),
-                FieldSchema(name="taux_remise", dtype=DataType.DOUBLE),
-                FieldSchema(
-                    name="condition_prix", dtype=DataType.VARCHAR, max_length=65535
-                ),
-                FieldSchema(name="date_prix", dtype=DataType.VARCHAR, max_length=64),
-                FieldSchema(
-                    name="date_validite", dtype=DataType.VARCHAR, max_length=64
-                ),
-                FieldSchema(name="anciennete_jours", dtype=DataType.DOUBLE),
                 # --- Champs système ---
                 FieldSchema(name="date_ajout", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_maj", dtype=DataType.VARCHAR, max_length=64),
@@ -173,14 +164,16 @@ class MilvusPrixProduitsCrud:
             self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
             # Index HNSW pour le champ embedding (dense vector)
-            index_params = {
-                "metric_type": "COSINE",
-                "index_type": "HNSW",
-                "params": {
-                    "M": settings.M_PARAMS,
-                    "efConstruction": settings.EF_PARAMS,
-                },
-            }
+            # index_params = {
+            #     "metric_type": "COSINE",
+            #     "index_type": "HNSW",
+            #     "params": {
+            #         "M": settings.M_PARAMS,
+            #         "efConstruction": settings.EF_PARAMS,
+            #     },
+            # }
+            # collection.create_index(field_name="embedding", index_params=index_params)
+            index_params = {"metric_type": "COSINE", "index_type": "FLAT", "params": {}}
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # Index pour le champ sparse_embedding (BM25)
@@ -193,10 +186,10 @@ class MilvusPrixProduitsCrud:
             )
 
             # Index scalaires pour les filtres fréquents
+            collection.create_index(field_name="source", index_name="idx_source")
             collection.create_index(
                 field_name="id_produit", index_name="idx_id_produit"
             )
-            collection.create_index(field_name="source", index_name="idx_source")
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
@@ -229,10 +222,26 @@ class MilvusPrixProduitsCrud:
                 f"[{model_key}][PrixProduits] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'..."
             )
 
+            # Champs autorisés dans le schéma de la collection (hors auto_id et vecteurs)
+            # allowed_fields = {
+            #     "description_produit", "nom_produit", "valeur_prix",
+            #     "source", "id_categorie", "nom_categorie", "date_prix",
+            #     "id_lead", "id_produit", "domaine", "id_societe_ia",
+            #     "valeur_reponse_q1", "prix_original", "structure_prix",
+            #     "unite", "devise", "taxe", "type_transaction", "perimetre",
+            #     "id_fournisseur", "fournisseur",
+            #     "chunk_id", "chunk_number", "total_chunks",
+            #     "text", "embedding",
+            #     "date_ajout", "date_maj",
+            # }
+
             sanitized_batch = []
             for data in datas:
                 data["date_ajout"] = datetime.now().isoformat()
                 data["date_maj"] = None
+
+                # Filtrer les champs non présents dans le schéma
+                # data = {k: v for k, v in data.items()}
 
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
@@ -288,19 +297,28 @@ class MilvusPrixProduitsCrud:
                 expr=f"id_produit in {list_id_produit}",
                 output_fields=[
                     "id",
+                    "description_produit",
+                    "nom_produit",
+                    "valeur_prix",
                     "source",
-                    "fiabilite",
-                    "id_produit",
                     "id_categorie",
-                    "titre_produit",
-                    "text",
+                    "nom_categorie",
+                    "date_prix",
+                    "id_lead",
+                    "id_produit",
+                    "domaine",
+                    "id_societe_ia",
+                    "valeur_reponse_q1",
+                    "prix_original",
                     "structure_prix",
-                    "valeur_min",
-                    "valeur_max",
+                    "unite",
                     "devise",
                     "taxe",
-                    "unite",
                     "type_transaction",
+                    "perimetre",
+                    "id_fournisseur",
+                    "fournisseur",
+                    "text",
                 ],
             )
             self.logger.info(f"[{model_key}] ✓ Récupération terminée avec succès.")

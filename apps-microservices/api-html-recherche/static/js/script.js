@@ -33,6 +33,7 @@ $(function () {
       mcf: false,
       siteweb: false,
       pj: false,
+      prix: false,
     },
     selectedCategories: [],
     selectedIdsProduits: [],
@@ -825,6 +826,12 @@ $(function () {
                 <i data-lucide="database" class="h-3 w-3"></i>
                 <span>MCF & HelloPro</span>
             </span>`;
+      case "prix":
+        return `
+            <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
+                <i data-lucide="tag" class="h-3 w-3"></i>
+                <span>Prix</span>
+            </span>`;
       default:
         return `
             <span class="flex items-center gap-1.5 px-2 py-1 bg-custom-clair-3 text-custom-gris text-xs rounded-full">
@@ -967,7 +974,7 @@ $(function () {
 
 
     // Mise à jour pour correspondre aux noms de sources de `index3.html`
-    ["produits", "devis", "siteweb", "echanges","pj"].forEach((source) => {
+    ["produits", "devis", "siteweb", "echanges","pj","prix"].forEach((source) => {
       $(`#${source}`).on("change", function () {
         state.selectedSources[source] = $(this).is(":checked");
         updateSubfilters(source);
@@ -1403,6 +1410,10 @@ $(function () {
         title = meta.id_demande || title;
         result.source = "PJ"
         break;
+      case "prix":
+        title = meta.nom_produit || title;
+        result.source = "Prix"
+        break;
       default:
         break;
     }
@@ -1543,7 +1554,7 @@ $(function () {
           switch (sourceName) {
             case 'produits':
               // sourceName = 'produits_3';
-              sourceName = GetURLParameter("source") || 'produits_4';
+              sourceName = GetURLParameter("source") || 'produits_3';
               const produitsSource = $('#produitsSource').val();
               if (produitsSource.length > 0) {
                 // La clé 'provenance' est une supposition logique, à confirmer avec le backend
@@ -1626,6 +1637,13 @@ $(function () {
                 filtreSpecifique.id_fournisseur = fournisseurMcf;
               }
               break;
+            case 'prix':
+              const prixSource = $('#prixSource').val();
+              if (prixSource && prixSource.length > 0) {
+                filtreSpecifique.source = prixSource;
+              }
+              sourceName = 'prix';
+              break;
           }
           return {
             source: sourceName,
@@ -1636,7 +1654,7 @@ $(function () {
       // Si aucune source n'est sélectionnée, utiliser la valeur par défaut du schéma
       if (sourcesAvecFiltres.length === 0) {
         // sourcesAvecFiltres = [{ source: "produits_3", filtre: {} }];
-        sourcesAvecFiltres = [{ source: GetURLParameter("source") || "produits_4", filtre: {} }];
+        sourcesAvecFiltres = [{ source: GetURLParameter("source") || "produits_3", filtre: {} }];
         state.hybrid = true;
       }
 

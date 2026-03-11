@@ -660,6 +660,28 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Prix -->
+                <div class="space-y-2 pl-2">
+                  <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-custom-clair-3 transition-colors">
+                    <input type="checkbox" id="prix" class="checkbox-custom" />
+                    <label for="prix" class="text-sm font-medium cursor-pointer flex-1 text-custom-noir">Prix</label>
+                  </div>
+                  <div id="prixSubfilters" class="pl-6 space-y-2 hidden">
+                    <div class="space-y-1">
+                      <label class="text-xs text-custom-gris">Source</label>
+                      <select id="prixSource"
+                        class="init-select2-filtre w-full h-9 px-3 border border-custom-gris-blanc rounded-md text-sm"
+                        multiple="">
+                        <option disabled>Rechercher...</option>
+                        <option value="produit">Produit</option>
+                        <option value="messages">Messages</option>
+                        <option value="site_web">Site web</option>
+                        <option value="devis">Devis</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

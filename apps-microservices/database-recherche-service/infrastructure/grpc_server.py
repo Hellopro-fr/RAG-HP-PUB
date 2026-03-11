@@ -1,5 +1,7 @@
 import grpc
 import logging
+import os
+import asyncio
 from concurrent import futures
 from google.protobuf import struct_pb2
 from google.protobuf.json_format import MessageToDict
@@ -10,14 +12,78 @@ from grpc_stubs import database_pb2_grpc
 
 from application.search_use_case import SearchUseCase
 
+TOTAL_MAX_CONCURRENT_REQUESTS = int(os.getenv("TOTAL_MAX_CONCURRENT_REQUESTS", "50"))
+HIGH_PRIORITY_RATIO = float(os.getenv("HIGH_PRIORITY_RATIO", "0.2"))
+MEDIUM_PRIORITY_RATIO = float(os.getenv("MEDIUM_PRIORITY_RATIO", "0.3"))
+
+high_priority_services_str = os.getenv("HIGH_PRIORITY_SERVICES", "api-recherche-service, api-chat-llm-service")
+HIGH_PRIORITY_SERVICES = {s.strip() for s in high_priority_services_str.split(',') if s.strip()}
+
+medium_priority_services_str = os.getenv("MEDIUM_PRIORITY_SERVICES", "api-classification-service")
+MEDIUM_PRIORITY_SERVICES = {s.strip() for s in medium_priority_services_str.split(',') if s.strip()}
+
 
 class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer):
     def __init__(self, use_case: SearchUseCase):
         self.use_case = use_case
+        
+        high_prio_slots = int(TOTAL_MAX_CONCURRENT_REQUESTS * HIGH_PRIORITY_RATIO)
+        medium_prio_slots = int(TOTAL_MAX_CONCURRENT_REQUESTS * MEDIUM_PRIORITY_RATIO)
+        
+        if high_prio_slots == 0 and TOTAL_MAX_CONCURRENT_REQUESTS > 0 and HIGH_PRIORITY_SERVICES:
+            high_prio_slots = 1
+        if medium_prio_slots == 0 and TOTAL_MAX_CONCURRENT_REQUESTS > high_prio_slots and MEDIUM_PRIORITY_SERVICES:
+            medium_prio_slots = 1
+            
+        low_prio_slots = TOTAL_MAX_CONCURRENT_REQUESTS - high_prio_slots - medium_prio_slots
+        if low_prio_slots < 0:
+            low_prio_slots = 0
+            
+        if TOTAL_MAX_CONCURRENT_REQUESTS == 0:
+            high_prio_slots = 0
+            medium_prio_slots = 0
+            low_prio_slots = 0
+            
+        self.high_prio_semaphore = asyncio.Semaphore(high_prio_slots) if high_prio_slots > 0 else None
+        self.medium_prio_semaphore = asyncio.Semaphore(medium_prio_slots) if medium_prio_slots > 0 else None
+        self.low_prio_semaphore = asyncio.Semaphore(low_prio_slots) if low_prio_slots > 0 else None
+
+        logging.info(f"Database Concurrency Config: Total={TOTAL_MAX_CONCURRENT_REQUESTS}")
+        logging.info(f"High Priority Slots: {high_prio_slots} | Medium Priority Slots: {medium_prio_slots} | Low Priority Slots: {low_prio_slots}")
+
+    async def _execute_with_priority(self, source_service: str, func, *args, **kwargs):
+        """
+        Wraps the synchronous database call into an async background thread 
+        and guards it with the appropriate priority semaphore.
+        """
+        is_high_priority = source_service in HIGH_PRIORITY_SERVICES
+        is_medium_priority = source_service in MEDIUM_PRIORITY_SERVICES
+
+        if is_high_priority and self.high_prio_semaphore:
+            semaphore = self.high_prio_semaphore
+            priority_label = "HAUTE"
+        elif is_medium_priority and self.medium_prio_semaphore:
+            semaphore = self.medium_prio_semaphore
+            priority_label = "MOYENNE"
+        elif self.low_prio_semaphore:
+            semaphore = self.low_prio_semaphore
+            priority_label = "BASSE"
+        else:
+            semaphore = None
+            priority_label = "ILLIMITEE (Aucun sémaphore)"
+
+        logging.info(f"Requête DB reçue de '{source_service}'. Priorité: {priority_label}.")
+
+        if semaphore:
+            async with semaphore:
+                return await asyncio.to_thread(func, *args, **kwargs)
+        else:
+            return await asyncio.to_thread(func, *args, **kwargs)
 
     async def Search(self, request, context):
+        source_service = request.source_service if request.HasField("source_service") else "unknown-service"
         logging.info(
-            f"Requête de recherche reçue pour la collection '{request.collection_name}' avec top_k={request.top_k}"
+            f"Requête de recherche reçue de '{source_service}' pour la collection '{request.collection_name}' avec top_k={request.top_k}"
         )
         # TODO: Sécuriser ce flux (authentification, validation des entrées)
         try:
@@ -25,7 +91,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             if request.HasField("options"):
                 kwargs = MessageToDict(request.options)
 
-            results = self.use_case.execute_search(
+            results = await self._execute_with_priority(
+                source_service,
+                self.use_case.execute_search,
                 collection_name=request.collection_name,
                 vector=list(request.query_embedding),
                 top_k=request.top_k,
@@ -40,7 +108,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 **kwargs,
             )
 
-            proto_results = []
+            proto_results =[]
             for res in results:
                 # Conversion du dictionnaire de métadonnées en Struct protobuf
                 metadata_struct = struct_pb2.Struct()
@@ -84,11 +152,16 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         """
         Implémentation de la méthode RPC GetSchema.
         """
+        source_service = request.source_service if request.HasField("source_service") else "unknown-service"
         logging.info(
-            f"Requête GetSchema reçue pour la collection '{request.collection_name}'"
+            f"Requête GetSchema reçue de '{source_service}' pour la collection '{request.collection_name}'"
         )
         try:
-            schema_map = self.use_case.get_collection_schema(request.collection_name)
+            schema_map = await self._execute_with_priority(
+                source_service,
+                self.use_case.get_collection_schema,
+                request.collection_name
+            )
             return database_pb2.GetSchemaResponse(fields=schema_map)
         except Exception as e:
             logging.error(f"Erreur dans GetSchema: {e}", exc_info=True)
@@ -97,11 +170,14 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             return database_pb2.GetSchemaResponse()
 
     async def ClassicSearch(self, request, context):
+        source_service = request.source_service if request.HasField("source_service") else "unknown-service"
         logging.info(
-            f"Requête de recherche classique reçue pour '{request.collection_name}' avec le filtre '{request.filter_expression}'"
+            f"Requête de recherche classique reçue de '{source_service}' pour '{request.collection_name}' avec le filtre '{request.filter_expression}'"
         )
         try:
-            results = self.use_case.execute_classic_search(
+            results = await self._execute_with_priority(
+                source_service,
+                self.use_case.execute_classic_search,
                 collection_name=request.collection_name,
                 filter_expression=request.filter_expression,
                 top_k=request.top_k,
@@ -110,7 +186,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 ),
             )
 
-            proto_results = []
+            proto_results =[]
             for res in results:
                 metadata_struct = struct_pb2.Struct()
                 if res.metadata:
@@ -144,8 +220,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             return database_pb2.SearchResponse()
 
     async def HybridSearch(self, request, context):
+        source_service = request.source_service if request.HasField("source_service") else "unknown-service"
         logging.info(
-            f"Requête de recherche hybride reçue pour la collection '{request.collection_name}' avec top_k={request.top_k}"
+            f"Requête de recherche hybride reçue de '{source_service}' pour la collection '{request.collection_name}' avec top_k={request.top_k}"
         )
         try:
             kwargs = {}
@@ -190,7 +267,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 f"ranker_type={ranker_type}, rrf_k={rrf_k}"
             )
 
-            results = self.use_case.execute_hybrid_search(
+            results = await self._execute_with_priority(
+                source_service,
+                self.use_case.execute_hybrid_search,
                 collection_name=request.collection_name,
                 dense_vector=list(request.dense_vector),
                 query_text=request.query_text,
@@ -215,7 +294,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 **kwargs,
             )
 
-            proto_results = []
+            proto_results =[]
             for res in results:
                 metadata_struct = struct_pb2.Struct()
                 if res.metadata:

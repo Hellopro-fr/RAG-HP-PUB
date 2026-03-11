@@ -30,6 +30,8 @@ class PrixExtractor:
     directement au service prix-normalisation.
     """
 
+    ETAPE = "10"
+
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
@@ -97,11 +99,13 @@ class PrixExtractor:
         """
         try:
             payload = ProduitPrixPayload(
+                source="produit",
                 date_prix=produit.get("date_prix") or None,
                 id_categorie=id_categorie,
                 nom_categorie=category_name,
                 id_lead=None,                                       # non disponible pour les produits
                 id_produit=str(produit.get("id_produit", "")),
+                source_chunk_id=None,
                 domaine=produit.get("domaine") or None,
                 id_societe_ia=str(produit.get("id_societe_ia", "")) or None,
                 valeur_reponse_q1=None,                             # non applicable ici
@@ -109,6 +113,7 @@ class PrixExtractor:
                 nom_produit=str(produit.get("nom_produit", "")).strip(),
                 structure_prix=produit.get("structure_prix") or None,
                 valeur_prix=str(produit.get("valeur_prix", "")).strip(),
+                prix_original=str(produit.get("prix_original", "")).strip(),
                 unite=None,                                         # non disponible dans get_produit_prix
                 devise=produit.get("devise") or None,
                 taxe=produit.get("taxe") or None,
@@ -267,6 +272,17 @@ class PrixExtractor:
         self._log(f"Erreurs: {error_count}")
         self._log(f"Durée: {elapsed:.1f}s")
         self._log("=" * 60)
+
+        await self.api_client.post(
+            "prix",
+            "mail",
+            "success",
+            {
+                "id_categorie": id_categorie,
+                "etape": self.ETAPE,
+                "tracking_file": self.tracking_file
+            }
+        )
 
         return PrixExtractionResult(
             id_categorie=id_categorie,
