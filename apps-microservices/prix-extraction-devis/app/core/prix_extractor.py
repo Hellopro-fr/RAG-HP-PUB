@@ -14,6 +14,7 @@ from app.schemas.prix_extraction import (
     ItemResult,
     PrixExtractionResult
 )
+from app.schemas.produit_prix_payload import ProduitPrixPayload
 from app.core.credentials import settings
 
 
@@ -34,6 +35,8 @@ class PrixExtractor:
 
     # Nombre max de traitements parallèles pour les items
     MAX_PARALLEL_ITEMS = 5
+
+    ETAPE = "8"
 
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
@@ -145,6 +148,63 @@ class PrixExtractor:
         else:
             raise ValueError(f"Provider LLM inconnu: {provider}. Utilisez 'gemini' ou 'deepseek'.")
 
+    def _validate_and_build_payload(
+        self,
+        prix_data: dict,
+        item_id: str,
+        source_chunk_id: str,
+        id_categorie: str,
+        category_name: str,
+        item_metadata: dict
+    ):
+        """
+        Valide les données extraites par le LLM et construit un ProduitPrixPayload.
+
+        Args:
+            prix_data     : Données JSON extraites par le LLM depuis le devis
+            item_id       : ID du devis source (stocké en tant que id_lead)
+            id_categorie  : ID de la catégorie
+            category_name : Nom de la catégorie
+            item_metadata : Métadonnées de l'item devis
+
+        Returns:
+            ProduitPrixPayload validé, ou None si les données sont insuffisantes.
+        """
+        if not prix_data or not isinstance(prix_data, dict):
+            self._log(f"⚠️ Pas de données prix pour item {item_id}")
+            return None
+        try:
+            payload = ProduitPrixPayload(
+                source="devis",
+                id_lead=item_id,
+                id_categorie=id_categorie,
+                nom_categorie=category_name,
+                # Champs obligatoires attendus dans la réponse LLM
+                nom_produit=str(prix_data.get("nom_produit", "")).strip(),
+                description_produit=str(prix_data.get("description_produit", "")).strip(),
+                valeur_prix=str(prix_data.get("valeur_prix", "")).strip(),
+                # Champs optionnels extraits par le LLM
+                date_prix=prix_data.get("date_prix") or None,
+                id_produit=str(prix_data.get("id_produit", "")) or None,
+                source_chunk_id=source_chunk_id,
+                domaine=prix_data.get("domaine") or item_metadata.get("domaine") or None,
+                id_societe_ia=str(prix_data.get("id_societe_ia", "")) or None,
+                valeur_reponse_q1=prix_data.get("valeur_reponse_q1") or None,
+                prix_original=str(prix_data.get("prix_original", "")).strip() or None,
+                structure_prix=prix_data.get("structure_prix") or None,
+                unite=prix_data.get("unite") or None,
+                devise=prix_data.get("devise") or None,
+                taxe=prix_data.get("taxe") or None,
+                type_transaction=prix_data.get("type_transaction") or None,
+                perimetre=prix_data.get("perimetre") or None,
+                id_fournisseur=str(prix_data.get("id_fournisseur", "")) or None,
+                fournisseur=prix_data.get("fournisseur") or item_metadata.get("fournisseur") or None,
+            )
+            return payload
+        except Exception as e:
+            self._log(f"⚠️ Validation échouée pour item {item_id}: {e}")
+            return None
+
     async def _process_single_item(
         self,
         item: Dict[str, Any],
@@ -154,88 +214,92 @@ class PrixExtractor:
         category_name: str = ""
     ) -> ItemResult:
         """
-        Traite un seul item: LLM call + stockage.
+        Traite un seul item devis: LLM call + validation payload.
+
+        En cas d'erreur (LLM, JSON, validation), une exception est levée
+        afin d'interrompre immédiatement le traitement de la catégorie.
 
         Args:
-            item: L'objet à traiter (issu de l'étape d'extraction des données)
-            item_index: Index de l'item (pour les logs)
-            total_items: Nombre total d'items (pour les logs)
-            id_categorie: ID de la catégorie
+            item         : L'objet à traiter
+            item_index   : Index de l'item (pour les logs)
+            total_items  : Nombre total d'items
+            id_categorie : ID de la catégorie
             category_name: Nom de la catégorie
 
         Returns:
-            ItemResult avec le résultat du traitement
+            ItemResult avec status="success" et prix_data validé.
+
+        Raises:
+            Exception si le LLM échoue, si le JSON est illisible ou si la
+            validation du payload échoue — l'appel à asyncio.gather propagera
+            l'exception, stoppant le traitement de la catégorie.
         """
         async with self._semaphore:
             item_id = str(item.get("id", item.get("item_id", f"item_{item_index}")))
             item_content = str(item.get("content", item.get("text", item.get("data", ""))))
+            source_chunk_id = str(item.get("source_chunk_id", item.get("id", f"item_{item_index}")))
 
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
 
-            try:
-                # 1. Construire le prompt avec le contenu de l'item
-                prompt_text = self._build_prompt(item_content, category_name)
+            # 1. Construire le prompt avec le contenu de l'item
+            prompt_text = self._build_prompt(item_content, category_name)
 
-                # 2. Appeler le LLM
-                result = await self._call_llm(prompt_text, id_categorie)
+            # 2. Appeler le LLM
+            result = await self._call_llm(prompt_text, id_categorie)
 
-                # Vérifier si c'est une erreur (format Gemini avec "code")
-                if "code" in result:
-                    self._log(f"[{item_index + 1}/{total_items}] ❌ Erreur LLM item {item_id}: {result.get('error')}")
-                    return ItemResult(
-                        item_id=item_id,
-                        source="devis",
-                        content=item_content,
-                        status="error",
-                        error_message=str(result.get("error", "Erreur LLM inconnue"))
-                    )
+            # Vérifier si c'est une erreur (format Gemini avec "code")
+            if "code" in result:
+                error_msg = str(result.get("error", "Erreur LLM inconnue"))
+                self._log(f"[{item_index + 1}/{total_items}] ❌ Erreur LLM item {item_id}: {error_msg}")
+                raise Exception(f"Erreur LLM pour item {item_id}: {error_msg}")
 
-                # 3. Extraire la réponse
-                response_text = result.get("message", "")
-                self._log(f"[{item_index + 1}/{total_items}] Réponse LLM reçue ({len(response_text)} chars)")
+            # 3. Extraire la réponse
+            response_text = result.get("message", "")
+            self._log(f"[{item_index + 1}/{total_items}] Réponse LLM reçue ({len(response_text)} chars)")
 
-                # Tenter d'extraire le JSON de la réponse
-                prix_data = utils.extract_json_from_text(response_text)                
-
-                # 4. Stocker le résultat via l'API HelloPro (item ID + résultat du prompt)
-                save_data = {
-                    "id_categorie": id_categorie,
-                    "item_id": item_id,
-                    "source": "devis",
-                    "llm_response": response_text,
-                    "prix_data": prix_data,
-                    "item_metadata": item.get("metadata", {})
-                }
-
-                save_result = await self.api_client.post(
+            # Tenter d'extraire le JSON de la réponse
+            prix_data_raw = utils.extract_json_from_text(response_text)
+            if not prix_data_raw:
+                self._log("ERREUR: Impossible d'extraire le JSON")
+                await self.api_client.post(
                     "prix",
-                    "extraction_devis",
-                    "save",
-                    save_data
+                    "mail",
+                    "error",
+                    {
+                        "id_categorie" : id_categorie,
+                        "error_message": "Erreur extraction JSON",
+                        "etape"        : self.ETAPE,
+                        "error_detail" : {"response_text": response_text},
+                        "tracking_file": self.tracking_file
+                    }
+                )
+                raise Exception(f"Impossible d'extraire le JSON de la réponse LLM pour item {item_id}")
+
+            # 3b. Valider et construire le payload structuré
+            payload = self._validate_and_build_payload(
+                prix_data=prix_data_raw,
+                item_id=item_id,
+                source_chunk_id=source_chunk_id,
+                id_categorie=id_categorie,
+                category_name=category_name,
+                item_metadata=item.get("metadata", {})
+            )
+            if payload is None:
+                raise Exception(
+                    f"Validation du payload échouée (champs obligatoires manquants) : "
+                    f"Catégorie {id_categorie} - Item {item_id} - Data : {prix_data_raw}"
                 )
 
-                if save_result:
-                    self._log(f"[{item_index + 1}/{total_items}] ✅ Résultat sauvegardé pour item {item_id}")
-                else:
-                    self._log(f"[{item_index + 1}/{total_items}] ⚠️ Échec sauvegarde item {item_id}")
+            prix_data = payload.dict()
 
-                return ItemResult(
-                    item_id=item_id,
-                    source="devis",
-                    content=item_content,
-                    prix_data=prix_data,
-                    status="success"
-                )
-
-            except Exception as e:
-                self._log(f"[{item_index + 1}/{total_items}] ❌ Exception item {item_id}: {e}")
-                return ItemResult(
-                    item_id=item_id,
-                    source="devis",
-                    content=item_content if item_content else "",
-                    status="error",
-                    error_message=str(e)
-                )
+            self._log(f"[{item_index + 1}/{total_items}] ✅ Item {item_id} validé")
+            return ItemResult(
+                item_id=item_id,
+                source="devis",
+                content=item_content,
+                prix_data=prix_data,
+                status="success"
+            )
 
     async def _fetch_items(self, id_categorie: str, category_name: str) -> List[Dict[str, Any]]:
         """
@@ -361,26 +425,54 @@ class PrixExtractor:
             for i, item in enumerate(items)
         ]
 
-        results: List[ChunkResult] = await asyncio.gather(*tasks, return_exceptions=True)
+        results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
 
         elapsed = time.time() - start_time
 
-        # Collecter et compter les résultats
+        # Collecter et compter les résultats — toute exception lève immédiatement
         success_count = 0
         error_count = 0
         item_results: List[ItemResult] = []
         for r in results:
             if isinstance(r, Exception):
-                error_count += 1
-                self._log(f"❌ Exception non gérée: {r}")
+                # Propager l'exception : arrêt immédiat du traitement de la catégorie
+                self._log(f"❌ Exception critique: {r}")
+                raise r
             elif isinstance(r, ItemResult):
                 item_results.append(r)
                 if r.status == "success":
                     success_count += 1
                 else:
                     error_count += 1
+                    self._log(f"❌ Item en erreur: {r.item_id} — {r.error_message}")
+                    raise Exception(f"Item {r.item_id} en erreur: {r.error_message}")
             else:
-                error_count += 1
+                raise Exception(f"Résultat inattendu: {type(r)} — {r}")
+
+        # Sauvegarde batch des IDs traités avec succès
+        # type_extraction = 2 pour les devis
+        successful_ids = [r.item_id for r in item_results if r.status == "success"]
+
+        if successful_ids:
+            self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) devis ---")
+            save_result = await self.api_client.post(
+                "prix",
+                "process",
+                "save",
+                {
+                    "id_categorie":    id_categorie,
+                    "type_extraction": "2",           # 2 = devis
+                    "id_cibles":       successful_ids  # liste d'IDs (batch)
+                }
+            )
+            if save_result and not save_result.get("erreur"):
+                nb = save_result.get("nb_insere", len(successful_ids))
+                self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s) dans extraction_prix_ia")
+            else:
+                self._log(f"⚠️ Batch save: réponse inattendue: {save_result}")
+                raise Exception(f"Batch save: réponse inattendue: {save_result}")
+        else:
+            self._log("ℹ️ Aucun ID devis à sauvegarder (aucun succès)")
 
         self._log("\n" + "=" * 60)
         self._log("EXTRACTION TERMINÉE")
@@ -389,6 +481,17 @@ class PrixExtractor:
         self._log(f"Erreurs: {error_count}")
         self._log(f"Durée: {elapsed:.1f}s")
         self._log("=" * 60)
+
+        await self.api_client.post(
+            "prix",
+            "mail",
+            "success",
+            {
+                "id_categorie": id_categorie,
+                "etape": self.ETAPE,
+                "tracking_file": self.tracking_file
+            }
+        )
 
         return PrixExtractionResult(
             id_categorie=id_categorie,

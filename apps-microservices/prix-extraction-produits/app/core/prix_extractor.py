@@ -30,6 +30,8 @@ class PrixExtractor:
     directement au service prix-normalisation.
     """
 
+    ETAPE = "10"
+
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
@@ -270,6 +272,17 @@ class PrixExtractor:
         self._log(f"Erreurs: {error_count}")
         self._log(f"Durée: {elapsed:.1f}s")
         self._log("=" * 60)
+
+        await self.api_client.post(
+            "prix",
+            "mail",
+            "success",
+            {
+                "id_categorie": id_categorie,
+                "etape": self.ETAPE,
+                "tracking_file": self.tracking_file
+            }
+        )
 
         return PrixExtractionResult(
             id_categorie=id_categorie,
