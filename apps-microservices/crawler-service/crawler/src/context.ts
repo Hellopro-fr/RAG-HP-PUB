@@ -1,10 +1,16 @@
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
+import { UrlConsolidator } from "./class/UrlConsolidator.js";
+import { UpdateChecker } from "./class/UpdateChecker.js";
+import { JsonlWriter } from "./class/JsonlWriter.js";
 import { PlaywrightCrawler } from "crawlee";
 
 export const context = {
     dedupManager: null as DedupManager | null,
     statsManager: null as StatsManager | null,
+    urlConsolidator: null as UrlConsolidator | null,
+    updateChecker: null as UpdateChecker | null,
+    jsonlWriter: null as JsonlWriter | null,
     crawlerInstance: null as PlaywrightCrawler | null,
     // Store detected method in memory to avoid race conditions/disk IO
     frenchDetectionMethod: null as string | null,

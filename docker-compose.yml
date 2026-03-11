@@ -822,10 +822,13 @@ services:
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - MODEL_PATH=/app/models/deepseek-ocr # Update with your model path
-      - MAX_CONCURRENCY=50 # Adjust based on your GPU memory
+      - MAX_CONCURRENCY=8 # Réduit de 50 à 8 pour limiter la consommation RAM exponentielle
       - GPU_MEMORY_UTILIZATION=0.85 # Adjust based on your GPU memory
+      - NUM_WORKERS=8 # Réduit de 24 à 8 pour limiter la pression RAM des threads de pré-traitement
     deploy:
       resources:
+        limits:
+          memory: 24G # Plafond dur RAM — ajuster selon la RAM disponible sur le serveur
         reservations:
           devices:
             - driver: nvidia

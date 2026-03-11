@@ -209,6 +209,9 @@ class FilterBuilder:
                 key = "categorie"
             elif key == "id_categorie" and source == "siteweb":
                 continue
+            elif key == "autre_chunks" and source == "prix":
+                # Le filtre "autre_chunks" pour la source prix n'a pas besoin de filtrage dans Milvus
+                continue
             elif key == "avec_prix" and source == "produits_4":
                 logger.info(f"avec_prix produits_4 : {val}")
                 clauses.append(f"(prix_ht != '' OR prix_ttc != '')")
@@ -301,12 +304,14 @@ class ContextBuilder:
                 "siteweb_2": lambda m: m.get("url", "N/A"),
                 "devis": lambda m: m.get("lead_id", "N/A"),
                 "echanges": lambda m: m.get("conversation_id", "N/A"),
+                "prix": lambda m: m.get("nom_produit", "N/A"),
             }
 
             fournisseur_extractors = {
                 "produits_3": lambda m: m.get("fournisseur", "N/A"),
                 "siteweb_2": lambda m: m.get("fournisseur", "N/A"),
                 "echanges": lambda m: m.get("fournisseur", "N/A"),
+                "prix": lambda m: m.get("fournisseur", "N/A"),
             }
 
             title = title_extractors.get(source, lambda m: "N/A")(metadata)
@@ -317,6 +322,7 @@ class ContextBuilder:
             source_map = {
                 "produits_3": "Produits",
                 "siteweb_2": "Siteweb",
+                "prix": "Prix",
             }
             source_display = source_map.get(source, source)
 

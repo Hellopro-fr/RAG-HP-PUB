@@ -296,7 +296,7 @@ class CrawlerManager:
                         
                         # Extract specific fields and merge into top-level params
                         # Requested fields: mode, health, metrics, rates, thresholds
-                        target_fields = ["mode", "health", "metrics", "rates", "thresholds"]
+                        target_fields = ["mode", "health", "metrics", "rates", "thresholds", "jsonl_files"]
                         for field in target_fields:
                             if field in report_json:
                                 params[field] = report_json[field]
