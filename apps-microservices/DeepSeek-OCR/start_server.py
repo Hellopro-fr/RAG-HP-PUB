@@ -458,13 +458,16 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         # Process all pages
         results_text = await process_images(images, use_prompt)
         
-        # Convert to response format
+        # Sauvegarder le nombre de pages avant la libération mémoire
+        num_pages = len(images)
+        
         # Fermeture explicite des images PIL
         for img in images:
             img.close()
         del images
         gc.collect()
         
+        # Convert to response format
         results = [
             OCRResponse(
                 success=True,
@@ -478,7 +481,7 @@ async def process_pdf_endpoint(file: UploadFile = File(...), prompt: Optional[st
         return BatchOCRResponse(
             success=True,
             results=results,
-            total_pages=len(images),
+            total_pages=num_pages,
             filename=file.filename
         )
         
