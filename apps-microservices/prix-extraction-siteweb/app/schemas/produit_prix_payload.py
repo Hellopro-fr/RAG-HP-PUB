@@ -5,7 +5,7 @@ import re
 
 class ProduitPrixPayload(BaseModel):
     """
-    Schéma de validation du payload publié vers embedding pour la source 'produits'.
+    Schéma de validation du payload publié vers embedding pour la source 'siteweb'.
     """
 
     # --- Champs obligatoires ---
