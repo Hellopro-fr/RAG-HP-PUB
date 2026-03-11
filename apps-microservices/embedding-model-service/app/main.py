@@ -11,9 +11,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 async def main():
     # --- Start Prometheus metrics server ---
     start_metrics_server_in_thread(port=8530)
-    # L'initialisation est beaucoup plus simple.
-    # Plus de chargement de modèle lourd, juste le tokenizer.
+    
     use_case = EmbeddingUseCase()
+    # Démarre les workers de la Priority Queue en arrière-plan
+    await use_case.start_workers()
+    
     await serve(use_case)
 
 if __name__ == '__main__':
