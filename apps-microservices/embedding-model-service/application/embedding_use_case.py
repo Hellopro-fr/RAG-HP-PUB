@@ -58,20 +58,26 @@ class EmbeddingUseCase:
         logging.info(f"Services moyenne priorité: {MEDIUM_PRIORITY_SERVICES}")
 
     async def start_workers(self):
-        """Démarre les workers en arrière-plan avec des garanties anti-starvation."""
+        """Démarre les workers en arrière-plan avec des garanties anti-starvation et une voie rapide."""
         if not self.workers and self.max_concurrent_requests > 0:
             total = self.max_concurrent_requests
 
-            # Allocation des workers pour éviter la famine (starvation)
-            if total >= 3:
-                low_workers = max(1, int(total * 0.1))
-                medium_workers = max(1, int(total * 0.1))
-                shared_workers = total - low_workers - medium_workers
+            # Allocation des workers pour éviter la famine (starvation) et garantir la voie rapide HAUTE
+            if total >= 4:
+                high_workers = max(1, int(total * 0.2))  # Fast Lane HAUTE (exclusive)
+                medium_workers = max(1, int(total * 0.1))  # Plancher MOYENNE
+                low_workers = max(1, int(total * 0.1))  # Plancher BASSE
+                shared_workers = total - high_workers - medium_workers - low_workers
             else:
                 shared_workers = total
+                high_workers = 0
                 medium_workers = 0
                 low_workers = 0
 
+            for i in range(high_workers):
+                self.workers.append(
+                    asyncio.create_task(self._high_worker_loop(f"high-{i}"))
+                )
             for i in range(shared_workers):
                 self.workers.append(
                     asyncio.create_task(self._shared_worker_loop(f"shared-{i}"))
@@ -86,17 +92,39 @@ class EmbeddingUseCase:
                 )
 
             logging.info(
-                f"✅ {total} workers d'embedding démarrés (Shared: {shared_workers}, Medium: {medium_workers}, Low: {low_workers})."
+                f"✅ {total} workers d'embedding démarrés (High: {high_workers}, Shared: {shared_workers}, Medium: {medium_workers}, Low: {low_workers})."
             )
 
     async def _execute_task(self, func, args, kwargs, future):
         try:
+            # Si le client a timeout pendant l'attente, on annule et on ignore cette requête (Smart Cancellation)
             if not future.cancelled():
                 result = await func(*args, **kwargs)
                 future.set_result(result)
+            else:
+                logging.info(
+                    "Ignoré par le worker: Requête déjà annulée (Timeout/Disconnect)"
+                )
         except Exception as e:
             if not future.cancelled():
                 future.set_exception(e)
+
+    async def _high_worker_loop(self, worker_id: str):
+        """Voie rapide stricte (Fast Lane): Ne traite QUE la haute priorité, sans exception."""
+        while True:
+            try:
+                async with self.queue_cond:
+                    while not self.high_queue:
+                        await self.queue_cond.wait()
+                    func, args, kwargs, future = self.high_queue.popleft()
+
+                await self._execute_task(func, args, kwargs, future)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logging.error(
+                    f"Erreur inattendue dans le worker {worker_id}: {e}", exc_info=True
+                )
 
     async def _shared_worker_loop(self, worker_id: str):
         while True:
@@ -191,6 +219,20 @@ class EmbeddingUseCase:
     async def _process_embeddings(self, texts: List[str]) -> List[List[float]]:
         """La vraie logique métier, exécutée de façon isolée par les workers."""
         all_embeddings = []
+
+        # Fonction synchrone isolée pour libérer l'Event Loop
+        def _sync_tokenize(batch):
+            encoded = self.tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                return_tensors="np",
+                max_length=512,
+            )
+            return encoded["input_ids"].astype(np.int64), encoded[
+                "attention_mask"
+            ].astype(np.int64)
+
         try:
             for i in range(0, len(texts), self.batch_size):
                 batch_texts = texts[i : i + self.batch_size]
@@ -198,15 +240,10 @@ class EmbeddingUseCase:
                     f"Traitement du batch d'embedding {i // self.batch_size + 1}/{(len(texts) + self.batch_size - 1) // self.batch_size} avec {len(batch_texts)} textes."
                 )
 
-                encoded_input = self.tokenizer(
-                    batch_texts,
-                    padding=True,
-                    truncation=True,
-                    return_tensors="np",
-                    max_length=512,
+                # Exécution CPU lourde dans un thread séparé !
+                input_ids, attention_mask = await asyncio.to_thread(
+                    _sync_tokenize, batch_texts
                 )
-                input_ids = encoded_input["input_ids"].astype(np.int64)
-                attention_mask = encoded_input["attention_mask"].astype(np.int64)
 
                 inputs = [
                     InferInput("input_ids", input_ids.shape, "INT64"),
@@ -217,14 +254,18 @@ class EmbeddingUseCase:
 
                 outputs = [InferRequestedOutput("last_hidden_state")]
 
+                # GRPc vers Triton
                 response = await self.triton_client.infer(
                     model_name=MODEL_NAME, inputs=inputs, outputs=outputs
                 )
 
                 last_hidden_state = response.as_numpy("last_hidden_state")
-                sentence_embeddings = self.mean_pooling(
-                    last_hidden_state, attention_mask
+
+                # Exécution CPU lourde dans un thread séparé !
+                sentence_embeddings = await asyncio.to_thread(
+                    self.mean_pooling, last_hidden_state, attention_mask
                 )
+
                 all_embeddings.extend(sentence_embeddings.tolist())
 
             return all_embeddings
@@ -277,13 +318,21 @@ class EmbeddingUseCase:
                 self.low_queue.append(item)
 
             logging.info(
-                f"Requête d'embedding reçue de '{source_service or 'inconnu'}'. Priorité: {priority_label}.[Queues -> H:{len(self.high_queue)}, M:{len(self.medium_queue)}, L:{len(self.low_queue)}]"
+                f"Requête d'embedding reçue de '{source_service or 'inconnu'}'. Priorité: {priority_label}. [Queues -> H:{len(self.high_queue)}, M:{len(self.medium_queue)}, L:{len(self.low_queue)}]"
             )
 
             # Réveille tous les workers, les plus appropriés prendront la tâche
             self.queue_cond.notify_all()
 
-        return await future
+        try:
+            return await future
+        except asyncio.CancelledError:
+            # Smart Cancellation : Le client a timeout, on annule la tâche.
+            future.cancel()
+            logging.warning(
+                f"Requête d'embedding annulée par le client (timeout/disconnect). Priority: {priority_label}"
+            )
+            raise
 
     def chunk_text(self, text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
         """

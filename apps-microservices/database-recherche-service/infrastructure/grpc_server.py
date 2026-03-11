@@ -49,19 +49,25 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         logging.info(f"Medium Priority Services: {MEDIUM_PRIORITY_SERVICES}")
 
     async def start_workers(self):
-        """Démarre les workers en arrière-plan pour exécuter les tâches Milvus avec garanties anti-starvation."""
+        """Démarre les workers en arrière-plan pour exécuter les tâches Milvus avec garanties anti-starvation et voie rapide."""
         if not self.workers and self.max_concurrent_requests > 0:
             total = self.max_concurrent_requests
 
-            if total >= 3:
-                low_workers = max(1, int(total * 0.1))
-                medium_workers = max(1, int(total * 0.1))
-                shared_workers = total - low_workers - medium_workers
+            if total >= 4:
+                high_workers = max(1, int(total * 0.2))  # Fast Lane HAUTE (exclusive)
+                low_workers = max(1, int(total * 0.1))  # Plancher BASSE
+                medium_workers = max(1, int(total * 0.1))  # Plancher MOYENNE
+                shared_workers = total - high_workers - low_workers - medium_workers
             else:
                 shared_workers = total
+                high_workers = 0
                 medium_workers = 0
                 low_workers = 0
 
+            for i in range(high_workers):
+                self.workers.append(
+                    asyncio.create_task(self._high_worker_loop(f"high-{i}"))
+                )
             for i in range(shared_workers):
                 self.workers.append(
                     asyncio.create_task(self._shared_worker_loop(f"shared-{i}"))
@@ -76,17 +82,39 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 )
 
             logging.info(
-                f"✅ {total} workers de base de données démarrés (Shared: {shared_workers}, Medium: {medium_workers}, Low: {low_workers})."
+                f"✅ {total} workers de base de données démarrés (High: {high_workers}, Shared: {shared_workers}, Medium: {medium_workers}, Low: {low_workers})."
             )
 
     async def _execute_task(self, func, args, kwargs, future):
         try:
+            # Smart Cancellation : on vérifie que le timeout gRPC client n'a pas annulé la requête
             if not future.cancelled():
                 result = await asyncio.to_thread(func, *args, **kwargs)
                 future.set_result(result)
+            else:
+                logging.info(
+                    "Ignoré par le DB worker: Requête déjà annulée (Timeout/Disconnect)"
+                )
         except Exception as e:
             if not future.cancelled():
                 future.set_exception(e)
+
+    async def _high_worker_loop(self, worker_id: str):
+        while True:
+            try:
+                async with self.queue_cond:
+                    while not self.high_queue:
+                        await self.queue_cond.wait()
+                    func, args, kwargs, future = self.high_queue.popleft()
+
+                await self._execute_task(func, args, kwargs, future)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logging.error(
+                    f"Erreur inattendue dans le DB worker {worker_id}: {e}",
+                    exc_info=True,
+                )
 
     async def _shared_worker_loop(self, worker_id: str):
         while True:
@@ -180,12 +208,20 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 self.low_queue.append(item)
 
             logging.info(
-                f"Requête DB reçue de '{source_service}'. Priorité: {priority_label}.[Queues -> H:{len(self.high_queue)}, M:{len(self.medium_queue)}, L:{len(self.low_queue)}]"
+                f"Requête DB reçue de '{source_service}'. Priorité: {priority_label}. [Queues -> H:{len(self.high_queue)}, M:{len(self.medium_queue)}, L:{len(self.low_queue)}]"
             )
 
             self.queue_cond.notify_all()
 
-        return await future
+        try:
+            return await future
+        except asyncio.CancelledError:
+            # Smart Cancellation
+            future.cancel()
+            logging.warning(
+                f"Requête DB annulée par le client (timeout/disconnect). Priority: {priority_label}"
+            )
+            raise
 
     async def Search(self, request, context):
         source_service = (
@@ -251,6 +287,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 )
 
             return database_pb2.SearchResponse(results=proto_results)
+        except asyncio.CancelledError:
+            # Si le timeout se produit, gRPC annule la tâche.
+            raise
         except Exception as e:
             logging.error(f"Erreur dans Search: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
@@ -278,6 +317,8 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 request.collection_name,
             )
             return database_pb2.GetSchemaResponse(fields=schema_map)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logging.error(f"Erreur dans GetSchema: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
@@ -332,6 +373,8 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 )
 
             return database_pb2.SearchResponse(results=proto_results)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logging.error(f"Erreur dans ClassicSearch: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
@@ -444,6 +487,8 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 )
 
             return database_pb2.SearchResponse(results=proto_results)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logging.error(f"Erreur dans HybridSearch: {e}", exc_info=True)
             context.set_code(grpc.StatusCode.INTERNAL)
