@@ -5,7 +5,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import ProgressHeader from "./ProgressHeader";
 import CountryCodeSelect from "./CountryCodeSelect";
 import { useBuyerCheck } from "@/hooks/api";
-import { useFlowStore } from "@/lib/stores/flow-store";
+import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from "@/lib/stores/flow-store";
 import { ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -172,6 +172,27 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
     if (leadSubmission.isSuccess && leadSubmission.data?.data) {
       const { isExternalRedirect, fallbackUrl } = leadSubmission.data.data;
       if (!isExternalRedirect && fallbackUrl) {
+        // Marquer la soumission comme complétée IMMÉDIATEMENT (pas dans le setTimeout!)
+        try {
+          const originalToken = typeof window !== 'undefined'
+            ? sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY)
+            : undefined;
+
+          const submissionData = {
+            timestamp: Date.now(),
+            originalToken: originalToken || undefined,
+            categoryId: categoryId,
+            expiresAt: Date.now() + (48 * 60 * 60 * 1000), // 48h (sécurité)
+          };
+
+          localStorage.setItem(
+            FLOW_SUBMISSION_COMPLETED_KEY,
+            JSON.stringify(submissionData)
+          );
+        } catch (e) {
+          console.error('[SomethingToAddForm] ❌ Failed to set submission flag:', e);
+        }
+
         // Afficher le message d'erreur et rediriger après 2 secondes
         setShowFallbackRedirect(true);
         // Scroll vers le message après un court délai pour laisser le rendu se faire
@@ -179,12 +200,13 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
           fallbackMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
         const timer = setTimeout(() => {
+          // Redirection vers page feuille (quitte Next.js)
           window.location.href = fallbackUrl;
         }, 2000);
         return () => clearTimeout(timer);
       }
     }
-  }, [leadSubmission.isSuccess, leadSubmission.data]);
+  }, [leadSubmission.isSuccess, leadSubmission.data, categoryId]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {

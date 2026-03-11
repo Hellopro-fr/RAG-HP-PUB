@@ -3,7 +3,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { envoyerDemandes } from '@/lib/api/demande-info';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
-import { useFlowStore } from '@/lib/stores/flow-store';
+import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from '@/lib/stores/flow-store';
 import type { LeadSubmission, Supplier, ProfileType } from '@/types';
 import type { DemandeInfoPayload, StatutAcheteur, ProduitSelection } from '@/types/demande';
 
@@ -192,6 +192,30 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
       const categoryId = data.categoryId || '0';
       const fallbackUrl = `https://www.hellopro.fr/-${categoryId}-fr-1-feuille.html`;
 
+      // ⚠️ IMPORTANT: Créer le flag localStorage ICI (dans mutationFn) car le composant
+      // pourrait se démonter avant que onSuccess ne soit appelé
+      if (isExternalRedirect || (!isExternalRedirect && fallbackUrl)) {
+        try {
+          const originalToken = typeof window !== 'undefined'
+            ? sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY)
+            : undefined;
+
+          const submissionData = {
+            timestamp: Date.now(),
+            originalToken: originalToken || undefined,
+            categoryId: categoryId,
+            expiresAt: Date.now() + (48 * 60 * 60 * 1000), // 48h
+          };
+
+          localStorage.setItem(
+            FLOW_SUBMISSION_COMPLETED_KEY,
+            JSON.stringify(submissionData)
+          );
+        } catch (e) {
+          console.error('[LeadSubmission] ❌ Failed to set flag:', e);
+        }
+      }
+
       return {
         data: {
           leadId,
@@ -223,7 +247,7 @@ export function useLeadSubmission(options: UseLeadSubmissionOptions = {}) {
       }
 
       // Redirection uniquement si URL externe (succès PHP)
-      // Si pas d'URL externe, les formulaires gèrent l'affichage du message d'erreur
+      // Note: Le flag localStorage est déjà créé dans mutationFn
       if (response.data?.isExternalRedirect && response.data?.redirectUrl) {
         window.location.href = response.data.redirectUrl;
       }
