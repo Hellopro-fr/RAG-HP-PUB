@@ -3,6 +3,7 @@ import logging
 import os
 import collections
 import asyncio
+import functools
 from concurrent import futures
 from google.protobuf import struct_pb2
 from google.protobuf.json_format import MessageToDict
@@ -42,6 +43,16 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         self.low_queue = collections.deque()
         self.queue_cond = asyncio.Condition()
 
+        # Compteurs de workers pour le notify ciblé (initialisés dans start_workers)
+        self._high_workers_count = 0
+        self._shared_workers_count = 0
+
+        # Thread pools dédiés pour éviter la famine de threads (thread starvation)
+        # Le pool HAUTE est exclusif : les requêtes HAUTE ne sont JAMAIS bloquées
+        # par des requêtes MOYENNE/BASSE qui occupent tous les threads.
+        self._high_executor = None
+        self._default_executor = None
+
         logging.info(
             f"Database Priority Queue Config: Total Slots={self.max_concurrent_requests}"
         )
@@ -64,6 +75,27 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 medium_workers = 0
                 low_workers = 0
 
+            # Sauvegarde des compteurs pour le notify ciblé
+            self._high_workers_count = high_workers
+            self._shared_workers_count = shared_workers
+
+            # Création des thread pools dédiés :
+            # - _high_executor : exclusif aux workers HAUTE, dimensionné exactement
+            #   pour que chaque high worker ait toujours un thread disponible.
+            # - _default_executor : pour tous les autres workers (shared + medium + low).
+            #   Dimensionné pour couvrir le nombre total de workers non-HAUTE.
+            other_workers = shared_workers + medium_workers + low_workers
+            self._high_executor = futures.ThreadPoolExecutor(
+                max_workers=max(1, high_workers), thread_name_prefix="db-high"
+            )
+            self._default_executor = futures.ThreadPoolExecutor(
+                max_workers=max(1, other_workers), thread_name_prefix="db-default"
+            )
+
+            logging.info(
+                f"🔧 Thread pools créés: High={max(1, high_workers)} threads, Default={max(1, other_workers)} threads."
+            )
+
             for i in range(high_workers):
                 self.workers.append(
                     asyncio.create_task(self._high_worker_loop(f"high-{i}"))
@@ -85,11 +117,14 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 f"✅ {total} workers de base de données démarrés (High: {high_workers}, Shared: {shared_workers}, Medium: {medium_workers}, Low: {low_workers})."
             )
 
-    async def _execute_task(self, func, args, kwargs, future):
+    async def _execute_task(self, func, args, kwargs, future, executor=None):
         try:
             # Smart Cancellation : on vérifie que le timeout gRPC client n'a pas annulé la requête
             if not future.cancelled():
-                result = await asyncio.to_thread(func, *args, **kwargs)
+                loop = asyncio.get_running_loop()
+                # functools.partial est nécessaire car run_in_executor ne supporte pas **kwargs
+                callable_with_kwargs = functools.partial(func, *args, **kwargs)
+                result = await loop.run_in_executor(executor, callable_with_kwargs)
                 future.set_result(result)
             else:
                 logging.info(
@@ -107,7 +142,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                         await self.queue_cond.wait()
                     func, args, kwargs, future = self.high_queue.popleft()
 
-                await self._execute_task(func, args, kwargs, future)
+                await self._execute_task(
+                    func, args, kwargs, future, executor=self._high_executor
+                )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -129,7 +166,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                     else:
                         func, args, kwargs, future = self.low_queue.popleft()
 
-                await self._execute_task(func, args, kwargs, future)
+                await self._execute_task(
+                    func, args, kwargs, future, executor=self._default_executor
+                )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -149,7 +188,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                     else:
                         func, args, kwargs, future = self.low_queue.popleft()
 
-                await self._execute_task(func, args, kwargs, future)
+                await self._execute_task(
+                    func, args, kwargs, future, executor=self._default_executor
+                )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -166,7 +207,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                         await self.queue_cond.wait()
                     func, args, kwargs, future = self.low_queue.popleft()
 
-                await self._execute_task(func, args, kwargs, future)
+                await self._execute_task(
+                    func, args, kwargs, future, executor=self._default_executor
+                )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -211,7 +254,15 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 f"Requête DB reçue de '{source_service}'. Priorité: {priority_label}. [Queues -> H:{len(self.high_queue)}, M:{len(self.medium_queue)}, L:{len(self.low_queue)}]"
             )
 
-            self.queue_cond.notify_all()
+            # Notify ciblé pour éviter le thundering herd :
+            # - HAUTE: réveille les high workers + shared workers (garantie de pic up immédiat)
+            # - MOYENNE/BASSE: réveille 1 seul worker (suffisant, un shared/medium/low prendra la tâche)
+            if priority == 1:
+                self.queue_cond.notify(
+                    self._high_workers_count + self._shared_workers_count
+                )
+            else:
+                self.queue_cond.notify(1)
 
         try:
             return await future
