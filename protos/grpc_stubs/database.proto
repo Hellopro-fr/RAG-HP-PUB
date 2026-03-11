@@ -18,6 +18,7 @@ message SearchRequest {
   optional string filter_expression = 4;
   repeated string output_fields = 5;
   optional google.protobuf.Struct options = 6;
+  optional string source_service = 7;
 }
 
 message ClassicSearchRequest {
@@ -25,6 +26,7 @@ message ClassicSearchRequest {
   string filter_expression = 2; // Le filtre "expr" de Milvus
   int32 top_k = 3;
   repeated string output_fields = 4;
+  optional string source_service = 5;
 }
 
 // Requête de recherche hybride combinant recherche vectorielle dense et recherche full-text BM25
@@ -38,6 +40,7 @@ message HybridSearchRequest {
   optional string filter_expression = 7; // Filtre Milvus optionnel
   repeated string output_fields = 8;    // Champs de sortie optionnels
   optional google.protobuf.Struct options = 9; // Options supplémentaires (ex: context_mode)
+  optional string source_service = 10;
 }
 
 message SearchResult {
@@ -53,6 +56,7 @@ message SearchResponse {
 
 message GetSchemaRequest {
   string collection_name = 1;
+  optional string source_service = 2;
 }
 
 message GetSchemaResponse {
