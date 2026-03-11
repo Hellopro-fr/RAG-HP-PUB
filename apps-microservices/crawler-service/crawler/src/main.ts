@@ -29,6 +29,9 @@ import {
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
+import { UrlConsolidator } from "./class/UrlConsolidator.js";
+import { UpdateChecker } from "./class/UpdateChecker.js";
+import { JsonlWriter } from "./class/JsonlWriter.js";
 import { context } from "./context.js";
 
 const execAsync = promisify(exec);
@@ -562,52 +565,59 @@ if (crawlMode === 'update') {
     // Copy the detection method to avoid race conditions
     copyPreviousMethod(previousCrawlId, domain);
 
-    const previousDatasetGenerator = loadDatasetUrlsGenerator(previousCrawlId, domain);
-    let count = 0;
-    let skippedDuplicates = 0;
-    
-    for await (const url of previousDatasetGenerator) {
-        // Ensure even seed URLs are cleaned before processing
-        // This handles cases where old data had dirty URLs (e.g. ?order=xxx)
-        // We reuse the same config logic passed via CLI
-        const cleanUrl = processUrl(
-            url, 
-            skipquestionmark, 
-            skipdiez, 
-            { toKeep, toRemove }
-        );
+    // --- URL CONSOLIDATION (Epic 1) ---
+    // Load URLs from 3 sources and deduplicate with strict priority:
+    // Dataset > Request_queue > Request_url
+    const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+    const consolidator = new UrlConsolidator(redisUrl, id, previousCrawlId, domain);
+    await consolidator.connect();
+    context.urlConsolidator = consolidator;
 
-        // 1. Add to Redis (Mark as Known) - Returns true if NEW (unique)
-        // We use context.dedupManager as the source of truth for uniqueness in this session
+    const cleanUrlFn = (rawUrl: string) => processUrl(
+        rawUrl, 
+        skipquestionmark, 
+        skipdiez, 
+        { toKeep, toRemove }
+    );
+
+    const previousDatasetGenerator = loadDatasetUrlsGenerator(previousCrawlId, domain);
+    const previousRequestUrlsGenerator = getUrlsCrawledStreaming(domain, false);
+
+    const { allUrls, counts: consolidationCounts } = await consolidator.consolidate(
+        previousDatasetGenerator,
+        previousRequestUrlsGenerator,
+        cleanUrlFn
+    );
+
+    // Seed the request queue with ALL consolidated URLs
+    let seedCount = 0;
+    for await (const { url, source } of allUrls) {
+        // Add to DedupManager (Mark as Known)
         if (context.dedupManager) {
-            const isNewUnique = await context.dedupManager.addUrl(cleanUrl);
-            
+            const isNewUnique = await context.dedupManager.addUrl(url);
             if (isNewUnique) {
-                // 2. Add to Queue (Mark as Existing for Verification) ONLY if it's unique
                 await requestQueue.addRequest({
-                    url: cleanUrl,
-                    userData: { is_existing: true }
+                    url: url,
+                    userData: { source: source }
                 });
-                
-                count++;
-                if (count % 1000 === 0) {
-                    console.log(`Seeded ${count} unique URLs from previous crawl...`);
+                seedCount++;
+                if (seedCount % 1000 === 0) {
+                    console.log(`Seeded ${seedCount} unique URLs...`);
                 }
-            } else {
-                skippedDuplicates++;
             }
         }
     }
-    console.log(`Finished seeding ${count} unique URLs from previous crawl. (Skipped ${skippedDuplicates} duplicates)`);
+    console.log(`Finished seeding ${seedCount} unique URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
 
     // --- CONFIGURE CIRCUIT BREAKER ---
-    // This logic determines if we use Micro Mode (<50) or Standard Mode (>=50)
+    // Based on Dataset count only (not total), as that represents the "previous state"
+    const previousTotal = consolidationCounts.dataset;
     context.config.circuitBreaker.enabled = true;
-    context.config.circuitBreaker.previousTotal = count;
-    context.config.circuitBreaker.isMicroMode = count < 50;
+    context.config.circuitBreaker.previousTotal = previousTotal;
+    context.config.circuitBreaker.isMicroMode = previousTotal < 50;
     
     console.log(`\n🛡️ Circuit Breaker Configured:`);
-    console.log(`   - Previous Total: ${count}`);
+    console.log(`   - Previous Total (Dataset): ${previousTotal}`);
     console.log(`   - Mode: ${context.config.circuitBreaker.isMicroMode ? "MICRO (Absolute Limits)" : "STANDARD (Rate Limits)"}`);
     if (context.config.circuitBreaker.isMicroMode) {
         console.log(`   - Limits: MaxErrors=${context.config.circuitBreaker.maxAbsErrors}, MaxRedirects=${context.config.circuitBreaker.maxAbsRedirects}, MaxNew=${context.config.circuitBreaker.maxAbsNew}`);
@@ -615,6 +625,15 @@ if (crawlMode === 'update') {
         console.log(`   - Limits: MinSample=${context.config.circuitBreaker.minSample}, ErrorRate=${(context.config.circuitBreaker.maxErrorRate * 100).toFixed(1)}%, RedirectRate=${(context.config.circuitBreaker.maxRedirectRate * 100).toFixed(1)}%, GrowthRate=${(context.config.circuitBreaker.maxGrowthRate * 100).toFixed(1)}%`);
     }
     console.log(`----------------------------------------\n`);
+
+    // --- INSTANTIATE UPDATE CHECKER + JSONL WRITER (Epic 2 + 4) ---
+    if (context.statsManager && context.urlConsolidator) {
+        const jsonlWriter = new JsonlWriter(storagePath);
+        const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
+        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter);
+        context.jsonlWriter = jsonlWriter;
+        console.log(`✅ UpdateChecker + JsonlWriter initialized for update mode.`);
+    }
 
 } else if (await requestQueue.isEmpty()) {
     console.log("RequestQueueEmpty - Adding standard seed");
@@ -760,7 +779,17 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to save stats:", e);
     }
 
-    // 3. Cleanup Redis connections
+    // 3. Close JSONL streams (flush to disk before Redis cleanup)
+    if (context.jsonlWriter) {
+        try {
+            await context.jsonlWriter.closeAll();
+        } catch (e) {
+            console.error("Failed to close JSONL streams:", e);
+        }
+    }
+
+    // 4. Cleanup Redis connections
+    if (context.urlConsolidator) await context.urlConsolidator.cleanup();
     if (context.dedupManager) await context.dedupManager.cleanup();
     if (context.statsManager) await context.statsManager.cleanup();
 

@@ -106,8 +106,12 @@ router.addDefaultHandler(
             const status = response.status();
             if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
                 log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
-                // Increment error stats
-                if (context.statsManager && request.userData.is_existing) {
+                // Delegate error tracking to UpdateChecker in update mode
+                const source = request.userData.source || '';
+                if (context.updateChecker && source) {
+                    await context.updateChecker.checkUrl(request.url, request.loadedUrl, source, status, false);
+                } else if (context.statsManager && request.userData.is_existing) {
+                    // Legacy fallback for non-update mode
                     await context.statsManager.increment("errors");
                 }
                 // Don't process, let failedRequestHandler handle it
@@ -179,7 +183,8 @@ router.addDefaultHandler(
 
         // --- Deduplication & "Double Check" (Redis) ---
         let isDoublon = false;
-        const isExisting = request.userData.is_existing || false;
+        const source = request.userData.source || '';
+        const isExisting = request.userData.is_existing || (source === 'dataset');
 
         // Skip Redis check for "Existing" URLs to allow re-verification in Update Mode
         if (context.dedupManager && !isExisting) {
@@ -207,17 +212,13 @@ router.addDefaultHandler(
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
             // If we ended up at a different URL than requested (redirect), make sure the 
             // final URL is also marked as known in Redis to prevent future re-crawling.
-            // Note: Do NOT use rightTrimSlash here — the trailing slash can be significant
-            // (e.g., /path/ returns 200 but /path returns 404 on some servers).
             if (context.dedupManager && request.url !== request.loadedUrl) {
-                // We add it to Redis. We don't care if it returns true/false here, just ensuring it's known.
                 await context.dedupManager.addUrl(request.loadedUrl);
             }
 
-            if (isExisting && context.statsManager) {
-                // request.loadedUrl is the final URL after redirects
-                // request.url is the queue/original URL
-                // Check if they differ (fuzzy matching to ignore trailing slashes)
+            // --- UPDATE MODE: Redirect tracking via UpdateChecker (no inline stats) ---
+            // Legacy redirect tracking is kept for backward compatibility when UpdateChecker is not active
+            if (!context.updateChecker && isExisting && context.statsManager) {
                 const finalUrl = rightTrimSlash(request.loadedUrl);
                 const originalUrl = rightTrimSlash(request.url);
                 
@@ -314,12 +315,23 @@ router.addDefaultHandler(
             if (isEnqueuingLinks) {
                 // === VALIDATED CONTENT BLOCK ===
                 
-                // Count as NEW URL only if it's not existing AND passed validation (isEnqueuingLinks=True)
-                if (context.dedupManager && !isExisting) {
+                // --- UPDATE MODE: Delegate to UpdateChecker ---
+                if (context.updateChecker && source) {
+                    const httpStatus = response?.status() || 200;
+                    const result = await context.updateChecker.checkUrl(
+                        request.url,
+                        request.loadedUrl,
+                        source,
+                        httpStatus,
+                        true // Page is French (since isEnqueuingLinks = true)
+                    );
+                    log.info(`[UpdateChecker] ${result.action}: ${result.url} (${result.reason || ''})`);
+                } else if (context.dedupManager && !isExisting) {
+                    // Legacy: Count as NEW URL only if not existing AND passed validation
                     if (context.statsManager) {
                         await context.statsManager.increment("new_urls");
                         
-                        // Fail Fast Check for New URLs (moved from early check)
+                        // Fail Fast Check for New URLs
                         if (context.config.maxNewUrls && await context.statsManager.checkThreshold("new_urls", context.config.maxNewUrls)) {
                             log.warning("🛑 Max new URLs limit reached during processing. Stopping.");
                             context.stopReason = "limitNewUrls";
@@ -512,7 +524,7 @@ router.addDefaultHandler(
                             return false;
                         }
 
-                        request.userData = { is_existing: false };
+                        request.userData = { source: 'discovered' };
                         return request;
                     },
                 });
@@ -537,6 +549,20 @@ router.addDefaultHandler(
                 }
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
+
+                // --- UPDATE MODE: Non-French page = not eligible ---
+                if (context.updateChecker && source) {
+                    const httpStatus = response?.status() || 200;
+                    const result = await context.updateChecker.checkUrl(
+                        request.url,
+                        request.loadedUrl,
+                        source,
+                        httpStatus,
+                        false // NOT French
+                    );
+                    log.info(`[UpdateChecker] ${result.action}: ${result.url} (not_french)`);
+                }
+
                 let dataset = await Dataset.open("nfr-" + targetDomain);
                 await dataset.pushData({ url, content });
                 await requestQueue.markRequestHandled(request);
