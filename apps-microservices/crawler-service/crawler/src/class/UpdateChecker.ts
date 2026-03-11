@@ -1,5 +1,6 @@
 import { UrlConsolidator } from './UrlConsolidator.js';
 import { StatsManager } from './StatsManager.js';
+import { JsonlWriter } from './JsonlWriter.js';
 import { DomainFR } from './DomainFR.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
 
@@ -72,13 +73,21 @@ const FORBIDDEN_PARAMS = [
 export class UpdateChecker {
     private consolidator: UrlConsolidator;
     private statsManager: StatsManager;
+    private jsonlWriter: JsonlWriter | null;
+
+    // JSONL filenames
+    static readonly DELETED_FILE = 'deleted_urls.jsonl';
+    static readonly REDIRECTED_FILE = 'redirected_urls.jsonl';
+    static readonly NEW_URLS_FILE = 'new_urls.jsonl';
 
     constructor(
         consolidator: UrlConsolidator,
         statsManager: StatsManager,
+        jsonlWriter: JsonlWriter | null = null,
     ) {
         this.consolidator = consolidator;
         this.statsManager = statsManager;
+        this.jsonlWriter = jsonlWriter;
     }
 
     /**
@@ -167,12 +176,14 @@ export class UpdateChecker {
             if (isFromDataset) {
                 // Dataset URL returned an error → it should be removed
                 await this.statsManager.increment("errors");
-                return {
+                const result: CheckUrlResult = {
                     action: 'deleted',
                     url: originalUrl,
                     source,
                     reason: `http_error_${httpStatus}`,
                 };
+                await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
+                return result;
             } else {
                 // Non-dataset URL error → just ignore, don't track
                 return { action: 'ignored', url: originalUrl, source, reason: 'non_dataset_error' };
@@ -193,12 +204,14 @@ export class UpdateChecker {
                 } else {
                     // Redirect to a URL NOT in Dataset → track the redirection
                     await this.statsManager.increment("redirects");
-                    return {
+                    const result: CheckUrlResult = {
                         action: 'redirected',
                         url: originalUrl,
                         source,
                         destination: loadedUrl,
                     };
+                    await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, result);
+                    return result;
                 }
             } else {
                 // Non-dataset URL redirected
@@ -209,12 +222,14 @@ export class UpdateChecker {
                     // Redirects to a new URL — check eligibility of the DESTINATION
                     if (this.isEligible(loadedUrl, isFrenchContent)) {
                         await this.statsManager.increment("new_urls");
-                        return {
+                        const result: CheckUrlResult = {
                             action: 'new_url',
                             url: loadedUrl,
                             source,
                             reason: 'redirect_eligible_destination',
                         };
+                        await this.writeJsonl(UpdateChecker.NEW_URLS_FILE, result);
+                        return result;
                     }
                     return { action: 'ignored', url: originalUrl, source, reason: 'redirect_ineligible_destination' };
                 }
@@ -232,25 +247,49 @@ export class UpdateChecker {
             } else {
                 // No longer eligible → mark as deleted
                 await this.statsManager.increment("errors");
-                return {
+                const result: CheckUrlResult = {
                     action: 'deleted',
                     url: originalUrl,
                     source,
                     reason: 'not_eligible',
                 };
+                await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
+                return result;
             }
         } else {
             // Non-dataset URL, 2xx → check if eligible for insertion
             if (this.isEligible(loadedUrl, isFrenchContent)) {
                 await this.statsManager.increment("new_urls");
-                return {
+                const result: CheckUrlResult = {
                     action: 'new_url',
                     url: loadedUrl,
                     source,
                     reason: 'eligible_new_content',
                 };
+                await this.writeJsonl(UpdateChecker.NEW_URLS_FILE, result);
+                return result;
             }
             return { action: 'ignored', url: originalUrl, source, reason: 'not_eligible' };
+        }
+    }
+
+    /**
+     * Write a JSONL line if the writer is available.
+     */
+    private async writeJsonl(filename: string, data: CheckUrlResult): Promise<void> {
+        if (this.jsonlWriter) {
+            try {
+                await this.jsonlWriter.writeLine(filename, {
+                    url: data.url,
+                    source: data.source,
+                    action: data.action,
+                    reason: data.reason || undefined,
+                    destination: data.destination || undefined,
+                    timestamp: new Date().toISOString(),
+                });
+            } catch (e) {
+                console.error(`[UpdateChecker] Failed to write JSONL to ${filename}: ${e}`);
+            }
         }
     }
 }

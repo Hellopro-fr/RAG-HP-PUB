@@ -31,6 +31,7 @@ import { DedupManager } from "./class/DedupManager.js";
 import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
+import { JsonlWriter } from "./class/JsonlWriter.js";
 import { context } from "./context.js";
 
 const execAsync = promisify(exec);
@@ -625,11 +626,13 @@ if (crawlMode === 'update') {
     }
     console.log(`----------------------------------------\n`);
 
-    // --- INSTANTIATE UPDATE CHECKER (Epic 2) ---
+    // --- INSTANTIATE UPDATE CHECKER + JSONL WRITER (Epic 2 + 4) ---
     if (context.statsManager && context.urlConsolidator) {
+        const jsonlWriter = new JsonlWriter(storagePath);
         const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
-        context.updateChecker = new UC(context.urlConsolidator, context.statsManager);
-        console.log(`✅ UpdateChecker initialized for update mode.`);
+        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter);
+        context.jsonlWriter = jsonlWriter;
+        console.log(`✅ UpdateChecker + JsonlWriter initialized for update mode.`);
     }
 
 } else if (await requestQueue.isEmpty()) {
@@ -776,7 +779,16 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to save stats:", e);
     }
 
-    // 3. Cleanup Redis connections
+    // 3. Close JSONL streams (flush to disk before Redis cleanup)
+    if (context.jsonlWriter) {
+        try {
+            await context.jsonlWriter.closeAll();
+        } catch (e) {
+            console.error("Failed to close JSONL streams:", e);
+        }
+    }
+
+    // 4. Cleanup Redis connections
     if (context.urlConsolidator) await context.urlConsolidator.cleanup();
     if (context.dedupManager) await context.dedupManager.cleanup();
     if (context.statsManager) await context.statsManager.cleanup();
