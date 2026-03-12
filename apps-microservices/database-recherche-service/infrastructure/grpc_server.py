@@ -14,8 +14,12 @@ from grpc_stubs import database_pb2_grpc
 
 from application.search_use_case import SearchUseCase
 
-TOTAL_MAX_CONCURRENT_REQUESTS = int(os.getenv("TOTAL_MAX_CONCURRENT_REQUESTS", "100"))
+TOTAL_MAX_CONCURRENT_REQUESTS = int(os.getenv("TOTAL_MAX_CONCURRENT_REQUESTS", "200"))
 DB_BATCH_SIZE = int(os.getenv("DB_BATCH_SIZE", "64"))
+# Limiteur pour empêcher de saturer Zilliz Cloud avec des requêtes de classification
+DB_MAX_CONCURRENT_ZILLIZ_DEFAULT = int(
+    os.getenv("DB_MAX_CONCURRENT_ZILLIZ_DEFAULT", "2")
+)
 
 high_priority_services_str = os.getenv(
     "HIGH_PRIORITY_SERVICES", "api-recherche-service, api-chat-llm-service"
@@ -54,6 +58,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         self._high_executor = None
         self._default_executor = None
 
+        # Limiteur pour protéger Zilliz Cloud des surcharges
+        self._zilliz_limiter = None
+
         # Event pour bloquer strictement les priorités inférieures quand HAUTE est actif
         self._lower_priorities_allowed = asyncio.Event()
 
@@ -86,6 +93,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             # Initialisation de l'Event (ouvert par défaut)
             self._lower_priorities_allowed.set()
 
+            # Initialisation du limiteur In-Flight Zilliz
+            self._zilliz_limiter = asyncio.Semaphore(DB_MAX_CONCURRENT_ZILLIZ_DEFAULT)
+
             # Création des thread pools dédiés :
             # - _high_executor : exclusif aux workers HAUTE, dimensionné exactement
             #   pour que chaque high worker ait toujours un thread disponible.
@@ -100,7 +110,7 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             )
 
             logging.info(
-                f"🔧 Thread pools créés: High={max(1, high_workers)} threads, Default={max(1, other_workers)} threads."
+                f"🔧 Thread pools créés: High={max(1, high_workers)} threads, Default={max(1, other_workers)} threads. Zilliz Limiter: {DB_MAX_CONCURRENT_ZILLIZ_DEFAULT}"
             )
 
             for i in range(high_workers):
@@ -124,7 +134,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 f"✅ {total} workers de base de données démarrés (High: {high_workers}, Shared: {shared_workers}, Medium: {medium_workers}, Low: {low_workers})."
             )
 
-    async def _execute_task(self, func, args, kwargs, future, executor=None):
+    async def _execute_task(
+        self, func, args, kwargs, future, executor=None, limiter=None
+    ):
         """Execution standard pour les tâches non-batchables (GetSchema, ClassicSearch)."""
         try:
             # Smart Cancellation : on vérifie que le timeout gRPC client n'a pas annulé la requête
@@ -132,7 +144,13 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                 loop = asyncio.get_running_loop()
                 # functools.partial est nécessaire car run_in_executor ne supporte pas **kwargs
                 callable_with_kwargs = functools.partial(func, *args, **kwargs)
-                result = await loop.run_in_executor(executor, callable_with_kwargs)
+                if limiter:
+                    async with limiter:
+                        result = await loop.run_in_executor(
+                            executor, callable_with_kwargs
+                        )
+                else:
+                    result = await loop.run_in_executor(executor, callable_with_kwargs)
                 future.set_result(result)
             else:
                 logging.info(
@@ -142,14 +160,14 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             if not future.cancelled():
                 future.set_exception(e)
 
-    async def _process_queue_batch(self, batch, executor):
-        """Orchestre l'exécution d'un batch de requêtes dynamiquement groupées."""
+    async def _process_queue_batch(self, batch, executor, limiter=None):
+        """Orchestre l'exécution d'un batch de requêtes dynamiquement groupées avec limiteur Zilliz."""
         first_item = batch[0]
 
         # Si c'est une tâche non-batchable (ClassicSearch, GetSchema), exécuter classiquement
         if callable(first_item[0]):
             func, args, kwargs, future = first_item
-            await self._execute_task(func, args, kwargs, future, executor)
+            await self._execute_task(func, args, kwargs, future, executor, limiter)
             return
 
         action_type = first_item[0]
@@ -185,7 +203,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                         **kwargs,
                     )
 
-                results = await loop.run_in_executor(executor, _sync_search)
+                if limiter:
+                    async with limiter:
+                        results = await loop.run_in_executor(executor, _sync_search)
+                else:
+                    results = await loop.run_in_executor(executor, _sync_search)
 
                 for i, (_, future) in enumerate(active_batch):
                     if not future.cancelled():
@@ -224,7 +246,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                         **kwargs,
                     )
 
-                results = await loop.run_in_executor(executor, _sync_hybrid)
+                if limiter:
+                    async with limiter:
+                        results = await loop.run_in_executor(executor, _sync_hybrid)
+                else:
+                    results = await loop.run_in_executor(executor, _sync_hybrid)
 
                 for i, (_, future) in enumerate(active_batch):
                     if not future.cancelled():
@@ -269,7 +295,10 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                     batch = self._extract_batch_from_queue(self.high_queue)
 
                 if batch:
-                    await self._process_queue_batch(batch, executor=self._high_executor)
+                    # Les tâches HAUTES n'ont pas de limiteur Zilliz
+                    await self._process_queue_batch(
+                        batch, executor=self._high_executor, limiter=None
+                    )
 
                 # Si la file HAUTE est complètement vide, on libère l'Event de pause
                 # pour permettre aux workers MOYENNE/BASSE de reprendre le travail.
@@ -310,8 +339,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                         batch = self._extract_batch_from_queue(self.low_queue)
 
                 if batch:
+                    # Les tâches MOYENNE/BASSE utilisent le limiteur
                     await self._process_queue_batch(
-                        batch, executor=self._default_executor
+                        batch,
+                        executor=self._default_executor,
+                        limiter=self._zilliz_limiter,
                     )
             except asyncio.CancelledError:
                 break
@@ -341,8 +373,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                         batch = self._extract_batch_from_queue(self.low_queue)
 
                 if batch:
+                    # Les tâches MOYENNE/BASSE utilisent le limiteur
                     await self._process_queue_batch(
-                        batch, executor=self._default_executor
+                        batch,
+                        executor=self._default_executor,
+                        limiter=self._zilliz_limiter,
                     )
             except asyncio.CancelledError:
                 break
@@ -370,8 +405,11 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                         batch = self._extract_batch_from_queue(self.low_queue)
 
                 if batch:
+                    # Les tâches MOYENNE/BASSE utilisent le limiteur
                     await self._process_queue_batch(
-                        batch, executor=self._default_executor
+                        batch,
+                        executor=self._default_executor,
+                        limiter=self._zilliz_limiter,
                     )
             except asyncio.CancelledError:
                 break
