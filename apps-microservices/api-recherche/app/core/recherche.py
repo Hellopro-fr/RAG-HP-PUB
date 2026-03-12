@@ -223,9 +223,6 @@ class FilterBuilder:
             if not dtype:
                 continue
 
-            if key == "total_chunks" and source == "prix":
-                logger.warning(f"Type champs : {dtype}")
-                logger.warning(f"Type val : {val}")
             if dtype == DataType.ARRAY:
                 clauses.append(self._build_array_clause(key, val))
             elif dtype in self.NUMERIC_DTYPES:
