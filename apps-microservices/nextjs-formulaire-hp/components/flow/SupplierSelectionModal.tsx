@@ -20,6 +20,7 @@ import CustomNeedForm from "./CustomNeedForm";
 import ProductDetailModal from "./ProductDetailModal";
 import ProductComparisonModal from "./ProductComparisonModal";
 import CriteriaChangedBanner from "./CriteriaChangedBanner";
+import BudgetEstimate from "./BudgetEstimate";
 import {
   trackComparisonModalView,
   trackProductSelectionChange,
@@ -305,6 +306,9 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   setCriteriaModified(true);
                 }}
               />
+
+              {/* Budget Estimate */}
+              <BudgetEstimate />
 
               {/* Criteria Changed Banner */}
               {criteriaHaveChanged && selectedSupplierIds.length > 0 && (
