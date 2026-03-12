@@ -685,4 +685,22 @@ export function initDebugMatching(): void {
   }
 }
 
+/**
+ * Construit la chaîne décrivant le parcours utilisateur (questions/réponses)
+ * Format : "Q1: Quel Type ? R1: 2 colonnes | Q2: Capacité ? R2: 4T"
+ */
+export function buildParcours(userQuestionAnswers: UserQuestionAnswer[]): string {
+  if (!userQuestionAnswers || userQuestionAnswers.length === 0) return '';
+  
+  return userQuestionAnswers.map((qa, index) => {
+    const questionNum = index + 1;
+    const question = qa.questionLabel || `Question ${qa.questionId}`;
+    const answer = Array.isArray(qa.answerLabel)
+      ? qa.answerLabel.join(', ')
+      : (qa.answerLabel || String(qa.answerId));
+    
+    return `Q${questionNum}: ${question} R${questionNum}: ${answer}`;
+  }).join(' | ');
+}
+
 export { debugInfo, clearDebugInfo };

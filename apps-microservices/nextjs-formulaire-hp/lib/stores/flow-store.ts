@@ -257,12 +257,16 @@ export interface FlowState {
   // Paramètres de test pour le scoring du matching (passés via URL)
   matchingTestParams: MatchingTestParams | null;
 
+  // Activation du rerank via RAG (passé via URL ?rerank=1)
+  useRerank: boolean;
+
   // IDs des produits à soumettre (pour le devis unique vs sélection multiple)
   supplierIdsToSubmit: string[] | null;
 
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
   setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
+  setUseRerank: (useRerank: boolean) => void;
   setCharacteristicsMap: (characteristics: CharacteristicsMap) => void;
   setOrphanedSelectedSuppliers: (suppliers: Supplier[]) => void;
   setCriteriaHaveChanged: (changed: boolean) => void;
@@ -336,6 +340,7 @@ const initialState = {
   removedSecondaireCriteriaIds: [],
   userQuestionAnswers: [],
   matchingTestParams: null,
+  useRerank: false,
   ddc: "",
   supplierIdsToSubmit: null,
 };
@@ -439,6 +444,8 @@ export const useFlowStore = create<FlowState>()(
       setMatchingResults: (results) => set({ matchingResults: results }),
 
       setMatchingTestParams: (params) => set({ matchingTestParams: params }),
+
+      setUseRerank: (useRerank) => set({ useRerank }),
 
       setFlowType: (flowType) => set({ flowType }),
 
