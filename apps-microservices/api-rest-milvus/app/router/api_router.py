@@ -11,7 +11,7 @@ from .distinct import router as distinct_router
 
 api_router = APIRouter()
 
-api_router.include_router(distinct_router, tags=["Distinct Values"])
+api_router.include_router(distinct_router, tags=["GET Distinct Values"])
 api_router.include_router(read_router, tags=["GET"])
 api_router.include_router(read_post_router, tags=["POST Search"])
 api_router.include_router(check_urls_router, tags=["URL Verification"])
