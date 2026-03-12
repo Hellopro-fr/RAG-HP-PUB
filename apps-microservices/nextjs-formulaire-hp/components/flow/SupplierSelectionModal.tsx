@@ -308,7 +308,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
               />
 
               {/* Budget Estimate */}
-              <BudgetEstimate />
+              <BudgetEstimate handleClickNeCorrespondPas={() => setViewState("custom-need")}/>
 
               {/* Criteria Changed Banner */}
               {criteriaHaveChanged && selectedSupplierIds.length > 0 && (

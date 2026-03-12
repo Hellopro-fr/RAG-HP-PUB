@@ -35,6 +35,7 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [description, setDescription] = useState("");
+  const [budget, setBudget] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
 
@@ -373,11 +374,10 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
             {/* Title */}
             <div className="text-center">
               <h2 className="text-2xl font-bold text-foreground">
-                Décrivez votre besoin
+                Ajustez votre recherche
               </h2>
               <p className="mt-1 text-muted-foreground">
-                Votre besoin est unique ? Décrivez-le et nos experts trouveront les
-                fournisseurs qu'il vous faut.
+                Nous allons rechercher un fournisseur adapté à votre budget et vos contraintes.
               </p>
             </div>
 
@@ -390,7 +390,43 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
                     htmlFor="description"
                     className="block text-sm font-medium text-foreground"
                   >
-                    Votre besoin *
+                    Budget souhaité *
+                  </label>
+                </div>
+                <div className="relative">
+                  <input
+                    id="budget"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value)}
+                    className={`w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none ${isListening ? "border-red-400 ring-2 ring-red-100" : "border-input"
+                      }`}
+                    placeholder="Ex: 2 000 € – 3 000 € HT"
+                  />
+                  {isListening && (
+                    <div className="absolute bottom-3 right-3 flex items-center gap-1.5 text-xs text-red-500">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                      Écoute en cours...
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Reassurance */}
+              <div className="flex items-start gap-3 rounded-xl bg-primary/5 border border-primary/10 p-4">
+                <UserCheck className="h-5 w-5 shrink-0 text-primary mt-0.5" />
+                <p className="text-sm text-foreground/80">
+                  Nos experts vont rechercher un fournisseur adapté à votre budget et vos besoins spécifiques.
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label
+                    htmlFor="description"
+                    className="block text-sm font-medium text-foreground"
+                  >
+                    Quelque chose à ajouter ? (optionnel)
                   </label>
                   <button
                     type="button"
@@ -457,15 +493,6 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
                 </label>
               </div>
 
-              {/* Reassurance */}
-              <div className="flex items-start gap-3 rounded-xl bg-primary/5 border border-primary/10 p-4">
-                <UserCheck className="h-5 w-5 shrink-0 text-primary mt-0.5" />
-                <p className="text-sm text-foreground/80">
-                  Un expert analysera votre demande et vous proposera les meilleurs
-                  fournisseurs sous 24h
-                </p>
-              </div>
-
               {/* Actions */}
               <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                 <button
@@ -476,8 +503,8 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
                 </button>
                 <button
                   onClick={goToNextStep}
-                  disabled={!description.trim()}
-                  className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${description.trim()
+                  disabled={!budget.trim()}
+                  className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${budget.trim()
                     ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                     }`}
