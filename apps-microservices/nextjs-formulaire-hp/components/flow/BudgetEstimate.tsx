@@ -31,7 +31,7 @@ interface BudgetEstimateProps {
   /** Tableau des prix sourcés */
   priceItems?: PriceItem[];
   /** Callback quand l'utilisateur clique "Ce budget ne correspond pas à mon projet" */
-  onBudgetMismatch?: () => void;
+  handleClickNeCorrespondPas?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ const BudgetEstimate = ({
   pricePositions: pricePositionsProp,
   detailDescription,
   priceItems = DEFAULT_PRICE_ITEMS,
-  onBudgetMismatch,
+  handleClickNeCorrespondPas
 }: BudgetEstimateProps) => {
   const [showDetail, setShowDetail] = useState(false);
 
@@ -185,7 +185,7 @@ const BudgetEstimate = ({
         {/* Ligne 3 : lien budget ne correspond pas */}
         <div className="pl-0 sm:pl-[3.375rem]">
           <button
-            onClick={onBudgetMismatch}
+            onClick={handleClickNeCorrespondPas}
             className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2"
           >
             Ce budget ne correspond pas à mon projet →
