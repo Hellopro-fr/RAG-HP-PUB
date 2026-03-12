@@ -53,6 +53,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         self._high_executor = None
         self._default_executor = None
 
+        # Event pour bloquer strictement les priorités inférieures quand HAUTE est actif
+        self._lower_priorities_allowed = asyncio.Event()
+
         logging.info(
             f"Database Priority Queue Config: Total Slots={self.max_concurrent_requests}"
         )
@@ -78,6 +81,9 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
             # Sauvegarde des compteurs pour le notify ciblé
             self._high_workers_count = high_workers
             self._shared_workers_count = shared_workers
+
+            # Initialisation de l'Event (ouvert par défaut)
+            self._lower_priorities_allowed.set()
 
             # Création des thread pools dédiés :
             # - _high_executor : exclusif aux workers HAUTE, dimensionné exactement
@@ -142,9 +148,15 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
                         await self.queue_cond.wait()
                     func, args, kwargs, future = self.high_queue.popleft()
 
-                await self._execute_task(
-                    func, args, kwargs, future, executor=self._high_executor
-                )
+                await self._execute_task(func, args, kwargs, future, executor=self._high_executor)
+
+                # Si la file HAUTE est complètement vide, on libère l'Event de pause
+                # pour permettre aux workers MOYENNE/BASSE de reprendre le travail.
+                async with self.queue_cond:
+                    if not self.high_queue:
+                        if not self._lower_priorities_allowed.is_set():
+                            logging.info("⏸️ File HAUTE vide. Reprise des requêtes DB MOYENNE/BASSE.")
+                            self._lower_priorities_allowed.set()
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -156,9 +168,16 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
     async def _shared_worker_loop(self, worker_id: str):
         while True:
             try:
+                # Pause stricte : on attend que l'Event soit ouvert
+                await self._lower_priorities_allowed.wait()
+
                 async with self.queue_cond:
                     while not (self.high_queue or self.medium_queue or self.low_queue):
                         await self.queue_cond.wait()
+                    # Si un HAUTE est arrivé entre temps, il faut se re-suspendre.
+                    if not self._lower_priorities_allowed.is_set():
+                        continue
+
                     if self.high_queue:
                         func, args, kwargs, future = self.high_queue.popleft()
                     elif self.medium_queue:
@@ -180,9 +199,16 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
     async def _medium_worker_loop(self, worker_id: str):
         while True:
             try:
+                # Pause stricte : on attend que l'Event soit ouvert
+                await self._lower_priorities_allowed.wait()
+
                 async with self.queue_cond:
                     while not (self.medium_queue or self.low_queue):
                         await self.queue_cond.wait()
+                    # Si un HAUTE est arrivé entre temps, il faut se re-suspendre.
+                    if not self._lower_priorities_allowed.is_set():
+                        continue
+
                     if self.medium_queue:
                         func, args, kwargs, future = self.medium_queue.popleft()
                     else:
@@ -202,9 +228,16 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
     async def _low_worker_loop(self, worker_id: str):
         while True:
             try:
+                # Pause stricte : on attend que l'Event soit ouvert
+                await self._lower_priorities_allowed.wait()
+
                 async with self.queue_cond:
                     while not self.low_queue:
                         await self.queue_cond.wait()
+                    # Si un HAUTE est arrivé entre temps, il faut se re-suspendre.
+                    if not self._lower_priorities_allowed.is_set():
+                        continue
+
                     func, args, kwargs, future = self.low_queue.popleft()
 
                 await self._execute_task(
@@ -244,6 +277,10 @@ class DatabaseSearchServiceImpl(database_pb2_grpc.DatabaseSearchServiceServicer)
         async with self.queue_cond:
             item = (func, args, kwargs, future)
             if priority == 1:
+                # Dès qu'une HAUTE entre, on ferme physiquement la porte aux requêtes inférieures
+                if self._lower_priorities_allowed.is_set():
+                    logging.info("⏸️ Requête HAUTE DB reçue. Pause des requêtes MOYENNE/BASSE.")
+                    self._lower_priorities_allowed.clear()
                 self.high_queue.append(item)
             elif priority == 2:
                 self.medium_queue.append(item)
