@@ -354,8 +354,7 @@ class PrixExtractor:
 
         source_results = await database_client.classic_search_vector(
             collection    = source_name,
-            filter_expr   = final_filter_expr,
-            output_fields = self.request.fields if self.request.fields else None,
+            filter_expr   = final_filter_expr
         )
         
         # Convertir les résultats en dictionnaires
@@ -532,6 +531,7 @@ class PrixExtractor:
         self._log(f"📊 {total_items} items à traiter")
         self._log(f"Items: {json.dumps(items)}")
         sys.exit(1) #TODO: à enlever après test
+        raise Exception(f"test") 
 
         # Traitement parallèle de tous les items
         self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
