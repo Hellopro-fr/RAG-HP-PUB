@@ -104,12 +104,10 @@ class EmbeddingUseCase:
             # Création des thread pools dédiés (pour le CPU binding: tokenization/pooling)
             other_workers = shared_workers + medium_workers + low_workers
             self._high_executor = futures.ThreadPoolExecutor(
-                max_workers=max(1, high_workers),
-                thread_name_prefix="emb-high"
+                max_workers=max(1, high_workers), thread_name_prefix="emb-high"
             )
             self._default_executor = futures.ThreadPoolExecutor(
-                max_workers=max(1, other_workers),
-                thread_name_prefix="emb-default"
+                max_workers=max(1, other_workers), thread_name_prefix="emb-default"
             )
 
             logging.info(
@@ -137,40 +135,80 @@ class EmbeddingUseCase:
                 f"✅ {total} workers d'embedding démarrés (High: {high_workers}, Shared: {shared_workers}, Medium: {medium_workers}, Low: {low_workers})."
             )
 
-    async def _execute_task(self, func, args, kwargs, future, executor=None, limiter=None):
+    async def _process_batch(self, batch, executor=None, limiter=None):
+        """Prend un ensemble de requêtes (Dynamic Batching), les exécute sur le GPU et distribue les résultats."""
+        # 1. Ignorer les requêtes annulées (Timeout)
+        active_batch = [
+            (texts, future) for texts, future in batch if not future.cancelled()
+        ]
+        if not active_batch:
+            return
+
+        # 2. Agréger les textes
+        all_texts = []
+        for texts, future in active_batch:
+            all_texts.extend(texts)
+
+        if len(active_batch) > 1:
+            logging.info(
+                f"🔄 Dynamic Batching: Agrégation de {len(active_batch)} requêtes en un seul batch de {len(all_texts)} textes."
+            )
+
+        # 3. Traiter le batch massif
         try:
-            # Si le client a timeout pendant l'attente, on annule et on ignore cette requête (Smart Cancellation)
-            if not future.cancelled():
-                # On passe executor et limiter à _process_embeddings via kwargs
-                kwargs['executor'] = executor
-                kwargs['limiter'] = limiter
-                result = await func(*args, **kwargs)
-                future.set_result(result)
-            else:
-                logging.info(
-                    "Ignoré par le worker: Requête déjà annulée (Timeout/Disconnect)"
-                )
+            results = await self._process_embeddings(
+                all_texts, executor=executor, limiter=limiter
+            )
+
+            # 4. Redistribuer les résultats aux bons futures
+            current_idx = 0
+            for texts, future in active_batch:
+                if not future.cancelled():
+                    req_len = len(texts)
+                    req_results = results[current_idx : current_idx + req_len]
+                    future.set_result(req_results)
+                current_idx += len(texts)
+
         except Exception as e:
-            if not future.cancelled():
-                future.set_exception(e)
+            for texts, future in active_batch:
+                if not future.cancelled():
+                    future.set_exception(e)
 
     async def _high_worker_loop(self, worker_id: str):
-        """Voie rapide stricte (Fast Lane): Ne traite QUE la haute priorité, sans exception."""
+        """Voie rapide stricte (Fast Lane): Ne traite QUE la haute priorité, avec Dynamic Batching."""
         while True:
             try:
+                batch = []
                 async with self.queue_cond:
                     while not self.high_queue:
                         await self.queue_cond.wait()
-                    func, args, kwargs, future = self.high_queue.popleft()
 
-                await self._execute_task(func, args, kwargs, future, executor=self._high_executor, limiter=None)
+                    # Draine la queue jusqu'à atteindre la taille optimale du batch
+                    current_texts = 0
+                    while self.high_queue and current_texts < self.batch_size:
+                        texts, future = self.high_queue[0]  # Peek
+                        if (
+                            current_texts > 0
+                            and current_texts + len(texts) > self.batch_size
+                        ):
+                            break  # On dépasse la capacité optimale, on laisse pour le prochain worker
+                        texts, future = self.high_queue.popleft()
+                        batch.append((texts, future))
+                        current_texts += len(texts)
+
+                if batch:
+                    await self._process_batch(
+                        batch, executor=self._high_executor, limiter=None
+                    )
 
                 # Si la file HAUTE est complètement vide, on libère l'Event de pause
                 # pour permettre aux workers MOYENNE/BASSE de reprendre le travail.
                 async with self.queue_cond:
                     if not self.high_queue:
                         if not self._lower_priorities_allowed.is_set():
-                            logging.info("⏸️ File HAUTE vide. Reprise des requêtes MOYENNE/BASSE.")
+                            logging.info(
+                                "⏸️ File HAUTE vide. Reprise des requêtes MOYENNE/BASSE."
+                            )
                             self._lower_priorities_allowed.set()
             except asyncio.CancelledError:
                 break
@@ -185,23 +223,38 @@ class EmbeddingUseCase:
                 # Pause stricte : on attend que l'Event soit ouvert (pas de requêtes HAUTE en cours)
                 await self._lower_priorities_allowed.wait()
 
+                batch = []
                 async with self.queue_cond:
                     while not (self.high_queue or self.medium_queue or self.low_queue):
                         await self.queue_cond.wait()
+
                     # Si un HAUTE est arrivé entre temps, il faut se re-suspendre.
-                    # On ignore la tâche pour ce cycle et on retourne vérifier l'Event.
                     if not self._lower_priorities_allowed.is_set():
                         continue
 
-                    if self.high_queue:
-                        func, args, kwargs, future = self.high_queue.popleft()
-                    elif self.medium_queue:
-                        func, args, kwargs, future = self.medium_queue.popleft()
-                    else:
-                        func, args, kwargs, future = self.low_queue.popleft()
+                    # Draine la queue en respectant les priorités
+                    current_texts = 0
+                    for q in [self.high_queue, self.medium_queue, self.low_queue]:
+                        while q and current_texts < self.batch_size:
+                            texts, future = q[0]
+                            if (
+                                current_texts > 0
+                                and current_texts + len(texts) > self.batch_size
+                            ):
+                                break
+                            texts, future = q.popleft()
+                            batch.append((texts, future))
+                            current_texts += len(texts)
+                        if current_texts >= self.batch_size:
+                            break
 
-                # Shared worker : limité par le semaphore Triton, utilise le pool par défaut
-                await self._execute_task(func, args, kwargs, future, executor=self._default_executor, limiter=self._triton_limiter)
+                if batch:
+                    # Shared worker : limité par le semaphore Triton, utilise le pool par défaut
+                    await self._process_batch(
+                        batch,
+                        executor=self._default_executor,
+                        limiter=self._triton_limiter,
+                    )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -212,22 +265,37 @@ class EmbeddingUseCase:
     async def _medium_worker_loop(self, worker_id: str):
         while True:
             try:
-                # Pause stricte : on attend que l'Event soit ouvert (pas de requêtes HAUTE en cours)
                 await self._lower_priorities_allowed.wait()
 
+                batch = []
                 async with self.queue_cond:
                     while not (self.medium_queue or self.low_queue):
                         await self.queue_cond.wait()
-                    # Si un HAUTE est arrivé entre temps, on retourne vérifier l'Event.
+
                     if not self._lower_priorities_allowed.is_set():
                         continue
 
-                    if self.medium_queue:
-                        func, args, kwargs, future = self.medium_queue.popleft()
-                    else:
-                        func, args, kwargs, future = self.low_queue.popleft()
+                    current_texts = 0
+                    for q in [self.medium_queue, self.low_queue]:
+                        while q and current_texts < self.batch_size:
+                            texts, future = q[0]
+                            if (
+                                current_texts > 0
+                                and current_texts + len(texts) > self.batch_size
+                            ):
+                                break
+                            texts, future = q.popleft()
+                            batch.append((texts, future))
+                            current_texts += len(texts)
+                        if current_texts >= self.batch_size:
+                            break
 
-                await self._execute_task(func, args, kwargs, future, executor=self._default_executor, limiter=self._triton_limiter)
+                if batch:
+                    await self._process_batch(
+                        batch,
+                        executor=self._default_executor,
+                        limiter=self._triton_limiter,
+                    )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -238,19 +306,34 @@ class EmbeddingUseCase:
     async def _low_worker_loop(self, worker_id: str):
         while True:
             try:
-                # Pause stricte : on attend que l'Event soit ouvert (pas de requêtes HAUTE en cours)
                 await self._lower_priorities_allowed.wait()
 
+                batch = []
                 async with self.queue_cond:
                     while not self.low_queue:
                         await self.queue_cond.wait()
-                    # Si un HAUTE est arrivé entre temps, on retourne vérifier l'Event.
+
                     if not self._lower_priorities_allowed.is_set():
                         continue
 
-                    func, args, kwargs, future = self.low_queue.popleft()
+                    current_texts = 0
+                    while self.low_queue and current_texts < self.batch_size:
+                        texts, future = self.low_queue[0]
+                        if (
+                            current_texts > 0
+                            and current_texts + len(texts) > self.batch_size
+                        ):
+                            break
+                        texts, future = self.low_queue.popleft()
+                        batch.append((texts, future))
+                        current_texts += len(texts)
 
-                await self._execute_task(func, args, kwargs, future, executor=self._default_executor, limiter=self._triton_limiter)
+                if batch:
+                    await self._process_batch(
+                        batch,
+                        executor=self._default_executor,
+                        limiter=self._triton_limiter,
+                    )
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -292,7 +375,9 @@ class EmbeddingUseCase:
         sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
         return (sum_embeddings / sum_mask).numpy()
 
-    async def _process_embeddings(self, texts: List[str], executor=None, limiter=None) -> List[List[float]]:
+    async def _process_embeddings(
+        self, texts: List[str], executor=None, limiter=None
+    ) -> List[List[float]]:
         """La vraie logique métier, exécutée de façon isolée par les workers."""
         all_embeddings = []
 
@@ -347,14 +432,18 @@ class EmbeddingUseCase:
                 last_hidden_state = response.as_numpy("last_hidden_state")
 
                 # Exécution CPU lourde dans le thread pool dédié !
-                callable_pooling = functools.partial(self.mean_pooling, last_hidden_state, attention_mask)
+                callable_pooling = functools.partial(
+                    self.mean_pooling, last_hidden_state, attention_mask
+                )
                 sentence_embeddings = await loop.run_in_executor(
                     executor, callable_pooling
                 )
 
                 all_embeddings.extend(sentence_embeddings.tolist())
-                
-            logging.info(f"✅ [_process_embeddings] Génération terminée avec succès pour {len(texts)} textes.")
+
+            logging.info(
+                f"✅ [_process_embeddings] Génération terminée avec succès pour {len(texts)} textes."
+            )
 
             return all_embeddings
         except Exception as e:
@@ -397,11 +486,16 @@ class EmbeddingUseCase:
         future = loop.create_future()
 
         async with self.queue_cond:
-            item = (self._process_embeddings, (texts,), {}, future)
+            item = (
+                texts,
+                future,
+            )  # Stocke uniquement les arguments pour le dynamic batching
             if priority == 1:
                 # Dès qu'une HAUTE entre, on ferme physiquement la porte aux requêtes inférieures
                 if self._lower_priorities_allowed.is_set():
-                    logging.info("⏸️ Requête HAUTE reçue. Pause des requêtes MOYENNE/BASSE.")
+                    logging.info(
+                        "⏸️ Requête HAUTE reçue. Pause des requêtes MOYENNE/BASSE."
+                    )
                     self._lower_priorities_allowed.clear()
                 self.high_queue.append(item)
             elif priority == 2:
@@ -417,7 +511,9 @@ class EmbeddingUseCase:
             # - HAUTE: réveille les high workers + shared workers
             # - MOYENNE/BASSE: réveille 1 seul worker
             if priority == 1:
-                self.queue_cond.notify(self._high_workers_count + self._shared_workers_count)
+                self.queue_cond.notify(
+                    self._high_workers_count + self._shared_workers_count
+                )
             else:
                 self.queue_cond.notify(1)
 

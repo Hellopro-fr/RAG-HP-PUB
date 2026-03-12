@@ -220,7 +220,7 @@ services:
       - .env
     environment:
       - TRITON_URL=${TRITON_URL}
-      - EMBEDDING_BATCH_SIZE=8
+      - EMBEDDING_BATCH_SIZE=64
       - TRITON_MAX_CONCURRENT_DEFAULT=1
       - TOTAL_MAX_CONCURRENT_REQUESTS=10
       - HIGH_PRIORITY_SERVICES=api-recherche-service
@@ -258,6 +258,7 @@ services:
       - TOTAL_MAX_CONCURRENT_REQUESTS=100
       - HIGH_PRIORITY_SERVICES=api-recherche-service
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
+      - DB_BATCH_SIZE=64
     env_file:
       - .env
     networks:
