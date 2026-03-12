@@ -255,7 +255,7 @@ services:
       dockerfile: ./apps-microservices/database-recherche-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
     environment:
-      - TOTAL_MAX_CONCURRENT_REQUESTS=100
+      - TOTAL_MAX_CONCURRENT_REQUESTS=200
       - HIGH_PRIORITY_SERVICES=api-recherche-service
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
       - DB_BATCH_SIZE=16
