@@ -1742,6 +1742,7 @@ class RecommendationService:
 
             # Map etat_societe to human-readable label
             etat_societe_raw = str(info.get("etat_societe", ""))
+            logging.warning(f"[RERANK]etat_societe_raw: {etat_societe_raw}")
             etat_societe_label = ETAT_SOCIETE_MAP.get(
                 etat_societe_raw, etat_societe_raw
             )
@@ -1755,9 +1756,9 @@ class RecommendationService:
                     "id_fournisseur": str(info.get("id_fournisseur", "")),
                     "type": etat_societe_label,
                 },
-                "score_matching": (
-                    produit_map[id_produit].score if id_produit in produit_map else 0.0
-                ),
+                # "score_matching": (
+                #     produit_map[id_produit].score if id_produit in produit_map else 0.0
+                # ),
                 "caracteristiques": (
                     [
                         {
@@ -2117,7 +2118,7 @@ class RecommendationService:
 
         logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
-
+        return top_produit, liste_produit, []
         try:
             llm_response = await gemini_client.generate_rerank_response(
                 system_prompt, liste_produits_json

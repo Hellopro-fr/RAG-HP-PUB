@@ -51,7 +51,8 @@ class GeminiClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gemini-3-flash-preview",
+        # model: str = "gemini-3-flash-preview",
+        model: str = "gemini-2.0-flash-thinking-exp-01-21",
         max_retries: int = 10,
     ):
         self.api_key = api_key or settings.GEMINI_API_KEY
@@ -150,7 +151,9 @@ class GeminiClient:
             # Combine system prompt and user data into one prompt
             combined_prompt = f"{system_prompt}\n\n{user_data_json}"
 
-            logger.warning("[RERANK-GEMINI] Sending request to Gemini (model=%s)...", self.model)
+            logger.warning(
+                "[RERANK-GEMINI] Sending request to Gemini (model=%s)...", self.model
+            )
 
             # Run the synchronous chat call in a thread pool to avoid blocking the event loop
             result = await asyncio.wait_for(
@@ -196,10 +199,14 @@ class GeminiClient:
                 return None
 
         except asyncio.TimeoutError:
-            logger.error(f"[RERANK-GEMINI] Gemini call timed out after {self._timeout}s")
+            logger.error(
+                f"[RERANK-GEMINI] Gemini call timed out after {self._timeout}s"
+            )
             return None
         except Exception as e:
-            logger.error(f"[RERANK-GEMINI] Gemini rerank generation error: {e}", exc_info=True)
+            logger.error(
+                f"[RERANK-GEMINI] Gemini rerank generation error: {e}", exc_info=True
+            )
             return None
 
 
