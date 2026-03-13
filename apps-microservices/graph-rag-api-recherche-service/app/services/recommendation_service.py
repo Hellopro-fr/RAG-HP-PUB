@@ -2171,19 +2171,20 @@ class RecommendationService:
         llm_autres = llm_response.get("autres_produits", [])
         llm_ecartes = llm_response.get("produits_ecartes", [])
 
-        # Build a map of id_produit -> LLM score from all sections
+        # Build a map of id_produit -> LLM score and full LLM entry from all sections
         llm_score_map = {}
         llm_response_map = {}
         for entry in llm_top + llm_autres + llm_ecartes:
             if isinstance(entry, dict):
                 pid = str(entry.get("id_produit", ""))
-                score = entry.get("score")
-                if pid and score is not None:
-                    try:
-                        llm_score_map[pid] = float(score)
-                        llm_response_map[pid] = entry
-                    except (ValueError, TypeError):
-                        pass
+                if pid:
+                    llm_response_map[pid] = entry
+                    score = entry.get("score")
+                    if score is not None:
+                        try:
+                            llm_score_map[pid] = float(score)
+                        except (ValueError, TypeError):
+                            pass
 
         # Ensure all are string ID lists
         llm_top_ids = [
