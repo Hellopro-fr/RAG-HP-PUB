@@ -1,5 +1,7 @@
 import logging
 import time
+import re
+import json
 import asyncio
 from typing import List, Dict, Any, Optional
 
@@ -15,6 +17,8 @@ from app.domain.models import (
     ScoredProduct,
 )
 from app.infrastructure.clients import clients
+from app.infrastructure.hellopro_api_client import hellopro_api_client, ETAT_SOCIETE_MAP
+from app.infrastructure.gemini_client import gemini_client
 
 # from app.services.unit_normalizer import unit_normalizer
 
@@ -980,12 +984,12 @@ class RecommendationService:
         }
 
         # Debug: Log parameters with their types
-        logging.info(f"📝 Cypher params being sent:")
+        logging.warning(f"📝 Cypher params being sent:")
         for key, value in params.items():
             if key not in ["filters", "weights"]:  # Skip large nested params
-                logging.info(f"   {key}: {value} (type: {type(value).__name__})")
+                logging.warning(f"   {key}: {value} (type: {type(value).__name__})")
             else:
-                logging.info(
+                logging.warning(
                     f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>"
                 )
 
@@ -1177,7 +1181,9 @@ class RecommendationService:
             "blocking_numeric": blocking_num,
         }
 
-    def _extract_scoring_params(self, request: MatchingPayloadIdProduit) -> Dict[str, Any]:
+    def _extract_scoring_params(
+        self, request: MatchingPayloadIdProduit
+    ) -> Dict[str, Any]:
         """
         Extract all scoring parameters from request.scoring with defaults.
         Returns a flat dict of scoring values.
@@ -1415,13 +1421,10 @@ class RecommendationService:
 
                     if matched_nodes:
                         # Pick the node with the highest node_score (computed in Cypher)
-                        node = max(
-                            matched_nodes, key=lambda n: n.get("node_score", 0)
-                        )
+                        node = max(matched_nodes, key=lambda n: n.get("node_score", 0))
                         valeur = (
                             str(node.get("valeur", ""))
-                            if node.get("valeur")
-                            and node.get("type_donnee") != "text"
+                            if node.get("valeur") and node.get("type_donnee") != "text"
                             else None
                         )
                         valeur_min = (
@@ -1481,9 +1484,7 @@ class RecommendationService:
             carac_score = rec.get("global_score", 0.0)
             info_produit = rec.get("product_data", {})
 
-            caracteristiques = convert_to_caracteristique_matching(
-                details, final_score
-            )
+            caracteristiques = convert_to_caracteristique_matching(details, final_score)
 
             return Produit(
                 rang=rang,
@@ -1573,8 +1574,12 @@ class RecommendationService:
 
         # Build Cypher params with request.top_k
         params = self._build_cypher_params(
-            request, flat_filters, weights_map, scoring_params,
-            top_k=request.top_k, target_product_id=target_product_id,
+            request,
+            flat_filters,
+            weights_map,
+            scoring_params,
+            top_k=request.top_k,
+            target_product_id=target_product_id,
         )
 
         try:
@@ -1656,7 +1661,10 @@ class RecommendationService:
 
             # Parse results and convert to MatchingResponse format
             liste_produit, top_produit = self._parse_matching_results(
-                results, request, blocked_val, different_val,
+                results,
+                request,
+                blocked_val,
+                different_val,
             )
 
             total_time = time.perf_counter() - start_time
@@ -1673,6 +1681,600 @@ class RecommendationService:
                 temps_de_traitement=0.0,
             )
 
+    async def _enrich_and_rerank_with_llm(
+        self,
+        top_produit: List[Produit],
+        liste_produit: List[Produit],
+        id_categorie: str,
+        parcours: str = "",
+        request: Optional[MatchingPayloadIdProduit] = None,
+    ) -> tuple:
+        """
+        Enrich products with HelloPro API data and rerank using Gemini LLM.
+
+        1. Extract all id_produit from top_produit + liste_produit
+        2. Fetch product info + characteristics + category definitions in parallel
+        3. Build BESOIN_ACHETEUR, CARACTERISTIQUES_CRITIQUES, LISTE_PRODUITS
+        4. Format system prompt with template variables and call Gemini
+        5. Reorder results based on LLM response
+
+        Returns (reranked_top_produit, reranked_liste_produit, ecarts)
+        """
+        # 1. Extract all product IDs
+        all_produits = top_produit + liste_produit
+        if not all_produits:
+            logging.warning("[RERANK] No products to rerank, returning empty")
+            return top_produit, liste_produit, []
+
+        id_produits = [p.id_produit for p in all_produits]
+        produit_map = {p.id_produit: p for p in all_produits}
+        # logging.warning(
+        #     f"[RERANK] Starting rerank for {len(id_produits)} products "
+        #     f"(top={len(top_produit)}, liste={len(liste_produit)}), "
+        #     f"id_categorie={id_categorie}"
+        # )
+        # logging.warning(f"[RERANK] Product IDs: {id_produits}")
+
+        # 2. Fetch product info + characteristics + category definitions in parallel
+        logging.warning(
+            "[RERANK] Fetching product info, characteristics, and category definitions from HelloPro API..."
+        )
+        try:
+            products_info, all_caracs, category_caracs = await asyncio.gather(
+                hellopro_api_client.fetch_products_info(id_categorie, id_produits),
+                hellopro_api_client.fetch_all_product_caracteristiques(id_produits),
+                hellopro_api_client.fetch_category_caracteristiques(id_categorie),
+            )
+        except Exception as e:
+            logging.error(f"[RERANK] HelloPro API enrichment error: {e}", exc_info=True)
+            return top_produit, liste_produit, []
+
+        # logging.warning(
+        #     f"[RERANK] HelloPro API results: "
+        #     f"products_info={len(products_info)} items, "
+        #     f"all_caracs={len(all_caracs)} products with caracs, "
+        #     f"category_caracs={len(category_caracs)} category definitions"
+        # )
+
+        # 3. Format enriched data for LLM
+        formatted_products = []
+        # logging.warning(f"[RERANK] product_info: {products_info}")
+        liste_carac_id = []
+        for carac in request.liste_caracteristique:
+            liste_carac_id.append(str(carac.id_caracteristique))
+
+        for id_produit in id_produits:
+            info = products_info.get(
+                id_produit, products_info.get(str(id_produit), {})
+            ).get("produit", {})
+            info_fournisseur = products_info.get(
+                id_produit, products_info.get(str(id_produit), {})
+            ).get("vendeur", {})
+            caracs = all_caracs.get(id_produit, all_caracs.get(str(id_produit), []))
+            # logging.warning(f"[RERANK] caracs: {caracs}")
+
+            # Determine fournisseur type from coeff_etat_score
+            produit_obj = produit_map.get(id_produit)
+            etat_societe_label = (
+                "Client"
+                if produit_obj and produit_obj.coeff_etat_score == 1.0
+                else "Prospect"
+            )
+
+            formatted_product = {
+                "id_produit": str(id_produit),
+                "titre": info.get(
+                    "titre_produit", info.get("nom_produit", info.get("titre", ""))
+                ),
+                "description": re.sub(
+                    r"\s+",
+                    " ",
+                    re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
+                        "\xa0", " "
+                    ),
+                ).strip(),
+                "fournisseur": {
+                    "nom": info_fournisseur.get("nom", ""),
+                    "id_fournisseur": str(info_fournisseur.get("id", "")),
+                    "type": etat_societe_label,
+                },
+                "caracteristiques": (
+                    [
+                        {
+                            "nom": c.get("nom_caracteristique", c.get("label", "")),
+                            "valeur": c.get("valeur", ""),
+                            "unite": c.get("unite", ""),
+                        }
+                        for c in caracs
+                        if str(c.get("id_caracteristique", "")) in liste_carac_id
+                    ]
+                    if caracs
+                    else []
+                ),
+            }
+            formatted_products.append(formatted_product)
+
+        # logging.warning(
+        #     f"[RERANK] Formatted {len(formatted_products)} products for LLM"
+        # )
+        # for fp in formatted_products:
+        #     logging.warning(
+        #         f"[RERANK]   Product {fp['id_produit']}: "
+        #         f"titre='{fp['titre'][:50]}...', "
+        #         f"fournisseur={fp['fournisseur']['type']}, "
+        #         # f"score_matching={fp['score_matching']}, "
+        #         f"nb_caracs={len(fp['caracteristiques'])}"
+        #     )
+
+        # 4. Build BESOIN_ACHETEUR, CARACTERISTIQUES_CRITIQUES, LISTE_PRODUITS
+
+        # BESOIN_ACHETEUR = rerank.parcours
+        besoin_acheteur = parcours if parcours else "Non renseigné"
+
+        # CARACTERISTIQUES_CRITIQUES: format from request.liste_caracteristique
+        # enriched with category characteristic definitions (names)
+        # Build a map from id_caracteristique -> category definition for name lookup
+        category_carac_map = {}
+        for cat_def in category_caracs:
+            cid = str(cat_def.get("id_caracteristique", ""))
+            category_carac_map[cid] = cat_def
+
+        caracteristiques_critiques_lines = []
+        if request and request.liste_caracteristique:
+            for carac in request.liste_caracteristique:
+                cid = str(carac.id_caracteristique)
+                poids_q = carac.poids_question or 1
+                poids_c = carac.poids_caracteristique or "critique"
+                unite = carac.unite or ""
+
+                if poids_c != "critique":
+                    continue
+
+                # Get the name from category definitions, fallback to id
+                cat_def = category_carac_map.get(cid, {})
+                nom = cat_def.get("nom", f"Caractéristique #{cid}")
+                if not unite and cat_def.get("unite"):
+                    unite = cat_def.get("unite", "")
+
+                # Determine icon based on poids_caracteristique
+                icon = "🔴" if poids_c == "critique" else "🟡"
+
+                # Format valeurs_cibles
+                valeur_parts = []
+                if isinstance(carac.valeurs_cibles, dict):
+                    # Numeric range: {min: X, max: Y, exact: Z}
+                    if carac.valeurs_cibles.get("min") is not None:
+                        valeur_parts.append(
+                            f"min: {carac.valeurs_cibles['min']} {unite}".strip()
+                        )
+                    if carac.valeurs_cibles.get("max") is not None:
+                        valeur_parts.append(
+                            f"max: {carac.valeurs_cibles['max']} {unite}".strip()
+                        )
+                    if carac.valeurs_cibles.get("exact") is not None:
+                        valeur_parts.append(
+                            f"{carac.valeurs_cibles['exact']} {unite}".strip()
+                        )
+                elif isinstance(carac.valeurs_cibles, list):
+                    # Text values: look up human-readable names from category definition
+                    cat_valeurs = cat_def.get("valeurs", [])
+                    valeur_id_to_name = {
+                        str(v.get("id_valeur", "")): v.get("valeur", "")
+                        for v in cat_valeurs
+                    }
+                    text_values = []
+                    for v in carac.valeurs_cibles:
+                        readable = valeur_id_to_name.get(str(v), str(v))
+                        text_values.append(readable)
+                    valeur_parts.append(", ".join(text_values))
+
+                valeur_str = ", ".join(valeur_parts) if valeur_parts else "Non spécifié"
+                line = f"{icon} {nom} (poids: {poids_q}) : {valeur_str}"
+                caracteristiques_critiques_lines.append(line)
+
+        caracteristiques_critiques = "\n".join(caracteristiques_critiques_lines)
+
+        # logging.warning(
+        #     f"[RERANK] BESOIN_ACHETEUR (parcours): {besoin_acheteur[:200]}..."
+        # )
+        # logging.warning(
+        #     f"[RERANK] CARACTERISTIQUES_CRITIQUES ({len(caracteristiques_critiques_lines)} lines):\n"
+        #     f"{caracteristiques_critiques}"
+        # )
+
+        # LISTE_PRODUITS = formatted product list as JSON
+        liste_produits_json = json.dumps(formatted_products, ensure_ascii=False)
+        # logging.warning(
+        #     f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
+        # )
+
+        # 5. Build system prompt with template variables and call Gemini
+        system_prompt = """
+            ## RÔLE ET OBJECTIF
+
+            Tu es un expert en matching acheteur-produit pour une marketplace B2B.
+            Tu reçois une liste de produits pré-sélectionnés par un système de scoring automatique
+            et la demande d'un acheteur professionnel. Tu produis un classement final fiable en
+            écartant les produits incompatibles et en repositionnant les autres selon leur
+            pertinence réelle.
+
+
+            ## VARIABLES D'ENTRÉE
+
+            - **[BESOIN_ACHETEUR]** : les réponses de l'acheteur au questionnaire
+            - **[CARACTERISTIQUES_CRITIQUES]** : les critères prioritaires et leur niveau
+            (critique ou secondaire)
+            - **[LISTE_PRODUITS]** : les produits pré-sélectionnés avec leurs caractéristiques,
+            incluant pour chaque produit le statut du fournisseur associé (client actif ou non)
+
+
+            ## ÉTAPES DE TRAITEMENT
+
+            ### ÉTAPE 1 — Analyser chaque produit individuellement
+
+            **Pré-qualification contextuelle (obligatoire avant toute vérification de critères)**
+
+            Avant d'examiner les critères individuels, qualifie le besoin de l'acheteur en trois dimensions :
+            - **Type de produit attendu** : quelle est la famille de produit précise, pas le nom générique
+            (ex. : pas le nom de la catégorie seul, mais le type exact avec ses caractéristiques structurantes)
+            - **Contexte d'utilisation** : quel est l'environnement, le secteur, le type d'usage
+            (professionnel/résidentiel, intérieur/extérieur, usage intensif/occasionnel, etc.)
+            - **Profil de l'utilisateur final** : à qui est destiné le produit
+            (garagiste, agriculteur, exploitant forestier, etc.)
+
+            Pour chaque produit, vérifie en priorité si son espace d'usage correspond à celui qualifié
+            ci-dessus. Un produit dont l'espace d'usage est structurellement différent est écarté à
+            cette étape, avant toute vérification de critères.
+
+            Un espace d'usage est structurellement différent quand le changement de contexte implique
+            des exigences techniques différentes, même si le nom du produit est identique.
+            Exemples types : même nom de produit mais usage professionnel ≠ usage résidentiel /
+            même nom de produit mais usage intensif ≠ usage occasionnel / produit neuf ≠ produit d'occasion.
+
+            **A. Compatibilité de type, de segment et d'usage**
+            Deux produits peuvent partager le même nom générique tout en étant incompatibles.
+            Les écarts suivants sont éliminatoires :
+            - Porteur ou interface différent de ce qui est demandé
+            - État (neuf / occasion) différent de ce qui est demandé
+            - Capacité, puissance ou charge significativement inférieure à la cible
+            - Usage spécialisé ne couvrant pas le besoin général exprimé
+            - Segment ou contexte d'utilisation structurellement différent
+            (résidentiel vs professionnel, mobile vs fixe, entrée de gamme vs usage lourd)
+
+            **B. Respect des contraintes absolues**
+            Vérifie chaque critère critique de [CARACTERISTIQUES_CRITIQUES] :
+            - Valeur numérique inférieure à un minimum exigé : ÉCARTÉ
+            - Valeur numérique supérieure à un maximum exigé : ÉCARTÉ
+            - Valeur textuelle incompatible avec la cible : ÉCARTÉ
+            - Valeur non renseignée : non validable, ne suppose pas de compatibilité par défaut
+
+
+            ### ÉTAPE 2 — Calculer le score de chaque produit non écarté
+
+            Le score est calculé sur l'ensemble des caractéristiques de [CARACTERISTIQUES_CRITIQUES],
+            qu'elles soient renseignées ou non dans la fiche produit.
+
+            Formule : Score = Somme(Points_i × Poids_i) / Somme(Poids_i)
+            où la somme porte sur TOUS les critères, renseignés ou non.
+
+            Barème des points :
+            - Valeur dans la cible ou dans la fourchette numérique : 1.0
+            - Correspondance partielle sur critère secondaire : 0.5
+            - Valeur hors fourchette sur critère secondaire : 0.1
+            - Caractéristique non renseignée dans la fiche produit : 0.0
+            - Valeur incompatible sur critère critique : ÉCARTÉ
+
+            Poids : critique = 2 / secondaire = 1
+
+            **Score de complétude informationnelle**
+
+            Après calcul du score principal, attribue un score de complétude de 1 à 5 selon la grille
+            suivante :
+
+            - **5** — Tous les critères critiques sont renseignés ET plus de 75% des critères
+            secondaires sont renseignés
+            - **4** — Tous les critères critiques sont renseignés ET entre 50% et 75% des critères
+            secondaires sont renseignés
+            - **3** — Tous les critères critiques sont renseignés ET moins de 50% des critères
+            secondaires sont renseignés
+            - **2** — Au moins un critère critique non renseigné, mais des critères secondaires présents
+            - **1** — Aucun critère critique renseigné, ou moins de 2 caractéristiques renseignées
+            au total
+
+            **Plafonnement du score par niveau de complétude**
+
+            Le score final ne peut pas dépasser le plafond associé au niveau de complétude du produit :
+
+            - Complétude **5** → plafond **1.0**
+            - Complétude **4** → plafond **0.90**
+            - Complétude **3** → plafond **0.75**
+            - Complétude **2** → plafond **0.60**
+            - Complétude **1** → plafond **0.40**
+
+            Le score affiché en output est le score après application du plafond,
+            exprimé comme un nombre décimal entre 0 et 1 (ex: 0.85).
+
+            Seuils de décision (appliqués sur le score plafonné) :
+            - Score ≥ 0.70 : VALIDE
+            - Score entre 0.40 et 0.69 : DÉGRADÉ
+            - Score < 0.40 : ÉCARTÉ par score insuffisant
+
+            Règles de décision forcées, non contournables par le score :
+            - Aucune caractéristique critique renseignée : décision forcée DÉGRADÉ
+            - Une ou plusieurs caractéristiques critiques manquantes : décision plafonnée à DÉGRADÉ
+            - Score ≥ 0.70 et tous les critères critiques renseignés et compatibles : VALIDE confirmé
+
+            Ce score de complétude est un critère de classement actif, appliqué systématiquement
+            après le score principal et avant la règle fournisseur. À score principal égal ou proche
+            (écart ≤ 5 points), le produit avec la complétude la plus élevée est positionné en priorité.
+
+            L'ordre de priorité dans le classement est donc :
+            1. Score principal plafonné (décroissant)
+            2. Score de complétude (décroissant) si écart de score principal ≤ 5 points
+            3. Statut fournisseur client (dans la marge de 10 points sur le score principal)
+
+            Le score de complétude est affiché dans l'output pour chaque produit classé.
+
+
+            ### ÉTAPE 3 — Appliquer la règle fournisseur
+
+            La règle fournisseur s'applique après calcul des scores et application du score de
+            complétude. Elle peut modifier l'ordre de classement selon les conditions suivantes :
+
+            **Condition d'application :** un produit dont le fournisseur est client actif peut être
+            repositionné devant un produit de fournisseur prospect si et seulement si l'écart de score
+            principal entre les deux est inférieur ou égal à 10 points.
+
+            **Cette règle ne s'applique jamais dans le sens inverse** : un produit prospect ne peut
+            jamais remonter devant un produit client, quelle que soit la situation.
+
+            **La règle s'applique aussi entre paliers de décision** (ex. : un produit client DÉGRADÉ
+            peut passer devant un produit prospect VALIDE si l'écart de score principal est ≤ 10 points).
+
+            Au-delà de 10 points d'écart, le score prime toujours, quel que soit le statut fournisseur.
+
+
+            ### ÉTAPE 4 — Produire le classement final
+
+            - Top produits : les 4 meilleurs produits VALIDES ou DÉGRADÉS par score décroissant.
+            Si moins de 4 produits sont éligibles, le top est réduit en conséquence.
+            - Autres produits : jusqu'à 8 produits VALIDES ou DÉGRADÉS restants par score décroissant.
+            - Produits écartés : listés séparément avec leur score et leur raison d'exclusion.
+            Jamais dans le top ni dans les autres produits.
+
+
+            ## RÈGLES GÉNÉRALES
+
+            - Un seul écart sur un critère critique suffit à écarter le produit, sans calcul.
+            - Ne jamais supposer qu'une information manquante est favorable au produit.
+            - Si l'acheteur a répondu "Je ne sais pas", n'applique pas d'exigence sur ce critère.
+            - Reste factuel. Si tu ne peux pas conclure faute d'information, indique-le
+            dans la justification.
+
+
+            ## FORMAT DE SORTIE
+
+            La réponse doit être un objet JSON valide et uniquement un objet JSON,
+            sans texte avant ou après.
+
+            {{
+            "besoin_acheteur": "Reformulation synthétique du besoin en 2-3 phrases.",
+            "top_produits": [
+                {{
+                "rang": 1,
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.85,
+                "completude": 4,
+                "base_calcul": "X/Y critères renseignés",
+                "decision": "VALIDE",
+                "fournisseur_client": true,
+                "justification": "Raison courte de ce positionnement."
+                }}
+            ],
+            "autres_produits": [
+                {{
+                "rang": 5,
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.52,
+                "completude": 2,
+                "base_calcul": "X/Y critères renseignés",
+                "decision": "DÉGRADÉ",
+                "fournisseur_client": false,
+                "justification": "Raison courte de ce positionnement."
+                }}
+            ],
+            "produits_ecartes": [
+                {{
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.35,
+                "fournisseur_client": false,
+                "raison_exclusion": "Raison factuelle de l'exclusion."
+                }}
+            ]
+            }}
+
+
+            ## CHECKLIST AVANT SORTIE
+
+            - [ ] Pré-qualification contextuelle effectuée avant toute vérification de critères
+            - [ ] Chaque critère critique vérifié pour chaque produit
+            - [ ] Incompatibilités de segment et d'usage traitées comme éliminatoires
+            - [ ] Valeurs numériques hors fourchette sur critères critiques traitées comme bloquantes
+            - [ ] Score calculé sur l'ensemble des critères, les non renseignés comptent 0
+            - [ ] Règles de décision forcées appliquées après le calcul
+            - [ ] Score de complétude calculé et plafond appliqué pour chaque produit
+            - [ ] Classement appliqué dans l'ordre : score principal → complétude (si écart ≤ 5 pts) → fournisseur (si écart ≤ 10 pts)
+            - [ ] Règle fournisseur appliquée avec marge de 10 points, jamais dans le sens prospect → client
+            - [ ] Aucun produit écarté dans le top ou les autres produits
+            - [ ] Top limité à 4 produits, autres produits limités à 8
+            - [ ] Champ base_calcul et champ completude renseignés pour chaque produit classé
+            - [ ] Champ score renseigné pour chaque produit écarté
+            - [ ] Sortie JSON valide sans texte en dehors du JSON
+
+
+            DONNÉES D'ENTRÉE
+
+            [BESOIN_ACHETEUR]
+            {besoin_acheteur}
+
+            [CARACTERISTIQUES_CRITIQUES]
+            {caracteristiques_critiques}
+
+            [LISTE_PRODUITS]
+            {liste_produits_json}
+            """
+
+        # Format the template variables into the system prompt
+        system_prompt = system_prompt.format(
+            besoin_acheteur=besoin_acheteur,
+            caracteristiques_critiques=caracteristiques_critiques,
+            liste_produits_json=liste_produits_json,
+        )
+
+        # logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
+        logging.warning("[RERANK] Calling Gemini LLM for reranking...")
+        # return top_produit, liste_produit, []
+        try:
+            llm_response = await gemini_client.generate_rerank_response(
+                system_prompt, liste_produits_json
+            )
+        except Exception as e:
+            logging.error(f"[RERANK] Gemini rerank call error: {e}", exc_info=True)
+            return top_produit, liste_produit, []
+
+        if not llm_response:
+            logging.warning(
+                "[RERANK] Gemini returned no usable response, keeping original order"
+            )
+            return top_produit, liste_produit, []
+
+        # logging.warning(
+        #     f"[RERANK] Gemini response received: {json.dumps(llm_response, ensure_ascii=False, default=str)[:1000]}"
+        # )
+
+        # 5. Reorder results based on LLM response
+        llm_top = llm_response.get("top_produits", [])
+        llm_autres = llm_response.get("autres_produits", [])
+        llm_ecartes = llm_response.get("produits_ecartes", [])
+
+        # Build a map of id_produit -> LLM score and full LLM entry from all sections
+        llm_score_map = {}
+        llm_response_map = {}
+        for entry in llm_top + llm_autres + llm_ecartes:
+            if isinstance(entry, dict):
+                pid = str(entry.get("id_produit", ""))
+                if pid:
+                    llm_response_map[pid] = entry
+                    score = entry.get("score")
+                    if score is not None:
+                        try:
+                            llm_score_map[pid] = float(score)
+                        except (ValueError, TypeError):
+                            pass
+
+        # Ensure all are string ID lists
+        llm_top_ids = [
+            str(x.get("id_produit", x) if isinstance(x, dict) else x) for x in llm_top
+        ]
+        llm_autres_ids = [
+            str(x.get("id_produit", x) if isinstance(x, dict) else x)
+            for x in llm_autres
+        ]
+        llm_ecartes_ids = [
+            str(x.get("id_produit", x) if isinstance(x, dict) else x)
+            for x in llm_ecartes
+        ]
+
+        # logging.warning(
+        #     f"[RERANK] LLM classification: "
+        #     f"top_produits={llm_top_ids}, "
+        #     f"autres_produits={llm_autres_ids}, "
+        #     f"produits_ecartes={llm_ecartes_ids}"
+        # )
+        # logging.warning(f"[RERANK] LLM score map: {llm_score_map}")
+
+        # Rebuild ordered lists from LLM output, using LLM score when available
+        reranked_top = []
+        for idx, pid in enumerate(llm_top_ids):
+            if pid in produit_map:
+                p = produit_map[pid]
+                reranked_top.append(
+                    Produit(
+                        rang=idx + 1,
+                        id_produit=p.id_produit,
+                        score=llm_score_map.get(pid, p.score),
+                        caracteristique=p.caracteristique,
+                        coeff_geo=p.coeff_geo,
+                        coeff_type_frns=p.coeff_type_frns,
+                        coeff_etat_score=p.coeff_etat_score,
+                        coeff_caracteristique=p.coeff_caracteristique,
+                        info_produit=p.info_produit,
+                        llm_response=llm_response_map.get(pid, {}),
+                    )
+                )
+
+        reranked_liste = []
+        for idx, pid in enumerate(llm_autres_ids):
+            if pid in produit_map:
+                p = produit_map[pid]
+                reranked_liste.append(
+                    Produit(
+                        rang=idx + 1,
+                        id_produit=p.id_produit,
+                        score=llm_score_map.get(pid, p.score),
+                        caracteristique=p.caracteristique,
+                        coeff_geo=p.coeff_geo,
+                        coeff_type_frns=p.coeff_type_frns,
+                        coeff_etat_score=p.coeff_etat_score,
+                        coeff_caracteristique=p.coeff_caracteristique,
+                        info_produit=p.info_produit,
+                        llm_response=llm_response_map.get(pid, {}),
+                    )
+                )
+
+        ecarts = []
+        for idx, pid in enumerate(llm_ecartes_ids):
+            if pid in produit_map:
+                p = produit_map[pid]
+                ecarts.append(
+                    Produit(
+                        rang=idx + 1,
+                        id_produit=p.id_produit,
+                        score=llm_score_map.get(pid, p.score),
+                        caracteristique=p.caracteristique,
+                        coeff_geo=p.coeff_geo,
+                        coeff_type_frns=p.coeff_type_frns,
+                        coeff_etat_score=p.coeff_etat_score,
+                        coeff_caracteristique=p.coeff_caracteristique,
+                        info_produit=p.info_produit,
+                        llm_response=llm_response_map.get(pid, {}),
+                    )
+                )
+
+        # Any products not mentioned by LLM go into liste_produit at the end
+        all_llm_ids = set(llm_top_ids + llm_autres_ids + llm_ecartes_ids)
+        for pid, p in produit_map.items():
+            if pid not in all_llm_ids:
+                reranked_liste.append(
+                    Produit(
+                        rang=len(reranked_liste) + 1,
+                        id_produit=p.id_produit,
+                        score=p.score,
+                        caracteristique=p.caracteristique,
+                        coeff_geo=p.coeff_geo,
+                        coeff_type_frns=p.coeff_type_frns,
+                        coeff_etat_score=p.coeff_etat_score,
+                        coeff_caracteristique=p.coeff_caracteristique,
+                        info_produit=p.info_produit,
+                        llm_response=llm_response_map.get(pid, {}),
+                    )
+                )
+
+        return reranked_top, reranked_liste, ecarts
+
     async def get_products_by_caracteristique_filters_rerank(
         self,
         request: MatchingPayloadIdProduit,
@@ -1681,7 +2283,8 @@ class RecommendationService:
         """
         Get products filtered and scored by CaracteristiqueTechnique constraints,
         using rerank.top_k instead of request.top_k.
-        Same core functionality as get_products_by_caracteristique_filters.
+        Same core functionality as get_products_by_caracteristique_filters,
+        then enriches with HelloPro API data and reranks via Gemini LLM.
         Called when rerank.use_rerank is True.
         """
         start_time = time.perf_counter()
@@ -1706,8 +2309,12 @@ class RecommendationService:
 
         # Build Cypher params with rerank.top_k instead of request.top_k
         params = self._build_cypher_params(
-            request, flat_filters, weights_map, scoring_params,
-            top_k=request.rerank.top_k, target_product_id=target_product_id,
+            request,
+            flat_filters,
+            weights_map,
+            scoring_params,
+            top_k=request.rerank.top_k,
+            target_product_id=target_product_id,
         )
 
         try:
@@ -1732,13 +2339,31 @@ class RecommendationService:
 
             # Parse results and convert to MatchingResponse format
             liste_produit, top_produit = self._parse_matching_results(
-                results, request, blocked_val, different_val,
+                results,
+                request,
+                blocked_val,
+                different_val,
+            )
+
+            # --- Enrich with HelloPro API data and rerank via Gemini LLM ---
+            id_categorie = str(request.id_categorie) if request.id_categorie else ""
+            parcours = request.rerank.parcours if request.rerank else ""
+
+            reranked_top, reranked_liste, ecarts = (
+                await self._enrich_and_rerank_with_llm(
+                    top_produit,
+                    liste_produit,
+                    id_categorie,
+                    parcours,
+                    request=request,
+                )
             )
 
             total_time = time.perf_counter() - start_time
             return MatchingResponse(
-                top_produit=top_produit,
-                liste_produit=liste_produit,
+                top_produit=reranked_top,
+                liste_produit=reranked_liste,
+                ecarts=ecarts if ecarts else None,
                 temps_de_traitement=total_time,
             )
         except Exception as e:
