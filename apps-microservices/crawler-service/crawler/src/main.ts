@@ -1,4 +1,5 @@
 import { RequestQueue, RobotsFile, Dataset, Configuration } from "crawlee";
+import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import { createClient } from 'redis';
