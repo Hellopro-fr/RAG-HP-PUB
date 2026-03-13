@@ -1747,11 +1747,12 @@ class RecommendationService:
             ).get("vendeur", {})
             caracs = all_caracs.get(id_produit, all_caracs.get(str(id_produit), []))
 
-            # Map etat_societe to human-readable label
-            etat_societe_raw = str(info_fournisseur.get("etat_societe", ""))
-            logging.warning(f"[RERANK]etat_societe_raw: {etat_societe_raw}")
-            etat_societe_label = ETAT_SOCIETE_MAP.get(
-                etat_societe_raw, etat_societe_raw
+            # Determine fournisseur type from coeff_etat_score
+            produit_obj = produit_map.get(id_produit)
+            etat_societe_label = (
+                "Client"
+                if produit_obj and produit_obj.coeff_etat_score == 1.0
+                else "Prospect"
             )
 
             formatted_product = {
