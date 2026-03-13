@@ -1413,6 +1413,16 @@ $(function () {
       case "prix":
         title = meta.nom_produit || title;
         result.source = "Prix"
+        if (meta.valeur_prix) {
+          let prix_line = `Prix: ${meta.valeur_prix}`;
+          for (const extra of [meta.devise, meta.taxe, meta.unite]) {
+            if (extra) {
+              prix_line += ` ${extra}`;
+            }
+          }
+          price_copy = prix_line;
+          price += `<span class='text-sm'>${prix_line}</span>`;
+        }
         break;
       default:
         break;
