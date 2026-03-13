@@ -1787,8 +1787,8 @@ class RecommendationService:
                             "valeur": c.get("valeur", ""),
                             "unite": c.get("unite", ""),
                         }
-                        for c in caracs
                         if c.get("id_caracteristique") in liste_carac_id
+                        for c in caracs
                     ]
                     if caracs
                     else []
