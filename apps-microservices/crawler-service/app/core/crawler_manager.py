@@ -712,6 +712,7 @@ class CrawlerManager:
             IncludeInArchive.DATASET: ["datasets/" + domain, "datasets/" + sanitized_name],
             IncludeInArchive.DATASET_NFR: ["datasets/nfr-" + domain, "datasets/nfr-" + sanitized_name],
             IncludeInArchive.DATASET_ERROR: ["datasets/error-" + domain, "datasets/error-" + sanitized_name],
+            IncludeInArchive.DATASET_UPDATE: ["datasets/update-" + domain, "datasets/update-" + sanitized_name],
             IncludeInArchive.REQUEST_QUEUES: ["request_queues/" + domain, "request_queues/" + sanitized_name],
             IncludeInArchive.REQUEST_URLS: ["request_urls/" + domain, "request_urls/" + sanitized_name],
             IncludeInArchive.MISCELLANEOUS: ["miscellaneous/" + domain, "miscellaneous/" + sanitized_name],

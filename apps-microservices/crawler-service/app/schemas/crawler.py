@@ -8,6 +8,7 @@ class IncludeInArchive(str, Enum):
     DATASET = "dataset"
     DATASET_NFR = "dataset_nfr"
     DATASET_ERROR = "dataset_error"
+    DATASET_UPDATE = "dataset_update"
     REQUEST_QUEUES = "request_queues"
     REQUEST_URLS = "request_urls"
     MISCELLANEOUS = "miscellaneous"
