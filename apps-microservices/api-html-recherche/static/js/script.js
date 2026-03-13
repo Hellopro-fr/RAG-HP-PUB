@@ -1443,7 +1443,7 @@ $(function () {
     }
 
     if (description && result.source === 'Prix') {
-      if (meta.chunk_id == 1) {
+      if (meta.chunk_id != meta.total_chunks) {
         description += " " + price_copy;
       }
       if (meta.caracteristique) {
