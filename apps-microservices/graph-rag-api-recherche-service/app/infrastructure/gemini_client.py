@@ -162,10 +162,10 @@ class GeminiClient:
                 timeout=self._timeout,
             )
 
-            logger.warning(
-                "[RERANK-GEMINI] Gemini response received: %s",
-                str(result)[:500],
-            )
+            # logger.warning(
+            #     "[RERANK-GEMINI] Gemini response received: %s",
+            #     str(result)[:500],
+            # )
 
             # Check for error in result
             if "error" in result:
