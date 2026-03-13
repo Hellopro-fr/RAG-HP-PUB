@@ -1442,7 +1442,7 @@ $(function () {
       }
     }
 
-    if (description && result.source === 'prix') {
+    if (description && result.source === 'Prix') {
       if (meta.chunk_id == 1) {
         description += " " + price_copy;
       }
