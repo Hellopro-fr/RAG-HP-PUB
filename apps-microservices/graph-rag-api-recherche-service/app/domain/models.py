@@ -421,6 +421,9 @@ class MatchingResponse(BaseModel):
     liste_produit: List[Produit] = Field(
         default_factory=list, description="Liste des produits trouvés classés par score"
     )
+    ecarts: Optional[List[Produit]] = Field(
+        None, description="Produits écartés par le LLM lors du reranking"
+    )
     temps_de_traitement: float = Field(
         ..., description="Temps pris pour effectuer le matching en secondes"
     )
