@@ -1784,6 +1784,9 @@ class RecommendationService:
                     else []
                 ),
             }
+            logging.warning(
+                f"[RERANK] formatted produit : {formatted_product.get("caracteristiques")}"
+            )
             if not formatted_product.get("titre") or not formatted_product.get(
                 "description"
             ):
