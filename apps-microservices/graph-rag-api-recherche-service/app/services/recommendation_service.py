@@ -2151,9 +2151,9 @@ class RecommendationService:
             )
             return top_produit, liste_produit, []
 
-        logging.warning(
-            f"[RERANK] Gemini response received: {json.dumps(llm_response, ensure_ascii=False, default=str)[:1000]}"
-        )
+        # logging.warning(
+        #     f"[RERANK] Gemini response received: {json.dumps(llm_response, ensure_ascii=False, default=str)[:1000]}"
+        # )
 
         # 5. Reorder results based on LLM response
         llm_top = llm_response.get("top_produits", [])
