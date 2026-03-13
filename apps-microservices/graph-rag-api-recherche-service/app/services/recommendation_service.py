@@ -1738,6 +1738,10 @@ class RecommendationService:
         # 3. Format enriched data for LLM
         formatted_products = []
         # logging.warning(f"[RERANK] product_info: {products_info}")
+        liste_carac_id = []
+        for carac in request.liste_caracteristique:
+            liste_carac_id.append(carac.id_caracteristique)
+
         for id_produit in id_produits:
             info = products_info.get(
                 id_produit, products_info.get(str(id_produit), {})
@@ -1762,11 +1766,11 @@ class RecommendationService:
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
                 "description": re.sub(
-                    r" +",
+                    r"\s+",
                     " ",
-                    re.sub(
-                        r"<[^>]+>", "", info.get("description_produit", "")
-                    ).replace("\xa0", " "),
+                    re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
+                        "\xa0", " "
+                    ),
                 ).strip(),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
@@ -1784,6 +1788,7 @@ class RecommendationService:
                             "unite": c.get("unite", ""),
                         }
                         for c in caracs
+                        if c.get("id_caracteristique") in liste_carac_id
                     ]
                     if caracs
                     else []
