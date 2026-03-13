@@ -78,6 +78,11 @@ async function validateTokenInMiddleware(
   secret: string
 ): Promise<{ valid: boolean; categoryId?: number; urlData?: TokenUrlData; error?: string; ddc?: string | undefined }> {
   try {
+    // Validation basique du format avant déchiffrement
+    if (!token || token.length < 20 || !/^[A-Za-z0-9_-]+$/.test(token)) {
+      return { valid: false, error: 'invalid_format' };
+    }
+
     // 1. Décoder le token Base64 URL-safe en bytes
     const encryptedData = base64UrlDecodeToBytes(token);
 
@@ -132,7 +137,12 @@ async function validateTokenInMiddleware(
     return { valid: true, categoryId: payload.c, urlData, ddc: payload.ddc_is_v };
   } catch (error) {
     // Erreur de déchiffrement = token invalide
-    console.error('[Middleware] Token validation error:', error);
+    // DOMException n'est pas bien sérialisée, extraire les infos utiles
+    const errorInfo = error instanceof Error
+      ? { name: error.name, message: error.message }
+      : { type: typeof error, value: String(error) };
+
+    console.error('[Middleware] Token validation error:', errorInfo);
     return { valid: false, error: 'invalid_token' };
   }
 }

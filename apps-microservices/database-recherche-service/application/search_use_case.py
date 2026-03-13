@@ -7,7 +7,6 @@ class SearchUseCase:
     def __init__(self, db_client: MilvusClient):
         self.db_client = db_client
 
-    # MODIFIÉ: La signature de la méthode est mise à jour
     def execute_search(
         self,
         collection_name: str,
@@ -28,6 +27,29 @@ class SearchUseCase:
 
         return self.db_client.search(collection_name, vector, top_k, **search_kwargs)
 
+    def execute_search_batch(
+        self,
+        collection_name: str,
+        vectors: List[List[float]],
+        top_k: int,
+        filter_expression: Optional[str] = None,
+        output_fields: Optional[List[str]] = None,
+        context_mode: Optional[str] = None,
+    ) -> List[List[SearchResultEntity]]:
+        """
+        Cas d'utilisation pour exécuter une recherche vectorielle dense en batch.
+        """
+        search_kwargs = {}
+        if filter_expression:
+            search_kwargs["expr"] = filter_expression
+        if output_fields:
+            search_kwargs["output_fields"] = output_fields
+        search_kwargs["context_mode"] = context_mode
+
+        return self.db_client.search_batch(
+            collection_name, vectors, top_k, **search_kwargs
+        )
+
     def get_collection_schema(self, collection_name: str) -> dict[str, str]:
         """
         Cas d'utilisation pour récupérer le schéma d'une collection.
@@ -39,7 +61,7 @@ class SearchUseCase:
         collection_name: str,
         filter_expression: str,
         top_k: int,
-        output_fields: Optional[List[str]] = None,
+        output_fields: List[str] = [],
     ) -> List[SearchResultEntity]:
         """
         Cas d'utilisation pour exécuter une recherche classique par filtre.
@@ -86,6 +108,53 @@ class SearchUseCase:
             collection_name=collection_name,
             dense_vector=dense_vector,
             query_text=query_text,
+            top_k=top_k,
+            dense_weight=dense_weight,
+            sparse_weight=sparse_weight,
+            ef=ef,
+            radius=radius,
+            range_filter=range_filter,
+            drop_ratio_search=drop_ratio_search,
+            dense_limit_multiplier=dense_limit_multiplier,
+            ranker_type=ranker_type,
+            rrf_k=rrf_k,
+            **search_kwargs,
+        )
+
+    def execute_hybrid_search_batch(
+        self,
+        collection_name: str,
+        dense_vectors: List[List[float]],
+        query_texts: List[str],
+        top_k: int,
+        dense_weight: float = 0.7,
+        sparse_weight: float = 0.3,
+        filter_expression: Optional[str] = None,
+        output_fields: Optional[List[str]] = None,
+        context_mode: Optional[str] = None,
+        ef: Optional[int] = None,
+        radius: Optional[float] = None,
+        range_filter: Optional[float] = None,
+        drop_ratio_search: float = 0.0,
+        dense_limit_multiplier: int = 1,
+        ranker_type: str = "weighted",
+        rrf_k: int = 60,
+        **kwargs,
+    ) -> List[List[SearchResultEntity]]:
+        """
+        Cas d'utilisation pour exécuter une recherche hybride en batch.
+        """
+        search_kwargs = {}
+        if filter_expression:
+            search_kwargs["expr"] = filter_expression
+        if output_fields:
+            search_kwargs["output_fields"] = output_fields
+        search_kwargs["context_mode"] = context_mode
+
+        return self.db_client.hybrid_search_batch(
+            collection_name=collection_name,
+            dense_vectors=dense_vectors,
+            query_texts=query_texts,
             top_k=top_k,
             dense_weight=dense_weight,
             sparse_weight=sparse_weight,

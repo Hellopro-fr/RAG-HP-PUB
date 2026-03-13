@@ -269,6 +269,12 @@ class MatchingOptions(BaseModel):
     )
 
 
+class RerankingOptions(BaseModel):
+    top_k: int = Field(24, description="Nombre de produits à reclasser")
+    use_rerank: bool = False
+    parcours: str = ""
+
+
 class ScoringOptions(BaseModel):
     z_unmatched: float = Field(
         0, description="Score pour les geolocalisation non matched"
@@ -336,6 +342,10 @@ class MatchingPayload(BaseModel):
             t_unmatched=0.2,
         ),
         description="Options pour le scoring",
+    )
+    rerank: Optional[RerankingOptions] = Field(
+        RerankingOptions(top_k=24, use_rerank=False, parcours=""),
+        description="Options pour le reranking",
     )
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
 

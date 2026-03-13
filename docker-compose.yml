@@ -221,6 +221,7 @@ services:
     environment:
       - TRITON_URL=${TRITON_URL}
       - EMBEDDING_BATCH_SIZE=8
+      - TRITON_MAX_CONCURRENT_DEFAULT=1
       - TOTAL_MAX_CONCURRENT_REQUESTS=10
       - HIGH_PRIORITY_SERVICES=api-recherche-service
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
@@ -254,9 +255,11 @@ services:
       dockerfile: ./apps-microservices/database-recherche-service/Dockerfile
     profiles: ["app"] # Profile for the main application stack
     environment:
-      - TOTAL_MAX_CONCURRENT_REQUESTS=100
+      - TOTAL_MAX_CONCURRENT_REQUESTS=200
       - HIGH_PRIORITY_SERVICES=api-recherche-service
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
+      - DB_BATCH_SIZE=16
+      - DB_MAX_CONCURRENT_ZILLIZ_DEFAULT=2
     env_file:
       - .env
     networks:
@@ -1782,6 +1785,11 @@ services:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking/enrichissement:ro
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking/equivalence:ro
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking/caracterisation:ro
+      # Monte les dossiers tracking des services prix (paths VM)
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking/prix-extraction-produits:ro
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking/prix-extraction-siteweb:ro
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking/prix-extraction-message:ro
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking/prix-extraction-devis:ro
     networks:
       - services-net
     logging: *logging_defaults

@@ -268,6 +268,16 @@ class MilvusClient:
     def search(
         self, collection_name: str, vector: list[float], top_k: int, **kwargs
     ) -> list[SearchResultEntity]:
+        # Backward compatibility layer using the new batching method
+        batch_results = self.search_batch(collection_name, [vector], top_k, **kwargs)
+        return batch_results[0] if batch_results else []
+
+    def search_batch(
+        self, collection_name: str, vectors: list[list[float]], top_k: int, **kwargs
+    ) -> list[list[SearchResultEntity]]:
+        """
+        Exécute une recherche vectorielle dense sur un lot (batch) de requêtes simultanément.
+        """
         try:
             if not connections.has_connection("default"):
                 self.__init__()
@@ -291,14 +301,15 @@ class MilvusClient:
             if "text" not in fields_without_embedding:
                 fields_without_embedding.append("text")
 
-            # --- 1. Recherche Vectorielle ---
+            # --- Recherche Vectorielle ---
             search_params = self._build_dense_search_params(
                 collection_name=collection_name,
                 top_k=top_k,
             )
 
+            # Execution batchée sur Milvus
             results = collection.search(
-                data=[vector],
+                data=vectors,
                 anns_field="embedding",
                 param=search_params,
                 limit=top_k,
@@ -306,64 +317,64 @@ class MilvusClient:
                 expr=kwargs.get("expr", None),
             )
 
-            domain_results = []
-
-            # Mode de contexte : 'adjacent', 'full', ou None
             context_mode = kwargs.get("context_mode")
             col_conf = COLLECTION_CONFIG.get(collection_name)
 
-            # Si pas de contexte demandé ou config inexistante, retour simple
-            if not context_mode or not col_conf:
-                for hit in results[0]:
-                    domain_results.append(
-                        SearchResultEntity(
-                            id=hit.id,
-                            score=hit.distance,
-                            metadata=self._serialize_entity(
-                                hit.entity, collection_name
-                            ),
-                            source=collection_name,
-                        )
-                    )
-                return domain_results
+            batch_domain_results = []
 
-            # --- 2. Préparation du contexte ---
+            if not context_mode or not col_conf:
+                for hits in results:
+                    domain_results = []
+                    for hit in hits:
+                        domain_results.append(
+                            SearchResultEntity(
+                                id=hit.id,
+                                score=hit.distance,
+                                metadata=self._serialize_entity(
+                                    hit.entity, collection_name
+                                ),
+                                source=collection_name,
+                            )
+                        )
+                    batch_domain_results.append(domain_results)
+                return batch_domain_results
+
+            # --- Préparation du contexte global pour tout le batch ---
             group_field = col_conf["group_field"]
             seq_field = col_conf["seq_field"]
 
-            seen_ids = set()
-            candidates = []
-            context_queries = set()  # Pour stocker les IDs ou tuples à récupérer
+            context_queries = set()
+            all_candidates = []
 
-            for hit in results[0]:
-                if hit.id in seen_ids:
-                    continue
-                seen_ids.add(hit.id)
+            for hits in results:
+                candidates = []
+                seen_ids = set()
+                for hit in hits:
+                    if hit.id in seen_ids:
+                        continue
+                    seen_ids.add(hit.id)
 
-                if len(candidates) >= top_k:
-                    break
+                    if len(candidates) >= top_k:
+                        break
 
-                entity_data = hit.entity
-                group_val = entity_data.get(group_field)
-                seq_val = entity_data.get(seq_field)
+                    entity_data = hit.entity
+                    group_val = entity_data.get(group_field)
+                    seq_val = entity_data.get(seq_field)
 
-                candidate = {"hit": hit, "group_val": group_val, "seq_val": seq_val}
-                candidates.append(candidate)
+                    candidate = {"hit": hit, "group_val": group_val, "seq_val": seq_val}
+                    candidates.append(candidate)
 
-                if group_val is not None:
-                    if context_mode == "adjacent" and seq_val is not None:
-                        # Cas N-1 et N+1
-                        if seq_val > 0:
-                            context_queries.add((group_val, seq_val - 1))
-                        context_queries.add((group_val, seq_val + 1))
+                    if group_val is not None:
+                        if context_mode == "adjacent" and seq_val is not None:
+                            if seq_val > 0:
+                                context_queries.add((group_val, seq_val - 1))
+                            context_queries.add((group_val, seq_val + 1))
+                        elif context_mode == "full":
+                            context_queries.add(group_val)
+                all_candidates.append(candidates)
 
-                    elif context_mode == "full":
-                        # Cas Full : on veut tout le document identifié par group_val
-                        context_queries.add(group_val)
-
-            # --- 3. Récupération Batch des Contextes ---
+            # --- Récupération Batch des Contextes ---
             context_map = {}
-
             if context_queries:
                 query_list = list(context_queries)
                 BATCH_SIZE = 50
@@ -407,7 +418,6 @@ class MilvusClient:
                             expr_parts.append(f"{group_field} == {g_str}")
                         full_expr = " || ".join(expr_parts)
 
-                    # Exécution
                     if full_expr:
                         try:
                             context_hits = collection.query(
@@ -427,52 +437,47 @@ class MilvusClient:
                                     if c_group not in context_map:
                                         context_map[c_group] = []
                                     context_map[c_group].append(c)
-
                         except Exception as e:
                             logging.warning(
                                 f"Erreur batch contexte ({context_mode}): {e}"
                             )
 
-            # --- 4. Assemblage Final ---
-            for item in candidates:
-                hit = item["hit"]
-                metadata = self._serialize_entity(hit.entity, collection_name)
+            # --- Assemblage Final ---
+            for candidates in all_candidates:
+                domain_results = []
+                for item in candidates:
+                    hit = item["hit"]
+                    metadata = self._serialize_entity(hit.entity, collection_name)
 
-                g_val = item["group_val"]
-                s_val = item["seq_val"]
+                    g_val = item["group_val"]
+                    s_val = item["seq_val"]
 
-                if context_mode == "adjacent":
-                    # Ajout simple de n-1 et n+1
-                    metadata["context_pre"] = context_map.get((g_val, s_val - 1))
-                    metadata["context_post"] = context_map.get((g_val, s_val + 1))
+                    if context_mode == "adjacent":
+                        metadata["context_pre"] = context_map.get((g_val, s_val - 1))
+                        metadata["context_post"] = context_map.get((g_val, s_val + 1))
 
-                elif context_mode == "full":
-                    # Récupération de tous les chunks associés à ce fichier
-                    all_chunks = context_map.get(g_val, [])
+                    elif context_mode == "full":
+                        all_chunks = context_map.get(g_val, [])
+                        for chunk in all_chunks:
+                            c_num = chunk.get(seq_field)
+                            c_txt = chunk.get("text")
+                            if c_num is not None:
+                                metadata[f"context_{c_num}"] = c_txt
 
-                    # On itère sur tous les chunks trouvés pour ce document
-                    for chunk in all_chunks:
-                        # On récupère le numéro (ex: 1, 2, 3...)
-                        c_num = chunk.get(seq_field)
-                        c_txt = chunk.get("text")
-
-                        if c_num is not None:
-                            # Création dynamique : context_1, context_2, etc.
-                            metadata[f"context_{c_num}"] = c_txt
-
-                domain_results.append(
-                    SearchResultEntity(
-                        id=hit.id,
-                        score=hit.distance,
-                        metadata=metadata,
-                        source=collection_name,
+                    domain_results.append(
+                        SearchResultEntity(
+                            id=hit.id,
+                            score=hit.distance,
+                            metadata=metadata,
+                            source=collection_name,
+                        )
                     )
-                )
+                batch_domain_results.append(domain_results)
 
-            return domain_results
+            return batch_domain_results
 
         except Exception as e:
-            logging.error(f"Search failed: {e}")
+            logging.error(f"Search batch failed: {e}")
             return []
 
     def hybrid_search(
@@ -483,7 +488,27 @@ class MilvusClient:
         top_k: int,
         dense_weight: float = 0.7,
         sparse_weight: float = 0.3,
-        # --- Paramètres d'exploration pour optimiser la pertinence ---
+        **kwargs,
+    ) -> list[SearchResultEntity]:
+        batch_results = self.hybrid_search_batch(
+            collection_name,
+            [dense_vector],
+            [query_text],
+            top_k,
+            dense_weight,
+            sparse_weight,
+            **kwargs,
+        )
+        return batch_results[0] if batch_results else []
+
+    def hybrid_search_batch(
+        self,
+        collection_name: str,
+        dense_vectors: list[list[float]],
+        query_texts: list[str],
+        top_k: int,
+        dense_weight: float = 0.7,
+        sparse_weight: float = 0.3,
         ef: int | None = None,
         radius: float | None = None,
         range_filter: float | None = None,
@@ -492,7 +517,7 @@ class MilvusClient:
         ranker_type: str = "weighted",
         rrf_k: int = 60,
         **kwargs,
-    ) -> list[SearchResultEntity]:
+    ) -> list[list[SearchResultEntity]]:
         """
         Recherche hybride combinant recherche vectorielle dense (COSINE) et
         recherche full-text BM25 via le champ sparse de Milvus.
@@ -592,7 +617,7 @@ class MilvusClient:
             )
 
             dense_request = AnnSearchRequest(
-                data=[dense_vector],
+                data=dense_vectors,
                 anns_field="embedding",
                 param=dense_search_params,
                 limit=sub_limit,
@@ -611,7 +636,7 @@ class MilvusClient:
             )
 
             sparse_request = AnnSearchRequest(
-                data=[query_text],
+                data=query_texts,
                 anns_field="sparse_embedding",
                 param=sparse_search_params,
                 limit=sub_limit,
@@ -629,6 +654,7 @@ class MilvusClient:
                     f"dense={dense_weight}, sparse={sparse_weight})"
                 )
 
+            # Exécution batchée sur Milvus
             results = collection.hybrid_search(
                 reqs=[dense_request, sparse_request],
                 rerank=ranker,
@@ -636,27 +662,32 @@ class MilvusClient:
                 output_fields=fields_without_embedding,
             )
 
-            # --- 4. Construction des résultats du domaine ---
-            domain_results = []
-            for hit in results[0]:
-                domain_results.append(
-                    SearchResultEntity(
-                        id=hit.id,
-                        score=hit.distance,
-                        metadata=self._serialize_entity(hit.entity, collection_name),
-                        source=collection_name,
+            batch_domain_results = []
+            for hits in results:
+                domain_results = []
+                for hit in hits:
+                    domain_results.append(
+                        SearchResultEntity(
+                            id=hit.id,
+                            score=hit.distance,
+                            metadata=self._serialize_entity(
+                                hit.entity, collection_name
+                            ),
+                            source=collection_name,
+                        )
                     )
+
+                logging.info(
+                    f"[hybrid_search] Returned {len(domain_results)} results "
+                    f"(requested top_k={top_k})"
                 )
 
-            logging.info(
-                f"[hybrid_search] Returned {len(domain_results)} results "
-                f"(requested top_k={top_k})"
-            )
+                batch_domain_results.append(domain_results)
 
-            return domain_results
+            return batch_domain_results
 
         except Exception as e:
             logging.error(
-                f"Hybrid search failed on '{collection_name}': {e}", exc_info=True
+                f"Hybrid search batch failed on '{collection_name}': {e}", exc_info=True
             )
             return []

@@ -184,7 +184,8 @@ class PrixExtractor:
                 nom_produit=str(prix_data.get("nom_produit", "")).strip(),
                 description_produit=str(prix_data.get("description_produit", "")).strip(),
                 valeur_prix=str(prix_data.get("valeur_prix", "")).strip(),
-                # Champs optionnels extraits par le LLM
+                # Champs optionnels extraits par le LLM                
+                caracteristique=prix_data.get("caracteristique") or None,
                 date_prix=prix_data.get("date_prix") or None,
                 id_lead=prix_data.get("id_lead") or None,
                 id_produit=str(prix_data.get("id_produit", "")) or None,
