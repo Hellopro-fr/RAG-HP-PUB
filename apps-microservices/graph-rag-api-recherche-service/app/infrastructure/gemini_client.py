@@ -1,33 +1,143 @@
 """
-LLM client for reranking via gRPC llm-service.
-Uses common_utils get_llm_chat_response with Gemini 3 Flash.
+Direct Gemini SDK client for LLM-based reranking.
+Uses google-genai package with Gemini 3 Flash and retry logic.
 """
 
+import asyncio
 import json
 import logging
 from typing import Dict, Any, Optional
 
-from common_utils.grpc_clients.llm_client import get_llm_chat_response
-from common_utils.grpc_clients.schemas.chat import ChatRequest
+from google import genai
+from google.genai import types, errors
+from tenacity import (
+    Retrying,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception,
+)
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-class GeminiClient:
-    """LLM client for reranking via gRPC llm-service."""
+def make_serializable(obj):
+    """Parcourt récursivement l'objet pour convertir les bytes en hex string."""
+    if isinstance(obj, bytes):
+        return obj.hex()  # Convertit b'\xe6...' en string 'e6...'
+    if isinstance(obj, dict):
+        return {k: make_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [make_serializable(v) for v in obj]
+    return obj
 
-    def __init__(self):
-        self._model = "gemini-3-flash-preview"
+
+def is_retryable_error(exception):
+    """
+    Checks if the exception is a Google GenAI 503 or 429 error.
+    """
+    code = getattr(exception, "status_code", None)
+
+    if code is None:
+        code = getattr(exception, "code", None)
+
+    return code in [503, 429]
+
+
+class GeminiClient:
+    """Direct Gemini SDK client for reranking with retry logic."""
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "gemini-3-flash-preview",
+        max_retries: int = 10,
+    ):
+        self.api_key = api_key or settings.GEMINI_API_KEY
+        self.model = model
+        self.max_retries = max_retries
         self._temperature = 0.1
         self._timeout = 120  # seconds
+        self.client = genai.Client(api_key=self.api_key)
+
+    def chat(self, prompt: str) -> Dict[str, Any]:
+        """
+        Envoie un prompt à Gemini avec retry automatique
+
+        Args:
+            prompt: Le prompt à envoyer
+
+        Returns:
+            Dict avec 'message', 'api_response' ou 'code', 'error', 'content', 'response'
+        """
+        response = None
+
+        try:
+            # Configure Tenacity pour les retries
+            retryer = Retrying(
+                stop=stop_after_attempt(self.max_retries),
+                wait=wait_exponential(multiplier=1, min=1, max=60),
+                retry=retry_if_exception(is_retryable_error),
+                reraise=True,
+            )
+
+            for attempt in retryer:
+                with attempt:
+                    # Log seulement sur les retries
+                    if attempt.retry_state.attempt_number > 1:
+                        logger.info(
+                            f"Retry Gemini API... Tentative {attempt.retry_state.attempt_number}"
+                        )
+
+                    logger.info(
+                        f"Gemini API tentative: {attempt.retry_state.attempt_number}"
+                    )
+
+                    response = self.client.models.generate_content(
+                        model=self.model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=self._temperature,
+                            response_mime_type="application/json",
+                        ),
+                    )
+
+        except errors.ClientError as e:
+            logger.error(
+                f"Gemini ClientError: {e.message} (Code: {e.code}) type: {type(e)}"
+            )
+            return {
+                "code": e.code,
+                "error": e.message,
+                "content": None,
+                "response": {
+                    "code": e.code,
+                    "message": e.message,
+                    "status": getattr(e, "status", "UNKNOWN"),
+                },
+            }
+
+        except Exception as e:
+            logger.error(f"Erreur inattendue dans Gemini: {e}")
+            return {
+                "code": 500,
+                "error": str(e),
+                "content": None,
+                "response": {},
+            }
+
+        # Succès
+        api_response_dict = response.model_dump()
+        safe_api_response = make_serializable(api_response_dict)
+
+        return {"message": response.text, "api_response": safe_api_response}
 
     async def generate_rerank_response(
         self, system_prompt: str, user_data_json: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Send enriched product data to LLM service for reranking analysis.
+        Send enriched product data to Gemini for reranking analysis.
 
         Args:
             system_prompt: The system instruction for the LLM.
@@ -40,72 +150,56 @@ class GeminiClient:
             # Combine system prompt and user data into one prompt
             combined_prompt = f"{system_prompt}\n\n{user_data_json}"
 
-            logger.warning(
-                "[RERANK-GEMINI] Sending request to llm-service via gRPC (model=%s)...",
-                self._model,
-            )
+            logger.warning("[RERANK-GEMINI] Sending request to Gemini (model=%s)...", self.model)
 
-            chat_request = ChatRequest(
-                prompt=combined_prompt,
-                model=self._model,
-                provider="gemini",
-                temperature=self._temperature,
-                max_tokens=8192,
-                enable_thinking=False,
-                options={
-                    "top_p": 0.8,
-                    "top_k": 20,
-                },
+            # Run the synchronous chat call in a thread pool to avoid blocking the event loop
+            result = await asyncio.wait_for(
+                asyncio.to_thread(self.chat, combined_prompt),
+                timeout=self._timeout,
             )
 
             logger.warning(
-                "[RERANK-GEMINI] ChatRequest created: model=%s, provider=%s, temperature=%s",
-                chat_request.model,
-                chat_request.provider,
-                chat_request.temperature,
+                "[RERANK-GEMINI] Gemini response received: %s",
+                str(result)[:500],
             )
 
-            response_dict = await get_llm_chat_response(chat_request)
-
-            logger.warning(
-                "[RERANK-GEMINI] gRPC response received: %s",
-                str(response_dict)[:500],
-            )
-
-            if not response_dict:
-                logger.warning("[RERANK-GEMINI] LLM service returned empty response")
+            # Check for error in result
+            if "error" in result:
+                logger.warning(
+                    "[RERANK-GEMINI] Gemini returned error: code=%s, error=%s",
+                    result.get("code"),
+                    result.get("error"),
+                )
                 return None
 
-            # Extract the full_message from the response
-            full_message = response_dict.get("full_message", "")
-            if not full_message:
-                logger.warning("[RERANK-GEMINI] LLM response has no full_message")
+            # Extract message from the result
+            response_text = result.get("message", "")
+            if not response_text:
+                logger.warning("[RERANK-GEMINI] Gemini returned empty message")
                 return None
 
             logger.warning(
-                "[RERANK-GEMINI] full_message received (%d chars): %s",
-                len(str(full_message)),
-                str(full_message)[:500],
+                "[RERANK-GEMINI] Gemini message received (%d chars): %s",
+                len(response_text),
+                response_text[:500],
             )
 
-            # If full_message is already a dict (parsed by protobuf), return it
-            if isinstance(full_message, dict):
-                logger.warning("[RERANK-GEMINI] full_message is already a dict, returning directly")
-                return full_message
-
-            # Otherwise parse as JSON string
+            # Parse JSON response
             try:
-                parsed = json.loads(full_message)
+                parsed = json.loads(response_text)
                 logger.warning("[RERANK-GEMINI] Successfully parsed JSON response")
                 return parsed
             except json.JSONDecodeError as e:
                 logger.error(
-                    f"[RERANK-GEMINI] Failed to parse LLM response as JSON: {e}\nResponse: {str(full_message)[:500]}"
+                    f"[RERANK-GEMINI] Failed to parse Gemini response as JSON: {e}\nResponse: {response_text[:500]}"
                 )
                 return None
 
+        except asyncio.TimeoutError:
+            logger.error(f"[RERANK-GEMINI] Gemini call timed out after {self._timeout}s")
+            return None
         except Exception as e:
-            logger.error(f"[RERANK-GEMINI] LLM rerank generation error: {e}", exc_info=True)
+            logger.error(f"[RERANK-GEMINI] Gemini rerank generation error: {e}", exc_info=True)
             return None
 
 

@@ -11,3 +11,4 @@ waitress
 langgraph
 langchain-core
 google-genai
+tenacity
