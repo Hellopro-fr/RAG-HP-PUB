@@ -1737,12 +1737,17 @@ class RecommendationService:
         # 3. Format enriched data for LLM
         formatted_products = []
         for id_produit in id_produits:
-            logging.warning(f"[RERANK] product_info: {products_info}")
-            info = products_info.get(id_produit, products_info.get(str(id_produit), {}))
+            # logging.warning(f"[RERANK] product_info: {products_info}")
+            info = products_info.get(
+                id_produit, products_info.get(str(id_produit), {})
+            ).get("produit", {})
+            info_fournisseur = products_info.get(
+                id_produit, products_info.get(str(id_produit), {})
+            ).get("fournisseur", {})
             caracs = all_caracs.get(id_produit, all_caracs.get(str(id_produit), []))
 
             # Map etat_societe to human-readable label
-            etat_societe_raw = str(info.get("etat_societe", ""))
+            etat_societe_raw = str(info_fournisseur.get("etat_societe", ""))
             logging.warning(f"[RERANK]etat_societe_raw: {etat_societe_raw}")
             etat_societe_label = ETAT_SOCIETE_MAP.get(
                 etat_societe_raw, etat_societe_raw
@@ -1753,8 +1758,8 @@ class RecommendationService:
                 "titre": info.get("titre_produit", info.get("nom_produit", "")),
                 "description": info.get("description_produit", ""),
                 "fournisseur": {
-                    "nom": info.get("fournisseur", info.get("nom_fournisseur", "")),
-                    "id_fournisseur": str(info.get("id_fournisseur", "")),
+                    "nom": info_fournisseur.get("nom_fournisseur", ""),
+                    "id_fournisseur": str(info_fournisseur.get("id_fournisseur", "")),
                     "type": etat_societe_label,
                 },
                 # "score_matching": (
