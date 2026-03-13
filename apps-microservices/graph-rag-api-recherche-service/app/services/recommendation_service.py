@@ -1895,9 +1895,9 @@ class RecommendationService:
 
         # LISTE_PRODUITS = formatted product list as JSON
         liste_produits_json = json.dumps(formatted_products, ensure_ascii=False)
-        logging.warning(
-            f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
-        )
+        # logging.warning(
+        #     f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
+        # )
 
         # 5. Build system prompt with template variables and call Gemini
         system_prompt = """
@@ -2145,7 +2145,7 @@ class RecommendationService:
             liste_produits_json=liste_produits_json,
         )
 
-        logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
+        # logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
         # return top_produit, liste_produit, []
         try:
