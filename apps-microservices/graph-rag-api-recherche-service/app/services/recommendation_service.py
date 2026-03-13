@@ -2167,22 +2167,34 @@ class RecommendationService:
         )
 
         # 5. Reorder results based on LLM response
-        llm_top_ids = llm_response.get("top_produits", [])
-        llm_autres_ids = llm_response.get("autres_produits", [])
-        llm_ecartes_ids = llm_response.get("produits_ecartes", [])
+        llm_top = llm_response.get("top_produits", [])
+        llm_autres = llm_response.get("autres_produits", [])
+        llm_ecartes = llm_response.get("produits_ecartes", [])
 
-        # Ensure all are string lists
+        # Build a map of id_produit -> LLM score from all sections
+        llm_score_map = {}
+        for entry in llm_top + llm_autres + llm_ecartes:
+            if isinstance(entry, dict):
+                pid = str(entry.get("id_produit", ""))
+                score = entry.get("score")
+                if pid and score is not None:
+                    try:
+                        llm_score_map[pid] = float(score)
+                    except (ValueError, TypeError):
+                        pass
+
+        # Ensure all are string ID lists
         llm_top_ids = [
             str(x.get("id_produit", x) if isinstance(x, dict) else x)
-            for x in llm_top_ids
+            for x in llm_top
         ]
         llm_autres_ids = [
             str(x.get("id_produit", x) if isinstance(x, dict) else x)
-            for x in llm_autres_ids
+            for x in llm_autres
         ]
         llm_ecartes_ids = [
             str(x.get("id_produit", x) if isinstance(x, dict) else x)
-            for x in llm_ecartes_ids
+            for x in llm_ecartes
         ]
 
         logging.warning(
@@ -2191,8 +2203,9 @@ class RecommendationService:
             f"autres_produits={llm_autres_ids}, "
             f"produits_ecartes={llm_ecartes_ids}"
         )
+        logging.warning(f"[RERANK] LLM score map: {llm_score_map}")
 
-        # Rebuild ordered lists from LLM output
+        # Rebuild ordered lists from LLM output, using LLM score when available
         reranked_top = []
         for idx, pid in enumerate(llm_top_ids):
             if pid in produit_map:
@@ -2201,7 +2214,7 @@ class RecommendationService:
                     Produit(
                         rang=idx + 1,
                         id_produit=p.id_produit,
-                        score=p.score,
+                        score=llm_score_map.get(pid, p.score),
                         caracteristique=p.caracteristique,
                         coeff_geo=p.coeff_geo,
                         coeff_type_frns=p.coeff_type_frns,
@@ -2219,7 +2232,7 @@ class RecommendationService:
                     Produit(
                         rang=idx + 1,
                         id_produit=p.id_produit,
-                        score=p.score,
+                        score=llm_score_map.get(pid, p.score),
                         caracteristique=p.caracteristique,
                         coeff_geo=p.coeff_geo,
                         coeff_type_frns=p.coeff_type_frns,
@@ -2237,7 +2250,7 @@ class RecommendationService:
                     Produit(
                         rang=idx + 1,
                         id_produit=p.id_produit,
-                        score=p.score,
+                        score=llm_score_map.get(pid, p.score),
                         caracteristique=p.caracteristique,
                         coeff_geo=p.coeff_geo,
                         coeff_type_frns=p.coeff_type_frns,
