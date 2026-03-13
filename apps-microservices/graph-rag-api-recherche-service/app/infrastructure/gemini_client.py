@@ -182,11 +182,11 @@ class GeminiClient:
                 logger.warning("[RERANK-GEMINI] Gemini returned empty message")
                 return None
 
-            logger.warning(
-                "[RERANK-GEMINI] Gemini message received (%d chars): %s",
-                len(response_text),
-                response_text[:500],
-            )
+            # logger.warning(
+            #     "[RERANK-GEMINI] Gemini message received (%d chars): %s",
+            #     len(response_text),
+            #     response_text[:500],
+            # )
 
             # Parse JSON response
             try:
