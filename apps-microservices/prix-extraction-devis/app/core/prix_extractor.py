@@ -354,7 +354,8 @@ class PrixExtractor:
 
         source_results = await database_client.classic_search_vector(
             collection    = source_name,
-            filter_expr   = final_filter_expr
+            filter_expr   = final_filter_expr,
+            k = settings.MILVUS_TOP_K
         )
         
         # Convertir les résultats en dictionnaires
