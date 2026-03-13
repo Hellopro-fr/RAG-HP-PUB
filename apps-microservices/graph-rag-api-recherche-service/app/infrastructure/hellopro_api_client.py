@@ -32,10 +32,15 @@ class HelloProApiClient:
         self._timeout = httpx.Timeout(30.0, connect=10.0)
 
     def _get_headers(self) -> Dict[str, str]:
-        return {
-            "Authorization": f"Bearer {settings.HELLOPRO_API_BEARER_TOKEN}",
+        headers = {
             "Content-Type": "application/json",
         }
+        token = settings.HELLOPRO_API_BEARER_TOKEN
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        else:
+            logger.warning("HELLOPRO_API_BEARER_TOKEN is not set, requests may fail")
+        return headers
 
     async def fetch_products_info(
         self, id_categorie: str, id_produits: List[str]
@@ -126,10 +131,8 @@ class HelloProApiClient:
         ]
         results = await asyncio.gather(*tasks)
 
-        return {
-            id_produit: caracs
-            for id_produit, caracs in zip(id_produits, results)
-        }
+        return {id_produit: caracs for id_produit, caracs in zip(id_produits, results)}
+
     async def fetch_category_caracteristiques(
         self, id_categorie: str
     ) -> List[Dict[str, Any]]:
