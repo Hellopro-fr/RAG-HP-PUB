@@ -1442,6 +1442,15 @@ $(function () {
       }
     }
 
+    if (description && result.source === 'Prix') {
+      if (meta.chunk_id != meta.total_chunks) {
+        description += " " + price_copy;
+      }
+      if (meta.caracteristique) {
+        description += " Caractéristiques : " + meta.caracteristique;
+      }
+    }
+
     let url = meta.url;
 
     if (result.source === 'devis') {
@@ -1454,7 +1463,7 @@ $(function () {
       if(/mon_compte/.test(meta.fichier_source)) {
         url = `https://mc.hellopro.fr/${meta.fichier_source}`;
       }
-    }
+    } 
 
     return {
       id: meta.sku || Math.random().toString(36).substring(7), // L'UI a besoin d'un ID unique
