@@ -1744,7 +1744,7 @@ class RecommendationService:
             ).get("produit", {})
             info_fournisseur = products_info.get(
                 id_produit, products_info.get(str(id_produit), {})
-            ).get("fournisseur", {})
+            ).get("vendeur", {})
             caracs = all_caracs.get(id_produit, all_caracs.get(str(id_produit), []))
 
             # Map etat_societe to human-readable label
@@ -1763,8 +1763,8 @@ class RecommendationService:
                     r"<[^>]+>", "", info.get("description_produit", "")
                 ),
                 "fournisseur": {
-                    "nom": info_fournisseur.get("nom_fournisseur", ""),
-                    "id_fournisseur": str(info_fournisseur.get("id_fournisseur", "")),
+                    "nom": info_fournisseur.get("nom", ""),
+                    "id_fournisseur": str(info_fournisseur.get("id", "")),
                     "type": etat_societe_label,
                 },
                 # "score_matching": (
