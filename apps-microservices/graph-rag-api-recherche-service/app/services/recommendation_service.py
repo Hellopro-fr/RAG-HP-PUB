@@ -1746,7 +1746,7 @@ class RecommendationService:
                 id_produit, products_info.get(str(id_produit), {})
             ).get("vendeur", {})
             caracs = all_caracs.get(id_produit, all_caracs.get(str(id_produit), []))
-            logging.warning(f"[RERANK] caracs: {caracs}")
+            # logging.warning(f"[RERANK] caracs: {caracs}")
 
             # Determine fournisseur type from coeff_etat_score
             produit_obj = produit_map.get(id_produit)
@@ -1775,7 +1775,7 @@ class RecommendationService:
                 "caracteristiques": (
                     [
                         {
-                            "nom": c.get("nom", c.get("label", "")),
+                            "nom": c.get("nom_caracteristique", c.get("label", "")),
                             "valeur": c.get("valeur", ""),
                             "unite": c.get("unite", ""),
                         }
