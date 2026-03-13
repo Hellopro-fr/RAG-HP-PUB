@@ -1,5 +1,6 @@
 import logging
 import time
+import re
 import asyncio
 from typing import List, Dict, Any, Optional
 
@@ -1755,8 +1756,10 @@ class RecommendationService:
 
             formatted_product = {
                 "id_produit": str(id_produit),
-                "titre": info.get("titre", info.get("nom_produit", "")),
-                "description": info.get("description_produit", ""),
+                "titre": info.get(
+                    "titre_produit", info.get("nom_produit", info.get("titre", ""))
+                ),
+                "description": re.sub(r"<[^>]+>", "", info.get("description_produit", "")),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom_fournisseur", ""),
                     "id_fournisseur": str(info_fournisseur.get("id_fournisseur", "")),
