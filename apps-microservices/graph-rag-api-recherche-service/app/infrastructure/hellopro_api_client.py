@@ -3,6 +3,8 @@ HelloPro API client for fetching product info and characteristics.
 Uses httpx for async HTTP requests.
 """
 
+import os
+
 import asyncio
 import logging
 from typing import List, Dict, Any, Optional
@@ -36,6 +38,9 @@ class HelloProApiClient:
             "Content-Type": "application/json",
         }
         token = settings.HELLOPRO_API_BEARER_TOKEN
+        if not token:
+            token = os.environ.get("HELLOPRO_API_BEARER_TOKEN", "")
+
         if token:
             headers["Authorization"] = f"Bearer {token}"
         else:
