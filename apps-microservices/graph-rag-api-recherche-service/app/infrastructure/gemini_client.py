@@ -52,7 +52,7 @@ class GeminiClient:
         self,
         api_key: Optional[str] = None,
         # model: str = "gemini-3-flash-preview",
-        model: str = "gemini-2.0-flash-thinking-exp-01-21",
+        model: str = "gemini-2.5-flash-lite",
         max_retries: int = 10,
     ):
         self.api_key = api_key or settings.GEMINI_API_KEY
