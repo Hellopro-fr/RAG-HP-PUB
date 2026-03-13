@@ -409,6 +409,9 @@ class Produit(BaseModel):
     info_produit: Optional[Dict[str, Any]] = Field(
         None, description="Informations sur le produit"
     )
+    llm_response: Optional[Dict[str, Any]] = Field(
+        None, description="Réponse du LLM pour le produit"
+    )
     # top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 

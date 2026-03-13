@@ -2173,6 +2173,7 @@ class RecommendationService:
 
         # Build a map of id_produit -> LLM score from all sections
         llm_score_map = {}
+        llm_response_map = {}
         for entry in llm_top + llm_autres + llm_ecartes:
             if isinstance(entry, dict):
                 pid = str(entry.get("id_produit", ""))
@@ -2180,13 +2181,13 @@ class RecommendationService:
                 if pid and score is not None:
                     try:
                         llm_score_map[pid] = float(score)
+                        llm_response_map[pid] = entry
                     except (ValueError, TypeError):
                         pass
 
         # Ensure all are string ID lists
         llm_top_ids = [
-            str(x.get("id_produit", x) if isinstance(x, dict) else x)
-            for x in llm_top
+            str(x.get("id_produit", x) if isinstance(x, dict) else x) for x in llm_top
         ]
         llm_autres_ids = [
             str(x.get("id_produit", x) if isinstance(x, dict) else x)
@@ -2221,6 +2222,7 @@ class RecommendationService:
                         coeff_etat_score=p.coeff_etat_score,
                         coeff_caracteristique=p.coeff_caracteristique,
                         info_produit=p.info_produit,
+                        llm_response=llm_response_map.get(pid, {}),
                     )
                 )
 
@@ -2239,6 +2241,7 @@ class RecommendationService:
                         coeff_etat_score=p.coeff_etat_score,
                         coeff_caracteristique=p.coeff_caracteristique,
                         info_produit=p.info_produit,
+                        llm_response=llm_response_map.get(pid, {}),
                     )
                 )
 
@@ -2257,6 +2260,7 @@ class RecommendationService:
                         coeff_etat_score=p.coeff_etat_score,
                         coeff_caracteristique=p.coeff_caracteristique,
                         info_produit=p.info_produit,
+                        llm_response=llm_response_map.get(pid, {}),
                     )
                 )
 
@@ -2275,6 +2279,7 @@ class RecommendationService:
                         coeff_etat_score=p.coeff_etat_score,
                         coeff_caracteristique=p.coeff_caracteristique,
                         info_produit=p.info_produit,
+                        llm_response=llm_response_map.get(pid, {}),
                     )
                 )
 
