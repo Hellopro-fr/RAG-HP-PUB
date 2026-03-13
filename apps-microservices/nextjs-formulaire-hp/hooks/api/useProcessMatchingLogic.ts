@@ -7,6 +7,7 @@ import type { MatchingResponse, ProductInfoResponse } from '@/types/matching';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 
 import { basePath } from '@/lib/utils';
+import { buildParcours } from '@/lib/utils/debug-matching';
 
 /**
  * Récupère les informations produits depuis l'API
@@ -302,6 +303,9 @@ export function useProcessMatchingLogic() {
       // Envoyer uniquement les critères actifs (non supprimés) à l'API
       formData.append('liste_caracteristique', JSON.stringify(activeEquivalences));
 
+      // Données depuis le store pour Rerank
+      const { useRerank, userQuestionAnswers } = useFlowStore.getState();
+
       // Paramètres de scoring par défaut + paramètres de test (si présents dans l'URL)
       const defaultScoringParams = {
         c_unknown_score: 0,
@@ -312,6 +316,14 @@ export function useProcessMatchingLogic() {
       formData.append('scoring', JSON.stringify(scoringParams));
       console.log('[MATCHING REFETCH] Scoring params:', scoringParams);
 
+      // Bloc Rerank
+      const rerankPayload = {
+        use_rerank: useRerank,
+        parcours: buildParcours(userQuestionAnswers),
+        top_k: 24,
+      };
+      formData.append('rerank', JSON.stringify(rerankPayload));
+
       console.log('Payload MATCHING (client - refetch):', {
         id_categorie: categoryId,
         top_k: 12,
@@ -319,7 +331,8 @@ export function useProcessMatchingLogic() {
         champs_sortie: ["url"],
         liste_caracteristique: activeEquivalences,
         removed_criteria_ids: allRemovedIds,
-        scoring: scoringParams
+        scoring: scoringParams,
+        rerank: rerankPayload
       });
 
       const apiBase = getApiBasePath();

@@ -14,6 +14,20 @@ from app.schemas.prix_extraction import (
     ItemResult,
     PrixExtractionResult
 )
+import json
+import sys
+# from api_recherche_lib.schemas.search import SearchRequestWs, SourcesFiltre
+# from api_recherche_lib.core.recherche import search_in_milvus, search_in_milvus_classique
+
+
+from common_utils.grpc_clients import (
+    embedding_client,
+    database_client,
+    reranking_client,
+)
+from google.protobuf.json_format import MessageToDict
+
+
 from app.schemas.produit_prix_payload import ProduitPrixPayload
 from app.core.credentials import settings
 
@@ -28,7 +42,7 @@ class PrixExtractor:
     """Extracteur de prix depuis les données devis via LLM (Gemini/DeepSeek)"""
 
     # ID du prompt statique - Devis
-    PROMPT_ID = settings.PROMPT_ID  # "143"
+    PROMPT_ID = settings.PROMPT_ID  # "73"
 
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
@@ -73,9 +87,10 @@ class PrixExtractor:
         prompt_text = self.prompt_config.get("contenu_prompt", "")
 
         # Remplacer les placeholders si présents
-        prompt_text = prompt_text.replace("{ITEM_CONTENT}", item_content)
-        prompt_text = prompt_text.replace("{CONTENU}", item_content)
-        prompt_text = prompt_text.replace("{CATEGORIE}", category_name)
+        # prompt_text = prompt_text.replace("{ITEM_CONTENT}", item_content)
+        # prompt_text = prompt_text.replace("{CONTENU}", item_content)
+        # prompt_text = prompt_text.replace("{CATEGORIE}", category_name)
+        prompt_text = prompt_text.replace("{list_PJ}", item_content)
 
         return prompt_text
 
@@ -184,6 +199,7 @@ class PrixExtractor:
                 description_produit=str(prix_data.get("description_produit", "")).strip(),
                 valeur_prix=str(prix_data.get("valeur_prix", "")).strip(),
                 # Champs optionnels extraits par le LLM
+                caracteristique=prix_data.get("caracteristique") or None,
                 date_prix=prix_data.get("date_prix") or None,
                 id_produit=str(prix_data.get("id_produit", "")) or None,
                 source_chunk_id=source_chunk_id,
@@ -303,29 +319,134 @@ class PrixExtractor:
 
     async def _fetch_items(self, id_categorie: str, category_name: str) -> List[Dict[str, Any]]:
         """
-        Récupère les items à traiter pour cette catégorie.
+        Récupère les items à traiter pour cette catégorie, groupés par id_demande et metadata.id.
 
         Returns:
-            Liste d'objets à traiter, chacun contenant au minimum:
-            - 'id': identifiant unique de l'item
-            - 'content': le contenu textuel à envoyer au LLM
-            - 'metadata': (optionnel) données supplémentaires
+            Liste d'objets groupés par id_demande, puis par metadata.id, contenant:
+            - 'id_demande': identifiant de la demande
+            - 'metadata_id': identifiant du document source (metadata.id)
+            - 'total_chunks': nombre total de chunks pour ce document
+            - 'chunks': liste des chunks avec leur contenu et métadonnées
 
-        TODO: Implémenter la logique d'extraction des données devis.
-              Cette méthode doit retourner une liste de dictionnaires représentant
-              les items à traiter. Exemple:
-              [
-                  {"id": "123", "content": "Texte du devis...", "metadata": {...}},
-                  {"id": "456", "content": "Autre devis...", "metadata": {...}},
-                  ...
-              ]
+        Structure:
+            [
+                {
+                    "id_demande": "3737139",
+                    "metadata_id": "463593687250988350",
+                    "total_chunks": 4,
+                    "chunks": [...]
+                },
+                ...
+            ]
         """
+        # Valeurs par défaut depuis les settings
+        logger.info(f"Prompt Recherche de prix: '{self.prompt_config}'")
+        
+        if not self.prompt_config:
+            logger.warning(f"Prompt ID {self.PROMPT_ID} non trouvé, "
+                        "utilisation d'une chaîne vide")
+
+        source_name = settings.MILVUS_SOURCE
+        
+        # Construire le filtre Milvus
+        final_filter_expr = f"id_categorie in ['{id_categorie}'] and page_type in ['{settings.MILVUS_PAGE_TYPE}']"
+        
+        logger.info(f"Filtre Milvus: {final_filter_expr}")
+
+        source_results = await database_client.classic_search_vector(
+            collection    = source_name,
+            filter_expr   = final_filter_expr,
+            k = settings.MILVUS_TOP_K
+        )
+        
+        # Convertir les résultats en dictionnaires
+        all_results_list = [MessageToDict(res) for res in source_results]
+       
+        # Extraction de la liste pjechanges
+        pjechanges = all_results_list.get("results", {}).get("matches", {}).get("pjechanges", [])
+        grouped = {}
+
+        for item in pjechanges:
+            outer_id = item.get("id")
+            metadata = item.get("metadata", {})
+            metadata_id = metadata.get("id")
+            entity = metadata.get("entity", {})
+            
+            chunk_number = entity.get("chunk_number")
+            chunk_id = entity.get("chunk_id")
+            text = entity.get("text", "")
+
+            if metadata_id not in grouped:
+                grouped[metadata_id] = {
+                    "fields": entity.copy(),
+                    "items_to_sort": []
+                }
+            
+            # On stocke les infos nécessaires dans un dictionnaire simple
+            grouped[metadata_id]["items_to_sort"].append({
+                "chunk_number": chunk_number,
+                "chunk_id": str(chunk_id),
+                "text": text,
+                "outer_id": str(outer_id)
+            })
+
+        final_result = []
+
+        for m_id, content in grouped.items():
+            # 2. Trier par chunk_number pour respecter l'ordre (1, 2, 3...)
+            sorted_items = sorted(content["items_to_sort"], key=lambda x: x["chunk_number"])
+            
+            # 3. Fusion du texte avec gestion de l'overlap (chevauchement)
+            full_text = ""
+            for item in sorted_items:
+                # CORRECTION ICI : on utilise item["text"] directement
+                current = item["text"] 
+
+                if not full_text:
+                    full_text = current
+                else:
+                    # On cherche le plus grand overlap entre la fin de full_text et le début de current
+                    # On nettoie les espaces pour la comparaison
+                    s_full = full_text.rstrip()
+                    s_current = current.lstrip()
+                    
+                    max_o = min(len(s_full), len(s_current), 150) # limite de recherche TODO: à voir comment le transformer en 100 chunks
+                    overlap_len = 0
+                    
+                    for o in range(max_o, 0, -1):
+                        if s_full.endswith(s_current[:o]):
+                            overlap_len = o
+                            break
+                    
+                    if overlap_len > 0:
+                        # On ajoute la suite du texte après l'overlap
+                        full_text = s_full + s_current[overlap_len:]
+                    else:
+                        # Pas d'overlap, on ajoute un espace si nécessaire
+                        full_text = s_full + " " + s_current
+
+            # 4. Concaténation des IDs et numéros de chunks
+            merged_ids = ",".join([i["outer_id"] for i in sorted_items])
+            merged_chunk_numbers = ",".join([str(i["chunk_number"]) for i in sorted_items])
+            merged_chunk_ids = ",".join([i["chunk_id"] for i in sorted_items])
+            
+            # 5. Mise à jour de l'objet final
+            item_data = content["fields"]
+            item_data["text"] = full_text.strip()
+            item_data["id"] = merged_ids
+            item_data["chunk_number"] = merged_chunk_numbers
+            item_data["chunk_id"] = merged_chunk_ids
+            
+            final_result.append(item_data)
+
+        return final_result
+
         # TODO: Implémenter la récupération des données devis ici.
         # Exemple: appel API, requête base de données, etc.
-        raise NotImplementedError(
-            "La logique d'extraction des données devis n'est pas encore implémentée. "
-            "Veuillez implémenter _fetch_items() dans prix-extraction-devis/app/core/prix_extractor.py"
-        )
+        # raise NotImplementedError(
+        #     "La logique d'extraction des données devis n'est pas encore implémentée. "
+        #     "Veuillez implémenter _fetch_items() dans prix-extraction-devis/app/core/prix_extractor.py"
+        # )
 
     async def extract_prix_for_category(
         self,
@@ -334,7 +455,7 @@ class PrixExtractor:
         """
         Processus principal: extraction de prix devis pour une catégorie.
 
-        1. Charge le prompt (ID=143)
+        1. Charge le prompt (ID=73)
         2. [TODO] Récupère les items à traiter via _fetch_items()
         3. Traite chaque item en parallèle via asyncio
         4. Pour chaque item: LLM call → stockage API
@@ -406,9 +527,13 @@ class PrixExtractor:
                 errors=0,
                 status="completed"
             )
+        
 
         total_items = len(items)
         self._log(f"📊 {total_items} items à traiter")
+        self._log(f"Items: {json.dumps(items)}")
+        sys.exit(1) #TODO: à enlever après test
+        raise Exception(f"test") 
 
         # Traitement parallèle de tous les items
         self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")

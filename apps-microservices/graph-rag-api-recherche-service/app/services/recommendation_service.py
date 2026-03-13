@@ -29,653 +29,26 @@ class RecommendationService:
     Uses async gRPC calls for normalization.
     """
 
-    def _extract_scalar(self, value: Any) -> Any:
-        if isinstance(value, (list, tuple)):
-            return value[0] if len(value) > 0 else None
-        return value
+    # --- Centralized Cypher Query Constants ---
 
-    async def _get_characteristic_labels(self, char_ids: List[str]) -> Dict[str, str]:
-        if not char_ids:
-            return {}
-        query = """
-        MATCH (c:CaracteristiqueTechnique)
-        WHERE c.id_source_caracteristique IN $ids
-        RETURN DISTINCT c.id_source_caracteristique as id, c.label as label
-        """
-        try:
-            # Ensure IDs are strings for Cypher
-            safe_ids = [str(i) for i in char_ids]
-            results = await clients.execute_cypher(query, {"ids": safe_ids})
-            return {str(row["id"]): row["label"] for row in results}
-        except Exception as e:
-            logging.error(f"Error fetching characteristic labels: {e}")
-            return {}
+    CYPHER_STEP1_TARGET = """
+         MATCH (p:Produit)
+         WHERE toString(p.id) = $target_product_id AND p.est_actif = true
+         WITH p, $filters AS active_filters
+         """
 
-    async def _normalize_single_constraint(self, c: Any, label: str) -> Dict[str, Any]:
-        """
-        Helper to normalize a single constraint object asynchronously.
-        """
-        c_dict = c.model_dump()
-        char_id = str(c_dict.get("id_caracteristique"))
-        unit = c_dict.get("unite")
+    CYPHER_STEP1_ANCHOR = """
+         UNWIND $filters AS f
+         MATCH (pc:CaracteristiqueTechnique)
+         WHERE toString(pc.id_source_caracteristique) = f.cid
+         MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
+         
+         WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie) AND p.est_actif = true
+         
+         WITH DISTINCT p, $filters AS active_filters
+         """
 
-        target_num = None
-        blocking_num = None
-
-        # Prepare tasks for parallel normalization
-        tasks = []
-
-        # 1. Target Numeric
-        raw_target = c_dict.get("valeurs_cibles")
-        if isinstance(raw_target, dict):
-            for k in ["min", "max", "exact"]:
-                if raw_target.get(k) is not None:
-                    val = self._extract_scalar(raw_target[k])
-                    tasks.append(clients.normalize_quantity(val, unit, label))
-                else:
-                    tasks.append(
-                        asyncio.sleep(0)
-                    )  # Placeholder to keep index alignment
-
-        # 2. Blocking Numeric
-        raw_blocking = c_dict.get("valeurs_bloquantes")
-        if isinstance(raw_blocking, dict):
-            for k in ["min", "max", "exact"]:
-                if raw_blocking.get(k) is not None:
-                    val = self._extract_scalar(raw_blocking[k])
-                    tasks.append(clients.normalize_quantity(val, unit, label))
-                else:
-                    tasks.append(asyncio.sleep(0))
-
-        # Execute all normalization calls for this constraint in parallel
-        results = await asyncio.gather(*tasks)
-
-        # Reconstruct structures
-        res_idx = 0
-
-        # Reconstruct Target
-        if isinstance(raw_target, dict):
-            norm = {"unit": None, "min": None, "max": None, "exact": None}
-            for k in ["min", "max", "exact"]:
-                res = results[res_idx]
-                res_idx += 1
-                if isinstance(res, dict) and res:
-                    norm[k] = res.get("valeur_canonique")
-                    norm["unit"] = res.get("unite_canonique")
-            target_num = norm if norm["unit"] else None
-
-        # Reconstruct Blocking
-        if isinstance(raw_blocking, dict):
-            norm = {"unit": None, "min": None, "max": None, "exact": None}
-            for k in ["min", "max", "exact"]:
-                res = results[res_idx]
-                res_idx += 1
-                if isinstance(res, dict) and res:
-                    norm[k] = res.get("valeur_canonique")
-                    norm["unit"] = res.get("unite_canonique")
-            blocking_num = norm if norm["unit"] else None
-
-        return {
-            "id_caracteristique": char_id,
-            "target_list": (
-                [str(x) for x in c_dict.get("valeurs_cibles")]
-                if isinstance(c_dict.get("valeurs_cibles"), list)
-                else []
-            ),
-            "blocking_list": (
-                [str(x) for x in c_dict.get("valeurs_bloquantes")]
-                if isinstance(c_dict.get("valeurs_bloquantes"), list)
-                else []
-            ),
-            "target_numeric": target_num,
-            "blocking_numeric": blocking_num,
-        }
-
-    async def _normalize_constraints_for_unwind(
-        self, request: ComplexFilterRequest
-    ) -> List[Dict[str, Any]]:
-        """
-        Pre-processes constraints into a flat list suitable for Cypher UNWIND.
-        Uses asyncio.gather to normalize all constraints in parallel.
-        """
-        all_char_ids = {
-            str(c.id_caracteristique)
-            for constraints in request.ids.values()
-            for c in constraints
-        }
-        label_map = await self._get_characteristic_labels(list(all_char_ids))
-
-        flat_filters = []
-        normalization_tasks = []
-
-        # First pass: Create tasks
-        for rid, constraints in request.ids.items():
-            for c in constraints:
-                char_id = str(c.id_caracteristique)
-                label = label_map.get(char_id, "dimensionless")
-                normalization_tasks.append(self._normalize_single_constraint(c, label))
-
-        # Execute all normalization tasks
-        processed_constraints_flat = await asyncio.gather(*normalization_tasks)
-
-        # Second pass: Re-group by RID
-        # We need to map the flat list back to the structure: [{"rid": rid, "constraints": [...]}]
-
-        # Create an iterator for the results
-        res_iter = iter(processed_constraints_flat)
-
-        for rid, constraints in request.ids.items():
-            group_constraints = []
-            for _ in constraints:
-                group_constraints.append(next(res_iter))
-            flat_filters.append({"rid": rid, "constraints": group_constraints})
-
-        return flat_filters
-
-    async def _get_question_weights(self, rids: List[str]) -> Dict[str, int]:
-        if not rids:
-            return {}
-        query = """
-        MATCH (r:Reponse)<-[:PROPOSE]-(q:Question)
-        WHERE r.id_reponse IN $rids
-        RETURN r.id_reponse as rid, q.ordre as ordre
-        """
-        try:
-            results = await clients.execute_cypher(query, {"rids": rids})
-            rid_to_order = {row["rid"]: row["ordre"] for row in results}
-            unique_orders = sorted(list(set(rid_to_order.values())))
-            total = len(unique_orders)
-            order_to_weight = {
-                order: (total - i) for i, order in enumerate(unique_orders)
-            }
-            return {
-                rid: order_to_weight.get(order, 1)
-                for rid, order in rid_to_order.items()
-            }
-        except Exception:
-            return {rid: 1 for rid in rids}
-
-    async def get_products_by_complex_filters(
-        self, request: ComplexFilterRequest, target_product_id: Optional[str] = None
-    ) -> ResultProduct:
-        start_time = time.perf_counter()
-
-        norm_start = time.perf_counter()
-        flat_filters = await self._normalize_constraints_for_unwind(request)
-        # flat_filters_test = await self._normalize_constraints_for_unwind_test(request)
-        # print(f"New implementation flat_filters: {flat_filters}")
-        # print(f"Old implementation flat_filters: {flat_filters_test}")
-        norm_time = time.perf_counter() - norm_start
-        all_rids = [f["rid"] for f in flat_filters]
-        weights_map = await self._get_question_weights(all_rids)
-
-        blocked_val = float(request.blocked_val)
-        different_val = float(request.different_val)
-
-        # Build Cypher Query (V4) with top_p computed in Cypher
-        cypher_query = """
-        // --- STEP 1: ANCHOR TRAVERSAL (V3 Strategy) ---
-        // Find only relevant products first
-        UNWIND $filters AS f
-        MATCH (r:Reponse {id_reponse: f.rid})
-        MATCH (r)<-[:EQUIVAUT_A|COUVRE]-(intermediate)<-[:A_POUR_CARACTERISTIQUE|EST_PROPOSE_PAR]-(p:Produit)
-        
-        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
-          AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
-        
-        WITH DISTINCT p, $filters AS active_filters
-        
-        // --- STEP 2: CLASSIC SCORING (V1 Logic) ---
-        // Broadcast filters to the reduced set of products
-        UNWIND active_filters AS f
-        
-        // Bulk Match Characteristics for the specific Response (rid)
-        OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)-[:EQUIVAUT_A]->(r:Reponse {id_reponse: f.rid})
-        
-        // Bundle Constraints with their matching Characteristics
-        WITH p, f, collect(pc) AS pcs
-        WITH p, f, [c IN f.constraints | {
-            cid: c.id_caracteristique,
-            conf: c,
-            matches: [pc IN pcs WHERE toString(pc.id_source_caracteristique) = toString(c.id_caracteristique)]
-        }] AS constraint_data
-        
-        // Evaluate Scores per Characteristic ID
-        WITH p, f, [item IN constraint_data | {
-            cid: item.cid,
-            score: CASE 
-                // Blocking Check
-                WHEN ANY(pc IN item.matches WHERE 
-                    (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
-                    OR
-                    (item.conf.blocking_numeric IS NOT NULL AND (item.conf.blocking_numeric.unit IS NULL OR pc.unite_canonique = item.conf.blocking_numeric.unit) AND (
-                        (item.conf.blocking_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.blocking_numeric.min) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique >= item.conf.blocking_numeric.min))) OR
-                        (item.conf.blocking_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.blocking_numeric.max) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_max_canonique <= item.conf.blocking_numeric.max))) OR
-                        (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
-                    ))
-                ) THEN $blocked_val
-                // Target Check
-                WHEN ANY(pc IN item.matches WHERE 
-                    (size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list))
-                    OR
-                    (item.conf.target_numeric IS NOT NULL AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit) AND (
-                        (item.conf.target_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.target_numeric.min) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.min)))) OR
-                        (item.conf.target_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.target_numeric.max) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.max)))) OR
-                        (item.conf.target_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.target_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact) AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact))))
-                    ))
-                ) THEN 1.0
-                // Connected Check
-                WHEN size(item.matches) > 0 THEN $different_val
-                // Default
-                ELSE 0.1
-            END,
-            has_pc: size(item.matches) > 0,
-            is_blocked: ANY(pc IN item.matches WHERE (size(item.conf.blocking_list) > 0 OR item.conf.blocking_numeric IS NOT NULL))
-        }] AS char_results
-        
-        // Aggregate Response Score and Weights
-        WITH p, f.rid AS rid, char_results,
-             EXISTS((p)-[:EST_PROPOSE_PAR]->(:Fournisseur)-[:COUVRE]->(:Reponse {id_reponse: f.rid})) AS supplier_covers
-        
-        WITH p, rid, char_results, supplier_covers,
-             [res IN char_results | res.score] AS raw_scores,
-             [res IN char_results | CASE WHEN res.score = $different_val AND supplier_covers THEN 1.0 ELSE res.score END] AS adjusted_scores
-        
-        WITH p, rid, char_results, adjusted_scores,
-             CASE WHEN $blocked_val IN adjusted_scores THEN $blocked_val ELSE apoc.coll.max(adjusted_scores) END AS rid_score,
-             (supplier_covers OR ANY(res IN char_results WHERE res.has_pc OR res.score = $blocked_val)) AS matched,
-             coalesce($weights[rid], 1.0) as weight
-        
-        // Global Product Scoring and Detail Construction
-        WITH p, collect({
-            rid: rid, 
-            score: rid_score, 
-            weight: weight,
-            matched: matched,
-            ids: apoc.map.fromPairs([res IN char_results | [res.cid, res.score]])
-        }) AS details
-        
-        WITH p, details,
-             reduce(s = 0.0, d IN details | s + (d.score * d.weight)) AS numerator,
-             reduce(w = 0.0, d IN details | w + d.weight) AS denominator
-        
-        WITH p, details, (numerator / denominator) AS global_score
-        
-        ORDER BY global_score DESC
-        LIMIT $top_k
-        
-        // Collect all scored products
-        WITH collect({node: p, details: details, global_score: global_score}) AS all_products
-        
-        // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
-        WITH all_products,
-             // Group by id_fournisseur and get the top product per fournisseur
-             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
-                 head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
-             ] AS top_per_fournisseur
-        
-        // Sort top_per_fournisseur by global_score descending and limit to 4
-        WITH all_products, top_per_fournisseur
-        UNWIND top_per_fournisseur AS p_top
-        WITH all_products, p_top 
-        ORDER BY p_top.global_score DESC 
-        LIMIT 4
-        
-        // First alias the node, then project the node data
-        WITH all_products, p_top.node AS top_node, p_top.global_score AS top_score, p_top.details AS top_details
-        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details
-        WITH all_products, collect({
-            product_data: top_product_data,
-            score: top_score,
-            details: top_details
-        }) AS top_p
-        
-        UNWIND all_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
-        """
-
-        # Determine projection
-        if request.output_fields:
-            # Ensure we don't have empty list behavior if user sends []
-            fields = (
-                [f".{f}" for f in request.output_fields]
-                if len(request.output_fields) > 0
-                else [".*"]
-            )
-            projection = f"{{ {', '.join(fields)} }}"
-        else:
-            projection = "{.*}"
-
-        # Inject projection - both placeholders use the same projection format
-        cypher_query = cypher_query.replace("TOP_P_PROJECTION_PLACEHOLDER", projection)
-        cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
-
-        params = {
-            "filters": flat_filters,
-            "weights": weights_map,
-            "id_categorie": str(request.id_categorie) if request.id_categorie else None,
-            "top_k": int(request.top_k),
-            "target_product_id": target_product_id,
-            "blocked_val": blocked_val,
-            "different_val": different_val,
-        }
-
-        # Debug: Log parameters with their types
-        logging.info(f"📝 Cypher params being sent:")
-        for key, value in params.items():
-            if key not in ["filters", "weights"]:  # Skip large nested params
-                logging.info(f"   {key}: {value} (type: {type(value).__name__})")
-            else:
-                logging.info(
-                    f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>"
-                )
-
-        try:
-            query_start = time.perf_counter()
-            results = await clients.execute_cypher(cypher_query, params)
-            # Use direct Neo4j connection to avoid gRPC serialization issues
-            # results = await clients.execute_cypher_direct(cypher_query, params)
-            query_time = time.perf_counter() - query_start
-
-            # Parse results - now returns rows of products, each containing the top_p list
-            scored_products = []
-            top_p = []
-
-            if results:
-                # Extract top_p from the first row (it's the same for all rows)
-                raw_top_p = results[0].get("top_p", [])
-                # Convert top_p entries to ScoredProduct objects
-                for entry in raw_top_p:
-                    if isinstance(entry, dict) and "product_data" in entry:
-                        top_p.append(
-                            ScoredProduct(
-                                **entry["product_data"],
-                                score=entry.get("score", 0.0),
-                                details=entry.get("details", []),
-                                info={"weights": weights_map},
-                            )
-                        )
-
-                for rec in results:
-                    scored_products.append(
-                        ScoredProduct(
-                            **rec["product_data"],
-                            score=rec.get("global_score", 0.0),
-                            details=rec.get("details", []),
-                            info={"weights": weights_map},
-                        )
-                    )
-
-            total_time = time.perf_counter() - start_time
-            return ResultProduct(
-                data=scored_products,
-                info={
-                    "query_time": query_time,
-                    "normalization_time": norm_time,
-                    "total_time": total_time,
-                    "count": len(scored_products),
-                    "version": "v4_classic_inverted",
-                },
-                top_p=top_p,
-            )
-        except Exception as e:
-            logging.error(f"Recommendation Error: {e}", exc_info=True)
-            return ResultProduct(data=[], info={"error": str(e)})
-
-    async def _normalize_constraints_for_caracteristique(
-        self, request: MatchingPayload
-    ) -> List[Dict[str, Any]]:
-        """
-        Pre-processes constraints for caracteristique-based filtering.
-        Uses MatchingPayload schema with MatchingOptions.Score for weights.
-        """
-        # Extract caracteristique IDs from the list
-        all_char_ids = [
-            str(c.id_caracteristique) for c in request.liste_caracteristique
-        ]
-        label_map = await self._get_characteristic_labels(all_char_ids)
-
-        # Get score weights from options
-        score_options = request.options.score if request.options else None
-        critique_weight = score_options.critique if score_options else 5
-        secondaire_weight = score_options.secondaire if score_options else 1
-
-        flat_filters = []
-        normalization_tasks = []
-        task_metadata = []  # Track (cid, q_weight, c_weight) for each task
-
-        # First pass: Create tasks
-        for c in request.liste_caracteristique:
-            cid = str(c.id_caracteristique)
-            label = label_map.get(cid, "dimensionless")
-            normalization_tasks.append(
-                self._normalize_single_constraint_for_matching_payload(c, cid, label)
-            )
-            # Resolve c_weight from poids_caracteristique using MatchingOptions.Score
-            poids_carac = c.poids_caracteristique or "critique"
-            if poids_carac == "critique":
-                c_weight = critique_weight
-            elif poids_carac == "secondaire":
-                c_weight = secondaire_weight
-            else:
-                c_weight = critique_weight  # Default to critique
-
-            q_weight = c.poids_question or 1
-            task_metadata.append((cid, q_weight, c_weight))
-
-        # Execute all normalization tasks
-        processed_constraints_flat = await asyncio.gather(*normalization_tasks)
-
-        # Second pass: Re-group by caracteristique ID with hierarchical weights
-        grouped = {}
-        for i, processed in enumerate(processed_constraints_flat):
-            cid, q_weight, c_weight = task_metadata[i]
-            if cid not in grouped:
-                grouped[cid] = {"cid": cid, "q_weight": q_weight, "constraints": []}
-            # Add c_weight to the processed constraint
-            processed["c_weight"] = c_weight
-            grouped[cid]["constraints"].append(processed)
-
-        flat_filters = list(grouped.values())
-        return flat_filters
-
-    async def _normalize_single_constraint_for_matching_payload(
-        self, c: Any, char_id: str, label: str
-    ) -> Dict[str, Any]:
-        """
-        Helper to normalize a single constraint from MatchingCaracteristique.
-        """
-        c_dict = c.model_dump()
-        unit = c_dict.get("unite")
-
-        target_num = None
-        blocking_num = None
-
-        # Prepare tasks for parallel normalization
-        tasks = []
-
-        # 1. Target Numeric
-        raw_target = c_dict.get("valeurs_cibles")
-        if isinstance(raw_target, dict):
-            for k in ["min", "max", "exact"]:
-                if raw_target.get(k) is not None:
-                    val = self._extract_scalar(raw_target[k])
-                    tasks.append(clients.normalize_quantity(val, unit, label))
-                else:
-                    tasks.append(asyncio.sleep(0))
-
-        # 2. Blocking Numeric
-        raw_blocking = c_dict.get("valeurs_bloquantes")
-        if isinstance(raw_blocking, dict):
-            for k in ["min", "max", "exact"]:
-                if raw_blocking.get(k) is not None:
-                    val = self._extract_scalar(raw_blocking[k])
-                    tasks.append(clients.normalize_quantity(val, unit, label))
-                else:
-                    tasks.append(asyncio.sleep(0))
-
-        # Execute all normalization calls for this constraint in parallel
-        results = await asyncio.gather(*tasks)
-
-        # Reconstruct structures
-        res_idx = 0
-
-        # Reconstruct Target
-        if isinstance(raw_target, dict):
-            norm = {"unit": None, "min": None, "max": None, "exact": None}
-            for k in ["min", "max", "exact"]:
-                res = results[res_idx]
-                res_idx += 1
-                if isinstance(res, dict) and res:
-                    norm[k] = res.get("valeur_canonique")
-                    norm["unit"] = res.get("unite_canonique")
-            target_num = norm if norm["unit"] else None
-
-        # Reconstruct Blocking
-        if isinstance(raw_blocking, dict):
-            norm = {"unit": None, "min": None, "max": None, "exact": None}
-            for k in ["min", "max", "exact"]:
-                res = results[res_idx]
-                res_idx += 1
-                if isinstance(res, dict) and res:
-                    norm[k] = res.get("valeur_canonique")
-                    norm["unit"] = res.get("unite_canonique")
-            blocking_num = norm if norm["unit"] else None
-
-        return {
-            "id_caracteristique": char_id,
-            "target_list": (
-                [str(x) for x in c_dict.get("valeurs_cibles")]
-                if isinstance(c_dict.get("valeurs_cibles"), list)
-                else []
-            ),
-            "blocking_list": (
-                [str(x) for x in c_dict.get("valeurs_bloquantes")]
-                if isinstance(c_dict.get("valeurs_bloquantes"), list)
-                else []
-            ),
-            "target_numeric": target_num,
-            "blocking_numeric": blocking_num,
-        }
-
-    async def get_products_by_caracteristique_filters(
-        self,
-        request: MatchingPayloadIdProduit,
-        target_product_id: Optional[str] = None,
-    ) -> MatchingResponse:
-        """
-        Get products filtered and scored by CaracteristiqueTechnique constraints.
-        Uses MatchingPayload schema with MatchingOptions.Score for caracteristique weights.
-        Includes geographic zone scoring based on MetadonneUtilisateurs.
-        """
-        start_time = time.perf_counter()
-
-        if request.id_produit is not None:
-            target_product_id = str(request.id_produit)
-
-        norm_start = time.perf_counter()
-        flat_filters = await self._normalize_constraints_for_caracteristique(request)
-        norm_time = time.perf_counter() - norm_start
-
-        # Build weights map from request (cid -> q_weight)
-        weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
-
-        # Use default values for blocked_val and different_val
-        blocked_val = (
-            request.scoring.v_blocked if request.scoring.v_blocked is not None else -2.0
-        )
-        different_val = (
-            request.scoring.v_different
-            if request.scoring.v_different is not None
-            else -0.3
-        )
-
-        z_unmatched = (
-            request.scoring.z_unmatched
-            if request.scoring.z_unmatched is not None
-            else 0
-        )
-        e_unmatched = (
-            request.scoring.e_unmatched
-            if request.scoring.e_unmatched is not None
-            else 0.9
-        )
-        g_unknown_score = (
-            request.scoring.g_unknown_score
-            if request.scoring.g_unknown_score is not None
-            else 0.8
-        )
-        c_unknown_score = (
-            request.scoring.c_unknown_score
-            if request.scoring.c_unknown_score is not None
-            else 0
-        )
-        t_unmatched = (
-            request.scoring.t_unmatched
-            if request.scoring.t_unmatched is not None
-            else 0.2
-        )
-
-        absolute_threshold = (
-            request.scoring.absolute_threshold
-            if request.scoring.absolute_threshold is not None
-            else 0.3
-        )
-        relative_tolerance = (
-            request.scoring.relative_tolerance
-            if request.scoring.relative_tolerance is not None
-            else 0.1
-        )
-        max_per_supplier_primary = (
-            request.scoring.max_per_supplier_primary
-            if request.scoring.max_per_supplier_primary is not None
-            else 10
-        )
-        max_per_supplier_extended = (
-            request.scoring.max_per_supplier_extended
-            if request.scoring.max_per_supplier_extended is not None
-            else 20
-        )
-        score_step = (
-            request.scoring.score_step
-            if request.scoring.score_step is not None
-            else 0.1
-        )
-        diversity_lambda = (
-            request.scoring.diversity_lambda
-            if request.scoring.diversity_lambda is not None
-            else 0.7
-        )
-
-        # Extract user location data from metadonnee_utilisateurs
-        user_meta = request.metadonnee_utilisateurs
-        user_cp = user_meta.cp if user_meta else None
-        user_dept = user_cp[:2] if user_cp is not None and len(user_cp) >= 2 else None
-        user_id_pays = user_meta.id_pays if user_meta else None
-        user_typologie = user_meta.typologie if user_meta else None
-
-        # Build Cypher Query Step 1 (Dynamic)
-        if target_product_id:
-            query_step_1 = """
-             MATCH (p:Produit)
-             WHERE toString(p.id) = $target_product_id AND p.est_actif = true
-             WITH p, $filters AS active_filters
-             """
-        else:
-            query_step_1 = """
-             UNWIND $filters AS f
-             MATCH (pc:CaracteristiqueTechnique)
-             WHERE toString(pc.id_source_caracteristique) = f.cid
-             MATCH (p:Produit)-[:A_POUR_CARACTERISTIQUE]->(pc)
-             
-             WHERE ($id_categorie IS NULL OR p.id_categorie = $id_categorie) AND p.est_actif = true
-             
-             WITH DISTINCT p, $filters AS active_filters
-             """
-
-        # --- STEP 2: SCORING ---
-        query_step_2 = """
+    CYPHER_STEP2_SCORING = """
         // --- STEP 2: SCORING by CaracteristiqueTechnique with CONTINUOUS SCORING ---
         UNWIND active_filters AS f
         
@@ -1274,6 +647,639 @@ class RecommendationService:
         RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, zone_score, etat_score, typo_score, final_score, info_soc, top_p, pre_diversity_debug
         """
 
+    def _extract_scalar(self, value: Any) -> Any:
+        if isinstance(value, (list, tuple)):
+            return value[0] if len(value) > 0 else None
+        return value
+
+    async def _get_characteristic_labels(self, char_ids: List[str]) -> Dict[str, str]:
+        if not char_ids:
+            return {}
+        query = """
+        MATCH (c:CaracteristiqueTechnique)
+        WHERE c.id_source_caracteristique IN $ids
+        RETURN DISTINCT c.id_source_caracteristique as id, c.label as label
+        """
+        try:
+            # Ensure IDs are strings for Cypher
+            safe_ids = [str(i) for i in char_ids]
+            results = await clients.execute_cypher(query, {"ids": safe_ids})
+            return {str(row["id"]): row["label"] for row in results}
+        except Exception as e:
+            logging.error(f"Error fetching characteristic labels: {e}")
+            return {}
+
+    async def _normalize_single_constraint(self, c: Any, label: str) -> Dict[str, Any]:
+        """
+        Helper to normalize a single constraint object asynchronously.
+        """
+        c_dict = c.model_dump()
+        char_id = str(c_dict.get("id_caracteristique"))
+        unit = c_dict.get("unite")
+
+        target_num = None
+        blocking_num = None
+
+        # Prepare tasks for parallel normalization
+        tasks = []
+
+        # 1. Target Numeric
+        raw_target = c_dict.get("valeurs_cibles")
+        if isinstance(raw_target, dict):
+            for k in ["min", "max", "exact"]:
+                if raw_target.get(k) is not None:
+                    val = self._extract_scalar(raw_target[k])
+                    tasks.append(clients.normalize_quantity(val, unit, label))
+                else:
+                    tasks.append(
+                        asyncio.sleep(0)
+                    )  # Placeholder to keep index alignment
+
+        # 2. Blocking Numeric
+        raw_blocking = c_dict.get("valeurs_bloquantes")
+        if isinstance(raw_blocking, dict):
+            for k in ["min", "max", "exact"]:
+                if raw_blocking.get(k) is not None:
+                    val = self._extract_scalar(raw_blocking[k])
+                    tasks.append(clients.normalize_quantity(val, unit, label))
+                else:
+                    tasks.append(asyncio.sleep(0))
+
+        # Execute all normalization calls for this constraint in parallel
+        results = await asyncio.gather(*tasks)
+
+        # Reconstruct structures
+        res_idx = 0
+
+        # Reconstruct Target
+        if isinstance(raw_target, dict):
+            norm = {"unit": None, "min": None, "max": None, "exact": None}
+            for k in ["min", "max", "exact"]:
+                res = results[res_idx]
+                res_idx += 1
+                if isinstance(res, dict) and res:
+                    norm[k] = res.get("valeur_canonique")
+                    norm["unit"] = res.get("unite_canonique")
+            target_num = norm if norm["unit"] else None
+
+        # Reconstruct Blocking
+        if isinstance(raw_blocking, dict):
+            norm = {"unit": None, "min": None, "max": None, "exact": None}
+            for k in ["min", "max", "exact"]:
+                res = results[res_idx]
+                res_idx += 1
+                if isinstance(res, dict) and res:
+                    norm[k] = res.get("valeur_canonique")
+                    norm["unit"] = res.get("unite_canonique")
+            blocking_num = norm if norm["unit"] else None
+
+        return {
+            "id_caracteristique": char_id,
+            "target_list": (
+                [str(x) for x in c_dict.get("valeurs_cibles")]
+                if isinstance(c_dict.get("valeurs_cibles"), list)
+                else []
+            ),
+            "blocking_list": (
+                [str(x) for x in c_dict.get("valeurs_bloquantes")]
+                if isinstance(c_dict.get("valeurs_bloquantes"), list)
+                else []
+            ),
+            "target_numeric": target_num,
+            "blocking_numeric": blocking_num,
+        }
+
+    async def _normalize_constraints_for_unwind(
+        self, request: ComplexFilterRequest
+    ) -> List[Dict[str, Any]]:
+        """
+        Pre-processes constraints into a flat list suitable for Cypher UNWIND.
+        Uses asyncio.gather to normalize all constraints in parallel.
+        """
+        all_char_ids = {
+            str(c.id_caracteristique)
+            for constraints in request.ids.values()
+            for c in constraints
+        }
+        label_map = await self._get_characteristic_labels(list(all_char_ids))
+
+        flat_filters = []
+        normalization_tasks = []
+
+        # First pass: Create tasks
+        for rid, constraints in request.ids.items():
+            for c in constraints:
+                char_id = str(c.id_caracteristique)
+                label = label_map.get(char_id, "dimensionless")
+                normalization_tasks.append(self._normalize_single_constraint(c, label))
+
+        # Execute all normalization tasks
+        processed_constraints_flat = await asyncio.gather(*normalization_tasks)
+
+        # Second pass: Re-group by RID
+        # We need to map the flat list back to the structure: [{"rid": rid, "constraints": [...]}]
+
+        # Create an iterator for the results
+        res_iter = iter(processed_constraints_flat)
+
+        for rid, constraints in request.ids.items():
+            group_constraints = []
+            for _ in constraints:
+                group_constraints.append(next(res_iter))
+            flat_filters.append({"rid": rid, "constraints": group_constraints})
+
+        return flat_filters
+
+    async def _get_question_weights(self, rids: List[str]) -> Dict[str, int]:
+        if not rids:
+            return {}
+        query = """
+        MATCH (r:Reponse)<-[:PROPOSE]-(q:Question)
+        WHERE r.id_reponse IN $rids
+        RETURN r.id_reponse as rid, q.ordre as ordre
+        """
+        try:
+            results = await clients.execute_cypher(query, {"rids": rids})
+            rid_to_order = {row["rid"]: row["ordre"] for row in results}
+            unique_orders = sorted(list(set(rid_to_order.values())))
+            total = len(unique_orders)
+            order_to_weight = {
+                order: (total - i) for i, order in enumerate(unique_orders)
+            }
+            return {
+                rid: order_to_weight.get(order, 1)
+                for rid, order in rid_to_order.items()
+            }
+        except Exception:
+            return {rid: 1 for rid in rids}
+
+    async def get_products_by_complex_filters(
+        self, request: ComplexFilterRequest, target_product_id: Optional[str] = None
+    ) -> ResultProduct:
+        start_time = time.perf_counter()
+
+        norm_start = time.perf_counter()
+        flat_filters = await self._normalize_constraints_for_unwind(request)
+        # flat_filters_test = await self._normalize_constraints_for_unwind_test(request)
+        # print(f"New implementation flat_filters: {flat_filters}")
+        # print(f"Old implementation flat_filters: {flat_filters_test}")
+        norm_time = time.perf_counter() - norm_start
+        all_rids = [f["rid"] for f in flat_filters]
+        weights_map = await self._get_question_weights(all_rids)
+
+        blocked_val = float(request.blocked_val)
+        different_val = float(request.different_val)
+
+        # Build Cypher Query (V4) with top_p computed in Cypher
+        cypher_query = """
+        // --- STEP 1: ANCHOR TRAVERSAL (V3 Strategy) ---
+        // Find only relevant products first
+        UNWIND $filters AS f
+        MATCH (r:Reponse {id_reponse: f.rid})
+        MATCH (r)<-[:EQUIVAUT_A|COUVRE]-(intermediate)<-[:A_POUR_CARACTERISTIQUE|EST_PROPOSE_PAR]-(p:Produit)
+        
+        WHERE ($target_product_id IS NULL OR p.id_produit = $target_product_id)
+          AND ($id_categorie IS NULL OR p.id_categorie = $id_categorie)
+        
+        WITH DISTINCT p, $filters AS active_filters
+        
+        // --- STEP 2: CLASSIC SCORING (V1 Logic) ---
+        // Broadcast filters to the reduced set of products
+        UNWIND active_filters AS f
+        
+        // Bulk Match Characteristics for the specific Response (rid)
+        OPTIONAL MATCH (p)-[:A_POUR_CARACTERISTIQUE]->(pc:CaracteristiqueTechnique)-[:EQUIVAUT_A]->(r:Reponse {id_reponse: f.rid})
+        
+        // Bundle Constraints with their matching Characteristics
+        WITH p, f, collect(pc) AS pcs
+        WITH p, f, [c IN f.constraints | {
+            cid: c.id_caracteristique,
+            conf: c,
+            matches: [pc IN pcs WHERE toString(pc.id_source_caracteristique) = toString(c.id_caracteristique)]
+        }] AS constraint_data
+        
+        // Evaluate Scores per Characteristic ID
+        WITH p, f, [item IN constraint_data | {
+            cid: item.cid,
+            score: CASE 
+                // Blocking Check
+                WHEN ANY(pc IN item.matches WHERE 
+                    (size(item.conf.blocking_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.blocking_list OR toString(pc.valeur) IN item.conf.blocking_list))
+                    OR
+                    (item.conf.blocking_numeric IS NOT NULL AND (item.conf.blocking_numeric.unit IS NULL OR pc.unite_canonique = item.conf.blocking_numeric.unit) AND (
+                        (item.conf.blocking_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.blocking_numeric.min) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique >= item.conf.blocking_numeric.min))) OR
+                        (item.conf.blocking_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.blocking_numeric.max) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_max_canonique <= item.conf.blocking_numeric.max))) OR
+                        (item.conf.blocking_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.blocking_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND pc.valeur_min_canonique <= item.conf.blocking_numeric.exact AND pc.valeur_max_canonique >= item.conf.blocking_numeric.exact)))
+                    ))
+                ) THEN $blocked_val
+                // Target Check
+                WHEN ANY(pc IN item.matches WHERE 
+                    (size(item.conf.target_list) > 0 AND (toString(pc.id_source_valeur) IN item.conf.target_list OR toString(pc.valeur) IN item.conf.target_list))
+                    OR
+                    (item.conf.target_numeric IS NOT NULL AND (item.conf.target_numeric.unit IS NULL OR pc.unite_canonique = item.conf.target_numeric.unit) AND (
+                        (item.conf.target_numeric.min IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique >= item.conf.target_numeric.min) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.min)))) OR
+                        (item.conf.target_numeric.max IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique <= item.conf.target_numeric.max) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.max)))) OR
+                        (item.conf.target_numeric.exact IS NOT NULL AND ((pc.type_donnee = 'numeric' AND pc.valeur_canonique = item.conf.target_numeric.exact) OR (pc.type_donnee = 'numeric_range' AND (pc.valeur_min_canonique IS NULL OR pc.valeur_min_canonique <= item.conf.target_numeric.exact) AND (pc.valeur_max_canonique IS NULL OR pc.valeur_max_canonique >= item.conf.target_numeric.exact))))
+                    ))
+                ) THEN 1.0
+                // Connected Check
+                WHEN size(item.matches) > 0 THEN $different_val
+                // Default
+                ELSE 0.1
+            END,
+            has_pc: size(item.matches) > 0,
+            is_blocked: ANY(pc IN item.matches WHERE (size(item.conf.blocking_list) > 0 OR item.conf.blocking_numeric IS NOT NULL))
+        }] AS char_results
+        
+        // Aggregate Response Score and Weights
+        WITH p, f.rid AS rid, char_results,
+             EXISTS((p)-[:EST_PROPOSE_PAR]->(:Fournisseur)-[:COUVRE]->(:Reponse {id_reponse: f.rid})) AS supplier_covers
+        
+        WITH p, rid, char_results, supplier_covers,
+             [res IN char_results | res.score] AS raw_scores,
+             [res IN char_results | CASE WHEN res.score = $different_val AND supplier_covers THEN 1.0 ELSE res.score END] AS adjusted_scores
+        
+        WITH p, rid, char_results, adjusted_scores,
+             CASE WHEN $blocked_val IN adjusted_scores THEN $blocked_val ELSE apoc.coll.max(adjusted_scores) END AS rid_score,
+             (supplier_covers OR ANY(res IN char_results WHERE res.has_pc OR res.score = $blocked_val)) AS matched,
+             coalesce($weights[rid], 1.0) as weight
+        
+        // Global Product Scoring and Detail Construction
+        WITH p, collect({
+            rid: rid, 
+            score: rid_score, 
+            weight: weight,
+            matched: matched,
+            ids: apoc.map.fromPairs([res IN char_results | [res.cid, res.score]])
+        }) AS details
+        
+        WITH p, details,
+             reduce(s = 0.0, d IN details | s + (d.score * d.weight)) AS numerator,
+             reduce(w = 0.0, d IN details | w + d.weight) AS denominator
+        
+        WITH p, details, (numerator / denominator) AS global_score
+        
+        ORDER BY global_score DESC
+        LIMIT $top_k
+        
+        // Collect all scored products
+        WITH collect({node: p, details: details, global_score: global_score}) AS all_products
+        
+        // --- STEP 3: Compute top_p (one top product per fournisseur, limit 4) ---
+        WITH all_products,
+             // Group by id_fournisseur and get the top product per fournisseur
+             [fournisseur_id IN apoc.coll.toSet([prod IN all_products | prod.node.id_fournisseur]) |
+                 head([prod IN all_products WHERE prod.node.id_fournisseur = fournisseur_id | prod])
+             ] AS top_per_fournisseur
+        
+        // Sort top_per_fournisseur by global_score descending and limit to 4
+        WITH all_products, top_per_fournisseur
+        UNWIND top_per_fournisseur AS p_top
+        WITH all_products, p_top 
+        ORDER BY p_top.global_score DESC 
+        LIMIT 4
+        
+        // First alias the node, then project the node data
+        WITH all_products, p_top.node AS top_node, p_top.global_score AS top_score, p_top.details AS top_details
+        WITH all_products, top_node TOP_P_PROJECTION_PLACEHOLDER AS top_product_data, top_score, top_details
+        WITH all_products, collect({
+            product_data: top_product_data,
+            score: top_score,
+            details: top_details
+        }) AS top_p
+        
+        UNWIND all_products AS prod
+        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
+        """
+
+        # Determine projection
+        if request.output_fields:
+            # Ensure we don't have empty list behavior if user sends []
+            fields = (
+                [f".{f}" for f in request.output_fields]
+                if len(request.output_fields) > 0
+                else [".*"]
+            )
+            projection = f"{{ {', '.join(fields)} }}"
+        else:
+            projection = "{.*}"
+
+        # Inject projection - both placeholders use the same projection format
+        cypher_query = cypher_query.replace("TOP_P_PROJECTION_PLACEHOLDER", projection)
+        cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
+
+        params = {
+            "filters": flat_filters,
+            "weights": weights_map,
+            "id_categorie": str(request.id_categorie) if request.id_categorie else None,
+            "top_k": int(request.top_k),
+            "target_product_id": target_product_id,
+            "blocked_val": blocked_val,
+            "different_val": different_val,
+        }
+
+        # Debug: Log parameters with their types
+        logging.info(f"📝 Cypher params being sent:")
+        for key, value in params.items():
+            if key not in ["filters", "weights"]:  # Skip large nested params
+                logging.info(f"   {key}: {value} (type: {type(value).__name__})")
+            else:
+                logging.info(
+                    f"   {key}: <{len(value) if isinstance(value, (list, dict)) else 1} items>"
+                )
+
+        try:
+            query_start = time.perf_counter()
+            results = await clients.execute_cypher(cypher_query, params)
+            # Use direct Neo4j connection to avoid gRPC serialization issues
+            # results = await clients.execute_cypher_direct(cypher_query, params)
+            query_time = time.perf_counter() - query_start
+
+            # Parse results - now returns rows of products, each containing the top_p list
+            scored_products = []
+            top_p = []
+
+            if results:
+                # Extract top_p from the first row (it's the same for all rows)
+                raw_top_p = results[0].get("top_p", [])
+                # Convert top_p entries to ScoredProduct objects
+                for entry in raw_top_p:
+                    if isinstance(entry, dict) and "product_data" in entry:
+                        top_p.append(
+                            ScoredProduct(
+                                **entry["product_data"],
+                                score=entry.get("score", 0.0),
+                                details=entry.get("details", []),
+                                info={"weights": weights_map},
+                            )
+                        )
+
+                for rec in results:
+                    scored_products.append(
+                        ScoredProduct(
+                            **rec["product_data"],
+                            score=rec.get("global_score", 0.0),
+                            details=rec.get("details", []),
+                            info={"weights": weights_map},
+                        )
+                    )
+
+            total_time = time.perf_counter() - start_time
+            return ResultProduct(
+                data=scored_products,
+                info={
+                    "query_time": query_time,
+                    "normalization_time": norm_time,
+                    "total_time": total_time,
+                    "count": len(scored_products),
+                    "version": "v4_classic_inverted",
+                },
+                top_p=top_p,
+            )
+        except Exception as e:
+            logging.error(f"Recommendation Error: {e}", exc_info=True)
+            return ResultProduct(data=[], info={"error": str(e)})
+
+    async def _normalize_constraints_for_caracteristique(
+        self, request: MatchingPayload
+    ) -> List[Dict[str, Any]]:
+        """
+        Pre-processes constraints for caracteristique-based filtering.
+        Uses MatchingPayload schema with MatchingOptions.Score for weights.
+        """
+        # Extract caracteristique IDs from the list
+        all_char_ids = [
+            str(c.id_caracteristique) for c in request.liste_caracteristique
+        ]
+        label_map = await self._get_characteristic_labels(all_char_ids)
+
+        # Get score weights from options
+        score_options = request.options.score if request.options else None
+        critique_weight = score_options.critique if score_options else 5
+        secondaire_weight = score_options.secondaire if score_options else 1
+
+        flat_filters = []
+        normalization_tasks = []
+        task_metadata = []  # Track (cid, q_weight, c_weight) for each task
+
+        # First pass: Create tasks
+        for c in request.liste_caracteristique:
+            cid = str(c.id_caracteristique)
+            label = label_map.get(cid, "dimensionless")
+            normalization_tasks.append(
+                self._normalize_single_constraint_for_matching_payload(c, cid, label)
+            )
+            # Resolve c_weight from poids_caracteristique using MatchingOptions.Score
+            poids_carac = c.poids_caracteristique or "critique"
+            if poids_carac == "critique":
+                c_weight = critique_weight
+            elif poids_carac == "secondaire":
+                c_weight = secondaire_weight
+            else:
+                c_weight = critique_weight  # Default to critique
+
+            q_weight = c.poids_question or 1
+            task_metadata.append((cid, q_weight, c_weight))
+
+        # Execute all normalization tasks
+        processed_constraints_flat = await asyncio.gather(*normalization_tasks)
+
+        # Second pass: Re-group by caracteristique ID with hierarchical weights
+        grouped = {}
+        for i, processed in enumerate(processed_constraints_flat):
+            cid, q_weight, c_weight = task_metadata[i]
+            if cid not in grouped:
+                grouped[cid] = {"cid": cid, "q_weight": q_weight, "constraints": []}
+            # Add c_weight to the processed constraint
+            processed["c_weight"] = c_weight
+            grouped[cid]["constraints"].append(processed)
+
+        flat_filters = list(grouped.values())
+        return flat_filters
+
+    async def _normalize_single_constraint_for_matching_payload(
+        self, c: Any, char_id: str, label: str
+    ) -> Dict[str, Any]:
+        """
+        Helper to normalize a single constraint from MatchingCaracteristique.
+        """
+        c_dict = c.model_dump()
+        unit = c_dict.get("unite")
+
+        target_num = None
+        blocking_num = None
+
+        # Prepare tasks for parallel normalization
+        tasks = []
+
+        # 1. Target Numeric
+        raw_target = c_dict.get("valeurs_cibles")
+        if isinstance(raw_target, dict):
+            for k in ["min", "max", "exact"]:
+                if raw_target.get(k) is not None:
+                    val = self._extract_scalar(raw_target[k])
+                    tasks.append(clients.normalize_quantity(val, unit, label))
+                else:
+                    tasks.append(asyncio.sleep(0))
+
+        # 2. Blocking Numeric
+        raw_blocking = c_dict.get("valeurs_bloquantes")
+        if isinstance(raw_blocking, dict):
+            for k in ["min", "max", "exact"]:
+                if raw_blocking.get(k) is not None:
+                    val = self._extract_scalar(raw_blocking[k])
+                    tasks.append(clients.normalize_quantity(val, unit, label))
+                else:
+                    tasks.append(asyncio.sleep(0))
+
+        # Execute all normalization calls for this constraint in parallel
+        results = await asyncio.gather(*tasks)
+
+        # Reconstruct structures
+        res_idx = 0
+
+        # Reconstruct Target
+        if isinstance(raw_target, dict):
+            norm = {"unit": None, "min": None, "max": None, "exact": None}
+            for k in ["min", "max", "exact"]:
+                res = results[res_idx]
+                res_idx += 1
+                if isinstance(res, dict) and res:
+                    norm[k] = res.get("valeur_canonique")
+                    norm["unit"] = res.get("unite_canonique")
+            target_num = norm if norm["unit"] else None
+
+        # Reconstruct Blocking
+        if isinstance(raw_blocking, dict):
+            norm = {"unit": None, "min": None, "max": None, "exact": None}
+            for k in ["min", "max", "exact"]:
+                res = results[res_idx]
+                res_idx += 1
+                if isinstance(res, dict) and res:
+                    norm[k] = res.get("valeur_canonique")
+                    norm["unit"] = res.get("unite_canonique")
+            blocking_num = norm if norm["unit"] else None
+
+        return {
+            "id_caracteristique": char_id,
+            "target_list": (
+                [str(x) for x in c_dict.get("valeurs_cibles")]
+                if isinstance(c_dict.get("valeurs_cibles"), list)
+                else []
+            ),
+            "blocking_list": (
+                [str(x) for x in c_dict.get("valeurs_bloquantes")]
+                if isinstance(c_dict.get("valeurs_bloquantes"), list)
+                else []
+            ),
+            "target_numeric": target_num,
+            "blocking_numeric": blocking_num,
+        }
+
+    def _extract_scoring_params(self, request: MatchingPayloadIdProduit) -> Dict[str, Any]:
+        """
+        Extract all scoring parameters from request.scoring with defaults.
+        Returns a flat dict of scoring values.
+        """
+        blocked_val = (
+            request.scoring.v_blocked if request.scoring.v_blocked is not None else -2.0
+        )
+        different_val = (
+            request.scoring.v_different
+            if request.scoring.v_different is not None
+            else -0.3
+        )
+        z_unmatched = (
+            request.scoring.z_unmatched
+            if request.scoring.z_unmatched is not None
+            else 0
+        )
+        e_unmatched = (
+            request.scoring.e_unmatched
+            if request.scoring.e_unmatched is not None
+            else 0.9
+        )
+        g_unknown_score = (
+            request.scoring.g_unknown_score
+            if request.scoring.g_unknown_score is not None
+            else 0.8
+        )
+        c_unknown_score = (
+            request.scoring.c_unknown_score
+            if request.scoring.c_unknown_score is not None
+            else 0
+        )
+        t_unmatched = (
+            request.scoring.t_unmatched
+            if request.scoring.t_unmatched is not None
+            else 0.2
+        )
+        absolute_threshold = (
+            request.scoring.absolute_threshold
+            if request.scoring.absolute_threshold is not None
+            else 0.3
+        )
+        relative_tolerance = (
+            request.scoring.relative_tolerance
+            if request.scoring.relative_tolerance is not None
+            else 0.1
+        )
+        max_per_supplier_primary = (
+            request.scoring.max_per_supplier_primary
+            if request.scoring.max_per_supplier_primary is not None
+            else 10
+        )
+        max_per_supplier_extended = (
+            request.scoring.max_per_supplier_extended
+            if request.scoring.max_per_supplier_extended is not None
+            else 20
+        )
+        score_step = (
+            request.scoring.score_step
+            if request.scoring.score_step is not None
+            else 0.1
+        )
+        diversity_lambda = (
+            request.scoring.diversity_lambda
+            if request.scoring.diversity_lambda is not None
+            else 0.7
+        )
+
+        return {
+            "blocked_val": blocked_val,
+            "different_val": different_val,
+            "z_unmatched": z_unmatched,
+            "e_unmatched": e_unmatched,
+            "g_unknown_score": g_unknown_score,
+            "c_unknown_score": c_unknown_score,
+            "t_unmatched": t_unmatched,
+            "absolute_threshold": absolute_threshold,
+            "relative_tolerance": relative_tolerance,
+            "max_per_supplier_primary": max_per_supplier_primary,
+            "max_per_supplier_extended": max_per_supplier_extended,
+            "score_step": score_step,
+            "diversity_lambda": diversity_lambda,
+        }
+
+    def _build_cypher_query(
+        self,
+        request: MatchingPayloadIdProduit,
+        target_product_id: Optional[str] = None,
+    ) -> str:
+        """
+        Build the full Cypher query (Step 1 + Step 2), ensure required champs_sortie,
+        and inject projection placeholders.
+        """
+        # Build Cypher Query Step 1 (Dynamic) using centralized constants
+        if target_product_id:
+            query_step_1 = self.CYPHER_STEP1_TARGET
+        else:
+            query_step_1 = self.CYPHER_STEP1_ANCHOR
+
+        # --- STEP 2: SCORING (centralized) ---
+        query_step_2 = self.CYPHER_STEP2_SCORING
+
         cypher_query = query_step_1 + query_step_2
 
         if (
@@ -1304,35 +1310,272 @@ class RecommendationService:
         cypher_query = cypher_query.replace("TOP_P_PROJECTION_PLACEHOLDER", projection)
         cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
 
-        params = {
+        return cypher_query
+
+    def _build_cypher_params(
+        self,
+        request: MatchingPayloadIdProduit,
+        flat_filters: List[Dict[str, Any]],
+        weights_map: Dict[str, Any],
+        scoring_params: Dict[str, Any],
+        top_k: int,
+        target_product_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Build the full Cypher parameter dict. The top_k argument allows the caller
+        to pass either request.top_k or request.rerank.top_k.
+        """
+        # Extract user location data from metadonnee_utilisateurs
+        user_meta = request.metadonnee_utilisateurs
+        user_cp = user_meta.cp if user_meta else None
+        user_dept = user_cp[:2] if user_cp is not None and len(user_cp) >= 2 else None
+        user_id_pays = user_meta.id_pays if user_meta else None
+        user_typologie = user_meta.typologie if user_meta else None
+
+        return {
             "filters": flat_filters,
             "weights": weights_map,
             "id_categorie": (
                 str(request.id_categorie) if request.id_categorie is not None else None
             ),
-            "top_k": int(request.top_k),
+            "top_k": int(top_k),
             "target_product_id": (
                 str(f"""id_produit_{request.id_produit}""")
                 if request.id_produit is not None
                 else None
             ),
-            "blocked_val": blocked_val,
-            "different_val": different_val,
+            "blocked_val": scoring_params["blocked_val"],
+            "different_val": scoring_params["different_val"],
             "user_dept": user_dept,
             "user_id_pays": str(user_id_pays) if user_id_pays is not None else None,
-            "z_unmatched": z_unmatched,
-            "e_unmatched": e_unmatched,
-            "g_unknown_score": g_unknown_score,
-            "c_unknown_score": c_unknown_score,
+            "z_unmatched": scoring_params["z_unmatched"],
+            "e_unmatched": scoring_params["e_unmatched"],
+            "g_unknown_score": scoring_params["g_unknown_score"],
+            "c_unknown_score": scoring_params["c_unknown_score"],
             "user_typologie": user_typologie,
-            "t_unmatched": t_unmatched,
-            "absolute_threshold": absolute_threshold,
-            "relative_tolerance": relative_tolerance,
-            "max_per_supplier_primary": max_per_supplier_primary,
-            "max_per_supplier_extended": max_per_supplier_extended,
-            "score_step": score_step,
-            "diversity_lambda": diversity_lambda,
+            "t_unmatched": scoring_params["t_unmatched"],
+            "absolute_threshold": scoring_params["absolute_threshold"],
+            "relative_tolerance": scoring_params["relative_tolerance"],
+            "max_per_supplier_primary": scoring_params["max_per_supplier_primary"],
+            "max_per_supplier_extended": scoring_params["max_per_supplier_extended"],
+            "score_step": scoring_params["score_step"],
+            "diversity_lambda": scoring_params["diversity_lambda"],
         }
+
+    def _parse_matching_results(
+        self,
+        results: List[Dict[str, Any]],
+        request: MatchingPayloadIdProduit,
+        blocked_val: float,
+        different_val: float,
+    ) -> tuple:
+        """
+        Parse Cypher results into (liste_produit, top_produit) lists of Produit objects.
+        Returns a tuple of (liste_produit, top_produit).
+        """
+        liste_produit = []
+        top_produit = []
+
+        def convert_to_caracteristique_matching(
+            details: List[Dict[str, Any]], score: float
+        ) -> List[CaracteristiqueMatching]:
+            """Convert Cypher details to CaracteristiqueMatching list."""
+            caracteristiques = []
+            for detail in details:
+                # Each detail is a q_weight group containing constraints
+                q_weight = detail.get("q_weight", 1)
+                constraints = detail.get("constraints", [])
+
+                for constraint in constraints:
+                    cid = constraint.get("cid", "0")
+                    c_score = constraint.get("score", 0.0)
+                    c_weight = constraint.get("c_weight_sum", 1)
+                    matched_nodes = constraint.get("matched_nodes", [])
+
+                    # Determine statut_matching based on score
+                    # 1: matche (score >= 0.8), 2: ecart (0 < score < 0.8), 3: bloquant (score < 0), 4: non_renseigne (no match)
+                    if c_score >= 0.8:
+                        statut = 1  # Matche
+                    elif c_score == blocked_val:
+                        statut = 3  # Bloquant
+                    elif c_score == different_val:
+                        statut = 2  # Ecart
+                    elif len(matched_nodes) == 0:
+                        statut = 4  # Non renseigné
+                    else:
+                        statut = 2  # Ecart
+
+                    # Extract value and unit from the best-scoring matched node
+                    valeur = None
+                    valeur_min = None
+                    valeur_max = None
+                    unite = None
+                    type_carac = 2  # Default to textuelle
+                    id_valeurs = []
+
+                    if matched_nodes:
+                        # Pick the node with the highest node_score (computed in Cypher)
+                        node = max(
+                            matched_nodes, key=lambda n: n.get("node_score", 0)
+                        )
+                        valeur = (
+                            str(node.get("valeur", ""))
+                            if node.get("valeur")
+                            and node.get("type_donnee") != "text"
+                            else None
+                        )
+                        valeur_min = (
+                            str(node.get("valeur_min", ""))
+                            if node.get("valeur_min")
+                            and node.get("type_donnee") != "text"
+                            else None
+                        )
+                        valeur_max = (
+                            str(node.get("valeur_max", ""))
+                            if node.get("valeur_max")
+                            and node.get("type_donnee") != "text"
+                            else None
+                        )
+                        unite = node.get("unite") or node.get("unite_canonique")
+                        type_donnee = node.get("type_donnee", "")
+                        type_carac = (
+                            1 if type_donnee in ["numeric", "numeric_range"] else 2
+                        )
+                        if node.get("id_source_valeur"):
+                            try:
+                                id_valeurs = [int(node.get("id_source_valeur"))]
+                            except (ValueError, TypeError):
+                                id_valeurs = []
+                        elif c_score > 0 and type_donnee in [
+                            "numeric",
+                            "numeric_range",
+                        ]:
+                            statut = 1
+
+                    caracteristiques.append(
+                        CaracteristiqueMatching(
+                            statut_matching=statut,
+                            id_caracteristique=int(cid) if cid.isdigit() else 0,
+                            type_caracteristique=type_carac,
+                            valeur=valeur,
+                            valeur_min=valeur_min,
+                            valeur_max=valeur_max,
+                            unite=unite,
+                            id_valeur=id_valeurs,
+                            poids=int(c_weight),
+                            bareme=float(c_score),
+                            poids_question=int(q_weight),
+                        )
+                    )
+
+            return caracteristiques
+
+        def build_produit(rec: Dict[str, Any], rang: int) -> Produit:
+            """Convert a result record to Produit."""
+            product_data = rec.get("product_data", {})
+            details = rec.get("details", [])
+            final_score = rec.get("final_score", 0.0)
+            zone_score = rec.get("zone_score", 1.0)
+            etat_score = rec.get("etat_score", 1.0)
+            typo_score = rec.get("typo_score", 1.0)
+            carac_score = rec.get("global_score", 0.0)
+            info_produit = rec.get("product_data", {})
+
+            caracteristiques = convert_to_caracteristique_matching(
+                details, final_score
+            )
+
+            return Produit(
+                rang=rang,
+                id_produit=str(product_data.get("id_produit", "")),
+                score=float(final_score),
+                caracteristique=caracteristiques,
+                info_produit=(
+                    info_produit
+                    if request.champs_sortie is not None
+                    and len(request.champs_sortie) > 0
+                    else None
+                ),
+                coeff_geo=float(zone_score),
+                coeff_type_frns=float(typo_score),
+                coeff_etat_score=float(etat_score),
+                coeff_caracteristique=float(carac_score),
+            )
+
+        if results:
+            # Extract top_p from first result
+            raw_top_p = results[0].get("top_p", [])
+
+            # Build top_produit list
+            for idx, entry in enumerate(raw_top_p):
+                if isinstance(entry, dict) and "product_data" in entry:
+                    top_zone_score = entry.get("zone_score", 1.0)
+                    top_final_score = entry.get("score", 0.0)
+                    top_etat_score = entry.get("etat_score", 1.0)
+                    top_typo_score = entry.get("typo_score", 1.0)
+                    top_carac_score = entry.get("global_score", 0.0)
+                    produit = Produit(
+                        rang=idx + 1,
+                        id_produit=str(entry["product_data"].get("id_produit", "")),
+                        score=float(top_final_score),
+                        caracteristique=convert_to_caracteristique_matching(
+                            entry.get("details", []), top_final_score
+                        ),
+                        info_produit=(
+                            entry.get("product_data", {})
+                            if request.champs_sortie is not None
+                            and len(request.champs_sortie) > 0
+                            else None
+                        ),
+                        coeff_geo=float(top_zone_score),
+                        coeff_type_frns=float(top_typo_score),
+                        coeff_etat_score=float(top_etat_score),
+                        coeff_caracteristique=float(top_carac_score),
+                    )
+                    top_produit.append(produit)
+
+            # Build liste_produit
+            for idx, rec in enumerate(results):
+                if rec.get("product_data"):
+                    liste_produit.append(build_produit(rec, idx + 1))
+
+        return liste_produit, top_produit
+
+    async def get_products_by_caracteristique_filters(
+        self,
+        request: MatchingPayloadIdProduit,
+        target_product_id: Optional[str] = None,
+    ) -> MatchingResponse:
+        """
+        Get products filtered and scored by CaracteristiqueTechnique constraints.
+        Uses MatchingPayload schema with MatchingOptions.Score for caracteristique weights.
+        Includes geographic zone scoring based on MetadonneUtilisateurs.
+        """
+        start_time = time.perf_counter()
+
+        if request.id_produit is not None:
+            target_product_id = str(request.id_produit)
+
+        norm_start = time.perf_counter()
+        flat_filters = await self._normalize_constraints_for_caracteristique(request)
+        norm_time = time.perf_counter() - norm_start
+
+        # Build weights map from request (cid -> q_weight)
+        weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
+
+        # Extract scoring parameters
+        scoring_params = self._extract_scoring_params(request)
+        blocked_val = scoring_params["blocked_val"]
+        different_val = scoring_params["different_val"]
+
+        # Build Cypher query with projection
+        cypher_query = self._build_cypher_query(request, target_product_id)
+
+        # Build Cypher params with request.top_k
+        params = self._build_cypher_params(
+            request, flat_filters, weights_map, scoring_params,
+            top_k=request.top_k, target_product_id=target_product_id,
+        )
 
         try:
             query_start = time.perf_counter()
@@ -1348,10 +1591,10 @@ class RecommendationService:
                 # logging.warning("DIVERSITY ALGORITHM DEBUG")
                 # logging.warning("=" * 80)
                 # logging.warning(
-                #     f"Query time: {query_time:.4f}s | Total results: {len(results)} | absolute_threshold: {absolute_threshold}"
+                #     f"Query time: {query_time:.4f}s | Total results: {len(results)} | absolute_threshold: {scoring_params['absolute_threshold']}"
                 # )
                 # logging.warning(
-                #     f"Parameters: top_k={int(request.top_k)}, K(target)={int(request.top_k) + 4}, max_per_supplier_extended={max_per_supplier_extended}, diversity_lambda={diversity_lambda}"
+                #     f"Parameters: top_k={int(request.top_k)}, K(target)={int(request.top_k) + 4}, max_per_supplier_extended={scoring_params['max_per_supplier_extended']}, diversity_lambda={scoring_params['diversity_lambda']}"
                 # )
 
                 # # Log pre-diversity debug (products selected by the MMR algorithm)
@@ -1412,171 +1655,9 @@ class RecommendationService:
                 # logging.warning("=" * 80)
 
             # Parse results and convert to MatchingResponse format
-            liste_produit = []
-            top_produit = []
-
-            def convert_to_caracteristique_matching(
-                details: List[Dict[str, Any]], score: float
-            ) -> List[CaracteristiqueMatching]:
-                """Convert Cypher details to CaracteristiqueMatching list."""
-                caracteristiques = []
-                for detail in details:
-                    # Each detail is a q_weight group containing constraints
-                    q_weight = detail.get("q_weight", 1)
-                    constraints = detail.get("constraints", [])
-
-                    for constraint in constraints:
-                        cid = constraint.get("cid", "0")
-                        c_score = constraint.get("score", 0.0)
-                        c_weight = constraint.get("c_weight_sum", 1)
-                        matched_nodes = constraint.get("matched_nodes", [])
-
-                        # Determine statut_matching based on score
-                        # 1: matche (score >= 0.8), 2: ecart (0 < score < 0.8), 3: bloquant (score < 0), 4: non_renseigne (no match)
-                        if c_score >= 0.8:
-                            statut = 1  # Matche
-                        elif c_score == blocked_val:
-                            statut = 3  # Bloquant
-                        elif c_score == different_val:
-                            statut = 2  # Ecart
-                        elif len(matched_nodes) == 0:
-                            statut = 4  # Non renseigné
-                        else:
-                            statut = 2  # Ecart
-
-                        # Extract value and unit from the best-scoring matched node
-                        valeur = None
-                        valeur_min = None
-                        valeur_max = None
-                        unite = None
-                        type_carac = 2  # Default to textuelle
-                        id_valeurs = []
-
-                        if matched_nodes:
-                            # Pick the node with the highest node_score (computed in Cypher)
-                            node = max(
-                                matched_nodes, key=lambda n: n.get("node_score", 0)
-                            )
-                            valeur = (
-                                str(node.get("valeur", ""))
-                                if node.get("valeur")
-                                and node.get("type_donnee") != "text"
-                                else None
-                            )
-                            valeur_min = (
-                                str(node.get("valeur_min", ""))
-                                if node.get("valeur_min")
-                                and node.get("type_donnee") != "text"
-                                else None
-                            )
-                            valeur_max = (
-                                str(node.get("valeur_max", ""))
-                                if node.get("valeur_max")
-                                and node.get("type_donnee") != "text"
-                                else None
-                            )
-                            unite = node.get("unite") or node.get("unite_canonique")
-                            type_donnee = node.get("type_donnee", "")
-                            type_carac = (
-                                1 if type_donnee in ["numeric", "numeric_range"] else 2
-                            )
-                            if node.get("id_source_valeur"):
-                                try:
-                                    id_valeurs = [int(node.get("id_source_valeur"))]
-                                except (ValueError, TypeError):
-                                    id_valeurs = []
-                            elif c_score > 0 and type_donnee in [
-                                "numeric",
-                                "numeric_range",
-                            ]:
-                                statut = 1
-
-                        caracteristiques.append(
-                            CaracteristiqueMatching(
-                                statut_matching=statut,
-                                id_caracteristique=int(cid) if cid.isdigit() else 0,
-                                type_caracteristique=type_carac,
-                                valeur=valeur,
-                                valeur_min=valeur_min,
-                                valeur_max=valeur_max,
-                                unite=unite,
-                                id_valeur=id_valeurs,
-                                poids=int(c_weight),
-                                bareme=float(c_score),
-                                poids_question=int(q_weight),
-                            )
-                        )
-
-                return caracteristiques
-
-            def build_produit(rec: Dict[str, Any], rang: int) -> Produit:
-                """Convert a result record to Produit."""
-                product_data = rec.get("product_data", {})
-                details = rec.get("details", [])
-                final_score = rec.get("final_score", 0.0)
-                zone_score = rec.get("zone_score", 1.0)
-                etat_score = rec.get("etat_score", 1.0)
-                typo_score = rec.get("typo_score", 1.0)
-                carac_score = rec.get("global_score", 0.0)
-                info_produit = rec.get("product_data", {})
-
-                caracteristiques = convert_to_caracteristique_matching(
-                    details, final_score
-                )
-
-                return Produit(
-                    rang=rang,
-                    id_produit=str(product_data.get("id_produit", "")),
-                    score=float(final_score),
-                    caracteristique=caracteristiques,
-                    info_produit=(
-                        info_produit
-                        if request.champs_sortie is not None
-                        and len(request.champs_sortie) > 0
-                        else None
-                    ),
-                    coeff_geo=float(zone_score),
-                    coeff_type_frns=float(typo_score),
-                    coeff_etat_score=float(etat_score),
-                    coeff_caracteristique=float(carac_score),
-                )
-
-            if results:
-                # Extract top_p from first result
-                raw_top_p = results[0].get("top_p", [])
-
-                # Build top_produit list
-                for idx, entry in enumerate(raw_top_p):
-                    if isinstance(entry, dict) and "product_data" in entry:
-                        top_zone_score = entry.get("zone_score", 1.0)
-                        top_final_score = entry.get("score", 0.0)
-                        top_etat_score = entry.get("etat_score", 1.0)
-                        top_typo_score = entry.get("typo_score", 1.0)
-                        top_carac_score = entry.get("global_score", 0.0)
-                        produit = Produit(
-                            rang=idx + 1,
-                            id_produit=str(entry["product_data"].get("id_produit", "")),
-                            score=float(top_final_score),
-                            caracteristique=convert_to_caracteristique_matching(
-                                entry.get("details", []), top_final_score
-                            ),
-                            info_produit=(
-                                entry.get("product_data", {})
-                                if request.champs_sortie is not None
-                                and len(request.champs_sortie) > 0
-                                else None
-                            ),
-                            coeff_geo=float(top_zone_score),
-                            coeff_type_frns=float(top_typo_score),
-                            coeff_etat_score=float(top_etat_score),
-                            coeff_caracteristique=float(top_carac_score),
-                        )
-                        top_produit.append(produit)
-
-                # Build liste_produit
-                for idx, rec in enumerate(results):
-                    if rec.get("product_data"):
-                        liste_produit.append(build_produit(rec, idx + 1))
+            liste_produit, top_produit = self._parse_matching_results(
+                results, request, blocked_val, different_val,
+            )
 
             total_time = time.perf_counter() - start_time
             return MatchingResponse(
@@ -1586,6 +1667,82 @@ class RecommendationService:
             )
         except Exception as e:
             logging.error(f"Caracteristique Filter Error: {e}", exc_info=True)
+            return MatchingResponse(
+                top_produit=[],
+                liste_produit=[],
+                temps_de_traitement=0.0,
+            )
+
+    async def get_products_by_caracteristique_filters_rerank(
+        self,
+        request: MatchingPayloadIdProduit,
+        target_product_id: Optional[str] = None,
+    ) -> MatchingResponse:
+        """
+        Get products filtered and scored by CaracteristiqueTechnique constraints,
+        using rerank.top_k instead of request.top_k.
+        Same core functionality as get_products_by_caracteristique_filters.
+        Called when rerank.use_rerank is True.
+        """
+        start_time = time.perf_counter()
+
+        if request.id_produit is not None:
+            target_product_id = str(request.id_produit)
+
+        norm_start = time.perf_counter()
+        flat_filters = await self._normalize_constraints_for_caracteristique(request)
+        norm_time = time.perf_counter() - norm_start
+
+        # Build weights map from request (cid -> q_weight)
+        weights_map = {f["cid"]: f["q_weight"] for f in flat_filters}
+
+        # Extract scoring parameters
+        scoring_params = self._extract_scoring_params(request)
+        blocked_val = scoring_params["blocked_val"]
+        different_val = scoring_params["different_val"]
+
+        # Build Cypher query with projection
+        cypher_query = self._build_cypher_query(request, target_product_id)
+
+        # Build Cypher params with rerank.top_k instead of request.top_k
+        params = self._build_cypher_params(
+            request, flat_filters, weights_map, scoring_params,
+            top_k=request.rerank.top_k, target_product_id=target_product_id,
+        )
+
+        try:
+            query_start = time.perf_counter()
+            results = await clients.execute_cypher(cypher_query, params)
+            query_time = time.perf_counter() - query_start
+
+            # --- DEBUG: Diversity Algorithm Output ---
+            if results:
+                pre_diversity_debug = results[0].get("pre_diversity_debug", [])
+                raw_top_p_debug = results[0].get("top_p", [])
+
+                # Log vendor distribution
+                vendor_counts = {}
+                for p in pre_diversity_debug:
+                    vid = p.get("id_fournisseur", "?")
+                    vendor_counts[vid] = vendor_counts.get(vid, 0) + 1
+
+                final_count = sum(1 for r in results if r.get("product_data"))
+                for i, rec in enumerate(results):
+                    pd = rec.get("product_data", {})
+
+            # Parse results and convert to MatchingResponse format
+            liste_produit, top_produit = self._parse_matching_results(
+                results, request, blocked_val, different_val,
+            )
+
+            total_time = time.perf_counter() - start_time
+            return MatchingResponse(
+                top_produit=top_produit,
+                liste_produit=liste_produit,
+                temps_de_traitement=total_time,
+            )
+        except Exception as e:
+            logging.error(f"Caracteristique Filter Rerank Error: {e}", exc_info=True)
             return MatchingResponse(
                 top_produit=[],
                 liste_produit=[],

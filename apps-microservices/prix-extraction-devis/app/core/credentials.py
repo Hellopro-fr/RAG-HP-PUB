@@ -21,7 +21,13 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
 
     # Prompt statique - Devis
-    PROMPT_ID: str = "143"
+    PROMPT_ID: str = "73"
+
+    MILVUS_SOURCE: str = "pjechanges"  # Collection source dans Milvus
+    MILVUS_PAGE_TYPE: str = "devis"
+    MILVUS_TYPE: int = 1 # type de recherche vectorielle
+    MILVUS_ACTION: int = 2 # utilisation LLM
+    MILVUS_TOP_K: int = 300
 
     # API HelloPro
     # HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M" #dev

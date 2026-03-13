@@ -14,9 +14,13 @@ const NEEDS_REDIRECT_KEY = 'flow-needs-redirect';
 // Clé de sessionStorage pour le token original (ne pas effacer au reload)
 const ORIGINAL_TOKEN_KEY = 'flow-original-token';
 
+// Clé localStorage pour marquer soumission réussie (survit à window.location.href)
+const SUBMISSION_COMPLETED_KEY = 'flow-submission-completed';
+
 // Exporter les clés pour FlowStorageReset et questionnaire-client
 export const FLOW_NEEDS_REDIRECT_KEY = NEEDS_REDIRECT_KEY;
 export const FLOW_ORIGINAL_TOKEN_KEY = ORIGINAL_TOKEN_KEY;
+export const FLOW_SUBMISSION_COMPLETED_KEY = SUBMISSION_COMPLETED_KEY;
 
 // =============================================================================
 // EXÉCUTION IMMÉDIATE - Doit s'exécuter AVANT que Zustand hydrate
@@ -34,6 +38,30 @@ if (typeof window !== 'undefined') {
     const SESSION_ACTIVE_KEY = 'flow-session-active';
     const wasSessionActive = sessionStorage.getItem(SESSION_ACTIVE_KEY) === 'true';
 
+    // Vérifier si l'utilisateur revient après une soumission externe
+    const submissionDataRaw = localStorage.getItem(SUBMISSION_COMPLETED_KEY);
+    let hasCompletedSubmission = false;
+    let submissionToken: string | undefined;
+
+    if (submissionDataRaw) {
+      try {
+        const submissionData = JSON.parse(submissionDataRaw);
+        const now = Date.now();
+
+        // Vérifier si le flag n'a pas expiré (48h - sécurité)
+        if (submissionData.expiresAt && now < submissionData.expiresAt) {
+          hasCompletedSubmission = true;
+          submissionToken = submissionData.originalToken;
+        } else {
+          // Expiration : nettoyer le flag
+          localStorage.removeItem(SUBMISSION_COMPLETED_KEY);
+        }
+      } catch (e) {
+        // JSON invalide : nettoyer
+        localStorage.removeItem(SUBMISSION_COMPLETED_KEY);
+      }
+    }
+
     let shouldClear = false;
     let needsRedirect = false;
     let reason = 'unknown';
@@ -43,8 +71,22 @@ if (typeof window !== 'undefined') {
       shouldClear = true;
       needsRedirect = true;
       reason = 'reload';
+    } else if (navType === 'back_forward' && hasCompletedSubmission) {
+      // Retour navigateur APRÈS soumission externe
+      // → Clear store + redirect vers Q1/Q2
+      shouldClear = true;
+      needsRedirect = true;
+      reason = 'back-after-submission';
+
+      // Sauvegarder le token pour redirection vers Q2
+      if (submissionToken) {
+        sessionStorage.setItem(ORIGINAL_TOKEN_KEY, submissionToken);
+      }
+
+      // Nettoyer le flag après utilisation (une seule redirection)
+      localStorage.removeItem(SUBMISSION_COMPLETED_KEY);
     } else if (navType === 'back_forward') {
-      // Bouton retour/avancer du navigateur
+      // Bouton retour/avancer du navigateur NORMAL (pas après soumission)
       // Permettre la navigation naturelle dans le flow (pas de reset ni redirection)
       shouldClear = false;
       needsRedirect = false;
@@ -63,12 +105,10 @@ if (typeof window !== 'undefined') {
 
     if (shouldClear) {
       sessionStorage.removeItem('flow-storage');
-      //console.log('[FlowStore] Storage cleared -', reason);
     }
 
     if (needsRedirect) {
       sessionStorage.setItem(NEEDS_REDIRECT_KEY, 'true');
-      //console.log('[FlowStore] Redirect flag set');
     }
 
     // Marquer la session comme active
@@ -217,12 +257,16 @@ export interface FlowState {
   // Paramètres de test pour le scoring du matching (passés via URL)
   matchingTestParams: MatchingTestParams | null;
 
+  // Activation du rerank via RAG (passé via URL ?rerank=1)
+  useRerank: boolean;
+
   // IDs des produits à soumettre (pour le devis unique vs sélection multiple)
   supplierIdsToSubmit: string[] | null;
 
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
   setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
+  setUseRerank: (useRerank: boolean) => void;
   setCharacteristicsMap: (characteristics: CharacteristicsMap) => void;
   setOrphanedSelectedSuppliers: (suppliers: Supplier[]) => void;
   setCriteriaHaveChanged: (changed: boolean) => void;
@@ -296,6 +340,7 @@ const initialState = {
   removedSecondaireCriteriaIds: [],
   userQuestionAnswers: [],
   matchingTestParams: null,
+  useRerank: false,
   ddc: "",
   supplierIdsToSubmit: null,
 };
@@ -399,6 +444,8 @@ export const useFlowStore = create<FlowState>()(
       setMatchingResults: (results) => set({ matchingResults: results }),
 
       setMatchingTestParams: (params) => set({ matchingTestParams: params }),
+
+      setUseRerank: (useRerank) => set({ useRerank }),
 
       setFlowType: (flowType) => set({ flowType }),
 

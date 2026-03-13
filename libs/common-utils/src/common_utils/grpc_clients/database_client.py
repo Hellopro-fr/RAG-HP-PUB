@@ -1,6 +1,7 @@
 import grpc
 import os
 import logging
+import time
 from typing import List, Optional
 
 from google.protobuf import struct_pb2
@@ -12,6 +13,10 @@ DATABASE_SERVICE_URL = os.getenv(
     "DATABASE_SERVICE_URL", "database-recherche-service:50054"
 )
 SERVICE_NAME = os.getenv("SERVICE_NAME", "unknown-service")
+
+# Cache en mémoire pour éviter le spam de gRPC GetSchema
+_SCHEMA_CACHE = {}
+_SCHEMA_CACHE_TTL = 3600  # Durée de vie du cache (1 heure)
 
 
 # MODIFIÉ: La signature est mise à jour pour inclure les nouveaux paramètres optionnels
@@ -28,17 +33,17 @@ async def search_vector(
 
             # MODIFIÉ: Construction de la requête avec les champs optionnels et source_service
             request = database_pb2.SearchRequest(
-                collection_name=collection, 
-                query_embedding=vector, 
+                collection_name=collection,
+                query_embedding=vector,
                 top_k=k,
-                source_service=SERVICE_NAME
+                source_service=SERVICE_NAME,
             )
             if filter_expr:
                 request.filter_expression = filter_expr
             if kwargs.get("output_fields") and isinstance(
                 kwargs.get("output_fields"), list
             ):
-                request.output_fields.extend(kwargs.get("output_fields",[]))
+                request.output_fields.extend(kwargs.get("output_fields", []))
             if "context_mode" in kwargs:
                 options_struct = struct_pb2.Struct()
                 options_struct.update(
@@ -55,17 +60,30 @@ async def search_vector(
 
 async def get_collection_schema(collection_name: str) -> Optional[dict]:
     """
-    Appelle le service gRPC pour obtenir le schéma d'une collection.
+    Appelle le service gRPC pour obtenir le schéma d'une collection avec un cache d'une heure.
     """
+    current_time = time.time()
+
+    # Vérification du cache
+    if collection_name in _SCHEMA_CACHE:
+        cached_schema, timestamp = _SCHEMA_CACHE[collection_name]
+        if current_time - timestamp < _SCHEMA_CACHE_TTL:
+            return cached_schema
+
     try:
         async with grpc.aio.insecure_channel(DATABASE_SERVICE_URL) as channel:
             stub = database_pb2_grpc.DatabaseSearchServiceStub(channel)
             request = database_pb2.GetSchemaRequest(
-                collection_name=collection_name,
-                source_service=SERVICE_NAME
+                collection_name=collection_name, source_service=SERVICE_NAME
             )
             response = await stub.GetSchema(request)
-            return dict(response.fields)
+
+            schema_dict = dict(response.fields)
+
+            # Mise en cache du résultat
+            _SCHEMA_CACHE[collection_name] = (schema_dict, current_time)
+
+            return schema_dict
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant GetSchema: {e.details()}")
         return None
@@ -85,8 +103,8 @@ async def classic_search_vector(
                 collection_name=collection,
                 filter_expression=filter_expr,
                 top_k=k,
-                output_fields=output_fields if output_fields else[],
-                source_service=SERVICE_NAME
+                output_fields=output_fields if output_fields else [],
+                source_service=SERVICE_NAME,
             )
 
             response = await stub.ClassicSearch(request)
@@ -138,14 +156,14 @@ async def hybrid_search_vector(
                 top_k=k,
                 dense_weight=dense_weight,
                 sparse_weight=sparse_weight,
-                source_service=SERVICE_NAME
+                source_service=SERVICE_NAME,
             )
             if filter_expr:
                 request.filter_expression = filter_expr
             if kwargs.get("output_fields") and isinstance(
                 kwargs.get("output_fields"), list
             ):
-                request.output_fields.extend(kwargs.get("output_fields",[]))
+                request.output_fields.extend(kwargs.get("output_fields", []))
 
             # Construction du Struct options avec les paramètres d'exploration
             options_data = {}

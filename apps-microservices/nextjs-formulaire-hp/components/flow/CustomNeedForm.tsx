@@ -9,7 +9,7 @@ import { trackCustomNeedPageView, trackCustomNeedContactView, trackFormValidatio
 import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
 import { validatePhoneNumber } from "@/lib/utils/phone-validation";
 import { toast } from "@/hooks/use-toast";
-import { useFlowStore } from "@/lib/stores/flow-store";
+import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from "@/lib/stores/flow-store";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
 import { ContactFormData } from "@/types";
 import { useBuyerCheck } from "@/hooks/api";
@@ -64,6 +64,27 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
     if (leadSubmission.isSuccess && leadSubmission.data?.data) {
       const { isExternalRedirect, fallbackUrl } = leadSubmission.data.data;
       if (!isExternalRedirect && fallbackUrl) {
+        // Marquer la soumission comme complétée IMMÉDIATEMENT (pas dans le setTimeout!)
+        try {
+          const originalToken = typeof window !== 'undefined'
+            ? sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY)
+            : undefined;
+
+          const submissionData = {
+            timestamp: Date.now(),
+            originalToken: originalToken || undefined,
+            categoryId: categoryId,
+            expiresAt: Date.now() + (48 * 60 * 60 * 1000), // 48h (sécurité)
+          };
+
+          localStorage.setItem(
+            FLOW_SUBMISSION_COMPLETED_KEY,
+            JSON.stringify(submissionData)
+          );
+        } catch (e) {
+          console.error('[CustomNeedForm] ❌ Failed to set submission flag:', e);
+        }
+
         // Afficher le message d'erreur et rediriger après 2 secondes
         setShowFallbackRedirect(true);
         // Scroll vers le message après un court délai pour laisser le rendu se faire
@@ -71,12 +92,13 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
           fallbackMessageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
         const timer = setTimeout(() => {
+          // Redirection vers page feuille (quitte Next.js)
           window.location.href = fallbackUrl;
         }, 2000);
         return () => clearTimeout(timer);
       }
     }
-  }, [leadSubmission.isSuccess, leadSubmission.data]);
+  }, [leadSubmission.isSuccess, leadSubmission.data, categoryId]);
   const { trackDbEvent } = useDbTracking();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
