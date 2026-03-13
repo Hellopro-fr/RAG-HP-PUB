@@ -1701,12 +1701,20 @@ class RecommendationService:
         # 1. Extract all product IDs
         all_produits = top_produit + liste_produit
         if not all_produits:
+            logging.info("[RERANK] No products to rerank, returning empty")
             return top_produit, liste_produit, []
 
         id_produits = [p.id_produit for p in all_produits]
         produit_map = {p.id_produit: p for p in all_produits}
+        logging.info(
+            f"[RERANK] Starting rerank for {len(id_produits)} products "
+            f"(top={len(top_produit)}, liste={len(liste_produit)}), "
+            f"id_categorie={id_categorie}"
+        )
+        logging.info(f"[RERANK] Product IDs: {id_produits}")
 
         # 2. Fetch product info + characteristics + category definitions in parallel
+        logging.info("[RERANK] Fetching product info, characteristics, and category definitions from HelloPro API...")
         try:
             products_info, all_caracs, category_caracs = await asyncio.gather(
                 hellopro_api_client.fetch_products_info(id_categorie, id_produits),
@@ -1714,8 +1722,15 @@ class RecommendationService:
                 hellopro_api_client.fetch_category_caracteristiques(id_categorie),
             )
         except Exception as e:
-            logging.error(f"HelloPro API enrichment error: {e}", exc_info=True)
+            logging.error(f"[RERANK] HelloPro API enrichment error: {e}", exc_info=True)
             return top_produit, liste_produit, []
+
+        logging.info(
+            f"[RERANK] HelloPro API results: "
+            f"products_info={len(products_info)} items, "
+            f"all_caracs={len(all_caracs)} products with caracs, "
+            f"category_caracs={len(category_caracs)} category definitions"
+        )
 
         # 3. Format enriched data for LLM
         formatted_products = []
@@ -1755,6 +1770,16 @@ class RecommendationService:
                 ),
             }
             formatted_products.append(formatted_product)
+
+        logging.info(f"[RERANK] Formatted {len(formatted_products)} products for LLM")
+        for fp in formatted_products:
+            logging.info(
+                f"[RERANK]   Product {fp['id_produit']}: "
+                f"titre='{fp['titre'][:50]}...', "
+                f"fournisseur={fp['fournisseur']['type']}, "
+                f"score_matching={fp['score_matching']}, "
+                f"nb_caracs={len(fp['caracteristiques'])}"
+            )
 
         # 4. Build BESOIN_ACHETEUR, CARACTERISTIQUES_CRITIQUES, LISTE_PRODUITS
 
@@ -1824,10 +1849,17 @@ class RecommendationService:
 
         caracteristiques_critiques = "\n".join(caracteristiques_critiques_lines)
 
+        logging.info(f"[RERANK] BESOIN_ACHETEUR (parcours): {besoin_acheteur[:200]}...")
+        logging.info(
+            f"[RERANK] CARACTERISTIQUES_CRITIQUES ({len(caracteristiques_critiques_lines)} lines):\n"
+            f"{caracteristiques_critiques}"
+        )
+
         import json
 
         # LISTE_PRODUITS = formatted product list as JSON
         liste_produits_json = json.dumps(formatted_products, ensure_ascii=False)
+        logging.info(f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars")
 
         # 5. Build system prompt with template variables and call Gemini
         system_prompt = """
@@ -2075,19 +2107,24 @@ class RecommendationService:
             liste_produits_json=liste_produits_json,
         )
 
+        logging.info(f"[RERANK] System prompt size: {len(system_prompt)} chars")
+        logging.info("[RERANK] Calling Gemini LLM for reranking...")
+
         try:
             llm_response = await gemini_client.generate_rerank_response(
                 system_prompt, liste_produits_json
             )
         except Exception as e:
-            logging.error(f"Gemini rerank call error: {e}", exc_info=True)
+            logging.error(f"[RERANK] Gemini rerank call error: {e}", exc_info=True)
             return top_produit, liste_produit, []
 
         if not llm_response:
             logging.warning(
-                "Gemini returned no usable response, keeping original order"
+                "[RERANK] Gemini returned no usable response, keeping original order"
             )
             return top_produit, liste_produit, []
+
+        logging.info(f"[RERANK] Gemini response received: {json.dumps(llm_response, ensure_ascii=False, default=str)[:1000]}")
 
         # 5. Reorder results based on LLM response
         llm_top_ids = llm_response.get("top_produits", [])
@@ -2095,13 +2132,15 @@ class RecommendationService:
         llm_ecartes_ids = llm_response.get("produits_ecartes", [])
 
         # Ensure all are string lists
-        llm_top_ids = [str(x) for x in llm_top_ids]
-        llm_autres_ids = [str(x) for x in llm_autres_ids]
-        llm_ecartes_ids = [str(x) for x in llm_ecartes_ids]
+        llm_top_ids = [str(x.get("id_produit", x) if isinstance(x, dict) else x) for x in llm_top_ids]
+        llm_autres_ids = [str(x.get("id_produit", x) if isinstance(x, dict) else x) for x in llm_autres_ids]
+        llm_ecartes_ids = [str(x.get("id_produit", x) if isinstance(x, dict) else x) for x in llm_ecartes_ids]
 
         logging.info(
-            f"LLM rerank result: top={len(llm_top_ids)}, "
-            f"autres={len(llm_autres_ids)}, ecartes={len(llm_ecartes_ids)}"
+            f"[RERANK] LLM classification: "
+            f"top_produits={llm_top_ids}, "
+            f"autres_produits={llm_autres_ids}, "
+            f"produits_ecartes={llm_ecartes_ids}"
         )
 
         # Rebuild ordered lists from LLM output
