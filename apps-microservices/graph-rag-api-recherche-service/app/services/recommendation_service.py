@@ -1772,6 +1772,7 @@ class RecommendationService:
                     else []
                 ),
             }
+            logging.warning(f"[RERANK] formatted produit : {formatted_product}")
             formatted_products.append(formatted_product)
 
         logging.warning(
