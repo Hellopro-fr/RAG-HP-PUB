@@ -409,6 +409,9 @@ class Produit(BaseModel):
     info_produit: Optional[Dict[str, Any]] = Field(
         None, description="Informations sur le produit"
     )
+    llm_response: Optional[Dict[str, Any]] = Field(
+        None, description="Réponse du LLM pour le produit"
+    )
     # top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 
@@ -420,6 +423,9 @@ class MatchingResponse(BaseModel):
     )
     liste_produit: List[Produit] = Field(
         default_factory=list, description="Liste des produits trouvés classés par score"
+    )
+    ecarts: Optional[List[Produit]] = Field(
+        None, description="Produits écartés par le LLM lors du reranking"
     )
     temps_de_traitement: float = Field(
         ..., description="Temps pris pour effectuer le matching en secondes"
