@@ -82,6 +82,9 @@ class MilvusPrixProduitsCrud:
                 # --- Champs optionnels ---
                 FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=255),
                 FieldSchema(
+                    name="caracteristique", dtype=DataType.VARCHAR, max_length=65535
+                ),
+                FieldSchema(
                     name="id_categorie", dtype=DataType.VARCHAR, max_length=255
                 ),
                 FieldSchema(
@@ -301,6 +304,7 @@ class MilvusPrixProduitsCrud:
                     "nom_produit",
                     "valeur_prix",
                     "source",
+                    "caracteristique",
                     "id_categorie",
                     "nom_categorie",
                     "date_prix",
