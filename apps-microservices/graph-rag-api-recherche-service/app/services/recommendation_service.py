@@ -1740,7 +1740,7 @@ class RecommendationService:
         # logging.warning(f"[RERANK] product_info: {products_info}")
         liste_carac_id = []
         for carac in request.liste_caracteristique:
-            liste_carac_id.append(carac.id_caracteristique)
+            liste_carac_id.append(str(carac.id_caracteristique))
 
         for id_produit in id_produits:
             info = products_info.get(
@@ -1787,8 +1787,8 @@ class RecommendationService:
                             "valeur": c.get("valeur", ""),
                             "unite": c.get("unite", ""),
                         }
-                        if c.get("id_caracteristique") in liste_carac_id
                         for c in caracs
+                        if str(c.get("id_caracteristique", "")) in liste_carac_id
                     ]
                     if caracs
                     else []
