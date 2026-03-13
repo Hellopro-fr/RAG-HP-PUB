@@ -373,21 +373,21 @@ class PrixExtractor:
         for item in pjechanges:
             outer_id = item.get("id")
             metadata = item.get("metadata", {})
-            metadata_id = metadata.get("id")
             entity = metadata.get("entity", {})
             
+            fichier_source = entity.get("fichier_source")
             chunk_number = entity.get("chunk_number")
             chunk_id = entity.get("chunk_id")
             text = entity.get("text", "")
 
-            if metadata_id not in grouped:
-                grouped[metadata_id] = {
+            if fichier_source not in grouped:
+                grouped[fichier_source] = {
                     "fields": entity.copy(),
                     "items_to_sort": []
                 }
             
             # On stocke les infos nécessaires dans un dictionnaire simple
-            grouped[metadata_id]["items_to_sort"].append({
+            grouped[fichier_source]["items_to_sort"].append({
                 "chunk_number": chunk_number,
                 "chunk_id": str(chunk_id),
                 "text": text,
@@ -396,7 +396,7 @@ class PrixExtractor:
 
         final_result = []
 
-        for m_id, content in grouped.items():
+        for fichier_source, content in grouped.items():
             # 2. Trier par chunk_number pour respecter l'ordre (1, 2, 3...)
             sorted_items = sorted(content["items_to_sort"], key=lambda x: x["chunk_number"])
             
