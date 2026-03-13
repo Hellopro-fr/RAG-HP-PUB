@@ -1755,7 +1755,7 @@ class RecommendationService:
 
             formatted_product = {
                 "id_produit": str(id_produit),
-                "titre": info.get("titre_produit", info.get("nom_produit", "")),
+                "titre": info.get("titre", info.get("nom_produit", "")),
                 "description": info.get("description_produit", ""),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom_fournisseur", ""),
