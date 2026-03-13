@@ -1762,8 +1762,12 @@ class RecommendationService:
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
                 "description": re.sub(
-                    r"<[^>]+>", "", info.get("description_produit", "")
-                ).replace("\xa0", " "),
+                    r" +",
+                    " ",
+                    re.sub(
+                        r"<[^>]+>", "", info.get("description_produit", "")
+                    ).replace("\xa0", " "),
+                ).strip(),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "id_fournisseur": str(info_fournisseur.get("id", "")),
