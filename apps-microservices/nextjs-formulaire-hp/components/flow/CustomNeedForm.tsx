@@ -239,8 +239,9 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
 
     const finalData: any = {
       ...formData,
-      files: filesStore || files,
-      message: description
+      files  : filesStore || files,
+      message: description,
+      budget : budget,
     };
 
     finalData.files = finalData.files || files;
@@ -426,7 +427,7 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
                     htmlFor="description"
                     className="block text-sm font-medium text-foreground"
                   >
-                    Quelque chose à ajouter ? (optionnel)
+                    Votre besoin *
                   </label>
                   <button
                     type="button"
@@ -503,8 +504,8 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
                 </button>
                 <button
                   onClick={goToNextStep}
-                  disabled={!budget.trim()}
-                  className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${budget.trim()
+                  disabled={!budget.trim() && !description.trim()}
+                  className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${budget.trim() && description.trim()
                     ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                     }`}
