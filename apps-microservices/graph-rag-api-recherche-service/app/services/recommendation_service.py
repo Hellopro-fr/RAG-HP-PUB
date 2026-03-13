@@ -1,6 +1,7 @@
 import logging
 import time
 import re
+import json
 import asyncio
 from typing import List, Dict, Any, Optional
 
@@ -1707,12 +1708,12 @@ class RecommendationService:
 
         id_produits = [p.id_produit for p in all_produits]
         produit_map = {p.id_produit: p for p in all_produits}
-        logging.warning(
-            f"[RERANK] Starting rerank for {len(id_produits)} products "
-            f"(top={len(top_produit)}, liste={len(liste_produit)}), "
-            f"id_categorie={id_categorie}"
-        )
-        logging.warning(f"[RERANK] Product IDs: {id_produits}")
+        # logging.warning(
+        #     f"[RERANK] Starting rerank for {len(id_produits)} products "
+        #     f"(top={len(top_produit)}, liste={len(liste_produit)}), "
+        #     f"id_categorie={id_categorie}"
+        # )
+        # logging.warning(f"[RERANK] Product IDs: {id_produits}")
 
         # 2. Fetch product info + characteristics + category definitions in parallel
         logging.warning(
@@ -1728,12 +1729,12 @@ class RecommendationService:
             logging.error(f"[RERANK] HelloPro API enrichment error: {e}", exc_info=True)
             return top_produit, liste_produit, []
 
-        logging.warning(
-            f"[RERANK] HelloPro API results: "
-            f"products_info={len(products_info)} items, "
-            f"all_caracs={len(all_caracs)} products with caracs, "
-            f"category_caracs={len(category_caracs)} category definitions"
-        )
+        # logging.warning(
+        #     f"[RERANK] HelloPro API results: "
+        #     f"products_info={len(products_info)} items, "
+        #     f"all_caracs={len(all_caracs)} products with caracs, "
+        #     f"category_caracs={len(category_caracs)} category definitions"
+        # )
 
         # 3. Format enriched data for LLM
         formatted_products = []
@@ -1777,9 +1778,6 @@ class RecommendationService:
                     "id_fournisseur": str(info_fournisseur.get("id", "")),
                     "type": etat_societe_label,
                 },
-                # "score_matching": (
-                #     produit_map[id_produit].score if id_produit in produit_map else 0.0
-                # ),
                 "caracteristiques": (
                     [
                         {
@@ -1794,26 +1792,19 @@ class RecommendationService:
                     else []
                 ),
             }
-            # logging.warning(f"[RERANK] formatted produit : {formatted_product}")
-            # if not formatted_product.get("titre") or not formatted_product.get(
-            #     "description"
-            # ):
-            #     logging.warning(f"[RERANK] formatted produit : {formatted_product}")
-            #     logging.warning(f"[RERANK] product_data : {info}")
-
             formatted_products.append(formatted_product)
 
-        logging.warning(
-            f"[RERANK] Formatted {len(formatted_products)} products for LLM"
-        )
-        for fp in formatted_products:
-            logging.warning(
-                f"[RERANK]   Product {fp['id_produit']}: "
-                f"titre='{fp['titre'][:50]}...', "
-                f"fournisseur={fp['fournisseur']['type']}, "
-                # f"score_matching={fp['score_matching']}, "
-                f"nb_caracs={len(fp['caracteristiques'])}"
-            )
+        # logging.warning(
+        #     f"[RERANK] Formatted {len(formatted_products)} products for LLM"
+        # )
+        # for fp in formatted_products:
+        #     logging.warning(
+        #         f"[RERANK]   Product {fp['id_produit']}: "
+        #         f"titre='{fp['titre'][:50]}...', "
+        #         f"fournisseur={fp['fournisseur']['type']}, "
+        #         # f"score_matching={fp['score_matching']}, "
+        #         f"nb_caracs={len(fp['caracteristiques'])}"
+        #     )
 
         # 4. Build BESOIN_ACHETEUR, CARACTERISTIQUES_CRITIQUES, LISTE_PRODUITS
 
@@ -1883,15 +1874,13 @@ class RecommendationService:
 
         caracteristiques_critiques = "\n".join(caracteristiques_critiques_lines)
 
-        logging.warning(
-            f"[RERANK] BESOIN_ACHETEUR (parcours): {besoin_acheteur[:200]}..."
-        )
-        logging.warning(
-            f"[RERANK] CARACTERISTIQUES_CRITIQUES ({len(caracteristiques_critiques_lines)} lines):\n"
-            f"{caracteristiques_critiques}"
-        )
-
-        import json
+        # logging.warning(
+        #     f"[RERANK] BESOIN_ACHETEUR (parcours): {besoin_acheteur[:200]}..."
+        # )
+        # logging.warning(
+        #     f"[RERANK] CARACTERISTIQUES_CRITIQUES ({len(caracteristiques_critiques_lines)} lines):\n"
+        #     f"{caracteristiques_critiques}"
+        # )
 
         # LISTE_PRODUITS = formatted product list as JSON
         liste_produits_json = json.dumps(formatted_products, ensure_ascii=False)
@@ -2199,13 +2188,13 @@ class RecommendationService:
             for x in llm_ecartes
         ]
 
-        logging.warning(
-            f"[RERANK] LLM classification: "
-            f"top_produits={llm_top_ids}, "
-            f"autres_produits={llm_autres_ids}, "
-            f"produits_ecartes={llm_ecartes_ids}"
-        )
-        logging.warning(f"[RERANK] LLM score map: {llm_score_map}")
+        # logging.warning(
+        #     f"[RERANK] LLM classification: "
+        #     f"top_produits={llm_top_ids}, "
+        #     f"autres_produits={llm_autres_ids}, "
+        #     f"produits_ecartes={llm_ecartes_ids}"
+        # )
+        # logging.warning(f"[RERANK] LLM score map: {llm_score_map}")
 
         # Rebuild ordered lists from LLM output, using LLM score when available
         reranked_top = []
