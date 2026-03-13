@@ -8,6 +8,7 @@ import { normalizeMatchingToSuppliers, enrichSuppliersWithProductInfo } from '@/
 import type { MatchingResponse, ProductInfoResponse } from '@/types/matching';
 import { basePath } from '@/lib/utils';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
+import { buildParcours } from '@/lib/utils/debug-matching';
 
 // Valeurs par défaut pour les métadonnées géographiques
 const DEFAULT_GEO_METADATA = {
@@ -84,6 +85,9 @@ export function useProcessMatching(): UseProcessMatchingResult {
       // Consolider les équivalences du questionnaire
       const consolidatedEquivalences = consolidateEquivalences(dynamicEquivalences);
 
+      // Données depuis le store pour Rerank
+      const { useRerank, userQuestionAnswers } = useFlowStore.getState();
+
       // Sauvegarder les équivalences consolidées dans le store pour ModifyCriteriaForm
       setEquivalenceCaracteristique(consolidatedEquivalences);
 
@@ -109,12 +113,21 @@ export function useProcessMatching(): UseProcessMatchingResult {
       };
       formData.append('scoring', JSON.stringify(scoringParams));
 
+      // Bloc Rerank
+      const rerankPayload = {
+        use_rerank: useRerank,
+        parcours: buildParcours(userQuestionAnswers),
+        top_k: 24,
+      };
+      formData.append('rerank', JSON.stringify(rerankPayload));
+
       console.log('[useProcessMatching] Calling matching API with payload:', {
         id_categorie: categoryId,
         metadonnee_utilisateurs,
         liste_caracteristique: consolidatedEquivalences,
         liste_caracteristique_length: consolidatedEquivalences.length,
-        scoring: scoringParams
+        scoring: scoringParams,
+        rerank: rerankPayload
       });
 
       const apiBase = getApiBasePath();

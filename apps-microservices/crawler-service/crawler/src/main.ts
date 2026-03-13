@@ -1,4 +1,5 @@
 import { RequestQueue, RobotsFile, Dataset, Configuration } from "crawlee";
+import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import { createClient } from 'redis';
@@ -590,21 +591,23 @@ if (crawlMode === 'update') {
     );
 
     // Seed the request queue with ALL consolidated URLs
+    // IMPORTANT: In update mode, we ALWAYS enqueue — the DedupManager was pre-loaded
+    // from disk and would falsely reject known URLs. We still mark them as known
+    // so that newly discovered URLs during crawling are properly deduplicated.
     let seedCount = 0;
     for await (const { url, source } of allUrls) {
-        // Add to DedupManager (Mark as Known)
+        // Mark as known in DedupManager (for dedup during crawl, NOT for gating)
         if (context.dedupManager) {
-            const isNewUnique = await context.dedupManager.addUrl(url);
-            if (isNewUnique) {
-                await requestQueue.addRequest({
-                    url: url,
-                    userData: { source: source }
-                });
-                seedCount++;
-                if (seedCount % 1000 === 0) {
-                    console.log(`Seeded ${seedCount} unique URLs...`);
-                }
-            }
+            await context.dedupManager.addUrl(url);
+        }
+
+        await requestQueue.addRequest({
+            url: url,
+            userData: { source: source }
+        });
+        seedCount++;
+        if (seedCount % 1000 === 0) {
+            console.log(`Seeded ${seedCount} unique URLs...`);
         }
     }
     console.log(`Finished seeding ${seedCount} unique URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
@@ -627,12 +630,14 @@ if (crawlMode === 'update') {
     console.log(`----------------------------------------\n`);
 
     // --- INSTANTIATE UPDATE CHECKER + JSONL WRITER (Epic 2 + 4) ---
+    // JSONL files go in storage/datasets/update-{domain}/ (convention: same as error-{domain})
     if (context.statsManager && context.urlConsolidator) {
-        const jsonlWriter = new JsonlWriter(storagePath);
+        const updateDatasetPath = path.join(storagePath, 'storage', 'datasets', `update-${domain}`);
+        const jsonlWriter = new JsonlWriter(updateDatasetPath);
         const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
         context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter);
         context.jsonlWriter = jsonlWriter;
-        console.log(`✅ UpdateChecker + JsonlWriter initialized for update mode.`);
+        console.log(`✅ UpdateChecker + JsonlWriter initialized (output: storage/datasets/update-${domain}/).`);
     }
 
 } else if (await requestQueue.isEmpty()) {

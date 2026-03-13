@@ -1707,6 +1707,8 @@ services:
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       NEO4J_DATABASE: ${NEO4J_DATABASE}
+      HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
+      LLM_SERVICE_URL: llm-service:50051
     networks:
       - services-net
       - services-ext-net
@@ -1734,6 +1736,8 @@ services:
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       NEO4J_DATABASE: ${NEO4J_DATABASE}
+      HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
+      LLM_SERVICE_URL: llm-service:50051
     networks:
       - services-net
       - services-ext-net
@@ -1785,6 +1789,11 @@ services:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking/enrichissement:ro
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking/equivalence:ro
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking/caracterisation:ro
+      # Monte les dossiers tracking des services prix (paths VM)
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking/prix-extraction-produits:ro
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking/prix-extraction-siteweb:ro
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking/prix-extraction-message:ro
+      - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking/prix-extraction-devis:ro
     networks:
       - services-net
     logging: *logging_defaults

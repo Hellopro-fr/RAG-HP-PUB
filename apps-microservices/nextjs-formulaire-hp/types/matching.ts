@@ -31,6 +31,21 @@ export interface MatchingCharacteristic {
 }
 
 /**
+ * Données renvoyées par le Rerank (LLM)
+ */
+export interface LlmResponse {
+  rang: number;
+  id_produit: string;
+  nom: string;
+  score: number;
+  completude: number;
+  base_calcul: string;
+  decision: string;
+  fournisseur_client: boolean;
+  justification: string;
+}
+
+/**
  * Produit retourné par l'API matching
  */
 export interface MatchingProduct {
@@ -50,6 +65,8 @@ export interface MatchingProduct {
   coeff_caracteristique?: number;
   /** Coefficient état score (debug uniquement) */
   coeff_etat_score?: number;
+  /** Response du LLM pour le rerank (debug uniquement) */
+  llm_response?: LlmResponse;
 }
 
 /**

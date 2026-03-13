@@ -123,11 +123,17 @@ async def match_products(request: MatchingPayloadIdProduit):
                 liste_produit=[],
                 temps_de_traitement=0.0,
             )
-
-        results = await recommendation_service.get_products_by_caracteristique_filters(
-            request
-        )
-        return results
+        if request.rerank.use_rerank:
+            result = await recommendation_service.get_products_by_caracteristique_filters_rerank(
+                request
+            )
+        else:
+            result = (
+                await recommendation_service.get_products_by_caracteristique_filters(
+                    request
+                )
+            )
+        return result
 
     except Exception as e:
         raise HTTPException(

@@ -15,6 +15,7 @@ class ProduitPrixPayload(BaseModel):
 
     # --- Champs optionnels ---
     source: Optional[str] = Field(None, description="Source du data prix (ex: 'produit' , 'message' , 'devis' , 'siteweb')")
+    caracteristique: Optional[str] = Field(None, description="caracteristique du produit")
     id_categorie: Optional[str] = Field(None, description="ID de la catégorie")
     nom_categorie: Optional[str] = Field(None, description="Nom  de la catégorie")
     date_prix: Optional[str] = Field(None, description="Date du prix au format YYYY-MM-DD, ex: '2025-11-15'")
