@@ -36,14 +36,23 @@ class GeminiClient:
     def _sync_generate(self, system_prompt: str, user_data_json: str) -> Optional[str]:
         """Synchronous generate_content call (runs in thread pool)."""
         client = self._get_client()
+
+        contents = [
+            types.Content(
+                role="user", parts=[types.Part.from_text(text=user_data_json)]
+            )
+        ]
+
+        config_params = {
+            "temperature": self._temperature,
+            "response_mime_type": "application/json",
+        }
+
+        config = types.GenerateContentConfig(**config_params)
+        config.system_instruction = system_prompt
+
         response = client.models.generate_content(
-            model=self._model,
-            contents=user_data_json,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=self._temperature,
-                response_mime_type="application/json",
-            ),
+            model=self._model, contents=contents, config=config
         )
         return response.text
 
