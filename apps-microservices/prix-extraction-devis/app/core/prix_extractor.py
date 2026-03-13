@@ -341,6 +341,7 @@ class PrixExtractor:
         """
         # Valeurs par défaut depuis les settings
         logger.info(f"Prompt Recherche de prix: '{self.prompt_config}'")
+        self._log(f"Prompt Recherche de prix: '{self.prompt_config}'")
         
         if not self.prompt_config:
             logger.warning(f"Prompt ID {self.PROMPT_ID} non trouvé, "
@@ -351,17 +352,19 @@ class PrixExtractor:
         # Construire le filtre Milvus
         final_filter_expr = f"id_categorie in ['{id_categorie}'] and page_type in ['{settings.MILVUS_PAGE_TYPE}']"
         
-        logger.info(f"Filtre Milvus: {final_filter_expr}")
+        # logger.info(f"Filtre Milvus: {final_filter_expr}")
+        self._log(f"Filtre Milvus: {final_filter_expr}")
 
         source_results = await database_client.classic_search_vector(
             collection    = source_name,
             filter_expr   = final_filter_expr,
             k = settings.MILVUS_TOP_K
         )
-        logger.info(f"source_results: {json.dumps(source_results)}")
+        self._log(f"source_results: {source_results}")
         
         # Convertir les résultats en dictionnaires
         all_results_list = [MessageToDict(res) for res in source_results]
+        self._log(f"all_results_list: {json.dumps(all_results_list)}")
        
         # Extraction de la liste pjechanges
         pjechanges = all_results_list.get("results", {}).get("matches", {}).get("pjechanges", [])
