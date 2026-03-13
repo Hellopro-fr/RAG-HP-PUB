@@ -239,8 +239,9 @@ const CustomNeedForm = ({ onBack, onContactComplete }: CustomNeedFormProps) => {
 
     const finalData: any = {
       ...formData,
-      files: filesStore || files,
-      message: description
+      files  : filesStore || files,
+      message: description,
+      budget : budget,
     };
 
     finalData.files = finalData.files || files;

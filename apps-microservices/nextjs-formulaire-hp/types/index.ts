@@ -143,6 +143,7 @@ export interface ContactFormData {
   id_pays_tel?: number;  // ID du pays pour le téléphone
   phone: string;
   message?: string;
+  budget?: string;
   files?: File[];  // Pièces jointes (PJ)
   id_acheteur?: string;  // ID de l'acheteur si le mail est connu
 }
