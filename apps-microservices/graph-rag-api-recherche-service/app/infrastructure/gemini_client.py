@@ -1,15 +1,14 @@
 """
-Direct Gemini SDK client for LLM-based reranking.
-Uses google-genai package with Gemini 2.5 Flash.
+LLM client for reranking via gRPC llm-service.
+Uses common_utils get_llm_chat_response with Gemini 3 Flash.
 """
 
-import asyncio
 import json
 import logging
 from typing import Dict, Any, Optional
 
-from google import genai
-from google.genai import types
+from common_utils.grpc_clients.llm_client import get_llm_chat_response
+from common_utils.grpc_clients.schemas.chat import ChatRequest
 
 from app.config import settings
 
@@ -17,72 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiClient:
-    """Direct Gemini SDK client for reranking."""
+    """LLM client for reranking via gRPC llm-service."""
 
     def __init__(self):
-        self._client = None
         self._model = "gemini-3-flash-preview"
         self._temperature = 0.1
         self._timeout = 120  # seconds
-
-    def _get_client(self) -> genai.Client:
-        if self._client is None:
-            api_key = settings.GEMINI_API_KEY
-            if not api_key:
-                raise ValueError("GEMINI_API_KEY is not set in settings")
-            self._client = genai.Client(api_key=api_key)
-        return self._client
-
-    def _sync_generate(self, system_prompt: str, user_data_json: str) -> Optional[str]:
-        """Synchronous streaming generate_content call (runs in thread pool)."""
-        client = self._get_client()
-
-        contents = [
-            types.Content(
-                role="user", parts=[types.Part.from_text(text=user_data_json)]
-            )
-        ]
-
-        config_params = {
-            "temperature": self._temperature,
-            "response_mime_type": "application/json",
-        }
-
-        config = types.GenerateContentConfig(**config_params)
-        config.system_instruction = system_prompt
-
-        logger.warning("[RERANK-GEMINI-STREAM] Starting streaming call to model=%s", self._model)
-
-        stream = client.models.generate_content_stream(
-            model=self._model, contents=contents, config=config
-        )
-
-        collected_text = ""
-        chunk_index = 0
-        for chunk in stream:
-            chunk_index += 1
-            chunk_text = chunk.text if chunk.text else ""
-            collected_text += chunk_text
-            logger.warning(
-                "[RERANK-GEMINI-STREAM] Chunk #%d received (%d chars): %s",
-                chunk_index,
-                len(chunk_text),
-                chunk_text[:200],
-            )
-
-        logger.warning(
-            "[RERANK-GEMINI-STREAM] Streaming complete. Total chunks=%d, total chars=%d",
-            chunk_index,
-            len(collected_text),
-        )
-
-        return collected_text if collected_text else None
 
     async def generate_rerank_response(
         self, system_prompt: str, user_data_json: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Send enriched product data to Gemini for reranking analysis.
+        Send enriched product data to LLM service for reranking analysis.
 
         Args:
             system_prompt: The system instruction for the LLM.
@@ -92,38 +37,77 @@ class GeminiClient:
             Parsed JSON dict from the LLM response, or None on error.
         """
         try:
-            logger.info("[RERANK-GEMINI] Sending request to Gemini (model=%s)...", self._model)
+            # Combine system prompt and user data into one prompt
+            combined_prompt = f"{system_prompt}\n\n{user_data_json}"
 
-            # Run the synchronous SDK call in a thread pool to avoid blocking the event loop
-            response_text = await asyncio.wait_for(
-                asyncio.to_thread(self._sync_generate, system_prompt, user_data_json),
-                timeout=self._timeout,
+            logger.warning(
+                "[RERANK-GEMINI] Sending request to llm-service via gRPC (model=%s)...",
+                self._model,
             )
 
-            if not response_text:
-                logger.warning("[RERANK-GEMINI] Gemini returned empty response")
+            chat_request = ChatRequest(
+                prompt=combined_prompt,
+                model=self._model,
+                provider="gemini",
+                temperature=self._temperature,
+                max_tokens=8192,
+                enable_thinking=False,
+                options={
+                    "top_p": 0.8,
+                    "top_k": 20,
+                },
+            )
+
+            logger.warning(
+                "[RERANK-GEMINI] ChatRequest created: model=%s, provider=%s, temperature=%s",
+                chat_request.model,
+                chat_request.provider,
+                chat_request.temperature,
+            )
+
+            response_dict = await get_llm_chat_response(chat_request)
+
+            logger.warning(
+                "[RERANK-GEMINI] gRPC response received: %s",
+                str(response_dict)[:500],
+            )
+
+            if not response_dict:
+                logger.warning("[RERANK-GEMINI] LLM service returned empty response")
                 return None
 
-            logger.info("[RERANK-GEMINI] Gemini response received (%d chars)", len(response_text))
+            # Extract the full_message from the response
+            full_message = response_dict.get("full_message", "")
+            if not full_message:
+                logger.warning("[RERANK-GEMINI] LLM response has no full_message")
+                return None
 
-            # Parse JSON response
+            logger.warning(
+                "[RERANK-GEMINI] full_message received (%d chars): %s",
+                len(str(full_message)),
+                str(full_message)[:500],
+            )
+
+            # If full_message is already a dict (parsed by protobuf), return it
+            if isinstance(full_message, dict):
+                logger.warning("[RERANK-GEMINI] full_message is already a dict, returning directly")
+                return full_message
+
+            # Otherwise parse as JSON string
             try:
-                parsed = json.loads(response_text)
+                parsed = json.loads(full_message)
+                logger.warning("[RERANK-GEMINI] Successfully parsed JSON response")
                 return parsed
             except json.JSONDecodeError as e:
                 logger.error(
-                    f"[RERANK-GEMINI] Failed to parse Gemini response as JSON: {e}\nResponse: {response_text[:500]}"
+                    f"[RERANK-GEMINI] Failed to parse LLM response as JSON: {e}\nResponse: {str(full_message)[:500]}"
                 )
                 return None
 
-        except asyncio.TimeoutError:
-            logger.error(f"[RERANK-GEMINI] Gemini call timed out after {self._timeout}s")
-            return None
         except Exception as e:
-            logger.error(f"[RERANK-GEMINI] Gemini rerank generation error: {e}", exc_info=True)
+            logger.error(f"[RERANK-GEMINI] LLM rerank generation error: {e}", exc_info=True)
             return None
 
 
 # Singleton instance
 gemini_client = GeminiClient()
-
