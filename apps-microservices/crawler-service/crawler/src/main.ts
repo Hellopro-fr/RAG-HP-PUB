@@ -629,12 +629,14 @@ if (crawlMode === 'update') {
     console.log(`----------------------------------------\n`);
 
     // --- INSTANTIATE UPDATE CHECKER + JSONL WRITER (Epic 2 + 4) ---
+    // JSONL files go in storage/datasets/update-{domain}/ (convention: same as error-{domain})
     if (context.statsManager && context.urlConsolidator) {
-        const jsonlWriter = new JsonlWriter(storagePath);
+        const updateDatasetPath = path.join(storagePath, 'storage', 'datasets', `update-${domain}`);
+        const jsonlWriter = new JsonlWriter(updateDatasetPath);
         const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
         context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter);
         context.jsonlWriter = jsonlWriter;
-        console.log(`✅ UpdateChecker + JsonlWriter initialized for update mode.`);
+        console.log(`✅ UpdateChecker + JsonlWriter initialized (output: storage/datasets/update-${domain}/).`);
     }
 
 } else if (await requestQueue.isEmpty()) {
