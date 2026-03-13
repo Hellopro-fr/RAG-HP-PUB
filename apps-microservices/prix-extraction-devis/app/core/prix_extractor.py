@@ -358,6 +358,7 @@ class PrixExtractor:
             filter_expr   = final_filter_expr,
             k = settings.MILVUS_TOP_K
         )
+        logger.info(f"source_results: {json.dumps(source_results)}")
         
         # Convertir les résultats en dictionnaires
         all_results_list = [MessageToDict(res) for res in source_results]
