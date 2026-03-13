@@ -1782,7 +1782,7 @@ class RecommendationService:
                 f"[RERANK]   Product {fp['id_produit']}: "
                 f"titre='{fp['titre'][:50]}...', "
                 f"fournisseur={fp['fournisseur']['type']}, "
-                f"score_matching={fp['score_matching']}, "
+                # f"score_matching={fp['score_matching']}, "
                 f"nb_caracs={len(fp['caracteristiques'])}"
             )
 
