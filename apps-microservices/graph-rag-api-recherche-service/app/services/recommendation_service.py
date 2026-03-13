@@ -1763,7 +1763,7 @@ class RecommendationService:
                 ),
                 "description": re.sub(
                     r"<[^>]+>", "", info.get("description_produit", "")
-                ),
+                ).replace("\xa0", " "),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "id_fournisseur": str(info_fournisseur.get("id", "")),
