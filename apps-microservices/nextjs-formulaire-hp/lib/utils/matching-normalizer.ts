@@ -299,6 +299,7 @@ function normalizeProduct(
         poids_question: c.poids_question,
         poids: c.poids,
       })),
+      llm_response: product.llm_response,
     },
   };
 }

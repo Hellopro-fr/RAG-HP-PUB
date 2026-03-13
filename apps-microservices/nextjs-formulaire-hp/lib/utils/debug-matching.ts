@@ -12,12 +12,25 @@ interface CharacteristicDebug {
   coeff_etat_score?: number;
 }
 
+interface LlmResponse {
+  rang: number;
+  id_produit: string;
+  nom: string;
+  score: number;
+  completude: number;
+  base_calcul: string;
+  decision: string;
+  fournisseur_client: boolean;
+  justification: string;
+}
+
 interface ProductDebugInfo {
   coeff_geo?: number;
   coeff_type_frns?: number;
   coeff_caracteristique?: number;
   coeff_etat_score?: number;
   characteristics_debug?: CharacteristicDebug[];
+  llm_response?: LlmResponse;
 }
 
 interface MatchingProduct {
@@ -324,6 +337,42 @@ function debugInfo(): void {
       `;
     }).join('');
 
+    const llmInfo = debug.llm_response ? `
+      <div style="margin-top:6px;margin-bottom:6px;padding:6px;background:#1a1a2e;border:1px dashed #0050ff;border-radius:4px">
+        <div style="color:#00aaff;font-weight:bold;margin-bottom:4px;font-size:10px;">Résultat Rerank LLM</div>
+        <table style="width:100%;font-size:9px;border-collapse:collapse;">
+          <tr>
+            <td style="color:#888;width:70px;padding:1px 0;">Decision:</td>
+            <td style="color:${debug.llm_response.decision === 'VALIDE' ? '#0f0' : '#f88'};font-weight:bold;padding:1px 0;">${debug.llm_response.decision}</td>
+          </tr>
+          <tr>
+            <td style="color:#888;padding:1px 0;">Score LLM:</td>
+            <td style="color:#ff0;padding:1px 0;">${debug.llm_response.score}</td>
+          </tr>
+          <tr>
+            <td style="color:#888;padding:1px 0;">Rang LLM:</td>
+            <td style="color:#0ff;padding:1px 0;">${debug.llm_response.rang}</td>
+          </tr>
+          <tr>
+            <td style="color:#888;padding:1px 0;">Complétude:</td>
+            <td style="color:#fff;padding:1px 0;">${debug.llm_response.completude}</td>
+          </tr>
+          <tr>
+            <td style="color:#888;padding:1px 0;">Frns client:</td>
+            <td style="color:${debug.llm_response.fournisseur_client ? '#0f0' : '#888'};padding:1px 0;">${debug.llm_response.fournisseur_client ? 'Oui' : 'Non'}</td>
+          </tr>
+          <tr>
+            <td style="color:#888;padding:1px 0;">Base calcul:</td>
+            <td style="color:#fff;padding:1px 0;">${debug.llm_response.base_calcul}</td>
+          </tr>
+          <tr>
+            <td style="color:#888;vertical-align:top;padding:1px 0;">Justification:</td>
+            <td style="color:#aaa;font-style:italic;padding:1px 0;">"${debug.llm_response.justification}"</td>
+          </tr>
+        </table>
+      </div>
+    ` : '';
+
     overlay.innerHTML = `
       <div style="color:#fff;font-weight:bold;font-size:11px;margin-bottom:4px;border-bottom:1px solid #333;padding-bottom:4px">
         DEBUG - ID: ${product.id}
@@ -347,6 +396,7 @@ function debugInfo(): void {
         </tr>
         ${charRows}
       </table>
+      ${llmInfo}
       <div style="margin-top:6px;padding-top:4px;border-top:1px solid #333;color:#666;font-size:7px">
         Raw: ${JSON.stringify(debug).substring(0, 200)}...
       </div>
@@ -575,6 +625,27 @@ function debugInfo(): void {
           </tr>
         </table>
       </div>
+
+      ${debug.llm_response ? `
+      <div style="margin-bottom:12px;padding:8px;background:#1a1a2e;border:1px solid #0050ff;border-radius:4px">
+        <div style="color:#00aaff;font-weight:bold;margin-bottom:4px;">Resultat Rerank LLM</div>
+        <table style="width:100%;font-size:11px;">
+          <tr>
+            <td style="color:#888;width:120px;">Decision:</td>
+            <td style="color:${debug.llm_response.decision === 'VALIDE' ? '#0f0' : '#f88'};font-weight:bold;">${debug.llm_response.decision}</td>
+          </tr>
+          <tr><td style="color:#888;">Score LLM:</td><td style="color:#ff0;">${debug.llm_response.score}</td></tr>
+          <tr><td style="color:#888;">Rang LLM:</td><td style="color:#0ff;">${debug.llm_response.rang}</td></tr>
+          <tr><td style="color:#888;">Complétude:</td><td style="color:#fff;">${debug.llm_response.completude}</td></tr>
+          <tr><td style="color:#888;">Fournisseur client:</td><td style="color:${debug.llm_response.fournisseur_client ? '#0f0' : '#888'};">${debug.llm_response.fournisseur_client ? 'Oui' : 'Non'}</td></tr>
+          <tr><td style="color:#888;">Base de calcul:</td><td style="color:#fff;">${debug.llm_response.base_calcul}</td></tr>
+          <tr>
+            <td style="color:#888;vertical-align:top;">Justification:</td>
+            <td style="color:#aaa;font-style:italic;">"${debug.llm_response.justification}"</td>
+          </tr>
+        </table>
+      </div>
+      ` : ''}
 
       <div style="color:#fff;font-weight:bold;margin-bottom:6px">characteristics_debug (${chars.length})</div>
 
