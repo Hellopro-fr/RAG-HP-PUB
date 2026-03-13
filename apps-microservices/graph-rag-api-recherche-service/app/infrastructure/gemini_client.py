@@ -20,7 +20,7 @@ class GeminiClient:
 
     def __init__(self):
         self._client = None
-        self._model = "gemini-2.5-flash-preview-05-20"
+        self._model = "gemini-3-flash-preview"
         self._temperature = 0.1
 
     def _get_client(self) -> genai.Client:
