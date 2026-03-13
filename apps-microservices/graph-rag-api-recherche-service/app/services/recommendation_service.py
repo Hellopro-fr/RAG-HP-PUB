@@ -1737,7 +1737,7 @@ class RecommendationService:
 
         # 3. Format enriched data for LLM
         formatted_products = []
-        logging.warning(f"[RERANK] product_info: {products_info}")
+        # logging.warning(f"[RERANK] product_info: {products_info}")
         for id_produit in id_produits:
             info = products_info.get(
                 id_produit, products_info.get(str(id_produit), {})
@@ -1783,7 +1783,12 @@ class RecommendationService:
                     else []
                 ),
             }
-            logging.warning(f"[RERANK] formatted produit : {formatted_product}")
+            if not formatted_product.get("titre") or not formatted_product.get(
+                "description"
+            ):
+                logging.warning(f"[RERANK] formatted produit : {formatted_product}")
+                logging.warning(f"[RERANK] product_data : {info}")
+
             formatted_products.append(formatted_product)
 
         logging.warning(
