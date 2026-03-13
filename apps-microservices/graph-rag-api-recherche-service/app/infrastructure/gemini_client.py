@@ -34,7 +34,7 @@ class GeminiClient:
         return self._client
 
     def _sync_generate(self, system_prompt: str, user_data_json: str) -> Optional[str]:
-        """Synchronous generate_content call (runs in thread pool)."""
+        """Synchronous streaming generate_content call (runs in thread pool)."""
         client = self._get_client()
 
         contents = [
@@ -51,10 +51,32 @@ class GeminiClient:
         config = types.GenerateContentConfig(**config_params)
         config.system_instruction = system_prompt
 
-        response = client.models.generate_content(
+        logger.warning("[RERANK-GEMINI-STREAM] Starting streaming call to model=%s", self._model)
+
+        stream = client.models.generate_content_stream(
             model=self._model, contents=contents, config=config
         )
-        return response.text
+
+        collected_text = ""
+        chunk_index = 0
+        for chunk in stream:
+            chunk_index += 1
+            chunk_text = chunk.text if chunk.text else ""
+            collected_text += chunk_text
+            logger.warning(
+                "[RERANK-GEMINI-STREAM] Chunk #%d received (%d chars): %s",
+                chunk_index,
+                len(chunk_text),
+                chunk_text[:200],
+            )
+
+        logger.warning(
+            "[RERANK-GEMINI-STREAM] Streaming complete. Total chunks=%d, total chars=%d",
+            chunk_index,
+            len(collected_text),
+        )
+
+        return collected_text if collected_text else None
 
     async def generate_rerank_response(
         self, system_prompt: str, user_data_json: str
