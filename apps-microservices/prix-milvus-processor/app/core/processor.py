@@ -47,10 +47,11 @@ def insertion_data(produits_data: dict) -> dict:
     result = base_vectorielle.insert_prix_produits(produits)
 
     if not result or result.get("status") != "success":
-        id_produit_milvus = ""
-        logging.warning(
-            f"[PrixProcessor] Insertion échouée pour id_produit={id_produit}"
+        error_msg = (
+            f"L'insertion a échoué pour id_produit={id_produit}. Résultat: {result}"
         )
+        logging.error(f"[PrixProcessor] {error_msg}")
+        raise Exception(error_msg)
     else:
         id_produit_milvus = result.get("ids", "")
         logging.info(

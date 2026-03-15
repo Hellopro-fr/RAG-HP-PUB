@@ -14,7 +14,7 @@ from pymilvus import (
     CollectionSchema,
     DataType,
     Collection,
-    MilvusException
+    MilvusException,
 )
 
 
@@ -24,14 +24,22 @@ class ModelConfig:
     collection_name: str = "devis"
     dimension: int = 1024
 
+
 class MilvusDevisCrud:
-    def __init__(self, config: Configuration = settings , **kwargs: Any):
+    def __init__(self, config: Configuration = settings, **kwargs: Any):
         self.config = config
         self.collection: Optional[Collection] = None
-        if not self.config.ZILLIZ_URI or not self.config.ZILLIZ_PORT or not self.config.ZILLIZ_USER or not self.config.ZILLIZ_PASSWORD:
-            raise ValueError("Zilliz Cloud URI and Port and User and Password must be set in the environment.")
-        self.logger = kwargs.get('logger', logging)
-        
+        if (
+            not self.config.ZILLIZ_URI
+            or not self.config.ZILLIZ_PORT
+            or not self.config.ZILLIZ_USER
+            or not self.config.ZILLIZ_PASSWORD
+        ):
+            raise ValueError(
+                "Zilliz Cloud URI and Port and User and Password must be set in the environment."
+            )
+        self.logger = kwargs.get("logger", logging)
+
     def _connect_to_milvus(self):
         self.logger.info("Connexion sur Zilliz cloud...")
         connections.connect(
@@ -39,17 +47,19 @@ class MilvusDevisCrud:
             host=self.config.ZILLIZ_URI,
             port=self.config.ZILLIZ_PORT,
             user=self.config.ZILLIZ_USER,
-            password=self.config.ZILLIZ_PASSWORD
+            password=self.config.ZILLIZ_PASSWORD,
         )
         self.logger.info("✓ Connexion sur Zilliz cloud avec succès.")
-    
+
     # TODO : modification pour les autres collections
     def _get_or_create_collection(self, model_config: ModelConfig) -> Collection:
         collection_name = model_config.collection_name
         model_key = model_config.model_id
 
         if utility.has_collection(collection_name) and self.config.RECREATE_COLLECTIONS:
-            logging.warning(f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'")
+            logging.warning(
+                f"[{model_key}] Collection déjà existante → suppréssion en cours : '{collection_name}'"
+            )
             utility.drop_collection(collection_name)
 
         if not utility.has_collection(collection_name):
@@ -57,51 +67,81 @@ class MilvusDevisCrud:
             # Définition du schéma détaillé
             fields = [
                 # Todo : ce clé doit être unique
-                FieldSchema(name="id", dtype=DataType.INT64 , is_primary = True , auto_id = True),
+                FieldSchema(
+                    name="id", dtype=DataType.INT64, is_primary=True, auto_id=True
+                ),
                 FieldSchema(name="lead_id", dtype=DataType.INT64),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=model_config.dimension),
+                FieldSchema(
+                    name="embedding",
+                    dtype=DataType.FLOAT_VECTOR,
+                    dim=model_config.dimension,
+                ),
                 FieldSchema(name="message", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="message_hellopro", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(
+                    name="message_hellopro", dtype=DataType.VARCHAR, max_length=65535
+                ),
                 FieldSchema(name="categorie", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="id_categorie", dtype=DataType.INT64),
                 FieldSchema(name="effectif", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="prof_ou_part", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(
+                    name="prof_ou_part", dtype=DataType.VARCHAR, max_length=65535
+                ),
                 FieldSchema(name="naf2", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="naf5", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="departement", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(
+                    name="departement", dtype=DataType.VARCHAR, max_length=65535
+                ),
                 FieldSchema(name="region", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="pays", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="critere", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="societe_acheteur", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(
+                    name="societe_acheteur", dtype=DataType.VARCHAR, max_length=65535
+                ),
                 FieldSchema(name="siren", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="siret", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="date_du_lead", dtype=DataType.INT64),
                 FieldSchema(name="nb_mec", dtype=DataType.INT64),
-                FieldSchema(name="liste_frns", dtype=DataType.ARRAY,element_type=DataType.VARCHAR,max_length=2048,max_capacity=1000),
-                FieldSchema(name="appreciation_lead", dtype=DataType.VARCHAR, max_length=65535),
+                FieldSchema(
+                    name="liste_frns",
+                    dtype=DataType.ARRAY,
+                    element_type=DataType.VARCHAR,
+                    max_length=2048,
+                    max_capacity=1000,
+                ),
+                FieldSchema(
+                    name="appreciation_lead", dtype=DataType.VARCHAR, max_length=65535
+                ),
                 FieldSchema(name="id_produit", dtype=DataType.INT64),
                 FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="page_type", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR , max_length=65535),
+                FieldSchema(name="chunk_id", dtype=DataType.VARCHAR, max_length=65535),
                 FieldSchema(name="chunk_number", dtype=DataType.INT64),
                 FieldSchema(name="total_chunks", dtype=DataType.INT64),
-                FieldSchema(name="date_ajout",  dtype=DataType.VARCHAR, max_length=65535),
-                FieldSchema(name="date_maj",  dtype=DataType.VARCHAR, max_length=65535)
+                FieldSchema(
+                    name="date_ajout", dtype=DataType.VARCHAR, max_length=65535
+                ),
+                FieldSchema(name="date_maj", dtype=DataType.VARCHAR, max_length=65535),
             ]
-            schema = CollectionSchema(fields, description=f"Collection de chunks de demande de devis pour {model_key}")
-            
-            collection = Collection(
-                collection_name, 
-                schema,
-                consistency_level="Strong"
+            schema = CollectionSchema(
+                fields,
+                description=f"Collection de chunks de demande de devis pour {model_key}",
             )
-            
+
+            collection = Collection(collection_name, schema, consistency_level="Strong")
+
             # self.logger.info(f"[{model_key}] Création HNSW index pour l'embedding")
 
             # TODO : Vérifier les paramètres d'indexation
             # Exemple d'indexation HNSW pour les embeddings
-            index_params = {"metric_type": "COSINE", "index_type": "HNSW", "params": {"M": settings.M_PARAMS, "efConstruction": settings.EF_PARAMS}}
+            index_params = {
+                "metric_type": "COSINE",
+                "index_type": "HNSW",
+                "params": {
+                    "M": settings.M_PARAMS,
+                    "efConstruction": settings.EF_PARAMS,
+                },
+            }
             collection.create_index(field_name="embedding", index_params=index_params)
 
             # # Optionnel: Créer des index scalaires pour les filtres fréquents
@@ -112,13 +152,16 @@ class MilvusDevisCrud:
 
             self.logger.info(f"[{model_key}] ✓ Index créés.")
         else:
-            self.logger.info(f"[{model_key}] Connexion à la collection existante : '{collection_name}'")
+            self.logger.info(
+                f"[{model_key}] Connexion à la collection existante : '{collection_name}'"
+            )
             collection = Collection(collection_name)
-        
-        collection.load()
-        self.logger.info(f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête.")
-        return collection
 
+        collection.load()
+        self.logger.info(
+            f"[{model_key}] ✓ Collection '{collection_name}' chargée et prête."
+        )
+        return collection
 
     def insert_devis(self, datas: List[Dict[str, Any]]) -> Dict[str, Any]:
 
@@ -126,137 +169,171 @@ class MilvusDevisCrud:
         model_key = model_config.model_id
 
         try:
-            
+
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
-            
+
             if not datas or self.collection is None:
                 return {
                     "status": "error",
-                    "message": "Aucune donnée à insérer ou collection non initialisée."
+                    "message": "Aucune donnée à insérer ou collection non initialisée.",
                 }
-            
-            self.logger.info(f"[{model_key}][Demande de devis] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'...")
-           
+
+            self.logger.info(
+                f"[{model_key}][Demande de devis] Insertion de batch de {len(datas)} entités dans '{self.collection.name}'..."
+            )
+
             sanitized_batch = []
             for data in datas:
-                data["date_ajout"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
-                data["date_maj"] = None  
+                data["date_ajout"] = (
+                    datetime.now().isoformat()
+                )  # ex: "2025-08-18T14:23:45.123456"
+                data["date_maj"] = None
 
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
                 data = Utils.sanitize_record(data)
-                sanitized_batch.append(data)  
-            
+                sanitized_batch.append(data)
+
             result = self.collection.insert(sanitized_batch)
             # self.collection.flush()
 
-            self.logger.info(f"Résultat insertion : {result}") 
-            self.logger.info(f"Clé primaire : {result.primary_keys}") 
-            
+            self.logger.info(f"Résultat insertion : {result}")
+            self.logger.info(f"Clé primaire : {result.primary_keys}")
+
             self.logger.info(f"[{model_key}] ✓ Insertion terminée avec succès.")
-            
+
             return {
-                "ids": ",".join(map(str,result.primary_keys)) if result.primary_keys else "",
+                "ids": (
+                    ",".join(map(str, result.primary_keys))
+                    if result.primary_keys
+                    else ""
+                ),
                 "status": "success",
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Demande de devis] Erreur Milvus lors de l'insertion : {e}")
+            self.logger.error(
+                f"[{model_key}][Demande de devis] Erreur Milvus lors de l'insertion : {e}"
+            )
             self.logger.error(f"Data : {data}")
+            raise
         except Exception as e:
-            self.logger.error(f"[{model_key}][Demande de devis] insertion de batch : {e}", exc_info=True)
+            self.logger.error(
+                f"[{model_key}][Demande de devis] insertion de batch : {e}",
+                exc_info=True,
+            )
             self.logger.error(f"Data : {data}")
-    
+            raise
+
     def update_devis(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
 
         try:
-            
+
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
-            
+
             if not data or self.collection is None:
                 return {
                     "status": "error",
-                    "message": "Aucune donnée à mettre à jour ou collection non initialisée."
-                }
-            
-            if not data.get("id"):
-                self.logger.error(f"[{model_key}][Demande de devis] Mise à jour sans ID.")
-                return {
-                    "status": "error",
-                    "message": "Clé primaire (ID) requise pour la mise à jour."
+                    "message": "Aucune donnée à mettre à jour ou collection non initialisée.",
                 }
 
-            self.logger.info(f"[{model_key}][Demande de devis] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'...")
-            
-            
-            data["date_maj"] = datetime.now().isoformat()  # ex: "2025-08-18T14:23:45.123456"
+            if not data.get("id"):
+                self.logger.error(
+                    f"[{model_key}][Demande de devis] Mise à jour sans ID."
+                )
+                return {
+                    "status": "error",
+                    "message": "Clé primaire (ID) requise pour la mise à jour.",
+                }
+
+            self.logger.info(
+                f"[{model_key}][Demande de devis] Mise à jour de batch de {len(data)} entités dans '{self.collection.name}'..."
+            )
+
+            data["date_maj"] = (
+                datetime.now().isoformat()
+            )  # ex: "2025-08-18T14:23:45.123456"
 
             # Sanitize the record to ensure no None values
             # This is important for Milvus compatibility
-            data = Utils.sanitize_record(data)  
-            
+            data = Utils.sanitize_record(data)
+
             result = self.collection.upsert(data)
             self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Mise à jour terminée avec succès.")
-            
+
             return {
                 "ids": str(result.primary_keys[0]) if result.primary_keys else "",
                 "status": "success",
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Demande de devis] Erreur Milvus lors de mise à jour : {e}")
+            self.logger.error(
+                f"[{model_key}][Demande de devis] Erreur Milvus lors de mise à jour : {e}"
+            )
             self.logger.error(f"Data : {data}")
+            raise
         except Exception as e:
-            self.logger.error(f"[{model_key}][Demande de devis] Mise à jour de batch : {e}", exc_info=True)
+            self.logger.error(
+                f"[{model_key}][Demande de devis] Mise à jour de batch : {e}",
+                exc_info=True,
+            )
             self.logger.error(f"Data : {data}")
+            raise
 
-    def delete_devis(self,data: Dict[str, Any]) -> Dict[str, Any]:
+    def delete_devis(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
         model_key = model_config.model_id
         id_entity_milvus = data.get("id")
-        
+
         try:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
 
             if not self.collection:
-                return {
-                    "status": "error",
-                    "message": "Collection non initialisée."
-                }
+                return {"status": "error", "message": "Collection non initialisée."}
 
             if not id_entity_milvus:
-                self.logger.error(f"[{model_key}][Demande de devis] Suppression sans ID.")
+                self.logger.error(
+                    f"[{model_key}][Demande de devis] Suppression sans ID."
+                )
                 return {
                     "status": "error",
-                    "message": "Clé primaire (ID) requise pour la suppression."
+                    "message": "Clé primaire (ID) requise pour la suppression.",
                 }
 
-            self.logger.info(f"[{model_key}][Demande de devis] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'...")
+            self.logger.info(
+                f"[{model_key}][Demande de devis] Suppression de l'entité avec ID {id_entity_milvus} dans '{self.collection.name}'..."
+            )
             result = self.collection.delete(f"id == {id_entity_milvus}")
             self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Suppression terminée avec succès.")
 
             return {
                 "status": "success",
-                "message": f"Demande de devis avec ID {id_entity_milvus} supprimé."
+                "message": f"Demande de devis avec ID {id_entity_milvus} supprimé.",
             }
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Demande de devis] Erreur Milvus lors de la suppression : {e}")
+            self.logger.error(
+                f"[{model_key}][Demande de devis] Erreur Milvus lors de la suppression : {e}"
+            )
+            raise
         except Exception as e:
-            self.logger.error(f"[{model_key}][Demande de devis] Suppression : {e}", exc_info=True)
+            self.logger.error(
+                f"[{model_key}][Demande de devis] Suppression : {e}", exc_info=True
+            )
+            raise
 
-    def get_devis(self,lead_id: str) -> Dict[str, Any]:
+    def get_devis(self, lead_id: str) -> Dict[str, Any]:
         list_lead_id = [lead_id]
         model_config = ModelConfig()
         model_key = model_config.model_id
-        
+
         try:
             self._connect_to_milvus()
             self.collection = self._get_or_create_collection(model_config)
@@ -265,29 +342,32 @@ class MilvusDevisCrud:
                 return {
                     "status": "error",
                     "message": "Collection non initialisée.",
-                    "code": 404
+                    "code": 404,
                 }
 
             if not lead_id:
                 return {
                     "status": "error",
                     "message": "Conversation ID requise pour la récupération.",
-                    "code" : 400
+                    "code": 400,
                 }
 
             result = self.collection.query(
-                expr=f"lead_id in {list_lead_id}",
-                output_fields=["id"]
+                expr=f"lead_id in {list_lead_id}", output_fields=["id"]
             )
             # self.collection.flush()
             self.logger.info(f"[{model_key}] ✓ Récupèration terminée avec succès.")
 
-            return {
-                "status": "success",
-                "data": result
-            }
+            return {"status": "success", "data": result}
 
         except MilvusException as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}")
+            self.logger.error(
+                f"[{model_key}][Echange] Erreur Milvus lors de la récupération : {e}"
+            )
+            raise
         except Exception as e:
-            self.logger.error(f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}", exc_info=True)
+            self.logger.error(
+                f"[{model_key}][Echange] Erreur de Récupèration de siteweb : {e}",
+                exc_info=True,
+            )
+            raise
