@@ -2136,7 +2136,9 @@ class RecommendationService:
 
         # logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
-        # return top_produit, liste_produit, []
+        logging.warning(f"[RERANK] System prompt: {system_prompt}")
+        logging.warning(f"[RERANK] Liste produits: {liste_produits_json}")
+        return top_produit, liste_produit, []
         try:
             llm_response = await gemini_client.generate_rerank_response(
                 system_prompt, liste_produits_json
