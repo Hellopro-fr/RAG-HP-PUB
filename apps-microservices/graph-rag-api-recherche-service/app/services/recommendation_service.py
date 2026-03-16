@@ -1888,8 +1888,27 @@ class RecommendationService:
         #     f"[RERANK] LISTE_PRODUITS JSON size: {len(liste_produits_json)} chars"
         # )
 
-        # 5. Build system prompt with template variables and call Gemini
-        system_prompt = """
+        # 5. Fetch system prompt from HelloPro API and call Gemini
+        logging.warning("[RERANK] Fetching prompt from HelloPro API (id_prompt=112)...")
+        prompt_data = await hellopro_api_client.fetch_prompt("112")
+
+        prompt_temperature = None
+        if prompt_data and prompt_data.get("contenu_prompt"):
+            system_prompt = prompt_data["contenu_prompt"]
+            logging.warning("[RERANK] Successfully fetched prompt from API (length=%d chars)", len(system_prompt))
+
+            # Parse temperature from the API response
+            raw_temperature = prompt_data.get("temperature")
+            if raw_temperature is not None:
+                try:
+                    prompt_temperature = float(raw_temperature)
+                    logging.warning("[RERANK] Using temperature from API: %s", prompt_temperature)
+                except (ValueError, TypeError):
+                    logging.warning("[RERANK] Invalid temperature value from API: %s, using default", raw_temperature)
+                    prompt_temperature = None
+        else:
+            logging.warning("[RERANK] Failed to fetch prompt from API, using hardcoded fallback")
+            system_prompt = """
             ## RÔLE ET OBJECTIF
 
             Tu es un expert en matching acheteur-produit pour une marketplace B2B.
@@ -2141,7 +2160,7 @@ class RecommendationService:
         return top_produit, liste_produit, []
         try:
             llm_response = await gemini_client.generate_rerank_response(
-                system_prompt, liste_produits_json
+                system_prompt, liste_produits_json, temperature=prompt_temperature
             )
         except Exception as e:
             logging.error(f"[RERANK] Gemini rerank call error: {e}", exc_info=True)
