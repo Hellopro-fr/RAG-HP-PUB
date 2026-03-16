@@ -540,8 +540,6 @@ class PrixExtractor:
         total_items = len(items)
         self._log(f"📊 {total_items} items à traiter")
         self._log(f"Items: {json.dumps(items)}")
-        sys.exit(1) #TODO: à enlever après test
-        raise Exception(f"test") 
 
         # Traitement parallèle de tous les items
         self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
@@ -555,8 +553,11 @@ class PrixExtractor:
                 id_categorie=id_categorie,
                 category_name=category_name
             )
-            for i, item in enumerate(items)
+            for i, item in enumerate(items[:1])#TODO: à enlever après test
         ]
+        self._log(f"tasks: {json.dumps(tasks)}")
+        sys.exit(1) #TODO: à enlever après test
+        raise Exception(f"test 2") 
 
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
 
