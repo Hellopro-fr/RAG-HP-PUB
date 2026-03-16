@@ -2167,10 +2167,10 @@ class RecommendationService:
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
         # logging.warning(f"[RERANK] System prompt: {system_prompt}")
         # logging.warning(f"[RERANK] Liste produits: {liste_produits_json}")
-        return top_produit, liste_produit, []
+        # return top_produit, liste_produit, []
         try:
             llm_response = await gemini_client.generate_rerank_response(
-                system_prompt, liste_produits_json, temperature=prompt_temperature
+                system_prompt, temperature=prompt_temperature
             )
         except Exception as e:
             logging.error(f"[RERANK] Gemini rerank call error: {e}", exc_info=True)
