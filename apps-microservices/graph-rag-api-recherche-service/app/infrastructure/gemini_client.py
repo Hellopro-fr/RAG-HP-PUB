@@ -96,7 +96,9 @@ class GeminiClient:
                         f"Gemini API tentative: {attempt.retry_state.attempt_number}"
                     )
 
-                    effective_temperature = temperature if temperature is not None else self._temperature
+                    effective_temperature = (
+                        temperature if temperature is not None else self._temperature
+                    )
                     response = self.client.models.generate_content(
                         model=self.model,
                         contents=prompt,
@@ -137,7 +139,10 @@ class GeminiClient:
         return {"message": response.text, "api_response": safe_api_response}
 
     async def generate_rerank_response(
-        self, system_prompt: str, user_data_json: str, temperature: Optional[float] = None
+        self,
+        system_prompt: str,
+        # user_data_json: str,
+        temperature: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Send enriched product data to Gemini for reranking analysis.
@@ -151,11 +156,13 @@ class GeminiClient:
         """
         try:
             # Combine system prompt and user data into one prompt
-            combined_prompt = f"{system_prompt}\n\n{user_data_json}"
+            # combined_prompt = f"{system_prompt}\n\n{user_data_json}"
+            combined_prompt = f"{system_prompt}"
 
             logger.warning(
                 "[RERANK-GEMINI] Sending request to Gemini (model=%s)...", self.model
             )
+            logger.warning("[RERANK-GEMINI] Combined prompt: %s", combined_prompt)
 
             # Run the synchronous chat call in a thread pool to avoid blocking the event loop
             result = await asyncio.wait_for(

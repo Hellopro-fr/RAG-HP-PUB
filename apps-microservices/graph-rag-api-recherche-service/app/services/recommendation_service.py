@@ -1895,19 +1895,29 @@ class RecommendationService:
         prompt_temperature = None
         if prompt_data and prompt_data.get("contenu_prompt"):
             system_prompt = prompt_data["contenu_prompt"]
-            logging.warning("[RERANK] Successfully fetched prompt from API (length=%d chars)", len(system_prompt))
+            logging.warning(
+                "[RERANK] Successfully fetched prompt from API (length=%d chars)",
+                len(system_prompt),
+            )
 
             # Parse temperature from the API response
             raw_temperature = prompt_data.get("temperature")
             if raw_temperature is not None:
                 try:
                     prompt_temperature = float(raw_temperature)
-                    logging.warning("[RERANK] Using temperature from API: %s", prompt_temperature)
+                    logging.warning(
+                        "[RERANK] Using temperature from API: %s", prompt_temperature
+                    )
                 except (ValueError, TypeError):
-                    logging.warning("[RERANK] Invalid temperature value from API: %s, using default", raw_temperature)
+                    logging.warning(
+                        "[RERANK] Invalid temperature value from API: %s, using default",
+                        raw_temperature,
+                    )
                     prompt_temperature = None
         else:
-            logging.warning("[RERANK] Failed to fetch prompt from API, using hardcoded fallback")
+            logging.warning(
+                "[RERANK] Failed to fetch prompt from API, using hardcoded fallback"
+            )
             system_prompt = """
             ## RÔLE ET OBJECTIF
 
@@ -2155,8 +2165,8 @@ class RecommendationService:
 
         # logging.warning(f"[RERANK] System prompt size: {len(system_prompt)} chars")
         logging.warning("[RERANK] Calling Gemini LLM for reranking...")
-        logging.warning(f"[RERANK] System prompt: {system_prompt}")
-        logging.warning(f"[RERANK] Liste produits: {liste_produits_json}")
+        # logging.warning(f"[RERANK] System prompt: {system_prompt}")
+        # logging.warning(f"[RERANK] Liste produits: {liste_produits_json}")
         return top_produit, liste_produit, []
         try:
             llm_response = await gemini_client.generate_rerank_response(
