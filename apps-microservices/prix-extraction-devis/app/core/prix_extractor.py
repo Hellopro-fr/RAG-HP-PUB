@@ -539,7 +539,7 @@ class PrixExtractor:
 
         total_items = len(items)
         self._log(f"📊 {total_items} items à traiter")
-        self._log(f"Items: {json.dumps(items)}")
+        # self._log(f"Items: {json.dumps(items)}")
 
         # Traitement parallèle de tous les items
         self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
@@ -555,7 +555,7 @@ class PrixExtractor:
             )
             for i, item in enumerate(items[:1])#TODO: à enlever après test
         ]
-        self._log(f"tasks: {json.dumps(tasks)}")
+        self._log(f"tasks: {tasks}")
         sys.exit(1) #TODO: à enlever après test
         raise Exception(f"test 2") 
 
