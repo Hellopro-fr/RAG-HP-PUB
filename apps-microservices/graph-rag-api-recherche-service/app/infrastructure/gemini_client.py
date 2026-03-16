@@ -162,7 +162,7 @@ class GeminiClient:
             logger.warning(
                 "[RERANK-GEMINI] Sending request to Gemini (model=%s)...", self.model
             )
-            logger.warning("[RERANK-GEMINI] Combined prompt: %s", combined_prompt)
+            # logger.warning("[RERANK-GEMINI] Combined prompt: %s", combined_prompt)
 
             # Run the synchronous chat call in a thread pool to avoid blocking the event loop
             result = await asyncio.wait_for(
