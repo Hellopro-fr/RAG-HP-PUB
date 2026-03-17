@@ -46,8 +46,8 @@ class QuestionnaireRequest(BaseModel):
 class QuestionnaireResponse(BaseModel):
     """Réponse de l'endpoint /prix/questionnaire"""
     success: bool = Field(..., description="Indique si le traitement a réussi")
-    reponse_llm: Optional[str] = Field(None, description="Réponse générée par le LLM basée sur les résultats RAG")
-    chunks_count: int = Field(0, description="Nombre de chunks RAG utilisés")
+    reponse: Optional[Dict[str, Any]] = Field(None, description="Réponse json extracté générée par le LLM")
+    api_response: Optional[Dict[str, Any]] = Field(None, description="Réponse brute de l'API")
     time_elapsed: Optional[float] = Field(None, description="Temps de traitement en secondes")
     message: str = Field("", description="Message informatif ou d'erreur")
 
