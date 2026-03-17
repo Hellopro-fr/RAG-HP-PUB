@@ -2008,6 +2008,23 @@ services:
       - services-net
     logging: *logging_defaults
 
+  prix-traitement:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-traitement/Dockerfile
+    profiles: ["prix-service"]
+    restart: unless-stopped
+    ports:
+      - "8591:8591"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
+
 networks:
   services-net:
     driver: bridge
