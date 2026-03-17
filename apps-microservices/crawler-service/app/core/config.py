@@ -23,6 +23,14 @@ class Settings:
     # Base directory for storing all crawl data (logs, datasets, etc.)
     CRAWLER_STORAGE_PATH: str = os.getenv("CRAWLER_STORAGE_PATH", "/app/storage")
 
+    # Shared volume path where archives are placed for the upload daemon to pick up
+    ARCHIVES_SHARED_PATH: str = os.getenv("ARCHIVES_SHARED_PATH", "/app/archives")
+
+    # Shared volume paths for the download daemon (GCS retrieval)
+    DOWNLOAD_REQUESTS_PATH: str = os.getenv("DOWNLOAD_REQUESTS_PATH", "/app/download_requests")
+    DOWNLOAD_RESULTS_PATH: str = os.getenv("DOWNLOAD_RESULTS_PATH", "/app/download_results")
+    GCS_DOWNLOAD_TIMEOUT_SECONDS: int = int(os.getenv("GCS_DOWNLOAD_TIMEOUT_SECONDS", "300"))
+
     # Path to the compiled Node.js crawler entry point
     CRAWLER_EXECUTABLE_PATH: str = "/app/crawler/dist/main.js"
 

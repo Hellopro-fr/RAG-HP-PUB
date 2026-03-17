@@ -1270,6 +1270,8 @@ services:
     volumes:
       - crawler_data:/app/storage
       - ./apps-microservices/crawler-service/crawler_archives:/app/archives
+      - ./apps-microservices/crawler-service/crawler_download_requests:/app/download_requests
+      - ./apps-microservices/crawler-service/crawler_download_results:/app/download_results
     env_file:
       - .env
     environment:

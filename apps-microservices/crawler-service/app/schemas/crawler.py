@@ -95,7 +95,15 @@ class StopResponse(BaseModel):
 
 class ArchiveResponse(BaseModel):
     message: str
-    gcs_url: str
+    crawl_id: str
+    archive_status: str = Field("pending_upload", description="'pending_upload' = local archive created, awaiting daemon upload to GCS.")
+    archive_size_bytes: Optional[int] = Field(None, description="Size of the archive file in bytes.")
+
+class RetrieveResponse(BaseModel):
+    message: str
+    crawl_id: str
+    status: str = Field(..., description="Restored job status after retrieval (e.g., 'finished').")
+    domain: str
 
 class CrawlStatus(BaseModel):
     crawl_id: str

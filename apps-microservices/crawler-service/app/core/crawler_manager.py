@@ -661,21 +661,104 @@ class CrawlerManager:
         )
         # --- END: ENHANCED STATS CALCULATION ---
         
-    async def get_results_archive(self, job_info: dict, include: List[IncludeInArchive]) -> str:
+    async def get_results_archive(self, job_info: dict, include: List[IncludeInArchive]) -> Tuple[str, bool]:
+        """
+        Returns (archive_path, is_temporary).
+        is_temporary=True means the file should be cleaned up after serving (GCS download).
+        is_temporary=False means the file is cached and should NOT be cleaned up.
+        """
         crawl_id = job_info['crawl_id']
-        
+
         if job_info["status"] == "running":
              raise HTTPException(status_code=400, detail="Cannot get results for a running crawl.")
-        
-        # Offload the blocking I/O operation (file copying and compression) to a worker thread
-        # to prevent blocking the main event loop and causing 504 timeouts.
+
+        # For archived crawls: local data is gone, retrieve from GCS via daemon
+        if job_info["status"] == "archived":
+            # First check if the shared archive still exists locally (daemon hasn't uploaded yet)
+            local_shared_archive = os.path.join(settings.ARCHIVES_SHARED_PATH, f"{crawl_id}.tar.gz")
+            if os.path.exists(local_shared_archive):
+                logger.info(f"Serving locally staged archive for archived crawl '{crawl_id}'.")
+                return local_shared_archive, False
+
+            # Otherwise, request download from GCS via daemon
+            archive_path = await self._retrieve_from_gcs_daemon(crawl_id)
+            return archive_path, True
+
+        # For finished crawls with local data: generate custom archive
         try:
-            return await anyio.to_thread.run_sync(self._generate_archive_sync, job_info, include)
+            path = await anyio.to_thread.run_sync(self._generate_archive_sync, job_info, include)
+            return path, False
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Error in background archive generation for '{crawl_id}': {e}", exc_info=True)
             raise e
+
+    async def _retrieve_from_gcs_daemon(self, crawl_id: str) -> str:
+        """
+        Triggers a GCS download via the host-side download daemon and waits for the result.
+        The daemon watches a shared 'requests' volume and writes downloaded archives
+        to a shared 'results' volume.
+        Returns the path to the downloaded archive file.
+        """
+        requests_dir = settings.DOWNLOAD_REQUESTS_PATH
+        results_dir = settings.DOWNLOAD_RESULTS_PATH
+
+        request_path = os.path.join(requests_dir, f"{crawl_id}.request")
+        download_path = os.path.join(results_dir, f"{crawl_id}.tar.gz")
+        done_path = os.path.join(results_dir, f"{crawl_id}.done")
+        error_path = os.path.join(results_dir, f"{crawl_id}.error")
+
+        # If already downloaded (from a concurrent or previous request), return immediately
+        if os.path.exists(done_path) and os.path.exists(download_path):
+            logger.info(f"GCS download already available for '{crawl_id}'.")
+            return download_path
+
+        # Submit download request (idempotent: overwrites existing request file)
+        os.makedirs(requests_dir, exist_ok=True)
+        async with aiofiles.open(request_path, 'w') as f:
+            await f.write(crawl_id)
+
+        logger.info(f"GCS download request submitted for '{crawl_id}'. Waiting for daemon...")
+
+        # Poll for completion with timeout
+        timeout = settings.GCS_DOWNLOAD_TIMEOUT_SECONDS
+        for _ in range(timeout):
+            # Check for error first
+            if os.path.exists(error_path):
+                error_msg = "Download failed"
+                try:
+                    async with aiofiles.open(error_path, 'r') as f:
+                        error_msg = (await f.read()).strip()
+                except Exception:
+                    pass
+                # Clean up error marker
+                try:
+                    os.remove(error_path)
+                except OSError:
+                    pass
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"GCS download failed for '{crawl_id}': {error_msg}"
+                )
+
+            # Check for success
+            if os.path.exists(done_path) and os.path.exists(download_path):
+                logger.info(f"GCS download complete for '{crawl_id}'.")
+                return download_path
+
+            await asyncio.sleep(1)
+
+        # Timeout: clean up the request file to avoid daemon processing a stale request
+        try:
+            if os.path.exists(request_path):
+                os.remove(request_path)
+        except OSError:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"GCS download timed out after {timeout}s for '{crawl_id}'. Ensure the download daemon is running."
+        )
 
     def _generate_archive_sync(self, job_info: dict, include: List[IncludeInArchive]) -> str:
         """
@@ -915,25 +998,43 @@ class CrawlerManager:
         self.local_processes.clear()
         logger.info("Graceful shutdown complete for this replica.")
 
-    async def archive_crawl(self, job_info: dict) -> str:
+    async def archive_crawl(self, job_info: dict) -> dict:
         """
-        Archives a finished crawl job to a shared volume for host-side upload.
-        Only 'finished' jobs can be archived.
+        Archives a finished crawl job to a shared volume for host-side upload to GCS.
+        Only 'finished' jobs can be archived. Sets status to 'archived' to prevent double-archiving.
+        Returns a dict with crawl_id, archive_status, and archive_size_bytes.
         """
         crawl_id = job_info['crawl_id']
         job_status = job_info.get('status')
-        
+
+        if job_status == "archived":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Crawl '{crawl_id}' has already been archived."
+            )
+
         if job_status != "finished":
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot archive crawl '{crawl_id}' because it is not in 'finished' state (current status: {job_status})."
             )
 
         job_storage_path = job_info["storage_path"]
-        
-        # --- START: CREATE STATUS SNAPSHOT ---
-        # Before archiving, save the current status to prevent data loss when Redis is restarted
-        # This is critical because the dataset files will be deleted after archiving
+        archives_dir = settings.ARCHIVES_SHARED_PATH
+        target_archive_path = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
+
+        # Idempotency: if archive file already exists (e.g. daemon hasn't picked it up yet), skip re-generation
+        if os.path.exists(target_archive_path):
+            archive_size = os.path.getsize(target_archive_path)
+            logger.info(f"Archive already exists for '{crawl_id}' at '{target_archive_path}'. Skipping re-generation.")
+            await self._mark_as_archived(crawl_id, job_info)
+            return {
+                "crawl_id": crawl_id,
+                "archive_status": "pending_upload",
+                "archive_size_bytes": archive_size,
+            }
+
+        # Save current status snapshot before archiving (critical: dataset files will be deleted)
         try:
             current_status = await self.get_status(job_info)
             snapshot_path = os.path.join(job_storage_path, '_status_snapshot.json')
@@ -945,73 +1046,72 @@ class CrawlerManager:
             logger.info(f"Created status snapshot for crawl '{crawl_id}' before archiving.")
         except Exception as e:
             logger.error(f"Failed to create status snapshot for '{crawl_id}': {e}", exc_info=True)
-            # Don't fail the archiving process, but log the error
-        # --- END: CREATE STATUS SNAPSHOT ---
 
-        # Ensure the shared archives directory exists
-        archives_dir = "/app/archives"
-        os.makedirs(archives_dir, exist_ok=True)
-
-        target_archive_path = os.path.join(archives_dir, f"{crawl_id}.tar.gz")
-
-        logger.info(
-            f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
-
-        # DEBUG: Check if directory exists and is writable
-        if os.path.exists(archives_dir):
-            logger.info(f"Archives directory '{archives_dir}' exists.")
-            logger.info(f"Permissions: {oct(os.stat(archives_dir).st_mode)}")
-        else:
-            logger.error(
-                f"Archives directory '{archives_dir}' DOES NOT EXIST even after makedirs!")
+        logger.info(f"Starting archiving for crawl '{crawl_id}' to '{target_archive_path}'.")
 
         try:
-            # 1. Create a tar.gz archive directly in the shared volume
-            # We use make_archive which adds the extension, so we pass the base name without extension
-            base_name = os.path.join(archives_dir, crawl_id)
+            def _archive_and_cleanup():
+                """Synchronous archive creation + local cleanup, run in a worker thread."""
+                os.makedirs(archives_dir, exist_ok=True)
 
-            # Run blocking I/O in executor
-            loop = asyncio.get_event_loop()
-            final_path = await loop.run_in_executor(
-                None,
-                lambda: shutil.make_archive(
-                    base_name, 'gztar', root_dir=job_storage_path)
-            )
-            
-            logger.info(f"Successfully created archive at '{final_path}'.")
+                # Create tar.gz archive in the shared volume
+                base_name = os.path.join(archives_dir, crawl_id)
+                final_path = shutil.make_archive(base_name, 'gztar', root_dir=job_storage_path)
 
-            # 2. Cleanup local files (preserve logs, markers, and status snapshot)
-            files_to_keep = {'crawler.log', '_callback_payload.json',
-                             '_completion_marker.json', '_status_snapshot.json'}
-            
-            for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                for name in files:
-                    if name not in files_to_keep:
-                        os.remove(os.path.join(root, name))
-                for name in dirs:
-                    # We can remove empty directories
-                    try:
-                        os.rmdir(os.path.join(root, name))
-                    except OSError:
-                        pass # Directory not empty or other error
+                # Cleanup local data files (preserve logs, markers, and status snapshot)
+                files_to_keep = {'crawler.log', '_callback_payload.json',
+                                 '_completion_marker.json', '_status_snapshot.json'}
+                for root, dirs, files in os.walk(job_storage_path, topdown=False):
+                    for name in files:
+                        if name not in files_to_keep:
+                            os.remove(os.path.join(root, name))
+                    for name in dirs:
+                        try:
+                            os.rmdir(os.path.join(root, name))
+                        except OSError:
+                            pass
 
-            logger.info(
-                f"Cleaned up local storage for '{crawl_id}'. Preserved logs, markers, and status snapshot.")
+                archive_size = os.path.getsize(final_path)
+                return final_path, archive_size
 
-            # Return the path relative to the host (conceptual) or just a success message
-            return f"Ready for upload: {final_path}"
+            final_path, archive_size = await anyio.to_thread.run_sync(_archive_and_cleanup)
+
+            logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes). Local storage cleaned up.")
+
+            # Mark job as 'archived' to prevent double-archiving
+            await self._mark_as_archived(crawl_id, job_info)
+
+            return {
+                "crawl_id": crawl_id,
+                "archive_status": "pending_upload",
+                "archive_size_bytes": archive_size,
+            }
 
         except Exception as e:
             logger.error(f"Failed to archive crawl '{crawl_id}': {e}", exc_info=True)
             raise HTTPException(
                 status_code=500, detail=f"Archiving failed: {str(e)}")
 
-    async def retrieve_archived_crawl(self, crawl_id: str):
-        """
-        Placeholder for retrieving an archived crawl from GCS.
-        """
-        # TODO: Implement retrieval logic (download from GCS, extract, etc.)
-        raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Retrieval of archived crawls is not yet implemented.")
+    async def _mark_as_archived(self, crawl_id: str, job_info: dict):
+        """Updates job status to 'archived' in Redis to prevent double-archiving."""
+        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+        job_info["status"] = "archived"
+        job_info["archived_at"] = datetime.utcnow().isoformat()
+        await cache_service.set_json(job_key, job_info)
+        await self._publish_update(crawl_id, "archived")
+        logger.info(f"Marked crawl '{crawl_id}' as 'archived' in Redis.")
+
+    def cleanup_temp_download(self, crawl_id: str):
+        """Cleans up temporary GCS download files after serving to the client."""
+        results_dir = settings.DOWNLOAD_RESULTS_PATH
+        for suffix in ('.tar.gz', '.done', '.error'):
+            path = os.path.join(results_dir, f"{crawl_id}{suffix}")
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+                    logger.debug(f"Cleaned up temp download file: {path}")
+            except OSError as e:
+                logger.warning(f"Failed to clean up temp file '{path}': {e}")
 
     async def reconcile_jobs(self):
         """

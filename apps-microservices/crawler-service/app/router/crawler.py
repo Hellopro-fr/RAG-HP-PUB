@@ -269,13 +269,13 @@ async def download_crawl_results(
 ):
     """
     Downloads a custom archive of a completed crawl job, including only the specified components.
-    Recovers from storage if missing from Redis.
+    For archived crawls (data uploaded to GCS), automatically retrieves the full archive
+    from GCS via the download daemon and streams it to the client.
     """
     try:
         crawl_id = job_info['crawl_id']
-        archive_path = await crawler_manager.get_results_archive(job_info, include)
-        
-        # Validate that the archive file was actually created before returning
+        archive_path, is_temporary = await crawler_manager.get_results_archive(job_info, include)
+
         if not os.path.exists(archive_path):
             logger.error(
                 f"Archive file was not created at expected path: {archive_path}")
@@ -285,10 +285,10 @@ async def download_crawl_results(
                 f"The crawl data may have been cleaned up after archiving to GCS."
             )
 
-        # Archive is now cached for performance, so we do NOT delete it immediately.
-        # Cleanup should be handled by a separate retention policy/cron if needed.
-        # background_tasks.add_task(lambda path: os.remove(path), archive_path)
-        
+        # For GCS downloads (temporary files): schedule cleanup after the response is sent
+        if is_temporary:
+            background_tasks.add_task(crawler_manager.cleanup_temp_download, crawl_id)
+
         return FileResponse(path=archive_path, media_type='application/gzip', filename=f"{crawl_id}-results.tar.gz")
     except HTTPException as e:
         raise e
@@ -299,15 +299,16 @@ async def download_crawl_results(
 @router.post("/archive/{crawl_id}", response_model=ArchiveResponse)
 async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     """
-    Archives a finished crawl job to Google Cloud Storage.
-    The job must be in 'finished' state.
-    After successful upload, local files are cleaned up (except logs).
+    Archives a finished crawl job to a shared volume for upload to Google Cloud Storage.
+    The job must be in 'finished' state. After archiving, status becomes 'archived'
+    to prevent double-archiving. Local data files are cleaned up (logs and markers are preserved).
+    The upload daemon will pick up the archive and upload it to GCS asynchronously.
     """
     try:
-        gcs_url = await crawler_manager.archive_crawl(job_info)
+        result = await crawler_manager.archive_crawl(job_info)
         return ArchiveResponse(
-            message="Crawl archived successfully.",
-            gcs_url=gcs_url
+            message="Crawl archived successfully. Pending upload to GCS by daemon.",
+            **result
         )
     except HTTPException as e:
         raise e
@@ -316,12 +317,23 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
         raise HTTPException(status_code=500, detail="An internal error occurred during archiving.")
 
 @router.get("/archive/{crawl_id}")
-async def get_archived_crawl(crawl_id: str):
+async def get_archived_crawl(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     """
-    Placeholder for retrieving an archived crawl from GCS.
-    Currently returns 501 Not Implemented.
+    Returns the archive status for a crawl job.
+    To download the results of an archived crawl, use GET /results/{crawl_id}
+    which will automatically retrieve the archive from GCS via the download daemon.
     """
-    return await crawler_manager.retrieve_archived_crawl(crawl_id)
+    crawl_id = job_info['crawl_id']
+    job_status = job_info.get('status')
+    return {
+        "crawl_id": crawl_id,
+        "status": job_status,
+        "archived": job_status == "archived",
+        "message": "Use GET /results/{crawl_id}?include=dataset to download. "
+                   "Archived crawls are automatically retrieved from GCS."
+                   if job_status == "archived"
+                   else f"Crawl is in '{job_status}' state, not archived."
+    }
 
 @router.post("/reconcile-jobs")
 async def reconcile_jobs():
