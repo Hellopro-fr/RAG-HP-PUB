@@ -185,6 +185,37 @@ async def get_recent_domains(hours: int = 6):
         "hours_checked": hours
     }
 
+@app.get("/domains/unsynced", tags=["Domains"])
+async def get_unsynced_domains():
+    """
+    Get ALL domains that have at least one unsynced product.
+    Unlike /domains/recent, this has no time filter — it catches everything.
+    Use this endpoint for reliable cron synchronization.
+    
+    **Returns:**
+    - List of domains with unsynced products, sorted by unsynced count (highest first)
+    
+    **Example response:**
+    ```json
+    {
+      "domains": [
+        {
+          "domain": "tech-shop.com",
+          "last_updated": "2026-01-26T08:30:00",
+          "total_products": 150,
+          "unsynced_products": 25
+        }
+      ],
+      "count": 1
+    }
+    ```
+    """
+    domains = await archiver.get_domains_with_unsynced()
+    return {
+        "domains": domains,
+        "count": len(domains),
+    }
+
 @app.get("/domains/{domain}/status", tags=["Domains"])
 async def get_domain_sync_status(domain: str):
     """
