@@ -174,7 +174,10 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         
         for rep in reponses_q1_carac_prix:
             id_reponse = rep.get("id_reponse", "")
-            reponse = rep.get("reponse", "")
+            reponse = rep.get("reponse", rep.get("texte_reponse", ""))
+            if not reponse:
+                logger.warning(f"[{id_categorie}] - Réponse {id_reponse} - Aucune réponse trouvée")
+                continue
             has_data = rep.get("has_data", False)
             caracteristiques_prix_existant = rep.get("caracteristiques_prix", [])
 
