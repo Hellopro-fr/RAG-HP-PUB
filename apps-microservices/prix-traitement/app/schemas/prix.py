@@ -35,6 +35,7 @@ class QuestionnaireRequest(BaseModel):
     """Requête pour le questionnaire prix via RAG + LLM"""
     texte_recherche: str = Field(..., description="Texte libre utilisé pour la recherche RAG")
     id_categorie: Union[str, int] = Field(..., description="ID de la catégorie cible pour filtrer les résultats")
+    nom_categorie: str = Field(..., description="Nom de la catégorie cible pour filtrer les résultats")
     
     @field_validator('id_categorie')
     @classmethod

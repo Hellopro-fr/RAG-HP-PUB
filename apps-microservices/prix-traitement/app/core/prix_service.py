@@ -357,7 +357,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         await api_client.close()
 
 
-async def run_questionnaire(texte_recherche: str, id_categorie: str) -> Dict[str, Any]:
+async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str) -> Dict[str, Any]:
     """
     Recherche RAG sur la source "prix" filtrée par id_categorie, 
     formate les chunks et les envoie au LLM (Gemini) avec le prompt 114.
@@ -453,7 +453,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str) -> Dict[str
         # Joindre tous les chunks avec un séparateur
         all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
         
-        logger.info(f"[{id_categorie}] {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars) {all_chunks_text}")
+        logger.info(f"[{id_categorie}] {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars) {all_chunks_text[:100]}")
         
         # =====================================================================
         # ÉTAPE 3 : Récupérer le prompt (id=114)
@@ -481,11 +481,11 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str) -> Dict[str
         # =====================================================================
         # Remplacer les placeholders dans le prompt
         final_prompt = prompt_text
-        final_prompt = final_prompt.replace("{CHUNKS}", all_chunks_text)
-        final_prompt = final_prompt.replace("{texte_recherche}", texte_recherche)
-        final_prompt = final_prompt.replace("{id_categorie}", id_categorie)
+        final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
+        final_prompt = final_prompt.replace("{requete_rag}", texte_recherche)
+        final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         
-        logger.info(f"[{id_categorie}] Appel Gemini (model={settings.GEMINI_MODEL_NAME}, temperature=0.1, {len(final_prompt)} chars)...")
+        logger.info(f"[{id_categorie}] Appel Gemini (model={settings.GEMINI_MODEL_NAME}, {len(final_prompt)} chars)...")
         
         # Utiliser GeminiProvider
         gemini = GeminiProvider(
