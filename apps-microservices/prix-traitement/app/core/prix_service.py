@@ -128,11 +128,12 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
                 "data": None,
                 "llm_response": None,
                 "time_elapsed": elapsed,
-                "message": f"Impossible de récupérer les données de la catégorie {id_categorie} Q1 : {len(reponses_q1)} Caracteristiques : {len(jeu_caracteristiques)}"
+                "message": f"Impossible de récupérer les données de la catégorie {id_categorie} Q1 : {len(reponses_q1_carac_prix)} Caracteristiques : {len(jeu_caracteristiques)}"
             }
         
         logger.info(f"[{id_categorie}] Données catégorie récupérées avec succès")
-        
+
+        logger.info(f"[{id_categorie}] jeu_caracteristiques : {jeu_caracteristiques_json[:100]}")        
 
 
         # =====================================================================
@@ -204,7 +205,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
             final_prompt = prompt_text
             final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
             final_prompt = final_prompt.replace("{reponse_question_1}", reponse)
-            final_prompt = final_prompt.replace("{jeu_caracteristiques}", jeu_caracteristiques_json)
+            final_prompt = final_prompt.replace("{jeu_caracteristique}", jeu_caracteristiques_json)
             
             logger.info(f"[{id_categorie}] Appel Gemini pour réponse '{reponse}' ({len(final_prompt)} chars)...")
             
