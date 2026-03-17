@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+transformers
+sentence-transformers
+torch
+protobuf
+sentencepiece

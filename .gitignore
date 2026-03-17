@@ -127,3 +127,10 @@ docker-compose.override.yml
 package-lock.json
 .gitignore
 apps-microservices/nextjs-formulaire-hp/package-lock.json
+
+## Localfile
+
+local/*
+localfile.*
+
+*.agent
