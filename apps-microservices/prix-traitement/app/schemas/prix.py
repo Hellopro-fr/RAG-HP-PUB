@@ -29,3 +29,25 @@ class CaracteristiqueResponse(BaseModel):
     skipped: List[str] = Field(default_factory=list, description="Réponses ignorées (déjà traitées)")
     time_elapsed: Optional[float] = Field(None, description="Temps de traitement en secondes")
     message: str = Field("", description="Message informatif ou d'erreur")
+
+
+class QuestionnaireRequest(BaseModel):
+    """Requête pour le questionnaire prix via RAG + LLM"""
+    texte_recherche: str = Field(..., description="Texte libre utilisé pour la recherche RAG")
+    id_categorie: Union[str, int] = Field(..., description="ID de la catégorie cible pour filtrer les résultats")
+    nom_categorie: str = Field(..., description="Nom de la catégorie cible pour filtrer les résultats")
+    
+    @field_validator('id_categorie')
+    @classmethod
+    def convert_id_to_str(cls, v):
+        return str(v)
+
+
+class QuestionnaireResponse(BaseModel):
+    """Réponse de l'endpoint /prix/questionnaire"""
+    success: bool = Field(..., description="Indique si le traitement a réussi")
+    reponse: Optional[Dict[str, Any]] = Field(None, description="Réponse json extracté générée par le LLM")
+    api_response: Optional[Dict[str, Any]] = Field(None, description="Réponse brute de l'API")
+    time_elapsed: Optional[float] = Field(None, description="Temps de traitement en secondes")
+    message: str = Field("", description="Message informatif ou d'erreur")
+
