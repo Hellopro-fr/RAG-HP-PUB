@@ -248,11 +248,14 @@ async def force_finish_crawl(
     return result
 
 @router.get("/status", response_model=Dict[str, CrawlStatus])
-async def get_all_crawl_statuses():
+async def get_all_crawl_statuses(
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status (e.g., running, finished, failed, archived, restarting_oom).")
+):
     """
-    Gets the status of all active crawl jobs on this instance.
+    Gets the status of all crawl jobs. Optionally filter by status.
+    Examples: /status?status=running, /status?status=finished
     """
-    return await crawler_manager.get_all_statuses()
+    return await crawler_manager.get_all_statuses(status_filter=status_filter)
 
 @router.get("/status/{crawl_id}", response_model=CrawlStatus)
 async def get_crawl_status(job_info: dict = Depends(get_job_or_recover)):

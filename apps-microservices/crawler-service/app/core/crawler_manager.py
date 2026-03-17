@@ -111,17 +111,21 @@ class CrawlerManager:
         if not is_restart:
             redis_max_global_str = await cache_service.get_key("crawl_jobs:max_global_crawls")
             current_max_global = int(redis_max_global_str) if redis_max_global_str else settings.DEFAULT_MAX_GLOBAL_CRAWLS
-            
-            running_count_str = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
-            running_count = int(running_count_str) if running_count_str else 0
-            
-            if running_count >= current_max_global:
-                logger.warning(f"Global concurrency limit reached ({running_count}/{current_max_global}). Rejecting '{crawl_id}'.")
+
+            # Optimistic increment: atomically claim a slot, then check the limit.
+            # This prevents the TOCTOU race where two concurrent requests both read
+            # count=N-1, both pass the check, and both increment to N+1.
+            new_count = await cache_service.increment_key(CRAWL_RUNNING_COUNT_KEY)
+
+            if new_count > current_max_global:
+                # Over limit — roll back the optimistic increment and reject
+                await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                logger.warning(f"Global concurrency limit reached ({new_count - 1}/{current_max_global}). Rejecting '{crawl_id}'.")
                 detail_payload = {
                 "error_code": "GLOBAL_CAPACITY_EXCEEDED",
                 "message": "The service has reached its global concurrency limit.",
                 "global_limit": current_max_global,
-                "current_running": running_count
+                "current_running": new_count - 1
                 }
                 raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -129,7 +133,10 @@ class CrawlerManager:
                 )
 
         # Local concurrency check for this replica
-        if len(self.local_processes) >= settings.MAX_CONCURRENT_CRAWLS:
+        # Bypassed for is_restart=True (OOM relaunch) because the slot is reserved
+        # in local_processes until relaunch completes.
+        active_local = sum(1 for p in self.local_processes.values() if p.returncode is None)
+        if not is_restart and active_local >= settings.MAX_CONCURRENT_CRAWLS:
             logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'.")
             detail_payload = {
                 "error_code": "REPLICA_CAPACITY_EXCEEDED",
@@ -183,9 +190,9 @@ class CrawlerManager:
         }
         await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_data)
         
-        # Atomically increment the global running count ONLY IF NOT RESTARTING
-        if not is_restart:
-            await cache_service.increment_key(CRAWL_RUNNING_COUNT_KEY)
+        # Note: Global counter was already incremented via optimistic increment above
+        # (for non-restart crawls). For is_restart=True, we intentionally skip
+        # incrementing because the slot was preserved from the original OOM'd crawl.
 
         await self._publish_update(crawl_id, "running")
         
@@ -436,9 +443,6 @@ class CrawlerManager:
         # Ensure we kill any child processes (Chrome) that Node left behind
         self._kill_process_group(process.pid)
 
-        await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
-        
-        
         job_info = await cache_service.get_json(job_key)
         if job_info:
             exit_code = process.returncode
@@ -446,37 +450,40 @@ class CrawlerManager:
             is_success = (exit_code == 2)
             # Exit code 3 is a specially dedicated code for OOM_RELAUNCH
             is_oom_relaunch = (exit_code == 3)
-            
+
             if is_oom_relaunch:
+                 # OOM path: preserve BOTH the global counter slot AND the local_processes
+                 # entry so no other crawl can steal the reserved slot before relaunch.
+                 # The slot will be released by _relaunch_oom_crawl if max restarts is
+                 # reached or if the relaunch itself fails.
                  logger.warning(f"Crawl '{crawl_id}' exited with OOM_RELAUNCH (code 3). Slot preserved. Auto-relaunching...")
-                 
-                 # MARK STATUS AS RESTARTING
+
                  job_info["status"] = "restarting_oom"
                  if "last_heartbeat" in job_info:
                     del job_info["last_heartbeat"]
                  await cache_service.set_json(job_key, job_info)
                  await self._publish_update(crawl_id, "restarting_oom")
-                 
-                 # TRIGGER RELAUNCH
+
+                 # DO NOT decrement global counter — slot is reserved for relaunch
+                 # DO NOT remove from local_processes — prevents slot stealing during relaunch delay
                  asyncio.create_task(self._relaunch_oom_crawl(job_info))
-                 
-                 # CLEANUP LOCAL PROCESS BUT DO NOT DECREMENT GLOBAL COUNTER
-                 if crawl_id in self.local_processes:
-                    del self.local_processes[crawl_id]
-                    
+
                  return # EXIT FUNCTION EARLY - NO WEBHOOKS
+
+            # Non-OOM path: release the global counter slot
+            await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
 
             final_status = "finished" if is_success else "failed"
             job_info["status"] = final_status
             job_info["pid"] = None
             if "last_heartbeat" in job_info:
-                del job_info["last_heartbeat"]  # Clean up heartbeat field
+                del job_info["last_heartbeat"]
             await cache_service.set_json(job_key, job_info)
-            logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status updated in Redis and counter decremented.")
+            logger.info(f"Crawl '{crawl_id}' finished with exit code {exit_code}. Status: {final_status}. Counter decremented.")
 
             await self._publish_update(crawl_id, final_status)
-            
-            # --- START: Create Completion Marker ---
+
+            # --- Create Completion Marker ---
             marker_path = os.path.join(job_info['storage_path'], '_completion_marker.json')
             marker_data = {
                 "final_status": final_status,
@@ -489,7 +496,6 @@ class CrawlerManager:
                 logger.info(f"Created completion marker for crawl '{crawl_id}'.")
             except Exception as e:
                 logger.error(f"Failed to write completion marker for '{crawl_id}': {e}", exc_info=True)
-            # --- END: Create Completion Marker ---
 
             # --- WEBHOOK LOGIC ---
             if is_success and job_info.get("callback_url"):
@@ -498,13 +504,13 @@ class CrawlerManager:
             elif not is_success and job_info.get("failure_callback_url"):
                 logger.info(f"Crawl '{crawl_id}' failed. Triggering failure webhook.")
                 asyncio.create_task(self._send_failure_webhook(
-                    str(job_info["failure_callback_url"]), 
-                    crawl_id, 
-                    job_info["domain"], 
+                    str(job_info["failure_callback_url"]),
+                    crawl_id,
+                    job_info["domain"],
                     exit_code,
                     job_info.get("crawl_mode", "standard")
                 ))
-        
+
         if crawl_id in self.local_processes:
             del self.local_processes[crawl_id]
 
@@ -576,14 +582,16 @@ class CrawlerManager:
         logger.info(f"Force-finished job '{crawl_id}': {old_status} -> {target_status}")
         return {"crawl_id": crawl_id, "old_status": old_status, "new_status": target_status}
 
-    async def get_all_statuses(self) -> Dict[str, CrawlStatus]:
+    async def get_all_statuses(self, status_filter: Optional[str] = None) -> Dict[str, CrawlStatus]:
         all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
         statuses = {}
         for key in all_job_keys:
             crawl_id = key.replace(CRAWL_JOB_PREFIX, "")
-            # This uses the public get_status which now needs job_info, so we get it first.
             job_info = await cache_service.get_json(key)
             if job_info:
+                # Apply filter before computing full status (avoids unnecessary disk I/O)
+                if status_filter and job_info.get("status") != status_filter:
+                    continue
                 status_data = await self.get_status(job_info)
                 if status_data:
                     statuses[crawl_id] = status_data
