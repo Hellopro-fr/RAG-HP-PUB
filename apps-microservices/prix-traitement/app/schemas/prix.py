@@ -1,12 +1,15 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-
+from typing import List, Optional, Dict, Any, Union
 
 class CaracteristiqueRequest(BaseModel):
     """Requête pour l'extraction des caractéristiques influençant le prix"""
-    id_categorie: str = Field(..., description="ID de la catégorie à analyser")
+    id_categorie: Union[str, int] = Field(..., description="ID de la catégorie à analyser")
     id_prompt: Optional[str] = Field(None, description="ID du prompt à utiliser (optionnel, utilise la config par défaut)")
-
+    
+    @field_validator('id_categorie')
+    @classmethod
+    def convert_to_str(cls, v):
+        return str(v)
 
 class ReponseResult(BaseModel):
     """Résultat du traitement d'une réponse Q1"""

@@ -290,6 +290,36 @@ class Archiver:
         # Sort by most recent first
         return sorted(recent_domains, key=lambda x: x["last_updated"], reverse=True)
 
+    async def get_domains_with_unsynced(self) -> List[Dict]:
+        """Get ALL domains that have at least one unsynced product, regardless of last_updated."""
+        if not os.path.exists(self.images_base):
+            return []
+        
+        domains_with_unsynced = []
+        
+        for domain in os.listdir(self.images_base):
+            domain_path = os.path.join(self.images_base, domain)
+            if not os.path.isdir(domain_path):
+                continue
+            
+            manifest = await self.get_manifest(domain)
+            if not manifest:
+                continue
+            
+            products = manifest.get("products", [])
+            unsynced = sum(1 for p in products if not p.get("synced", False))
+            
+            if unsynced > 0:
+                domains_with_unsynced.append({
+                    "domain": domain,
+                    "last_updated": manifest.get("last_updated"),
+                    "total_products": len(products),
+                    "unsynced_products": unsynced,
+                })
+        
+        # Trier par nombre de non-sync décroissant
+        return sorted(domains_with_unsynced, key=lambda x: x["unsynced_products"], reverse=True)
+
     async def list_archives(self) -> List[Dict]:
         """List all archives with metadata."""
         if not os.path.exists(self.archive_base):
