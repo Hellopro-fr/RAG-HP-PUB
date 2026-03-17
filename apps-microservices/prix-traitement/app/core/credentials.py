@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     HP_TOKEN: str = "GQr3DiVJGPIxO9o7mp5FNHXsk8Ak4fZ8x8X/732mVcUY9kyOhvo79EpFYM9GplusZO/54dvfTKZF5YNSpFNEGiRvyYZkKplusmftUpAJXoEXq45aVVSKxjpiiMzrrToEYplusziMjI3Megal"  #prod
 
     # Prompt par défaut pour l'identification des caractéristiques
-    PROMPT_ID: str = "141"
+    PROMPT_ID_CARAC_PRIX: str = "113"
 
     class Config:
         env_file = ".env"
