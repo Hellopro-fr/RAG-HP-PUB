@@ -386,7 +386,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         # =====================================================================
         # ÉTAPE 1 : Recherche RAG dans Milvus (source=prix, filtre=id_categorie)
         # =====================================================================
-        logger.info(f"[{id_categorie}] Recherche RAG: texte='{texte_recherche[:80]}...', source=prix, top_k=30")
+        logger.info(f"[{id_categorie}] Nom catégorie : {nom_categorie} ,  Recherche RAG: texte='{texte_recherche[:80]}...', source=prix, top_k=30")
         
         from app.core.search import call_search_api_async
         
@@ -473,8 +473,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
                 "message": f"Impossible de récupérer le prompt id={prompt_id}"
             }
         
-        prompt_text = prompt_config.get("contenu_prompt", "")
-        logger.info(f"[{id_categorie}] Prompt récupéré : {prompt_text[:100]}...")
+        prompt_text = prompt_config.get("contenu_prompt", "")        
         
         # =====================================================================
         # ÉTAPE 4 : Construire le prompt final et appeler Gemini
@@ -485,6 +484,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         final_prompt = final_prompt.replace("{requete_rag}", texte_recherche)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         
+        logger.info(f"[{id_categorie}] Prompt : {final_prompt[:100]}...")
         logger.info(f"[{id_categorie}] Appel Gemini (model={settings.GEMINI_MODEL_NAME}, {len(final_prompt)} chars)...")
         
         # Utiliser GeminiProvider
@@ -508,28 +508,40 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             temperature=0.1
         )
         
+        elapsed = time.time() - start_time
         # Vérifier si erreur LLM
         if "error" in llm_result:
-            elapsed = time.time() - start_time
             error_msg = f"Erreur Gemini: {llm_result.get('error', '')}"
             logger.error(f"[{id_categorie}] {error_msg}")
             return {
                 "success": False,
-                "reponse_llm": None,
-                "chunks_count": len(chunks),
+                "reponse": None,
+                "api_response": llm_result.get("api_response", {}),
                 "time_elapsed": elapsed,
                 "message": error_msg
             }
         
         llm_text = llm_result.get("message", "")
-        elapsed = time.time() - start_time
         
-        logger.info(f"[{id_categorie}] Réponse Gemini reçue ({len(llm_text)} chars) en {elapsed:.1f}s")
         
+        logger.info(f"[{id_categorie}] Réponse Gemini reçue : {llm_text} en {elapsed:.1f}s")
+
+        parsed = extract_json_from_text(llm_text)
+        if not parsed or not isinstance(parsed, dict) or not parsed.get("caracteristiques_prix"):
+            error_msg = f"Réponse JSON vide ou malformée pour réponse='{llm_text}'"
+            logger.error(f"[{id_categorie}] {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+
         return {
             "success": True,
-            "reponse_llm": llm_text,
-            "chunks_count": len(chunks),
+            "reponse": parsed,
+            "api_response": llm_result.get("api_response", {}),
             "time_elapsed": elapsed,
             "message": f"{len(chunks)} chunks traités en {elapsed:.1f}s"
         }
@@ -539,8 +551,8 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         logger.error(f"[{id_categorie}] Erreur inattendue dans run_questionnaire: {e}", exc_info=True)
         return {
             "success": False,
-            "reponse_llm": None,
-            "chunks_count": 0,
+            "reponse": None,
+            "api_response": llm_result.get("api_response", {}),
             "time_elapsed": elapsed,
             "message": f"Erreur inattendue: {str(e)}"
         }
