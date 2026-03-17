@@ -79,13 +79,13 @@ async def questionnaire_prix(request: QuestionnaireRequest = Body(...)):
         
         response = QuestionnaireResponse(
             success=result.get("success", False),
-            reponse_llm=result.get("reponse_llm"),
-            chunks_count=result.get("chunks_count", 0),
+            reponse=result.get("reponse"),
+            api_response=result.get("api_response"),
             time_elapsed=result.get("time_elapsed"),
             message=result.get("message", "")
         )
         
-        logger.info(f"Réponse /prix/questionnaire: success={response.success}, chunks={response.chunks_count}")
+        logger.info(f"Réponse /prix/questionnaire: success={response.success}, message={response.message}")
         return response
         
     except ValueError as ve:

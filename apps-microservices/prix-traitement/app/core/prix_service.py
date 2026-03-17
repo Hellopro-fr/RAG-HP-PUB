@@ -527,7 +527,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         logger.info(f"[{id_categorie}] Réponse Gemini reçue : {llm_text} en {elapsed:.1f}s")
 
         parsed = extract_json_from_text(llm_text)
-        if not parsed or not isinstance(parsed, dict) or not parsed.get("caracteristiques_prix"):
+        if not parsed or not isinstance(parsed, dict):
             error_msg = f"Réponse JSON vide ou malformée pour réponse='{llm_text}'"
             logger.error(f"[{id_categorie}] {error_msg}")
             return {
