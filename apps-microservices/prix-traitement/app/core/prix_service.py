@@ -178,6 +178,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
             has_data = rep.get("has_data", False)
             caracteristiques_prix_existant = rep.get("caracteristiques_prix", [])
 
+            logger.info(f"[{id_categorie}] - Réponse {id_reponse} - {reponse}")
 
             if has_data and caracteristiques_prix_existant:
                 logger.warning(f"[{id_categorie}] - Caracteristiques prix existantes pour la reponse {id_reponse} - {reponse}")
@@ -352,3 +353,194 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
     finally:
         await api_client.close()
 
+
+async def run_questionnaire(texte_recherche: str, id_categorie: str) -> Dict[str, Any]:
+    """
+    Recherche RAG sur la source "prix" filtrée par id_categorie, 
+    formate les chunks et les envoie au LLM (Gemini) avec le prompt 114.
+    
+    Étapes :
+    1. Recherche RAG dans Milvus (source=prix, top_k=30, filtre=id_categorie)
+    2. Formate chaque chunk en texte structuré (titre, fournisseur, catégorie, texte, prix, caractéristiques)
+    3. Récupère le prompt configuré (id=114)
+    4. Injecte les chunks formatés dans le prompt et appelle Gemini
+    5. Retourne la réponse LLM
+    
+    Args:
+        texte_recherche: Texte libre pour la recherche RAG
+        id_categorie: ID de la catégorie pour filtrer les résultats
+        
+    Returns:
+        Dict avec 'success', 'reponse_llm', 'chunks_count', 'time_elapsed', 'message'
+    """
+    start_time = time.time()
+    prompt_id = settings.PROMPT_ID_QUESTIONNAIRE
+    
+    api_client = HelloProAPIClient()
+    ID_PROCESS = "37"
+    
+    try:
+        # =====================================================================
+        # ÉTAPE 1 : Recherche RAG dans Milvus (source=prix, filtre=id_categorie)
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Recherche RAG: texte='{texte_recherche[:80]}...', source=prix, top_k=30")
+        
+        from app.core.search import call_search_api_async
+        
+        chunks = await call_search_api_async(
+            prompt=texte_recherche,
+            num_results=30,
+            source="prix",
+            filtre={"id_categorie": id_categorie}
+        )
+        
+        if not chunks:
+            elapsed = time.time() - start_time
+            logger.warning(f"[{id_categorie}] Aucun résultat RAG trouvé")
+            return {
+                "success": False,
+                "reponse_llm": None,
+                "chunks_count": 0,
+                "time_elapsed": elapsed,
+                "message": f"Aucun résultat RAG trouvé pour la catégorie {id_categorie}"
+            }
+        
+        logger.info(f"[{id_categorie}] {len(chunks)} chunks RAG trouvés")
+        
+        # =====================================================================
+        # ÉTAPE 2 : Formater les chunks pour le prompt
+        # =====================================================================
+        # Format basé sur adaptSearchResult (source "prix") dans script.js
+        # et le ContextBuilder dans recherche.py
+        formatted_chunks = []
+        
+        for i, chunk in enumerate(chunks):
+            meta = chunk.get("metadata", {}).get("entity", {})
+            
+            nom_produit = meta.get("nom_produit", "N/A")
+            fournisseur = meta.get("fournisseur", "N/A")
+            nom_categorie = meta.get("nom_categorie", meta.get("categorie", "N/A"))
+            text = meta.get("text", "")
+            
+            # Construction de la ligne de prix
+            prix_line = ""
+            valeur_prix = meta.get("valeur_prix", "")
+            if valeur_prix:
+                prix_parts = [str(valeur_prix)]
+                devise = meta.get("devise", "")
+                taxe = meta.get("taxe", "")
+                unite = meta.get("unite", "")
+                extras = [e for e in [devise, taxe, unite] if e]
+                if extras:
+                    prix_parts.append(f"{' '.join(extras)}")
+                prix_line = " ".join(prix_parts)
+            
+            caracteristique = meta.get("caracteristique", "")
+            
+            chunk_text = f"""Titre : {nom_produit}
+            Source : Prix
+            Fournisseur : {fournisseur}
+            Catégorie : {nom_categorie}
+            Texte : {text}
+            Prix : {prix_line}
+            Caractéristiques : {caracteristique}"""
+            
+            formatted_chunks.append(chunk_text)
+        
+        # Joindre tous les chunks avec un séparateur
+        all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
+        
+        logger.info(f"[{id_categorie}] {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars) {all_chunks_text}")
+        
+        # =====================================================================
+        # ÉTAPE 3 : Récupérer le prompt (id=114)
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Récupération du prompt (id={prompt_id})...")
+        
+        prompt_config = await get_prompt(prompt_id)
+        
+        if not prompt_config:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] Impossible de récupérer le prompt id={prompt_id}")
+            return {
+                "success": False,
+                "reponse_llm": None,
+                "chunks_count": len(chunks),
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer le prompt id={prompt_id}"
+            }
+        
+        prompt_text = prompt_config.get("contenu_prompt", "")
+        logger.info(f"[{id_categorie}] Prompt récupéré : {prompt_text[:100]}...")
+        
+        # =====================================================================
+        # ÉTAPE 4 : Construire le prompt final et appeler Gemini
+        # =====================================================================
+        # Remplacer les placeholders dans le prompt
+        final_prompt = prompt_text
+        final_prompt = final_prompt.replace("{CHUNKS}", all_chunks_text)
+        final_prompt = final_prompt.replace("{texte_recherche}", texte_recherche)
+        final_prompt = final_prompt.replace("{id_categorie}", id_categorie)
+        
+        logger.info(f"[{id_categorie}] Appel Gemini (model={settings.GEMINI_MODEL_NAME}, temperature=0.1, {len(final_prompt)} chars)...")
+        
+        # Utiliser GeminiProvider
+        gemini = GeminiProvider(
+            model=settings.GEMINI_MODEL_NAME
+        )
+        
+        llm_result = gemini.chat(final_prompt)
+        
+        # Log LLM usage
+        usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
+        await api_client.log_llm_usage(
+            type_ia=3,  # Gemini
+            model=settings.GEMINI_MODEL_NAME,
+            input_token=usage_metadata.get("prompt_token_count", 0),
+            output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+            id_process=ID_PROCESS,
+            origine="prix-traitement-questionnaire",
+            etat=1 if "error" not in llm_result else 2,
+            retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else "",
+            temperature=0.1
+        )
+        
+        # Vérifier si erreur LLM
+        if "error" in llm_result:
+            elapsed = time.time() - start_time
+            error_msg = f"Erreur Gemini: {llm_result.get('error', '')}"
+            logger.error(f"[{id_categorie}] {error_msg}")
+            return {
+                "success": False,
+                "reponse_llm": None,
+                "chunks_count": len(chunks),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+        
+        llm_text = llm_result.get("message", "")
+        elapsed = time.time() - start_time
+        
+        logger.info(f"[{id_categorie}] Réponse Gemini reçue ({len(llm_text)} chars) en {elapsed:.1f}s")
+        
+        return {
+            "success": True,
+            "reponse_llm": llm_text,
+            "chunks_count": len(chunks),
+            "time_elapsed": elapsed,
+            "message": f"{len(chunks)} chunks traités en {elapsed:.1f}s"
+        }
+    
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"[{id_categorie}] Erreur inattendue dans run_questionnaire: {e}", exc_info=True)
+        return {
+            "success": False,
+            "reponse_llm": None,
+            "chunks_count": 0,
+            "time_elapsed": elapsed,
+            "message": f"Erreur inattendue: {str(e)}"
+        }
+    
+    finally:
+        await api_client.close()
