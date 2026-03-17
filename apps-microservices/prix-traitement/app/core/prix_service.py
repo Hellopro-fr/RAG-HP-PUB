@@ -392,7 +392,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         
         chunks = await call_search_api_async(
             prompt=texte_recherche,
-            num_results=30,
+            num_results=50,
             source="prix",
             filtre={"id_categorie": id_categorie}
         )
