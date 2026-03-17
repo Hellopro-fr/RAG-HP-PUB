@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     # Prompt par défaut pour l'identification des caractéristiques
     PROMPT_ID_CARAC_PRIX: str = "113"
 
+    # Prompt par défaut pour le questionnaire prix (RAG + LLM)
+    PROMPT_ID_QUESTIONNAIRE: str = "114"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
