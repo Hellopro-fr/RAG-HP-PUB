@@ -32,4 +32,4 @@ COPY apps-microservices/prix-traitement/main.py .
 EXPOSE 8595
 
 # Étape 5: Définir la commande de lancement directement
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8595"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8591"]
