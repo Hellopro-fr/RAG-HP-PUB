@@ -283,7 +283,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
                 "id_reponse": id_reponse,
                 "reponse": reponse,
                 "sous_type": parsed.get("sous_type", ""),
-                "caracteristiques_prix": parsed["caracteristiques_prix"],
+                "caracteristiques_prix": caracteristiques_prix,
                 "ids_saved": saved_ids,
             })
             
