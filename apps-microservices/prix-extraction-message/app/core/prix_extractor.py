@@ -30,6 +30,9 @@ class PrixExtractor:
     # ID du prompt statique - Message
     PROMPT_ID = settings.PROMPT_ID  # "142"
 
+    # ID process
+    ID_PROCESS = "37"
+
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
 
@@ -106,8 +109,8 @@ class PrixExtractor:
                 type_ia=3,  # Gemini
                 model=self.GEMINI_MODEL,
                 input_token=usage_metadata.get("prompt_token_count", 0),
-                output_token=usage_metadata.get("candidates_token_count", 0),
-                id_process=id_categorie,
+                output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+                id_process=self.ID_PROCESS,
                 origine="prix-extraction-message",
                 etat=1 if "code" not in result else 2,
                 retour_erreur=str(result.get("error", "")) if "code" in result else ""
@@ -134,7 +137,7 @@ class PrixExtractor:
                 model="deepseek-chat",
                 input_token=input_tokens,
                 output_token=output_tokens,
-                id_process=id_categorie,
+                id_process=self.ID_PROCESS,
                 origine="prix-extraction-message",
                 etat=1,
                 temperature=temperature

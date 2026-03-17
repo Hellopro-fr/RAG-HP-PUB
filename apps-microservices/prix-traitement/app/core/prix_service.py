@@ -67,6 +67,8 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
     prompt_id = id_prompt or settings.PROMPT_ID
     
     api_client = HelloProAPIClient()
+
+    ID_PROCESS = "37"
     
     try:
         # =====================================================================
@@ -208,10 +210,23 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
             
             # --- Appel Gemini ---
             llm_result = gemini.chat(final_prompt)
+
+            # Log LLM usage pour Gemini
+            usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
+            await api_client.log_llm_usage(
+                type_ia=3,  # Gemini
+                model=settings.GEMINI_MODEL_NAME,
+                input_token=usage_metadata.get("prompt_token_count", 0),
+                output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+                id_process=ID_PROCESS,
+                origine="prix-extraction-devis",
+                etat=1 if "error" not in llm_result else 2,
+                retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else ""
+            )
             
             # Vérifier si erreur LLM
             if "error" in llm_result:
-                error_msg = f"Erreur Gemini pour la réponse '{reponse}' (code {llm_result.get('code', '?')})"
+                error_msg = f"Erreur Gemini pour la réponse '{reponse}' (code {llm_result.get('error', '')})"
                 logger.error(f"[{id_categorie}] {error_msg}")
                 errors.append(error_msg)
                 continue
