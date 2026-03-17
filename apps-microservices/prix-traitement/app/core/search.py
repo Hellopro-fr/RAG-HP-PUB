@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 async def call_search_api_async(
     prompt: str, 
-    num_results: int = 30, 
+    num_results: int = 50, 
     source: str = "prix",
     filtre: Optional[Dict[str, Any]] = None,
     use_reranker: bool = False, 
