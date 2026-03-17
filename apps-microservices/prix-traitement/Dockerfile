@@ -1,0 +1,35 @@
+# apps-microservices/prix-traitement/Dockerfile
+
+FROM python:3.10-slim
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Étape 1: Définir le PYTHONPATH pour que les imports fonctionnent
+ENV PYTHONPATH=/app
+
+# Étape 2: Installer TOUTES les dépendances dans l'environnement global du conteneur
+# D'abord, on copie et installe notre librairie partagée
+COPY libs/common-utils /app/libs/common-utils
+RUN pip install -e /app/libs/common-utils
+
+# Ensuite, on copie et installe les requirements spécifiques à ce service
+COPY apps-microservices/prix-traitement/requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY libs/grpc-stubs /app/libs/grpc-stubs
+RUN find /app/libs/grpc-stubs/src/grpc_stubs -name "*.py" -delete
+
+COPY protos /app/protos
+RUN find /app/protos/grpc_stubs -name "*.proto" | xargs python -m grpc_tools.protoc -I/app/protos --python_out=/app/libs/grpc-stubs/src --grpc_python_out=/app/libs/grpc-stubs/src
+RUN pip install -e /app/libs/grpc-stubs
+
+# Étape 3: Copier le code source de manière propre
+COPY apps-microservices/prix-traitement/app ./app
+COPY apps-microservices/prix-traitement/main.py .
+
+# Étape 4: Exposer le port
+EXPOSE 8595
+
+# Étape 5: Définir la commande de lancement directement
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8595"]

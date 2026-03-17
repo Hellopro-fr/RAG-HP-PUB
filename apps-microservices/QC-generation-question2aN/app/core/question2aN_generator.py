@@ -31,6 +31,9 @@ class Question2aNGenerator:
     # PROMPT_QUESTION2_ID = "102"
     ETAPE = "2"
     GEMINI_MODEL = "gemini-3.1-pro-preview"
+
+    # ID process
+    ID_PROCESS = "30"
     
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
@@ -230,8 +233,8 @@ class Question2aNGenerator:
             type_ia=3,  # Gemini
             model=self.GEMINI_MODEL,
             input_token=usage_metadata.get("prompt_token_count", 0),
-            output_token=usage_metadata.get("candidates_token_count", 0),
-            id_process=id_categorie,
+            output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+            id_process=self.ID_PROCESS,
             origine="qc-generation-question2aN",
             etat=1 if "code" not in result else 2,
             retour_erreur=str(result.get("error", "")) if "code" in result else ""
