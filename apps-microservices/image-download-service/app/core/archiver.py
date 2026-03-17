@@ -42,12 +42,24 @@ class Archiver:
             return None
 
     async def save_manifest(self, domain: str, manifest: Dict):
-        """Save the manifest for a domain."""
+        """Save the manifest for a domain using NFS-safe locking and atomic write."""
+        import tempfile
+        from image_download_service.core.nfs_lock import nfs_lock
+        
         manifest_path = os.path.join(self.images_base, domain, "manifest.json")
+        manifest_dir = os.path.dirname(manifest_path)
         
         try:
-            async with aiofiles.open(manifest_path, 'w') as f:
-                await f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
+            with nfs_lock(manifest_path):
+                fd, tmp_path = tempfile.mkstemp(dir=manifest_dir, suffix='.tmp')
+                try:
+                    with os.fdopen(fd, 'w') as tmp_f:
+                        tmp_f.write(json.dumps(manifest, indent=2, ensure_ascii=False))
+                    os.replace(tmp_path, manifest_path)
+                except Exception:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                    raise
         except Exception as e:
             logger.error(f"Error saving manifest for {domain}: {e}")
 
