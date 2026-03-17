@@ -64,7 +64,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         Dict avec 'success', 'data', 'llm_response', 'message'
     """
     start_time = time.time()
-    prompt_id = id_prompt or settings.PROMPT_ID
+    prompt_id = id_prompt or settings.PROMPT_ID_CARAC_PRIX
     
     api_client = HelloProAPIClient()
 
