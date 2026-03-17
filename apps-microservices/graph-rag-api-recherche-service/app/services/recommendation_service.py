@@ -1687,6 +1687,7 @@ class RecommendationService:
         liste_produit: List[Produit],
         id_categorie: str,
         parcours: str = "",
+        id_prompt: int = 112,
         request: Optional[MatchingPayloadIdProduit] = None,
     ) -> tuple:
         """
@@ -1889,8 +1890,10 @@ class RecommendationService:
         # )
 
         # 5. Fetch system prompt from HelloPro API and call Gemini
-        logging.warning("[RERANK] Fetching prompt from HelloPro API (id_prompt=112)...")
-        prompt_data = await hellopro_api_client.fetch_prompt("112")
+        logging.warning(
+            "[RERANK] Fetching prompt from HelloPro API (id_prompt=%s)...", id_prompt
+        )
+        prompt_data = await hellopro_api_client.fetch_prompt(str(id_prompt) or "112")
 
         prompt_temperature = None
         if prompt_data and prompt_data.get("contenu_prompt"):
@@ -2386,6 +2389,7 @@ class RecommendationService:
                     liste_produit,
                     id_categorie,
                     parcours,
+                    id_prompt=request.rerank.id_prompt,
                     request=request,
                 )
             )
