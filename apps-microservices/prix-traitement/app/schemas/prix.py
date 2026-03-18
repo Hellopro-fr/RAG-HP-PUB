@@ -64,7 +64,7 @@ class CaracteristiqueLotItemResult(BaseModel):
     data: Optional[List[ReponseResult]] = Field(None, description="Résultats par réponse Q1")
     raw: Optional[List[Dict[str, Any]]] = Field(None, description="Données brutes des résultats")
     errors: List[str] = Field(default_factory=list, description="Erreurs rencontrées pour cette catégorie")
-    skipped: List[str] = Field(default_factory=list, description="Réponses ignorées")
+    skipped: List[Any] = Field(default_factory=list, description="Réponses ignorées (dicts ou strings)")
     time_elapsed: Optional[float] = Field(None, description="Temps de traitement pour cette catégorie")
     message: str = Field("", description="Message informatif ou d'erreur")
 
