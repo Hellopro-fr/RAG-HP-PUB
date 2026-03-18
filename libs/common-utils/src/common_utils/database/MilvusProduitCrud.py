@@ -237,6 +237,12 @@ class MilvusProduitsCrud:
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
                 data = Utils.sanitize_record(data)
+
+                # Truncate url_images to fit the VARCHAR(4095) schema limit
+                # This field is not used in RAG search, so truncation is safe
+                if len(data.get("url_images", "")) > 4095:
+                    data["url_images"] = data["url_images"][:4095]
+
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
