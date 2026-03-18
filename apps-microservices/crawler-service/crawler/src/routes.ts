@@ -94,6 +94,10 @@ router.addDefaultHandler(
         // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
         if (!targetDomain || !urlObj.hostname.includes(targetDomain)) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            // Set structured error message for "1 seul URL crawlé" case: domain change
+            if (request.url === site) {
+                context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
             return;
         }
 
@@ -106,6 +110,10 @@ router.addDefaultHandler(
             const status = response.status();
             if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
                 log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
+                // Set structured error message for "1 seul URL crawlé" case: HTTP error on homepage
+                if (request.url === site) {
+                    context.crawlErrorMessage = `Erreur HTTP ${status}`;
+                }
                 // Delegate error tracking to UpdateChecker in update mode
                 const source = request.userData.source || '';
                 if (context.updateChecker && source) {
@@ -262,6 +270,7 @@ router.addDefaultHandler(
                         // so it is visually noticeable when a non-French homepage has French alternatives.
                         if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
                             log.error(`[ALTERNATIVE_URLS] Homepage ${url} is NOT French, but French alternatives were found: ${detectResult.alternative_urls.join(", ")}`);
+                            context.crawlErrorMessage = `Homepage non détectée en Français mais des alternatives en Français ont été trouvées : ${detectResult.alternative_urls.join(", ")}`;
                         }
 
                         // Fallback: fast URL-only check
@@ -278,6 +287,7 @@ router.addDefaultHandler(
                     }
                 } catch (apiError: any) {
                     log.error(`Detection API error for main site ${url}: ${apiError.message}`);
+                    context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
                 }
             } else {
                 // INTERNAL PAGE LOGIC WITH FALLBACK
