@@ -5,6 +5,7 @@ Conversion de la logique PHP (api.php → run_identification) en Python.
 import time
 import json
 import logging
+import asyncio
 from typing import Dict, Any, Optional, List
 
 from app.core.api_client import GeminiProvider, HelloProAPIClient
@@ -174,10 +175,14 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         
         for rep in reponses_q1_carac_prix:
             id_reponse = rep.get("id_reponse", "")
-            reponse = rep.get("reponse", "")
+            reponse = rep.get("reponse", rep.get("texte_reponse", ""))
+            if not reponse:
+                logger.warning(f"[{id_categorie}] - Réponse {id_reponse} - Aucune réponse trouvée")
+                continue
             has_data = rep.get("has_data", False)
             caracteristiques_prix_existant = rep.get("caracteristiques_prix", [])
 
+            logger.info(f"[{id_categorie}] - Réponse {id_reponse} - {reponse}")
 
             if has_data and caracteristiques_prix_existant:
                 logger.warning(f"[{id_categorie}] - Caracteristiques prix existantes pour la reponse {id_reponse} - {reponse}")
@@ -352,3 +357,357 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
     finally:
         await api_client.close()
 
+
+async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str) -> Dict[str, Any]:
+    """
+    Recherche RAG sur la source "prix" filtrée par id_categorie, 
+    formate les chunks et les envoie au LLM (Gemini) avec le prompt 114.
+    
+    Étapes :
+    1. Recherche RAG dans Milvus (source=prix, top_k=30, filtre=id_categorie)
+    2. Formate chaque chunk en texte structuré (titre, fournisseur, catégorie, texte, prix, caractéristiques)
+    3. Récupère le prompt configuré (id=114)
+    4. Injecte les chunks formatés dans le prompt et appelle Gemini
+    5. Retourne la réponse LLM
+    
+    Args:
+        texte_recherche: Texte libre pour la recherche RAG
+        id_categorie: ID de la catégorie pour filtrer les résultats
+        
+    Returns:
+        Dict avec 'success', 'reponse_llm', 'chunks_count', 'time_elapsed', 'message'
+    """
+    start_time = time.time()
+    prompt_id = settings.PROMPT_ID_QUESTIONNAIRE
+    
+    api_client = HelloProAPIClient()
+    ID_PROCESS = "37"
+    
+    try:
+        # =====================================================================
+        # ÉTAPE 1 : Recherche RAG dans Milvus (source=prix, filtre=id_categorie)
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Nom catégorie : {nom_categorie} ,  Recherche RAG: texte='{texte_recherche[:80]}...', source=prix, top_k=30")
+        
+        from app.core.search import call_search_api_async
+        
+        chunks = await call_search_api_async(
+            prompt=texte_recherche,
+            num_results=50,
+            source="prix",
+            filtre={"id_categorie": id_categorie}
+        )
+        
+        if not chunks:
+            elapsed = time.time() - start_time
+            logger.warning(f"[{id_categorie}] Aucun résultat RAG trouvé")
+            return {
+                "success": False,
+                "reponse_llm": None,
+                "chunks_count": 0,
+                "time_elapsed": elapsed,
+                "message": f"Aucun résultat RAG trouvé pour la catégorie {id_categorie}"
+            }
+        
+        logger.info(f"[{id_categorie}] {len(chunks)} chunks RAG trouvés")
+        
+        # =====================================================================
+        # ÉTAPE 2 : Formater les chunks pour le prompt
+        # =====================================================================
+        # Format basé sur adaptSearchResult (source "prix") dans script.js
+        # et le ContextBuilder dans recherche.py
+        formatted_chunks = []
+        
+        for i, chunk in enumerate(chunks):
+            meta = chunk.get("metadata", {}).get("entity", {})
+            
+            nom_produit = meta.get("nom_produit", "N/A")
+            fournisseur = meta.get("fournisseur", "N/A")
+            nom_categorie = meta.get("nom_categorie", meta.get("categorie", "N/A"))
+            text = meta.get("text", "")
+            
+            # Construction de la ligne de prix
+            prix_line = ""
+            valeur_prix = meta.get("valeur_prix", "")
+            if valeur_prix:
+                prix_parts = [str(valeur_prix)]
+                devise = meta.get("devise", "")
+                taxe = meta.get("taxe", "")
+                unite = meta.get("unite", "")
+                extras = [e for e in [devise, taxe, unite] if e]
+                if extras:
+                    prix_parts.append(f"{' '.join(extras)}")
+                prix_line = " ".join(prix_parts)
+            
+            caracteristique = meta.get("caracteristique", "")
+            
+            chunk_text = f"""Titre : {nom_produit}
+            Source : Prix
+            Fournisseur : {fournisseur}
+            Catégorie : {nom_categorie}
+            Texte : {text}
+            Prix : {prix_line}
+            Caractéristiques : {caracteristique}"""
+            
+            formatted_chunks.append(chunk_text)
+        
+        # Joindre tous les chunks avec un séparateur
+        all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
+        
+        logger.info(f"[{id_categorie}] {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars) {all_chunks_text[:100]}")
+        
+        # =====================================================================
+        # ÉTAPE 3 : Récupérer le prompt (id=114)
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Récupération du prompt (id={prompt_id})...")
+        
+        prompt_config = await get_prompt(prompt_id)
+        
+        if not prompt_config:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] Impossible de récupérer le prompt id={prompt_id}")
+            return {
+                "success": False,
+                "reponse_llm": None,
+                "chunks_count": len(chunks),
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer le prompt id={prompt_id}"
+            }
+        
+        prompt_text = prompt_config.get("contenu_prompt", "")        
+        
+        # =====================================================================
+        # ÉTAPE 4 : Construire le prompt final et appeler Gemini
+        # =====================================================================
+        # Remplacer les placeholders dans le prompt
+        final_prompt = prompt_text
+        final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
+        final_prompt = final_prompt.replace("{requete_rag}", texte_recherche)
+        final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+        
+        logger.info(f"[{id_categorie}] Prompt : {final_prompt[:100]}...")
+        logger.info(f"[{id_categorie}] Appel Gemini (model={settings.GEMINI_MODEL_NAME}, {len(final_prompt)} chars)...")
+        
+        # Utiliser GeminiProvider
+        gemini = GeminiProvider(
+            model=settings.GEMINI_MODEL_NAME
+        )
+        
+        llm_result = gemini.chat(final_prompt)
+        
+        # Log LLM usage
+        usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
+        await api_client.log_llm_usage(
+            type_ia=3,  # Gemini
+            model=settings.GEMINI_MODEL_NAME,
+            input_token=usage_metadata.get("prompt_token_count", 0),
+            output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+            id_process=ID_PROCESS,
+            origine="prix-traitement-questionnaire",
+            etat=1 if "error" not in llm_result else 2,
+            retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else "",
+            temperature=0.1
+        )
+        
+        elapsed = time.time() - start_time
+        # Vérifier si erreur LLM
+        if "error" in llm_result:
+            error_msg = f"Erreur Gemini: {llm_result.get('error', '')}"
+            logger.error(f"[{id_categorie}] {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+        
+        llm_text = llm_result.get("message", "")
+        
+        
+        logger.info(f"[{id_categorie}] Réponse Gemini reçue : {llm_text} en {elapsed:.1f}s")
+
+        parsed = extract_json_from_text(llm_text)
+        if not parsed or not isinstance(parsed, dict):
+            error_msg = f"Réponse JSON vide ou malformée pour réponse='{llm_text}'"
+            logger.error(f"[{id_categorie}] {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+
+        return {
+            "success": True,
+            "reponse": parsed,
+            "api_response": llm_result.get("api_response", {}),
+            "time_elapsed": elapsed,
+            "message": f"{len(chunks)} chunks traités en {elapsed:.1f}s"
+        }
+    
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"[{id_categorie}] Erreur inattendue dans run_questionnaire: {e}", exc_info=True)
+        return {
+            "success": False,
+            "reponse": None,
+            "api_response": llm_result.get("api_response", {}),
+            "time_elapsed": elapsed,
+            "message": f"Erreur inattendue: {str(e)}"
+        }
+    
+    finally:
+        await api_client.close()
+
+
+# =========================================================================
+# BATCH : traitement parallèle de plusieurs catégories (semaphore = 5)
+# =========================================================================
+
+# Nombre max de traitements parallèles pour le lot
+MAX_PARALLEL_CATEGORIES = 5
+
+async def _process_single_category(
+    semaphore: asyncio.Semaphore,
+    id_categorie: str,
+    id_prompt: Optional[str],
+    index: int,
+    total: int
+) -> Dict[str, Any]:
+    """
+    Traite une seule catégorie sous le contrôle du sémaphore.
+    
+    Args:
+        semaphore: Sémaphore asyncio pour limiter le parallélisme
+        id_categorie: ID de la catégorie à traiter
+        id_prompt: ID du prompt (optionnel)
+        index: Index dans le lot (pour les logs)
+        total: Nombre total dans le lot (pour les logs)
+        
+    Returns:
+        Dict avec le résultat de run_identification + id_categorie
+    """
+    async with semaphore:
+        logger.info(f"[LOT {index + 1}/{total}] Début traitement catégorie {id_categorie}")
+        try:
+            result = await run_identification(
+                id_categorie=id_categorie,
+                id_prompt=id_prompt
+            )
+            result["id_categorie"] = id_categorie
+            logger.info(f"[LOT {index + 1}/{total}] Fin catégorie {id_categorie}: success={result.get('success')}")
+            return result
+        except Exception as e:
+            logger.error(f"[LOT {index + 1}/{total}] Erreur catégorie {id_categorie}: {e}", exc_info=True)
+            return {
+                "id_categorie": id_categorie,
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [str(e)],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Erreur: {str(e)}"
+            }
+
+
+async def run_identification_lot(
+    categories: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Traitement batch de plusieurs catégories en parallèle (max 5 simultanées).
+    Basé sur le pattern asyncio.Semaphore de prix-extraction-message/prix_extractor.py.
+    
+    Args:
+        categories: Liste de dicts avec 'id_categorie' et optionnellement 'id_prompt'
+        
+    Returns:
+        Dict avec 'success', 'total', 'success_count', 'error_count', 'results', 'time_elapsed', 'message'
+    """
+    start_time = time.time()
+    total = len(categories)
+    
+    if total == 0:
+        return {
+            "success": True,
+            "total": 0,
+            "success_count": 0,
+            "error_count": 0,
+            "results": [],
+            "time_elapsed": 0.0,
+            "message": "Aucune catégorie à traiter"
+        }
+    
+    logger.info(f"[LOT] Démarrage batch: {total} catégories, {MAX_PARALLEL_CATEGORIES} en parallèle")
+    
+    # Créer le sémaphore pour limiter à MAX_PARALLEL_CATEGORIES traitements simultanés
+    semaphore = asyncio.Semaphore(MAX_PARALLEL_CATEGORIES)
+    
+    # Créer les tâches pour chaque catégorie
+    tasks = [
+        _process_single_category(
+            semaphore=semaphore,
+            id_categorie=str(cat.get("id_categorie", "")),
+            id_prompt=cat.get("id_prompt"),
+            index=i,
+            total=total
+        )
+        for i, cat in enumerate(categories)
+    ]
+    
+    # Lancer toutes les tâches en parallèle (le sémaphore contrôle la concurrence)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    elapsed = time.time() - start_time
+    
+    # Agréger les résultats
+    success_count = 0
+    error_count = 0
+    item_results = []
+    
+    for r in results:
+        if isinstance(r, Exception):
+            # Exception non capturée (ne devrait pas arriver car _process_single_category gère les exceptions)
+            error_count += 1
+            item_results.append({
+                "id_categorie": "inconnu",
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [str(r)],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Exception: {str(r)}"
+            })
+        elif isinstance(r, dict):
+            item_results.append(r)
+            if r.get("success"):
+                success_count += 1
+            else:
+                error_count += 1
+        else:
+            error_count += 1
+            item_results.append({
+                "id_categorie": "inconnu",
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [f"Résultat inattendu: {type(r)}"],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Résultat inattendu: {type(r)}"
+            })
+    
+    logger.info(f"[LOT] Batch terminé: {success_count} succès, {error_count} erreurs en {elapsed:.1f}s")
+    
+    return {
+        "success": error_count == 0,
+        "total": total,
+        "success_count": success_count,
+        "error_count": error_count,
+        "results": item_results,
+        "time_elapsed": elapsed,
+        "message": f"{total} catégories traitées ({success_count} succès, {error_count} erreurs) en {elapsed:.1f}s"
+    }
