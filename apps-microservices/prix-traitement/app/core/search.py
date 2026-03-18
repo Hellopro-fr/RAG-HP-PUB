@@ -10,7 +10,7 @@ from typing import Any, Optional, List, Dict
 # Le Dockerfile copie les modules de l'API recherche dans /app/api_recherche_lib
 # Ces imports utilisent le namespace "api_recherche_lib" au lieu de "app" pour éviter les conflits
 from api_recherche_lib.core.recherche import search_in_milvus
-from api_recherche_lib.schemas.search import SearchRequestWs, SourcesFiltre, RerankerOptions
+from api_recherche_lib.schemas.search import SearchRequestWs, SourcesFiltre, RerankerOptions, HybridSearchOptions
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,12 @@ async def call_search_api_async(
                 use_reranker=use_reranker,
                 reranker_model=reranker_model,
                 rrf=False
+            ),
+            hybrid=True,
+            hybrid_options=HybridSearchOptions(               
+                dense_limit_multiplier=5,
+                ranker_type="rrf",
+                rrf_k=60
             )
         )
 
