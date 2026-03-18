@@ -94,6 +94,10 @@ router.addDefaultHandler(
         // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
         if (!targetDomain || !urlObj.hostname.includes(targetDomain)) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            // Set structured error message for "1 seul URL crawlé" case: domain change
+            if (request.url === site) {
+                context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
             return;
         }
 
@@ -106,6 +110,10 @@ router.addDefaultHandler(
             const status = response.status();
             if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
                 log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
+                // Set structured error message for "1 seul URL crawlé" case: HTTP error on homepage
+                if (request.url === site) {
+                    context.crawlErrorMessage = `Erreur HTTP ${status}`;
+                }
                 // Delegate error tracking to UpdateChecker in update mode
                 const source = request.userData.source || '';
                 if (context.updateChecker && source) {
@@ -262,6 +270,9 @@ router.addDefaultHandler(
                             return;
                         }
                         isEnqueuingLinks = true;
+                    } else {
+                        // Main site not detected as French — set structured error for callback
+                        context.crawlErrorMessage = "Page non détectée en Français";
                     }
                 }
             } else {
