@@ -688,6 +688,33 @@ if (queueInfo) {
 // --------------------------
 
 /**
+ * Maps internal stopReason/isError codes to human-readable French messages
+ * for storage in the database column `message_erreur_crawling` (VARCHAR 250).
+ */
+const mapStopReasonToMessage = (errorCode: string): string => {
+    const ERROR_MAP: Record<string, string> = {
+        "OOM_MAX_RESTARTS": "Out Of Memory",
+        "OOM_RELAUNCH": "Out Of Memory",
+        "limitQuestionMark": "Arrêt sur paramètre (?)",
+        "limitDiez": "Arrêt sur ancre (#)",
+        "circuitBreaker": "Circuit breaker déclenché",
+        "limitErrors": "Trop d'erreurs HTTP rencontrées",
+        "limitCrawl": "Limite de 5000 URLs atteinte",
+        "limitNewUrls": "Trop de nouvelles URLs détectées",
+        "stoppedManually": "Arrêté manuellement",
+        "insufficientData": "Données insuffisantes",
+        "PAYLOAD_READ_ERROR": "Erreur lecture payload",
+    };
+
+    if (!errorCode) return "";
+    const mapped = ERROR_MAP[errorCode];
+    if (mapped) return mapped;
+
+    // Fallback: truncate to 250 chars for VARCHAR(250)
+    return `Erreur inconnue : ${errorCode}`.substring(0, 250);
+};
+
+/**
  * Reusable Shutdown Logic
  * Handles persistence and cleanup on both Success and Signals (SIGTERM/SIGINT)
  */
@@ -731,6 +758,24 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // Get stats from instance if available, else usage functions
     const finalStats = context.crawlerInstance?.stats.state || statsFromFunctions;
 
+    // --- Compute message_erreur_crawling ---
+    // Priority: context.crawlErrorMessage (set by routes.ts for specific cases) > mapStopReasonToMessage
+    let messageErreurCrawling = context.crawlErrorMessage || "";
+
+    if (!messageErreurCrawling && isError) {
+        messageErreurCrawling = mapStopReasonToMessage(isError);
+    }
+
+    // Special case: OOM_RELAUNCH
+    if (reason === 'OOM_RELAUNCH' && !messageErreurCrawling) {
+        messageErreurCrawling = "Out Of Memory";
+    }
+
+    // Truncate to 250 chars (VARCHAR limit)
+    if (messageErreurCrawling.length > 250) {
+        messageErreurCrawling = messageErreurCrawling.substring(0, 250);
+    }
+
 
     // 3. Write Payloads
     const payload = {
@@ -740,7 +785,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         isFinished: isFinished,
         method: method,
         isError: isError,
-        storagePath: storagePath
+        storagePath: storagePath,
+        message_erreur_crawling: messageErreurCrawling || null
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');

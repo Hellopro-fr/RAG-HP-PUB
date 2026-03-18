@@ -48,5 +48,6 @@ export const context = {
             maxAbsNew: 20
         }
     },
-    stopReason: ""
+    stopReason: "",
+    crawlErrorMessage: ""
 };

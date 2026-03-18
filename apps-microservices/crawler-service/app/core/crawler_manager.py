@@ -52,6 +52,33 @@ class CrawlerManager:
     This class is now stateless, using Redis as the source of truth for job status.
     It maintains a small in-memory dict of active process handles for this specific replica.
     """
+
+    # Maps internal error codes to human-readable French messages
+    # for storage in the database column `message_erreur_crawling` (VARCHAR 250).
+    ERROR_MESSAGE_MAP = {
+        "OOM_MAX_RESTARTS": "Out Of Memory",
+        "OOM_RELAUNCH": "Out Of Memory",
+        "limitQuestionMark": "Arrêt sur paramètre (?)",
+        "limitDiez": "Arrêt sur ancre (#)",
+        "circuitBreaker": "Circuit breaker déclenché",
+        "limitErrors": "Trop d'erreurs HTTP rencontrées",
+        "limitCrawl": "Limite de 5000 URLs atteinte",
+        "limitNewUrls": "Trop de nouvelles URLs détectées",
+        "stoppedManually": "Arrêté manuellement",
+        "insufficientData": "Données insuffisantes",
+        "PAYLOAD_READ_ERROR": "Erreur lecture payload",
+    }
+
+    @staticmethod
+    def _map_error_to_message(is_error: str, exit_code: int = 0) -> str:
+        """Maps internal error codes to human-readable French messages for DB storage."""
+        if not is_error:
+            return ""
+        msg = CrawlerManager.ERROR_MESSAGE_MAP.get(is_error, "")
+        if not msg:
+            msg = f"Erreur inconnue : {is_error}"
+        return msg[:250]  # Truncate for VARCHAR(250)
+
     def __init__(self):
         # This dictionary ONLY tracks processes running on THIS replica.
         # The global state is in Redis.
@@ -315,6 +342,15 @@ class CrawlerManager:
                 logger.warning(f"Failed to include update report for '{crawl_id}': {e}")
         # --- END: Update Mode Report Inclusion ---
 
+        # --- START: Ensure message_erreur_crawling is present ---
+        # The TypeScript crawler writes this field in _callback_payload.json.
+        # If absent (e.g., older crawler version), apply Python-side fallback mapping.
+        if "message_erreur_crawling" not in params:
+            is_error = params.get("isError", "")
+            if is_error:
+                params["message_erreur_crawling"] = self._map_error_to_message(str(is_error))
+        # --- END: Ensure message_erreur_crawling is present ---
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(str(callback_url), params=params, timeout=30.0)
@@ -324,7 +360,18 @@ class CrawlerManager:
 
     async def _send_failure_webhook(self, url: str, crawl_id: str, domain: str, exit_code: int, crawl_mode: str = "standard"):
         # We process failures for both standard and update modes now
-        params = {"crawl_id": crawl_id, "domain": domain, "exit_code": exit_code, "timestamp": datetime.utcnow().isoformat()}
+        # Determine message_erreur_crawling from context
+        error_message = ""
+        if exit_code == -1:
+            error_message = "Out Of Memory"  # Special exit code for OOM max restarts or shutdown
+        elif exit_code == 3:
+            error_message = "Out Of Memory"  # OOM_RELAUNCH exit code
+        
+        params = {
+            "crawl_id": crawl_id, "domain": domain, "exit_code": exit_code,
+            "timestamp": datetime.utcnow().isoformat(),
+            "message_erreur_crawling": error_message
+        }
         
         try:
             async with httpx.AsyncClient() as client:
@@ -386,7 +433,8 @@ class CrawlerManager:
             "success": urls_crawled,
             "failed": error_urls,
             "stored_files_count": urls_crawled,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
+            "message_erreur_crawling": self._map_error_to_message(is_error) if is_error else ""
         }
         
         try:
