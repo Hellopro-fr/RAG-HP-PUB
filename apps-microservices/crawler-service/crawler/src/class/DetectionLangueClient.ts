@@ -83,6 +83,7 @@ export class DetectionLangueClient {
      *      "nlp_confirmed"                         -> "nlp_confirmed"
      */
     static extractPrimaryMethod(method: string): string {
+        if (!method) return "";
         const parts = method.split("+");
         const HTML_METHODS = ["langHtml", "matchMeta", "matchHttpEquiv"];
         const htmlMethod = parts.find((p) => HTML_METHODS.includes(p));
@@ -90,21 +91,15 @@ export class DetectionLangueClient {
     }
 
     /**
-     * Returns true if the stored method is URL-based or NLP-only,
+     * Returns true if the stored method is NOT an HTML-based method,
      * meaning forced_method validation won't work on internal pages
      * and NLP must be used instead.
+     *
+     * Uses a whitelist of the 3 HTML methods (closed set) rather than
+     * a blacklist of non-HTML methods (open-ended, fragile).
      */
     static requiresNlpValidation(method: string): boolean {
-        const URL_OR_NLP_METHODS = [
-            "direct_match",
-            "pattern_match_path",
-            "pattern_match_query",
-            "nlp_confirmed",
-            "nlp_soft_confirmed",
-            "nlp_only",
-            "french_lexical_signal",
-            "alternative_link_validated",
-        ];
-        return URL_OR_NLP_METHODS.includes(method);
+        const HTML_METHODS = ["langHtml", "matchMeta", "matchHttpEquiv"];
+        return !HTML_METHODS.includes(method);
     }
 }

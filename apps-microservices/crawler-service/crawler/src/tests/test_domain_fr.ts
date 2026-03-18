@@ -24,6 +24,8 @@ async function runTests() {
         { input: "pattern_match_path+nlp_soft_confirmed", expected: "pattern_match_path" },
         { input: "nlp_confirmed", expected: "nlp_confirmed" },
         { input: "direct_match", expected: "direct_match" },
+        // Edge case: empty/undefined method guard
+        { input: "", expected: "" },
     ];
 
     for (const test of methodCases) {
@@ -38,7 +40,7 @@ async function runTests() {
     console.log("\n--- Test 1b: requiresNlpValidation ---");
 
     const nlpValidationCases = [
-        // HTML-based methods → forced_method works, no NLP needed
+        // HTML-based methods (whitelist) → forced_method works, no NLP needed
         { input: "langHtml", expected: false },
         { input: "matchMeta", expected: false },
         { input: "matchHttpEquiv", expected: false },
@@ -51,6 +53,11 @@ async function runTests() {
         { input: "nlp_soft_confirmed", expected: true },
         { input: "french_lexical_signal", expected: true },
         { input: "alternative_link_validated", expected: true },
+        // Edge cases: nlp_override_* and unknown methods also need NLP (whitelist approach)
+        { input: "nlp_override_langHtml", expected: true },
+        { input: "no_redirect", expected: true },
+        { input: "some_future_method", expected: true },
+        { input: "", expected: true },
     ];
 
     for (const test of nlpValidationCases) {

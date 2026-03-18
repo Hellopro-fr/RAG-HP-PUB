@@ -258,31 +258,43 @@ router.addDefaultHandler(
 
                     if (detectResult.ok) {
                         const primaryMethod = DetectionLangueClient.extractPrimaryMethod(detectResult.method);
-                        frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
-                        if (frenchDetectionMethod instanceof Error) {
-                            log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
-                            await stopCrawler(crawler, "Failed to store French detection method");
-                            return;
-                        }
-                        isEnqueuingLinks = true;
-                    } else {
-                        // TODO: Implement alternative_urls handling — for now, log as error
-                        // so it is visually noticeable when a non-French homepage has French alternatives.
-                        if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
-                            log.error(`[ALTERNATIVE_URLS] Homepage ${url} is NOT French, but French alternatives were found: ${detectResult.alternative_urls.join(", ")}`);
-                            context.crawlErrorMessage = `Homepage non détectée en Français mais des alternatives en Français ont été trouvées : ${detectResult.alternative_urls.join(", ")}`;
-                        }
-
-                        // Fallback: fast URL-only check
-                        const checkUrlResult = await detectionClient.checkUrl(url);
-                        if (checkUrlResult.ok) {
-                            frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrlResult.method);
+                        if (!primaryMethod) {
+                            log.error(`API returned ok=true but empty method for ${url}. Cannot store detection method.`);
+                        } else {
+                            frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
                             if (frenchDetectionMethod instanceof Error) {
                                 log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
                                 await stopCrawler(crawler, "Failed to store French detection method");
                                 return;
                             }
                             isEnqueuingLinks = true;
+                        }
+                    } else {
+                        // Implement alternative_urls handling
+                        if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                            log.error(`[ALTERNATIVE_URLS] Homepage ${url} is NOT French, but French alternatives were found: ${detectResult.alternative_urls.join(", ")}`);
+                            context.crawlErrorMessage = `Homepage non détectée en Français mais des alternatives en Français ont été trouvées : ${detectResult.alternative_urls.join(", ")}`;
+                        }
+
+                        // Only fall back to URL check if NLP didn't explicitly reject.
+                        // When NLP analyzed the content and said "not French", a URL pattern
+                        // like .fr TLD should not override that verdict.
+                        const nlpRejected = detectResult.method.includes("nlp_not_confirmed")
+                            || detectResult.method.includes("nlp_override");
+
+                        if (!nlpRejected) {
+                            const checkUrlResult = await detectionClient.checkUrl(url);
+                            if (checkUrlResult.ok) {
+                                frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrlResult.method);
+                                if (frenchDetectionMethod instanceof Error) {
+                                    log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
+                                    await stopCrawler(crawler, "Failed to store French detection method");
+                                    return;
+                                }
+                                isEnqueuingLinks = true;
+                                // Clear alternative_urls error since crawl is proceeding via URL check
+                                context.crawlErrorMessage = undefined;
+                            }
                         }
                     }
                 } catch (apiError: any) {
@@ -302,12 +314,15 @@ router.addDefaultHandler(
                     try {
                         const autoCheck = await detectionClient.detect(url, content, {
                             mode: "simple",
+                            proxyUrl: proxyUrl ?? undefined,
                         });
 
                         if (autoCheck.ok) {
                             const primaryMethod = DetectionLangueClient.extractPrimaryMethod(autoCheck.method);
-                            methodOrError = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
-                            log.info(`Auto-detected and saved method: ${primaryMethod}`);
+                            if (primaryMethod) {
+                                methodOrError = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
+                                log.info(`Auto-detected and saved method: ${primaryMethod}`);
+                            }
                         } else {
                             // Try URL check fallback
                             const checkUrlResult = await detectionClient.checkUrl(url);
@@ -339,6 +354,7 @@ router.addDefaultHandler(
                             forcedMethod: needsNlp ? undefined : frenchDetectionMethod,
                             mode: "simple",
                             useNlpDetection: needsNlp,
+                            proxyUrl: proxyUrl ?? undefined,
                         });
 
                         if (detectResult.ok) {
@@ -609,6 +625,7 @@ router.addDefaultHandler(
                     log.info(`[UpdateChecker] ${result.action}: ${result.url} (not_french)`);
                 }
 
+                if (!content) content = await processPage(page, request.loadedUrl, log);
                 let dataset = await Dataset.open("nfr-" + targetDomain);
                 await dataset.pushData({ url, content });
                 await requestQueue.markRequestHandled(request);
