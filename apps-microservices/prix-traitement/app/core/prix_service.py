@@ -5,6 +5,7 @@ Conversion de la logique PHP (api.php → run_identification) en Python.
 import time
 import json
 import logging
+import asyncio
 from typing import Dict, Any, Optional, List
 
 from app.core.api_client import GeminiProvider, HelloProAPIClient
@@ -559,3 +560,154 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
     
     finally:
         await api_client.close()
+
+
+# =========================================================================
+# BATCH : traitement parallèle de plusieurs catégories (semaphore = 5)
+# =========================================================================
+
+# Nombre max de traitements parallèles pour le lot
+MAX_PARALLEL_CATEGORIES = 5
+
+async def _process_single_category(
+    semaphore: asyncio.Semaphore,
+    id_categorie: str,
+    id_prompt: Optional[str],
+    index: int,
+    total: int
+) -> Dict[str, Any]:
+    """
+    Traite une seule catégorie sous le contrôle du sémaphore.
+    
+    Args:
+        semaphore: Sémaphore asyncio pour limiter le parallélisme
+        id_categorie: ID de la catégorie à traiter
+        id_prompt: ID du prompt (optionnel)
+        index: Index dans le lot (pour les logs)
+        total: Nombre total dans le lot (pour les logs)
+        
+    Returns:
+        Dict avec le résultat de run_identification + id_categorie
+    """
+    async with semaphore:
+        logger.info(f"[LOT {index + 1}/{total}] Début traitement catégorie {id_categorie}")
+        try:
+            result = await run_identification(
+                id_categorie=id_categorie,
+                id_prompt=id_prompt
+            )
+            result["id_categorie"] = id_categorie
+            logger.info(f"[LOT {index + 1}/{total}] Fin catégorie {id_categorie}: success={result.get('success')}")
+            return result
+        except Exception as e:
+            logger.error(f"[LOT {index + 1}/{total}] Erreur catégorie {id_categorie}: {e}", exc_info=True)
+            return {
+                "id_categorie": id_categorie,
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [str(e)],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Erreur: {str(e)}"
+            }
+
+
+async def run_identification_lot(
+    categories: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Traitement batch de plusieurs catégories en parallèle (max 5 simultanées).
+    Basé sur le pattern asyncio.Semaphore de prix-extraction-message/prix_extractor.py.
+    
+    Args:
+        categories: Liste de dicts avec 'id_categorie' et optionnellement 'id_prompt'
+        
+    Returns:
+        Dict avec 'success', 'total', 'success_count', 'error_count', 'results', 'time_elapsed', 'message'
+    """
+    start_time = time.time()
+    total = len(categories)
+    
+    if total == 0:
+        return {
+            "success": True,
+            "total": 0,
+            "success_count": 0,
+            "error_count": 0,
+            "results": [],
+            "time_elapsed": 0.0,
+            "message": "Aucune catégorie à traiter"
+        }
+    
+    logger.info(f"[LOT] Démarrage batch: {total} catégories, {MAX_PARALLEL_CATEGORIES} en parallèle")
+    
+    # Créer le sémaphore pour limiter à MAX_PARALLEL_CATEGORIES traitements simultanés
+    semaphore = asyncio.Semaphore(MAX_PARALLEL_CATEGORIES)
+    
+    # Créer les tâches pour chaque catégorie
+    tasks = [
+        _process_single_category(
+            semaphore=semaphore,
+            id_categorie=str(cat.get("id_categorie", "")),
+            id_prompt=cat.get("id_prompt"),
+            index=i,
+            total=total
+        )
+        for i, cat in enumerate(categories)
+    ]
+    
+    # Lancer toutes les tâches en parallèle (le sémaphore contrôle la concurrence)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    elapsed = time.time() - start_time
+    
+    # Agréger les résultats
+    success_count = 0
+    error_count = 0
+    item_results = []
+    
+    for r in results:
+        if isinstance(r, Exception):
+            # Exception non capturée (ne devrait pas arriver car _process_single_category gère les exceptions)
+            error_count += 1
+            item_results.append({
+                "id_categorie": "inconnu",
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [str(r)],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Exception: {str(r)}"
+            })
+        elif isinstance(r, dict):
+            item_results.append(r)
+            if r.get("success"):
+                success_count += 1
+            else:
+                error_count += 1
+        else:
+            error_count += 1
+            item_results.append({
+                "id_categorie": "inconnu",
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [f"Résultat inattendu: {type(r)}"],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Résultat inattendu: {type(r)}"
+            })
+    
+    logger.info(f"[LOT] Batch terminé: {success_count} succès, {error_count} erreurs en {elapsed:.1f}s")
+    
+    return {
+        "success": error_count == 0,
+        "total": total,
+        "success_count": success_count,
+        "error_count": error_count,
+        "results": item_results,
+        "time_elapsed": elapsed,
+        "message": f"{total} catégories traitées ({success_count} succès, {error_count} erreurs) en {elapsed:.1f}s"
+    }

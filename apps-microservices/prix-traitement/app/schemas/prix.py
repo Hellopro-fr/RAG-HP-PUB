@@ -51,3 +51,31 @@ class QuestionnaireResponse(BaseModel):
     time_elapsed: Optional[float] = Field(None, description="Temps de traitement en secondes")
     message: str = Field("", description="Message informatif ou d'erreur")
 
+
+class CaracteristiqueLotRequest(BaseModel):
+    """Requête pour le traitement batch des caractéristiques prix"""
+    categories: List[CaracteristiqueRequest] = Field(..., description="Liste des catégories à traiter")
+
+
+class CaracteristiqueLotItemResult(BaseModel):
+    """Résultat du traitement d'une catégorie dans le lot"""
+    id_categorie: str = Field(..., description="ID de la catégorie traitée")
+    success: bool = Field(..., description="Indique si le traitement de cette catégorie a réussi")
+    data: Optional[List[ReponseResult]] = Field(None, description="Résultats par réponse Q1")
+    raw: Optional[List[Dict[str, Any]]] = Field(None, description="Données brutes des résultats")
+    errors: List[str] = Field(default_factory=list, description="Erreurs rencontrées pour cette catégorie")
+    skipped: List[str] = Field(default_factory=list, description="Réponses ignorées")
+    time_elapsed: Optional[float] = Field(None, description="Temps de traitement pour cette catégorie")
+    message: str = Field("", description="Message informatif ou d'erreur")
+
+
+class CaracteristiqueLotResponse(BaseModel):
+    """Réponse de l'endpoint /prix/caracteristique-lot"""
+    success: bool = Field(..., description="Indique si le traitement global a réussi (toutes les catégories)")
+    total: int = Field(0, description="Nombre total de catégories dans le lot")
+    success_count: int = Field(0, description="Nombre de catégories traitées avec succès")
+    error_count: int = Field(0, description="Nombre de catégories en erreur")
+    results: List[CaracteristiqueLotItemResult] = Field(default_factory=list, description="Résultats par catégorie")
+    time_elapsed: Optional[float] = Field(None, description="Temps de traitement total du lot")
+    message: str = Field("", description="Message informatif global")
+
