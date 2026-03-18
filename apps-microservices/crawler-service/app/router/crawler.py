@@ -319,25 +319,6 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
         logger.error(f"Error archiving crawl '{crawl_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred during archiving.")
 
-@router.get("/archive/{crawl_id}")
-async def get_archived_crawl(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
-    """
-    Returns the archive status for a crawl job.
-    To download the results of an archived crawl, use GET /results/{crawl_id}
-    which will automatically retrieve the archive from GCS via the download daemon.
-    """
-    crawl_id = job_info['crawl_id']
-    job_status = job_info.get('status')
-    return {
-        "crawl_id": crawl_id,
-        "status": job_status,
-        "archived": job_status == "archived",
-        "message": "Use GET /results/{crawl_id}?include=dataset to download. "
-                   "Archived crawls are automatically retrieved from GCS."
-                   if job_status == "archived"
-                   else f"Crawl is in '{job_status}' state, not archived."
-    }
-
 @router.post("/reconcile-jobs")
 async def reconcile_jobs():
     """
