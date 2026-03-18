@@ -293,7 +293,7 @@ router.addDefaultHandler(
                                 }
                                 isEnqueuingLinks = true;
                                 // Clear alternative_urls error since crawl is proceeding via URL check
-                                context.crawlErrorMessage = undefined;
+                                context.crawlErrorMessage = "";
                             }
                         }
                     }
