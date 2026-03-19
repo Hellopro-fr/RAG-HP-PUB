@@ -1,11 +1,18 @@
 import axios, { AxiosInstance } from "axios";
 
+export interface AlternativeUrl {
+    url: string;
+    method: string;
+    reliability: "high" | "medium" | "low";
+    validated: boolean;
+}
+
 export interface DetectionResult {
     ok: boolean;
     method: string;
     url?: string;
     confidence?: number;
-    alternative_urls?: string[];
+    alternative_urls?: AlternativeUrl[];
     error?: string;
 }
 

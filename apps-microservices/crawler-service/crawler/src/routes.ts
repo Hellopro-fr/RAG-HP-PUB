@@ -278,10 +278,12 @@ router.addDefaultHandler(
                             isEnqueuingLinks = true;
                         }
                     } else {
-                        // Implement alternative_urls handling
+                        // The API returns alternatives sorted by reliability (high > medium > low).
+                        // We only use the best one (first element).
                         if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
-                            log.error(`[ALTERNATIVE_URLS] Homepage ${url} is NOT French, but French alternatives were found: ${detectResult.alternative_urls.join(", ")}`);
-                            context.crawlErrorMessage = `Homepage non détectée en Français mais des alternatives en Français ont été trouvées : ${detectResult.alternative_urls.join(", ")}`;
+                            const best = detectResult.alternative_urls[0];
+                            log.error(`[ALTERNATIVE_URL] Homepage ${url} is NOT French, but a French alternative was found: ${best.url} (method: ${best.method}, reliability: ${best.reliability}, validated: ${best.validated})`);
+                            context.crawlErrorMessage = `Homepage non détectée en Français mais une alternative en Français a été trouvée : ${best.url} (fiabilité: ${best.reliability})`;
                         }
 
                         // Only fall back to URL check if NLP didn't explicitly reject.
