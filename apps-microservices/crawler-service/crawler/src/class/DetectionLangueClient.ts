@@ -102,4 +102,33 @@ export class DetectionLangueClient {
         const HTML_METHODS = ["langHtml", "matchMeta", "matchHttpEquiv"];
         return !HTML_METHODS.includes(method);
     }
+
+    /**
+     * Extract the language query parameter from a URL.
+     * Used for session-based i18n sites where the homepage has ?lang=fr
+     * (method: pattern_match_query) but internal pages don't carry the param.
+     *
+     * Checks common language param names: lang, locale, language, hl.
+     * Returns { key, value } if found with a French value, null otherwise.
+     *
+     * e.g. "http://www.awassos.com/index.php?lang=fr" -> { key: "lang", value: "fr" }
+     */
+    static extractLanguageQueryParam(
+        url: string
+    ): { key: string; value: string } | null {
+        try {
+            const urlObj = new URL(url);
+            const LANGUAGE_PARAMS = ["lang", "locale", "language", "hl"];
+
+            for (const param of LANGUAGE_PARAMS) {
+                const value = urlObj.searchParams.get(param);
+                if (value && /^fr/i.test(value)) {
+                    return { key: param, value };
+                }
+            }
+        } catch {
+            // Invalid URL — ignore
+        }
+        return null;
+    }
 }

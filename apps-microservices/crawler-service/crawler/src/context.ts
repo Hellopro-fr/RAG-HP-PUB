@@ -49,5 +49,8 @@ export const context = {
         }
     },
     stopReason: "",
-    crawlErrorMessage: ""
+    crawlErrorMessage: "",
+    // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
+    // Populated when homepage detection method is pattern_match_query
+    languageQueryParam: null as { key: string; value: string } | null
 };

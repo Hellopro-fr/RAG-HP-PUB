@@ -267,6 +267,14 @@ router.addDefaultHandler(
                                 await stopCrawler(crawler, "Failed to store French detection method");
                                 return;
                             }
+                            // For session-based i18n: extract ?lang=fr from start URL
+                            // so we can propagate it to discovered internal URLs
+                            if (primaryMethod === "pattern_match_query") {
+                                context.languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
+                                if (context.languageQueryParam) {
+                                    log.info(`Stored language query param: ${context.languageQueryParam.key}=${context.languageQueryParam.value} (will propagate to discovered URLs)`);
+                                }
+                            }
                             isEnqueuingLinks = true;
                         }
                     } else {
@@ -290,6 +298,13 @@ router.addDefaultHandler(
                                     log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
                                     await stopCrawler(crawler, "Failed to store French detection method");
                                     return;
+                                }
+                                // For session-based i18n: extract ?lang=fr from start URL
+                                if (checkUrlResult.method === "pattern_match_query") {
+                                    context.languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
+                                    if (context.languageQueryParam) {
+                                        log.info(`Stored language query param: ${context.languageQueryParam.key}=${context.languageQueryParam.value} (will propagate to discovered URLs)`);
+                                    }
                                 }
                                 isEnqueuingLinks = true;
                                 // Clear alternative_urls error since crawl is proceeding via URL check
@@ -539,6 +554,25 @@ router.addDefaultHandler(
                                 skipDiez,
                                 parameters
                             );
+                        }
+
+                        // 2b. Session-based i18n: propagate language query param
+                        // When the homepage was detected via ?lang=fr (pattern_match_query),
+                        // internal URLs often don't carry that param. Append it so the server
+                        // serves French content instead of the default language.
+                        if (context.languageQueryParam) {
+                            try {
+                                const reqUrl = new URL(request.url);
+                                if (!reqUrl.searchParams.has(context.languageQueryParam.key)) {
+                                    reqUrl.searchParams.set(
+                                        context.languageQueryParam.key,
+                                        context.languageQueryParam.value
+                                    );
+                                    request.url = reqUrl.toString();
+                                }
+                            } catch {
+                                // Invalid URL — skip param injection
+                            }
                         }
 
                         // 3. Security Checks & Forbidden Params
