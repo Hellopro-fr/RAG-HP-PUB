@@ -615,6 +615,21 @@ services:
       - services-net
     init: true
 
+  api-comparaison-texte-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-comparaison-texte/Dockerfile
+    container_name: api-comparaison-texte-service
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "8998:8998"
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   mysql:
     image: mysql:8.0
     container_name: mysql
