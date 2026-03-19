@@ -42,8 +42,8 @@ const now = new Date().toISOString().replace(/:/g, "-");
 const args: Record<string, string> = {};
 process.argv.slice(2).forEach(arg => {
     if (arg.startsWith('--')) {
-        const [key, value] = arg.replace(/^--/, '').split('=');
-        args[key] = value || 'true';
+        const [key, ...rest] = arg.replace(/^--/, '').split('=');
+        args[key] = rest.join('=') || 'true';
     }
 });
 
