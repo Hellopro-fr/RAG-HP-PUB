@@ -6,7 +6,7 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
-from app.models.schemas import DetectionMode, DetectionResponse
+from app.models.schemas import DetectionMode, DetectionResponse, AlternativeUrl
 from app.services.language_detector import LanguageDetector
 from app.services.redirect_tracker import RedirectTracker, fetch_html
 from app.core.config import settings
@@ -232,21 +232,21 @@ class DomainFR:
 
     async def _validate_alternative_urls(
         self,
-        candidates: list[tuple[str, str]]
-    ) -> list[str]:
+        candidates: list[dict]
+    ) -> list[AlternativeUrl]:
         """
         Validates candidate URLs in parallel with retry.
 
-        For each candidate (resolved_url, raw_href):
-        1. Tries to validate the resolved URL
+        For each candidate:
+        1. Tries to validate the resolved URL (HTTP 200 + text/html)
         2. If failed and raw_href is relative (no leading / or http),
            retries with / prepended (matches PHP needEditUrl behavior)
 
         Args:
-            candidates: List of (resolved_url, raw_href) tuples
+            candidates: List of dicts with keys: url, raw_href, method, reliability
 
         Returns:
-            List of validated URLs
+            List of AlternativeUrl with validated=True/False
         """
         if not candidates:
             return []
@@ -254,14 +254,18 @@ class DomainFR:
         semaphore = asyncio.Semaphore(3)
         base_domain = self.get_domain_from_url(self.homepage)
 
-        async def validate_with_retry(
-            resolved_url: str,
-            raw_href: str
-        ) -> Optional[str]:
+        async def validate_with_retry(candidate: dict) -> AlternativeUrl:
+            resolved_url = candidate['url']
+            raw_href = candidate['raw_href']
             async with semaphore:
                 # First attempt: validate the resolved URL
                 if await self._validate_single_url(resolved_url):
-                    return resolved_url
+                    return AlternativeUrl(
+                        url=resolved_url,
+                        method=candidate['method'],
+                        reliability=candidate['reliability'],
+                        validated=True
+                    )
 
                 # Retry with / prepended (PHP needEditUrl behavior)
                 if (
@@ -278,128 +282,176 @@ class DomainFR:
                             base_domain, link_domain
                         ):
                             if await self._validate_single_url(retry_url):
-                                return retry_url
+                                return AlternativeUrl(
+                                    url=retry_url,
+                                    method=candidate['method'],
+                                    reliability=candidate['reliability'],
+                                    validated=True
+                                )
 
-                return None
+                # Validation failed — return as non-validated
+                return AlternativeUrl(
+                    url=resolved_url,
+                    method=candidate['method'],
+                    reliability='low',
+                    validated=False
+                )
 
         results = await asyncio.gather(*[
-            validate_with_retry(url, href)
-            for url, href in candidates
+            validate_with_retry(c) for c in candidates
         ])
 
-        return [url for url in results if url is not None]
+        return [r for r in results if r is not None]
 
-    async def detect_alternative_languages(self, content: str) -> list[str]:
+    @staticmethod
+    def _compare_without_scheme(url1: str, url2: str) -> bool:
         """
-        Recherche des liens vers une version française et les valide.
+        Compare two URLs ignoring scheme (http vs https) and trailing slashes.
+        Port of PHP compareWithoutScheme().
+        """
+        try:
+            p1 = urlparse(url1)
+            p2 = urlparse(url2)
+            return (
+                (p1.hostname or '').lower() == (p2.hostname or '').lower()
+                and (p1.path or '/').rstrip('/') == (p2.path or '/').rstrip('/')
+                and (p1.query or '') == (p2.query or '')
+                and (p1.fragment or '') == (p2.fragment or '')
+            )
+        except Exception:
+            return url1 == url2
 
-        Logique de confiance (alignée sur le comportement PHP) :
-        - Hreflang : trusted sans validation HTTP (déclaration explicite du webmaster)
-        - data-lang / data-gt-lang : validé via HTTP
-        - Liens <a> avec /fr/ : validé via HTTP
-        - Options <option> avec fr : validé via HTTP
+    def _is_self_url(self, resolved: Optional[str]) -> bool:
+        """Check if a resolved URL points to the same page being tested."""
+        if not resolved:
+            return True
+        return self._compare_without_scheme(resolved, self.homepage)
 
-        Patterns portés depuis PHP detectOptionsLanguages() :
-        - Hreflang prioritaire (^fr) + secondaire (contient fr, e.g., be-fr, ca-fr)
-        - data-lang ET data-gt-lang (Google Translate)
-        - Retry avec / préfixé si la validation échoue (PHP needEditUrl)
+    async def detect_alternative_languages(self, content: str) -> list[AlternativeUrl]:
+        """
+        Recherche des liens vers une version française, les valide et les tague.
+
+        Collecte les alternatives depuis TOUTES les méthodes de découverte,
+        chacune taguée avec sa méthode et son niveau de fiabilité.
+        Les résultats sont triés par fiabilité (high > medium > low)
+        et dédupliqués de manière agressive (normalisation d'URL).
+
+        Niveaux de fiabilité :
+        - high   : hreflang (déclaration explicite du webmaster, trusted sans HTTP)
+        - medium : data-lang/data-gt-lang, liens <a>, options (validés via HTTP)
+        - low    : non validé (échec HTTP ou pas de validation)
+
+        L'URL en cours de test (self.homepage) est exclue des résultats.
         """
         if not content:
             return []
 
-        trusted_urls = []
-        candidates = []
-        seen_urls = set()
         base_domain = self.get_domain_from_url(self.homepage)
+        seen_urls = set()
+        all_alternatives: list[AlternativeUrl] = []
+        candidates_to_validate: list[dict] = []
 
-        def _add_trusted(resolved: Optional[str]):
-            if resolved and resolved not in seen_urls:
-                link_domain = self.get_domain_from_url(resolved)
-                if self._check_base_domain(base_domain, link_domain):
-                    trusted_urls.append(resolved)
-                    seen_urls.add(resolved)
+        def _resolve_and_check(href: str) -> Optional[str]:
+            """Resolve a href and check domain match + not self URL."""
+            resolved = self.resolve_url(self.homepage, href)
+            if not resolved or self._is_self_url(resolved):
+                return None
+            link_domain = self.get_domain_from_url(resolved)
+            if self._check_base_domain(base_domain, link_domain):
+                return resolved
+            return None
 
-        def _add_candidate(resolved: Optional[str], raw_href: str):
-            if resolved and resolved not in seen_urls:
-                link_domain = self.get_domain_from_url(resolved)
-                if self._check_base_domain(base_domain, link_domain):
-                    candidates.append((resolved, raw_href))
-                    seen_urls.add(resolved)
+        def _normalize_url(url: str) -> str:
+            """Normalize URL for deduplication (lowercase host, strip trailing /)."""
+            try:
+                p = urlparse(url)
+                base = f"{p.scheme}://{(p.hostname or '').lower()}{(p.path or '/').rstrip('/')}"
+                return base + (f"?{p.query}" if p.query else "")
+            except Exception:
+                return url
+
+        def _add_trusted(resolved: str, method: str):
+            """Add a trusted (hreflang) alternative — no HTTP validation needed."""
+            normalized = _normalize_url(resolved)
+            if normalized not in seen_urls:
+                seen_urls.add(normalized)
+                all_alternatives.append(AlternativeUrl(
+                    url=resolved,
+                    method=method,
+                    reliability='high',
+                    validated=True
+                ))
+
+        def _queue_candidate(resolved: str, raw_href: str, method: str):
+            """Queue a candidate for HTTP validation."""
+            normalized = _normalize_url(resolved)
+            if normalized not in seen_urls:
+                seen_urls.add(normalized)
+                candidates_to_validate.append({
+                    'url': resolved,
+                    'raw_href': raw_href,
+                    'method': method,
+                    'reliability': 'medium'
+                })
 
         try:
             soup = BeautifulSoup(content, 'lxml')
 
-            # 1. Hreflang prioritaire : commence par "fr" (trusted)
-            for link in soup.find_all(
-                attrs={'hreflang': re.compile(r'^fr', re.IGNORECASE)}
-            ):
-                href = link.get('href')
-                if href and href != '#':
-                    _add_trusted(self.resolve_url(self.homepage, href))
+            # 1. Hreflang (trusted, high reliability)
+            # Prioritaire: starts with "fr" (fr, fr-FR, fr-BE)
+            # Secondaire: contains "fr" anywhere (be-fr, ca-fr)
+            for regex in [re.compile(r'^fr', re.IGNORECASE), re.compile(r'fr', re.IGNORECASE)]:
+                for link in soup.find_all(attrs={'hreflang': regex}):
+                    href = link.get('href')
+                    if href and href != '#':
+                        resolved = _resolve_and_check(href)
+                        if resolved:
+                            _add_trusted(resolved, 'hreflang')
 
-            # 2. Hreflang secondaire : contient "fr" (e.g., be-fr, ca-fr) (trusted)
-            for link in soup.find_all(
-                attrs={'hreflang': re.compile(r'fr', re.IGNORECASE)}
-            ):
-                href = link.get('href')
-                if href and href != '#':
-                    _add_trusted(self.resolve_url(self.homepage, href))
-
-            # 3. data-lang et data-gt-lang (need validation)
+            # 2. data-lang et data-gt-lang (need validation, medium reliability)
             for attr_name in ['data-lang', 'data-gt-lang']:
-                # Prioritaire : commence par "fr"
-                for elem in soup.find_all(
-                    attrs={attr_name: re.compile(r'^fr', re.IGNORECASE)}
-                ):
-                    href = elem.get('href')
-                    if href and href != '#':
-                        _add_candidate(
-                            self.resolve_url(self.homepage, href), href
-                        )
-                # Secondaire : contient "fr"
-                for elem in soup.find_all(
-                    attrs={attr_name: re.compile(r'fr', re.IGNORECASE)}
-                ):
-                    href = elem.get('href')
-                    if href and href != '#':
-                        _add_candidate(
-                            self.resolve_url(self.homepage, href), href
-                        )
+                method_name = attr_name.replace('-', '_')
+                for regex in [re.compile(r'^fr', re.IGNORECASE), re.compile(r'fr', re.IGNORECASE)]:
+                    for elem in soup.find_all(attrs={attr_name: regex}):
+                        href = elem.get('href')
+                        if href and href != '#':
+                            resolved = _resolve_and_check(href)
+                            if resolved:
+                                _queue_candidate(resolved, href, method_name)
 
-            # 4. Liens <a> avec /fr/ ou lang=fr (need validation)
+            # 3. Liens <a> avec /fr/ ou lang=fr (need validation, medium reliability)
             fr_pattern = re.compile(
                 r'/(fr|fr-fr|fr_fr)(/|$)|lang=fr', re.IGNORECASE
             )
             for link in soup.find_all('a', href=True):
                 href = link['href']
                 if fr_pattern.search(href) and 'mailto:' not in href:
-                    _add_candidate(
-                        self.resolve_url(self.homepage, href), href
-                    )
+                    resolved = _resolve_and_check(href)
+                    if resolved:
+                        _queue_candidate(resolved, href, 'link_pattern')
 
-            # 5. Options <option> avec value fr (need validation)
+            # 4. Options <option> avec value fr (need validation, medium reliability)
             for option in soup.find_all('option'):
                 value = option.get('value', '')
                 if re.search(
                     r'(^|/)fr(/|$)|lang=fr', value, re.IGNORECASE
                 ):
-                    _add_candidate(
-                        self.resolve_url(self.homepage, value), value
-                    )
+                    resolved = _resolve_and_check(value)
+                    if resolved:
+                        _queue_candidate(resolved, value, 'option_tag')
 
         except Exception:
             pass
 
         # Validate candidates via HTTP (parallel, max 3 concurrent)
-        validated = await self._validate_alternative_urls(candidates)
+        validated_results = await self._validate_alternative_urls(candidates_to_validate)
+        all_alternatives.extend(validated_results)
 
-        # Combine: trusted hreflang first, then validated candidates
-        all_urls = list(trusted_urls)
-        for url in validated:
-            if url not in all_urls:
-                all_urls.append(url)
+        # Sort by reliability: high > medium > low
+        reliability_order = {'high': 0, 'medium': 1, 'low': 2}
+        all_alternatives.sort(key=lambda a: reliability_order.get(a.reliability, 3))
 
-        return all_urls[:5]
+        return all_alternatives[:10]
     
     async def check_page_if_french(
         self,
@@ -620,13 +672,16 @@ class DomainFR:
             )
         
         # Cas 6 : Liens alternatifs français validés/trusted trouvés
-        if alternatives:
+        # Only consider alternatives that are trusted (hreflang) or validated via HTTP
+        reliable_alternatives = [a for a in alternatives if a.validated]
+        if reliable_alternatives:
+            best = reliable_alternatives[0]
             return DetectionResponse(
                 ok=True,
-                url=alternatives[0],
-                method='alternative_link_validated',
-                alternative_urls=alternatives[1:] if len(alternatives) > 1 else [],
-                confidence=0.8
+                url=best.url,
+                method=f'alternative_{best.method}',
+                alternative_urls=alternatives,
+                confidence=0.8 if best.reliability == 'high' else 0.7
             )
         
         # Cas 7 : NLP disponible mais ne confirme pas, malgré indicateurs HTML/URL

@@ -46,6 +46,23 @@ class DetectionRequest(BaseModel):
     }
 
 
+class AlternativeUrl(BaseModel):
+    """URL alternative française détectée avec métadonnées de découverte"""
+    url: str = Field(..., description="URL de la version française")
+    method: str = Field(
+        ...,
+        description="Méthode de découverte (hreflang, data_lang, data_gt_lang, link_pattern, option_tag)"
+    )
+    reliability: str = Field(
+        ...,
+        description="Niveau de fiabilité: high (hreflang), medium (data-lang, validated links), low (non-validated)"
+    )
+    validated: bool = Field(
+        ...,
+        description="True si l'URL a été validée via HTTP (200 + text/html)"
+    )
+
+
 class DetectionResponse(BaseModel):
     """Réponse de détection pour une URL"""
     ok: bool = Field(..., description="True si français détecté")
@@ -55,9 +72,9 @@ class DetectionResponse(BaseModel):
         default=None,
         description="Score de confiance NLP (0-1)"
     )
-    alternative_urls: list[str] = Field(
+    alternative_urls: list[AlternativeUrl] = Field(
         default=[],
-        description="URLs françaises alternatives trouvées"
+        description="URLs françaises alternatives trouvées, triées par fiabilité"
     )
     error: Optional[str] = Field(
         default=None,
