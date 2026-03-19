@@ -539,6 +539,11 @@ router.addDefaultHandler(
                             "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
                         ];
 
+                        // Strip empty fragment (#) — "page#" and "page" are identical content
+                        if (request.url.endsWith('#')) {
+                            request.url = request.url.slice(0, -1);
+                        }
+
                         // Always strip the "Always Remove" list first
                         request.url = processUrl(request.url, true, false, { toRemove: alwaysRemove });
 
