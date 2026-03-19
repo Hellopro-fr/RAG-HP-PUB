@@ -387,7 +387,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         # =====================================================================
         # ÉTAPE 1 : Recherche RAG dans Milvus (source=prix, filtre=id_categorie)
         # =====================================================================
-        logger.info(f"[{id_categorie}] Nom catégorie : {nom_categorie} ,  Recherche RAG: texte='{texte_recherche[:80]}...', source=prix, top_k=30")
+        logger.info(f"[{id_categorie}] Nom catégorie : {nom_categorie} ,  Recherche RAG: texte='{texte_recherche}...', source=prix, top_k=50")
         
         from app.core.search import call_search_api_async
         
