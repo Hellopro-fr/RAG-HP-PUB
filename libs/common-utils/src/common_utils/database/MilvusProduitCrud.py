@@ -237,6 +237,13 @@ class MilvusProduitsCrud:
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
                 data = Utils.sanitize_record(data)
+
+                # Truncate url_images to fit the VARCHAR(4095) schema limit (bytes, not chars)
+                # This field is not used in RAG search, so truncation is safe
+                url_images = data.get("url_images", "")
+                if len(url_images.encode("utf-8")) > 4095:
+                    data["url_images"] = url_images.encode("utf-8")[:4095].decode("utf-8", errors="ignore")
+
                 sanitized_batch.append(data)
 
             result = self.collection.insert(sanitized_batch)
@@ -261,11 +268,13 @@ class MilvusProduitsCrud:
                 f"[{model_key}][Produits] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {datas}")
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Produits] insertion de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {datas}")
+            raise
 
     def update_produits(
         self,
@@ -391,12 +400,12 @@ class MilvusProduitsCrud:
             self.logger.error(
                 f"[{model_key}][Produits] Erreur Milvus lors de mise à jour : {e}"
             )
-            return {"status": "error", "message": f"Erreur Milvus: {str(e)}"}
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Produits] Mise à jour : {e}", exc_info=True
             )
-            return {"status": "error", "message": f"Erreur: {str(e)}"}
+            raise
 
     def delete_produits(self, data: Dict[str, Any]) -> Dict[str, Any]:
         model_config = ModelConfig()
@@ -433,10 +442,12 @@ class MilvusProduitsCrud:
             self.logger.error(
                 f"[{model_key}][Produits] Erreur Milvus lors de la suppression : {e}"
             )
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Produits] Suppression : {e}", exc_info=True
             )
+            raise
 
     def delete_produits_by_ids(self, ids: List[int]) -> Dict[str, Any]:
         """
@@ -484,12 +495,12 @@ class MilvusProduitsCrud:
             self.logger.error(
                 f"[{model_key}][Produits] Erreur Milvus lors de la suppression : {e}"
             )
-            return {"status": "error", "message": f"Erreur Milvus: {str(e)}"}
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Produits] Suppression : {e}", exc_info=True
             )
-            return {"status": "error", "message": f"Erreur: {str(e)}"}
+            raise
 
     def delete_produits_by_id_produit_and_source(
         self, id_produit: str, source: str
@@ -545,12 +556,12 @@ class MilvusProduitsCrud:
             self.logger.error(
                 f"[{model_key}][Produits] Erreur Milvus lors de la suppression : {e}"
             )
-            return {"status": "error", "message": f"Erreur Milvus: {str(e)}"}
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Produits] Suppression : {e}", exc_info=True
             )
-            return {"status": "error", "message": f"Erreur: {str(e)}"}
+            raise
 
     def get_produit(self, id_produit: str) -> Dict[str, Any]:
         list_id_produit = [id_produit]
@@ -597,11 +608,13 @@ class MilvusProduitsCrud:
             self.logger.error(
                 f"[{model_key}][Produit] Erreur Milvus lors de la récupération : {e}"
             )
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Produit] Erreur de Récupèration du produit : {e}",
                 exc_info=True,
             )
+            raise
 
     def get_produit_by_field(
         self, field_name: str, search_value: str
@@ -643,8 +656,10 @@ class MilvusProduitsCrud:
             self.logger.error(
                 f"[{model_key}][Produit] Erreur Milvus lors de la récupération : {e}"
             )
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][Produit] Erreur de Récupèration du produit : {e}",
                 exc_info=True,
             )
+            raise

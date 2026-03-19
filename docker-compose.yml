@@ -223,7 +223,7 @@ services:
       - EMBEDDING_BATCH_SIZE=8
       - TRITON_MAX_CONCURRENT_DEFAULT=1
       - TOTAL_MAX_CONCURRENT_REQUESTS=10
-      - HIGH_PRIORITY_SERVICES=api-recherche-service
+      - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
     # depends_on:
     #   triton-server:
@@ -256,7 +256,7 @@ services:
     profiles: ["app"] # Profile for the main application stack
     environment:
       - TOTAL_MAX_CONCURRENT_REQUESTS=200
-      - HIGH_PRIORITY_SERVICES=api-recherche-service
+      - HIGH_PRIORITY_SERVICES=api-recherche-service,prix-traitement
       - MEDIUM_PRIORITY_SERVICES=api-classification-service
       - DB_BATCH_SIZE=16
       - DB_MAX_CONCURRENT_ZILLIZ_DEFAULT=2
@@ -1285,6 +1285,8 @@ services:
     volumes:
       - crawler_data:/app/storage
       - ./apps-microservices/crawler-service/crawler_archives:/app/archives
+      - ./apps-microservices/crawler-service/crawler_download_requests:/app/download_requests
+      - ./apps-microservices/crawler-service/crawler_download_results:/app/download_results
     env_file:
       - .env
     environment:
@@ -1292,6 +1294,7 @@ services:
       - MAX_CONCURRENT_CRAWLS=1
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - DETECTION_LANGUE_API_URL=http://api-detection-langue-fr-service:8999
     deploy:
       replicas: 1
       resources:
@@ -2017,6 +2020,24 @@ services:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking
     deploy:
       replicas: 1
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  prix-traitement:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/prix-traitement/Dockerfile
+    profiles: ["prix-service"]
+    restart: unless-stopped
+    ports:
+      - "8591:8591"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      SERVICE_NAME: prix-traitement
+    env_file:
+      - .env
     networks:
       - services-net
     logging: *logging_defaults

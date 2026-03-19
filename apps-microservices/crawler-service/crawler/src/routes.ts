@@ -14,7 +14,7 @@ import {
     routerDefaultHandler,
     stopCrawler,
 } from "./functions.js";
-import { DomainFR } from "./class/DomainFR.js";
+import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 
 export const router = createPlaywrightRouter();
@@ -54,7 +54,7 @@ const FORBIDDEN_PARAMS = [
     'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
 ];
 
-const domainFR = new DomainFR("");
+const detectionClient = new DetectionLangueClient();
 
 router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
@@ -94,6 +94,10 @@ router.addDefaultHandler(
         // e.g. target="myshop.com", loaded="blog.myshop.com" -> ALLOWED
         if (!targetDomain || !urlObj.hostname.includes(targetDomain)) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            // Set structured error message for "1 seul URL crawlé" case: domain change
+            if (request.url === site) {
+                context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
             return;
         }
 
@@ -106,6 +110,10 @@ router.addDefaultHandler(
             const status = response.status();
             if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
                 log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
+                // Set structured error message for "1 seul URL crawlé" case: HTTP error on homepage
+                if (request.url === site) {
+                    context.crawlErrorMessage = `Erreur HTTP ${status}`;
+                }
                 // Delegate error tracking to UpdateChecker in update mode
                 const source = request.userData.source || '';
                 if (context.updateChecker && source) {
@@ -241,53 +249,105 @@ router.addDefaultHandler(
             if (isMainSite) {
                 // Process normally and store the method
                 content = await processPage(page, request.loadedUrl, log);
-                domainFR.homepage = url;
-                const checkPageIfFrench = await domainFR.checkPageIfFrench(content, false);
 
-                if (checkPageIfFrench["ok"]) {
-                    frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkPageIfFrench["method"]);
-                    if (frenchDetectionMethod instanceof Error) {
-                        log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
-                        await stopCrawler(crawler, "Failed to store French detection method");
-                        return;
-                    }
-                    isEnqueuingLinks = true;
-                } else {
-                    const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
-                    if (checkUrl["ok"]) {
-                        frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrl["method"]);
-                        if (frenchDetectionMethod instanceof Error) {
-                            log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
-                            await stopCrawler(crawler, "Failed to store French detection method");
-                            return;
+                try {
+                    const detectResult = await detectionClient.detect(url, content, {
+                        mode: "complete",
+                        proxyUrl: proxyUrl ?? undefined,
+                    });
+
+                    if (detectResult.ok) {
+                        const primaryMethod = DetectionLangueClient.extractPrimaryMethod(detectResult.method);
+                        if (!primaryMethod) {
+                            log.error(`API returned ok=true but empty method for ${url}. Cannot store detection method.`);
+                        } else {
+                            frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
+                            if (frenchDetectionMethod instanceof Error) {
+                                log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
+                                await stopCrawler(crawler, "Failed to store French detection method");
+                                return;
+                            }
+                            // For session-based i18n: extract ?lang=fr from start URL
+                            // so we can propagate it to discovered internal URLs
+                            if (primaryMethod === "pattern_match_query") {
+                                context.languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
+                                if (context.languageQueryParam) {
+                                    log.info(`Stored language query param: ${context.languageQueryParam.key}=${context.languageQueryParam.value} (will propagate to discovered URLs)`);
+                                }
+                            }
+                            isEnqueuingLinks = true;
                         }
-                        isEnqueuingLinks = true;
+                    } else {
+                        // Implement alternative_urls handling
+                        if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                            log.error(`[ALTERNATIVE_URLS] Homepage ${url} is NOT French, but French alternatives were found: ${detectResult.alternative_urls.join(", ")}`);
+                            context.crawlErrorMessage = `Homepage non détectée en Français mais des alternatives en Français ont été trouvées : ${detectResult.alternative_urls.join(", ")}`;
+                        }
+
+                        // Only fall back to URL check if NLP didn't explicitly reject.
+                        // When NLP analyzed the content and said "not French", a URL pattern
+                        // like .fr TLD should not override that verdict.
+                        const nlpRejected = detectResult.method.includes("nlp_not_confirmed")
+                            || detectResult.method.includes("nlp_override");
+
+                        if (!nlpRejected) {
+                            const checkUrlResult = await detectionClient.checkUrl(url);
+                            if (checkUrlResult.ok) {
+                                frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrlResult.method);
+                                if (frenchDetectionMethod instanceof Error) {
+                                    log.error(`Failed to store French detection method: ${frenchDetectionMethod.message}`);
+                                    await stopCrawler(crawler, "Failed to store French detection method");
+                                    return;
+                                }
+                                // For session-based i18n: extract ?lang=fr from start URL
+                                if (checkUrlResult.method === "pattern_match_query") {
+                                    context.languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
+                                    if (context.languageQueryParam) {
+                                        log.info(`Stored language query param: ${context.languageQueryParam.key}=${context.languageQueryParam.value} (will propagate to discovered URLs)`);
+                                    }
+                                }
+                                isEnqueuingLinks = true;
+                                // Clear alternative_urls error since crawl is proceeding via URL check
+                                context.crawlErrorMessage = "";
+                            }
+                        }
                     }
+                } catch (apiError: any) {
+                    log.error(`Detection API error for main site ${url}: ${apiError.message}`);
+                    context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
                 }
             } else {
                 // INTERNAL PAGE LOGIC WITH FALLBACK
                 let methodOrError = manageFrenchDetectionMethod(targetDomain as string);
-                
+
                 if (methodOrError instanceof Error) {
                     log.warning(`French detection method not found in storage. Attempting auto-detection on current page.`);
-                    
-                    // Fallback: Detect on current content
+
+                    // Fallback: Detect on current content via API
                     if (!content) content = await processPage(page, request.loadedUrl, log);
-                    
-                    // Use global instance (no forced method) to auto-detect
-                    domainFR.homepage = url; 
-                    const autoCheck = await domainFR.checkPageIfFrench(content, false); 
-                    
-                    if (autoCheck.ok) {
-                        methodOrError = manageFrenchDetectionMethod(targetDomain as string, autoCheck.method);
-                        log.info(`Auto-detected and saved method: ${autoCheck.method}`);
-                    } else {
-                        // Try URL check fallback
-                        const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
-                        if (checkUrl.ok) {
-                             methodOrError = manageFrenchDetectionMethod(targetDomain as string, checkUrl.method);
-                             log.info(`Auto-detected (URL) and saved method: ${checkUrl.method}`);
+
+                    try {
+                        const autoCheck = await detectionClient.detect(url, content, {
+                            mode: "simple",
+                            proxyUrl: proxyUrl ?? undefined,
+                        });
+
+                        if (autoCheck.ok) {
+                            const primaryMethod = DetectionLangueClient.extractPrimaryMethod(autoCheck.method);
+                            if (primaryMethod) {
+                                methodOrError = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
+                                log.info(`Auto-detected and saved method: ${primaryMethod}`);
+                            }
+                        } else {
+                            // Try URL check fallback
+                            const checkUrlResult = await detectionClient.checkUrl(url);
+                            if (checkUrlResult.ok) {
+                                methodOrError = manageFrenchDetectionMethod(targetDomain as string, checkUrlResult.method);
+                                log.info(`Auto-detected (URL) and saved method: ${checkUrlResult.method}`);
+                            }
                         }
+                    } catch (apiError: any) {
+                        log.error(`Detection API error during auto-detection for ${url}: ${apiError.message}`);
                     }
                 }
 
@@ -296,18 +356,35 @@ router.addDefaultHandler(
                     isEnqueuingLinks = false;
                 } else {
                     frenchDetectionMethod = methodOrError as string;
-                    
-                    if (!content) content = await processPage(page, request.loadedUrl, log);
-                    const domainFRWithMethod = new DomainFR(url, frenchDetectionMethod);
-                    const checkPageIfFrench = await domainFRWithMethod.checkPageIfFrench(content, false);
 
-                    if (checkPageIfFrench["ok"]) {
-                        isEnqueuingLinks = true;
-                    } else {
-                        const checkUrl = await DomainFR.checkUrl(url, false, proxyUrl);
-                        if (checkUrl["ok"] && checkUrl["method"] === frenchDetectionMethod) {
+                    if (!content) content = await processPage(page, request.loadedUrl, log);
+
+                    try {
+                        const needsNlp = DetectionLangueClient.requiresNlpValidation(frenchDetectionMethod);
+
+                        // When stored method is URL-based or NLP-only, forced_method cannot
+                        // validate HTML tags → use NLP to verify actual content instead.
+                        // When stored method is HTML-based, use forced_method for fast validation.
+                        const detectResult = await detectionClient.detect(url, content, {
+                            forcedMethod: needsNlp ? undefined : frenchDetectionMethod,
+                            mode: "simple",
+                            useNlpDetection: needsNlp,
+                            proxyUrl: proxyUrl ?? undefined,
+                        });
+
+                        if (detectResult.ok) {
                             isEnqueuingLinks = true;
+                        } else if (!needsNlp) {
+                            // Fallback: URL-only check with method match
+                            // Only relevant for HTML-based methods where forced_method
+                            // might fail but URL pattern still matches.
+                            const checkUrlResult = await detectionClient.checkUrl(url);
+                            if (checkUrlResult.ok && checkUrlResult.method === frenchDetectionMethod) {
+                                isEnqueuingLinks = true;
+                            }
                         }
+                    } catch (apiError: any) {
+                        log.error(`Detection API error for internal page ${url}: ${apiError.message}`);
                     }
                 }
             }
@@ -462,6 +539,11 @@ router.addDefaultHandler(
                             "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
                         ];
 
+                        // Strip empty fragment (#) — "page#" and "page" are identical content
+                        if (request.url.endsWith('#')) {
+                            request.url = request.url.slice(0, -1);
+                        }
+
                         // Always strip the "Always Remove" list first
                         request.url = processUrl(request.url, true, false, { toRemove: alwaysRemove });
 
@@ -477,6 +559,25 @@ router.addDefaultHandler(
                                 skipDiez,
                                 parameters
                             );
+                        }
+
+                        // 2b. Session-based i18n: propagate language query param
+                        // When the homepage was detected via ?lang=fr (pattern_match_query),
+                        // internal URLs often don't carry that param. Append it so the server
+                        // serves French content instead of the default language.
+                        if (context.languageQueryParam) {
+                            try {
+                                const reqUrl = new URL(request.url);
+                                if (!reqUrl.searchParams.has(context.languageQueryParam.key)) {
+                                    reqUrl.searchParams.set(
+                                        context.languageQueryParam.key,
+                                        context.languageQueryParam.value
+                                    );
+                                    request.url = reqUrl.toString();
+                                }
+                            } catch {
+                                // Invalid URL — skip param injection
+                            }
                         }
 
                         // 3. Security Checks & Forbidden Params
@@ -563,6 +664,7 @@ router.addDefaultHandler(
                     log.info(`[UpdateChecker] ${result.action}: ${result.url} (not_french)`);
                 }
 
+                if (!content) content = await processPage(page, request.loadedUrl, log);
                 let dataset = await Dataset.open("nfr-" + targetDomain);
                 await dataset.pushData({ url, content });
                 await requestQueue.markRequestHandled(request);

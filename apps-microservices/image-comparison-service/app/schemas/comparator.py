@@ -41,6 +41,10 @@ class SimilarityPair(BaseModel):
     score: float = Field(..., description="Similarity score (0-100)")
     method_details: Optional[Dict[str, float]] = Field(None, description="Breakdown of scores")
 
+class FailedImage(BaseModel):
+    id: str
+    url: Optional[HttpUrl] = None
+
 class ComparisonResult(BaseModel):
     job_id: str
     status: str
@@ -49,7 +53,7 @@ class ComparisonResult(BaseModel):
     total_images: int
     matches_found: int
     similar_pairs: List[SimilarityPair]
-    failed_images: List[str] = Field(default_factory=list)
+    failed_images: List[FailedImage] = Field(default_factory=list)
 
 class JobStatus(BaseModel):
     job_id: str

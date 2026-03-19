@@ -175,6 +175,42 @@ class HelloProApiClient:
             )
             return []
 
+    async def fetch_prompt(
+        self, id_prompt: str
+    ) -> Dict[str, Any]:
+        """
+        Fetch a prompt content and temperature from HelloPro API.
+        POST https://api.hellopro.fr/api/v2/index.php
+
+        Returns dict with 'contenu_prompt' and 'temperature', or empty dict on error.
+        """
+        payload = {
+            "etape": "prompt",
+            "field": "info",
+            "action": "get",
+            "data": {
+                "id_prompt": str(id_prompt),
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.post(
+                    HELLOPRO_CARAC_URL,
+                    json=payload,
+                    headers=self._get_headers(),
+                )
+                response.raise_for_status()
+                data = response.json()
+                # Response format: { "code": 200, "response": { "id_prompt": "...", "contenu_prompt": "...", "temperature": "..." } }
+                return data.get("response", {})
+        except Exception as e:
+            logger.error(
+                f"HelloPro fetch_prompt error for id_prompt {id_prompt}: {e}",
+                exc_info=True,
+            )
+            return {}
+
 
 # Singleton instance
 hellopro_api_client = HelloProApiClient()

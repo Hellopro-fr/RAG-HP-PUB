@@ -272,13 +272,13 @@ class MilvusPrixProduitsCrud:
                 f"[{model_key}][PrixProduits] Erreur Milvus lors de l'insertion : {e}"
             )
             self.logger.error(f"Data : {datas}")
-            return {"status": "error", "message": f"Erreur Milvus: {str(e)}"}
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][PrixProduits] insertion de batch : {e}", exc_info=True
             )
             self.logger.error(f"Data : {datas}")
-            return {"status": "error", "message": f"Erreur: {str(e)}"}
+            raise
 
     def get_prix_produit(self, id_produit: int) -> Dict[str, Any]:
         list_id_produit = [id_produit]
@@ -333,10 +333,10 @@ class MilvusPrixProduitsCrud:
             self.logger.error(
                 f"[{model_key}][PrixProduit] Erreur Milvus lors de la récupération : {e}"
             )
-            return {"status": "error", "message": f"Erreur Milvus: {str(e)}"}
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][PrixProduit] Erreur de Récupération du prix produit : {e}",
                 exc_info=True,
             )
-            return {"status": "error", "message": f"Erreur: {str(e)}"}
+            raise

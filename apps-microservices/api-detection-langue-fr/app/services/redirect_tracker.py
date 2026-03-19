@@ -45,10 +45,12 @@ class RedirectTracker:
         """
         self.redirects = []
         self.final_url = None
-        
+
+        # Use explicit proxy, or fall back to APIFY_PROXY from settings
+        effective_proxy = proxy or settings.APIFY_PROXY
         transport = None
-        if proxy:
-            transport = httpx.AsyncHTTPTransport(proxy=proxy)
+        if effective_proxy:
+            transport = httpx.AsyncHTTPTransport(proxy=effective_proxy)
         
         try:
             async with httpx.AsyncClient(
@@ -105,7 +107,10 @@ class RedirectTracker:
             }
         
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(
+                timeout=30,
+                proxy=settings.APIFY_PROXY
+            ) as client:
                 response = await client.post(
                     settings.PEMAVOR_API_URL,
                     json={'urls': urls},
@@ -125,14 +130,16 @@ class RedirectTracker:
 async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
     """
     Récupère le contenu HTML d'une URL.
-    
+
     Utilise des headers réalistes de navigateur pour éviter le blocage
     par les WAF (Cloudflare, etc.) et les protections anti-bot.
     Inclut un mécanisme de retry avec des stratégies différentes.
     """
+    # Use explicit proxy, or fall back to APIFY_PROXY from settings
+    effective_proxy = proxy or settings.APIFY_PROXY
     transport = None
-    if proxy:
-        transport = httpx.AsyncHTTPTransport(proxy=proxy)
+    if effective_proxy:
+        transport = httpx.AsyncHTTPTransport(proxy=effective_proxy)
     
     # Stratégie 1 : Requête normale avec headers réalistes
     try:
@@ -222,7 +229,7 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
     logger.info(f"Tentative de scraping Playwright pour {url}")
     try:
         from app.services.scraper import scrape_html
-        scraped_content = await scrape_html(url)
+        scraped_content = await scrape_html(url, proxy=effective_proxy)
         if scraped_content:
             return scraped_content
     except Exception as e:

@@ -4,7 +4,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-async def scrape_html(url: str, timeout: int = 30) -> Optional[str]:
+async def scrape_html(url: str, timeout: int = 30, proxy: Optional[str] = None) -> Optional[str]:
     """
     Récupère le contenu HTML d'une URL en utilisant un navigateur headless (Playwright).
 
@@ -14,6 +14,7 @@ async def scrape_html(url: str, timeout: int = 30) -> Optional[str]:
     Args:
         url: URL à scraper
         timeout: Timeout en secondes pour le chargement de la page
+        proxy: Proxy URL (format httpx: http://user:pass@host:port)
 
     Returns:
         Le contenu HTML rendu par le navigateur, ou None en cas d'erreur.
@@ -27,19 +28,36 @@ async def scrape_html(url: str, timeout: int = 30) -> Optional[str]:
         )
         return None
 
+    # Convert httpx proxy URL to Playwright format if provided
+    playwright_proxy = None
+    if proxy:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(proxy)
+            playwright_proxy = {"server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}"}
+            if parsed.username:
+                playwright_proxy["username"] = parsed.username
+            if parsed.password:
+                playwright_proxy["password"] = parsed.password
+        except Exception:
+            logger.warning(f"Failed to parse proxy URL for Playwright: {proxy}")
+
     browser = None
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
+            launch_args = {
+                "headless": True,
+                "args": [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-gpu',
                     '--disable-blink-features=AutomationControlled',
-                ]
-            )
+                ],
+            }
+            if playwright_proxy:
+                launch_args["proxy"] = playwright_proxy
+            browser = await p.chromium.launch(**launch_args)
 
             context = await browser.new_context(
                 user_agent=(
