@@ -41,17 +41,33 @@ const ignoredExtensions = [
     "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml",
 ].join("|");
 
-// Ported Forbidden Params from V3
+// FORBIDDEN_PARAMS: If ANY of these params are present, the entire URL is REJECTED (not crawled).
+// Use only for params that indicate a page variant with NO unique content (filters, sorts, pagination).
+// Params that are just noise (tracking, session) belong in alwaysRemove instead (strip param, keep URL).
+// NOTE: Uses startsWith matching — 'size_' blocks 'size_42', 'size_xl', etc.
 const FORBIDDEN_PARAMS = [
-    'order', 'sort', 'dir', 'limit', 'resultsPerPage',
+    // === SORTING & ORDERING ===
+    'sort', 'sort_by', 'order', 'dir',
+
+    // === PAGINATION ===
+    'limit', 'resultsPerPage', 'per_page', 'items',
+    'offset', 'start',
+
+    // === DISPLAY / VIEW MODE ===
+    'view', 'mode', 'display', 'productListView',
+
+    // === SEARCH (user-initiated, infinite variations) ===
+    'search', 'query',
+
+    // === PRICE & FILTER FACETS ===
     'filter', 'price', 'price_min', 'price_max',
-    'id_category', 'categoryId', 'productListView',
-    'q', 'search', 'query', 'offset', 'start',
-    'view', 'mode', 'display', 'per_page', 'items',
+
+    // === DATE FILTERS ===
     'year', 'month', 'day', 'date', 'from', 'to',
-    'ref', 'referrer', 'source', 'sort_by',
+
+    // === FACET PREFIXES (startsWith match) ===
     'size_', 'taille_', 'color_', 'couleur_',
-    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
+    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_',
 ];
 
 const detectionClient = new DetectionLangueClient();
@@ -467,9 +483,10 @@ router.addDefaultHandler(
                         // This ensures we strip parameters BEFORE checking forbidden list
                         const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
                         
-                        // List parameters always to remove
+                        // alwaysRemove: These params are STRIPPED from the URL, but the URL is still crawled.
+                        // Use for noise params (tracking, session, actions) that don't change page content.
                         const alwaysRemove = [
-                            // === CART & WISHLIST ===
+                            // === CART, WISHLIST & USER ACTIONS ===
                             "add-to-cart", "add_to_cart", "addtocart",
                             "add-to-compare", "add_to_compare",
                             "add-to-wishlist", "add_to_wishlist", "addtowishlist",
@@ -477,7 +494,7 @@ router.addDefaultHandler(
                             "remove_compare", "remove_item",
                             "quantity", "qty",
 
-                            // === TRACKING UTM (Marketing) ===
+                            // === UTM (Marketing) ===
                             "utm_source", "utm_medium", "utm_campaign",
                             "utm_content", "utm_term", "utm_id",
                             "utm_referrer", "utm_name",
@@ -489,7 +506,7 @@ router.addDefaultHandler(
                             // === GOOGLE ADS & ANALYTICS ===
                             "gclid", "gclsrc", "dclid",
                             "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
-                            "_ga", "_gid", "_gat",
+                            "_ga", "_gid", "_gat", "_gl",
 
                             // === HUBSPOT ===
                             "hsa_acc", "hsa_cam", "hsa_grp",
@@ -504,41 +521,34 @@ router.addDefaultHandler(
                             "twclid", "li_fat_id", "msclkid",
                             "igshid", "tt_medium", "tt_content",
 
-                            // === WORDPRESS ===
-                            "_wpnonce", "preview", "preview_id",
-                            "preview_nonce", "et_blog",
+                            // === OTHER TRACKING ===
+                            "_openstat", "yclid", "wickedid", "_kx", "epik", "pp",
+                            "click_id", "transaction_id",
+                            "ref", "referrer", "source", "medium", "campaign",
 
-                            // === PRESTASHOP ===
-                            "id_product", "id_category", "pid",
-                            "controller", "id_product_attribute",
-                            "isolang", "id_lang",
-
-                            // === SHOPIFY ===
-                            "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
-                            "pr_ref_pid", "pr_seq",
-                            "variant", "selling_plan",
-
-                            // === MAGENTO ===
-                            "SID", "___store", "___from_store",
-
-                            // === SESSION & TRACKING ===
+                            // === SESSION ===
                             "sessionid", "session_id", "PHPSESSID",
-                            "sid", "s_id",
-                            "_gl", "ref", "referrer",
+                            "sid", "s_id", "SID",
 
                             // === AFFILIATE & MARKETING ===
                             "aff_id", "affiliate", "partner",
-                            "coupon", "discount", "promo",
-                            "voucher",
+                            "coupon", "discount", "promo", "voucher",
 
-                            // === AUTRES TRACKING ===
-                            "click_id", "transaction_id",
-                            "source", "medium", "campaign",
+                            // === CMS INTERNALS (noise, not navigation) ===
+                            // WordPress
+                            "_wpnonce", "preview", "preview_id", "preview_nonce", "et_blog",
+                            // PrestaShop (non-routing params only)
+                            "id_product_attribute", "isolang", "id_lang",
+                            // Shopify (recommendation tracking only)
+                            "pr_prod_strat", "pr_rec_id", "pr_rec_pid", "pr_ref_pid", "pr_seq",
+                            "selling_plan",
+                            // Magento
+                            "___store", "___from_store",
 
-                            // === FILTRES SOUVENT INUTILES ===
+                            // === DEDUP HELPERS (same content, different presentation) ===
                             "view", "mode", "display",
+                            "order", "sort", "resultsPerPage", "productListView",
                             "timestamp", "random", "nocache",
-                            "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
                         ];
 
                         // Strip empty fragment (#) — "page#" and "page" are identical content
