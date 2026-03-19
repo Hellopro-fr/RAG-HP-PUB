@@ -1,5 +1,4 @@
 import httpx
-import ssl
 import logging
 from typing import Optional
 from app.core.config import settings
@@ -7,34 +6,15 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-# Headers réalistes pour éviter le blocage par les WAF/bot protection
-BROWSER_HEADERS = {
-    'User-Agent': settings.USER_AGENT,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate',
-    'Cache-Control': 'no-cache',
-    'Pragma': 'no-cache',
-    'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-    'Sec-Ch-Ua-Mobile': '?0',
-    'Sec-Ch-Ua-Platform': '"Windows"',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-    'Upgrade-Insecure-Requests': '1',
-}
-
-
 class RedirectTracker:
     """
     Gère le suivi des redirections HTTP avec fallback.
     """
-    
+
     def __init__(self):
         self.redirects: list = []
         self.final_url: Optional[str] = None
-    
+
     async def get_url_redirection(
         self,
         url: str,
@@ -42,58 +22,53 @@ class RedirectTracker:
     ) -> dict:
         """
         Suit les redirections et retourne l'URL finale avec les métadonnées.
+
+        Utilise Playwright pour suivre les redirections (cohérent avec fetch_html).
         """
         self.redirects = []
         self.final_url = None
 
-        # Use explicit proxy, or fall back to APIFY_PROXY from settings
         effective_proxy = proxy or settings.APIFY_PROXY
-        transport = None
-        if effective_proxy:
-            transport = httpx.AsyncHTTPTransport(proxy=effective_proxy)
-        
-        try:
-            async with httpx.AsyncClient(
-                timeout=settings.HTTP_TIMEOUT,
-                follow_redirects=True,
-                transport=transport,
-                headers=BROWSER_HEADERS,
-                verify=False  # Certains sites ont des certificats SSL invalides
-            ) as client:
-                response = await client.get(url)
-                
-                # Collecter les redirections
-                for hist in response.history:
-                    self.redirects.append({
-                        'url': str(hist.url),
-                        'status_code': hist.status_code
-                    })
-                
-                self.final_url = str(response.url)
-                
-                return {
-                    'success': True,
-                    'status_code': response.status_code,
-                    'final_url': self.final_url,
-                    'content_type': response.headers.get('content-type', ''),
-                    'redirects': self.redirects
-                }
-                
-        except httpx.TimeoutException:
+        if not effective_proxy:
+            logger.error(f"Proxy obligatoire pour le suivi de redirections: {url}")
             return {
                 'success': False,
                 'status_code': 0,
-                'error': 'timeout',
+                'error': 'Proxy non configuré (APIFY_PROXY ou proxy_url requis)',
                 'final_url': url
             }
-        except httpx.RequestError as e:
+
+        try:
+            from app.services.scraper import scrape_html_with_redirects
+            result = await scrape_html_with_redirects(url, proxy=effective_proxy)
+
+            if result and result.get('success'):
+                self.final_url = result.get('final_url', url)
+                self.redirects = result.get('redirects', [])
+                return {
+                    'success': True,
+                    'status_code': result.get('status_code', 200),
+                    'final_url': self.final_url,
+                    'content_type': result.get('content_type', ''),
+                    'redirects': self.redirects
+                }
+
+            return {
+                'success': False,
+                'status_code': 0,
+                'error': result.get('error', 'Échec Playwright') if result else 'Échec Playwright',
+                'final_url': url
+            }
+
+        except Exception as e:
+            logger.error(f"Erreur suivi redirections Playwright pour {url}: {e}")
             return {
                 'success': False,
                 'status_code': 0,
                 'error': str(e),
                 'final_url': url
             }
-    
+
     @staticmethod
     async def get_url_redirection_pemavor(urls: list[str]) -> dict:
         """
@@ -105,7 +80,7 @@ class RedirectTracker:
                 'success': False,
                 'error': 'Pemavor API not configured'
             }
-        
+
         try:
             async with httpx.AsyncClient(
                 timeout=30,
@@ -129,111 +104,25 @@ class RedirectTracker:
 
 async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
     """
-    Récupère le contenu HTML d'une URL.
+    Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
-    Utilise des headers réalistes de navigateur pour éviter le blocage
-    par les WAF (Cloudflare, etc.) et les protections anti-bot.
-    Inclut un mécanisme de retry avec des stratégies différentes.
+    Utilise un navigateur headless Playwright avec fingerprinting, blocage de
+    ressources lourdes et acceptation automatique des cookies — configuration
+    alignée sur le crawler-service pour des résultats cohérents.
     """
-    # Use explicit proxy, or fall back to APIFY_PROXY from settings
     effective_proxy = proxy or settings.APIFY_PROXY
-    transport = None
-    if effective_proxy:
-        transport = httpx.AsyncHTTPTransport(proxy=effective_proxy)
-    
-    # Stratégie 1 : Requête normale avec headers réalistes
-    try:
-        async with httpx.AsyncClient(
-            timeout=settings.HTTP_TIMEOUT,
-            follow_redirects=True,
-            transport=transport,
-            headers=BROWSER_HEADERS,
-            verify=False  # Certains sites ont des certificats SSL invalides
-        ) as client:
-            response = await client.get(url)
-            
-            if response.status_code in (200, 201, 202):
-                content_type = response.headers.get('content-type', '')
-                if 'text/html' not in content_type and 'application/xhtml' not in content_type:
-                    return None
-                return response.text
-            
-            # Si 403/503, on essaie la stratégie 2
-            if response.status_code in (403, 503):
-                logger.warning(f"Réponse {response.status_code} pour {url}, tentative avec headers alternatifs")
-            else:
-                logger.warning(f"Réponse {response.status_code} pour {url}")
-                return None
-                
-    except Exception as e:
-        logger.warning(f"Erreur première tentative pour {url}: {e}")
-    
-    # Stratégie 2 : Headers alternatifs (Googlebot-like)
-    # Certains sites autorisent les crawlers de moteurs de recherche
-    googlebot_headers = {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        'Accept': 'text/html,application/xhtml+xml',
-        'Accept-Language': 'fr-FR,fr;q=0.9',
-        'Accept-Encoding': 'gzip, deflate',
-    }
-    
-    try:
-        async with httpx.AsyncClient(
-            timeout=settings.HTTP_TIMEOUT,
-            follow_redirects=True,
-            transport=transport,
-            headers=googlebot_headers,
-            verify=False
-        ) as client:
-            response = await client.get(url)
-            
-            if response.status_code in (200, 201, 202):
-                content_type = response.headers.get('content-type', '')
-                if 'text/html' not in content_type and 'application/xhtml' not in content_type:
-                    return None
-                return response.text
-            
-            logger.warning(f"Réponse {response.status_code} pour {url} (tentative Googlebot)")
-                
-    except Exception as e:
-        logger.warning(f"Erreur deuxième tentative pour {url}: {e}")
-    
-    # Stratégie 3 : User-Agent minimal (curl-like)
-    # Parfois les sites n'aiment pas les UA trop sophistiqués
-    minimal_headers = {
-        'User-Agent': 'curl/8.4.0',
-        'Accept': '*/*',
-    }
-    
-    try:
-        async with httpx.AsyncClient(
-            timeout=settings.HTTP_TIMEOUT,
-            follow_redirects=True,
-            transport=transport,
-            headers=minimal_headers,
-            verify=False
-        ) as client:
-            response = await client.get(url)
-            
-            if response.status_code in (200, 201, 202):
-                content_type = response.headers.get('content-type', '')
-                if 'text/html' not in content_type and 'application/xhtml' not in content_type:
-                    return None
-                return response.text
-                
-    except Exception:
-        pass
-    
-    # Stratégie 4 : Scraping avec navigateur headless (Playwright)
-    # Dernier recours pour les sites avec protection anti-bot avancée
-    logger.info(f"Tentative de scraping Playwright pour {url}")
+    if not effective_proxy:
+        logger.error(f"Proxy obligatoire pour fetch_html: {url}. "
+                     f"Configurez APIFY_PROXY ou passez proxy_url.")
+        return None
+
     try:
         from app.services.scraper import scrape_html
-        scraped_content = await scrape_html(url, proxy=effective_proxy)
-        if scraped_content:
-            return scraped_content
+        content = await scrape_html(url, proxy=effective_proxy)
+        if content:
+            return content
     except Exception as e:
-        logger.warning(f"Erreur scraping Playwright pour {url}: {e}")
-    
-    logger.error(f"Échec de récupération HTML pour {url} après 4 tentatives (HTTP + scraping)")
+        logger.error(f"Erreur Playwright pour {url}: {e}")
+
+    logger.error(f"Échec de récupération HTML pour {url}")
     return None

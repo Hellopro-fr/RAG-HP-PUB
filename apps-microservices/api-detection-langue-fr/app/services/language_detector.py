@@ -1,5 +1,6 @@
 import re
 import logging
+import chardet
 from typing import Optional
 from bs4 import BeautifulSoup
 from langdetect import detect, detect_langs, LangDetectException
@@ -200,35 +201,108 @@ class LanguageDetector:
                 # En cas de sélecteur invalide, on continue
                 pass
     
+    # Éléments HTML non visibles à supprimer lors du nettoyage
+    _NON_VISIBLE_ELEMENTS = [
+        'head', 'script', 'style', 'meta', 'link', 'noscript',
+        'img', 'svg', 'iframe', 'figure', 'video', 'audio',
+        'source', 'track', 'canvas', 'embed', 'template'
+    ]
+
+    @staticmethod
+    def _normalize_encoding(html: str) -> str:
+        """
+        Normalise l'encodage du contenu HTML en UTF-8.
+
+        Reproduit le comportement de sanitizeUtf8Recursive() en PHP :
+        - Détection d'encodage (UTF-8, Windows-1252, ISO-8859-1, ISO-8859-15, ASCII)
+        - Conversion vers UTF-8
+        - Suppression des caractères de contrôle (sauf \\n, \\r, \\t)
+        """
+        if not html:
+            return html
+
+        # Tenter la détection d'encodage sur les bytes bruts
+        raw_bytes = html.encode('utf-8', errors='surrogateescape')
+        detected = chardet.detect(raw_bytes)
+        encoding = detected.get('encoding', 'utf-8') or 'utf-8'
+
+        # Si l'encodage détecté n'est pas UTF-8, convertir
+        if encoding.lower().replace('-', '') not in ('utf8', 'ascii'):
+            try:
+                raw_bytes = html.encode('raw_unicode_escape')
+                html = raw_bytes.decode(encoding, errors='replace')
+            except (UnicodeDecodeError, LookupError):
+                logger.warning(f"Échec conversion encodage {encoding}, conservation en UTF-8")
+
+        # Supprimer les caractères de contrôle (sauf \n \r \t) — comme PHP
+        html = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', html)
+
+        return html
+
+    def clean_html_to_text(self, html: str, max_length: int = 10000) -> Optional[str]:
+        """
+        Nettoie le contenu HTML et extrait le texte visible.
+
+        Combine le meilleur du nettoyage PHP (clean_html + sanitizeUtf8Recursive)
+        avec les capacités avancées du nettoyage API (suppression cookies/RGPD).
+
+        Pipeline :
+        1. Normalisation encodage (UTF-8, suppression caractères de contrôle)
+        2. Suppression éléments non visibles (head, script, style, etc.)
+        3. Suppression bannières cookies/consentement RGPD
+        4. Extraction texte visible
+        5. Post-traitement : collapse whitespace, trim (comme PHP strip_tags + preg_replace)
+
+        Args:
+            html: Contenu HTML brut
+            max_length: Longueur maximale du texte extrait (défaut: 10000)
+
+        Returns:
+            Texte nettoyé ou None si le contenu est trop court
+        """
+        if not html:
+            return None
+
+        # Étape 1 : Normalisation encodage
+        html = self._normalize_encoding(html)
+
+        # Étape 2 : Parser et supprimer les éléments non visibles
+        soup = BeautifulSoup(html, 'lxml')
+
+        for element in soup(self._NON_VISIBLE_ELEMENTS):
+            element.decompose()
+
+        # Étape 3 : Supprimer les bannières cookies/consentement
+        self._remove_cookie_consent_elements(soup)
+
+        # Étape 4 : Extraire le texte visible
+        text = soup.get_text(separator=' ', strip=True)
+
+        # Étape 5 : Post-traitement (équivalent PHP : preg_replace('/\s+/', ' ', ...) + trim)
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        # Vérifier longueur minimale
+        if len(text) < settings.NLP_MIN_TEXT_LENGTH:
+            return None
+
+        # Limiter le texte analysé (performance)
+        return text[:max_length]
+
     def detect_from_text_content(self, html: str) -> Optional[dict]:
         """
         Détecte la langue par analyse NLP du contenu textuel visible.
-        
+
         Utilise langdetect (Google) et langid (ML) avec vote majoritaire amélioré.
         """
         if not html:
             return None
-        
+
         try:
-            # Extraire le texte visible avec BeautifulSoup
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # Supprimer scripts, styles et autres éléments non visibles
-            # Note: on garde header, footer, nav car ils peuvent contenir du contenu pertinent
-            for element in soup(['head','script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
-                element.decompose()
-            
-            # Supprimer les bannières cookies/consentement (souvent en français sur sites non-FR)
-            self._remove_cookie_consent_elements(soup)
-            
-            text = soup.get_text(separator=' ', strip=True)
-            
-            # Vérifier longueur minimale
-            if len(text) < settings.NLP_MIN_TEXT_LENGTH:
+            # Extraire le texte visible via le pipeline de nettoyage centralisé
+            text = self.clean_html_to_text(html)
+
+            if not text:
                 return None
-            
-            # Limiter le texte analysé (performance)
-            text = text[:10000]
 
             # Détection avec langdetect
             langdetect_result = None
@@ -341,26 +415,12 @@ class LanguageDetector:
                     return None
                 self._fasttext_model = fasttext.load_model(model_path)
             
-            # Extraire le texte visible avec BeautifulSoup
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # Supprimer scripts, styles et autres éléments non visibles
-            # Harmonisé avec detect_from_text_content (même liste d'éléments)
-            for element in soup(['head','script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
-                element.decompose()
-            
-            # Supprimer les bannières cookies/consentement (souvent en français sur sites non-FR)
-            self._remove_cookie_consent_elements(soup)
-            
-            text = soup.get_text(separator=' ', strip=True)
-            
-            # Vérifier longueur minimale
-            if len(text) < settings.NLP_MIN_TEXT_LENGTH:
+            # Extraire le texte visible via le pipeline de nettoyage centralisé
+            text = self.clean_html_to_text(html)
+
+            if not text:
                 return None
-            
-            # Limiter le texte analysé (performance)
-            text = text[:10000]
-            
+
             # Nettoyer le texte (fastText n'aime pas les sauts de ligne)
             text_clean = ' '.join(text.split())
             
