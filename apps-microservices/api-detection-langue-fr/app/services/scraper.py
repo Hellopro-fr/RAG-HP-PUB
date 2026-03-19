@@ -1,9 +1,14 @@
+import asyncio
 import logging
 import random
 from typing import Optional
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+# Sémaphore global limitant le nombre de navigateurs Playwright simultanés.
+# Protège contre l'épuisement mémoire en cas de requêtes /detect ou /detect-batch concurrentes.
+_BROWSER_SEMAPHORE = asyncio.Semaphore(10)
 
 
 # Pool de User-Agents réalistes — rotation aléatoire à chaque requête
@@ -159,61 +164,71 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
 
     browser = None
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                proxy=playwright_proxy,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--disable-blink-features=AutomationControlled',
-                ],
-            )
+        async with _BROWSER_SEMAPHORE:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    proxy=playwright_proxy,
+                    args=[
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--disable-blink-features=AutomationControlled',
+                    ],
+                )
 
-            context = await browser.new_context(
-                user_agent=user_agent,
-                locale='fr-FR',
-                extra_http_headers={
-                    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                }
-            )
+                context = await browser.new_context(
+                    user_agent=user_agent,
+                    locale='fr-FR',
+                    extra_http_headers={
+                        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    }
+                )
 
-            # Injection cookie de consentement (comme crawler-service)
-            await _inject_cookie_consent(context, url)
+                # Injection cookie de consentement (comme crawler-service)
+                await _inject_cookie_consent(context, url)
 
-            page = await context.new_page()
+                page = await context.new_page()
 
-            # Blocage des ressources lourdes (comme crawler-service)
-            await _setup_resource_blocking(page)
+                # Blocage des ressources lourdes (comme crawler-service)
+                await _setup_resource_blocking(page)
 
-            # Navigation avec attente networkidle (comme crawler-service : 5s idle)
-            try:
-                await page.goto(url, wait_until='networkidle', timeout=timeout * 1000)
-            except Exception as nav_e:
-                err_str = str(nav_e)
-                if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
-                    logger.error(f"Site inaccessible (Refused/DNS): {url}")
-                    await context.close()
-                    await browser.close()
+                # Navigation en deux phases :
+                # Phase 1 : domcontentloaded (rapide, DOM prêt)
+                # Phase 2 : networkidle avec timeout court (bonus JS rendering)
+                # Évite d'attendre 90s sur des sites qui ne deviennent jamais idle
+                try:
+                    await page.goto(url, wait_until='domcontentloaded', timeout=timeout * 1000)
+                except Exception as nav_e:
+                    err_str = str(nav_e)
+                    if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
+                        logger.error(f"Site inaccessible (Refused/DNS): {url}")
+                        await context.close()
+                        await browser.close()
+                        return None
+
+                    logger.warning(f"Timeout/Erreur navigation pour {url} (extraction partielle tentée): {nav_e}")
+
+                # Phase 2 : attendre networkidle avec un timeout court (5s bonus)
+                try:
+                    await page.wait_for_load_state('networkidle', timeout=5000)
+                except Exception:
+                    # Pas grave — le DOM est déjà chargé, on continue
+                    pass
+
+                # Récupérer le HTML complet rendu par le navigateur (même partiel)
+                content = await page.content()
+
+                await context.close()
+                await browser.close()
+
+                if content and len(content) > 100:
+                    logger.info(f"Scraping réussi pour {url} ({len(content)} caractères)")
+                    return content
+                else:
+                    logger.warning(f"Contenu trop court pour {url}")
                     return None
-
-                logger.warning(f"Timeout/Erreur navigation pour {url} (extraction partielle tentée): {nav_e}")
-                # On continue pour tenter d'extraire le contenu partiellement chargé
-
-            # Récupérer le HTML complet rendu par le navigateur (même partiel)
-            content = await page.content()
-
-            await context.close()
-            await browser.close()
-
-            if content and len(content) > 100:
-                logger.info(f"Scraping réussi pour {url} ({len(content)} caractères)")
-                return content
-            else:
-                logger.warning(f"Contenu trop court pour {url}")
-                return None
 
     except Exception as e:
         logger.error(f"Erreur scraping Playwright pour {url}: {e}")
@@ -263,71 +278,79 @@ async def scrape_html_with_redirects(
 
     browser = None
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                proxy=playwright_proxy,
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--disable-blink-features=AutomationControlled',
-                ],
-            )
+        async with _BROWSER_SEMAPHORE:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    proxy=playwright_proxy,
+                    args=[
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--disable-blink-features=AutomationControlled',
+                    ],
+                )
 
-            context = await browser.new_context(
-                user_agent=user_agent,
-                locale='fr-FR',
-                extra_http_headers={
-                    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                context = await browser.new_context(
+                    user_agent=user_agent,
+                    locale='fr-FR',
+                    extra_http_headers={
+                        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    }
+                )
+
+                await _inject_cookie_consent(context, url)
+
+                page = await context.new_page()
+                await _setup_resource_blocking(page)
+
+                # Capturer les redirections via événement response
+                def on_response(response):
+                    status = response.status
+                    if 300 <= status < 400:
+                        redirects.append({
+                            'url': response.url,
+                            'status_code': status
+                        })
+
+                page.on('response', on_response)
+
+                # Navigation deux phases (cohérent avec scrape_html)
+                try:
+                    response = await page.goto(url, wait_until='domcontentloaded', timeout=timeout * 1000)
+                except Exception as nav_e:
+                    err_str = str(nav_e)
+                    if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
+                        await context.close()
+                        await browser.close()
+                        return {'success': False, 'error': f'Site inaccessible: {err_str}'}
+
+                    logger.warning(f"Timeout/Erreur navigation pour {url}: {nav_e}")
+                    response = None
+
+                # Phase 2 : bonus networkidle (5s)
+                try:
+                    await page.wait_for_load_state('networkidle', timeout=5000)
+                except Exception:
+                    pass
+
+                final_url = page.url
+                status_code = response.status if response else 0
+                content_type = ''
+                if response:
+                    content_type = response.headers.get('content-type', '')
+
+                await context.close()
+                await browser.close()
+
+                return {
+                    'success': True,
+                    'final_url': final_url,
+                    'status_code': status_code,
+                    'content_type': content_type,
+                    'redirects': redirects,
                 }
-            )
-
-            await _inject_cookie_consent(context, url)
-
-            page = await context.new_page()
-            await _setup_resource_blocking(page)
-
-            # Capturer les redirections via événement response
-            def on_response(response):
-                status = response.status
-                if 300 <= status < 400:
-                    redirects.append({
-                        'url': response.url,
-                        'status_code': status
-                    })
-
-            page.on('response', on_response)
-
-            try:
-                response = await page.goto(url, wait_until='networkidle', timeout=timeout * 1000)
-            except Exception as nav_e:
-                err_str = str(nav_e)
-                if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
-                    await context.close()
-                    await browser.close()
-                    return {'success': False, 'error': f'Site inaccessible: {err_str}'}
-
-                logger.warning(f"Timeout/Erreur navigation pour {url}: {nav_e}")
-                response = None
-
-            final_url = page.url
-            status_code = response.status if response else 0
-            content_type = ''
-            if response:
-                content_type = response.headers.get('content-type', '')
-
-            await context.close()
-            await browser.close()
-
-            return {
-                'success': True,
-                'final_url': final_url,
-                'status_code': status_code,
-                'content_type': content_type,
-                'redirects': redirects,
-            }
 
     except Exception as e:
         logger.error(f"Erreur suivi redirections Playwright pour {url}: {e}")
