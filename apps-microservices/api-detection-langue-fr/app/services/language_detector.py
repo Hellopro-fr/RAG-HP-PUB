@@ -536,12 +536,15 @@ class LanguageDetector:
                 'confidence': nlp_confidence
             }
         
-        # Cas C : HTML seul (NLP indisponible — texte trop court ou erreur)
+        # Cas C : HTML seul (NLP indisponible ou désactivé)
         if html_lang and not nlp_result:
+            # Si NLP était désactivé volontairement (use_nlp=False), ne pas ajouter nlp_skipped
+            # car le tracking NLP est géré par l'appelant (check_page_if_french)
+            method = html_method if not use_nlp else f"{html_method}+nlp_skipped"
             return {
                 'detected': True,
                 'is_french': html_lang == 'fr',
-                'method': f"{html_method}+nlp_skipped",
+                'method': method,
                 'value': html_lang,
                 'confidence': 0.6  # Confiance réduite car non confirmé par NLP
             }
