@@ -216,8 +216,13 @@ class DomainFR:
     async def _validate_single_url(self, url: str) -> bool:
         """
         Validates that a URL is reachable and serves HTML content.
-        Equivalent to PHP handleRedirections($link, null, 'text/html').
+
+        Stratégie en deux phases :
+        1. httpx (rapide, léger) — suffisant pour la plupart des sites
+        2. Playwright (fallback) — pour les sites avec protection anti-bot
+           qui bloquent les requêtes httpx mais acceptent les navigateurs
         """
+        # Phase 1 : validation rapide via httpx
         try:
             async with httpx.AsyncClient(
                 timeout=settings.HTTP_TIMEOUT,
@@ -230,9 +235,21 @@ class DomainFR:
                     content_type = response.headers.get('content-type', '')
                     if 'text/html' in content_type or 'application/xhtml' in content_type:
                         return True
-            return False
         except Exception:
-            return False
+            pass
+
+        # Phase 2 : fallback Playwright pour les sites avec protection anti-bot
+        try:
+            from app.services.scraper import scrape_html
+            effective_proxy = settings.APIFY_PROXY
+            if effective_proxy:
+                content = await scrape_html(url, proxy=effective_proxy)
+                if content and len(content) > 100:
+                    return True
+        except Exception:
+            pass
+
+        return False
 
     async def _validate_alternative_urls(
         self,
@@ -724,29 +741,31 @@ class DomainFR:
             )
         
         # Cas 8 : Dernier recours — signal lexical français
-        # Si les moteurs NLP échouent (contenu mixte, noms de produits, etc.)
-        # mais que le texte contient clairement des mots français exclusifs,
-        # on accepte avec une confiance réduite.
-        try:
-            soup_check = BeautifulSoup(content, 'lxml')
-            for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
-                el.decompose()
-            visible_text = soup_check.get_text(separator=' ', strip=True)
-            
-            if len(visible_text) >= 50:
-                french_signal = self.language_detector._compute_french_signal(visible_text)
-                logger.debug(f"Lexical French signal (last resort): {french_signal:.3f}")
-                
-                if french_signal > 0.3:
-                    return DetectionResponse(
-                        ok=True,
-                        url=url,
-                        method='french_lexical_signal',
-                        confidence=round(min(0.7, french_signal), 3),
-                        alternative_urls=alternatives
-                    )
-        except Exception as e:
-            logger.warning(f"Erreur signal lexical: {e}")
+        # Uniquement si NLP n'est pas disponible (texte trop court, modèle absent).
+        # Si NLP a détecté une autre langue, le signal lexical ne doit JAMAIS
+        # outrepasser le NLP — sinon des sites allemands/espagnols/etc. avec
+        # quelques mots français (navigation, footer) seraient faussement détectés.
+        if not nlp_available:
+            try:
+                soup_check = BeautifulSoup(content, 'lxml')
+                for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                    el.decompose()
+                visible_text = soup_check.get_text(separator=' ', strip=True)
+
+                if len(visible_text) >= 50:
+                    french_signal = self.language_detector._compute_french_signal(visible_text)
+                    logger.debug(f"Lexical French signal (last resort): {french_signal:.3f}")
+
+                    if french_signal > 0.3:
+                        return DetectionResponse(
+                            ok=True,
+                            url=url,
+                            method='french_lexical_signal',
+                            confidence=round(min(0.7, french_signal), 3),
+                            alternative_urls=alternatives
+                        )
+            except Exception as e:
+                logger.warning(f"Erreur signal lexical: {e}")
         
         # Cas 9 : Aucun indicateur français trouvé
         return DetectionResponse(
@@ -922,7 +941,7 @@ class DomainFR:
         if nlp_available and (html_indicates_french or url_indicates_french):
             return "Case 7: NLP does not confirm despite HTML/URL indicators"
 
-        if 'french_lexical_signal' in method:
-            return "Case 8: Last resort — French lexical signal"
+        if not nlp_available and 'french_lexical_signal' in method:
+            return "Case 8: Last resort — French lexical signal (NLP unavailable)"
 
         return "Case 9: No French indicators found"
