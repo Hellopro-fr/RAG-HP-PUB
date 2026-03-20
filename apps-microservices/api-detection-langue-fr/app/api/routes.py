@@ -135,15 +135,59 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                 )
     
     # Traiter tous les items en parallèle
-    results = await asyncio.gather(*[process_single(item) for item in items_to_process])
-    
+    results = list(await asyncio.gather(*[process_single(item) for item in items_to_process]))
+
+    # Retry séquentiel des URLs en fetch_failed (contention de ressources en batch)
+    # Les retries se font un par un, sans concurrence, comme un appel /detect individuel
+    failed_indices = [
+        i for i, r in enumerate(results)
+        if r.method == 'fetch_failed'
+    ]
+
+    if failed_indices:
+        import logging
+        batch_logger = logging.getLogger(__name__)
+        batch_logger.info(
+            f"Batch retry: {len(failed_indices)} URLs en fetch_failed, "
+            f"retry séquentiel..."
+        )
+
+        for idx in failed_indices:
+            item = items_to_process[idx]
+            batch_logger.info(f"Batch retry: tentative pour {item.url}")
+
+            # Délai avant retry pour laisser les ressources se libérer
+            await asyncio.sleep(2)
+
+            try:
+                html_content = item.html_content
+                if not html_content:
+                    html_content = await fetch_html(item.url, request.proxy_url)
+                    if not html_content:
+                        batch_logger.warning(f"Batch retry: échec pour {item.url}")
+                        continue
+
+                detector = DomainFR(
+                    homepage=item.url,
+                    use_nlp_detection=request.use_nlp_detection
+                )
+                retry_result = await detector.check_page_if_french(html_content, request.mode)
+                results[idx] = retry_result
+                batch_logger.info(
+                    f"Batch retry: succès pour {item.url} "
+                    f"(ok={retry_result.ok}, method={retry_result.method})"
+                )
+
+            except Exception as e:
+                batch_logger.warning(f"Batch retry: erreur pour {item.url}: {e}")
+
     # Calculer les statistiques
     success_count = sum(1 for r in results if r.ok)
     error_count = sum(1 for r in results if r.method == 'error' or r.method == 'fetch_failed')
     failed_count = len(results) - success_count - error_count
-    
+
     processing_time_ms = (time.time() - start_time) * 1000
-    
+
     return BatchDetectionResponse(
         total=len(results),
         success_count=success_count,
