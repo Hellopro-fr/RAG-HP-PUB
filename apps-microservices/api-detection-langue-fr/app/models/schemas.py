@@ -159,3 +159,64 @@ class UrlCheckResponse(BaseModel):
     method: str
     url: Optional[str] = None
     original_url: Optional[str] = None
+
+
+# ============================================================================
+# Debug models
+# ============================================================================
+
+class DebugFetchInfo(BaseModel):
+    """Informations sur le contenu recupere"""
+    fetched_by: str = Field(..., description="'api' si recupere par Playwright, 'provided' si fourni dans la requete")
+    raw_html_length: int = Field(..., description="Longueur du HTML brut en caracteres")
+    raw_html_preview: str = Field(..., description="Premiers 500 caracteres du HTML brut")
+
+class DebugCleaningInfo(BaseModel):
+    """Informations sur le nettoyage du contenu"""
+    cleaned_text_length: int = Field(..., description="Longueur du texte nettoye en caracteres")
+    cleaned_text_preview: str = Field(..., description="Premiers 500 caracteres du texte nettoye")
+
+class DebugUrlCheckInfo(BaseModel):
+    """Resultat du check URL (TLD, path, query)"""
+    ok: bool
+    method: str
+    is_strong_url: bool = Field(..., description="True si TLD .fr")
+
+class DebugHtmlTagsInfo(BaseModel):
+    """Resultat de la detection par balises HTML"""
+    detected: bool
+    is_french: bool
+    method: Optional[str] = None
+    value: Optional[str] = None
+
+class DebugNlpInfo(BaseModel):
+    """Resultat de la detection NLP"""
+    available: bool
+    lang: Optional[str] = None
+    confidence: Optional[float] = None
+    method: Optional[str] = None
+    details: Optional[dict] = None
+    confirms_french: bool = False
+    soft_french: bool = False
+    contradicts_french: bool = False
+    strongly_contradicts: bool = False
+
+class DebugAlternativesInfo(BaseModel):
+    """Informations sur les URLs alternatives detectees"""
+    candidates_found: int
+    candidates: list[AlternativeUrl] = []
+
+class DebugInfo(BaseModel):
+    """Informations de debug completes du pipeline de detection"""
+    fetch: DebugFetchInfo
+    cleaning: DebugCleaningInfo
+    url_check: DebugUrlCheckInfo
+    html_tags: DebugHtmlTagsInfo
+    nlp: DebugNlpInfo
+    alternatives: DebugAlternativesInfo
+    decision: str = Field(..., description="Cas de decision applique (ex: 'Case 1: nlp_confirmed')")
+
+class DebugDetectionResponse(BaseModel):
+    """Reponse de detection avec informations de debug"""
+    result: DetectionResponse
+    debug: DebugInfo

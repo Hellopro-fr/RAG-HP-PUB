@@ -6,7 +6,11 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
-from app.models.schemas import DetectionMode, DetectionResponse, AlternativeUrl
+from app.models.schemas import (
+    DetectionMode, DetectionResponse, AlternativeUrl,
+    DebugDetectionResponse, DebugInfo, DebugFetchInfo, DebugCleaningInfo,
+    DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo, DebugAlternativesInfo
+)
 from app.services.language_detector import LanguageDetector
 from app.services.redirect_tracker import RedirectTracker, fetch_html
 from app.core.config import settings
@@ -440,6 +444,31 @@ class DomainFR:
                     if resolved:
                         _queue_candidate(resolved, value, 'option_tag')
 
+            # 5. Liens <a> pointant vers un domaine .fr apparenté
+            # Ex: essity.com → essity.fr (même base de domaine avec TLD .fr)
+            # Ne capture que les liens vers des domaines .fr qui partagent le même
+            # nom de domaine principal (évite les faux positifs vers des .fr sans rapport)
+            homepage_parsed = urlparse(self.homepage)
+            homepage_host = (homepage_parsed.hostname or '').lower()
+            if not homepage_host.endswith('.fr'):
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    if 'mailto:' in href:
+                        continue
+                    try:
+                        link_parsed = urlparse(href)
+                        link_host = (link_parsed.hostname or '').lower()
+                        if link_host.endswith('.fr') and link_host != homepage_host:
+                            # Vérifier que le domaine principal est le même
+                            # Ex: essity.com et essity.fr partagent "essity"
+                            link_base = self.get_domain_from_url(href)
+                            if self._check_base_domain(base_domain, link_base):
+                                resolved = _resolve_and_check(href)
+                                if resolved:
+                                    _queue_candidate(resolved, href, 'domain_fr_link')
+                    except Exception:
+                        continue
+
         except Exception:
             pass
 
@@ -725,3 +754,175 @@ class DomainFR:
             url=url,
             method='Check_nok_v2'
         )
+
+    async def check_page_if_french_debug(
+        self,
+        content: str,
+        mode: DetectionMode = DetectionMode.COMPLETE,
+        fetched_by: str = 'api'
+    ) -> DebugDetectionResponse:
+        """
+        Version debug de check_page_if_french qui collecte les informations
+        de chaque etape du pipeline pour diagnostic.
+
+        Args:
+            content: Contenu HTML de la page
+            mode: Mode de detection (simple ou complete)
+            fetched_by: 'api' si recupere par Playwright, 'provided' si fourni
+
+        Returns:
+            DebugDetectionResponse avec le resultat + infos debug
+        """
+        url = self.homepage
+
+        # --- Debug: Fetch info ---
+        debug_fetch = DebugFetchInfo(
+            fetched_by=fetched_by,
+            raw_html_length=len(content) if content else 0,
+            raw_html_preview=(content[:500] if content else '')
+        )
+
+        # --- Debug: Cleaning info ---
+        cleaned_text = self.language_detector.clean_html_to_text(content) if content else None
+        debug_cleaning = DebugCleaningInfo(
+            cleaned_text_length=len(cleaned_text) if cleaned_text else 0,
+            cleaned_text_preview=(cleaned_text[:500] if cleaned_text else '')
+        )
+
+        # --- Etape 1: URL check ---
+        url_check = await self.check_url(url, track_redirect=False)
+        url_indicates_french = url_check.get('ok', False)
+        url_method = url_check.get('method', '')
+        is_strong_url = self._is_strong_french_url(url)
+
+        debug_url_check = DebugUrlCheckInfo(
+            ok=url_indicates_french,
+            method=url_method,
+            is_strong_url=is_strong_url
+        )
+
+        # --- Etape 2: HTML tags ---
+        lang_result = self.language_detector.detect_combined(content, use_nlp=False) if content else {}
+        html_indicates_french = lang_result.get('detected') and lang_result.get('is_french')
+        html_method = lang_result.get('method', '')
+
+        debug_html_tags = DebugHtmlTagsInfo(
+            detected=bool(lang_result.get('detected')),
+            is_french=bool(html_indicates_french),
+            method=html_method or None,
+            value=lang_result.get('value')
+        )
+
+        # --- Etape 3: NLP ---
+        nlp_result = None
+        if content:
+            nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
+
+            if nlp_result is None:
+                nlp_result = self.language_detector.detect_from_text_content(content)
+            elif nlp_result.get('lang') != 'fr' and nlp_result.get('confidence', 0) < 0.75:
+                secondary_result = self.language_detector.detect_from_text_content(content)
+                if secondary_result and secondary_result.get('lang') == 'fr':
+                    nlp_result = secondary_result
+
+        nlp_lang = nlp_result.get('lang') if nlp_result else None
+        nlp_confidence = nlp_result.get('confidence', 0) if nlp_result else 0.0
+        nlp_available = nlp_result is not None
+
+        nlp_confirms_french = nlp_available and nlp_lang == 'fr' and nlp_confidence >= settings.NLP_MIN_CONFIDENCE
+        nlp_soft_french = nlp_available and nlp_lang == 'fr' and nlp_confidence < settings.NLP_MIN_CONFIDENCE
+        nlp_contradicts_french = nlp_available and nlp_lang is not None and nlp_lang != 'fr'
+        nlp_strongly_contradicts = nlp_contradicts_french and nlp_confidence > 0.9
+
+        debug_nlp = DebugNlpInfo(
+            available=nlp_available,
+            lang=nlp_lang,
+            confidence=nlp_confidence if nlp_available else None,
+            method=nlp_result.get('method') if nlp_result else None,
+            details=nlp_result.get('details') if nlp_result else None,
+            confirms_french=nlp_confirms_french,
+            soft_french=nlp_soft_french,
+            contradicts_french=nlp_contradicts_french,
+            strongly_contradicts=nlp_strongly_contradicts
+        )
+
+        # --- Etape 4: Alternatives ---
+        alternatives = []
+        if mode == DetectionMode.COMPLETE and content:
+            alternatives = await self.detect_alternative_languages(content)
+
+        debug_alternatives = DebugAlternativesInfo(
+            candidates_found=len(alternatives),
+            candidates=alternatives
+        )
+
+        # --- Run actual detection to get the result ---
+        result = await self.check_page_if_french(content, mode)
+
+        # --- Determine which decision case was applied ---
+        decision = self._identify_decision_case(
+            nlp_confirms_french, is_strong_url, nlp_strongly_contradicts,
+            nlp_soft_french, nlp_available, nlp_contradicts_french,
+            url_indicates_french, html_indicates_french, alternatives,
+            result
+        )
+
+        debug_info = DebugInfo(
+            fetch=debug_fetch,
+            cleaning=debug_cleaning,
+            url_check=debug_url_check,
+            html_tags=debug_html_tags,
+            nlp=debug_nlp,
+            alternatives=debug_alternatives,
+            decision=decision
+        )
+
+        return DebugDetectionResponse(
+            result=result,
+            debug=debug_info
+        )
+
+    @staticmethod
+    def _identify_decision_case(
+        nlp_confirms_french: bool,
+        is_strong_url: bool,
+        nlp_strongly_contradicts: bool,
+        nlp_soft_french: bool,
+        nlp_available: bool,
+        nlp_contradicts_french: bool,
+        url_indicates_french: bool,
+        html_indicates_french: bool,
+        alternatives: list,
+        result: DetectionResponse
+    ) -> str:
+        """Identifie le cas de decision applique pour le debug."""
+        method = result.method
+
+        if nlp_confirms_french:
+            return "Case 1: NLP confirms French"
+
+        if is_strong_url:
+            if nlp_strongly_contradicts:
+                return "Case 2a: TLD .fr but NLP strongly contradicts"
+            return "Case 2b: TLD .fr trusted (NLP soft/skipped/weak disagree)"
+
+        if url_indicates_french and nlp_soft_french:
+            return "Case 3: Moderate URL signal + NLP soft French"
+
+        if html_indicates_french and nlp_soft_french:
+            return "Case 4: HTML indicates French + NLP soft French"
+
+        if not nlp_available and (html_indicates_french or url_indicates_french):
+            return "Case 5: NLP unavailable + HTML/URL signals"
+
+        reliable_alts = [a for a in alternatives if a.validated]
+        if reliable_alts:
+            return f"Case 6: Alternative French URL found ({reliable_alts[0].method})"
+
+        if nlp_available and (html_indicates_french or url_indicates_french):
+            return "Case 7: NLP does not confirm despite HTML/URL indicators"
+
+        if 'french_lexical_signal' in method:
+            return "Case 8: Last resort — French lexical signal"
+
+        return "Case 9: No French indicators found"

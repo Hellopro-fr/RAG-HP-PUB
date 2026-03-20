@@ -10,7 +10,8 @@ from app.models.schemas import (
     BatchDetectionResponse,
     BatchItem,
     UrlCheckResponse,
-    DetectionMode
+    DetectionMode,
+    DebugDetectionResponse
 )
 from app.core.domain_fr import DomainFR
 from app.services.redirect_tracker import fetch_html
@@ -174,6 +175,90 @@ async def check_url_only(url: str, track_redirect: bool = False) -> UrlCheckResp
         url=result.get('url'),
         original_url=result.get('original_url')
     )
+
+
+@router.post("/detect-debug", response_model=DebugDetectionResponse)
+async def detect_french_debug(request: DetectionRequest) -> DebugDetectionResponse:
+    """
+    Version debug de /detect qui retourne le resultat + les informations
+    detaillees de chaque etape du pipeline de detection.
+
+    Utile pour diagnostiquer pourquoi une URL est detectee ou non comme francaise.
+
+    Retourne :
+    - **result** : Le resultat normal de detection (identique a /detect)
+    - **debug.fetch** : Contenu recupere (longueur, apercu)
+    - **debug.cleaning** : Texte apres nettoyage (longueur, apercu)
+    - **debug.url_check** : Resultat du check URL (TLD, path, query)
+    - **debug.html_tags** : Resultat de la detection par balises HTML
+    - **debug.nlp** : Resultat NLP complet (langue, confiance, details)
+    - **debug.alternatives** : URLs alternatives detectees
+    - **debug.decision** : Cas de decision applique
+    """
+    try:
+        html_content = request.html_content
+        fetched_by = 'provided'
+
+        if not html_content:
+            fetched_by = 'api'
+            html_content = await fetch_html(request.url, request.proxy_url)
+            if not html_content:
+                from app.models.schemas import (
+                    DebugInfo, DebugFetchInfo, DebugCleaningInfo,
+                    DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo,
+                    DebugAlternativesInfo
+                )
+                return DebugDetectionResponse(
+                    result=DetectionResponse(
+                        ok=False,
+                        url=request.url,
+                        method='fetch_failed',
+                        error='Impossible de recuperer le contenu HTML'
+                    ),
+                    debug=DebugInfo(
+                        fetch=DebugFetchInfo(fetched_by='api', raw_html_length=0, raw_html_preview=''),
+                        cleaning=DebugCleaningInfo(cleaned_text_length=0, cleaned_text_preview=''),
+                        url_check=DebugUrlCheckInfo(ok=False, method='fetch_failed', is_strong_url=False),
+                        html_tags=DebugHtmlTagsInfo(detected=False, is_french=False),
+                        nlp=DebugNlpInfo(available=False),
+                        alternatives=DebugAlternativesInfo(candidates_found=0),
+                        decision='Fetch failed — no content to analyze'
+                    )
+                )
+
+        detector = DomainFR(
+            homepage=request.url,
+            forced_method=request.forced_method,
+            use_nlp_detection=request.use_nlp_detection
+        )
+
+        return await detector.check_page_if_french_debug(
+            html_content, request.mode, fetched_by=fetched_by
+        )
+
+    except Exception as e:
+        from app.models.schemas import (
+            DebugInfo, DebugFetchInfo, DebugCleaningInfo,
+            DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo,
+            DebugAlternativesInfo
+        )
+        return DebugDetectionResponse(
+            result=DetectionResponse(
+                ok=False,
+                url=request.url,
+                method='error',
+                error=str(e)
+            ),
+            debug=DebugInfo(
+                fetch=DebugFetchInfo(fetched_by='unknown', raw_html_length=0, raw_html_preview=''),
+                cleaning=DebugCleaningInfo(cleaned_text_length=0, cleaned_text_preview=''),
+                url_check=DebugUrlCheckInfo(ok=False, method='error', is_strong_url=False),
+                html_tags=DebugHtmlTagsInfo(detected=False, is_french=False),
+                nlp=DebugNlpInfo(available=False),
+                alternatives=DebugAlternativesInfo(candidates_found=0),
+                decision=f'Error: {str(e)}'
+            )
+        )
 
 
 @router.get("/health")
