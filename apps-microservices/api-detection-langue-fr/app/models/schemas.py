@@ -32,6 +32,10 @@ class DetectionRequest(BaseModel):
         default=True,
         description="Activer la détection NLP par contenu textuel"
     )
+    include_full_content: bool = Field(
+        default=False,
+        description="(Debug uniquement) Inclure le contenu HTML complet et le texte nettoye complet dans la reponse debug"
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -170,11 +174,13 @@ class DebugFetchInfo(BaseModel):
     fetched_by: str = Field(..., description="'api' si recupere par Playwright, 'provided' si fourni dans la requete")
     raw_html_length: int = Field(..., description="Longueur du HTML brut en caracteres")
     raw_html_preview: str = Field(..., description="Premiers 500 caracteres du HTML brut")
+    raw_html_full: Optional[str] = Field(default=None, description="Contenu HTML complet (uniquement si include_full_content=true)")
 
 class DebugCleaningInfo(BaseModel):
     """Informations sur le nettoyage du contenu"""
     cleaned_text_length: int = Field(..., description="Longueur du texte nettoye en caracteres")
     cleaned_text_preview: str = Field(..., description="Premiers 500 caracteres du texte nettoye")
+    cleaned_text_full: Optional[str] = Field(default=None, description="Texte nettoye complet (uniquement si include_full_content=true)")
 
 class DebugUrlCheckInfo(BaseModel):
     """Resultat du check URL (TLD, path, query)"""

@@ -778,7 +778,8 @@ class DomainFR:
         self,
         content: str,
         mode: DetectionMode = DetectionMode.COMPLETE,
-        fetched_by: str = 'api'
+        fetched_by: str = 'api',
+        include_full_content: bool = False
     ) -> DebugDetectionResponse:
         """
         Version debug de check_page_if_french qui collecte les informations
@@ -788,6 +789,7 @@ class DomainFR:
             content: Contenu HTML de la page
             mode: Mode de detection (simple ou complete)
             fetched_by: 'api' si recupere par Playwright, 'provided' si fourni
+            include_full_content: Si True, inclut le HTML complet et le texte nettoye complet
 
         Returns:
             DebugDetectionResponse avec le resultat + infos debug
@@ -798,14 +800,16 @@ class DomainFR:
         debug_fetch = DebugFetchInfo(
             fetched_by=fetched_by,
             raw_html_length=len(content) if content else 0,
-            raw_html_preview=(content[:500] if content else '')
+            raw_html_preview=(content[:500] if content else ''),
+            raw_html_full=content if (include_full_content and content) else None
         )
 
         # --- Debug: Cleaning info ---
         cleaned_text = self.language_detector.clean_html_to_text(content) if content else None
         debug_cleaning = DebugCleaningInfo(
             cleaned_text_length=len(cleaned_text) if cleaned_text else 0,
-            cleaned_text_preview=(cleaned_text[:500] if cleaned_text else '')
+            cleaned_text_preview=(cleaned_text[:500] if cleaned_text else ''),
+            cleaned_text_full=cleaned_text if (include_full_content and cleaned_text) else None
         )
 
         # --- Etape 1: URL check ---

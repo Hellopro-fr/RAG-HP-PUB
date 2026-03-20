@@ -181,6 +181,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 context = await browser.new_context(
                     user_agent=user_agent,
                     locale='fr-FR',
+                    ignore_https_errors=True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
                     extra_http_headers={
                         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
                     }
@@ -202,23 +203,35 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     await page.goto(url, wait_until='domcontentloaded', timeout=timeout * 1000)
                 except Exception as nav_e:
                     err_str = str(nav_e)
+                    # Erreurs permanentes — inutile de continuer
                     if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
                         logger.error(f"Site inaccessible (Refused/DNS): {url}")
                         await context.close()
                         await browser.close()
                         return None
 
+                    # Erreurs transitoires (proxy, timeout) — on tente l'extraction partielle
                     logger.warning(f"Timeout/Erreur navigation pour {url} (extraction partielle tentée): {nav_e}")
 
                 # Phase 2 : attendre networkidle avec un timeout court (5s bonus)
                 try:
                     await page.wait_for_load_state('networkidle', timeout=5000)
                 except Exception:
-                    # Pas grave — le DOM est déjà chargé, on continue
                     pass
 
-                # Récupérer le HTML complet rendu par le navigateur (même partiel)
-                content = await page.content()
+                # Récupérer le HTML — avec retry si la page est en cours de navigation
+                content = None
+                for content_attempt in range(3):
+                    try:
+                        content = await page.content()
+                        break
+                    except Exception as content_e:
+                        if 'navigating and changing the content' in str(content_e):
+                            logger.warning(f"Page en navigation pour {url}, attente 1s (tentative {content_attempt + 1}/3)")
+                            await page.wait_for_timeout(1000)
+                        else:
+                            logger.warning(f"Erreur page.content() pour {url}: {content_e}")
+                            break
 
                 await context.close()
                 await browser.close()
@@ -295,6 +308,7 @@ async def scrape_html_with_redirects(
                 context = await browser.new_context(
                     user_agent=user_agent,
                     locale='fr-FR',
+                    ignore_https_errors=True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
                     extra_http_headers={
                         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
                     }

@@ -5,9 +5,10 @@ from typing import Optional
 from app.core.config import settings
 
 # Erreurs non-retryables (échecs permanents — inutile de réessayer)
+# Note : les erreurs SSL (ERR_CERT_*) sont gérées par ignore_https_errors=True
+# dans Playwright, donc elles ne devraient plus apparaître.
 _NON_RETRYABLE_ERRORS = (
     'ERR_NAME_NOT_RESOLVED',   # Le domaine n'existe pas
-    'ERR_CERT_AUTHORITY_INVALID',  # Certificat invalide (peu probable de changer)
     'Proxy non configuré',     # Erreur de configuration
     'Proxy obligatoire',       # Erreur de configuration
     'Proxy invalide',          # Erreur de configuration
