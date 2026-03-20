@@ -1,7 +1,17 @@
+import asyncio
 import httpx
 import logging
 from typing import Optional
 from app.core.config import settings
+
+# Erreurs non-retryables (échecs permanents — inutile de réessayer)
+_NON_RETRYABLE_ERRORS = (
+    'ERR_NAME_NOT_RESOLVED',   # Le domaine n'existe pas
+    'ERR_CERT_AUTHORITY_INVALID',  # Certificat invalide (peu probable de changer)
+    'Proxy non configuré',     # Erreur de configuration
+    'Proxy obligatoire',       # Erreur de configuration
+    'Proxy invalide',          # Erreur de configuration
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +112,21 @@ class RedirectTracker:
             }
 
 
+def _is_retryable_error(error_msg: str) -> bool:
+    """Détermine si une erreur est retryable (transitoire) ou permanente."""
+    for non_retryable in _NON_RETRYABLE_ERRORS:
+        if non_retryable in error_msg:
+            return False
+    return True
+
+
 async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
+
+    Inclut un mécanisme de retry automatique pour les erreurs transitoires
+    (proxy lent, IP bloquée, timeout). Les erreurs permanentes (DNS, config)
+    ne sont pas retryées.
 
     Utilise un navigateur headless Playwright avec fingerprinting, blocage de
     ressources lourdes et acceptation automatique des cookies — configuration
@@ -116,13 +138,36 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
                      f"Configurez APIFY_PROXY ou passez proxy_url.")
         return None
 
-    try:
-        from app.services.scraper import scrape_html
-        content = await scrape_html(url, proxy=effective_proxy)
-        if content:
-            return content
-    except Exception as e:
-        logger.error(f"Erreur Playwright pour {url}: {e}")
+    max_retries = settings.HTTP_MAX_RETRIES
+    last_error = None
 
-    logger.error(f"Échec de récupération HTML pour {url}")
+    for attempt in range(1, max_retries + 1):
+        try:
+            from app.services.scraper import scrape_html
+            content = await scrape_html(url, proxy=effective_proxy)
+            if content:
+                if attempt > 1:
+                    logger.info(f"Récupération réussie pour {url} à la tentative {attempt}/{max_retries}")
+                return content
+
+            # Contenu vide/trop court — retryable
+            last_error = "Contenu vide ou trop court"
+
+        except Exception as e:
+            last_error = str(e)
+
+            # Vérifier si l'erreur est permanente
+            if not _is_retryable_error(last_error):
+                logger.error(f"Erreur non-retryable pour {url}: {last_error}")
+                return None
+
+        if attempt < max_retries:
+            wait_time = attempt * 2  # 2s, 4s entre les tentatives
+            logger.warning(
+                f"Tentative {attempt}/{max_retries} échouée pour {url} "
+                f"({last_error}), nouvelle tentative dans {wait_time}s..."
+            )
+            await asyncio.sleep(wait_time)
+
+    logger.error(f"Échec de récupération HTML pour {url} après {max_retries} tentatives ({last_error})")
     return None
