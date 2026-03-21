@@ -928,7 +928,8 @@ class DomainFR:
         mode: DetectionMode = DetectionMode.COMPLETE,
         fetched_by: str = 'api',
         include_full_content: bool = False,
-        redirected_from: Optional[str] = None
+        redirected_from: Optional[str] = None,
+        challenge_detected: Optional[str] = None
     ) -> DebugDetectionResponse:
         """
         Version debug de check_page_if_french qui collecte les informations
@@ -940,6 +941,7 @@ class DomainFR:
             fetched_by: 'api' si recupere par Playwright, 'provided' si fourni
             include_full_content: Si True, inclut le HTML complet et le texte nettoye complet
             redirected_from: URL d'origine avant redirection (None si pas de redirection)
+            challenge_detected: Nom du service de protection anti-bot detecte (None si contenu reel)
 
         Returns:
             DebugDetectionResponse avec le resultat + infos debug
@@ -952,7 +954,8 @@ class DomainFR:
             raw_html_length=len(content) if content else 0,
             raw_html_preview=(content[:500] if content else ''),
             raw_html_full=content if (include_full_content and content) else None,
-            redirected_from=redirected_from
+            redirected_from=redirected_from,
+            challenge_detected=challenge_detected
         )
 
         # --- Debug: Cleaning info ---

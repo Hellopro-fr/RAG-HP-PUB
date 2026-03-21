@@ -10,6 +10,47 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+def detect_challenge_page(html: str) -> Optional[str]:
+    """
+    Détecte si le contenu HTML est une page de challenge/protection anti-bot
+    (Cloudflare, DataDome, Imperva, PerimeterX, etc.) plutôt que le contenu réel.
+
+    Utilisé comme fallback dans routes.py : si le scraper n'a pas réussi à
+    attendre la redirection post-challenge, on détecte ici et on retourne
+    une erreur au lieu d'analyser le contenu du challenge.
+
+    Returns:
+        Nom du service de protection détecté, ou None si contenu légitime.
+    """
+    if not html:
+        return None
+
+    html_lower = html.lower()
+
+    patterns = [
+        # Cloudflare
+        ('cdn-cgi/challenge-platform', 'Cloudflare'),
+        ('cf-turnstile-response', 'Cloudflare'),
+        ('challenges.cloudflare.com/turnstile', 'Cloudflare'),
+        ('just a moment...', 'Cloudflare'),
+        ('un instant\u2026', 'Cloudflare'),
+        ('attention required!', 'Cloudflare'),
+        # DataDome
+        ('geo.captcha-delivery.com', 'DataDome'),
+        # PerimeterX / HUMAN
+        ('human.com/bot-defender', 'PerimeterX'),
+        # Imperva / Incapsula
+        ('_incap_ses', 'Imperva'),
+        ('incapsula', 'Imperva'),
+    ]
+
+    for pattern, service in patterns:
+        if pattern in html_lower:
+            return service
+
+    return None
+
+
 class LanguageDetector:
     """
     Détecteur de langue combinant plusieurs méthodes :

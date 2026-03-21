@@ -45,6 +45,45 @@ _BLOCKED_RESOURCE_EXTENSIONS = (
 )
 
 
+# Patterns indiquant une page de challenge/protection anti-bot
+# Chaque entrée : (pattern à chercher dans le HTML, nom du service)
+_CHALLENGE_PATTERNS = [
+    # Cloudflare
+    ('cdn-cgi/challenge-platform', 'Cloudflare'),
+    ('cf-turnstile-response', 'Cloudflare'),
+    ('challenges.cloudflare.com/turnstile', 'Cloudflare'),
+    ('Just a moment...', 'Cloudflare'),
+    ('Un instant\u2026', 'Cloudflare'),  # "Un instant…"
+    ('Attention Required!', 'Cloudflare'),
+    # DataDome
+    ('geo.captcha-delivery.com', 'DataDome'),
+    # PerimeterX / HUMAN
+    ('human.com/bot-defender', 'PerimeterX'),
+    # Imperva / Incapsula
+    ('_incap_ses', 'Imperva'),
+    ('incapsula', 'Imperva'),
+]
+
+
+def _detect_challenge_page(html: str) -> Optional[str]:
+    """
+    Détecte si le contenu HTML est une page de challenge/protection anti-bot
+    plutôt que le contenu réel du site.
+
+    Returns:
+        Nom du service de protection détecté, ou None si contenu légitime.
+    """
+    if not html:
+        return None
+
+    html_lower = html.lower()
+    for pattern, service in _CHALLENGE_PATTERNS:
+        if pattern.lower() in html_lower:
+            return service
+
+    return None
+
+
 def _parse_proxy(proxy: str) -> Optional[dict]:
     """
     Convertit une URL proxy httpx vers le format Playwright.
@@ -233,6 +272,51 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                         else:
                             logger.warning(f"Erreur page.content() pour {url}: {content_e}")
                             break
+
+                # Phase 3 : Détection de page de challenge (Cloudflare, DataDome, etc.)
+                # Si une page de challenge est détectée, attendre la redirection
+                # vers le site réel après résolution du challenge
+                if content:
+                    challenge_service = _detect_challenge_page(content)
+                    if challenge_service:
+                        logger.info(
+                            f"Page de challenge {challenge_service} détectée pour {url}, "
+                            f"attente de la redirection (max 20s)..."
+                        )
+                        try:
+                            # Attendre que la page navigue vers une nouvelle URL
+                            # (le challenge redirige automatiquement après résolution)
+                            await page.wait_for_url(
+                                lambda u: u != page.url,
+                                timeout=20000
+                            )
+                            # Attendre que le nouveau contenu soit chargé
+                            try:
+                                await page.wait_for_load_state('domcontentloaded', timeout=10000)
+                            except Exception:
+                                pass
+                            try:
+                                await page.wait_for_load_state('networkidle', timeout=5000)
+                            except Exception:
+                                pass
+
+                            # Re-extraire le contenu après redirection
+                            content = await page.content()
+                            new_challenge = _detect_challenge_page(content)
+                            if new_challenge:
+                                logger.warning(
+                                    f"Encore une page de challenge {new_challenge} après redirection pour {url}"
+                                )
+                            else:
+                                logger.info(
+                                    f"Challenge {challenge_service} résolu pour {url}, "
+                                    f"contenu réel récupéré ({len(content)} caractères)"
+                                )
+                        except Exception as challenge_e:
+                            logger.warning(
+                                f"Timeout attente redirection challenge {challenge_service} "
+                                f"pour {url}: {challenge_e}"
+                            )
 
                 # Capturer l'URL finale (après redirections éventuelles)
                 final_url = page.url

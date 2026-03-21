@@ -16,6 +16,7 @@ from app.models.schemas import (
 )
 from app.core.domain_fr import DomainFR
 from app.services.redirect_tracker import fetch_html
+from app.services.language_detector import detect_challenge_page
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,17 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
             if final_url and final_url != request.url:
                 logger.info(f"Redirection détectée: {request.url} → {final_url}")
                 effective_url = final_url
+
+        # Vérifier si le contenu est une page de challenge (Cloudflare, etc.)
+        challenge = detect_challenge_page(html_content)
+        if challenge:
+            logger.warning(f"Page de challenge {challenge} détectée pour {effective_url}")
+            return DetectionResponse(
+                ok=False,
+                url=effective_url,
+                method='challenge_page',
+                error=f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+            )
 
         # Créer le détecteur avec l'URL finale (après redirection éventuelle)
         detector = DomainFR(
@@ -141,6 +153,19 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                         logger.info(f"[BATCH] Redirection: {url} → {final_url}")
                         effective_url = final_url
 
+                # Vérifier si le contenu est une page de challenge
+                challenge = detect_challenge_page(html_content)
+                if challenge:
+                    processed_count += 1
+                    duration_ms = round((time.time() - item_start) * 1000)
+                    logger.warning(f"[BATCH] [{processed_count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
+                    return DetectionResponse(
+                        ok=False,
+                        url=effective_url,
+                        method='challenge_page',
+                        error=f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+                    )
+
                 detector = DomainFR(
                     homepage=effective_url,
                     use_nlp_detection=request.use_nlp_detection
@@ -173,16 +198,18 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
     pass1_duration = round((time.time() - start_time) * 1000)
     pass1_ok = sum(1 for r in results if r.ok)
-    pass1_failed = sum(1 for r in results if r.method == 'fetch_failed')
+    pass1_fetch_failed = sum(1 for r in results if r.method == 'fetch_failed')
+    pass1_challenge = sum(1 for r in results if r.method == 'challenge_page')
     logger.info(
-        f"[BATCH] Pass 1 termine: {pass1_ok} OK, {pass1_failed} fetch_failed, "
-        f"{total_items - pass1_ok - pass1_failed} autres ({pass1_duration}ms)"
+        f"[BATCH] Pass 1 termine: {pass1_ok} OK, {pass1_fetch_failed} fetch_failed, "
+        f"{pass1_challenge} challenge_page, "
+        f"{total_items - pass1_ok - pass1_fetch_failed - pass1_challenge} autres ({pass1_duration}ms)"
     )
 
-    # Pass 2 : retry séquentiel des fetch_failed
+    # Pass 2 : retry séquentiel des fetch_failed et challenge_page
     failed_indices = [
         i for i, r in enumerate(results)
-        if r.method == 'fetch_failed'
+        if r.method in ('fetch_failed', 'challenge_page')
     ]
 
     if failed_indices:
@@ -209,6 +236,12 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                         logger.info(f"[BATCH] Retry redirection: {item.url} → {final_url}")
                         effective_url = final_url
 
+                # Vérifier challenge page sur retry
+                challenge = detect_challenge_page(html_content)
+                if challenge:
+                    logger.warning(f"[BATCH] Retry CHALLENGE_{challenge} {item.url}")
+                    continue
+
                 detector = DomainFR(
                     homepage=effective_url,
                     use_nlp_detection=request.use_nlp_detection
@@ -228,7 +261,7 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
     # Statistiques finales
     success_count = sum(1 for r in results if r.ok)
-    error_count = sum(1 for r in results if r.method == 'error' or r.method == 'fetch_failed')
+    error_count = sum(1 for r in results if r.method in ('error', 'fetch_failed', 'challenge_page'))
     failed_count = len(results) - success_count - error_count
 
     processing_time_ms = (time.time() - start_time) * 1000
@@ -327,6 +360,11 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
                 redirected_from = request.url
                 effective_url = final_url
 
+        # Détecter page de challenge (info debug — ne bloque pas en mode debug)
+        challenge = detect_challenge_page(html_content)
+        if challenge:
+            logger.warning(f"[DEBUG] Page de challenge {challenge} détectée pour {effective_url}")
+
         detector = DomainFR(
             homepage=effective_url,
             forced_method=request.forced_method,
@@ -336,7 +374,8 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
         return await detector.check_page_if_french_debug(
             html_content, request.mode, fetched_by=fetched_by,
             include_full_content=request.include_full_content,
-            redirected_from=redirected_from
+            redirected_from=redirected_from,
+            challenge_detected=challenge
         )
 
     except Exception as e:
