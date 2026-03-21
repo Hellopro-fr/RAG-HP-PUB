@@ -597,6 +597,31 @@ class DomainFR:
                     except Exception:
                         continue
 
+            # 6. Liens <a> pointant vers un sous-domaine français
+            # Ex: swann-morton.com → fr.swann-morton.com
+            # Capture les patterns : fr.domain.com, french.domain.com,
+            # francais.domain.com, france.domain.com
+            fr_subdomain_pattern = re.compile(
+                r'^(fr|french|francais|français|france)\.', re.IGNORECASE
+            )
+            homepage_has_fr_subdomain = bool(fr_subdomain_pattern.match(homepage_host))
+            if not homepage_has_fr_subdomain:
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    if 'mailto:' in href:
+                        continue
+                    try:
+                        link_parsed = urlparse(href)
+                        link_host = (link_parsed.hostname or '').lower()
+                        if link_host and link_host != homepage_host and fr_subdomain_pattern.match(link_host):
+                            link_base = self.get_domain_from_url(href)
+                            if self._check_base_domain(base_domain, link_base):
+                                resolved = _resolve_and_check(href)
+                                if resolved:
+                                    _queue_candidate(resolved, href, 'subdomain_fr')
+                    except Exception:
+                        continue
+
         except Exception:
             pass
 
