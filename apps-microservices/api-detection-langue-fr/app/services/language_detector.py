@@ -15,9 +15,10 @@ def detect_challenge_page(html: str) -> Optional[str]:
     Détecte si le contenu HTML est une page de challenge/protection anti-bot
     (Cloudflare, DataDome, Imperva, PerimeterX, etc.) plutôt que le contenu réel.
 
-    Utilisé comme fallback dans routes.py : si le scraper n'a pas réussi à
-    attendre la redirection post-challenge, on détecte ici et on retourne
-    une erreur au lieu d'analyser le contenu du challenge.
+    Utilise une logique multi-indicateurs pour éviter les faux positifs
+    sur les vrais sites utilisant Cloudflare comme CDN. Un seul indicateur
+    faible (comme cdn-cgi/) ne suffit pas — il faut au moins 2 indicateurs
+    forts, ou 1 indicateur fort + contenu très court.
 
     Returns:
         Nom du service de protection détecté, ou None si contenu légitime.
@@ -27,26 +28,64 @@ def detect_challenge_page(html: str) -> Optional[str]:
 
     html_lower = html.lower()
 
-    patterns = [
-        # Cloudflare
-        ('cdn-cgi/challenge-platform', 'Cloudflare'),
-        ('cf-turnstile-response', 'Cloudflare'),
-        ('challenges.cloudflare.com/turnstile', 'Cloudflare'),
-        ('just a moment...', 'Cloudflare'),
-        ('un instant\u2026', 'Cloudflare'),
-        ('attention required!', 'Cloudflare'),
-        # DataDome
-        ('geo.captcha-delivery.com', 'DataDome'),
-        # PerimeterX / HUMAN
-        ('human.com/bot-defender', 'PerimeterX'),
-        # Imperva / Incapsula
-        ('_incap_ses', 'Imperva'),
-        ('incapsula', 'Imperva'),
+    # --- Cloudflare ---
+    # Indicateurs forts : spécifiques aux pages de challenge, pas aux sites normaux
+    cf_strong = [
+        'cf-turnstile-response',                      # Input CAPTCHA Turnstile
+        'challenges.cloudflare.com/turnstile',         # Script Turnstile JS
+        '<title>just a moment...</title>',             # Titre page challenge (EN)
+        '<title>un instant\u2026</title>',             # Titre page challenge (FR)
+        '<title>attention required!</title>',          # Titre page challenge (blocage)
+        'chl_page/v1',                                 # Script orchestration challenge
+    ]
+    # Indicateurs faibles : peuvent apparaitre sur des sites réels utilisant Cloudflare CDN
+    cf_weak = [
+        'cdn-cgi/challenge-platform',                  # Peut être en référence analytique
     ]
 
-    for pattern, service in patterns:
-        if pattern in html_lower:
-            return service
+    cf_strong_count = sum(1 for p in cf_strong if p in html_lower)
+    cf_weak_count = sum(1 for p in cf_weak if p in html_lower)
+
+    # Cloudflare confirmé si : 2+ forts, ou 1 fort + 1 faible
+    if cf_strong_count >= 2:
+        return 'Cloudflare'
+    if cf_strong_count >= 1 and cf_weak_count >= 1:
+        return 'Cloudflare'
+    # 1 indicateur fort seul + contenu très court (< 1000 chars hors CSS/JS)
+    if cf_strong_count >= 1:
+        # Estimation rapide du contenu visible (sans CSS/styles)
+        import re as _re
+        text_only = _re.sub(r'<style[^>]*>.*?</style>', '', html_lower, flags=_re.DOTALL)
+        text_only = _re.sub(r'<script[^>]*>.*?</script>', '', text_only, flags=_re.DOTALL)
+        text_only = _re.sub(r'<[^>]+>', '', text_only)
+        text_only = _re.sub(r'\s+', ' ', text_only).strip()
+        if len(text_only) < 1000:
+            return 'Cloudflare'
+
+    # --- DataDome ---
+    dd_indicators = [
+        'geo.captcha-delivery.com',
+        'datadome',
+    ]
+    dd_count = sum(1 for p in dd_indicators if p in html_lower)
+    if dd_count >= 2:
+        return 'DataDome'
+    if dd_count >= 1 and len(html) < 50000:
+        return 'DataDome'
+
+    # --- PerimeterX / HUMAN ---
+    if 'human.com/bot-defender' in html_lower:
+        return 'PerimeterX'
+
+    # --- Imperva / Incapsula ---
+    imperva_indicators = [
+        '_incap_ses',
+        'incapsula',
+        'visitorid',
+    ]
+    imperva_count = sum(1 for p in imperva_indicators if p in html_lower)
+    if imperva_count >= 2:
+        return 'Imperva'
 
     return None
 

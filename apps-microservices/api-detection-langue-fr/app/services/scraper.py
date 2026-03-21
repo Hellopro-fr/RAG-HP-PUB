@@ -45,43 +45,8 @@ _BLOCKED_RESOURCE_EXTENSIONS = (
 )
 
 
-# Patterns indiquant une page de challenge/protection anti-bot
-# Chaque entrée : (pattern à chercher dans le HTML, nom du service)
-_CHALLENGE_PATTERNS = [
-    # Cloudflare
-    ('cdn-cgi/challenge-platform', 'Cloudflare'),
-    ('cf-turnstile-response', 'Cloudflare'),
-    ('challenges.cloudflare.com/turnstile', 'Cloudflare'),
-    ('Just a moment...', 'Cloudflare'),
-    ('Un instant\u2026', 'Cloudflare'),  # "Un instant…"
-    ('Attention Required!', 'Cloudflare'),
-    # DataDome
-    ('geo.captcha-delivery.com', 'DataDome'),
-    # PerimeterX / HUMAN
-    ('human.com/bot-defender', 'PerimeterX'),
-    # Imperva / Incapsula
-    ('_incap_ses', 'Imperva'),
-    ('incapsula', 'Imperva'),
-]
-
-
-def _detect_challenge_page(html: str) -> Optional[str]:
-    """
-    Détecte si le contenu HTML est une page de challenge/protection anti-bot
-    plutôt que le contenu réel du site.
-
-    Returns:
-        Nom du service de protection détecté, ou None si contenu légitime.
-    """
-    if not html:
-        return None
-
-    html_lower = html.lower()
-    for pattern, service in _CHALLENGE_PATTERNS:
-        if pattern.lower() in html_lower:
-            return service
-
-    return None
+# Import de la détection de challenge centralisée (évite la duplication)
+from app.services.language_detector import detect_challenge_page as _detect_challenge_page
 
 
 def _parse_proxy(proxy: str) -> Optional[dict]:
