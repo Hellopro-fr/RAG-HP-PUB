@@ -278,6 +278,9 @@ class DomainFR:
         async def validate_with_retry(candidate: dict) -> AlternativeUrl:
             resolved_url = candidate['url']
             raw_href = candidate['raw_href']
+            hreflang_val = candidate.get('hreflang_value', '')
+            priority = self._french_region_priority(resolved_url, hreflang_val)
+
             async with semaphore:
                 # First attempt: validate the resolved URL
                 if await self._validate_single_url(resolved_url):
@@ -285,7 +288,8 @@ class DomainFR:
                         url=resolved_url,
                         method=candidate['method'],
                         reliability=candidate['reliability'],
-                        validated=True
+                        validated=True,
+                        region_priority=priority
                     )
 
                 # Retry with / prepended (PHP needEditUrl behavior)
@@ -303,11 +307,13 @@ class DomainFR:
                             base_domain, link_domain
                         ):
                             if await self._validate_single_url(retry_url):
+                                retry_priority = self._french_region_priority(retry_url, hreflang_val)
                                 return AlternativeUrl(
                                     url=retry_url,
                                     method=candidate['method'],
                                     reliability=candidate['reliability'],
-                                    validated=True
+                                    validated=True,
+                                    region_priority=retry_priority
                                 )
 
                 # Validation failed — return as non-validated
@@ -315,7 +321,8 @@ class DomainFR:
                     url=resolved_url,
                     method=candidate['method'],
                     reliability='low',
-                    validated=False
+                    validated=False,
+                    region_priority=priority
                 )
 
         results = await asyncio.gather(*[
@@ -347,6 +354,105 @@ class DomainFR:
         if not resolved:
             return True
         return self._compare_without_scheme(resolved, self.homepage)
+
+    @staticmethod
+    def _french_region_priority(url: str, hreflang_value: str = '') -> int:
+        """
+        Determine la priorite regionale d'une URL francaise.
+
+        Retourne:
+            0 = France specifiquement (fr-FR, fr_FR, /fr/fr, /fr-fr)
+            1 = Francais generique (/fr seul, hreflang="fr")
+            2 = Autre region francophone (fr-CA, fr-BE, /dz/fr, /ca/fr, ca-fr, be-fr)
+
+        Analyse dans l'ordre : hreflang > URL path > query params.
+        Gere les formats normaux et inverses (fr-ca, ca-fr, /fr/dz, /dz/fr).
+        """
+        hreflang_lower = hreflang_value.strip().lower().replace('_', '-')
+        url_lower = url.lower()
+
+        # --- Analyse hreflang (signal le plus fiable) ---
+        if hreflang_lower:
+            # France : fr-fr
+            if hreflang_lower in ('fr-fr',):
+                return 0
+            # Generique : fr seul
+            if hreflang_lower == 'fr':
+                return 1
+            # Autre region : fr-XX ou XX-fr (ou XX != fr)
+            parts = hreflang_lower.split('-')
+            if len(parts) == 2:
+                if parts[0] == 'fr' and parts[1] != 'fr':
+                    return 2  # fr-ca, fr-be, fr-ch, etc.
+                if parts[1] == 'fr' and parts[0] != 'fr':
+                    return 2  # ca-fr, be-fr, etc.
+            # Fallback: contient "fr" d'une maniere ou d'une autre
+            return 1
+
+        # --- Analyse URL path ---
+        try:
+            parsed = urlparse(url_lower)
+            path = (parsed.path or '').strip('/')
+            query = parsed.query or ''
+            segments = [s for s in path.split('/') if s]
+
+            # Patterns France dans le path : fr-fr, fr_fr
+            if any(s in ('fr-fr', 'fr_fr') for s in segments):
+                return 0
+
+            # Pattern /fr/fr (deux segments fr consecutifs)
+            for i in range(len(segments) - 1):
+                if segments[i] == 'fr' and segments[i + 1] == 'fr':
+                    return 0
+
+            # Patterns autre region dans le path
+            # Codes pays ISO 3166-1 alpha-2 courants (hors FR)
+            non_france_codes = {
+                'ca', 'be', 'ch', 'lu', 'mc', 'dz', 'ma', 'tn', 'sn', 'ci',
+                'cm', 'cd', 'cg', 'mg', 'ht', 'ml', 'ne', 'bf', 'bj', 'tg',
+                'gn', 'rw', 'bi', 'ga', 'cf', 'td', 'km', 'dj', 'mu', 'sc',
+                'us', 'gb', 'uk', 'de', 'es', 'it', 'pt', 'nl', 'at', 'au',
+                'nz', 'za', 'in', 'br', 'mx', 'ar', 'co', 'cl', 'pe', 'vn',
+                'mea', 'apac', 'emea', 'latam', 'na',  # Codes regions
+            }
+
+            # Chercher des patterns XX/fr ou fr/XX ou XX-fr ou fr-XX dans le path
+            for s in segments:
+                # Segment combine : fr-ca, ca-fr, fr_be, be_fr
+                parts = re.split(r'[-_]', s)
+                if len(parts) == 2:
+                    if parts[0] == 'fr' and parts[1] in non_france_codes:
+                        return 2
+                    if parts[1] == 'fr' and parts[0] in non_france_codes:
+                        return 2
+
+            # Chercher /XX/fr/ ou /fr/XX/ dans les segments adjacents
+            for i in range(len(segments) - 1):
+                pair = (segments[i], segments[i + 1])
+                if pair[0] == 'fr' and pair[1] in non_france_codes:
+                    return 2  # /fr/dz, /fr/ca
+                if pair[1] == 'fr' and pair[0] in non_france_codes:
+                    return 2  # /dz/fr, /ca/fr
+
+            # Si /fr/ est seul (pas accompagne d'un code pays)
+            if 'fr' in segments:
+                return 1
+
+            # --- Analyse query params ---
+            if 'lang=fr-fr' in query or 'lang=fr_fr' in query:
+                return 0
+            if 'lang=fr' in query:
+                # Verifier si c'est lang=fr-XX
+                lang_match = re.search(r'lang=fr[-_](\w+)', query)
+                if lang_match and lang_match.group(1).lower() != 'fr':
+                    return 2
+                return 1
+
+        except Exception:
+            pass
+
+        # Defaut : generique
+        return 1
 
     async def detect_alternative_languages(self, content: str) -> list[AlternativeUrl]:
         """
@@ -391,19 +497,21 @@ class DomainFR:
             except Exception:
                 return url
 
-        def _add_trusted(resolved: str, method: str):
+        def _add_trusted(resolved: str, method: str, hreflang_value: str = ''):
             """Add a trusted (hreflang) alternative — no HTTP validation needed."""
             normalized = _normalize_url(resolved)
             if normalized not in seen_urls:
                 seen_urls.add(normalized)
+                priority = self._french_region_priority(resolved, hreflang_value)
                 all_alternatives.append(AlternativeUrl(
                     url=resolved,
                     method=method,
                     reliability='high',
-                    validated=True
+                    validated=True,
+                    region_priority=priority
                 ))
 
-        def _queue_candidate(resolved: str, raw_href: str, method: str):
+        def _queue_candidate(resolved: str, raw_href: str, method: str, hreflang_value: str = ''):
             """Queue a candidate for HTTP validation."""
             normalized = _normalize_url(resolved)
             if normalized not in seen_urls:
@@ -412,7 +520,8 @@ class DomainFR:
                     'url': resolved,
                     'raw_href': raw_href,
                     'method': method,
-                    'reliability': 'medium'
+                    'reliability': 'medium',
+                    'hreflang_value': hreflang_value
                 })
 
         try:
@@ -424,10 +533,11 @@ class DomainFR:
             for regex in [re.compile(r'^fr', re.IGNORECASE), re.compile(r'fr', re.IGNORECASE)]:
                 for link in soup.find_all(attrs={'hreflang': regex}):
                     href = link.get('href')
+                    hreflang_val = link.get('hreflang', '')
                     if href and href != '#':
                         resolved = _resolve_and_check(href)
                         if resolved:
-                            _add_trusted(resolved, 'hreflang')
+                            _add_trusted(resolved, 'hreflang', hreflang_value=hreflang_val)
 
             # 2. data-lang et data-gt-lang (need validation, medium reliability)
             for attr_name in ['data-lang', 'data-gt-lang']:
@@ -435,10 +545,11 @@ class DomainFR:
                 for regex in [re.compile(r'^fr', re.IGNORECASE), re.compile(r'fr', re.IGNORECASE)]:
                     for elem in soup.find_all(attrs={attr_name: regex}):
                         href = elem.get('href')
+                        lang_val = elem.get(attr_name, '')
                         if href and href != '#':
                             resolved = _resolve_and_check(href)
                             if resolved:
-                                _queue_candidate(resolved, href, method_name)
+                                _queue_candidate(resolved, href, method_name, hreflang_value=lang_val)
 
             # 3. Liens <a> avec /fr/ ou lang=fr (need validation, medium reliability)
             fr_pattern = re.compile(
@@ -493,9 +604,12 @@ class DomainFR:
         validated_results = await self._validate_alternative_urls(candidates_to_validate)
         all_alternatives.extend(validated_results)
 
-        # Sort by reliability: high > medium > low
+        # Sort by: 1) reliability (high > medium > low), 2) region priority (France > generic > other)
         reliability_order = {'high': 0, 'medium': 1, 'low': 2}
-        all_alternatives.sort(key=lambda a: reliability_order.get(a.reliability, 3))
+        all_alternatives.sort(key=lambda a: (
+            reliability_order.get(a.reliability, 3),
+            a.region_priority
+        ))
 
         return all_alternatives[:10]
     

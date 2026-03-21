@@ -65,6 +65,10 @@ class AlternativeUrl(BaseModel):
         ...,
         description="True si l'URL a été validée via HTTP (200 + text/html)"
     )
+    region_priority: int = Field(
+        default=1,
+        description="Priorite region francaise: 0=France (fr-FR, /fr/fr), 1=Francais generique (/fr), 2=Autre region (fr-CA, fr-BE, /dz/fr)"
+    )
 
 
 class DetectionResponse(BaseModel):
