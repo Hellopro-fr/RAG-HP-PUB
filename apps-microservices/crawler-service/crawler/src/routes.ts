@@ -76,18 +76,22 @@ router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
         const proxyUrl = proxyInfo?.url || null;
 
-        // Resource Blocking (Images, Fonts, etc.)
+        // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
         await page.route('**/*', (route) => {
             const req = route.request();
             const resourceType = req.resourceType();
-            const reqUrl = req.url();
+            const reqUrl = req.url().toLowerCase();
 
             // Block heavy media and fonts
             if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
                 return route.abort();
             }
-            // Block download scripts and binary files
-            if (reqUrl.includes('download.php') || reqUrl.includes('imp=1') || /\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$/i.test(reqUrl)) {
+            // Block download scripts and binary files (expanded list aligned with api-detection-langue-fr)
+            if (
+                reqUrl.includes('download.php') ||
+                reqUrl.includes('imp=1') ||
+                /\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg|7z|bz2|tar|xz|jpg|jpeg|png|gif|bmp|tif|tiff|webp|svg|ico|mp4|avi|mov|wmv|flv|webm|m4v|mp3|wav|ogg|aac|mid|ppt|pptx|apk|rss)$/i.test(reqUrl)
+            ) {
                 return route.abort();
             }
             return route.continue();
@@ -223,15 +227,7 @@ router.addDefaultHandler(
             // Redis update handled in dedupManager
             // Local file update is heavy, skipped in V3 logic, keeping minimal or periodic in main.ts
 
-            // Accept Cookies
-            await page.context().addCookies([
-                {
-                    name: "cookieConsent",
-                    value: "accepted",
-                    domain: targetDomain,
-                    path: "/",
-                },
-            ]);
+            // Cookie consent is now injected pre-navigation in preNavigationHooks (functions.ts)
 
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
             // If we ended up at a different URL than requested (redirect), make sure the 

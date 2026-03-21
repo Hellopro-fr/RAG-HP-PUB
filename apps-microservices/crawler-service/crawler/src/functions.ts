@@ -125,16 +125,51 @@ export const processPage = async (
         await waitAndScroll(page, url, log, maxScrolls, timeoutSecs);
 
         // Return the complete page HTML after scrolling
-        return await page.content();
+        // Retry logic: handle race condition where page is mid-navigation
+        return await getPageContentWithRetry(page, url, log);
     } catch (error) {
         log.error(`Error processPage for ${url}: ${error}`);
         // Return current content even if scrolling failed, to avoid crashing the whole crawl
         try {
-            return await page.content();
+            return await getPageContentWithRetry(page, url, log);
         } catch (innerE) {
             throw new Error(`Critical error processPage : ${innerE}`);
         }
     }
+};
+
+/**
+ * Retrieves page HTML content with retry logic for mid-navigation race conditions.
+ * Some pages trigger JS navigation after scroll, causing page.content() to fail with
+ * "Unable to retrieve content because the page is navigating and changing the content".
+ *
+ * @param page - Playwright Page object
+ * @param url - Current page URL for logging
+ * @param log - Logger instance
+ * @param maxRetries - Maximum number of retries (default: 3)
+ * @returns Promise<string> - Page HTML content
+ */
+const getPageContentWithRetry = async (
+    page: Page,
+    url: string,
+    log: Log,
+    maxRetries: number = 3
+): Promise<string> => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await page.content();
+        } catch (error: any) {
+            const errorMsg = String(error?.message || error);
+            if (errorMsg.includes("navigating and changing the content") && attempt < maxRetries) {
+                log.warning(`Page mid-navigation for ${url}, waiting 1s (attempt ${attempt}/${maxRetries})`);
+                await page.waitForTimeout(1000);
+            } else {
+                throw error;
+            }
+        }
+    }
+    // Fallback (should not reach here)
+    return await page.content();
 };
 
 /**
@@ -254,6 +289,15 @@ export const startCrawler = async (
                 },
             },
             retireBrowserAfterPageCount: 25, // Prevent memory leaks in Chrome
+            // Ignorer les erreurs de certificat SSL (ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR)
+            // Permet de crawler des sites avec certificats expirés ou auto-signés
+            preLaunchHooks: [
+                (_pageId, launchContext) => {
+                    launchContext.launchOptions ??= {};
+                    launchContext.launchOptions.args ??= [];
+                    launchContext.launchOptions.args.push('--ignore-certificate-errors');
+                },
+            ],
         },
 
         // maxConcurrency: 1, // V3 default
@@ -352,7 +396,7 @@ export const startCrawler = async (
         },
 
         preNavigationHooks: [
-            async () => {
+            async ({ page }) => {
                 const isStopped = isStoppedManualy(domain, false);
                 if (isStopped) {
                     await stopCrawler(
@@ -360,7 +404,7 @@ export const startCrawler = async (
                         "The crawler has been stopped manually."
                     );
                 }
-                
+
                 if (context.stopReason) {
                     await stopCrawler(crawler, `Stopping due to: ${context.stopReason}`);
                 }
@@ -373,6 +417,21 @@ export const startCrawler = async (
                         context.stopReason = "limitCrawl";
                         await stopCrawler(crawler, "Limit of 5000 entries reached.");
                     }
+                }
+
+                // Injection cookie de consentement AVANT navigation
+                // Empêche les bannières cookies de s'afficher et de polluer le contenu
+                try {
+                    await page.context().addCookies([
+                        {
+                            name: "cookieConsent",
+                            value: "accepted",
+                            domain: domain,
+                            path: "/",
+                        },
+                    ]);
+                } catch (e) {
+                    // Ignore cookie injection errors
                 }
             },
         ],
