@@ -239,58 +239,65 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                             break
 
                 # Phase 3 : Détection de page de challenge (Cloudflare, DataDome, etc.)
-                # Si une page de challenge est détectée, attendre que le challenge
-                # se résolve et que le contenu réel apparaisse.
-                # Utilise une détection par contenu (disparition des marqueurs challenge)
-                # plutôt qu'une attente d'URL car certains challenges redirigent via JS
-                # sans changer l'URL immédiatement.
+                # Si une page de challenge est détectée, poll le contenu toutes les 3s
+                # en attendant que le challenge se résolve (redirection ou remplacement DOM).
+                # Utilise un polling loop plutôt que wait_for_function car les challenges
+                # Cloudflare font souvent une navigation complète (qui détruit le contexte JS).
                 if content:
                     challenge_service = _detect_challenge_page(content)
                     if challenge_service:
                         logger.info(
                             f"Page de challenge {challenge_service} détectée pour {url}, "
-                            f"attente de la résolution (max 45s)..."
+                            f"polling résolution (max 45s, intervalle 3s)..."
                         )
-                        try:
-                            # Attendre que les marqueurs du challenge disparaissent du DOM
-                            # Cela signifie que le challenge est résolu et le vrai contenu est chargé
-                            await page.wait_for_function(
-                                """() => {
-                                    const html = document.documentElement.outerHTML;
-                                    return !html.includes('cdn-cgi/challenge-platform')
-                                        && !html.includes('cf-turnstile-response')
-                                        && !html.includes('challenges.cloudflare.com/turnstile')
-                                        && !html.includes('geo.captcha-delivery.com');
-                                }""",
-                                timeout=45000
-                            )
+                        import time as _time
+                        poll_start = _time.time()
+                        poll_timeout = 45  # secondes
+                        poll_interval = 3  # secondes
+                        challenge_resolved = False
 
-                            # Attendre que le nouveau contenu soit chargé
-                            try:
-                                await page.wait_for_load_state('domcontentloaded', timeout=10000)
-                            except Exception:
-                                pass
-                            try:
-                                await page.wait_for_load_state('networkidle', timeout=5000)
-                            except Exception:
-                                pass
+                        while (_time.time() - poll_start) < poll_timeout:
+                            await page.wait_for_timeout(poll_interval * 1000)
 
-                            # Re-extraire le contenu après résolution
-                            content = await page.content()
-                            new_challenge = _detect_challenge_page(content)
-                            if new_challenge:
-                                logger.warning(
-                                    f"Encore une page de challenge {new_challenge} après résolution pour {url}"
-                                )
-                            else:
+                            try:
+                                content = await page.content()
+                            except Exception as poll_e:
+                                # Le contexte peut être détruit pendant une navigation
+                                logger.debug(f"Erreur content() pendant polling challenge pour {url}: {poll_e}")
+                                await page.wait_for_timeout(1000)
+                                try:
+                                    content = await page.content()
+                                except Exception:
+                                    continue
+
+                            if not _detect_challenge_page(content):
+                                challenge_resolved = True
+                                elapsed = round(_time.time() - poll_start, 1)
                                 logger.info(
-                                    f"Challenge {challenge_service} résolu pour {url}, "
-                                    f"contenu réel récupéré ({len(content)} caractères)"
+                                    f"Challenge {challenge_service} résolu pour {url} "
+                                    f"après {elapsed}s ({len(content)} caractères)"
                                 )
-                        except Exception as challenge_e:
+                                # Attendre que le contenu soit stable
+                                try:
+                                    await page.wait_for_load_state('networkidle', timeout=5000)
+                                except Exception:
+                                    pass
+                                # Re-extraire le contenu final
+                                try:
+                                    content = await page.content()
+                                except Exception:
+                                    pass
+                                break
+                            else:
+                                elapsed = round(_time.time() - poll_start, 1)
+                                logger.debug(
+                                    f"Challenge toujours présent pour {url} ({elapsed}s/{poll_timeout}s)"
+                                )
+
+                        if not challenge_resolved:
                             logger.warning(
-                                f"Timeout attente résolution challenge {challenge_service} "
-                                f"pour {url} (45s): {challenge_e}"
+                                f"Timeout polling challenge {challenge_service} pour {url} "
+                                f"après {poll_timeout}s"
                             )
 
                 # Capturer l'URL finale (après redirections éventuelles)
