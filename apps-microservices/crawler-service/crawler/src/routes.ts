@@ -13,6 +13,8 @@ import {
     rightTrimSlash,
     routerDefaultHandler,
     stopCrawler,
+    detectChallengePage,
+    waitForChallengeResolution,
 } from "./functions.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
@@ -264,6 +266,35 @@ router.addDefaultHandler(
                 // Process normally and store the method
                 content = await processPage(page, request.loadedUrl, log);
 
+                // Challenge page detection: check if the content is a bot protection page
+                // If detected, wait for the challenge to resolve before proceeding
+                const challengeService = detectChallengePage(content);
+                if (challengeService) {
+                    const resolvedContent = await waitForChallengeResolution(
+                        page, url, log, challengeService
+                    );
+                    if (resolvedContent) {
+                        content = resolvedContent;
+                    } else {
+                        // Challenge not resolved — store in error dataset and stop
+                        log.error(`Challenge ${challengeService} not resolved for main site ${url}. Aborting crawl.`);
+                        let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${targetDomain}`;
+                        let errorDataset = await Dataset.open(datasetName);
+                        await errorDataset.pushData({
+                            id: request.id,
+                            url: request.url,
+                            errors: [`Challenge page ${challengeService} not resolved after 45s`],
+                            proxy_used: proxyUrl || "none",
+                            status_code: response?.status() || 0,
+                            captcha: challengeService,
+                            timestamp: new Date().toISOString()
+                        });
+                        context.crawlErrorMessage = `Site protégé par ${challengeService} (challenge non résolu)`;
+                        await stopCrawler(crawler, `Challenge ${challengeService} not resolved for main site`);
+                        return;
+                    }
+                }
+
                 try {
                     const detectResult = await detectionClient.detect(url, content, {
                         mode: "complete",
@@ -342,6 +373,18 @@ router.addDefaultHandler(
                     // Fallback: Detect on current content via API
                     if (!content) content = await processPage(page, request.loadedUrl, log);
 
+                    // Challenge check on internal page content
+                    const internalChallenge1 = content ? detectChallengePage(content) : null;
+                    if (internalChallenge1) {
+                        const resolved = await waitForChallengeResolution(page, url, log, internalChallenge1);
+                        if (resolved) {
+                            content = resolved;
+                        } else {
+                            log.warning(`Challenge ${internalChallenge1} not resolved for internal page ${url}. Skipping.`);
+                            isEnqueuingLinks = false;
+                        }
+                    }
+
                     try {
                         const autoCheck = await detectionClient.detect(url, content, {
                             mode: "simple",
@@ -374,6 +417,18 @@ router.addDefaultHandler(
                     frenchDetectionMethod = methodOrError as string;
 
                     if (!content) content = await processPage(page, request.loadedUrl, log);
+
+                    // Challenge check on internal page content
+                    const internalChallenge2 = content ? detectChallengePage(content) : null;
+                    if (internalChallenge2) {
+                        const resolved = await waitForChallengeResolution(page, url, log, internalChallenge2);
+                        if (resolved) {
+                            content = resolved;
+                        } else {
+                            log.warning(`Challenge ${internalChallenge2} not resolved for internal page ${url}. Skipping.`);
+                            isEnqueuingLinks = false;
+                        }
+                    }
 
                     try {
                         const needsNlp = DetectionLangueClient.requiresNlpValidation(frenchDetectionMethod);

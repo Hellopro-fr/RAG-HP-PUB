@@ -173,6 +173,148 @@ const getPageContentWithRetry = async (
 };
 
 /**
+ * Detects if HTML content is a bot protection challenge page rather than real site content.
+ *
+ * Uses multi-indicator logic to avoid false positives on real sites using Cloudflare CDN.
+ * Requires 2+ strong indicators, or 1 strong + 1 weak, or 1 strong + very short content.
+ *
+ * Ported from api-detection-langue-fr (language_detector.py detect_challenge_page).
+ *
+ * @param html - Raw HTML content to check
+ * @returns Service name (e.g., 'Cloudflare', 'DataDome') or null if content is legitimate
+ */
+export const detectChallengePage = (html: string): string | null => {
+    if (!html) return null;
+
+    const htmlLower = html.toLowerCase();
+
+    // --- Cloudflare ---
+    const cfStrong = [
+        'cf-turnstile-response',
+        'challenges.cloudflare.com/turnstile',
+        '<title>just a moment...</title>',
+        '<title>un instant\u2026</title>',
+        '<title>attention required!</title>',
+        'chl_page/v1',
+    ];
+    const cfWeak = [
+        'cdn-cgi/challenge-platform',
+    ];
+
+    const cfStrongCount = cfStrong.filter(p => htmlLower.includes(p)).length;
+    const cfWeakCount = cfWeak.filter(p => htmlLower.includes(p)).length;
+
+    if (cfStrongCount >= 2) return 'Cloudflare';
+    if (cfStrongCount >= 1 && cfWeakCount >= 1) return 'Cloudflare';
+    if (cfStrongCount >= 1) {
+        // Check if visible text is very short (challenge pages have < 1000 chars)
+        const textOnly = htmlLower
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (textOnly.length < 1000) return 'Cloudflare';
+    }
+
+    // --- DataDome ---
+    const ddIndicators = ['geo.captcha-delivery.com', 'datadome'];
+    const ddCount = ddIndicators.filter(p => htmlLower.includes(p)).length;
+    if (ddCount >= 2) return 'DataDome';
+    if (ddCount >= 1 && html.length < 50000) return 'DataDome';
+
+    // --- PerimeterX / HUMAN ---
+    if (htmlLower.includes('human.com/bot-defender')) return 'PerimeterX';
+
+    // --- Imperva / Incapsula ---
+    const impervaIndicators = ['_incap_ses', 'incapsula', 'visitorid'];
+    const impervaCount = impervaIndicators.filter(p => htmlLower.includes(p)).length;
+    if (impervaCount >= 2) return 'Imperva';
+
+    return null;
+};
+
+/**
+ * Waits for a challenge page to resolve by polling page.content() at regular intervals.
+ *
+ * Survives full page navigations (which destroy JS context) because it re-reads
+ * page.content() each iteration instead of using page.wait_for_function().
+ *
+ * Ported from api-detection-langue-fr (scraper.py Phase 3).
+ *
+ * @param page - Playwright Page object
+ * @param url - URL being processed (for logging)
+ * @param log - Logger instance
+ * @param challengeService - Name of the detected challenge service
+ * @param timeoutSecs - Max time to wait for resolution (default: 45)
+ * @param intervalSecs - Polling interval (default: 3)
+ * @returns Resolved content string, or null if challenge was not resolved
+ */
+export const waitForChallengeResolution = async (
+    page: Page,
+    url: string,
+    log: Log,
+    challengeService: string,
+    timeoutSecs: number = 45,
+    intervalSecs: number = 3
+): Promise<string | null> => {
+    log.info(
+        `Challenge ${challengeService} detected on ${url}, ` +
+        `polling for resolution (max ${timeoutSecs}s, interval ${intervalSecs}s)...`
+    );
+
+    const startTime = Date.now();
+
+    while ((Date.now() - startTime) / 1000 < timeoutSecs) {
+        await page.waitForTimeout(intervalSecs * 1000);
+
+        let content: string;
+        try {
+            content = await page.content();
+        } catch (e) {
+            // Context may be destroyed during navigation
+            log.debug(`Error reading content during challenge poll for ${url}: ${e}`);
+            await page.waitForTimeout(1000);
+            try {
+                content = await page.content();
+            } catch {
+                continue;
+            }
+        }
+
+        if (!detectChallengePage(content)) {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            log.info(
+                `Challenge ${challengeService} resolved for ${url} ` +
+                `after ${elapsed}s (${content.length} chars)`
+            );
+
+            // Wait for content to stabilize
+            try {
+                await page.waitForLoadState('networkidle', { timeout: 5000 });
+            } catch {
+                // Ignore timeout
+            }
+
+            // Re-extract final content
+            try {
+                content = await page.content();
+            } catch {
+                // Keep previous content
+            }
+
+            return content;
+        }
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        log.debug(`Challenge still present on ${url} (${elapsed}s/${timeoutSecs}s)`);
+    }
+
+    log.warning(`Challenge ${challengeService} NOT resolved for ${url} after ${timeoutSecs}s`);
+    return null;
+};
+
+/**
  * Drops (deletes) an existing dataset by its name
  *
  * @description
