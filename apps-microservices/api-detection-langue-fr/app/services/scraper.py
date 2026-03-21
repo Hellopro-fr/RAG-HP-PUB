@@ -274,22 +274,32 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                             break
 
                 # Phase 3 : Détection de page de challenge (Cloudflare, DataDome, etc.)
-                # Si une page de challenge est détectée, attendre la redirection
-                # vers le site réel après résolution du challenge
+                # Si une page de challenge est détectée, attendre que le challenge
+                # se résolve et que le contenu réel apparaisse.
+                # Utilise une détection par contenu (disparition des marqueurs challenge)
+                # plutôt qu'une attente d'URL car certains challenges redirigent via JS
+                # sans changer l'URL immédiatement.
                 if content:
                     challenge_service = _detect_challenge_page(content)
                     if challenge_service:
                         logger.info(
                             f"Page de challenge {challenge_service} détectée pour {url}, "
-                            f"attente de la redirection (max 20s)..."
+                            f"attente de la résolution (max 45s)..."
                         )
                         try:
-                            # Attendre que la page navigue vers une nouvelle URL
-                            # (le challenge redirige automatiquement après résolution)
-                            await page.wait_for_url(
-                                lambda u: u != page.url,
-                                timeout=20000
+                            # Attendre que les marqueurs du challenge disparaissent du DOM
+                            # Cela signifie que le challenge est résolu et le vrai contenu est chargé
+                            await page.wait_for_function(
+                                """() => {
+                                    const html = document.documentElement.outerHTML;
+                                    return !html.includes('cdn-cgi/challenge-platform')
+                                        && !html.includes('cf-turnstile-response')
+                                        && !html.includes('challenges.cloudflare.com/turnstile')
+                                        && !html.includes('geo.captcha-delivery.com');
+                                }""",
+                                timeout=45000
                             )
+
                             # Attendre que le nouveau contenu soit chargé
                             try:
                                 await page.wait_for_load_state('domcontentloaded', timeout=10000)
@@ -300,12 +310,12 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                             except Exception:
                                 pass
 
-                            # Re-extraire le contenu après redirection
+                            # Re-extraire le contenu après résolution
                             content = await page.content()
                             new_challenge = _detect_challenge_page(content)
                             if new_challenge:
                                 logger.warning(
-                                    f"Encore une page de challenge {new_challenge} après redirection pour {url}"
+                                    f"Encore une page de challenge {new_challenge} après résolution pour {url}"
                                 )
                             else:
                                 logger.info(
@@ -314,8 +324,8 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                                 )
                         except Exception as challenge_e:
                             logger.warning(
-                                f"Timeout attente redirection challenge {challenge_service} "
-                                f"pour {url}: {challenge_e}"
+                                f"Timeout attente résolution challenge {challenge_service} "
+                                f"pour {url} (45s): {challenge_e}"
                             )
 
                 # Capturer l'URL finale (après redirections éventuelles)

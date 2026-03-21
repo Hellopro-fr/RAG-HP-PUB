@@ -1034,15 +1034,26 @@ class DomainFR:
         )
 
         # --- Run actual detection to get the result ---
-        result = await self.check_page_if_french(content, mode)
+        # Si une page de challenge a été détectée, on override le résultat
+        # pour éviter un faux positif (le contenu analysé est celui du challenge, pas du site)
+        if challenge_detected:
+            result = DetectionResponse(
+                ok=False,
+                url=url,
+                method='challenge_page',
+                error=f'Contenu bloqué par {challenge_detected} (page de challenge/CAPTCHA détectée)'
+            )
+            decision = f"Challenge page detected ({challenge_detected}) — result overridden to ok=false"
+        else:
+            result = await self.check_page_if_french(content, mode)
 
-        # --- Determine which decision case was applied ---
-        decision = self._identify_decision_case(
-            nlp_confirms_french, is_strong_url, nlp_strongly_contradicts,
-            nlp_soft_french, nlp_available, nlp_contradicts_french,
-            url_indicates_french, html_indicates_french, alternatives,
-            result
-        )
+            # --- Determine which decision case was applied ---
+            decision = self._identify_decision_case(
+                nlp_confirms_french, is_strong_url, nlp_strongly_contradicts,
+                nlp_soft_french, nlp_available, nlp_contradicts_french,
+                url_indicates_french, html_indicates_french, alternatives,
+                result
+            )
 
         debug_info = DebugInfo(
             fetch=debug_fetch,
