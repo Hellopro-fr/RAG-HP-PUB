@@ -77,6 +77,8 @@ router.addDefaultHandler(
         const proxyUrl = proxyInfo?.url || null;
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
+        // Uses ignoredExtensions as single source of truth for blocked file types
+        const blockedExtensionsRegex = new RegExp(`\\.(${ignoredExtensions})$`, 'i');
         await page.route('**/*', (route) => {
             const req = route.request();
             const resourceType = req.resourceType();
@@ -86,11 +88,11 @@ router.addDefaultHandler(
             if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
                 return route.abort();
             }
-            // Block download scripts and binary files (expanded list aligned with api-detection-langue-fr)
+            // Block download scripts and binary files (uses ignoredExtensions list)
             if (
                 reqUrl.includes('download.php') ||
                 reqUrl.includes('imp=1') ||
-                /\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg|7z|bz2|tar|xz|jpg|jpeg|png|gif|bmp|tif|tiff|webp|svg|ico|mp4|avi|mov|wmv|flv|webm|m4v|mp3|wav|ogg|aac|mid|ppt|pptx|apk|rss)$/i.test(reqUrl)
+                blockedExtensionsRegex.test(reqUrl)
             ) {
                 return route.abort();
             }
