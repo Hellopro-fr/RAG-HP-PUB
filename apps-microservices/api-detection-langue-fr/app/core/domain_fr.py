@@ -204,14 +204,21 @@ class DomainFR:
         return recheck
     
     def _check_base_domain(self, base_domain: str, actual_domain: str) -> bool:
-        """Vérifie que deux domaines sont liés."""
+        """
+        Vérifie que deux domaines sont liés.
+
+        Normalise les séparateurs (hyphens, underscores) avant comparaison
+        pour gérer les cas où une entreprise utilise des variantes :
+        Ex: stematjansen.com et stemat-jansen.fr → match
+        """
         if not base_domain or not actual_domain:
             return False
-        
-        base_lower = base_domain.lower()
-        actual_lower = actual_domain.lower()
-        
-        return base_lower in actual_lower or actual_lower in base_lower
+
+        # Normalisation : lowercase + suppression hyphens et underscores
+        base_norm = base_domain.lower().replace('-', '').replace('_', '')
+        actual_norm = actual_domain.lower().replace('-', '').replace('_', '')
+
+        return base_norm in actual_norm or actual_norm in base_norm
     
     async def _validate_single_url(self, url: str) -> bool:
         """
