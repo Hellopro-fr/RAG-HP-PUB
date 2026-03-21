@@ -40,28 +40,35 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
     try:
         # Récupérer le HTML si non fourni
         html_content = request.html_content
+        effective_url = request.url
+
         if not html_content:
-            html_content = await fetch_html(request.url, request.proxy_url)
-            if not html_content:
+            fetch_result = await fetch_html(request.url, request.proxy_url)
+            if not fetch_result:
                 return DetectionResponse(
                     ok=False,
                     url=request.url,
                     method='fetch_failed',
                     error='Impossible de récupérer le contenu HTML'
                 )
-        
-        # Créer le détecteur
+            html_content, final_url = fetch_result
+            # Mettre à jour l'URL si Playwright a suivi une redirection
+            if final_url and final_url != request.url:
+                logger.info(f"Redirection détectée: {request.url} → {final_url}")
+                effective_url = final_url
+
+        # Créer le détecteur avec l'URL finale (après redirection éventuelle)
         detector = DomainFR(
-            homepage=request.url,
+            homepage=effective_url,
             forced_method=request.forced_method,
             use_nlp_detection=request.use_nlp_detection
         )
-        
+
         # Lancer la détection
         result = await detector.check_page_if_french(html_content, request.mode)
-        
+
         return result
-        
+
     except Exception as e:
         return DetectionResponse(
             ok=False,
@@ -115,9 +122,11 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             item_start = time.time()
             try:
                 html_content = item.html_content
+                effective_url = url
+
                 if not html_content:
-                    html_content = await fetch_html(url, request.proxy_url)
-                    if not html_content:
+                    fetch_result = await fetch_html(url, request.proxy_url)
+                    if not fetch_result:
                         processed_count += 1
                         duration_ms = round((time.time() - item_start) * 1000)
                         logger.warning(f"[BATCH] [{processed_count}/{total_items}] FETCH_FAILED {url} ({duration_ms}ms)")
@@ -127,9 +136,13 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                             method='fetch_failed',
                             error='Impossible de récupérer le contenu HTML'
                         )
+                    html_content, final_url = fetch_result
+                    if final_url and final_url != url:
+                        logger.info(f"[BATCH] Redirection: {url} → {final_url}")
+                        effective_url = final_url
 
                 detector = DomainFR(
-                    homepage=url,
+                    homepage=effective_url,
                     use_nlp_detection=request.use_nlp_detection
                 )
 
@@ -184,14 +197,20 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
             try:
                 html_content = item.html_content
+                effective_url = item.url
+
                 if not html_content:
-                    html_content = await fetch_html(item.url, request.proxy_url)
-                    if not html_content:
+                    fetch_result = await fetch_html(item.url, request.proxy_url)
+                    if not fetch_result:
                         logger.warning(f"[BATCH] Retry ECHEC {item.url}")
                         continue
+                    html_content, final_url = fetch_result
+                    if final_url and final_url != item.url:
+                        logger.info(f"[BATCH] Retry redirection: {item.url} → {final_url}")
+                        effective_url = final_url
 
                 detector = DomainFR(
-                    homepage=item.url,
+                    homepage=effective_url,
                     use_nlp_detection=request.use_nlp_detection
                 )
                 retry_result = await detector.check_page_if_french(html_content, request.mode)
@@ -273,11 +292,13 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
     try:
         html_content = request.html_content
         fetched_by = 'provided'
+        effective_url = request.url
+        redirected_from = None
 
         if not html_content:
             fetched_by = 'api'
-            html_content = await fetch_html(request.url, request.proxy_url)
-            if not html_content:
+            fetch_result = await fetch_html(request.url, request.proxy_url)
+            if not fetch_result:
                 from app.models.schemas import (
                     DebugInfo, DebugFetchInfo, DebugCleaningInfo,
                     DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo,
@@ -300,16 +321,22 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
                         decision='Fetch failed — no content to analyze'
                     )
                 )
+            html_content, final_url = fetch_result
+            if final_url and final_url != request.url:
+                logger.info(f"[DEBUG] Redirection: {request.url} → {final_url}")
+                redirected_from = request.url
+                effective_url = final_url
 
         detector = DomainFR(
-            homepage=request.url,
+            homepage=effective_url,
             forced_method=request.forced_method,
             use_nlp_detection=request.use_nlp_detection
         )
 
         return await detector.check_page_if_french_debug(
             html_content, request.mode, fetched_by=fetched_by,
-            include_full_content=request.include_full_content
+            include_full_content=request.include_full_content,
+            redirected_from=redirected_from
         )
 
     except Exception as e:

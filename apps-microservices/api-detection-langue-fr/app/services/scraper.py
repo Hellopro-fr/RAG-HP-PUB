@@ -122,7 +122,7 @@ async def _inject_cookie_consent(context, url: str) -> None:
         pass
 
 
-async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[str]:
+async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[tuple[str, str]]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
@@ -139,7 +139,8 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
         proxy: Proxy URL obligatoire (format: http://user:pass@host:port)
 
     Returns:
-        Le contenu HTML rendu par le navigateur, ou None en cas d'erreur.
+        Tuple (contenu_html, url_finale) ou None en cas d'erreur.
+        url_finale est l'URL après redirections (peut différer de l'URL d'entrée).
     """
     try:
         from playwright.async_api import async_playwright
@@ -233,12 +234,18 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                             logger.warning(f"Erreur page.content() pour {url}: {content_e}")
                             break
 
+                # Capturer l'URL finale (après redirections éventuelles)
+                final_url = page.url
+
                 await context.close()
                 await browser.close()
 
                 if content and len(content) > 100:
-                    logger.info(f"Scraping réussi pour {url} ({len(content)} caractères)")
-                    return content
+                    if final_url != url:
+                        logger.info(f"Scraping réussi pour {url} → {final_url} ({len(content)} caractères)")
+                    else:
+                        logger.info(f"Scraping réussi pour {url} ({len(content)} caractères)")
+                    return (content, final_url)
                 else:
                     logger.warning(f"Contenu trop court pour {url}")
                     return None

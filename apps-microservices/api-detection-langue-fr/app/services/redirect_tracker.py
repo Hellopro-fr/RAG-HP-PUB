@@ -121,7 +121,7 @@ def _is_retryable_error(error_msg: str) -> bool:
     return True
 
 
-async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
+async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[str, str]]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
@@ -129,9 +129,9 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
     (proxy lent, IP bloquée, timeout). Les erreurs permanentes (DNS, config)
     ne sont pas retryées.
 
-    Utilise un navigateur headless Playwright avec fingerprinting, blocage de
-    ressources lourdes et acceptation automatique des cookies — configuration
-    alignée sur le crawler-service pour des résultats cohérents.
+    Returns:
+        Tuple (contenu_html, url_finale) ou None en cas d'erreur.
+        url_finale est l'URL après redirections (peut différer de l'URL d'entrée).
     """
     effective_proxy = proxy or settings.APIFY_PROXY
     if not effective_proxy:
@@ -145,11 +145,12 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[str]:
     for attempt in range(1, max_retries + 1):
         try:
             from app.services.scraper import scrape_html
-            content = await scrape_html(url, proxy=effective_proxy)
-            if content:
+            result = await scrape_html(url, proxy=effective_proxy)
+            if result:
+                content, final_url = result
                 if attempt > 1:
                     logger.info(f"Récupération réussie pour {url} à la tentative {attempt}/{max_retries}")
-                return content
+                return (content, final_url)
 
             # Contenu vide/trop court — retryable
             last_error = "Contenu vide ou trop court"

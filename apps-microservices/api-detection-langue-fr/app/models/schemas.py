@@ -179,6 +179,7 @@ class DebugFetchInfo(BaseModel):
     raw_html_length: int = Field(..., description="Longueur du HTML brut en caracteres")
     raw_html_preview: str = Field(..., description="Premiers 500 caracteres du HTML brut")
     raw_html_full: Optional[str] = Field(default=None, description="Contenu HTML complet (uniquement si include_full_content=true)")
+    redirected_from: Optional[str] = Field(default=None, description="URL d'origine avant redirection (null si pas de redirection)")
 
 class DebugCleaningInfo(BaseModel):
     """Informations sur le nettoyage du contenu"""

@@ -250,9 +250,11 @@ class DomainFR:
             from app.services.scraper import scrape_html
             effective_proxy = settings.APIFY_PROXY
             if effective_proxy:
-                content = await scrape_html(url, proxy=effective_proxy)
-                if content and len(content) > 100:
-                    return True
+                result = await scrape_html(url, proxy=effective_proxy)
+                if result:
+                    content, _ = result
+                    if content and len(content) > 100:
+                        return True
         except Exception:
             pass
 
@@ -925,7 +927,8 @@ class DomainFR:
         content: str,
         mode: DetectionMode = DetectionMode.COMPLETE,
         fetched_by: str = 'api',
-        include_full_content: bool = False
+        include_full_content: bool = False,
+        redirected_from: Optional[str] = None
     ) -> DebugDetectionResponse:
         """
         Version debug de check_page_if_french qui collecte les informations
@@ -936,6 +939,7 @@ class DomainFR:
             mode: Mode de detection (simple ou complete)
             fetched_by: 'api' si recupere par Playwright, 'provided' si fourni
             include_full_content: Si True, inclut le HTML complet et le texte nettoye complet
+            redirected_from: URL d'origine avant redirection (None si pas de redirection)
 
         Returns:
             DebugDetectionResponse avec le resultat + infos debug
@@ -947,7 +951,8 @@ class DomainFR:
             fetched_by=fetched_by,
             raw_html_length=len(content) if content else 0,
             raw_html_preview=(content[:500] if content else ''),
-            raw_html_full=content if (include_full_content and content) else None
+            raw_html_full=content if (include_full_content and content) else None,
+            redirected_from=redirected_from
         )
 
         # --- Debug: Cleaning info ---
