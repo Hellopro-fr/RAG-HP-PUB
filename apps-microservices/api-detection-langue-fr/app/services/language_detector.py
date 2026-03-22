@@ -45,15 +45,17 @@ def detect_challenge_page(html: str) -> Optional[str]:
     # --- Cloudflare Turnstile Challenge ---
     # Indicateurs forts : spécifiques aux pages de challenge, pas aux sites normaux
     cf_strong = [
-        'cf-turnstile-response',                      # Input CAPTCHA Turnstile
-        'challenges.cloudflare.com/turnstile',         # Script Turnstile JS
+        'cf-turnstile-response',                      # Input CAPTCHA Turnstile (uniquement sur pages challenge)
         '<title>just a moment...</title>',             # Titre page challenge (EN)
         '<title>un instant',                           # Titre page challenge (FR) — match partiel
         'chl_page/v1',                                 # Script orchestration challenge
     ]
-    # Indicateurs faibles : peuvent apparaitre sur des sites réels utilisant Cloudflare CDN
+    # Indicateurs faibles : peuvent apparaitre sur des sites réels utilisant Cloudflare
+    # challenges.cloudflare.com/turnstile est utilisé par les vrais sites pour les formulaires
+    # (contact, login, etc.) — ce n'est PAS exclusif aux pages de challenge
     cf_weak = [
         'cdn-cgi/challenge-platform',                  # Peut être en référence analytique
+        'challenges.cloudflare.com/turnstile',         # Script Turnstile JS — aussi sur vrais sites pour form CAPTCHA
     ]
 
     cf_strong_count = sum(1 for p in cf_strong if p in html_lower)
