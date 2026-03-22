@@ -43,32 +43,30 @@ def detect_challenge_page(html: str) -> Optional[str]:
         return 'Cloudflare_blocked'
 
     # --- Cloudflare Turnstile Challenge ---
-    # Indicateurs forts : spécifiques aux pages de challenge, pas aux sites normaux
-    cf_strong = [
-        'cf-turnstile-response',                      # Input CAPTCHA Turnstile (uniquement sur pages challenge)
+    # Détection basée sur un ancre obligatoire : chl_page/v1
+    #
+    # POURQUOI : Les composants Turnstile (cf-turnstile-response, challenges.cloudflare.com/turnstile)
+    # sont aussi présents sur les vrais sites qui utilisent Turnstile pour la protection de formulaires
+    # (contact, login, etc.). Seul chl_page/v1 est EXCLUSIF aux pages de challenge Cloudflare —
+    # il n'est jamais chargé sur un vrai site.
+    #
+    # Logique : chl_page/v1 (obligatoire) + au moins 1 confirmation
+    cf_anchor = 'chl_page/v1'  # Script orchestration challenge — EXCLUSIF aux pages challenge
+
+    cf_confirmations = [
+        'cf-turnstile-response',                      # Input CAPTCHA Turnstile
         '<title>just a moment...</title>',             # Titre page challenge (EN)
         '<title>un instant',                           # Titre page challenge (FR) — match partiel
-        'chl_page/v1',                                 # Script orchestration challenge
-    ]
-    # Indicateurs faibles : peuvent apparaitre sur des sites réels utilisant Cloudflare
-    # challenges.cloudflare.com/turnstile est utilisé par les vrais sites pour les formulaires
-    # (contact, login, etc.) — ce n'est PAS exclusif aux pages de challenge
-    cf_weak = [
-        'cdn-cgi/challenge-platform',                  # Peut être en référence analytique
-        'challenges.cloudflare.com/turnstile',         # Script Turnstile JS — aussi sur vrais sites pour form CAPTCHA
+        'noindex',                                     # meta robots noindex (pages challenge ont toujours noindex)
+        'cdn-cgi/challenge-platform',                  # Plateforme challenge CF
+        'challenges.cloudflare.com/turnstile',         # Script Turnstile JS
     ]
 
-    cf_strong_count = sum(1 for p in cf_strong if p in html_lower)
-    cf_weak_count = sum(1 for p in cf_weak if p in html_lower)
-
-    # Cloudflare challenge confirmé si : 2+ forts, ou 1 fort + 1 faible
-    if cf_strong_count >= 2:
-        return 'Cloudflare'
-    if cf_strong_count >= 1 and cf_weak_count >= 1:
-        return 'Cloudflare'
-    # 1 indicateur fort seul + contenu très court (< 1000 chars hors CSS/JS)
-    if cf_strong_count >= 1:
-        # Estimation rapide du contenu visible (sans CSS/styles)
+    if cf_anchor in html_lower:
+        cf_confirmation_count = sum(1 for p in cf_confirmations if p in html_lower)
+        if cf_confirmation_count >= 1:
+            return 'Cloudflare'
+        # chl_page/v1 seul + contenu très court → probablement une page challenge minimaliste
         import re as _re
         text_only = _re.sub(r'<style[^>]*>.*?</style>', '', html_lower, flags=_re.DOTALL)
         text_only = _re.sub(r'<script[^>]*>.*?</script>', '', text_only, flags=_re.DOTALL)
