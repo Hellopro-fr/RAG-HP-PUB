@@ -127,9 +127,14 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
-    Inclut un mécanisme de retry automatique pour les erreurs transitoires
-    (proxy lent, IP bloquée, timeout). Les erreurs permanentes (DNS, config)
-    ne sont pas retryées.
+    Stratégie de retry avec ciblage pays (sans sessions sticky) :
+    - Tentative 1-2 : country-FR (IP française, meilleure compatibilité)
+    - Tentative 3 : sans country (fallback si pool FR épuisé)
+
+    Pas de session sticky ici — Apify rotation intelligente sélectionne
+    automatiquement l'IP la plus anciennement utilisée pour chaque hostname.
+    Les sessions sticky ne sont utilisées qu'en Phase 3 (scraper.py) pour
+    la résolution de challenges Cloudflare qui nécessite une IP stable.
 
     Returns:
         Tuple (contenu_html, url_finale) ou None en cas d'erreur.
@@ -141,13 +146,23 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
                      f"Configurez APIFY_PROXY ou passez proxy_url.")
         return None
 
+    from app.services.scraper import scrape_html, build_proxy_url
+
     max_retries = settings.HTTP_MAX_RETRIES
     last_error = None
 
     for attempt in range(1, max_retries + 1):
+        # Stratégie de country : FR pour les premières tentatives, sans country en dernier recours
+        use_country = 'FR' if attempt < max_retries else None
+        attempt_proxy = build_proxy_url(effective_proxy, country=use_country)
+
+        if use_country:
+            logger.info(f"[{attempt}/{max_retries}] Fetch {url} avec proxy country-{use_country}")
+        else:
+            logger.info(f"[{attempt}/{max_retries}] Fetch {url} avec proxy sans country (fallback)")
+
         try:
-            from app.services.scraper import scrape_html
-            result = await scrape_html(url, proxy=effective_proxy)
+            result = await scrape_html(url, proxy=attempt_proxy)
             if result:
                 content, final_url = result
                 if attempt > 1:

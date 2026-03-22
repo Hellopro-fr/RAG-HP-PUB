@@ -1,10 +1,69 @@
 import asyncio
 import logging
 import random
+import uuid
 from typing import Optional
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+
+def build_proxy_url(base_proxy: str, session_id: Optional[str] = None, country: Optional[str] = 'FR') -> str:
+    """
+    Construit une URL proxy Apify avec ciblage pays et session sticky optionnelle.
+
+    Country targeting : cible les IPs du pays spécifié (meilleure compatibilité).
+    Session sticky (optionnelle) : garantit la même IP pour toute la durée d'une session.
+    À utiliser uniquement pour la résolution de challenges (Cloudflare) qui nécessite
+    une IP stable. Pour le fetching normal, laisser session_id=None et laisser
+    Apify utiliser sa rotation intelligente (IP la plus anciennement utilisée par hostname).
+
+    Note sur les sessions Apify datacenter :
+    - Les sessions persistent 26h (renouvelées à chaque requête)
+    - Chaque session verrouille une IP du pool partagé
+    - Le pool est limité par plan → éviter de créer trop de sessions
+
+    Format Apify :
+      - Sans session ni country : http://auto:{password}@proxy.apify.com:8000
+      - Avec country seul : http://country-FR:{password}@proxy.apify.com:8000
+      - Avec session seule : http://session-{id}:{password}@proxy.apify.com:8000
+      - Avec les deux : http://country-FR,session-{id}:{password}@proxy.apify.com:8000
+
+    Args:
+        base_proxy: URL proxy de base (format: http://auto:{password}@proxy.apify.com:8000)
+        session_id: Identifiant de session sticky. None = pas de session (rotation auto Apify).
+        country: Code pays ISO 2 lettres (défaut: 'FR'). None pour désactiver.
+
+    Returns:
+        URL proxy modifiée avec country et/ou session.
+    """
+    try:
+        parsed = urlparse(base_proxy)
+        password = parsed.password
+
+        if not password:
+            logger.warning(f"Pas de mot de passe dans l'URL proxy, retour proxy de base")
+            return base_proxy
+
+        # Construire le username avec country et/ou session
+        username_parts = []
+        if country:
+            username_parts.append(f"country-{country}")
+        if session_id:
+            username_parts.append(f"session-{session_id}")
+
+        # Si aucun paramètre, utiliser 'auto' (rotation intelligente Apify)
+        username = ','.join(username_parts) if username_parts else 'auto'
+
+        # Masquer le mot de passe dans les logs
+        masked = f"{parsed.scheme}://{username}:****@{parsed.hostname}:{parsed.port}"
+        logger.debug(f"Proxy URL: {masked}")
+
+        return f"{parsed.scheme}://{username}:{password}@{parsed.hostname}:{parsed.port}"
+
+    except Exception as e:
+        logger.warning(f"Erreur construction proxy URL: {e}, retour proxy de base")
+        return base_proxy
 
 # Sémaphore global limitant le nombre de navigateurs Playwright simultanés.
 # Protège contre l'épuisement mémoire en cas de requêtes /detect ou /detect-batch concurrentes.
