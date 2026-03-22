@@ -870,6 +870,9 @@ class DomainFR:
         # pour confirmer qu'elles sont réellement en français, pas juste accessibles.
         reliable_alternatives = [a for a in alternatives if a.validated]
         if reliable_alternatives:
+            challenge_blocked_count = 0
+            challenge_blocked_service = None
+
             for alt_candidate in reliable_alternatives:
                 try:
                     alt_content_result = await fetch_html(alt_candidate.url)
@@ -881,8 +884,11 @@ class DomainFR:
 
                     # Vérifier que ce n'est pas une page de challenge
                     from app.services.language_detector import detect_challenge_page
-                    if detect_challenge_page(alt_content):
-                        logger.warning(f"Page de challenge détectée sur l'alternative {alt_candidate.url}")
+                    challenge_service = detect_challenge_page(alt_content)
+                    if challenge_service:
+                        logger.warning(f"Page de challenge {challenge_service} détectée sur l'alternative {alt_candidate.url}")
+                        challenge_blocked_count += 1
+                        challenge_blocked_service = challenge_service
                         continue
 
                     # Détection HTML tags sur l'alternative
@@ -941,7 +947,26 @@ class DomainFR:
                 except Exception as alt_e:
                     logger.warning(f"Erreur vérification alternative {alt_candidate.url}: {alt_e}")
                     continue
-        
+
+            # Si toutes les alternatives ont été bloquées par des pages de challenge,
+            # retourner une erreur spécifique au lieu de Check_nok_v2
+            if challenge_blocked_count > 0 and challenge_blocked_count == len(reliable_alternatives):
+                if challenge_blocked_service == 'Cloudflare_blocked':
+                    error_msg = 'Alternative(s) française(s) trouvée(s) mais bloquée(s) par Cloudflare WAF'
+                else:
+                    error_msg = f'Alternative(s) française(s) trouvée(s) mais bloquée(s) par {challenge_blocked_service}'
+                logger.warning(
+                    f"Toutes les alternatives ({challenge_blocked_count}) bloquées par {challenge_blocked_service} "
+                    f"pour {url}"
+                )
+                return DetectionResponse(
+                    ok=False,
+                    url=url,
+                    method='challenge_page',
+                    alternative_urls=alternatives,
+                    error=error_msg
+                )
+
         # Cas 7 : NLP disponible mais ne confirme pas, malgré indicateurs HTML/URL
         if nlp_available and (html_indicates_french or url_indicates_french):
             return DetectionResponse(
