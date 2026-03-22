@@ -123,19 +123,71 @@ def _is_retryable_error(error_msg: str) -> bool:
     return True
 
 
+def _generate_url_variants(url: str) -> list[str]:
+    """
+    Génère les variantes d'URL à essayer quand l'URL originale échoue.
+
+    Bascule entre https/http et www/sans-www pour couvrir les cas où :
+    - Le certificat SSL est mal configuré (https échoue, http fonctionne)
+    - Le sous-domaine www n'est pas configuré (www échoue, sans-www fonctionne)
+    - Ou l'inverse (sans-www redirige vers www mais n'est pas configuré)
+
+    Returns:
+        Liste d'URLs variantes (excluant l'URL originale).
+    """
+    try:
+        parsed = urlparse(url)
+        scheme = parsed.scheme  # http ou https
+        hostname = parsed.hostname or ''
+        path = parsed.path or '/'
+        query = f'?{parsed.query}' if parsed.query else ''
+
+        # Déterminer les variantes de scheme et hostname
+        alt_scheme = 'http' if scheme == 'https' else 'https'
+        has_www = hostname.startswith('www.')
+        if has_www:
+            alt_hostname = hostname[4:]  # Retirer www.
+        else:
+            alt_hostname = f'www.{hostname}'  # Ajouter www.
+
+        port_str = f':{parsed.port}' if parsed.port and parsed.port not in (80, 443) else ''
+
+        # Générer les 3 variantes (excluant l'originale)
+        variants = [
+            f'{alt_scheme}://{hostname}{port_str}{path}{query}',          # Même host, autre scheme
+            f'{scheme}://{alt_hostname}{port_str}{path}{query}',          # Même scheme, autre host
+            f'{alt_scheme}://{alt_hostname}{port_str}{path}{query}',      # Autre scheme + autre host
+        ]
+
+        # Nettoyer : dédupliquer et exclure l'originale
+        original_normalized = url.rstrip('/')
+        seen = set()
+        unique_variants = []
+        for v in variants:
+            v_normalized = v.rstrip('/')
+            if v_normalized != original_normalized and v_normalized not in seen:
+                seen.add(v_normalized)
+                unique_variants.append(v)
+
+        return unique_variants
+    except Exception:
+        return []
+
+
 async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[str, str]]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
-    Stratégie de retry avec ciblage pays (sans sessions sticky) :
-    - Tentative 1 : auto (rotation intelligente Apify, pool large)
-    - Tentative 2 : country-FR (IP française, meilleure compatibilité géo)
-    - Tentative 3 : auto (fallback, rotation intelligente sur autre IP)
+    Stratégie en deux phases :
+    Phase 1 — Retry sur l'URL originale (3 tentatives, rotation proxy) :
+      - Tentative 1 : auto (rotation intelligente Apify, pool large)
+      - Tentative 2 : country-FR (IP française, meilleure compatibilité géo)
+      - Tentative 3 : auto (fallback, rotation intelligente sur autre IP)
 
-    Ordre auto → FR → auto pour éviter de gaspiller 2 tentatives sur
-    country-FR si le pool FR est trop petit ou bloqué pour ce site.
-    Apify rotation intelligente sélectionne automatiquement l'IP la plus
-    anciennement utilisée pour chaque hostname.
+    Phase 2 — Fallback sur variantes d'URL (si Phase 1 échoue) :
+      Bascule http/https et www/sans-www pour couvrir les cas de mauvaise
+      configuration SSL ou DNS. Chaque variante est testée une seule fois.
+      Ex: https://www.example.com → http://www.example.com → https://example.com → http://example.com
 
     Returns:
         Tuple (contenu_html, url_finale) ou None en cas d'erreur.
@@ -190,5 +242,38 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
             )
             await asyncio.sleep(wait_time)
 
-    logger.error(f"Échec de récupération HTML pour {url} après {max_retries} tentatives ({last_error})")
+    logger.warning(f"Échec de récupération HTML pour {url} après {max_retries} tentatives ({last_error})")
+
+    # Phase 2 : Fallback sur variantes d'URL (http/https, www/sans-www)
+    # Couvre les cas de mauvaise configuration SSL ou DNS côté serveur.
+    # Chaque variante est testée une seule fois avec proxy auto.
+    variants = _generate_url_variants(url)
+    if variants:
+        logger.warning(
+            f"[VARIANTES] Tentative de fallback pour {url} — "
+            f"{len(variants)} variante(s) à tester: {', '.join(variants)}"
+        )
+        for variant in variants:
+            try:
+                variant_proxy = build_proxy_url(effective_proxy, country=None)
+                logger.warning(f"[VARIANTE] Test {variant}")
+                result = await scrape_html(variant, proxy=variant_proxy)
+                if result:
+                    content, final_url = result
+                    logger.warning(
+                        f"[VARIANTE] Succès avec {variant} → {final_url} "
+                        f"({len(content)} caractères)"
+                    )
+                    return (content, final_url)
+            except Exception as e:
+                if not _is_retryable_error(str(e)):
+                    logger.warning(f"[VARIANTE] Erreur permanente pour {variant}: {e}")
+                    continue
+                logger.warning(f"[VARIANTE] Échec pour {variant}: {e}")
+                continue
+
+        logger.error(f"Échec de récupération HTML pour {url} — toutes les variantes ont échoué")
+    else:
+        logger.error(f"Échec de récupération HTML pour {url} — aucune variante à tester")
+
     return None
