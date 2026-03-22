@@ -128,13 +128,14 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
     Stratégie de retry avec ciblage pays (sans sessions sticky) :
-    - Tentative 1-2 : country-FR (IP française, meilleure compatibilité)
-    - Tentative 3 : sans country (fallback si pool FR épuisé)
+    - Tentative 1 : auto (rotation intelligente Apify, pool large)
+    - Tentative 2 : country-FR (IP française, meilleure compatibilité géo)
+    - Tentative 3 : auto (fallback, rotation intelligente sur autre IP)
 
-    Pas de session sticky ici — Apify rotation intelligente sélectionne
-    automatiquement l'IP la plus anciennement utilisée pour chaque hostname.
-    Les sessions sticky ne sont utilisées qu'en Phase 3 (scraper.py) pour
-    la résolution de challenges Cloudflare qui nécessite une IP stable.
+    Ordre auto → FR → auto pour éviter de gaspiller 2 tentatives sur
+    country-FR si le pool FR est trop petit ou bloqué pour ce site.
+    Apify rotation intelligente sélectionne automatiquement l'IP la plus
+    anciennement utilisée pour chaque hostname.
 
     Returns:
         Tuple (contenu_html, url_finale) ou None en cas d'erreur.
@@ -152,14 +153,15 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
     last_error = None
 
     for attempt in range(1, max_retries + 1):
-        # Stratégie de country : FR pour les premières tentatives, sans country en dernier recours
-        use_country = 'FR' if attempt < max_retries else None
+        # Stratégie : auto → country-FR → auto
+        # Tentative 2 utilise country-FR, les autres utilisent auto (pool large)
+        use_country = 'FR' if attempt == 2 else None
         attempt_proxy = build_proxy_url(effective_proxy, country=use_country)
 
         if use_country:
             logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy country-{use_country}")
         else:
-            logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy sans country (fallback)")
+            logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy auto (rotation intelligente)")
 
         try:
             result = await scrape_html(url, proxy=attempt_proxy)

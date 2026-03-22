@@ -260,11 +260,13 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 await _setup_resource_blocking(page)
 
                 # Navigation en deux phases :
-                # Phase 1 : domcontentloaded (rapide, DOM prêt)
+                # Phase 1 : domcontentloaded avec timeout réduit à 30s
+                #   Si un site ne retourne pas le HTML initial en 30s, 90s ne changera rien.
+                #   Les pages Cloudflare challenge chargent en < 5s.
                 # Phase 2 : networkidle avec timeout court (bonus JS rendering)
-                # Évite d'attendre 90s sur des sites qui ne deviennent jamais idle
+                nav_timeout = min(timeout, 30) * 1000  # Max 30s pour domcontentloaded
                 try:
-                    await page.goto(url, wait_until='domcontentloaded', timeout=timeout * 1000)
+                    await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
                 except Exception as nav_e:
                     err_str = str(nav_e)
                     # Erreurs permanentes — inutile de continuer
@@ -463,8 +465,9 @@ async def scrape_html_with_redirects(
                 page.on('response', on_response)
 
                 # Navigation deux phases (cohérent avec scrape_html)
+                nav_timeout = min(timeout, 30) * 1000  # Max 30s pour domcontentloaded
                 try:
-                    response = await page.goto(url, wait_until='domcontentloaded', timeout=timeout * 1000)
+                    response = await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
                 except Exception as nav_e:
                     err_str = str(nav_e)
                     if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
