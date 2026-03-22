@@ -556,13 +556,16 @@ class DomainFR:
             # 1. Hreflang (trusted, high reliability)
             # Prioritaire: starts with "fr" (fr, fr-FR, fr-BE)
             # Secondaire: contains "fr" anywhere (be-fr, ca-fr)
+            # Note: PAS de vérification de domaine pour hreflang — c'est une déclaration
+            # explicite du webmaster. Si le site déclare un hreflang vers un autre domaine,
+            # on fait confiance (ex: trojantechnologies.com → trojanuv.com/fr/).
             for regex in [re.compile(r'^fr', re.IGNORECASE), re.compile(r'fr', re.IGNORECASE)]:
                 for link in soup.find_all(attrs={'hreflang': regex}):
                     href = link.get('href')
                     hreflang_val = link.get('hreflang', '')
                     if href and href != '#':
-                        resolved = _resolve_and_check(href)
-                        if resolved:
+                        resolved = self.resolve_url(self.homepage, href)
+                        if resolved and not self._is_self_url(resolved):
                             _add_trusted(resolved, 'hreflang', hreflang_value=hreflang_val)
 
             # 2. data-lang et data-gt-lang (need validation, medium reliability)
