@@ -74,10 +74,13 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
             )
 
         # Créer le détecteur avec l'URL finale (après redirection éventuelle)
+        # original_homepage conserve l'URL d'origine pour accepter les alternatives
+        # qui pointent vers le domaine d'avant redirection (ex: trojanuv.com → trojantechnologies.com)
         detector = DomainFR(
             homepage=effective_url,
             forced_method=request.forced_method,
-            use_nlp_detection=request.use_nlp_detection
+            use_nlp_detection=request.use_nlp_detection,
+            original_homepage=request.url if effective_url != request.url else None
         )
 
         # Lancer la détection
@@ -182,7 +185,8 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
                 detector = DomainFR(
                     homepage=effective_url,
-                    use_nlp_detection=request.use_nlp_detection
+                    use_nlp_detection=request.use_nlp_detection,
+                    original_homepage=url if effective_url != url else None
                 )
 
                 result = await detector.check_page_if_french(html_content, request.mode)
@@ -258,7 +262,8 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
 
                 detector = DomainFR(
                     homepage=effective_url,
-                    use_nlp_detection=request.use_nlp_detection
+                    use_nlp_detection=request.use_nlp_detection,
+                    original_homepage=item.url if effective_url != item.url else None
                 )
                 retry_result = await detector.check_page_if_french(html_content, request.mode)
                 results[idx] = retry_result
@@ -382,7 +387,8 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
         detector = DomainFR(
             homepage=effective_url,
             forced_method=request.forced_method,
-            use_nlp_detection=request.use_nlp_detection
+            use_nlp_detection=request.use_nlp_detection,
+            original_homepage=request.url if effective_url != request.url else None
         )
 
         return await detector.check_page_if_french_debug(

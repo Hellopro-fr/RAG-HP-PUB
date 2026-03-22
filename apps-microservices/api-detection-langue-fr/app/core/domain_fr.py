@@ -32,9 +32,11 @@ class DomainFR:
         self,
         homepage: str,
         forced_method: Optional[str] = None,
-        use_nlp_detection: bool = True
+        use_nlp_detection: bool = True,
+        original_homepage: Optional[str] = None
     ):
         self.homepage = homepage
+        self.original_homepage = original_homepage or homepage
         self.forced_method = forced_method
         self.use_nlp_detection = use_nlp_detection
         self.tracker = RedirectTracker()
@@ -483,17 +485,32 @@ class DomainFR:
             return []
 
         base_domain = self.get_domain_from_url(self.homepage)
+        homepage_parsed = urlparse(self.homepage)
+        homepage_host = (homepage_parsed.hostname or '').lower()
+
+        # Domaine original (avant redirection) — permet d'accepter les alternatives
+        # qui pointent vers le domaine d'origine quand une redirection a changé le domaine.
+        # Ex: trojanuv.com → trojantechnologies.com, alternative trouvée: trojanuv.com/fr/
+        original_base_domain = self.get_domain_from_url(self.original_homepage)
+        has_different_original = (original_base_domain != base_domain)
+
         seen_urls = set()
         all_alternatives: list[AlternativeUrl] = []
         candidates_to_validate: list[dict] = []
 
         def _resolve_and_check(href: str) -> Optional[str]:
-            """Resolve a href and check domain match + not self URL."""
+            """Resolve a href and check domain match + not self URL.
+            Accepts URLs matching either the current domain or the original domain (before redirect).
+            """
             resolved = self.resolve_url(self.homepage, href)
             if not resolved or self._is_self_url(resolved):
                 return None
             link_domain = self.get_domain_from_url(resolved)
+            # Vérifier contre le domaine actuel (après redirection)
             if self._check_base_domain(base_domain, link_domain):
+                return resolved
+            # Vérifier contre le domaine original (avant redirection)
+            if has_different_original and self._check_base_domain(original_base_domain, link_domain):
                 return resolved
             return None
 
@@ -572,21 +589,60 @@ class DomainFR:
                         _queue_candidate(resolved, href, 'link_pattern')
 
             # 4. Options <option> avec value fr (need validation, medium reliability)
+            # Scanne les <select>/<option> pour :
+            #   a) Patterns /fr/ ou lang=fr dans l'URL
+            #   b) Domaines .fr apparentés (ex: soprema.fr dans un select de soprema-international.com)
+            #   c) Sous-domaines français (ex: fr.domain.com)
             for option in soup.find_all('option'):
                 value = option.get('value', '')
+                if not value or not value.strip():
+                    continue
+
+                # 4a. Pattern /fr/ ou lang=fr
                 if re.search(
                     r'(^|/)fr(/|$)|lang=fr', value, re.IGNORECASE
                 ):
                     resolved = _resolve_and_check(value)
                     if resolved:
                         _queue_candidate(resolved, value, 'option_tag')
+                    continue
+
+                # 4b. Domaine .fr apparenté (même logique que Method 5 mais pour <option>)
+                try:
+                    opt_parsed = urlparse(value)
+                    opt_host = (opt_parsed.hostname or '').lower()
+                    if opt_host and opt_host.endswith('.fr') and opt_host != homepage_host:
+                        opt_base = self.get_domain_from_url(value)
+                        if self._check_base_domain(base_domain, opt_base):
+                            resolved = _resolve_and_check(value)
+                            if resolved:
+                                _queue_candidate(resolved, value, 'option_domain_fr')
+                            continue
+                except Exception:
+                    pass
+
+                # 4c. Sous-domaine français (même logique que Method 6 mais pour <option>)
+                try:
+                    opt_parsed = urlparse(value)
+                    opt_host = (opt_parsed.hostname or '').lower()
+                    if opt_host and opt_host != homepage_host:
+                        fr_sub_match = re.match(
+                            r'^(fr|french|francais|français|france)\.', opt_host, re.IGNORECASE
+                        )
+                        if fr_sub_match:
+                            opt_base = self.get_domain_from_url(value)
+                            if self._check_base_domain(base_domain, opt_base):
+                                resolved = _resolve_and_check(value)
+                                if resolved:
+                                    _queue_candidate(resolved, value, 'option_subdomain_fr')
+                except Exception:
+                    pass
 
             # 5. Liens <a> pointant vers un domaine .fr apparenté
             # Ex: essity.com → essity.fr (même base de domaine avec TLD .fr)
             # Ne capture que les liens vers des domaines .fr qui partagent le même
             # nom de domaine principal (évite les faux positifs vers des .fr sans rapport)
-            homepage_parsed = urlparse(self.homepage)
-            homepage_host = (homepage_parsed.hostname or '').lower()
+            # Note: homepage_parsed et homepage_host sont définis en haut de la méthode
             if not homepage_host.endswith('.fr'):
                 for link in soup.find_all('a', href=True):
                     href = link['href']
