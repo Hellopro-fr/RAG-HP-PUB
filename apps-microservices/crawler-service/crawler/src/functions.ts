@@ -34,8 +34,25 @@ export const getApifyProxyUrl = (password?: string): string => {
     const PROXY_HOST_PORT = 8000;
     const PROXY_USERNAME = "auto";
     // const PROXY_USERNAME_FR = "country-FR"; // Unused in original code, but could be useful
-    
+
     return `http://${PROXY_USERNAME}:${password}@${PROXY_HOST}:${PROXY_HOST_PORT}`;
+};
+
+/**
+ * Masque le mot de passe dans une URL proxy pour les logs.
+ * Ex: http://auto:secret123@proxy.apify.com:8000 → http://auto:****@proxy.apify.com:8000
+ */
+export const maskProxyUrl = (proxyUrl: string | undefined): string => {
+    if (!proxyUrl) return "none";
+    try {
+        const url = new URL(proxyUrl);
+        if (url.password) {
+            return proxyUrl.replace(`:${url.password}@`, ':****@');
+        }
+        return proxyUrl;
+    } catch {
+        return proxyUrl;
+    }
 };
 
 export let stats: StatisticState;
@@ -188,26 +205,37 @@ export const detectChallengePage = (html: string): string | null => {
 
     const htmlLower = html.toLowerCase();
 
-    // --- Cloudflare ---
-    const cfStrong = [
+    // --- Cloudflare WAF Block Page ---
+    // Détection prioritaire : page "Sorry, you have been blocked" — IP rejetée par le WAF
+    // Différent du Turnstile challenge (qui peut se résoudre).
+    // Le block WAF est permanent pour cette IP → non résolvable, noRetry.
+    const cfBlockStrong = [
+        'sorry, you have been blocked',
+        'you are unable to access',
+        'cf-error-details',
+        'attention required!',
+    ];
+    const cfBlockCount = cfBlockStrong.filter(p => htmlLower.includes(p)).length;
+    if (cfBlockCount >= 2) return 'Cloudflare_blocked';
+
+    // --- Cloudflare Turnstile Challenge ---
+    // Ancre obligatoire : chl_page/v1 est EXCLUSIF aux pages de challenge Cloudflare.
+    // Les composants Turnstile (cf-turnstile-response, challenges.cloudflare.com/turnstile)
+    // apparaissent aussi sur les vrais sites pour la protection de formulaires.
+    const cfAnchor = 'chl_page/v1';
+    const cfConfirmations = [
         'cf-turnstile-response',
-        'challenges.cloudflare.com/turnstile',
         '<title>just a moment...</title>',
-        '<title>un instant\u2026</title>',
-        '<title>attention required!</title>',
-        'chl_page/v1',
-    ];
-    const cfWeak = [
+        '<title>un instant',
+        'noindex',
         'cdn-cgi/challenge-platform',
+        'challenges.cloudflare.com/turnstile',
     ];
 
-    const cfStrongCount = cfStrong.filter(p => htmlLower.includes(p)).length;
-    const cfWeakCount = cfWeak.filter(p => htmlLower.includes(p)).length;
-
-    if (cfStrongCount >= 2) return 'Cloudflare';
-    if (cfStrongCount >= 1 && cfWeakCount >= 1) return 'Cloudflare';
-    if (cfStrongCount >= 1) {
-        // Check if visible text is very short (challenge pages have < 1000 chars)
+    if (htmlLower.includes(cfAnchor)) {
+        const cfConfirmCount = cfConfirmations.filter(p => htmlLower.includes(p)).length;
+        if (cfConfirmCount >= 1) return 'Cloudflare';
+        // chl_page/v1 seul + contenu très court → page challenge minimaliste
         const textOnly = htmlLower
             .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
             .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -230,6 +258,33 @@ export const detectChallengePage = (html: string): string | null => {
     const impervaIndicators = ['_incap_ses', 'incapsula', 'visitorid'];
     const impervaCount = impervaIndicators.filter(p => htmlLower.includes(p)).length;
     if (impervaCount >= 2) return 'Imperva';
+
+    // --- Pages d'erreur HTTP génériques (403, 503, etc.) ---
+    // Détecte les pages d'erreur serveur/WAF non spécifiques à un fournisseur.
+    const httpErrorMatch = htmlLower.match(
+        /<title>\s*(403|401|406|429|503)\s*[-–—]?\s*(forbidden|unauthorized|not acceptable|too many requests|service unavailable|access denied|error)?\s*<\/title>/
+    );
+
+    if (httpErrorMatch) {
+        const errorCode = httpErrorMatch[1];
+        const errConfirmations = [
+            'noindex', 'you have been blocked', 'access denied',
+            'access to this page has been denied', 'forbidden',
+            'request blocked', 'your ip', 'security service', 'ray id',
+        ];
+        const errConfirmCount = errConfirmations.filter(p => htmlLower.includes(p)).length;
+        if (errConfirmCount >= 1) return `HTTP_${errorCode}_blocked`;
+
+        // Titre d'erreur seul + contenu très court (avec SVG strippé)
+        const textOnly = htmlLower
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (textOnly.length < 500) return `HTTP_${errorCode}_blocked`;
+    }
 
     return null;
 };
@@ -531,6 +586,24 @@ export const startCrawler = async (
                         `Captcha detected on ${request.url} : ${captchaDetected}`
                     );
                 }
+
+                // Détecter les pages de blocage permanent (WAF, HTTP 403/503)
+                // pour éviter de gaspiller des retries sur des URL définitivement bloquées
+                const challengeType = detectChallengePage(content);
+                if (challengeType) {
+                    const isPermanentBlock = challengeType === 'Cloudflare_blocked'
+                        || challengeType.startsWith('HTTP_');
+                    if (isPermanentBlock) {
+                        request.noRetry = true;
+                        log.warning(
+                            `Permanent block detected on ${request.url}: ${challengeType} — no retry`
+                        );
+                    } else {
+                        log.warning(
+                            `Challenge page detected on ${request.url}: ${challengeType} — will retry`
+                        );
+                    }
+                }
             } catch (error) {
                 log.error(
                     `Error when processing the page ${request.url} : ${error}`
@@ -544,7 +617,7 @@ export const startCrawler = async (
                 id: request.id,
                 url: request.url,
                 errors: request.errorMessages,
-                proxy_used: proxyInfo?.url || "none",
+                proxy_used: maskProxyUrl(proxyInfo?.url),
                 status_code: response?.status() || 0,
                 captcha: captchaDetected,
                 timestamp: new Date().toISOString()

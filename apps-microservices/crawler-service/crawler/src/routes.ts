@@ -8,6 +8,7 @@ import {
 } from "./main.js";
 import {
     manageFrenchDetectionMethod,
+    maskProxyUrl,
     processPage,
     processUrl,
     rightTrimSlash,
@@ -284,7 +285,7 @@ router.addDefaultHandler(
                             id: request.id,
                             url: request.url,
                             errors: [`Challenge page ${challengeService} not resolved after 45s`],
-                            proxy_used: proxyUrl || "none",
+                            proxy_used: maskProxyUrl(proxyUrl ?? undefined),
                             status_code: response?.status() || 0,
                             captcha: challengeService,
                             timestamp: new Date().toISOString()
