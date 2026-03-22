@@ -130,6 +130,12 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     async def process_single(index: int, item: BatchItem) -> DetectionResponse:
         nonlocal processed_count
         url = item.url
+
+        # Stagger delay : évite que tous les navigateurs frappent le proxy simultanément
+        # Réduit la pression sur le proxy et le risque de déclencher des protections anti-bot
+        if index > 0:
+            await asyncio.sleep(index * 0.5)
+
         async with semaphore:
             item_start = time.time()
             try:

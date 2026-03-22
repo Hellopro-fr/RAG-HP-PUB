@@ -457,6 +457,20 @@ export const startCrawler = async (
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
+            // Détection des erreurs permanentes — inutile de réessayer
+            // Aligné avec api-detection-langue-fr (redirect_tracker.py _NON_RETRYABLE_ERRORS)
+            const NON_RETRYABLE_ERRORS = [
+                'ERR_NAME_NOT_RESOLVED',     // Le domaine n'existe pas
+                'ERR_CERT_DATE_INVALID',     // Certificat SSL expiré
+                'ERR_SSL_PROTOCOL_ERROR',    // Protocole SSL incompatible
+            ];
+            const errorStr = String(request.errorMessages);
+            const isPermanentError = NON_RETRYABLE_ERRORS.some(err => errorStr.includes(err));
+            if (isPermanentError) {
+                request.noRetry = true;
+                log.warning(`Permanent error detected for ${request.url} — no retry`);
+            }
+
             // Accumulate error stats ONLY if the URL is from the previous crawl
             // This prevents new/broken URLs from triggering the circuit breaker for "Broken Site"
             if (context.statsManager) {

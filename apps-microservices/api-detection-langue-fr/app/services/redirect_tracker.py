@@ -5,13 +5,15 @@ from typing import Optional
 from app.core.config import settings
 
 # Erreurs non-retryables (échecs permanents — inutile de réessayer)
-# Note : les erreurs SSL (ERR_CERT_*) sont gérées par ignore_https_errors=True
-# dans Playwright, donc elles ne devraient plus apparaître.
+# ignore_https_errors=True gère la plupart des erreurs SSL, mais si elles
+# apparaissent malgré tout, c'est un problème permanent côté serveur.
 _NON_RETRYABLE_ERRORS = (
-    'ERR_NAME_NOT_RESOLVED',   # Le domaine n'existe pas
-    'Proxy non configuré',     # Erreur de configuration
-    'Proxy obligatoire',       # Erreur de configuration
-    'Proxy invalide',          # Erreur de configuration
+    'ERR_NAME_NOT_RESOLVED',     # Le domaine n'existe pas
+    'ERR_CERT_DATE_INVALID',     # Certificat SSL expiré (permanent malgré ignore_https_errors)
+    'ERR_SSL_PROTOCOL_ERROR',    # Protocole SSL incompatible (permanent)
+    'Proxy non configuré',       # Erreur de configuration
+    'Proxy obligatoire',         # Erreur de configuration
+    'Proxy invalide',            # Erreur de configuration
 )
 
 logger = logging.getLogger(__name__)
