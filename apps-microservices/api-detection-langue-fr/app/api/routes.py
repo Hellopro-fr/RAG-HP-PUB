@@ -58,15 +58,19 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
                 logger.info(f"Redirection détectée: {request.url} → {final_url}")
                 effective_url = final_url
 
-        # Vérifier si le contenu est une page de challenge (Cloudflare, etc.)
+        # Vérifier si le contenu est une page de challenge ou block (Cloudflare, etc.)
         challenge = detect_challenge_page(html_content)
         if challenge:
-            logger.warning(f"Page de challenge {challenge} détectée pour {effective_url}")
+            if challenge == 'Cloudflare_blocked':
+                error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
+            else:
+                error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+            logger.warning(f"Page de challenge/block {challenge} détectée pour {effective_url}")
             return DetectionResponse(
                 ok=False,
                 url=effective_url,
                 method='challenge_page',
-                error=f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+                error=error_msg
             )
 
         # Créer le détecteur avec l'URL finale (après redirection éventuelle)
@@ -159,17 +163,21 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                         logger.info(f"[BATCH] Redirection: {url} → {final_url}")
                         effective_url = final_url
 
-                # Vérifier si le contenu est une page de challenge
+                # Vérifier si le contenu est une page de challenge ou block
                 challenge = detect_challenge_page(html_content)
                 if challenge:
                     processed_count += 1
                     duration_ms = round((time.time() - item_start) * 1000)
                     logger.warning(f"[BATCH] [{processed_count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
+                    if challenge == 'Cloudflare_blocked':
+                        error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
+                    else:
+                        error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
                     return DetectionResponse(
                         ok=False,
                         url=effective_url,
                         method='challenge_page',
-                        error=f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+                        error=error_msg
                     )
 
                 detector = DomainFR(

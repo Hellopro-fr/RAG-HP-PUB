@@ -28,14 +28,27 @@ def detect_challenge_page(html: str) -> Optional[str]:
 
     html_lower = html.lower()
 
-    # --- Cloudflare ---
+    # --- Cloudflare WAF Block Page ---
+    # Détection prioritaire : page "Sorry, you have been blocked" — IP rejetée par le WAF
+    # Différent du Turnstile challenge (qui peut se résoudre).
+    # Le block WAF est permanent pour cette IP → non résolvable.
+    cf_block_strong = [
+        'sorry, you have been blocked',               # Message principal du block WAF
+        'you are unable to access',                    # Message secondaire
+        'cf-error-details',                            # Container d'erreur CF spécifique
+        'attention required!',                         # Titre (sans </title> pour match partiel)
+    ]
+    cf_block_count = sum(1 for p in cf_block_strong if p in html_lower)
+    if cf_block_count >= 2:
+        return 'Cloudflare_blocked'
+
+    # --- Cloudflare Turnstile Challenge ---
     # Indicateurs forts : spécifiques aux pages de challenge, pas aux sites normaux
     cf_strong = [
         'cf-turnstile-response',                      # Input CAPTCHA Turnstile
         'challenges.cloudflare.com/turnstile',         # Script Turnstile JS
         '<title>just a moment...</title>',             # Titre page challenge (EN)
-        '<title>un instant\u2026</title>',             # Titre page challenge (FR)
-        '<title>attention required!</title>',          # Titre page challenge (blocage)
+        '<title>un instant',                           # Titre page challenge (FR) — match partiel
         'chl_page/v1',                                 # Script orchestration challenge
     ]
     # Indicateurs faibles : peuvent apparaitre sur des sites réels utilisant Cloudflare CDN
@@ -46,7 +59,7 @@ def detect_challenge_page(html: str) -> Optional[str]:
     cf_strong_count = sum(1 for p in cf_strong if p in html_lower)
     cf_weak_count = sum(1 for p in cf_weak if p in html_lower)
 
-    # Cloudflare confirmé si : 2+ forts, ou 1 fort + 1 faible
+    # Cloudflare challenge confirmé si : 2+ forts, ou 1 fort + 1 faible
     if cf_strong_count >= 2:
         return 'Cloudflare'
     if cf_strong_count >= 1 and cf_weak_count >= 1:
