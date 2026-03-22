@@ -57,7 +57,7 @@ def build_proxy_url(base_proxy: str, session_id: Optional[str] = None, country: 
 
         # Masquer le mot de passe dans les logs
         masked = f"{parsed.scheme}://{username}:****@{parsed.hostname}:{parsed.port}"
-        logger.debug(f"Proxy URL: {masked}")
+        logger.warning(f"[PROXY] URL construite: {masked}")
 
         return f"{parsed.scheme}://{username}:{password}@{parsed.hostname}:{parsed.port}"
 

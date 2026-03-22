@@ -157,9 +157,9 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
         attempt_proxy = build_proxy_url(effective_proxy, country=use_country)
 
         if use_country:
-            logger.info(f"[{attempt}/{max_retries}] Fetch {url} avec proxy country-{use_country}")
+            logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy country-{use_country}")
         else:
-            logger.info(f"[{attempt}/{max_retries}] Fetch {url} avec proxy sans country (fallback)")
+            logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy sans country (fallback)")
 
         try:
             result = await scrape_html(url, proxy=attempt_proxy)

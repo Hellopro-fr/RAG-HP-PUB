@@ -1,5 +1,13 @@
+import logging
 from fastapi import FastAPI
 from app.api.routes import router
+
+# Configuration du logging — INFO pour voir les logs de stratégie proxy, retry, etc.
+# Sans cette configuration, Python utilise WARNING par défaut et masque les logs INFO.
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 app = FastAPI(
     title="API Détection Langue Française",
