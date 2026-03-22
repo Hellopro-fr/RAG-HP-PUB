@@ -866,17 +866,81 @@ class DomainFR:
             )
         
         # Cas 6 : Liens alternatifs français validés/trusted trouvés
-        # Only consider alternatives that are trusted (hreflang) or validated via HTTP
+        # Exécute la détection complète (fetch + NLP) sur les meilleures alternatives
+        # pour confirmer qu'elles sont réellement en français, pas juste accessibles.
         reliable_alternatives = [a for a in alternatives if a.validated]
         if reliable_alternatives:
-            best = reliable_alternatives[0]
-            return DetectionResponse(
-                ok=True,
-                url=best.url,
-                method=f'alternative_{best.method}',
-                alternative_urls=alternatives,
-                confidence=0.8 if best.reliability == 'high' else 0.7
-            )
+            for alt_candidate in reliable_alternatives:
+                try:
+                    alt_content_result = await fetch_html(alt_candidate.url)
+                    if not alt_content_result:
+                        logger.warning(f"Impossible de récupérer le contenu de l'alternative {alt_candidate.url}")
+                        continue
+
+                    alt_content, alt_final_url = alt_content_result
+
+                    # Vérifier que ce n'est pas une page de challenge
+                    from app.services.language_detector import detect_challenge_page
+                    if detect_challenge_page(alt_content):
+                        logger.warning(f"Page de challenge détectée sur l'alternative {alt_candidate.url}")
+                        continue
+
+                    # Détection HTML tags sur l'alternative
+                    alt_html_result = self.language_detector.detect_combined(alt_content, use_nlp=False)
+                    alt_html_french = alt_html_result.get('detected') and alt_html_result.get('is_french')
+
+                    # Détection NLP sur l'alternative
+                    alt_nlp = self.language_detector.detect_from_text_content_fasttext(alt_content)
+                    if alt_nlp is None:
+                        alt_nlp = self.language_detector.detect_from_text_content(alt_content)
+
+                    alt_nlp_lang = alt_nlp.get('lang') if alt_nlp else None
+                    alt_nlp_confidence = alt_nlp.get('confidence', 0) if alt_nlp else 0.0
+                    alt_nlp_french = alt_nlp_lang == 'fr' and alt_nlp_confidence >= settings.NLP_MIN_CONFIDENCE
+
+                    if alt_nlp_french:
+                        # Alternative confirmée française par NLP
+                        alt_method_parts = [f'alternative_{alt_candidate.method}']
+                        if alt_html_french:
+                            alt_method_parts.append('html_confirmed')
+                        alt_method_parts.append('nlp_confirmed')
+
+                        logger.info(
+                            f"Alternative {alt_candidate.url} confirmée française "
+                            f"(NLP: {alt_nlp_lang} {alt_nlp_confidence:.3f})"
+                        )
+                        return DetectionResponse(
+                            ok=True,
+                            url=alt_final_url or alt_candidate.url,
+                            method='+'.join(alt_method_parts),
+                            alternative_urls=alternatives,
+                            confidence=alt_nlp_confidence
+                        )
+                    elif alt_html_french:
+                        # HTML dit français mais NLP ne confirme pas (texte court ?)
+                        # Accepté avec confiance réduite
+                        logger.info(
+                            f"Alternative {alt_candidate.url} détectée française par HTML "
+                            f"(NLP indisponible ou non confirmé)"
+                        )
+                        return DetectionResponse(
+                            ok=True,
+                            url=alt_final_url or alt_candidate.url,
+                            method=f'alternative_{alt_candidate.method}+html_confirmed+nlp_skipped',
+                            alternative_urls=alternatives,
+                            confidence=0.6
+                        )
+                    else:
+                        logger.info(
+                            f"Alternative {alt_candidate.url} non confirmée française "
+                            f"(NLP: {alt_nlp_lang} {alt_nlp_confidence:.3f}), "
+                            f"essai suivant..."
+                        )
+                        continue
+
+                except Exception as alt_e:
+                    logger.warning(f"Erreur vérification alternative {alt_candidate.url}: {alt_e}")
+                    continue
         
         # Cas 7 : NLP disponible mais ne confirme pas, malgré indicateurs HTML/URL
         if nlp_available and (html_indicates_french or url_indicates_french):
