@@ -100,6 +100,45 @@ def detect_challenge_page(html: str) -> Optional[str]:
     if imperva_count >= 2:
         return 'Imperva'
 
+    # --- Pages d'erreur HTTP génériques (403 Forbidden, 503 Service Unavailable, etc.) ---
+    # Détecte les pages d'erreur serveur/WAF non spécifiques à un fournisseur.
+    # Ces pages indiquent que le proxy IP a été bloqué par le serveur lui-même.
+    # Logique : titre d'erreur HTTP + meta noindex + contenu court (pas un vrai site)
+    import re as _re_err
+
+    http_error_title_pattern = _re_err.search(
+        r'<title>\s*(403|401|406|429|503)\s*[-–—]?\s*(forbidden|unauthorized|not acceptable|too many requests|service unavailable|access denied|error)?\s*</title>',
+        html_lower
+    )
+
+    if http_error_title_pattern:
+        error_code = http_error_title_pattern.group(1)
+        # Confirmer avec au moins 1 indicateur supplémentaire
+        err_confirmations = [
+            'noindex',                              # meta robots noindex
+            'you have been blocked',                # Message de blocage
+            'access denied',                        # Accès refusé
+            'access to this page has been denied',  # Variante
+            'forbidden',                            # 403 body text
+            'request blocked',                      # WAF block
+            'your ip',                              # Référence à l'IP du visiteur
+            'security service',                     # Service de sécurité
+            'ray id',                               # Cloudflare-like ray ID (CDN générique)
+        ]
+        err_confirm_count = sum(1 for p in err_confirmations if p in html_lower)
+
+        if err_confirm_count >= 1:
+            return f'HTTP_{error_code}_blocked'
+
+        # Titre d'erreur seul + contenu très court → probablement une page d'erreur
+        text_only = _re_err.sub(r'<style[^>]*>.*?</style>', '', html_lower, flags=_re_err.DOTALL)
+        text_only = _re_err.sub(r'<script[^>]*>.*?</script>', '', text_only, flags=_re_err.DOTALL)
+        text_only = _re_err.sub(r'<svg[^>]*>.*?</svg>', '', text_only, flags=_re_err.DOTALL)
+        text_only = _re_err.sub(r'<[^>]+>', '', text_only)
+        text_only = _re_err.sub(r'\s+', ' ', text_only).strip()
+        if len(text_only) < 500:
+            return f'HTTP_{error_code}_blocked'
+
     return None
 
 

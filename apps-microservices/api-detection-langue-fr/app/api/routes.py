@@ -63,6 +63,9 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
         if challenge:
             if challenge == 'Cloudflare_blocked':
                 error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
+            elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
+                error_code = challenge.split('_')[1]
+                error_msg = f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
             else:
                 error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
             logger.warning(f"Page de challenge/block {challenge} détectée pour {effective_url}")
@@ -174,6 +177,9 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
                     logger.warning(f"[BATCH] [{processed_count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
                     if challenge == 'Cloudflare_blocked':
                         error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
+                    elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
+                        error_code = challenge.split('_')[1]
+                        error_msg = f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
                     else:
                         error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
                     return DetectionResponse(
