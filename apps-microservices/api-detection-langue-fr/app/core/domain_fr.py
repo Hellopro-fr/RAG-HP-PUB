@@ -556,13 +556,16 @@ class DomainFR:
             # 1. Hreflang (trusted, high reliability)
             # Prioritaire: starts with "fr" (fr, fr-FR, fr-BE)
             # Secondaire: contains "fr" anywhere (be-fr, ca-fr)
+            # Note: PAS de vérification de domaine pour hreflang — c'est une déclaration
+            # explicite du webmaster. Si le site déclare un hreflang vers un autre domaine,
+            # on fait confiance (ex: trojantechnologies.com → trojanuv.com/fr/).
             for regex in [re.compile(r'^fr', re.IGNORECASE), re.compile(r'fr', re.IGNORECASE)]:
                 for link in soup.find_all(attrs={'hreflang': regex}):
                     href = link.get('href')
                     hreflang_val = link.get('hreflang', '')
                     if href and href != '#':
-                        resolved = _resolve_and_check(href)
-                        if resolved:
+                        resolved = self.resolve_url(self.homepage, href)
+                        if resolved and not self._is_self_url(resolved):
                             _add_trusted(resolved, 'hreflang', hreflang_value=hreflang_val)
 
             # 2. data-lang et data-gt-lang (need validation, medium reliability)
@@ -928,12 +931,14 @@ class DomainFR:
         if reliable_alternatives:
             challenge_blocked_count = 0
             challenge_blocked_service = None
+            fetch_failed_count = 0
 
             for alt_candidate in reliable_alternatives:
                 try:
                     alt_content_result = await fetch_html(alt_candidate.url)
                     if not alt_content_result:
                         logger.warning(f"Impossible de récupérer le contenu de l'alternative {alt_candidate.url}")
+                        fetch_failed_count += 1
                         continue
 
                     alt_content, alt_final_url = alt_content_result
@@ -1002,23 +1007,32 @@ class DomainFR:
 
                 except Exception as alt_e:
                     logger.warning(f"Erreur vérification alternative {alt_candidate.url}: {alt_e}")
+                    fetch_failed_count += 1
                     continue
 
-            # Si toutes les alternatives ont été bloquées par des pages de challenge,
+            # Si toutes les alternatives ont échoué (challenge + fetch failures),
             # retourner une erreur spécifique au lieu de Check_nok_v2
-            if challenge_blocked_count > 0 and challenge_blocked_count == len(reliable_alternatives):
-                if challenge_blocked_service == 'Cloudflare_blocked':
-                    error_msg = 'Alternative(s) française(s) trouvée(s) mais bloquée(s) par Cloudflare WAF'
+            total_failures = challenge_blocked_count + fetch_failed_count
+            if total_failures > 0 and total_failures == len(reliable_alternatives):
+                # Déterminer le type d'erreur principal
+                if challenge_blocked_count > 0 and challenge_blocked_count >= fetch_failed_count:
+                    if challenge_blocked_service == 'Cloudflare_blocked':
+                        error_msg = 'Alternative(s) française(s) trouvée(s) mais bloquée(s) par Cloudflare WAF'
+                    else:
+                        error_msg = f'Alternative(s) française(s) trouvée(s) mais bloquée(s) par {challenge_blocked_service}'
+                    method = 'challenge_page'
                 else:
-                    error_msg = f'Alternative(s) française(s) trouvée(s) mais bloquée(s) par {challenge_blocked_service}'
+                    error_msg = "Alternative(s) française(s) trouvée(s) mais impossible de récupérer le contenu"
+                    method = 'fetch_failed'
+
                 logger.warning(
-                    f"Toutes les alternatives ({challenge_blocked_count}) bloquées par {challenge_blocked_service} "
-                    f"pour {url}"
+                    f"Toutes les alternatives ({len(reliable_alternatives)}) inaccessibles pour {url} "
+                    f"(challenge: {challenge_blocked_count}, fetch_failed: {fetch_failed_count})"
                 )
                 return DetectionResponse(
                     ok=False,
                     url=url,
-                    method='challenge_page',
+                    method=method,
                     alternative_urls=alternatives,
                     error=error_msg
                 )
