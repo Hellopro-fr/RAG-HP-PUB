@@ -269,8 +269,8 @@ class PrixExtractor:
         async with self._semaphore:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
             # Les données Milvus sont dans metadata.entity
-            chunk_metadata = chunk.get("metadata", {})            
-            chunk_metadata = chunk_metadata.get("entity", chunk_metadata)
+            metadata = chunk.get("metadata", {})            
+            chunk_metadata = metadata.get("entity", metadata)
             chunk_content = chunk_metadata.get("text", "")
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
@@ -278,6 +278,8 @@ class PrixExtractor:
 
             # 1. Construire le prompt avec le contenu du chunk
             prompt_text = self._build_prompt(chunk_metadata, category_name)
+
+            self._log(f"[{chunk_index + 1}/{total_chunks}] Prompt: ({prompt_text})")
 
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
@@ -290,7 +292,7 @@ class PrixExtractor:
 
             # 3. Extraire la réponse
             response_text = result.get("message", "")
-            self._log(f"[{chunk_index + 1}/{total_chunks}] Réponse LLM reçue ({len(response_text)} chars)")
+            self._log(f"[{chunk_index + 1}/{total_chunks}] Réponse LLM reçue ({response_text})")
 
             # Tenter d'extraire le JSON de la réponse
             prix_data_raw = utils.extract_json_from_text(response_text)
@@ -419,7 +421,7 @@ class PrixExtractor:
         self._log(f"\n--- Recherche Milvus (source={settings.MILVUS_SOURCE}, top_k={settings.MILVUS_TOP_K}) ---")
         chunks = await call_search_api_async(
             prompt=category_name,
-            num_results=settings.MILVUS_TOP_K,
+            num_results=5,
             source=settings.MILVUS_SOURCE
         )
         
