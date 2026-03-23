@@ -46,6 +46,7 @@ class PrixExtractor:
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
         self.prompt_config = None  # Sera chargé lors du premier traitement
+        self.info_q1 = ""  # Sera chargé lors du traitement (Question 1)
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL_CHUNKS)
 
     
@@ -54,6 +55,26 @@ class PrixExtractor:
         if self.tracking_file:
             utils.write_log(self.tracking_file, message)
         logger.info(message)
+
+    def _clean_q1_data(self, q1_response: dict) -> dict:
+        """
+        Nettoie les données Question 1 en retirant les champs inutiles
+        (equivalence, id_reponse_parent, id_question_parent, choix, et tous les id_*).
+        """
+        data = q1_response.get("response", q1_response)
+
+        cleaned = {
+            "intitule": data.get("intitule", ""),
+            "justification": data.get("justification", ""),
+            "reponses": []
+        }
+
+        for rep in data.get("reponses", []):
+            cleaned["reponses"].append({
+                "reponse": rep.get("reponse", "")
+            })
+
+        return cleaned
 
     async def _load_prompt(self, id_categorie: str):
         """Charge le prompt une seule fois au début du traitement"""
@@ -64,23 +85,30 @@ class PrixExtractor:
                 raise Exception(f"Impossible de charger le prompt ID={self.PROMPT_ID}")
             self._log(f"Prompt chargé (ID: {self.PROMPT_ID})")
 
-    def _build_prompt(self, chunk_content: str, category_name: str = "") -> str:
+    def _build_prompt(self, chunk_metadata: dict, category_name: str = "") -> str:
         """
         Construit le prompt final en injectant le contenu du chunk dans le template.
         
         Args:
-            chunk_content: Le contenu du chunk Milvus
+            chunk_metadata: Le contenu du chunk Milvus
             category_name: Le nom de la catégorie (optionnel)
             
         Returns:
             Le prompt final à envoyer au LLM
         """
         prompt_text = self.prompt_config.get("contenu_prompt", "")
+
+        chunk_siteweb = f"""url : {chunk_metadata.get("url", "")}
+                    Contenu : {chunk_metadata.get("text", "")}
+                    Fournisseur : {chunk_metadata.get("fournisseur", "")}
+                    Page_type : {chunk_metadata.get("page_type", "")}
+                    Date_ajout : {chunk_metadata.get("date_ajout", "")}
+                """
         
         # Remplacer les placeholders si présents
-        prompt_text = prompt_text.replace("{CHUNK_CONTENT}", chunk_content)
-        prompt_text = prompt_text.replace("{CONTENU}", chunk_content)
-        prompt_text = prompt_text.replace("{CATEGORIE}", category_name)
+        prompt_text = prompt_text.replace("{chunk_siteweb}", chunk_siteweb)
+        prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
+        prompt_text = prompt_text.replace("{nom_categorie}", category_name)
         
         return prompt_text
 
@@ -240,13 +268,12 @@ class PrixExtractor:
         """
         async with self._semaphore:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
-            chunk_content = chunk.get("content", chunk.get("text", chunk.get("document", "")))
             chunk_metadata = chunk.get("metadata", {})
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
 
             # 1. Construire le prompt avec le contenu du chunk
-            prompt_text = self._build_prompt(chunk_content, category_name)
+            prompt_text = self._build_prompt(chunk_metadata, category_name)
 
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
@@ -369,7 +396,21 @@ class PrixExtractor:
         
         # Charger le prompt
         await self._load_prompt(id_categorie)
-        
+
+        # Récupérer Question 1 pour le contexte du prompt
+        self._log("Récupération Question 1...")
+        q1_raw = await self.api_client.post(
+            "question",
+            "question1",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+        if not q1_raw:
+            self._log(f"ERREUR: Aucune donnée Question 1 pour la catégorie {id_categorie}")
+            raise Exception(f"Impossible de récupérer Question 1 pour la catégorie {id_categorie}")
+        self.info_q1 = utils.to_json_string(self._clean_q1_data(q1_raw))
+        self._log(f"Question 1 chargée: {self.info_q1}")
+
         # Recherche RAG dans Milvus
         self._log(f"\n--- Recherche Milvus (source={settings.MILVUS_SOURCE}, top_k={settings.MILVUS_TOP_K}) ---")
         chunks = await call_search_api_async(
