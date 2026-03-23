@@ -600,8 +600,8 @@ class PrixExtractor:
             for i, item in enumerate(items[:1])#TODO: à enlever après test
         ]
         self._log(f"tasks: {tasks}")
-        sys.exit(1) #TODO: à enlever après test
-        raise Exception(f"test 2") 
+        raise Exception("Test")
+        return None
 
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
 
