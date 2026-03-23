@@ -993,7 +993,7 @@ impl RecommendationService {
             .replace("{liste_produits_json}", &liste_produits_json);
 
         // Call Gemini
-        debug!("[RERANK] System prompt size: {} chars", system_prompt.len());
+        // debug!("[RERANK] System prompt size: {} chars", system_prompt.len());
         debug!("[RERANK] Calling Gemini LLM for reranking...");
         // debug!("[RERANK] Liste produits: {}", liste_produits_json);
         let llm_response = GEMINI_CLIENT.generate_rerank_response(&system_prompt, temperature).await;
