@@ -394,7 +394,35 @@ async def upload_migration_archive(
             
             completion_marker_created = True
             logger.info(f"Completion marker created at {marker_path}")
-        
+
+            # Create _status_snapshot.json so GET /status/{crawl_id} and
+            # POST /archive/{crawl_id} have proper domain/URL metadata
+            # instead of falling back to "unknown" from missing crawler.log
+            snapshot_path = os.path.join(base_storage_path, "_status_snapshot.json")
+            if not os.path.exists(snapshot_path):
+                datasets_base = os.path.join(base_storage_path, "storage", "datasets")
+                dataset_dir = os.path.join(datasets_base, eff_domain_name)
+                nfr_dir = os.path.join(datasets_base, f"nfr-{eff_domain_name}")
+                error_dir = os.path.join(datasets_base, f"error-{eff_domain_name}")
+
+                snapshot_data = {
+                    "crawl_id": domain_id,
+                    "id_domaine": domain_id,
+                    "status": "finished",
+                    "domain": eff_domain_name,
+                    "start_url": f"https://www.{eff_domain_name}/",
+                    "start_time": parsed_end_date.isoformat(),
+                    "urls_crawled": count_files_in_directory(dataset_dir) if os.path.isdir(dataset_dir) else 0,
+                    "error_urls_crawled": count_files_in_directory(error_dir) if os.path.isdir(error_dir) else 0,
+                    "nfr_urls_crawled": count_files_in_directory(nfr_dir) if os.path.isdir(nfr_dir) else 0,
+                    "last_activity": parsed_end_date.isoformat(),
+                    "last_heartbeat": None
+                }
+
+                with open(snapshot_path, "w") as f:
+                    json.dump(snapshot_data, f, indent=2)
+                logger.info(f"Status snapshot created at {snapshot_path}")
+
         return MigrationUploadResponse(
             success=True,
             message="Archive uploaded and extracted successfully.",
