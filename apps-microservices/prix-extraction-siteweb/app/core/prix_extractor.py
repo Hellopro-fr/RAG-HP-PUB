@@ -96,16 +96,13 @@ class PrixExtractor:
         Returns:
             Le prompt final à envoyer au LLM
         """
-        prompt_text = self.prompt_config.get("contenu_prompt", "")
+        prompt_text = self.prompt_config.get("contenu_prompt", "")        
 
-        # Les données Milvus sont dans metadata.entity
-        entity = chunk_metadata.get("entity", chunk_metadata)
-
-        chunk_siteweb = f"""url : {entity.get("url", "")}
-                    Contenu : {entity.get("text", "")}
-                    Fournisseur : {entity.get("fournisseur", "")}
-                    Page_type : {entity.get("page_type", "")}
-                    Date_ajout : {entity.get("date_ajout", "")}
+        chunk_siteweb = f"""url : {chunk_metadata.get("url", "")}
+                    Contenu : {chunk_metadata.get("text", "")}
+                    Fournisseur : {chunk_metadata.get("fournisseur", "")}
+                    Page_type : {chunk_metadata.get("page_type", "")}
+                    Date_ajout : {chunk_metadata.get("date_ajout", "")}
                 """
         
         # Remplacer les placeholders si présents
@@ -223,7 +220,7 @@ class PrixExtractor:
                 date_prix=prix_data.get("date_prix") or None,
                 id_lead=prix_data.get("id_lead") or None,
                 id_produit=str(prix_data.get("id_produit", "")) or None,
-                domaine=prix_data.get("domaine") or chunk_metadata.get("domaine") or None,
+                domaine=chunk_metadata.get("domaine") or None,
                 id_societe_ia=str(prix_data.get("id_societe_ia", "")) or None,
                 valeur_reponse_q1=prix_data.get("valeur_reponse_q1") or None,
                 prix_original=str(prix_data.get("prix_original", "")).strip() or None,
@@ -233,8 +230,8 @@ class PrixExtractor:
                 taxe=prix_data.get("taxe") or None,
                 type_transaction=prix_data.get("type_transaction") or None,
                 perimetre=prix_data.get("perimetre") or None,
-                id_fournisseur=str(prix_data.get("id_fournisseur", "")) or None,
-                fournisseur=prix_data.get("fournisseur") or chunk_metadata.get("fournisseur") or None,
+                id_fournisseur=str(chunk_metadata.get("id_fournisseur", "")) or None,
+                fournisseur=chunk_metadata.get("fournisseur") or None,
             )
             return payload
         except Exception as e:
@@ -271,18 +268,16 @@ class PrixExtractor:
         """
         async with self._semaphore:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
-            chunk_metadata = chunk.get("metadata", {})
+            # Les données Milvus sont dans metadata.entity
+            chunk_metadata = chunk.get("metadata", {})            
+            chunk_metadata = chunk_metadata.get("entity", chunk_metadata)
+            chunk_content = chunk_metadata.get("text", "")
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
             self._log(f"[{chunk_index + 1}/{total_chunks}] Chunk : {chunk}")
 
             # 1. Construire le prompt avec le contenu du chunk
             prompt_text = self._build_prompt(chunk_metadata, category_name)
-
-            #stopper pour un test
-            self._log(f"[{chunk_index + 1}/{total_chunks}] Prompt: {prompt_text}")
-            raise Exception("Test")
-            return None
 
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
@@ -424,7 +419,7 @@ class PrixExtractor:
         self._log(f"\n--- Recherche Milvus (source={settings.MILVUS_SOURCE}, top_k={settings.MILVUS_TOP_K}) ---")
         chunks = await call_search_api_async(
             prompt=category_name,
-            num_results=5,
+            num_results=settings.MILVUS_TOP_K,
             source=settings.MILVUS_SOURCE
         )
         
@@ -458,6 +453,11 @@ class PrixExtractor:
         ]
         
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+
+        #test 
+        self._log(f"Résultats: {results}")
+        raise Exception("Test")
+        return None
 
         elapsed = time.time() - start_time
 
