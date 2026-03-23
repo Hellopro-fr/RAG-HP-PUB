@@ -367,7 +367,7 @@ class PrixExtractor:
         
         # Convertir les résultats en dictionnaires
         all_results_list = [MessageToDict(res) for res in source_results]
-        self._log(f"all_results_list: {json.dumps(all_results_list)}")
+        # self._log(f"all_results_list: {json.dumps(all_results_list)}")
         
         # Extraction de la liste pjechanges
         # pjechanges = all_results_list.get("results", {}).get("matches", {}).get("pjechanges", [])
@@ -542,7 +542,10 @@ class PrixExtractor:
 
         total_items = len(items)
         self._log(f"📊 {total_items} items à traiter")
-        # self._log(f"Items: {json.dumps(items)}")
+        self._log(f"Items: {json.dumps(items)}")
+        
+        sys.exit(1) #TODO: à enlever après test
+        raise Exception(f"test 3") 
 
         # Traitement parallèle de tous les items
         self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
