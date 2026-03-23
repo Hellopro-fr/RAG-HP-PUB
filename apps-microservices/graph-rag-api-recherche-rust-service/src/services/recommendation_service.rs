@@ -64,7 +64,7 @@ impl RecommendationService {
         "#;
         let params = json!({ "ids": char_ids });
         let results = CLIENTS.execute_cypher(query, &params).await;
-        debug!("[recommendation] get_characteristic_labels: char_ids={:?}, gRPC returned {} results", char_ids, results.len());
+        debug!("[recommendation] get_characteristic_labels: char_ids={:?}, gRPC returned {:?} results", char_ids, results);
         let mut map = HashMap::new();
         for row in results {
             if let (Some(id), Some(label)) = (
