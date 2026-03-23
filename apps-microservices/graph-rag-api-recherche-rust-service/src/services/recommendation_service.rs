@@ -414,6 +414,7 @@ impl RecommendationService {
                     let mut unite = None;
                     let mut type_carac = 2;
                     let mut id_valeurs = vec![];
+                    let mut statut = statut;
 
                     if let Some(nodes) = matched_nodes {
                         if !nodes.is_empty() {
@@ -429,9 +430,10 @@ impl RecommendationService {
 
                             let type_donnee = node.get("type_donnee").and_then(|v| v.as_str()).unwrap_or("");
                             if type_donnee != "text" {
-                                valeur = node.get("valeur").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                valeur_min = node.get("valeur_min").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                valeur_max = node.get("valeur_max").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                // Use value_to_string to handle both string and numeric values (matches Python's str())
+                                valeur = node.get("valeur").and_then(|v| if v.is_null() { None } else { Some(v.to_string().trim_matches('"').to_string()) });
+                                valeur_min = node.get("valeur_min").and_then(|v| if v.is_null() { None } else { Some(v.to_string().trim_matches('"').to_string()) });
+                                valeur_max = node.get("valeur_max").and_then(|v| if v.is_null() { None } else { Some(v.to_string().trim_matches('"').to_string()) });
                             }
                             unite = node
                                 .get("unite")
@@ -441,8 +443,20 @@ impl RecommendationService {
 
                             type_carac = if type_donnee == "numeric" || type_donnee == "numeric_range" { 1 } else { 2 };
 
-                            if let Some(id_val) = node.get("id_source_valeur").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))) {
-                                id_valeurs.push(id_val);
+                            // Handle id_source_valeur: try numeric first, then string conversion (matches Python's int())
+                            let id_source_val = node.get("id_source_valeur");
+                            let has_id_source = id_source_val.map(|v| !v.is_null()).unwrap_or(false);
+                            if has_id_source {
+                                if let Some(id_val) = id_source_val.and_then(|v| {
+                                    v.as_i64()
+                                        .or_else(|| v.as_f64().map(|f| f as i64))
+                                        .or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
+                                }) {
+                                    id_valeurs.push(id_val);
+                                }
+                            } else if c_score > 0.0 && (type_donnee == "numeric" || type_donnee == "numeric_range") {
+                                // Match Python: if no id_source_valeur but positive score on numeric type, set statut to Matche
+                                statut = 1;
                             }
                         }
                     }
@@ -754,6 +768,14 @@ impl RecommendationService {
         let params = Self::build_cypher_params(
             request, &flat_filters, &weights_map, &scoring_params,
             request.top_k, target_product_id.as_deref(),
+        );
+
+        debug!("[recommendation] cypher_params: filters={}, weights={}, scoring={}, target_product_id={:?}, id_categorie={:?}",
+            serde_json::to_string(&flat_filters).unwrap_or_default(),
+            serde_json::to_string(&weights_map).unwrap_or_default(),
+            serde_json::to_string(&scoring_params).unwrap_or_default(),
+            target_product_id,
+            request.id_categorie,
         );
 
         let results = CLIENTS.execute_cypher(&cypher_query, &params).await;
