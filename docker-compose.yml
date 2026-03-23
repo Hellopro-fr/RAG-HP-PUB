@@ -1761,6 +1761,34 @@ services:
       - services-ext-net
       - services-global-net
 
+  graph-rag-api-recherche-rust-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-api-recherche-rust-service/Dockerfile
+    profiles: ["graph-rag-api"]
+    ports:
+      - "8527:8527"
+      - "8567:8567"
+    environment:
+      API_PORT: 8527
+      EMBEDDING_SERVICE_URL: embedding-model-service:50052
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PROMETHEUS_PORT: 8567
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: ${NEO4J_DATABASE}
+      HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
+      LLM_SERVICE_URL: llm-service:50051
+    networks:
+      - services-net
+      - services-ext-net
+      - services-global-net
 
   phpmyadmin:
     image: phpmyadmin:latest
