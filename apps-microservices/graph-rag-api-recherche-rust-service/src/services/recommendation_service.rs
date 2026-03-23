@@ -1,13 +1,30 @@
 use regex::Regex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use std::time::Instant;
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::domain::models::*;
 use crate::infrastructure::clients::CLIENTS;
 use crate::infrastructure::gemini_client::GEMINI_CLIENT;
 use crate::infrastructure::hellopro_api_client::HELLOPRO_CLIENT;
+
+// Static regex (Opt #6): compiled once instead of every call
+fn html_tag_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"<[^>]+>").unwrap())
+}
+
+fn whitespace_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\s+").unwrap())
+}
+
+// Label cache (Opt #5): TTL-based cache for characteristic labels
+static LABEL_CACHE: OnceLock<RwLock<Option<(HashMap<String, String>, Instant)>>> = OnceLock::new();
+const LABEL_CACHE_TTL_SECS: u64 = 3600; // 1 hour
 
 /// Recommendation Service: implements V4 Hybrid Recommendation Logic.
 /// This is the Rust port of Python's recommendation_service.py (2414 lines).
@@ -52,11 +69,27 @@ impl RecommendationService {
         }
     }
 
-    /// Get characteristic labels from the graph DB.
+    /// Get characteristic labels from the graph DB (with TTL cache).
     async fn get_characteristic_labels(char_ids: &[String]) -> HashMap<String, String> {
         if char_ids.is_empty() {
             return HashMap::new();
         }
+
+        // Check cache (Opt #5)
+        let cache = LABEL_CACHE.get_or_init(|| RwLock::new(None));
+        {
+            let guard = cache.read().await;
+            if let Some((ref cached_map, ref cached_at)) = *guard {
+                if cached_at.elapsed().as_secs() < LABEL_CACHE_TTL_SECS {
+                    // Check if all requested IDs are in cache
+                    if char_ids.iter().all(|id| cached_map.contains_key(id)) {
+                        debug!("[recommendation] get_characteristic_labels: cache hit ({} labels)", cached_map.len());
+                        return cached_map.clone();
+                    }
+                }
+            }
+        }
+
         let query = r#"
             MATCH (c:CaracteristiqueTechnique)
             WHERE c.id_source_caracteristique IN $ids
@@ -64,7 +97,6 @@ impl RecommendationService {
         "#;
         let params = json!({ "ids": char_ids });
         let results = CLIENTS.execute_cypher(query, &params).await;
-        // debug!("[recommendation] get_characteristic_labels: char_ids={:?}, gRPC returned {:?} results", char_ids, results);
         let mut map = HashMap::new();
         for row in results {
             if let (Some(id), Some(label)) = (
@@ -74,11 +106,42 @@ impl RecommendationService {
                 map.insert(id.to_string(), label.to_string());
             }
         }
-        debug!("[recommendation] get_characteristic_labels: resolved {} labels", map.len());
+        debug!("[recommendation] get_characteristic_labels: resolved {} labels (updating cache)", map.len());
+
+        // Update cache, merging with existing entries
+        {
+            let mut guard = cache.write().await;
+            if let Some((ref mut cached_map, ref mut cached_at)) = *guard {
+                cached_map.extend(map.iter().map(|(k, v)| (k.clone(), v.clone())));
+                *cached_at = Instant::now();
+            } else {
+                *guard = Some((map.clone(), Instant::now()));
+            }
+        }
+
         map
     }
 
-    /// Normalize a single constraint's numeric values in parallel.
+    /// Helper: extract (key, val_str) pairs for normalization from a JSON object
+    fn extract_normalize_inputs(raw: &Value) -> Vec<(&'static str, String)> {
+        let mut inputs = vec![];
+        for k in &["min", "max", "exact"] {
+            if let Some(val) = raw.get(*k) {
+                if !val.is_null() {
+                    let v = Self::extract_scalar(val);
+                    let val_str = match &v {
+                        Value::Number(n) => n.to_string(),
+                        Value::String(s) => s.clone(),
+                        _ => v.to_string(),
+                    };
+                    inputs.push((*k, val_str));
+                }
+            }
+        }
+        inputs
+    }
+
+    /// Normalize a single constraint's numeric values in parallel (Opt #2).
     async fn normalize_single_constraint(
         c: &Value,
         label: &str,
@@ -92,61 +155,57 @@ impl RecommendationService {
         let mut target_num: Option<Value> = None;
         let mut blocking_num: Option<Value> = None;
 
-        // Normalize target numeric
-        if let Some(raw_target) = c.get("valeurs_cibles") {
-            if raw_target.is_object() {
-                let mut norm = json!({"unit": null, "min": null, "max": null, "exact": null});
-                for k in &["min", "max", "exact"] {
-                    if let Some(val) = raw_target.get(k) {
-                        if !val.is_null() {
-                            let v = Self::extract_scalar(val);
-                            let val_str = match &v {
-                                Value::Number(n) => n.to_string(),
-                                Value::String(s) => s.clone(),
-                                _ => v.to_string(),
-                            };
-                            if let Some(result) = CLIENTS
-                                .normalize_quantity(&val_str, Some(unit), label)
-                                .await
-                            {
-                                norm[k] = json!(result.valeur_canonique);
-                                norm["unit"] = json!(result.unite_canonique);
-                            }
-                        }
-                    }
+        // Collect all normalization inputs, then run them in parallel
+        let target_inputs = c.get("valeurs_cibles")
+            .filter(|v| v.is_object())
+            .map(|v| Self::extract_normalize_inputs(v))
+            .unwrap_or_default();
+
+        let blocking_inputs = c.get("valeurs_bloquantes")
+            .filter(|v| v.is_object())
+            .map(|v| Self::extract_normalize_inputs(v))
+            .unwrap_or_default();
+
+        // Run ALL normalization calls (target + blocking) in parallel
+        let all_inputs: Vec<(&str, &str, String)> = target_inputs.iter()
+            .map(|(k, v)| ("target", *k, v.clone()))
+            .chain(blocking_inputs.iter().map(|(k, v)| ("blocking", *k, v.clone())))
+            .collect();
+
+        let all_results = futures::future::join_all(
+            all_inputs.iter().map(|(_group, _k, val_str)| {
+                CLIENTS.normalize_quantity(val_str, Some(unit), label)
+            })
+        ).await;
+
+        // Apply results back to target/blocking norms
+        if !target_inputs.is_empty() {
+            let mut norm = json!({"unit": null, "min": null, "max": null, "exact": null});
+            let target_count = target_inputs.len();
+            for (i, result) in all_results.iter().take(target_count).enumerate() {
+                if let Some(ref r) = result {
+                    let k = target_inputs[i].0;
+                    norm[k] = json!(r.valeur_canonique);
+                    norm["unit"] = json!(r.unite_canonique);
                 }
-                if !norm["unit"].is_null() {
-                    target_num = Some(norm);
-                }
+            }
+            if !norm["unit"].is_null() {
+                target_num = Some(norm);
             }
         }
 
-        // Normalize blocking numeric
-        if let Some(raw_blocking) = c.get("valeurs_bloquantes") {
-            if raw_blocking.is_object() {
-                let mut norm = json!({"unit": null, "min": null, "max": null, "exact": null});
-                for k in &["min", "max", "exact"] {
-                    if let Some(val) = raw_blocking.get(k) {
-                        if !val.is_null() {
-                            let v = Self::extract_scalar(val);
-                            let val_str = match &v {
-                                Value::Number(n) => n.to_string(),
-                                Value::String(s) => s.clone(),
-                                _ => v.to_string(),
-                            };
-                            if let Some(result) = CLIENTS
-                                .normalize_quantity(&val_str, Some(unit), label)
-                                .await
-                            {
-                                norm[k] = json!(result.valeur_canonique);
-                                norm["unit"] = json!(result.unite_canonique);
-                            }
-                        }
-                    }
+        if !blocking_inputs.is_empty() {
+            let mut norm = json!({"unit": null, "min": null, "max": null, "exact": null});
+            let target_count = target_inputs.len();
+            for (i, result) in all_results.iter().skip(target_count).enumerate() {
+                if let Some(ref r) = result {
+                    let k = blocking_inputs[i].0;
+                    norm[k] = json!(r.valeur_canonique);
+                    norm["unit"] = json!(r.unite_canonique);
                 }
-                if !norm["unit"].is_null() {
-                    blocking_num = Some(norm);
-                }
+            }
+            if !norm["unit"].is_null() {
+                blocking_num = Some(norm);
             }
         }
 
@@ -231,22 +290,24 @@ impl RecommendationService {
         let critique_weight = score_options.and_then(|s| s.critique).unwrap_or(5);
         let secondaire_weight = score_options.and_then(|s| s.secondaire).unwrap_or(1);
 
-        let mut grouped: HashMap<String, Value> = HashMap::new();
-
-        for c in &request.liste_caracteristique {
+        // Opt #1: Parallelize all normalize_single_constraint calls
+        let normalize_futures: Vec<_> = request.liste_caracteristique.iter().map(|c| {
             let cid = c.id_caracteristique.to_string().trim_matches('"').to_string();
-            let label = label_map.get(&cid).map(|s| s.as_str()).unwrap_or("dimensionless");
+            let label = label_map.get(&cid).cloned().unwrap_or_else(|| "dimensionless".to_string());
             let c_val = serde_json::to_value(c).unwrap_or(json!({}));
-            let mut normalized = Self::normalize_single_constraint(&c_val, label).await;
-
-            let poids_carac = c.poids_caracteristique.as_deref().unwrap_or("critique");
-            let c_weight = if poids_carac == "secondaire" {
-                secondaire_weight
-            } else {
-                critique_weight
-            };
+            let poids_carac = c.poids_caracteristique.as_deref().unwrap_or("critique").to_string();
+            let c_weight = if poids_carac == "secondaire" { secondaire_weight } else { critique_weight };
             let q_weight = c.poids_question.unwrap_or(1);
+            async move {
+                let normalized = Self::normalize_single_constraint(&c_val, &label).await;
+                (cid, c_weight, q_weight, normalized)
+            }
+        }).collect();
 
+        let norm_results = futures::future::join_all(normalize_futures).await;
+
+        let mut grouped: HashMap<String, Value> = HashMap::new();
+        for (cid, c_weight, q_weight, mut normalized) in norm_results {
             if let Some(obj) = normalized.as_object_mut() {
                 obj.insert("c_weight".to_string(), json!(c_weight));
             }
@@ -818,6 +879,8 @@ impl RecommendationService {
         parcours: &str,
         id_prompt: i32,
         request: &MatchingPayloadIdProduit,
+        pre_category_caracs: Vec<Value>,
+        pre_prompt_data: Option<Value>,
     ) -> (Vec<Produit>, Vec<Produit>, Vec<Produit>) {
         let all_produits: Vec<&Produit> = top_produit.iter().chain(liste_produit.iter()).collect();
         if all_produits.is_empty() {
@@ -828,12 +891,12 @@ impl RecommendationService {
         let produit_map: HashMap<String, &Produit> =
             all_produits.iter().map(|p| (p.id_produit.clone(), *p)).collect();
 
-        // Fetch data in parallel
-        let (products_info, all_caracs, category_caracs) = tokio::join!(
+        // Opt #3+4: category_caracs and prompt_data are pre-fetched, only fetch product-specific data
+        let (products_info, all_caracs) = tokio::join!(
             HELLOPRO_CLIENT.fetch_products_info(id_categorie, &id_produits),
             HELLOPRO_CLIENT.fetch_all_product_caracteristiques(&id_produits),
-            HELLOPRO_CLIENT.fetch_category_caracteristiques(id_categorie),
         );
+        let category_caracs = pre_category_caracs;
 
         // Build liste_carac_id from request
         let liste_carac_id: Vec<String> = request
@@ -842,9 +905,9 @@ impl RecommendationService {
             .map(|c| c.id_caracteristique.to_string().trim_matches('"').to_string())
             .collect();
 
-        // Format products for LLM
-        let html_tag_re = Regex::new(r"<[^>]+>").unwrap();
-        let whitespace_re = Regex::new(r"\s+").unwrap();
+        // Format products for LLM (Opt #6: use static regexes)
+        let html_tag_re = html_tag_regex();
+        let whitespace_re = whitespace_regex();
         let mut formatted_products = vec![];
 
         for id_produit in &id_produits {
@@ -971,9 +1034,8 @@ impl RecommendationService {
         let caracteristiques_critiques = critiques_lines.join("\n");
         let liste_produits_json = serde_json::to_string(&formatted_products).unwrap_or_default();
 
-        // Fetch system prompt
-        let prompt_data = HELLOPRO_CLIENT.fetch_prompt(&id_prompt.to_string()).await;
-        let (system_prompt_template, temperature) = if let Some(ref pd) = prompt_data {
+        // Opt #3+4: Use pre-fetched prompt data
+        let (system_prompt_template, temperature) = if let Some(ref pd) = pre_prompt_data {
             if let Some(content) = pd.get("contenu_prompt").and_then(|v| v.as_str()) {
                 debug!("System prompt from hellopro.fr: {}", "yes");
                 let temp = pd.get("temperature").and_then(|v| v.as_f64());
@@ -1089,7 +1151,11 @@ impl RecommendationService {
     ) -> MatchingResponse {
         let start = Instant::now();
 
+        // Opt #7: per-step timing
+        let step_norm = Instant::now();
         let flat_filters = Self::normalize_constraints_for_caracteristique(request).await;
+        debug!("[perf] normalize_constraints took {:.3}s", step_norm.elapsed().as_secs_f64());
+
         let weights_map: Value = flat_filters
             .iter()
             .filter_map(|f| {
@@ -1113,27 +1179,42 @@ impl RecommendationService {
             rerank_top_k, target_product_id.as_deref(),
         );
 
-        let results = CLIENTS.execute_cypher(&cypher_query, &params).await;
-        // debug!("[gRPC] execute_cypher: params={:?}, results={:?}", params, results);
-        debug!("[recommendation] get_products_by_caracteristique_filters_rerank: gRPC returned {} results", results.len());
-
-        let (liste_produit, top_produit) =
-            Self::parse_matching_results(&results, request, blocked_val, different_val);
-
         let id_categorie = request.id_categorie.as_ref().map(|v| v.to_string().trim_matches('"').to_string()).unwrap_or_default();
-        let parcours = request.rerank.as_ref().and_then(|r| r.parcours.as_deref()).unwrap_or("");
         let id_prompt = request.rerank.as_ref().and_then(|r| r.id_prompt).unwrap_or(112);
 
+        // Opt #3+4: Pre-fetch category_caracs + prompt in parallel with Cypher execution
+        let step_cypher = Instant::now();
+        let (results, pre_category_caracs, pre_prompt_data) = tokio::join!(
+            CLIENTS.execute_cypher(&cypher_query, &params),
+            HELLOPRO_CLIENT.fetch_category_caracteristiques(&id_categorie),
+            HELLOPRO_CLIENT.fetch_prompt(&id_prompt.to_string()),
+        );
+        debug!("[perf] cypher+prefetch took {:.3}s, gRPC returned {} results",
+            step_cypher.elapsed().as_secs_f64(), results.len());
+
+        let step_parse = Instant::now();
+        let (liste_produit, top_produit) =
+            Self::parse_matching_results(&results, request, blocked_val, different_val);
+        debug!("[perf] parse_matching_results took {:.3}s", step_parse.elapsed().as_secs_f64());
+
+        let parcours = request.rerank.as_ref().and_then(|r| r.parcours.as_deref()).unwrap_or("");
+
+        let step_rerank = Instant::now();
         let (reranked_top, reranked_liste, ecarts) = Self::enrich_and_rerank_with_llm(
             &top_produit, &liste_produit, &id_categorie, parcours, id_prompt, request,
+            pre_category_caracs, pre_prompt_data,
         )
         .await;
+        debug!("[perf] enrich_and_rerank_with_llm took {:.3}s", step_rerank.elapsed().as_secs_f64());
+
+        let total = start.elapsed().as_secs_f64();
+        debug!("[perf] get_products_by_caracteristique_filters_rerank total: {:.3}s", total);
 
         MatchingResponse {
             top_produit: reranked_top,
             liste_produit: reranked_liste,
             ecarts: if ecarts.is_empty() { None } else { Some(ecarts) },
-            temps_de_traitement: start.elapsed().as_secs_f64(),
+            temps_de_traitement: total,
         }
     }
 
