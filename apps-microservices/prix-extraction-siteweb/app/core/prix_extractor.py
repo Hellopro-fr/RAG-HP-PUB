@@ -271,6 +271,7 @@ class PrixExtractor:
             chunk_metadata = chunk.get("metadata", {})
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
+            self._log(f"[{chunk_index + 1}/{total_chunks}] Chunk : {chunk}")
 
             # 1. Construire le prompt avec le contenu du chunk
             prompt_text = self._build_prompt(chunk_metadata, category_name)
@@ -420,7 +421,7 @@ class PrixExtractor:
         self._log(f"\n--- Recherche Milvus (source={settings.MILVUS_SOURCE}, top_k={settings.MILVUS_TOP_K}) ---")
         chunks = await call_search_api_async(
             prompt=category_name,
-            num_results=settings.MILVUS_TOP_K,
+            num_results=5,
             source=settings.MILVUS_SOURCE
         )
         
