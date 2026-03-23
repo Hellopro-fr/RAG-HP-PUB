@@ -877,7 +877,7 @@ impl RecommendationService {
         liste_produit: &[Produit],
         id_categorie: &str,
         parcours: &str,
-        id_prompt: i32,
+        _id_prompt: i32,
         request: &MatchingPayloadIdProduit,
         pre_category_caracs: Vec<Value>,
         pre_prompt_data: Option<Value>,
@@ -1181,13 +1181,14 @@ impl RecommendationService {
 
         let id_categorie = request.id_categorie.as_ref().map(|v| v.to_string().trim_matches('"').to_string()).unwrap_or_default();
         let id_prompt = request.rerank.as_ref().and_then(|r| r.id_prompt).unwrap_or(112);
+        let id_prompt_str = id_prompt.to_string();
 
         // Opt #3+4: Pre-fetch category_caracs + prompt in parallel with Cypher execution
         let step_cypher = Instant::now();
         let (results, pre_category_caracs, pre_prompt_data) = tokio::join!(
             CLIENTS.execute_cypher(&cypher_query, &params),
             HELLOPRO_CLIENT.fetch_category_caracteristiques(&id_categorie),
-            HELLOPRO_CLIENT.fetch_prompt(&id_prompt.to_string()),
+            HELLOPRO_CLIENT.fetch_prompt(&id_prompt_str),
         );
         debug!("[perf] cypher+prefetch took {:.3}s, gRPC returned {} results",
             step_cypher.elapsed().as_secs_f64(), results.len());
