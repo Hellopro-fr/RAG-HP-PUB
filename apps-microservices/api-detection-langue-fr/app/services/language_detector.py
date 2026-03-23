@@ -1,5 +1,6 @@
 import re
 import logging
+import chardet
 from typing import Optional
 from bs4 import BeautifulSoup
 from langdetect import detect, detect_langs, LangDetectException
@@ -7,6 +8,138 @@ import langid
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def detect_challenge_page(html: str) -> Optional[str]:
+    """
+    Détecte si le contenu HTML est une page de challenge/protection anti-bot
+    (Cloudflare, DataDome, Imperva, PerimeterX, etc.) plutôt que le contenu réel.
+
+    Utilise une logique multi-indicateurs pour éviter les faux positifs
+    sur les vrais sites utilisant Cloudflare comme CDN. Un seul indicateur
+    faible (comme cdn-cgi/) ne suffit pas — il faut au moins 2 indicateurs
+    forts, ou 1 indicateur fort + contenu très court.
+
+    Returns:
+        Nom du service de protection détecté, ou None si contenu légitime.
+    """
+    if not html:
+        return None
+
+    html_lower = html.lower()
+
+    # --- Cloudflare WAF Block Page ---
+    # Détection prioritaire : page "Sorry, you have been blocked" — IP rejetée par le WAF
+    # Différent du Turnstile challenge (qui peut se résoudre).
+    # Le block WAF est permanent pour cette IP → non résolvable.
+    cf_block_strong = [
+        'sorry, you have been blocked',               # Message principal du block WAF
+        'you are unable to access',                    # Message secondaire
+        'cf-error-details',                            # Container d'erreur CF spécifique
+        'attention required!',                         # Titre (sans </title> pour match partiel)
+    ]
+    cf_block_count = sum(1 for p in cf_block_strong if p in html_lower)
+    if cf_block_count >= 2:
+        return 'Cloudflare_blocked'
+
+    # --- Cloudflare Turnstile Challenge ---
+    # Détection basée sur un ancre obligatoire : chl_page/v1
+    #
+    # POURQUOI : Les composants Turnstile (cf-turnstile-response, challenges.cloudflare.com/turnstile)
+    # sont aussi présents sur les vrais sites qui utilisent Turnstile pour la protection de formulaires
+    # (contact, login, etc.). Seul chl_page/v1 est EXCLUSIF aux pages de challenge Cloudflare —
+    # il n'est jamais chargé sur un vrai site.
+    #
+    # Logique : chl_page/v1 (obligatoire) + au moins 1 confirmation
+    cf_anchor = 'chl_page/v1'  # Script orchestration challenge — EXCLUSIF aux pages challenge
+
+    cf_confirmations = [
+        'cf-turnstile-response',                      # Input CAPTCHA Turnstile
+        '<title>just a moment...</title>',             # Titre page challenge (EN)
+        '<title>un instant',                           # Titre page challenge (FR) — match partiel
+        'noindex',                                     # meta robots noindex (pages challenge ont toujours noindex)
+        'cdn-cgi/challenge-platform',                  # Plateforme challenge CF
+        'challenges.cloudflare.com/turnstile',         # Script Turnstile JS
+    ]
+
+    if cf_anchor in html_lower:
+        cf_confirmation_count = sum(1 for p in cf_confirmations if p in html_lower)
+        if cf_confirmation_count >= 1:
+            return 'Cloudflare'
+        # chl_page/v1 seul + contenu très court → probablement une page challenge minimaliste
+        import re as _re
+        text_only = _re.sub(r'<style[^>]*>.*?</style>', '', html_lower, flags=_re.DOTALL)
+        text_only = _re.sub(r'<script[^>]*>.*?</script>', '', text_only, flags=_re.DOTALL)
+        text_only = _re.sub(r'<[^>]+>', '', text_only)
+        text_only = _re.sub(r'\s+', ' ', text_only).strip()
+        if len(text_only) < 1000:
+            return 'Cloudflare'
+
+    # --- DataDome ---
+    dd_indicators = [
+        'geo.captcha-delivery.com',
+        'datadome',
+    ]
+    dd_count = sum(1 for p in dd_indicators if p in html_lower)
+    if dd_count >= 2:
+        return 'DataDome'
+    if dd_count >= 1 and len(html) < 50000:
+        return 'DataDome'
+
+    # --- PerimeterX / HUMAN ---
+    if 'human.com/bot-defender' in html_lower:
+        return 'PerimeterX'
+
+    # --- Imperva / Incapsula ---
+    imperva_indicators = [
+        '_incap_ses',
+        'incapsula',
+        'visitorid',
+    ]
+    imperva_count = sum(1 for p in imperva_indicators if p in html_lower)
+    if imperva_count >= 2:
+        return 'Imperva'
+
+    # --- Pages d'erreur HTTP génériques (403 Forbidden, 503 Service Unavailable, etc.) ---
+    # Détecte les pages d'erreur serveur/WAF non spécifiques à un fournisseur.
+    # Ces pages indiquent que le proxy IP a été bloqué par le serveur lui-même.
+    # Logique : titre d'erreur HTTP + meta noindex + contenu court (pas un vrai site)
+    import re as _re_err
+
+    http_error_title_pattern = _re_err.search(
+        r'<title>\s*(403|401|406|429|503)\s*[-–—]?\s*(forbidden|unauthorized|not acceptable|too many requests|service unavailable|access denied|error)?\s*</title>',
+        html_lower
+    )
+
+    if http_error_title_pattern:
+        error_code = http_error_title_pattern.group(1)
+        # Confirmer avec au moins 1 indicateur supplémentaire
+        err_confirmations = [
+            'noindex',                              # meta robots noindex
+            'you have been blocked',                # Message de blocage
+            'access denied',                        # Accès refusé
+            'access to this page has been denied',  # Variante
+            'forbidden',                            # 403 body text
+            'request blocked',                      # WAF block
+            'your ip',                              # Référence à l'IP du visiteur
+            'security service',                     # Service de sécurité
+            'ray id',                               # Cloudflare-like ray ID (CDN générique)
+        ]
+        err_confirm_count = sum(1 for p in err_confirmations if p in html_lower)
+
+        if err_confirm_count >= 1:
+            return f'HTTP_{error_code}_blocked'
+
+        # Titre d'erreur seul + contenu très court → probablement une page d'erreur
+        text_only = _re_err.sub(r'<style[^>]*>.*?</style>', '', html_lower, flags=_re_err.DOTALL)
+        text_only = _re_err.sub(r'<script[^>]*>.*?</script>', '', text_only, flags=_re_err.DOTALL)
+        text_only = _re_err.sub(r'<svg[^>]*>.*?</svg>', '', text_only, flags=_re_err.DOTALL)
+        text_only = _re_err.sub(r'<[^>]+>', '', text_only)
+        text_only = _re_err.sub(r'\s+', ' ', text_only).strip()
+        if len(text_only) < 500:
+            return f'HTTP_{error_code}_blocked'
+
+    return None
 
 
 class LanguageDetector:
@@ -200,35 +333,108 @@ class LanguageDetector:
                 # En cas de sélecteur invalide, on continue
                 pass
     
+    # Éléments HTML non visibles à supprimer lors du nettoyage
+    _NON_VISIBLE_ELEMENTS = [
+        'head', 'script', 'style', 'meta', 'link', 'noscript',
+        'img', 'svg', 'iframe', 'figure', 'video', 'audio',
+        'source', 'track', 'canvas', 'embed', 'template'
+    ]
+
+    @staticmethod
+    def _normalize_encoding(html: str) -> str:
+        """
+        Normalise l'encodage du contenu HTML en UTF-8.
+
+        Reproduit le comportement de sanitizeUtf8Recursive() en PHP :
+        - Détection d'encodage (UTF-8, Windows-1252, ISO-8859-1, ISO-8859-15, ASCII)
+        - Conversion vers UTF-8
+        - Suppression des caractères de contrôle (sauf \\n, \\r, \\t)
+        """
+        if not html:
+            return html
+
+        # Tenter la détection d'encodage sur les bytes bruts
+        raw_bytes = html.encode('utf-8', errors='surrogateescape')
+        detected = chardet.detect(raw_bytes)
+        encoding = detected.get('encoding', 'utf-8') or 'utf-8'
+
+        # Si l'encodage détecté n'est pas UTF-8, convertir
+        if encoding.lower().replace('-', '') not in ('utf8', 'ascii'):
+            try:
+                raw_bytes = html.encode('raw_unicode_escape')
+                html = raw_bytes.decode(encoding, errors='replace')
+            except (UnicodeDecodeError, LookupError):
+                logger.warning(f"Échec conversion encodage {encoding}, conservation en UTF-8")
+
+        # Supprimer les caractères de contrôle (sauf \n \r \t) — comme PHP
+        html = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', html)
+
+        return html
+
+    def clean_html_to_text(self, html: str, max_length: int = 10000) -> Optional[str]:
+        """
+        Nettoie le contenu HTML et extrait le texte visible.
+
+        Combine le meilleur du nettoyage PHP (clean_html + sanitizeUtf8Recursive)
+        avec les capacités avancées du nettoyage API (suppression cookies/RGPD).
+
+        Pipeline :
+        1. Normalisation encodage (UTF-8, suppression caractères de contrôle)
+        2. Suppression éléments non visibles (head, script, style, etc.)
+        3. Suppression bannières cookies/consentement RGPD
+        4. Extraction texte visible
+        5. Post-traitement : collapse whitespace, trim (comme PHP strip_tags + preg_replace)
+
+        Args:
+            html: Contenu HTML brut
+            max_length: Longueur maximale du texte extrait (défaut: 10000)
+
+        Returns:
+            Texte nettoyé ou None si le contenu est trop court
+        """
+        if not html:
+            return None
+
+        # Étape 1 : Normalisation encodage
+        html = self._normalize_encoding(html)
+
+        # Étape 2 : Parser et supprimer les éléments non visibles
+        soup = BeautifulSoup(html, 'lxml')
+
+        for element in soup(self._NON_VISIBLE_ELEMENTS):
+            element.decompose()
+
+        # Étape 3 : Supprimer les bannières cookies/consentement
+        self._remove_cookie_consent_elements(soup)
+
+        # Étape 4 : Extraire le texte visible
+        text = soup.get_text(separator=' ', strip=True)
+
+        # Étape 5 : Post-traitement (équivalent PHP : preg_replace('/\s+/', ' ', ...) + trim)
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        # Vérifier longueur minimale
+        if len(text) < settings.NLP_MIN_TEXT_LENGTH:
+            return None
+
+        # Limiter le texte analysé (performance)
+        return text[:max_length]
+
     def detect_from_text_content(self, html: str) -> Optional[dict]:
         """
         Détecte la langue par analyse NLP du contenu textuel visible.
-        
+
         Utilise langdetect (Google) et langid (ML) avec vote majoritaire amélioré.
         """
         if not html:
             return None
-        
+
         try:
-            # Extraire le texte visible avec BeautifulSoup
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # Supprimer scripts, styles et autres éléments non visibles
-            # Note: on garde header, footer, nav car ils peuvent contenir du contenu pertinent
-            for element in soup(['head','script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
-                element.decompose()
-            
-            # Supprimer les bannières cookies/consentement (souvent en français sur sites non-FR)
-            self._remove_cookie_consent_elements(soup)
-            
-            text = soup.get_text(separator=' ', strip=True)
-            
-            # Vérifier longueur minimale
-            if len(text) < settings.NLP_MIN_TEXT_LENGTH:
+            # Extraire le texte visible via le pipeline de nettoyage centralisé
+            text = self.clean_html_to_text(html)
+
+            if not text:
                 return None
-            
-            # Limiter le texte analysé (performance)
-            text = text[:10000]
 
             # Détection avec langdetect
             langdetect_result = None
@@ -341,26 +547,12 @@ class LanguageDetector:
                     return None
                 self._fasttext_model = fasttext.load_model(model_path)
             
-            # Extraire le texte visible avec BeautifulSoup
-            soup = BeautifulSoup(html, 'lxml')
-            
-            # Supprimer scripts, styles et autres éléments non visibles
-            # Harmonisé avec detect_from_text_content (même liste d'éléments)
-            for element in soup(['head','script', 'style', 'meta', 'link', 'noscript', 'img', 'svg', 'iframe','figure','video','audio','source','track','canvas','embed','template']):
-                element.decompose()
-            
-            # Supprimer les bannières cookies/consentement (souvent en français sur sites non-FR)
-            self._remove_cookie_consent_elements(soup)
-            
-            text = soup.get_text(separator=' ', strip=True)
-            
-            # Vérifier longueur minimale
-            if len(text) < settings.NLP_MIN_TEXT_LENGTH:
+            # Extraire le texte visible via le pipeline de nettoyage centralisé
+            text = self.clean_html_to_text(html)
+
+            if not text:
                 return None
-            
-            # Limiter le texte analysé (performance)
-            text = text[:10000]
-            
+
             # Nettoyer le texte (fastText n'aime pas les sauts de ligne)
             text_clean = ' '.join(text.split())
             
@@ -476,12 +668,15 @@ class LanguageDetector:
                 'confidence': nlp_confidence
             }
         
-        # Cas C : HTML seul (NLP indisponible — texte trop court ou erreur)
+        # Cas C : HTML seul (NLP indisponible ou désactivé)
         if html_lang and not nlp_result:
+            # Si NLP était désactivé volontairement (use_nlp=False), ne pas ajouter nlp_skipped
+            # car le tracking NLP est géré par l'appelant (check_page_if_french)
+            method = html_method if not use_nlp else f"{html_method}+nlp_skipped"
             return {
                 'detected': True,
                 'is_french': html_lang == 'fr',
-                'method': f"{html_method}+nlp_skipped",
+                'method': method,
                 'value': html_lang,
                 'confidence': 0.6  # Confiance réduite car non confirmé par NLP
             }

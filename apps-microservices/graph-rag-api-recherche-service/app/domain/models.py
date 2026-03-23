@@ -273,6 +273,7 @@ class RerankingOptions(BaseModel):
     top_k: int = Field(24, description="Nombre de produits à reclasser")
     use_rerank: bool = False
     parcours: str = ""
+    id_prompt: int = Field(112, description="ID du prompt")
 
 
 class ScoringOptions(BaseModel):
@@ -344,7 +345,7 @@ class MatchingPayload(BaseModel):
         description="Options pour le scoring",
     )
     rerank: Optional[RerankingOptions] = Field(
-        RerankingOptions(top_k=24, use_rerank=False, parcours=""),
+        RerankingOptions(top_k=24, use_rerank=False, parcours="", id_prompt=112),
         description="Options pour le reranking",
     )
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")

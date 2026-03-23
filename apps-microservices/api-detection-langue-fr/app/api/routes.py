@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from typing import Optional
 from fastapi import APIRouter, HTTPException
@@ -10,10 +11,14 @@ from app.models.schemas import (
     BatchDetectionResponse,
     BatchItem,
     UrlCheckResponse,
-    DetectionMode
+    DetectionMode,
+    DebugDetectionResponse
 )
 from app.core.domain_fr import DomainFR
 from app.services.redirect_tracker import fetch_html
+from app.services.language_detector import detect_challenge_page
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -36,28 +41,56 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
     try:
         # Récupérer le HTML si non fourni
         html_content = request.html_content
+        effective_url = request.url
+
         if not html_content:
-            html_content = await fetch_html(request.url, request.proxy_url)
-            if not html_content:
+            fetch_result = await fetch_html(request.url, request.proxy_url)
+            if not fetch_result:
                 return DetectionResponse(
                     ok=False,
                     url=request.url,
                     method='fetch_failed',
                     error='Impossible de récupérer le contenu HTML'
                 )
-        
-        # Créer le détecteur
+            html_content, final_url = fetch_result
+            # Mettre à jour l'URL si Playwright a suivi une redirection
+            if final_url and final_url != request.url:
+                logger.info(f"Redirection détectée: {request.url} → {final_url}")
+                effective_url = final_url
+
+        # Vérifier si le contenu est une page de challenge ou block (Cloudflare, etc.)
+        challenge = detect_challenge_page(html_content)
+        if challenge:
+            if challenge == 'Cloudflare_blocked':
+                error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
+            elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
+                error_code = challenge.split('_')[1]
+                error_msg = f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
+            else:
+                error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+            logger.warning(f"Page de challenge/block {challenge} détectée pour {effective_url}")
+            return DetectionResponse(
+                ok=False,
+                url=effective_url,
+                method='challenge_page',
+                error=error_msg
+            )
+
+        # Créer le détecteur avec l'URL finale (après redirection éventuelle)
+        # original_homepage conserve l'URL d'origine pour accepter les alternatives
+        # qui pointent vers le domaine d'avant redirection (ex: trojanuv.com → trojantechnologies.com)
         detector = DomainFR(
-            homepage=request.url,
+            homepage=effective_url,
             forced_method=request.forced_method,
-            use_nlp_detection=request.use_nlp_detection
+            use_nlp_detection=request.use_nlp_detection,
+            original_homepage=request.url if effective_url != request.url else None
         )
-        
+
         # Lancer la détection
         result = await detector.check_page_if_french(html_content, request.mode)
-        
+
         return result
-        
+
     except Exception as e:
         return DetectionResponse(
             ok=False,
@@ -95,54 +128,174 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     if len(items_to_process) > 100:
         raise HTTPException(status_code=400, detail="Maximum 100 items par requête")
     
+    total_items = len(items_to_process)
     start_time = time.time()
-    
+
+    logger.info(f"[BATCH] Debut traitement: {total_items} URLs, concurrence={request.max_concurrency}, mode={request.mode}")
+
     # Sémaphore pour limiter la concurrence
     semaphore = asyncio.Semaphore(request.max_concurrency)
-    
-    async def process_single(item: BatchItem) -> DetectionResponse:
+    processed_count = 0
+
+    async def process_single(index: int, item: BatchItem) -> DetectionResponse:
+        nonlocal processed_count
         url = item.url
+
+        # Stagger delay : évite que tous les navigateurs frappent le proxy simultanément
+        # Réduit la pression sur le proxy et le risque de déclencher des protections anti-bot
+        if index > 0:
+            await asyncio.sleep(index * 0.5)
+
         async with semaphore:
+            item_start = time.time()
             try:
-                # Utiliser le HTML fourni s'il existe, sinon le télécharger
                 html_content = item.html_content
+                effective_url = url
+
                 if not html_content:
-                    html_content = await fetch_html(url, request.proxy_url)
-                    if not html_content:
+                    fetch_result = await fetch_html(url, request.proxy_url)
+                    if not fetch_result:
+                        processed_count += 1
+                        duration_ms = round((time.time() - item_start) * 1000)
+                        logger.warning(f"[BATCH] [{processed_count}/{total_items}] FETCH_FAILED {url} ({duration_ms}ms)")
                         return DetectionResponse(
                             ok=False,
                             url=url,
                             method='fetch_failed',
                             error='Impossible de récupérer le contenu HTML'
                         )
-                
-                # Créer le détecteur
+                    html_content, final_url = fetch_result
+                    if final_url and final_url != url:
+                        logger.info(f"[BATCH] Redirection: {url} → {final_url}")
+                        effective_url = final_url
+
+                # Vérifier si le contenu est une page de challenge ou block
+                challenge = detect_challenge_page(html_content)
+                if challenge:
+                    processed_count += 1
+                    duration_ms = round((time.time() - item_start) * 1000)
+                    logger.warning(f"[BATCH] [{processed_count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
+                    if challenge == 'Cloudflare_blocked':
+                        error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
+                    elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
+                        error_code = challenge.split('_')[1]
+                        error_msg = f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
+                    else:
+                        error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+                    return DetectionResponse(
+                        ok=False,
+                        url=effective_url,
+                        method='challenge_page',
+                        error=error_msg
+                    )
+
                 detector = DomainFR(
-                    homepage=url,
-                    use_nlp_detection=request.use_nlp_detection
+                    homepage=effective_url,
+                    use_nlp_detection=request.use_nlp_detection,
+                    original_homepage=url if effective_url != url else None
                 )
-                
-                # Lancer la détection
-                return await detector.check_page_if_french(html_content, request.mode)
-                
+
+                result = await detector.check_page_if_french(html_content, request.mode)
+
+                processed_count += 1
+                duration_ms = round((time.time() - item_start) * 1000)
+                status = "OK" if result.ok else "NOK"
+                logger.info(f"[BATCH] [{processed_count}/{total_items}] {status} {url} method={result.method} ({duration_ms}ms)")
+
+                return result
+
             except Exception as e:
+                processed_count += 1
+                duration_ms = round((time.time() - item_start) * 1000)
+                logger.error(f"[BATCH] [{processed_count}/{total_items}] ERROR {url}: {e} ({duration_ms}ms)")
                 return DetectionResponse(
                     ok=False,
                     url=url,
                     method='error',
                     error=str(e)
                 )
-    
-    # Traiter tous les items en parallèle
-    results = await asyncio.gather(*[process_single(item) for item in items_to_process])
-    
-    # Calculer les statistiques
+
+    # Pass 1 : traitement parallèle
+    results = list(await asyncio.gather(*[
+        process_single(i, item) for i, item in enumerate(items_to_process)
+    ]))
+
+    pass1_duration = round((time.time() - start_time) * 1000)
+    pass1_ok = sum(1 for r in results if r.ok)
+    pass1_fetch_failed = sum(1 for r in results if r.method == 'fetch_failed')
+    pass1_challenge = sum(1 for r in results if r.method == 'challenge_page')
+    logger.info(
+        f"[BATCH] Pass 1 termine: {pass1_ok} OK, {pass1_fetch_failed} fetch_failed, "
+        f"{pass1_challenge} challenge_page, "
+        f"{total_items - pass1_ok - pass1_fetch_failed - pass1_challenge} autres ({pass1_duration}ms)"
+    )
+
+    # Pass 2 : retry séquentiel des fetch_failed et challenge_page
+    failed_indices = [
+        i for i, r in enumerate(results)
+        if r.method in ('fetch_failed', 'challenge_page')
+    ]
+
+    if failed_indices:
+        logger.info(f"[BATCH] Pass 2: retry sequentiel de {len(failed_indices)} URLs en fetch_failed")
+
+        retry_success = 0
+        for retry_num, idx in enumerate(failed_indices, 1):
+            item = items_to_process[idx]
+            logger.info(f"[BATCH] Retry [{retry_num}/{len(failed_indices)}] {item.url}")
+
+            await asyncio.sleep(2)
+
+            try:
+                html_content = item.html_content
+                effective_url = item.url
+
+                if not html_content:
+                    fetch_result = await fetch_html(item.url, request.proxy_url)
+                    if not fetch_result:
+                        logger.warning(f"[BATCH] Retry ECHEC {item.url}")
+                        continue
+                    html_content, final_url = fetch_result
+                    if final_url and final_url != item.url:
+                        logger.info(f"[BATCH] Retry redirection: {item.url} → {final_url}")
+                        effective_url = final_url
+
+                # Vérifier challenge page sur retry
+                challenge = detect_challenge_page(html_content)
+                if challenge:
+                    logger.warning(f"[BATCH] Retry CHALLENGE_{challenge} {item.url}")
+                    continue
+
+                detector = DomainFR(
+                    homepage=effective_url,
+                    use_nlp_detection=request.use_nlp_detection,
+                    original_homepage=item.url if effective_url != item.url else None
+                )
+                retry_result = await detector.check_page_if_french(html_content, request.mode)
+                results[idx] = retry_result
+                retry_success += 1
+                logger.info(
+                    f"[BATCH] Retry OK {item.url} "
+                    f"(ok={retry_result.ok}, method={retry_result.method})"
+                )
+
+            except Exception as e:
+                logger.warning(f"[BATCH] Retry ERROR {item.url}: {e}")
+
+        logger.info(f"[BATCH] Pass 2 termine: {retry_success}/{len(failed_indices)} recuperes")
+
+    # Statistiques finales
     success_count = sum(1 for r in results if r.ok)
-    error_count = sum(1 for r in results if r.method == 'error' or r.method == 'fetch_failed')
+    error_count = sum(1 for r in results if r.method in ('error', 'fetch_failed', 'challenge_page'))
     failed_count = len(results) - success_count - error_count
-    
+
     processing_time_ms = (time.time() - start_time) * 1000
-    
+
+    logger.info(
+        f"[BATCH] Termine: {success_count} OK, {failed_count} non-FR, "
+        f"{error_count} erreurs ({round(processing_time_ms)}ms total)"
+    )
+
     return BatchDetectionResponse(
         total=len(results),
         success_count=success_count,
@@ -174,6 +327,106 @@ async def check_url_only(url: str, track_redirect: bool = False) -> UrlCheckResp
         url=result.get('url'),
         original_url=result.get('original_url')
     )
+
+
+@router.post("/detect-debug", response_model=DebugDetectionResponse)
+async def detect_french_debug(request: DetectionRequest) -> DebugDetectionResponse:
+    """
+    Version debug de /detect qui retourne le resultat + les informations
+    detaillees de chaque etape du pipeline de detection.
+
+    Utile pour diagnostiquer pourquoi une URL est detectee ou non comme francaise.
+
+    Retourne :
+    - **result** : Le resultat normal de detection (identique a /detect)
+    - **debug.fetch** : Contenu recupere (longueur, apercu)
+    - **debug.cleaning** : Texte apres nettoyage (longueur, apercu)
+    - **debug.url_check** : Resultat du check URL (TLD, path, query)
+    - **debug.html_tags** : Resultat de la detection par balises HTML
+    - **debug.nlp** : Resultat NLP complet (langue, confiance, details)
+    - **debug.alternatives** : URLs alternatives detectees
+    - **debug.decision** : Cas de decision applique
+    """
+    try:
+        html_content = request.html_content
+        fetched_by = 'provided'
+        effective_url = request.url
+        redirected_from = None
+
+        if not html_content:
+            fetched_by = 'api'
+            fetch_result = await fetch_html(request.url, request.proxy_url)
+            if not fetch_result:
+                from app.models.schemas import (
+                    DebugInfo, DebugFetchInfo, DebugCleaningInfo,
+                    DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo,
+                    DebugAlternativesInfo
+                )
+                return DebugDetectionResponse(
+                    result=DetectionResponse(
+                        ok=False,
+                        url=request.url,
+                        method='fetch_failed',
+                        error='Impossible de recuperer le contenu HTML'
+                    ),
+                    debug=DebugInfo(
+                        fetch=DebugFetchInfo(fetched_by='api', raw_html_length=0, raw_html_preview=''),
+                        cleaning=DebugCleaningInfo(cleaned_text_length=0, cleaned_text_preview=''),
+                        url_check=DebugUrlCheckInfo(ok=False, method='fetch_failed', is_strong_url=False),
+                        html_tags=DebugHtmlTagsInfo(detected=False, is_french=False),
+                        nlp=DebugNlpInfo(available=False),
+                        alternatives=DebugAlternativesInfo(candidates_found=0),
+                        decision='Fetch failed — no content to analyze'
+                    )
+                )
+            html_content, final_url = fetch_result
+            if final_url and final_url != request.url:
+                logger.info(f"[DEBUG] Redirection: {request.url} → {final_url}")
+                redirected_from = request.url
+                effective_url = final_url
+
+        # Détecter page de challenge (info debug — ne bloque pas en mode debug)
+        challenge = detect_challenge_page(html_content)
+        if challenge:
+            logger.warning(f"[DEBUG] Page de challenge {challenge} détectée pour {effective_url}")
+
+        detector = DomainFR(
+            homepage=effective_url,
+            forced_method=request.forced_method,
+            use_nlp_detection=request.use_nlp_detection,
+            original_homepage=request.url if effective_url != request.url else None
+        )
+
+        return await detector.check_page_if_french_debug(
+            html_content, request.mode, fetched_by=fetched_by,
+            include_full_content=request.include_full_content,
+            redirected_from=redirected_from,
+            challenge_detected=challenge
+        )
+
+    except Exception as e:
+        from app.models.schemas import (
+            DebugInfo, DebugFetchInfo, DebugCleaningInfo,
+            DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo,
+            DebugAlternativesInfo
+        )
+        return DebugDetectionResponse(
+            result=DetectionResponse(
+                ok=False,
+                url=request.url,
+                method='error',
+                error=str(e)
+            ),
+            debug=DebugInfo(
+                fetch=DebugFetchInfo(fetched_by='unknown', raw_html_length=0, raw_html_preview=''),
+                cleaning=DebugCleaningInfo(cleaned_text_length=0, cleaned_text_preview=''),
+                url_check=DebugUrlCheckInfo(ok=False, method='error', is_strong_url=False),
+                html_tags=DebugHtmlTagsInfo(detected=False, is_french=False),
+                nlp=DebugNlpInfo(available=False),
+                alternatives=DebugAlternativesInfo(candidates_found=0),
+                decision=f'Error: {str(e)}'
+            )
+        )
 
 
 @router.get("/health")

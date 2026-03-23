@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     MILVUS_PAGE_TYPE: str = "devis"
     MILVUS_TYPE: int = 1 # type de recherche vectorielle
     MILVUS_ACTION: int = 2 # utilisation LLM
-    MILVUS_TOP_K: int = 300
+    MILVUS_TOP_K: int = 1000
 
     # API HelloPro
     # HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M" #dev

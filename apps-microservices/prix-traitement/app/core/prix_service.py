@@ -1,0 +1,713 @@
+"""
+Service métier pour l'extraction des caractéristiques influençant le prix.
+Conversion de la logique PHP (api.php → run_identification) en Python.
+"""
+import time
+import json
+import logging
+import asyncio
+from typing import Dict, Any, Optional, List
+
+from app.core.api_client import GeminiProvider, HelloProAPIClient
+from app.core.utils import extract_json_from_text, get_prompt
+from app.core.credentials import settings
+
+logger = logging.getLogger(__name__)
+
+
+def format_numeric_constraint(constraint: Any, unite: str = "") -> str:
+    """
+    Formate une contrainte numérique (min/max/exact) en string lisible.
+    Conversion de la fonction PHP format_numeric_constraint.
+    
+    Args:
+        constraint: dict avec clés min/max/exact ou valeur simple
+        unite: unité à afficher
+        
+    Returns:
+        String formatée de la contrainte
+    """
+    if not constraint:
+        return ""
+
+    u = f" {unite}" if unite else ""
+
+    if isinstance(constraint, dict):
+        parts = []
+        if "min" in constraint:
+            parts.append(f"≥ {constraint['min']}{u}")
+        if "max" in constraint:
+            parts.append(f"≤ {constraint['max']}{u}")
+        if "exact" in constraint:
+            parts.append(f" {constraint['exact']}{u}")
+        return " & ".join(parts)
+
+    return f"{constraint}{u}"
+
+
+async def run_identification(id_categorie: str, id_prompt: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Logique principale d'identification des caractéristiques influençant le prix.
+    Conversion de la logique PHP run_identification en Python.
+    
+    Étapes :
+    1. Récupère les données de la catégorie via l'API HelloPro
+    2. Récupère le prompt configuré
+    3. Construit le prompt final et appelle Gemini
+    4. Parse la réponse JSON
+    5. Retourne le résultat structuré
+    
+    Args:
+        id_categorie: ID de la catégorie à analyser
+        id_prompt: ID du prompt (utilise la config par défaut si None)
+        
+    Returns:
+        Dict avec 'success', 'data', 'llm_response', 'message'
+    """
+    start_time = time.time()
+    prompt_id = id_prompt or settings.PROMPT_ID_CARAC_PRIX
+    
+    api_client = HelloProAPIClient()
+
+    ID_PROCESS = "37"
+    
+    try:
+        # =====================================================================
+        # ÉTAPE 0 : Récupérer les données de la catégorie : nom catégorie
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Récupération des données de la catégorie...")
+        
+        category_info = await api_client.post(
+            "category",
+            "info",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+        nom_categorie = category_info.get("nom_rubrique", "")
+        
+        if not category_info or not nom_categorie:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] Impossible de récupérer les données de la catégorie")
+            return {
+                "success": False,
+                "data": None,
+                "llm_response": None,
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer les données de la catégorie {id_categorie}"
+            }
+        
+        logger.info(f"[{id_categorie}] Données catégorie récupérées avec succès")
+        
+        # =====================================================================
+        # ÉTAPE 1 : Récupérer les données de la catégorie : Q1 + jeu caractéristiques + caractéristiques prix existant 
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Récupération des données de la catégorie...")
+
+        # Charger les réponses de Question 1 + caractéristiques prix existant 
+        reponses_q1_carac_prix = await api_client.post(
+            "prix",
+            "caracteristique",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+
+        # Charger les caractéristiques finales 
+        jeu_caracteristiques = await api_client.post(
+            "caracteristique",
+            "final",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+        # Sérialiser les données de la catégorie en JSON pour le prompt
+        jeu_caracteristiques_json = json.dumps(jeu_caracteristiques, ensure_ascii=False, indent=2)
+        
+        if not reponses_q1_carac_prix or not jeu_caracteristiques:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] Impossible de récupérer les données de la catégorie")
+            return {
+                "success": False,
+                "data": None,
+                "llm_response": None,
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer les données de la catégorie {id_categorie} Q1 : {len(reponses_q1_carac_prix)} Caracteristiques : {len(jeu_caracteristiques)}"
+            }
+        
+        logger.info(f"[{id_categorie}] Données catégorie récupérées avec succès")
+
+        logger.info(f"[{id_categorie}] jeu_caracteristiques : {jeu_caracteristiques_json[:100]}")        
+
+
+        # =====================================================================
+        # ÉTAPE 2 : Récupérer le prompt
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Récupération du prompt (id={prompt_id})...")
+        
+        prompt_config = await get_prompt(prompt_id)
+        
+        if not prompt_config:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] Impossible de récupérer le prompt id={prompt_id}")
+            return {
+                "success": False,
+                "data": None,
+                "llm_response": None,
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer le prompt id={prompt_id}"
+            }
+        
+        # Extraire le contenu du prompt
+        prompt_text = prompt_config.get("contenu_prompt", "")
+        logger.info(f"[{id_categorie}] Prompt récupéré : {prompt_text[:100]}...")
+        
+        # =====================================================================
+        # ÉTAPE 3 : Initialiser Gemini
+        # =====================================================================
+        gemini = GeminiProvider(
+            model=settings.GEMINI_MODEL_NAME
+        )
+        
+        # =====================================================================
+        # ÉTAPE 4 : Pour chaque réponse Q1, appel LLM + sauvegarde
+        # =====================================================================
+        results_by_reponse = []
+        skipped = []
+        errors = []
+        
+        for rep in reponses_q1_carac_prix:
+            id_reponse = rep.get("id_reponse", "")
+            reponse = rep.get("reponse", rep.get("texte_reponse", ""))
+            if not reponse:
+                logger.warning(f"[{id_categorie}] - Réponse {id_reponse} - Aucune réponse trouvée")
+                continue
+            has_data = rep.get("has_data", False)
+            caracteristiques_prix_existant = rep.get("caracteristiques_prix", [])
+
+            logger.info(f"[{id_categorie}] - Réponse {id_reponse} - {reponse}")
+
+            if has_data and caracteristiques_prix_existant:
+                logger.warning(f"[{id_categorie}] - Caracteristiques prix existantes pour la reponse {id_reponse} - {reponse}")
+                skipped.append({
+                    "id_reponse": id_reponse,
+                    "reponse": reponse,
+                })
+                continue
+            
+            # Récupérer les caractéristiques d'équivalence pour cette réponse
+            list_carac_equiv = []
+            equivalences = rep.get("equivalence", [])
+            if equivalences and isinstance(equivalences, list):
+                for equiv in equivalences:
+                    if isinstance(equiv, dict):
+                        id_c = equiv.get("id_caracteristique")
+                        if id_c:
+                            list_carac_equiv.append(str(id_c))
+                    else:
+                        logger.warning(f"[{id_categorie}] Équivalence non valide pour la réponse '{reponse}' (id={id_reponse}): {equivalences}")
+            
+            logger.info(f"[{id_categorie}] Traitement réponse Q1: '{reponse}' (id={id_reponse})")
+            
+            # --- Construction du prompt avec remplacement des variables dynamiques ---
+            final_prompt = prompt_text
+            final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+            final_prompt = final_prompt.replace("{reponse_question_1}", reponse)
+            final_prompt = final_prompt.replace("{jeu_caracteristique}", jeu_caracteristiques_json)
+            
+            logger.info(f"[{id_categorie}] Appel Gemini pour réponse '{reponse}' ({len(final_prompt)} chars)...")
+            
+            # --- Appel Gemini ---
+            llm_result = gemini.chat(final_prompt)
+
+            # Log LLM usage pour Gemini
+            usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
+            await api_client.log_llm_usage(
+                type_ia=3,  # Gemini
+                model=settings.GEMINI_MODEL_NAME,
+                input_token=usage_metadata.get("prompt_token_count", 0),
+                output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+                id_process=ID_PROCESS,
+                origine="prix-extraction-devis",
+                etat=1 if "error" not in llm_result else 2,
+                retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else ""
+            )
+            
+            # Vérifier si erreur LLM
+            if "error" in llm_result:
+                error_msg = f"Erreur Gemini pour la réponse '{reponse}' (code {llm_result.get('error', '')})"
+                logger.error(f"[{id_categorie}] {error_msg}")
+                errors.append(error_msg)
+                continue
+            
+            llm_text = llm_result.get("message", "")
+            logger.info(f"[{id_categorie}] Réponse Gemini : {llm_text}")
+            
+            # --- Parser la réponse JSON du LLM ---
+            parsed = extract_json_from_text(llm_text)
+            
+            caracteristiques_prix = []
+            
+            if not parsed or not isinstance(parsed, dict) or not parsed.get("caracteristiques_prix"):
+                error_msg = f"Réponse JSON vide ou malformée pour réponse='{reponse}' (id={id_reponse})"
+                logger.error(f"[{id_categorie}] {error_msg}")
+                errors.append(error_msg)
+                continue
+            
+            # --- Ajouter les caractéristiques d'équivalence ---
+            if list_carac_equiv:
+                for carac_equiv in list_carac_equiv:
+                    caracteristiques_prix.append(str(carac_equiv))
+
+            # Extraire les IDs des caractéristiques prix identifiées par le LLM
+            for carac_prix in parsed["caracteristiques_prix"]:                
+                id_carac = carac_prix.get("id", "")
+                if id_carac:
+                    caracteristiques_prix.append(str(id_carac))  
+            
+            # --- Dédupliquer ---
+            caracteristiques_prix = list(dict.fromkeys(caracteristiques_prix))
+            
+            # --- Sauvegarde via API ---                
+            save_result = await api_client.post(
+                "prix",
+                "caracteristique",
+                "save",
+                {
+                    "id_categorie": id_categorie,
+                    "id_reponse": id_reponse,
+                    "caracteristiques_prix": caracteristiques_prix
+                }
+            )
+            saved_ids = save_result.get("saved_ids", [])
+            if save_result is not None and len(saved_ids) > 0:
+                logger.info(f"[{id_categorie}] Sauvegardé: {len(saved_ids)} caractéristiques pour réponse='{reponse}' (id={id_reponse})")
+            else:
+                error_msg = f"Échec sauvegarde: {len(saved_ids)} caractéristiques pour réponse='{reponse}' (id={id_reponse})"
+                logger.warning(f"[{id_categorie}] Échec sauvegarde: {len(saved_ids)} caractéristiques pour réponse='{reponse}' (id={id_reponse})")
+                errors.append(error_msg)
+                continue
+            
+            results_by_reponse.append({
+                "id_reponse": id_reponse,
+                "reponse": reponse,
+                "sous_type": parsed.get("sous_type", ""),
+                "caracteristiques_prix": caracteristiques_prix,
+                "ids_saved": saved_ids,
+            })
+            
+            logger.info(f"[{id_categorie}] Réponse '{reponse}': {len(saved_ids)} caractéristiques sauvegardées")
+        
+        # =====================================================================
+        # ÉTAPE 5 : Construction du résultat final
+        # =====================================================================
+        elapsed = time.time() - start_time
+        
+        # Cas : aucune réponse traitée et des erreurs
+        if not results_by_reponse and errors:
+            return {
+                "success": False,
+                "data": [],
+                "raw": results_by_reponse,
+                "errors": errors,
+                "skipped": skipped,
+                "time_elapsed": elapsed,
+                "message": "; ".join(errors)
+            }
+        
+        # Cas : aucune réponse traitée et pas d'erreurs (tout déjà traité)
+        if not results_by_reponse and not errors:
+            return {
+                "success": False,
+                "data": [],
+                "raw": results_by_reponse,
+                "errors": errors,
+                "skipped": skipped,
+                "time_elapsed": elapsed,
+                "message": "Toutes les réponses Q1 ont déjà été traitées. Supprimez celles que vous souhaitez relancer."
+            }
+        
+        # Construction du message récapitulatif
+        msg = f"{len(results_by_reponse)} réponse(s) traitée(s)"
+        if skipped:
+            msg += f", {len(skipped)} ignorée(s) (déjà traitées)"
+        if errors:
+            msg += f", {len(errors)} erreur(s)"
+        
+        logger.info(f"[{id_categorie}] Identification terminée en {elapsed}s: {msg}")
+        
+        return {
+            "success": True,
+            "data": results_by_reponse,
+            "raw": results_by_reponse,
+            "errors": errors,
+            "skipped": skipped,
+            "time_elapsed": elapsed,
+            "message": msg
+        }
+    
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"[{id_categorie}] Erreur inattendue dans run_identification: {e}", exc_info=True)
+        return {
+            "success": False,
+            "data": None,
+            "llm_response": None,
+            "time_elapsed": elapsed,
+            "message": f"Erreur inattendue: {str(e)}"
+        }
+    
+    finally:
+        await api_client.close()
+
+
+async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str) -> Dict[str, Any]:
+    """
+    Recherche RAG sur la source "prix" filtrée par id_categorie, 
+    formate les chunks et les envoie au LLM (Gemini) avec le prompt 114.
+    
+    Étapes :
+    1. Recherche RAG dans Milvus (source=prix, top_k=30, filtre=id_categorie)
+    2. Formate chaque chunk en texte structuré (titre, fournisseur, catégorie, texte, prix, caractéristiques)
+    3. Récupère le prompt configuré (id=114)
+    4. Injecte les chunks formatés dans le prompt et appelle Gemini
+    5. Retourne la réponse LLM
+    
+    Args:
+        texte_recherche: Texte libre pour la recherche RAG
+        id_categorie: ID de la catégorie pour filtrer les résultats
+        
+    Returns:
+        Dict avec 'success', 'reponse_llm', 'chunks_count', 'time_elapsed', 'message'
+    """
+    start_time = time.time()
+    prompt_id = settings.PROMPT_ID_QUESTIONNAIRE
+    
+    api_client = HelloProAPIClient()
+    ID_PROCESS = "37"
+    
+    try:
+        # =====================================================================
+        # ÉTAPE 1 : Recherche RAG dans Milvus (source=prix, filtre=id_categorie)
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Nom catégorie : {nom_categorie} ,  Recherche RAG: texte='{texte_recherche}...', source=prix, top_k=50")
+        
+        from app.core.search import call_search_api_async
+        
+        chunks = await call_search_api_async(
+            prompt=texte_recherche,
+            num_results=50,
+            source="prix",
+            filtre={"id_categorie": id_categorie}
+        )
+        
+        if not chunks:
+            elapsed = time.time() - start_time
+            logger.warning(f"[{id_categorie}] Aucun résultat RAG trouvé")
+            return {
+                "success": False,
+                "reponse_llm": None,
+                "chunks_count": 0,
+                "time_elapsed": elapsed,
+                "message": f"Aucun résultat RAG trouvé pour la catégorie {id_categorie}"
+            }
+        
+        logger.info(f"[{id_categorie}] {len(chunks)} chunks RAG trouvés")
+        
+        # =====================================================================
+        # ÉTAPE 2 : Formater les chunks pour le prompt
+        # =====================================================================
+        # Format basé sur adaptSearchResult (source "prix") dans script.js
+        # et le ContextBuilder dans recherche.py
+        formatted_chunks = []
+        
+        for i, chunk in enumerate(chunks):
+            meta = chunk.get("metadata", {}).get("entity", {})
+            
+            nom_produit = meta.get("nom_produit", "N/A")
+            fournisseur = meta.get("fournisseur", "N/A")
+            nom_categorie = meta.get("nom_categorie", meta.get("categorie", "N/A"))
+            text = meta.get("text", "")
+            
+            # Construction de la ligne de prix
+            prix_line = ""
+            valeur_prix = meta.get("valeur_prix", "")
+            if valeur_prix:
+                prix_parts = [str(valeur_prix)]
+                devise = meta.get("devise", "")
+                taxe = meta.get("taxe", "")
+                unite = meta.get("unite", "")
+                extras = [e for e in [devise, taxe, unite] if e]
+                if extras:
+                    prix_parts.append(f"{' '.join(extras)}")
+                prix_line = " ".join(prix_parts)
+            
+            caracteristique = meta.get("caracteristique", "")
+            
+            chunk_text = f"""Titre : {nom_produit}
+            Source : Prix
+            Fournisseur : {fournisseur}
+            Catégorie : {nom_categorie}
+            Texte : {text}
+            Prix : {prix_line}
+            Caractéristiques : {caracteristique}"""
+            
+            formatted_chunks.append(chunk_text)
+        
+        # Joindre tous les chunks avec un séparateur
+        all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
+        
+        logger.info(f"[{id_categorie}] {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars) {all_chunks_text[:100]}")
+        
+        # =====================================================================
+        # ÉTAPE 3 : Récupérer le prompt (id=114)
+        # =====================================================================
+        logger.info(f"[{id_categorie}] Récupération du prompt (id={prompt_id})...")
+        
+        prompt_config = await get_prompt(prompt_id)
+        
+        if not prompt_config:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] Impossible de récupérer le prompt id={prompt_id}")
+            return {
+                "success": False,
+                "reponse_llm": None,
+                "chunks_count": len(chunks),
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer le prompt id={prompt_id}"
+            }
+        
+        prompt_text = prompt_config.get("contenu_prompt", "")        
+        
+        # =====================================================================
+        # ÉTAPE 4 : Construire le prompt final et appeler Gemini
+        # =====================================================================
+        # Remplacer les placeholders dans le prompt
+        final_prompt = prompt_text
+        final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
+        final_prompt = final_prompt.replace("{requete_rag}", texte_recherche)
+        final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
+        
+        logger.info(f"[{id_categorie}] Prompt : {final_prompt[:100]}...")
+        logger.info(f"[{id_categorie}] Appel Gemini (model={settings.GEMINI_MODEL_NAME}, {len(final_prompt)} chars)...")
+        
+        # Utiliser GeminiProvider
+        gemini = GeminiProvider(
+            model=settings.GEMINI_MODEL_NAME
+        )
+        
+        llm_result = gemini.chat(final_prompt)
+        
+        # Log LLM usage
+        usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
+        await api_client.log_llm_usage(
+            type_ia=3,  # Gemini
+            model=settings.GEMINI_MODEL_NAME,
+            input_token=usage_metadata.get("prompt_token_count", 0),
+            output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+            id_process=ID_PROCESS,
+            origine="prix-traitement-questionnaire",
+            etat=1 if "error" not in llm_result else 2,
+            retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else "",
+            temperature=0.1
+        )
+        
+        elapsed = time.time() - start_time
+        # Vérifier si erreur LLM
+        if "error" in llm_result:
+            error_msg = f"Erreur Gemini: {llm_result.get('error', '')}"
+            logger.error(f"[{id_categorie}] {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+        
+        llm_text = llm_result.get("message", "")
+        
+        
+        logger.info(f"[{id_categorie}] Réponse Gemini reçue : {llm_text} en {elapsed:.1f}s")
+
+        parsed = extract_json_from_text(llm_text)
+        if not parsed or not isinstance(parsed, dict):
+            error_msg = f"Réponse JSON vide ou malformée pour réponse='{llm_text}'"
+            logger.error(f"[{id_categorie}] {error_msg}")
+            return {
+                "success": False,
+                "reponse": None,
+                "api_response": llm_result.get("api_response", {}),
+                "time_elapsed": elapsed,
+                "message": error_msg
+            }
+
+        return {
+            "success": True,
+            "reponse": parsed,
+            "api_response": llm_result.get("api_response", {}),
+            "time_elapsed": elapsed,
+            "message": f"{len(chunks)} chunks traités en {elapsed:.1f}s"
+        }
+    
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"[{id_categorie}] Erreur inattendue dans run_questionnaire: {e}", exc_info=True)
+        return {
+            "success": False,
+            "reponse": None,
+            "api_response": llm_result.get("api_response", {}),
+            "time_elapsed": elapsed,
+            "message": f"Erreur inattendue: {str(e)}"
+        }
+    
+    finally:
+        await api_client.close()
+
+
+# =========================================================================
+# BATCH : traitement parallèle de plusieurs catégories (semaphore = 5)
+# =========================================================================
+
+# Nombre max de traitements parallèles pour le lot
+MAX_PARALLEL_CATEGORIES = 5
+
+async def _process_single_category(
+    semaphore: asyncio.Semaphore,
+    id_categorie: str,
+    id_prompt: Optional[str],
+    index: int,
+    total: int
+) -> Dict[str, Any]:
+    """
+    Traite une seule catégorie sous le contrôle du sémaphore.
+    
+    Args:
+        semaphore: Sémaphore asyncio pour limiter le parallélisme
+        id_categorie: ID de la catégorie à traiter
+        id_prompt: ID du prompt (optionnel)
+        index: Index dans le lot (pour les logs)
+        total: Nombre total dans le lot (pour les logs)
+        
+    Returns:
+        Dict avec le résultat de run_identification + id_categorie
+    """
+    async with semaphore:
+        logger.info(f"[LOT {index + 1}/{total}] Début traitement catégorie {id_categorie}")
+        try:
+            result = await run_identification(
+                id_categorie=id_categorie,
+                id_prompt=id_prompt
+            )
+            result["id_categorie"] = id_categorie
+            logger.info(f"[LOT {index + 1}/{total}] Fin catégorie {id_categorie}: success={result.get('success')}")
+            return result
+        except Exception as e:
+            logger.error(f"[LOT {index + 1}/{total}] Erreur catégorie {id_categorie}: {e}", exc_info=True)
+            return {
+                "id_categorie": id_categorie,
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [str(e)],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Erreur: {str(e)}"
+            }
+
+
+async def run_identification_lot(
+    categories: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Traitement batch de plusieurs catégories en parallèle (max 5 simultanées).
+    Basé sur le pattern asyncio.Semaphore de prix-extraction-message/prix_extractor.py.
+    
+    Args:
+        categories: Liste de dicts avec 'id_categorie' et optionnellement 'id_prompt'
+        
+    Returns:
+        Dict avec 'success', 'total', 'success_count', 'error_count', 'results', 'time_elapsed', 'message'
+    """
+    start_time = time.time()
+    total = len(categories)
+    
+    if total == 0:
+        return {
+            "success": True,
+            "total": 0,
+            "success_count": 0,
+            "error_count": 0,
+            "results": [],
+            "time_elapsed": 0.0,
+            "message": "Aucune catégorie à traiter"
+        }
+    
+    logger.info(f"[LOT] Démarrage batch: {total} catégories, {MAX_PARALLEL_CATEGORIES} en parallèle")
+    
+    # Créer le sémaphore pour limiter à MAX_PARALLEL_CATEGORIES traitements simultanés
+    semaphore = asyncio.Semaphore(MAX_PARALLEL_CATEGORIES)
+    
+    # Créer les tâches pour chaque catégorie
+    tasks = [
+        _process_single_category(
+            semaphore=semaphore,
+            id_categorie=str(cat.get("id_categorie", "")),
+            id_prompt=cat.get("id_prompt"),
+            index=i,
+            total=total
+        )
+        for i, cat in enumerate(categories)
+    ]
+    
+    # Lancer toutes les tâches en parallèle (le sémaphore contrôle la concurrence)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    elapsed = time.time() - start_time
+    
+    # Agréger les résultats
+    success_count = 0
+    error_count = 0
+    item_results = []
+    
+    for r in results:
+        if isinstance(r, Exception):
+            # Exception non capturée (ne devrait pas arriver car _process_single_category gère les exceptions)
+            error_count += 1
+            item_results.append({
+                "id_categorie": "inconnu",
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [str(r)],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Exception: {str(r)}"
+            })
+        elif isinstance(r, dict):
+            item_results.append(r)
+            if r.get("success"):
+                success_count += 1
+            else:
+                error_count += 1
+        else:
+            error_count += 1
+            item_results.append({
+                "id_categorie": "inconnu",
+                "success": False,
+                "data": None,
+                "raw": None,
+                "errors": [f"Résultat inattendu: {type(r)}"],
+                "skipped": [],
+                "time_elapsed": None,
+                "message": f"Résultat inattendu: {type(r)}"
+            })
+    
+    logger.info(f"[LOT] Batch terminé: {success_count} succès, {error_count} erreurs en {elapsed:.1f}s")
+    
+    return {
+        "success": error_count == 0,
+        "total": total,
+        "success_count": success_count,
+        "error_count": error_count,
+        "results": item_results,
+        "time_elapsed": elapsed,
+        "message": f"{total} catégories traitées ({success_count} succès, {error_count} erreurs) en {elapsed:.1f}s"
+    }

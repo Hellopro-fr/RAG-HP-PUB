@@ -1365,7 +1365,7 @@ $(function () {
 
 
     let title = meta.id_produit || 'Titre non disponible';
-    let categorie = meta.categorie || meta.id_categorie || 'N/A';
+    let categorie = meta.categorie || meta.nom_categorie || meta.id_categorie || 'N/A';
     let price = "";
     let price_copy = ""
     switch (result.source) {

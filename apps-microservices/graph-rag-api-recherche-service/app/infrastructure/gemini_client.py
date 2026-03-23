@@ -63,7 +63,7 @@ class GeminiClient:
         self._timeout = 120  # seconds
         self.client = genai.Client(api_key=self.api_key)
 
-    def chat(self, prompt: str) -> Dict[str, Any]:
+    def chat(self, prompt: str, temperature: Optional[float] = None) -> Dict[str, Any]:
         """
         Envoie un prompt à Gemini avec retry automatique
 
@@ -96,11 +96,14 @@ class GeminiClient:
                         f"Gemini API tentative: {attempt.retry_state.attempt_number}"
                     )
 
+                    effective_temperature = (
+                        temperature if temperature is not None else self._temperature
+                    )
                     response = self.client.models.generate_content(
                         model=self.model,
                         contents=prompt,
                         config=types.GenerateContentConfig(
-                            temperature=self._temperature,
+                            temperature=effective_temperature,
                             response_mime_type="application/json",
                         ),
                     )
@@ -136,7 +139,10 @@ class GeminiClient:
         return {"message": response.text, "api_response": safe_api_response}
 
     async def generate_rerank_response(
-        self, system_prompt: str, user_data_json: str
+        self,
+        system_prompt: str,
+        # user_data_json: str,
+        temperature: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Send enriched product data to Gemini for reranking analysis.
@@ -150,15 +156,17 @@ class GeminiClient:
         """
         try:
             # Combine system prompt and user data into one prompt
-            combined_prompt = f"{system_prompt}\n\n{user_data_json}"
+            # combined_prompt = f"{system_prompt}\n\n{user_data_json}"
+            combined_prompt = f"{system_prompt}"
 
             logger.warning(
                 "[RERANK-GEMINI] Sending request to Gemini (model=%s)...", self.model
             )
+            # logger.warning("[RERANK-GEMINI] Combined prompt: %s", combined_prompt)
 
             # Run the synchronous chat call in a thread pool to avoid blocking the event loop
             result = await asyncio.wait_for(
-                asyncio.to_thread(self.chat, combined_prompt),
+                asyncio.to_thread(self.chat, combined_prompt, temperature),
                 timeout=self._timeout,
             )
 
