@@ -975,13 +975,15 @@ impl RecommendationService {
         let prompt_data = HELLOPRO_CLIENT.fetch_prompt(&id_prompt.to_string()).await;
         let (system_prompt_template, temperature) = if let Some(ref pd) = prompt_data {
             if let Some(content) = pd.get("contenu_prompt").and_then(|v| v.as_str()) {
+                debug!("System prompt from hellopro.fr: {}", "yes");
                 let temp = pd.get("temperature").and_then(|v| v.as_f64());
                 (content.to_string(), temp)
-                debug!("System prompt from hellopro.fr: {}", "yes");
             } else {
+                debug!("System prompt from hellopro.fr: {}", "no");
                 (Self::default_system_prompt(), None)
             }
         } else {
+            debug!("System prompt from hellopro.fr: {}", "no");
             (Self::default_system_prompt(), None)
         };
 
