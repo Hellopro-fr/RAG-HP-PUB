@@ -892,10 +892,12 @@ impl RecommendationService {
             all_produits.iter().map(|p| (p.id_produit.clone(), *p)).collect();
 
         // Opt #3+4: category_caracs and prompt_data are pre-fetched, only fetch product-specific data
+        let step_hellopro = Instant::now();
         let (products_info, all_caracs) = tokio::join!(
             HELLOPRO_CLIENT.fetch_products_info(id_categorie, &id_produits),
             HELLOPRO_CLIENT.fetch_all_product_caracteristiques(&id_produits),
         );
+        debug!("[perf] hellopro API fetches took {:.3}s", step_hellopro.elapsed().as_secs_f64());
         let category_caracs = pre_category_caracs;
 
         // Build liste_carac_id from request
@@ -906,6 +908,7 @@ impl RecommendationService {
             .collect();
 
         // Format products for LLM (Opt #6: use static regexes)
+        let step_format = Instant::now();
         let html_tag_re = html_tag_regex();
         let whitespace_re = whitespace_regex();
         let mut formatted_products = vec![];
@@ -1034,6 +1037,8 @@ impl RecommendationService {
         let caracteristiques_critiques = critiques_lines.join("\n");
         let liste_produits_json = serde_json::to_string(&formatted_products).unwrap_or_default();
 
+        debug!("[perf] product formatting + prompt build took {:.3}s", step_format.elapsed().as_secs_f64());
+
         // Opt #3+4: Use pre-fetched prompt data
         let (system_prompt_template, temperature) = if let Some(ref pd) = pre_prompt_data {
             if let Some(content) = pd.get("contenu_prompt").and_then(|v| v.as_str()) {
@@ -1055,17 +1060,20 @@ impl RecommendationService {
             .replace("{liste_produits_json}", &liste_produits_json);
 
         // Call Gemini
-        // debug!("[RERANK] System prompt size: {} chars", system_prompt.len());
-        debug!("[RERANK] Calling Gemini LLM for reranking...");
-        // debug!("[RERANK] Liste produits: {}", liste_produits_json);
+        debug!("[RERANK] Calling Gemini LLM for reranking... (prompt: {} chars)", system_prompt.len());
+        let step_gemini = Instant::now();
         let llm_response = GEMINI_CLIENT.generate_rerank_response(&system_prompt, temperature).await;
+        debug!("[perf] Gemini LLM call took {:.3}s", step_gemini.elapsed().as_secs_f64());
         if llm_response.is_none() {
             return (top_produit.to_vec(), liste_produit.to_vec(), vec![]);
         }
         let llm_response = llm_response.unwrap();
 
         // Reorder based on LLM response
-        Self::reorder_from_llm(&llm_response, &produit_map)
+        let step_reorder = Instant::now();
+        let result = Self::reorder_from_llm(&llm_response, &produit_map);
+        debug!("[perf] reorder_from_llm took {:.3}s", step_reorder.elapsed().as_secs_f64());
+        result
     }
 
     fn reorder_from_llm(
