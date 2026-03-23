@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::config::SETTINGS;
 use crate::grpc_clients::embedding::EmbeddingClient;
@@ -112,8 +112,11 @@ impl ServiceClients {
 
     pub async fn get_embedding_vector(&self, text: &str) -> Vec<f32> {
         if let Some(client) = self.get_embedding().await {
-            client.get_embedding(text).await
+            let result = client.get_embedding(text).await;
+            debug!("[gRPC] get_embedding_vector: text={}, result_len={}", text, result.len());
+            result
         } else {
+            debug!("[gRPC] get_embedding_vector: client unavailable");
             vec![]
         }
     }
@@ -126,10 +129,13 @@ impl ServiceClients {
         threshold: f32,
     ) -> Vec<crate::grpc_clients::proto::graph_milvus::SearchResult> {
         if let Some(client) = self.get_milvus().await {
-            client
+            let results = client
                 .search_similar_entities(embedding, entity_type, top_k, threshold)
-                .await
+                .await;
+            debug!("[gRPC] search_milvus_entities: entity_type={}, top_k={}, threshold={}, results_count={}, results={:?}", entity_type, top_k, threshold, results.len(), results);
+            results
         } else {
+            debug!("[gRPC] search_milvus_entities: client unavailable");
             vec![]
         }
     }
@@ -141,10 +147,13 @@ impl ServiceClients {
         threshold: f32,
     ) -> Vec<crate::grpc_clients::proto::graph_milvus::SearchResult> {
         if let Some(client) = self.get_milvus().await {
-            client
+            let results = client
                 .search_similar_characteristics(embedding, top_k, threshold)
-                .await
+                .await;
+            debug!("[gRPC] search_milvus_characteristics: top_k={}, threshold={}, results_count={}, results={:?}", top_k, threshold, results.len(), results);
+            results
         } else {
+            debug!("[gRPC] search_milvus_characteristics: client unavailable");
             vec![]
         }
     }
@@ -158,11 +167,13 @@ impl ServiceClients {
             let (success, results, error_msg) = client
                 .execute_cypher(query, Some(params), false)
                 .await;
+            debug!("[gRPC] execute_cypher: success={}, results_count={}, query={}", success, results.len(), query);
             if !success && !error_msg.is_empty() {
                 error!("Cypher execution error: {}", error_msg);
             }
             results
         } else {
+            debug!("[gRPC] execute_cypher: client unavailable");
             vec![]
         }
     }
@@ -176,11 +187,13 @@ impl ServiceClients {
             let (success, results, error_msg) = client
                 .execute_cypher(query, Some(params), true)
                 .await;
+            debug!("[gRPC] execute_cypher_read: success={}, results_count={}, query={}", success, results.len(), query);
             if !success && !error_msg.is_empty() {
                 error!("Cypher read error: {}", error_msg);
             }
             results
         } else {
+            debug!("[gRPC] execute_cypher_read: client unavailable");
             vec![]
         }
     }
@@ -208,16 +221,22 @@ impl ServiceClients {
 
     pub async fn extract_entities(&self, text: &str) -> Vec<SpacyEntity> {
         if let Some(client) = self.get_spacy().await {
-            client.extract_entities(text).await
+            let results = client.extract_entities(text).await;
+            debug!("[gRPC] extract_entities: text={}, results_count={}, results={:?}", text, results.len(), results);
+            results
         } else {
+            debug!("[gRPC] extract_entities: client unavailable");
             vec![]
         }
     }
 
     pub async fn llm_chat(&self, message: &str) -> Result<Value, String> {
         if let Some(client) = self.get_llm().await {
-            client.chat(message).await
+            let result = client.chat(message).await;
+            debug!("[gRPC] llm_chat: result={:?}", result);
+            result
         } else {
+            debug!("[gRPC] llm_chat: client unavailable");
             Err("LLM service not available".into())
         }
     }
@@ -228,8 +247,11 @@ impl ServiceClients {
         documents: &[String],
     ) -> Vec<RerankScore> {
         if let Some(client) = self.get_reranking().await {
-            client.rerank_documents_with_scores(query, documents).await
+            let results = client.rerank_documents_with_scores(query, documents).await;
+            debug!("[gRPC] rerank_documents: query={}, docs_count={}, results={:?}", query, documents.len(), results);
+            results
         } else {
+            debug!("[gRPC] rerank_documents: client unavailable");
             vec![]
         }
     }
