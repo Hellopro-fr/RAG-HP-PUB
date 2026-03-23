@@ -167,7 +167,7 @@ impl ServiceClients {
             let (success, results, error_msg) = client
                 .execute_cypher(query, Some(params), false)
                 .await;
-            debug!("[gRPC] execute_cypher: success={}, results_count={}, query={}", success, results.len(), query);
+            debug!("[gRPC] execute_cypher: success={}, results={:?}", success, results);
             if !success && !error_msg.is_empty() {
                 error!("Cypher execution error: {}", error_msg);
             }
@@ -187,7 +187,7 @@ impl ServiceClients {
             let (success, results, error_msg) = client
                 .execute_cypher(query, Some(params), true)
                 .await;
-            debug!("[gRPC] execute_cypher_read: success={}, results_count={}, query={}", success, results.len(), query);
+            debug!("[gRPC] execute_cypher_read: success={}, results={:?}", success, results);
             if !success && !error_msg.is_empty() {
                 error!("Cypher read error: {}", error_msg);
             }
