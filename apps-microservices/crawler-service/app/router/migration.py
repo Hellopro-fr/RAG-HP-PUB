@@ -9,7 +9,8 @@ import tarfile
 import zipfile
 import shutil
 import tempfile
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
@@ -19,6 +20,61 @@ from app.core.config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+STALE_CHUNK_TTL_SECONDS = 3600  # 1 hour
+
+
+def sanitize_path_component(value: str, field_name: str) -> str:
+    """
+    Sanitize a value used as a path component to prevent path traversal attacks.
+    Rejects values containing '..', '/', '\\', or null bytes.
+    """
+    if not value or not value.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{field_name}' cannot be empty."
+        )
+    if '\x00' in value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{field_name}' contains invalid null bytes."
+        )
+    if '..' in value or '/' in value or '\\' in value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{field_name}' contains invalid path characters ('..' or path separators)."
+        )
+    return value.strip()
+
+
+def cleanup_stale_chunks() -> None:
+    """
+    Remove chunk directories older than STALE_CHUNK_TTL_SECONDS.
+    Called at the start of each upload to prevent orphan accumulation.
+    """
+    chunks_base = os.path.join(settings.CRAWLER_STORAGE_PATH, "temp_chunks")
+    if not os.path.isdir(chunks_base):
+        return
+
+    now = time.time()
+    try:
+        for domain_dir in os.listdir(chunks_base):
+            domain_path = os.path.join(chunks_base, domain_dir)
+            if not os.path.isdir(domain_path):
+                continue
+            for chunk_group in os.listdir(domain_path):
+                chunk_group_path = os.path.join(domain_path, chunk_group)
+                if not os.path.isdir(chunk_group_path):
+                    continue
+                mtime = os.path.getmtime(chunk_group_path)
+                if now - mtime > STALE_CHUNK_TTL_SECONDS:
+                    shutil.rmtree(chunk_group_path, ignore_errors=True)
+                    logger.info(f"Cleaned up stale chunk directory: {chunk_group_path}")
+            # Remove empty domain directories
+            if not os.listdir(domain_path):
+                os.rmdir(domain_path)
+    except Exception as e:
+        logger.warning(f"Error during stale chunk cleanup: {e}")
 
 
 def get_storage_subpath(content_type: ArchiveContentType, domain_name: str) -> str:
@@ -65,19 +121,60 @@ def detect_file_format(filename: str) -> FileFormat:
         return FileFormat.TAR_GZ
 
 
+def _get_safe_tar_members(tar: tarfile.TarFile, destination: str):
+    """
+    Filter tar members to prevent path traversal and symlink attacks.
+    Rejects members with absolute paths, '..' components, or symlinks
+    pointing outside the destination.
+    """
+    dest_real = os.path.realpath(destination)
+    for member in tar.getmembers():
+        member_path = os.path.normpath(member.name)
+        # Reject absolute paths
+        if os.path.isabs(member_path):
+            logger.warning(f"Skipping tar member with absolute path: {member.name}")
+            continue
+        # Reject paths with '..' traversal
+        if '..' in member_path.split(os.sep):
+            logger.warning(f"Skipping tar member with path traversal: {member.name}")
+            continue
+        # Reject symlinks pointing outside destination
+        if member.issym() or member.islnk():
+            link_target = os.path.normpath(os.path.join(destination, os.path.dirname(member_path), member.linkname))
+            if not os.path.realpath(link_target).startswith(dest_real):
+                logger.warning(f"Skipping tar member with external symlink: {member.name} -> {member.linkname}")
+                continue
+        # Verify resolved path stays within destination
+        resolved = os.path.realpath(os.path.join(destination, member_path))
+        if not resolved.startswith(dest_real):
+            logger.warning(f"Skipping tar member resolving outside destination: {member.name}")
+            continue
+        yield member
+
+
 def extract_archive_to_dir(archive_path: str, file_format: FileFormat, destination: str) -> None:
     """
     Extract an archive to the destination directory (raw extraction, no nesting fix).
+    Tar members are filtered to prevent path traversal and symlink attacks.
     """
-    if file_format == FileFormat.TAR_GZ:
-        with tarfile.open(archive_path, "r:gz") as tar:
-            tar.extractall(path=destination)
-    elif file_format == FileFormat.TAR:
-        with tarfile.open(archive_path, "r:") as tar:
-            tar.extractall(path=destination)
+    if file_format in (FileFormat.TAR_GZ, FileFormat.TAR):
+        mode = "r:gz" if file_format == FileFormat.TAR_GZ else "r:"
+        with tarfile.open(archive_path, mode) as tar:
+            safe_members = list(_get_safe_tar_members(tar, destination))
+            tar.extractall(path=destination, members=safe_members)
     elif file_format == FileFormat.ZIP:
         with zipfile.ZipFile(archive_path, "r") as zip_ref:
-            zip_ref.extractall(destination)
+            dest_real = os.path.realpath(destination)
+            for info in zip_ref.infolist():
+                member_path = os.path.normpath(info.filename)
+                if os.path.isabs(member_path) or '..' in member_path.split(os.sep):
+                    logger.warning(f"Skipping zip member with unsafe path: {info.filename}")
+                    continue
+                resolved = os.path.realpath(os.path.join(destination, member_path))
+                if not resolved.startswith(dest_real):
+                    logger.warning(f"Skipping zip member resolving outside destination: {info.filename}")
+                    continue
+                zip_ref.extract(info, destination)
     else:
         raise ValueError(f"Unsupported file format: {file_format}")
 
@@ -182,10 +279,18 @@ async def upload_migration_archive(
     
     If `is_crawl_finished=true`, a `_completion_marker.json` is created.
     """
+    # Sanitize inputs to prevent path traversal
+    domain_id = sanitize_path_component(domain_id, "domain_id")
+    if domain_name:
+        domain_name = sanitize_path_component(domain_name, "domain_name")
+
+    # Cleanup stale chunks from previous failed uploads
+    cleanup_stale_chunks()
+
     # Determine file format and effective filename
     filename_to_use = original_filename or archive.filename or "archive.tar.gz"
     actual_format = file_format or detect_file_format(filename_to_use)
-    
+
     # Use domain_name for subdirectories, fallback to domain_id if not provided
     eff_domain_name = domain_name if domain_name else domain_id
     
@@ -273,9 +378,9 @@ async def upload_migration_archive(
                     parsed_end_date = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
                 except ValueError:
                     logger.warning(f"Could not parse end_date '{end_date}', using current time")
-                    parsed_end_date = datetime.utcnow()
+                    parsed_end_date = datetime.now(timezone.utc)
             else:
-                parsed_end_date = datetime.utcnow()
+                parsed_end_date = datetime.now(timezone.utc)
             
             # Create completion marker - format matches crawler_manager.py
             marker_data = {
