@@ -19,13 +19,14 @@ class Settings(BaseSettings):
     
     # LLM - Gemini
     GEMINI_API_KEY: str
-    GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
+    # GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
+    GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
     
     # LLM - DeepSeek
     DEEPSEEK_API_KEY: str = ""
     
-    # Prompt statique
-    PROMPT_ID: str = "140"
+    # Prompt statique - Briefing Prix - Prompt extraction prix SiteWeb
+    PROMPT_ID: str = "117"
     
     # API HelloPro
     # HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M" #dev

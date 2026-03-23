@@ -28,6 +28,7 @@ def insertion_data(produits_data: dict) -> dict:
     collection = produits_data.get("collection", CollectionName.PRODUIT)
     bdd = produits_data.get("database", "qdrant")
     origin = produits_data.get("origin", "bo")
+    mode = produits_data.get("mode", "").lower()
 
     # print(f"═══════════════════════════════════════════════════════════")
     # print(f"🔄 DÉBUT TRAITEMENT - Database: {bdd}, Collection: {collection}, Origin: {origin}")
@@ -174,54 +175,62 @@ def insertion_data(produits_data: dict) -> dict:
                 )
 
                 if bdd.lower() == "milvus" and existing_record:
-                    # print(f"🔍 Mode MILVUS - Vérification des conditions de mise à jour")
-                    # Définir les 5 champs critiques à comparer
-                    critical_fields = [
-                        "nom_produit",
-                        "id_categorie",
-                        "prix_ht",
-                        "prix_ttc",
-                        "type_produit",
-                    ]
-
-                    # Comparer les champs critiques
-                    fields_changed = []
-                    for field in critical_fields:
-                        old_value = existing_record.get(field, "")
-                        new_value = produits[0].get(field, "")
-
-                        # Conversion en string pour comparaison uniforme
-                        if str(old_value) != str(new_value):
-                            fields_changed.append(field)
-
                     should_update = False
                     update_reason = ""
 
-                    # CONDITION 1 : Au moins un champ critique a changé
-                    if len(fields_changed) > 0:
+                    # MODE UPDATE : Forcer la mise à jour sans vérification
+                    if mode == "update":
                         should_update = True
-                        update_reason = f"field_change: {', '.join(fields_changed)}"
-                        # print(f"🔄 CONDITION 1 ACTIVÉE - Champs critiques modifiés: {', '.join(fields_changed)} → UPDATE")
-
-                    # CONDITION 2 : Tous champs identiques, vérifier similarité du texte
+                        update_reason = "forced_update: mode=update"
+                        logging.info(
+                            f"Mode 'update' activé pour id_produit={id_produit} → mise à jour forcée"
+                        )
                     else:
-                        # print(f"✅ CONDITION 1 NON ACTIVÉE - Tous les champs critiques sont identiques")
-                        old_text = existing_record.get("text", "")
-                        new_text = produits[0].get("text", "")
+                        # print(f"🔍 Mode MILVUS - Vérification des conditions de mise à jour")
+                        # Définir les 5 champs critiques à comparer
+                        critical_fields = [
+                            "nom_produit",
+                            "id_categorie",
+                            "prix_ht",
+                            "prix_ttc",
+                            "type_produit",
+                        ]
 
-                        # Calculer la similarité avec difflib
-                        similarity_ratio = difflib.SequenceMatcher(
-                            None, old_text, new_text
-                        ).ratio()
-                        # print(f"📊 Calcul similarité textuelle: {similarity_ratio:.4f}")
+                        # Comparer les champs critiques
+                        fields_changed = []
+                        for field in critical_fields:
+                            old_value = existing_record.get(field, "")
+                            new_value = produits[0].get(field, "")
 
-                        if similarity_ratio < 0.85:
+                            # Conversion en string pour comparaison uniforme
+                            if str(old_value) != str(new_value):
+                                fields_changed.append(field)
+
+                        # CONDITION 1 : Au moins un champ critique a changé
+                        if len(fields_changed) > 0:
                             should_update = True
-                            update_reason = f"text_similarity: {similarity_ratio:.2f}"
-                            # print(f"🔄 CONDITION 2 ACTIVÉE - Similarité {similarity_ratio:.2f} < 0.85 → UPDATE")
+                            update_reason = f"field_change: {', '.join(fields_changed)}"
+                            # print(f"🔄 CONDITION 1 ACTIVÉE - Champs critiques modifiés: {', '.join(fields_changed)} → UPDATE")
+
+                        # CONDITION 2 : Tous champs identiques, vérifier similarité du texte
                         else:
-                            pass
-                            # print(f"⏭️  CONDITION 2 NON ACTIVÉE - Similarité {similarity_ratio:.2f} >= 0.85 → SKIP")
+                            # print(f"✅ CONDITION 1 NON ACTIVÉE - Tous les champs critiques sont identiques")
+                            old_text = existing_record.get("text", "")
+                            new_text = produits[0].get("text", "")
+
+                            # Calculer la similarité avec difflib
+                            similarity_ratio = difflib.SequenceMatcher(
+                                None, old_text, new_text
+                            ).ratio()
+                            # print(f"📊 Calcul similarité textuelle: {similarity_ratio:.4f}")
+
+                            if similarity_ratio < 0.85:
+                                should_update = True
+                                update_reason = f"text_similarity: {similarity_ratio:.2f}"
+                                # print(f"🔄 CONDITION 2 ACTIVÉE - Similarité {similarity_ratio:.2f} < 0.85 → UPDATE")
+                            else:
+                                pass
+                                # print(f"⏭️  CONDITION 2 NON ACTIVÉE - Similarité {similarity_ratio:.2f} >= 0.85 → SKIP")
 
                     # Exécuter la mise à jour si nécessaire
                     if should_update:

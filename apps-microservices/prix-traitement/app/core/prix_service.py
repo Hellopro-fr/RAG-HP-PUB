@@ -440,6 +440,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
                 prix_line = " ".join(prix_parts)
             
             caracteristique = meta.get("caracteristique", "")
+            date_prix = meta.get("date_prix", "")
             
             chunk_text = f"""Titre : {nom_produit}
             Source : Prix
@@ -447,6 +448,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             Catégorie : {nom_categorie}
             Texte : {text}
             Prix : {prix_line}
+            Date_prix : {date_prix}
             Caractéristiques : {caracteristique}"""
             
             formatted_chunks.append(chunk_text)
