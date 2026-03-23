@@ -2,7 +2,7 @@ use regex::Regex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Instant;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::domain::models::*;
 use crate::infrastructure::clients::CLIENTS;
@@ -64,6 +64,7 @@ impl RecommendationService {
         "#;
         let params = json!({ "ids": char_ids });
         let results = CLIENTS.execute_cypher(query, &params).await;
+        debug!("[recommendation] get_characteristic_labels: char_ids={:?}, gRPC returned {} results", char_ids, results.len());
         let mut map = HashMap::new();
         for row in results {
             if let (Some(id), Some(label)) = (
@@ -73,6 +74,7 @@ impl RecommendationService {
                 map.insert(id.to_string(), label.to_string());
             }
         }
+        debug!("[recommendation] get_characteristic_labels: resolved {} labels", map.len());
         map
     }
 
@@ -626,6 +628,10 @@ impl RecommendationService {
         });
 
         let results = CLIENTS.execute_cypher(&cypher_query, &params).await;
+        debug!("[recommendation] get_products_by_complex_filters: gRPC returned {} results", results.len());
+        if !results.is_empty() {
+            trace!("[recommendation] get_products_by_complex_filters: first result sample={}", serde_json::to_string_pretty(&results[0]).unwrap_or_default());
+        }
 
         let mut scored_products = vec![];
         let mut top_p = vec![];
@@ -657,6 +663,7 @@ impl RecommendationService {
         }
 
         let total_time = start.elapsed().as_secs_f64();
+        debug!("[recommendation] get_products_by_complex_filters: scored_products={}, top_p={}, time={:.3}s", scored_products.len(), top_p.len(), total_time);
         ResultProduct {
             data: scored_products,
             info: Some(json!({
@@ -680,6 +687,7 @@ impl RecommendationService {
         "#;
         let params = json!({ "rids": rids });
         let results = CLIENTS.execute_cypher(query, &params).await;
+        debug!("[recommendation] get_question_weights: rids={:?}, gRPC returned {} results", rids, results.len());
 
         let mut rid_to_order: HashMap<String, i64> = HashMap::new();
         for row in &results {
@@ -718,8 +726,11 @@ impl RecommendationService {
         request: &MatchingPayloadIdProduit,
     ) -> MatchingResponse {
         let start = Instant::now();
+        debug!("[recommendation] get_products_by_caracteristique_filters: id_produit={:?}, id_categorie={:?}, top_k={}, nb_caracteristiques={}",
+            request.id_produit, request.id_categorie, request.top_k, request.liste_caracteristique.len());
 
         let flat_filters = Self::normalize_constraints_for_caracteristique(request).await;
+        debug!("[recommendation] normalize_constraints: produced {} flat_filters", flat_filters.len());
         let weights_map: Value = flat_filters
             .iter()
             .filter_map(|f| {
@@ -741,23 +752,32 @@ impl RecommendationService {
             request.top_k, target_product_id.as_deref(),
         );
 
-        match CLIENTS.execute_cypher(&cypher_query, &params).await {
-            results if !results.is_empty() => {
-                let (liste_produit, top_produit) =
-                    Self::parse_matching_results(&results, request, blocked_val, different_val);
-                MatchingResponse {
-                    top_produit,
-                    liste_produit,
-                    ecarts: None,
-                    temps_de_traitement: start.elapsed().as_secs_f64(),
-                }
+        let results = CLIENTS.execute_cypher(&cypher_query, &params).await;
+        debug!("[recommendation] get_products_by_caracteristique_filters: gRPC returned {} results", results.len());
+        if !results.is_empty() {
+            trace!("[recommendation] get_products_by_caracteristique_filters: first result={}", serde_json::to_string_pretty(&results[0]).unwrap_or_default());
+        } else {
+            debug!("[recommendation] get_products_by_caracteristique_filters: EMPTY results from cypher. target_product_id={:?}, id_categorie={:?}", target_product_id, request.id_categorie);
+            debug!("[recommendation] cypher params={}", serde_json::to_string_pretty(&params).unwrap_or_default());
+        }
+
+        if !results.is_empty() {
+            let (liste_produit, top_produit) =
+                Self::parse_matching_results(&results, request, blocked_val, different_val);
+            debug!("[recommendation] parse_matching_results: liste_produit={}, top_produit={}", liste_produit.len(), top_produit.len());
+            MatchingResponse {
+                top_produit,
+                liste_produit,
+                ecarts: None,
+                temps_de_traitement: start.elapsed().as_secs_f64(),
             }
-            _ => MatchingResponse {
+        } else {
+            MatchingResponse {
                 top_produit: vec![],
                 liste_produit: vec![],
                 ecarts: None,
                 temps_de_traitement: start.elapsed().as_secs_f64(),
-            },
+            }
         }
     }
 
