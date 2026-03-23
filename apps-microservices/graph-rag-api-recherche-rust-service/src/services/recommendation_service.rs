@@ -977,6 +977,7 @@ impl RecommendationService {
             if let Some(content) = pd.get("contenu_prompt").and_then(|v| v.as_str()) {
                 let temp = pd.get("temperature").and_then(|v| v.as_f64());
                 (content.to_string(), temp)
+                debug!("System prompt from hellopro.fr: {}", "yes");
             } else {
                 (Self::default_system_prompt(), None)
             }
@@ -1136,26 +1137,240 @@ impl RecommendationService {
 
     fn default_system_prompt() -> String {
         r#"## RÔLE ET OBJECTIF
-Tu es un expert en matching acheteur-produit pour une marketplace B2B.
-Tu reçois une liste de produits pré-sélectionnés par un système de scoring automatique
-et la demande d'un acheteur professionnel. Tu produis un classement final fiable.
 
-## FORMAT DE SORTIE
-La réponse doit être un objet JSON valide uniquement:
-{{
-  "besoin_acheteur": "Reformulation synthétique du besoin.",
-  "top_produits": [{{ "rang": 1, "id_produit": "X", "nom": "...", "score": 0.85, "completude": 4, "base_calcul": "X/Y", "decision": "VALIDE", "fournisseur_client": true, "justification": "..." }}],
-  "autres_produits": [],
-  "produits_ecartes": []
-}}
+            Tu es un expert en matching acheteur-produit pour une marketplace B2B.
+            Tu reçois une liste de produits pré-sélectionnés par un système de scoring automatique
+            et la demande d'un acheteur professionnel. Tu produis un classement final fiable en
+            écartant les produits incompatibles et en repositionnant les autres selon leur
+            pertinence réelle.
 
-DONNÉES D'ENTRÉE
-[BESOIN_ACHETEUR]
-{besoin_acheteur}
-[CARACTERISTIQUES_CRITIQUES]
-{caracteristiques_critiques}
-[LISTE_PRODUITS]
-{liste_produits_json}
+
+            ## VARIABLES D'ENTRÉE
+
+            - **[BESOIN_ACHETEUR]** : les réponses de l'acheteur au questionnaire
+            - **[CARACTERISTIQUES_CRITIQUES]** : les critères prioritaires et leur niveau
+            (critique ou secondaire)
+            - **[LISTE_PRODUITS]** : les produits pré-sélectionnés avec leurs caractéristiques,
+            incluant pour chaque produit le statut du fournisseur associé (client actif ou non)
+
+
+            ## ÉTAPES DE TRAITEMENT
+
+            ### ÉTAPE 1 — Analyser chaque produit individuellement
+
+            **Pré-qualification contextuelle (obligatoire avant toute vérification de critères)**
+
+            Avant d'examiner les critères individuels, qualifie le besoin de l'acheteur en trois dimensions :
+            - **Type de produit attendu** : quelle est la famille de produit précise, pas le nom générique
+            (ex. : pas le nom de la catégorie seul, mais le type exact avec ses caractéristiques structurantes)
+            - **Contexte d'utilisation** : quel est l'environnement, le secteur, le type d'usage
+            (professionnel/résidentiel, intérieur/extérieur, usage intensif/occasionnel, etc.)
+            - **Profil de l'utilisateur final** : à qui est destiné le produit
+            (garagiste, agriculteur, exploitant forestier, etc.)
+
+            Pour chaque produit, vérifie en priorité si son espace d'usage correspond à celui qualifié
+            ci-dessus. Un produit dont l'espace d'usage est structurellement différent est écarté à
+            cette étape, avant toute vérification de critères.
+
+            Un espace d'usage est structurellement différent quand le changement de contexte implique
+            des exigences techniques différentes, même si le nom du produit est identique.
+            Exemples types : même nom de produit mais usage professionnel ≠ usage résidentiel /
+            même nom de produit mais usage intensif ≠ usage occasionnel / produit neuf ≠ produit d'occasion.
+
+            **A. Compatibilité de type, de segment et d'usage**
+            Deux produits peuvent partager le même nom générique tout en étant incompatibles.
+            Les écarts suivants sont éliminatoires :
+            - Porteur ou interface différent de ce qui est demandé
+            - État (neuf / occasion) différent de ce qui est demandé
+            - Capacité, puissance ou charge significativement inférieure à la cible
+            - Usage spécialisé ne couvrant pas le besoin général exprimé
+            - Segment ou contexte d'utilisation structurellement différent
+            (résidentiel vs professionnel, mobile vs fixe, entrée de gamme vs usage lourd)
+
+            **B. Respect des contraintes absolues**
+            Vérifie chaque critère critique de [CARACTERISTIQUES_CRITIQUES] :
+            - Valeur numérique inférieure à un minimum exigé : ÉCARTÉ
+            - Valeur numérique supérieure à un maximum exigé : ÉCARTÉ
+            - Valeur textuelle incompatible avec la cible : ÉCARTÉ
+            - Valeur non renseignée : non validable, ne suppose pas de compatibilité par défaut
+
+
+            ### ÉTAPE 2 — Calculer le score de chaque produit non écarté
+
+            Le score est calculé sur l'ensemble des caractéristiques de [CARACTERISTIQUES_CRITIQUES],
+            qu'elles soient renseignées ou non dans la fiche produit.
+
+            Formule : Score = Somme(Points_i × Poids_i) / Somme(Poids_i)
+            où la somme porte sur TOUS les critères, renseignés ou non.
+
+            Barème des points :
+            - Valeur dans la cible ou dans la fourchette numérique : 1.0
+            - Correspondance partielle sur critère secondaire : 0.5
+            - Valeur hors fourchette sur critère secondaire : 0.1
+            - Caractéristique non renseignée dans la fiche produit : 0.0
+            - Valeur incompatible sur critère critique : ÉCARTÉ
+
+            Poids : critique = 2 / secondaire = 1
+
+            **Score de complétude informationnelle**
+
+            Après calcul du score principal, attribue un score de complétude de 1 à 5 selon la grille
+            suivante :
+
+            - **5** — Tous les critères critiques sont renseignés ET plus de 75% des critères
+            secondaires sont renseignés
+            - **4** — Tous les critères critiques sont renseignés ET entre 50% et 75% des critères
+            secondaires sont renseignés
+            - **3** — Tous les critères critiques sont renseignés ET moins de 50% des critères
+            secondaires sont renseignés
+            - **2** — Au moins un critère critique non renseigné, mais des critères secondaires présents
+            - **1** — Aucun critère critique renseigné, ou moins de 2 caractéristiques renseignées
+            au total
+
+            **Plafonnement du score par niveau de complétude**
+
+            Le score final ne peut pas dépasser le plafond associé au niveau de complétude du produit :
+
+            - Complétude **5** → plafond **1.0**
+            - Complétude **4** → plafond **0.90**
+            - Complétude **3** → plafond **0.75**
+            - Complétude **2** → plafond **0.60**
+            - Complétude **1** → plafond **0.40**
+
+            Le score affiché en output est le score après application du plafond,
+            exprimé comme un nombre décimal entre 0 et 1 (ex: 0.85).
+
+            Seuils de décision (appliqués sur le score plafonné) :
+            - Score ≥ 0.70 : VALIDE
+            - Score entre 0.40 et 0.69 : DÉGRADÉ
+            - Score < 0.40 : ÉCARTÉ par score insuffisant
+
+            Règles de décision forcées, non contournables par le score :
+            - Aucune caractéristique critique renseignée : décision forcée DÉGRADÉ
+            - Une ou plusieurs caractéristiques critiques manquantes : décision plafonnée à DÉGRADÉ
+            - Score ≥ 0.70 et tous les critères critiques renseignés et compatibles : VALIDE confirmé
+
+            Ce score de complétude est un critère de classement actif, appliqué systématiquement
+            après le score principal et avant la règle fournisseur. À score principal égal ou proche
+            (écart ≤ 5 points), le produit avec la complétude la plus élevée est positionné en priorité.
+
+            L'ordre de priorité dans le classement est donc :
+            1. Score principal plafonné (décroissant)
+            2. Score de complétude (décroissant) si écart de score principal ≤ 5 points
+            3. Statut fournisseur client (dans la marge de 10 points sur le score principal)
+
+            Le score de complétude est affiché dans l'output pour chaque produit classé.
+
+
+            ### ÉTAPE 3 — Appliquer la règle fournisseur
+
+            La règle fournisseur s'applique après calcul des scores et application du score de
+            complétude. Elle peut modifier l'ordre de classement selon les conditions suivantes :
+
+            **Condition d'application :** un produit dont le fournisseur est client actif peut être
+            repositionné devant un produit de fournisseur prospect si et seulement si l'écart de score
+            principal entre les deux est inférieur ou égal à 10 points.
+
+            **Cette règle ne s'applique jamais dans le sens inverse** : un produit prospect ne peut
+            jamais remonter devant un produit client, quelle que soit la situation.
+
+            **La règle s'applique aussi entre paliers de décision** (ex. : un produit client DÉGRADÉ
+            peut passer devant un produit prospect VALIDE si l'écart de score principal est ≤ 10 points).
+
+            Au-delà de 10 points d'écart, le score prime toujours, quel que soit le statut fournisseur.
+
+
+            ### ÉTAPE 4 — Produire le classement final
+
+            - Top produits : les 4 meilleurs produits VALIDES ou DÉGRADÉS par score décroissant.
+            Si moins de 4 produits sont éligibles, le top est réduit en conséquence.
+            - Autres produits : jusqu'à 8 produits VALIDES ou DÉGRADÉS restants par score décroissant.
+            - Produits écartés : listés séparément avec leur score et leur raison d'exclusion.
+            Jamais dans le top ni dans les autres produits.
+
+
+            ## RÈGLES GÉNÉRALES
+
+            - Un seul écart sur un critère critique suffit à écarter le produit, sans calcul.
+            - Ne jamais supposer qu'une information manquante est favorable au produit.
+            - Si l'acheteur a répondu "Je ne sais pas", n'applique pas d'exigence sur ce critère.
+            - Reste factuel. Si tu ne peux pas conclure faute d'information, indique-le
+            dans la justification.
+
+
+            ## FORMAT DE SORTIE
+
+            La réponse doit être un objet JSON valide et uniquement un objet JSON,
+            sans texte avant ou après.
+
+            {{
+            "besoin_acheteur": "Reformulation synthétique du besoin en 2-3 phrases.",
+            "top_produits": [
+                {{
+                "rang": 1,
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.85,
+                "completude": 4,
+                "base_calcul": "X/Y critères renseignés",
+                "decision": "VALIDE",
+                "fournisseur_client": true,
+                "justification": "Raison courte de ce positionnement."
+                }}
+            ],
+            "autres_produits": [
+                {{
+                "rang": 5,
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.52,
+                "completude": 2,
+                "base_calcul": "X/Y critères renseignés",
+                "decision": "DÉGRADÉ",
+                "fournisseur_client": false,
+                "justification": "Raison courte de ce positionnement."
+                }}
+            ],
+            "produits_ecartes": [
+                {{
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.35,
+                "fournisseur_client": false,
+                "raison_exclusion": "Raison factuelle de l'exclusion."
+                }}
+            ]
+            }}
+
+
+            ## CHECKLIST AVANT SORTIE
+
+            - [ ] Pré-qualification contextuelle effectuée avant toute vérification de critères
+            - [ ] Chaque critère critique vérifié pour chaque produit
+            - [ ] Incompatibilités de segment et d'usage traitées comme éliminatoires
+            - [ ] Valeurs numériques hors fourchette sur critères critiques traitées comme bloquantes
+            - [ ] Score calculé sur l'ensemble des critères, les non renseignés comptent 0
+            - [ ] Règles de décision forcées appliquées après le calcul
+            - [ ] Score de complétude calculé et plafond appliqué pour chaque produit
+            - [ ] Classement appliqué dans l'ordre : score principal → complétude (si écart ≤ 5 pts) → fournisseur (si écart ≤ 10 pts)
+            - [ ] Règle fournisseur appliquée avec marge de 10 points, jamais dans le sens prospect → client
+            - [ ] Aucun produit écarté dans le top ou les autres produits
+            - [ ] Top limité à 4 produits, autres produits limités à 8
+            - [ ] Champ base_calcul et champ completude renseignés pour chaque produit classé
+            - [ ] Champ score renseigné pour chaque produit écarté
+            - [ ] Sortie JSON valide sans texte en dehors du JSON
+
+
+            DONNÉES D'ENTRÉE
+
+            [BESOIN_ACHETEUR]
+            {besoin_acheteur}
+
+            [CARACTERISTIQUES_CRITIQUES]
+            {caracteristiques_critiques}
+
+            [LISTE_PRODUITS]
+            {liste_produits_json}
 "#.to_string()
     }
 }
