@@ -45,6 +45,6 @@ COPY --from=builder /app/target/release/graph-rag-api-recherche-rust-service /ap
 ENV RUST_LOG=info
 ENV RUST_BACKTRACE=1
 
-EXPOSE 8527
+EXPOSE 8528
 
 CMD ["/app/server"]
