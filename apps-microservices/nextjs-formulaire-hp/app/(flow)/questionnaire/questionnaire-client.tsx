@@ -8,6 +8,7 @@ import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type Matc
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
+import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
 
 // Interface pour les données URL (réponse Q1 pré-remplie)
 interface UrlData {
@@ -33,6 +34,7 @@ export default function QuestionnaireClient({
   const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setUseRerank } = useFlowStore();
   const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
+  const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
   const isHydrated = useFlowStoreHydration();
 
@@ -42,6 +44,7 @@ export default function QuestionnaireClient({
 
   // État pour le loader de matching et la destination après
   const [showLoader, setShowLoader] = useState(false);
+  const [loaderAnimationDone, setLoaderAnimationDone] = useState(false);
   const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | null>(null);
 
   // Récupérer et stocker le categoryId + sauvegarder le token original
@@ -215,20 +218,36 @@ export default function QuestionnaireClient({
   }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer]);
 
   const handleComplete = async () => {
-    // Afficher le loader et lancer le matching
+    // Afficher le loader et lancer matching + prix en parallèle
     setShowLoader(true);
-    const destination = await processMatching();
+
+    // Promise.all : attendre matching ET prix
+    // L'échec du prix ne bloque PAS (catch silencieux)
+    const [destination] = await Promise.all([
+      processMatching(),
+      fetchPriceEstimation().catch((err) => {
+        console.error('[Prix] Error (non-blocking):', err);
+      }),
+    ]);
+
     setRedirectDestination(destination);
   };
 
   const handleLoaderComplete = () => {
-    // Navigation après le loader
-    if (redirectDestination === 'something-to-add') {
-      goToSomethingToAdd();
-    } else {
-      goToSelection();
-    }
+    // Le timer du loader est terminé — juste un flag, pas de navigation directe
+    setLoaderAnimationDone(true);
   };
+
+  // Navigation seulement quand les 3 conditions sont réunies : timer + matching + prix
+  useEffect(() => {
+    if (loaderAnimationDone && redirectDestination) {
+      if (redirectDestination === 'something-to-add') {
+        goToSomethingToAdd();
+      } else {
+        goToSelection();
+      }
+    }
+  }, [loaderAnimationDone, redirectDestination, goToSelection, goToSomethingToAdd]);
 
   // Afficher le loader pendant le matching
   if (showLoader) {

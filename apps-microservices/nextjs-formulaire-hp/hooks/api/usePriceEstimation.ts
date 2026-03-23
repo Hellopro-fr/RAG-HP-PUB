@@ -1,0 +1,127 @@
+"use client";
+
+import { useCallback } from 'react';
+import { useFlowStore } from '@/lib/stores/flow-store';
+import { consolidateEquivalences } from '@/lib/utils/equivalence-merger';
+import { buildTexteRecherchePrix } from '@/lib/utils/build-texte-recherche-prix';
+import { basePath } from '@/lib/utils';
+import type { PrixApiResponse } from '@/types/prix';
+
+const getApiBasePath = () => {
+  return basePath || '';
+};
+
+/**
+ * Hook pour l'estimation de prix après le questionnaire.
+ * Encapsule : consolidation équivalences → filtrage caracs prix → build texte → appel API → validation → store.
+ */
+export function usePriceEstimation() {
+  const {
+    categoryId,
+    categoryName,
+    dynamicEquivalences,
+    dynamicAnswers,
+    caracteristiquesPrix,
+    characteristicsMap,
+    setPriceEstimation,
+  } = useFlowStore();
+
+  const fetchPriceEstimation = useCallback(async () => {
+    // 1. Consolider les équivalences du questionnaire
+    const consolidated = consolidateEquivalences(dynamicEquivalences);
+    if (consolidated.length === 0) {
+      console.log('[usePriceEstimation] No equivalences to process');
+      setPriceEstimation(null);
+      return;
+    }
+
+    try {
+      // 2. Trouver les caracteristiques_prix de la réponse Q1 sélectionnée
+      const q1AnswerCode = dynamicAnswers['Q1']?.[0];
+      const reponseQ1 = (caracteristiquesPrix || []).find(
+        (r: any) => String(r.id_reponse) === String(q1AnswerCode)
+      );
+      const caracsPrix = reponseQ1?.caracteristiques_prix || [];
+      const caracsPrixIds = caracsPrix.map((c: any) => Number(c.id_caracteristique));
+
+      // 3. Filtrer les équivalences consolidées aux IDs prix (si disponibles)
+      let payloadForPrix = consolidated;
+      if (caracsPrixIds.length > 0) {
+        const filtered = consolidated.filter(
+          (item) => caracsPrixIds.includes(item.id_caracteristique)
+        );
+        if (filtered.length > 0) payloadForPrix = filtered;
+      }
+
+      // 4. Construire texte_recherche
+      const texteRecherche = buildTexteRecherchePrix(payloadForPrix, characteristicsMap);
+      if (!texteRecherche) {
+        console.log('[usePriceEstimation] Empty texte_recherche, skipping');
+        setPriceEstimation(null);
+        return;
+      }
+
+      console.log('[usePriceEstimation] Calling prix API with:', {
+        id_categorie: categoryId,
+        texte_recherche: texteRecherche,
+        nom_categorie: categoryName,
+      });
+
+      // 5. Appeler l'API prix
+      const apiBase = getApiBasePath();
+      const res = await fetch(`${apiBase}/api/prix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id_categorie: categoryId,
+          texte_recherche: texteRecherche,
+          nom_categorie: categoryName,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Prix API error: ${res.status}`);
+
+      const data: PrixApiResponse = await res.json();
+
+      // 6. Validation : borne_basse === 0 → erreur backend silencieuse
+      if (!data.success || !data.reponse) {
+        console.warn('[usePriceEstimation] API returned success=false or no reponse');
+        setPriceEstimation({ data: null, error: 'No price data' });
+        return;
+      }
+
+      if (data.reponse.fourchette.borne_basse === 0) {
+        console.warn('[usePriceEstimation] borne_basse === 0, treating as backend error');
+        setPriceEstimation({ data: null, error: 'borne_basse is 0' });
+        return;
+      }
+
+      // 7. Stocker dans le flow-store
+      console.log('[usePriceEstimation] Prix estimation received:', {
+        borne_basse: data.reponse.fourchette.borne_basse,
+        borne_haute: data.reponse.fourchette.borne_haute,
+        confiance: data.reponse.fourchette.niveau_confiance,
+        exemples: data.reponse.exemples_produits.length,
+      });
+
+      setPriceEstimation({ data: data.reponse, error: null });
+
+    } catch (err) {
+      console.error('[usePriceEstimation] Error:', err);
+      setPriceEstimation({
+        data: null,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }, [
+    categoryId,
+    categoryName,
+    dynamicEquivalences,
+    dynamicAnswers,
+    caracteristiquesPrix,
+    characteristicsMap,
+    setPriceEstimation,
+  ]);
+
+  return { fetchPriceEstimation };
+}

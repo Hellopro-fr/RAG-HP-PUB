@@ -46,6 +46,37 @@ async function prefetchCategoryStats(
   }
 }
 
+/**
+ * Prefetch les caractéristiques prix en background (non-bloquant)
+ * Appelé dès le chargement de Q1 pour avoir les données prêtes pour l'estimation de prix
+ */
+async function prefetchCaracteristiquesPrix(
+  categoryId: number,
+  setCaracteristiquesPrix: (data: any[]) => void
+): Promise<void> {
+  try {
+    const apiBase = getApiBasePath();
+    const formData = new FormData();
+    formData.append('id_categorie', categoryId.toString());
+
+    const response = await fetch(`${apiBase}/api/caracteristiques-prix`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    // L'API retourne un objet avec un champ response contenant les réponses Q1 avec leurs caracteristiques_prix
+    const reponses = data.response || data;
+    if (Array.isArray(reponses)) {
+      setCaracteristiquesPrix(reponses);
+    }
+  } catch (error) {
+    console.error('Prefetch caracteristiques prix error:', error);
+  }
+}
+
 async function prefetchCharacteristics(
   categoryId: number,
   setCharacteristicsMap: (map: CharacteristicsMap) => void
@@ -174,6 +205,7 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     userQuestionAnswers,
     setCategoryName,
     setCategoryStats,
+    setCaracteristiquesPrix,
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
@@ -221,6 +253,7 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
       // Prefetch category stats (non-bloquant)
       if (rubriqueId) {
         prefetchCategoryStats(Number(rubriqueId), setCategoryStats);
+        prefetchCaracteristiquesPrix(Number(rubriqueId), setCaracteristiquesPrix);
       }
 
       const apiDataAPI : ApiQuestion = apiData;

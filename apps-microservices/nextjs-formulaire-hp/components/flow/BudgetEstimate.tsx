@@ -35,18 +35,16 @@ interface BudgetEstimateProps {
 }
 
 // ---------------------------------------------------------------------------
-// Données statiques par défaut (sera remplacé par des données dynamiques)
+// Helpers de formatage
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PRICE_ITEMS: PriceItem[] = [
-  { price: "2 890 €", equipment: "Pont 2 colonnes électrohydraulique 4T, avec traverse supérieure, alimentation 380V triphasé", date: "12/01/2026" },
-  { price: "3 150 €", equipment: "Pont élévateur 2 colonnes 4T asymétrique, traverse haute, moteur 3kW 400V", date: "28/12/2025" },
-  { price: "3 420 €", equipment: "Pont 2 colonnes symétrique 4T, bras télescopiques, traverse supérieure, 400V tri", date: "15/01/2026" },
-  { price: "2 750 €", equipment: "Pont élévateur 2 colonnes base sol, capacité 4T, traverse de sécurité, 380V", date: "05/01/2026" },
-  { price: "3 680 €", equipment: "Pont 2 colonnes 4T premium, déblocage automatique, traverse supérieure renforcée, 400V", date: "22/12/2025" },
-  { price: "3 050 €", equipment: "Pont élévateur 2 colonnes 4T, verrouillage mécanique, traverse haute, alimentation 400V", date: "08/02/2026" },
-  { price: "2 980 €", equipment: "Pont 2 colonnes économique 4T, traverse supérieure standard, 380V triphasé", date: "18/01/2026" },
-];
+/** Formate une date ISO "2025-08-31" en "31/08/2025" */
+const formatDateISO = (isoDate: string): string => {
+  if (!isoDate) return "";
+  const parts = isoDate.split("-");
+  if (parts.length !== 3) return isoDate;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers de calcul
@@ -98,7 +96,7 @@ const BudgetEstimate = ({
   priceMoy: priceMoyProp,
   pricePositions: pricePositionsProp,
   detailDescription,
-  priceItems = DEFAULT_PRICE_ITEMS,
+  priceItems = [],
   handleClickNeCorrespondPas
 }: BudgetEstimateProps) => {
   const [showDetail, setShowDetail] = useState(false);
@@ -230,7 +228,7 @@ const BudgetEstimate = ({
                       {item.equipment}
                     </td>
                     <td className="px-4 py-2.5 text-right text-muted-foreground whitespace-nowrap hidden sm:table-cell">
-                      {item.date}
+                      {formatDateISO(item.date)}
                     </td>
                   </tr>
                 ))}

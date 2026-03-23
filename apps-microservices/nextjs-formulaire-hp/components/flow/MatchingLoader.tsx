@@ -58,10 +58,10 @@ const MatchingLoader = ({ onComplete, duration = 5000 }: MatchingLoaderProps) =>
       });
     }, stepDuration);
 
-    // Complete after duration
+    // Complete after duration — pas de fade-out, le loader reste visible
+    // La navigation est gérée par le parent quand les données sont prêtes
     const completeTimer = setTimeout(() => {
-      setIsComplete(true);
-      setTimeout(onComplete, 500); // Small delay for exit animation
+      onComplete();
     }, duration);
 
     return () => {

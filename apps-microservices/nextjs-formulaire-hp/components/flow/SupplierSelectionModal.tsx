@@ -55,7 +55,8 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
     orphanedSelectedSuppliers,
     criteriaHaveChanged,
     removedCritiqueCriteriaIds,
-    removedSecondaireCriteriaIds
+    removedSecondaireCriteriaIds,
+    priceEstimation
   } = useFlowStore();
 
   // Utiliser uniquement les résultats dynamiques du matching (pas de fallback statique)
@@ -307,8 +308,30 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                 }}
               />
 
-              {/* Budget Estimate */}
-              <BudgetEstimate handleClickNeCorrespondPas={() => setViewState("custom-need")}/>
+              {/* Budget Estimate — affiché seulement si données prix valides */}
+              {priceEstimation?.data && priceEstimation.data.fourchette.borne_basse !== 0 && (() => {
+                const { fourchette, exemples_produits, phrase_prix } = priceEstimation.data!;
+                const fmtPrice = (n: number) =>
+                  new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
+
+                const priceItems = (exemples_produits || []).map((ex) => ({
+                  price: `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(ex.prix)} € ${ex.tva || "HT"}`,
+                  equipment: `${ex.nom}${ex.fournisseur ? ` — ${ex.fournisseur}` : ""}`,
+                  date: ex.date || "",
+                }));
+
+                return (
+                  <BudgetEstimate
+                    priceMin={fmtPrice(fourchette.borne_basse)}
+                    priceMax={fmtPrice(fourchette.borne_haute)}
+                    priceMoy={fmtPrice(fourchette.prix_median)}
+                    priceCount={priceItems.length}
+                    priceItems={priceItems.length > 0 ? priceItems : undefined}
+                    detailDescription={phrase_prix}
+                    handleClickNeCorrespondPas={() => setViewState("custom-need")}
+                  />
+                );
+              })()}
 
               {/* Criteria Changed Banner */}
               {criteriaHaveChanged && selectedSupplierIds.length > 0 && (
