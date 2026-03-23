@@ -8,11 +8,14 @@ import {
 } from "./main.js";
 import {
     manageFrenchDetectionMethod,
+    maskProxyUrl,
     processPage,
     processUrl,
     rightTrimSlash,
     routerDefaultHandler,
     stopCrawler,
+    detectChallengePage,
+    waitForChallengeResolution,
 } from "./functions.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
@@ -41,17 +44,33 @@ const ignoredExtensions = [
     "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml",
 ].join("|");
 
-// Ported Forbidden Params from V3
+// FORBIDDEN_PARAMS: If ANY of these params are present, the entire URL is REJECTED (not crawled).
+// Use only for params that indicate a page variant with NO unique content (filters, sorts, pagination).
+// Params that are just noise (tracking, session) belong in alwaysRemove instead (strip param, keep URL).
+// NOTE: Uses startsWith matching — 'size_' blocks 'size_42', 'size_xl', etc.
 const FORBIDDEN_PARAMS = [
-    'order', 'sort', 'dir', 'limit', 'resultsPerPage',
+    // === SORTING & ORDERING ===
+    'sort', 'sort_by', 'order', 'dir',
+
+    // === PAGINATION ===
+    'limit', 'resultsPerPage', 'per_page', 'items',
+    'offset', 'start',
+
+    // === DISPLAY / VIEW MODE ===
+    'view', 'mode', 'display', 'productListView',
+
+    // === SEARCH (user-initiated, infinite variations) ===
+    'search', 'query',
+
+    // === PRICE & FILTER FACETS ===
     'filter', 'price', 'price_min', 'price_max',
-    'id_category', 'categoryId', 'productListView',
-    'q', 'search', 'query', 'offset', 'start',
-    'view', 'mode', 'display', 'per_page', 'items',
+
+    // === DATE FILTERS ===
     'year', 'month', 'day', 'date', 'from', 'to',
-    'ref', 'referrer', 'source', 'sort_by',
+
+    // === FACET PREFIXES (startsWith match) ===
     'size_', 'taille_', 'color_', 'couleur_',
-    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_'
+    'price_', 'prix_', 'brand_', 'marque_', 'type_', 'vendor_',
 ];
 
 const detectionClient = new DetectionLangueClient();
@@ -60,18 +79,24 @@ router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
         const proxyUrl = proxyInfo?.url || null;
 
-        // Resource Blocking (Images, Fonts, etc.)
+        // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
+        // Uses ignoredExtensions as single source of truth for blocked file types
+        const blockedExtensionsRegex = new RegExp(`\\.(${ignoredExtensions})$`, 'i');
         await page.route('**/*', (route) => {
             const req = route.request();
             const resourceType = req.resourceType();
-            const reqUrl = req.url();
+            const reqUrl = req.url().toLowerCase();
 
             // Block heavy media and fonts
             if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
                 return route.abort();
             }
-            // Block download scripts and binary files
-            if (reqUrl.includes('download.php') || reqUrl.includes('imp=1') || /\.(pdf|zip|rar|doc|docx|xls|xlsx|exe|bin|iso|dmg)$/i.test(reqUrl)) {
+            // Block download scripts and binary files (uses ignoredExtensions list)
+            if (
+                reqUrl.includes('download.php') ||
+                reqUrl.includes('imp=1') ||
+                blockedExtensionsRegex.test(reqUrl)
+            ) {
                 return route.abort();
             }
             return route.continue();
@@ -207,15 +232,7 @@ router.addDefaultHandler(
             // Redis update handled in dedupManager
             // Local file update is heavy, skipped in V3 logic, keeping minimal or periodic in main.ts
 
-            // Accept Cookies
-            await page.context().addCookies([
-                {
-                    name: "cookieConsent",
-                    value: "accepted",
-                    domain: targetDomain,
-                    path: "/",
-                },
-            ]);
+            // Cookie consent is now injected pre-navigation in preNavigationHooks (functions.ts)
 
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
             // If we ended up at a different URL than requested (redirect), make sure the 
@@ -250,6 +267,35 @@ router.addDefaultHandler(
                 // Process normally and store the method
                 content = await processPage(page, request.loadedUrl, log);
 
+                // Challenge page detection: check if the content is a bot protection page
+                // If detected, wait for the challenge to resolve before proceeding
+                const challengeService = detectChallengePage(content);
+                if (challengeService) {
+                    const resolvedContent = await waitForChallengeResolution(
+                        page, url, log, challengeService
+                    );
+                    if (resolvedContent) {
+                        content = resolvedContent;
+                    } else {
+                        // Challenge not resolved — store in error dataset and stop
+                        log.error(`Challenge ${challengeService} not resolved for main site ${url}. Aborting crawl.`);
+                        let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${targetDomain}`;
+                        let errorDataset = await Dataset.open(datasetName);
+                        await errorDataset.pushData({
+                            id: request.id,
+                            url: request.url,
+                            errors: [`Challenge page ${challengeService} not resolved after 45s`],
+                            proxy_used: maskProxyUrl(proxyUrl ?? undefined),
+                            status_code: response?.status() || 0,
+                            captcha: challengeService,
+                            timestamp: new Date().toISOString()
+                        });
+                        context.crawlErrorMessage = `Site protégé par ${challengeService} (challenge non résolu)`;
+                        await stopCrawler(crawler, `Challenge ${challengeService} not resolved for main site`);
+                        return;
+                    }
+                }
+
                 try {
                     const detectResult = await detectionClient.detect(url, content, {
                         mode: "complete",
@@ -278,10 +324,12 @@ router.addDefaultHandler(
                             isEnqueuingLinks = true;
                         }
                     } else {
-                        // Implement alternative_urls handling
+                        // The API returns alternatives sorted by reliability (high > medium > low).
+                        // We only use the best one (first element).
                         if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
-                            log.error(`[ALTERNATIVE_URLS] Homepage ${url} is NOT French, but French alternatives were found: ${detectResult.alternative_urls.join(", ")}`);
-                            context.crawlErrorMessage = `Homepage non détectée en Français mais des alternatives en Français ont été trouvées : ${detectResult.alternative_urls.join(", ")}`;
+                            const best = detectResult.alternative_urls[0];
+                            log.error(`[ALTERNATIVE_URL] Homepage ${url} is NOT French, but a French alternative was found: ${best.url} (method: ${best.method}, reliability: ${best.reliability}, validated: ${best.validated})`);
+                            context.crawlErrorMessage = `Homepage non détectée en Français mais une alternative en Français a été trouvée : ${best.url} (fiabilité: ${best.reliability})`;
                         }
 
                         // Only fall back to URL check if NLP didn't explicitly reject.
@@ -326,6 +374,18 @@ router.addDefaultHandler(
                     // Fallback: Detect on current content via API
                     if (!content) content = await processPage(page, request.loadedUrl, log);
 
+                    // Challenge check on internal page content
+                    const internalChallenge1 = content ? detectChallengePage(content) : null;
+                    if (internalChallenge1) {
+                        const resolved = await waitForChallengeResolution(page, url, log, internalChallenge1);
+                        if (resolved) {
+                            content = resolved;
+                        } else {
+                            log.warning(`Challenge ${internalChallenge1} not resolved for internal page ${url}. Skipping.`);
+                            isEnqueuingLinks = false;
+                        }
+                    }
+
                     try {
                         const autoCheck = await detectionClient.detect(url, content, {
                             mode: "simple",
@@ -358,6 +418,18 @@ router.addDefaultHandler(
                     frenchDetectionMethod = methodOrError as string;
 
                     if (!content) content = await processPage(page, request.loadedUrl, log);
+
+                    // Challenge check on internal page content
+                    const internalChallenge2 = content ? detectChallengePage(content) : null;
+                    if (internalChallenge2) {
+                        const resolved = await waitForChallengeResolution(page, url, log, internalChallenge2);
+                        if (resolved) {
+                            content = resolved;
+                        } else {
+                            log.warning(`Challenge ${internalChallenge2} not resolved for internal page ${url}. Skipping.`);
+                            isEnqueuingLinks = false;
+                        }
+                    }
 
                     try {
                         const needsNlp = DetectionLangueClient.requiresNlpValidation(frenchDetectionMethod);
@@ -465,9 +537,10 @@ router.addDefaultHandler(
                         // This ensures we strip parameters BEFORE checking forbidden list
                         const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
                         
-                        // List parameters always to remove
+                        // alwaysRemove: These params are STRIPPED from the URL, but the URL is still crawled.
+                        // Use for noise params (tracking, session, actions) that don't change page content.
                         const alwaysRemove = [
-                            // === CART & WISHLIST ===
+                            // === CART, WISHLIST & USER ACTIONS ===
                             "add-to-cart", "add_to_cart", "addtocart",
                             "add-to-compare", "add_to_compare",
                             "add-to-wishlist", "add_to_wishlist", "addtowishlist",
@@ -475,7 +548,7 @@ router.addDefaultHandler(
                             "remove_compare", "remove_item",
                             "quantity", "qty",
 
-                            // === TRACKING UTM (Marketing) ===
+                            // === UTM (Marketing) ===
                             "utm_source", "utm_medium", "utm_campaign",
                             "utm_content", "utm_term", "utm_id",
                             "utm_referrer", "utm_name",
@@ -487,7 +560,7 @@ router.addDefaultHandler(
                             // === GOOGLE ADS & ANALYTICS ===
                             "gclid", "gclsrc", "dclid",
                             "srsltid", "utmcct", "utmcsr", "utmcmd", "utmccn",
-                            "_ga", "_gid", "_gat",
+                            "_ga", "_gid", "_gat", "_gl",
 
                             // === HUBSPOT ===
                             "hsa_acc", "hsa_cam", "hsa_grp",
@@ -502,41 +575,34 @@ router.addDefaultHandler(
                             "twclid", "li_fat_id", "msclkid",
                             "igshid", "tt_medium", "tt_content",
 
-                            // === WORDPRESS ===
-                            "_wpnonce", "preview", "preview_id",
-                            "preview_nonce", "et_blog",
+                            // === OTHER TRACKING ===
+                            "_openstat", "yclid", "wickedid", "_kx", "epik", "pp",
+                            "click_id", "transaction_id",
+                            "ref", "referrer", "source", "medium", "campaign",
 
-                            // === PRESTASHOP ===
-                            "id_product", "id_category", "pid",
-                            "controller", "id_product_attribute",
-                            "isolang", "id_lang",
-
-                            // === SHOPIFY ===
-                            "pr_prod_strat", "pr_rec_id", "pr_rec_pid",
-                            "pr_ref_pid", "pr_seq",
-                            "variant", "selling_plan",
-
-                            // === MAGENTO ===
-                            "SID", "___store", "___from_store",
-
-                            // === SESSION & TRACKING ===
+                            // === SESSION ===
                             "sessionid", "session_id", "PHPSESSID",
-                            "sid", "s_id",
-                            "_gl", "ref", "referrer",
+                            "sid", "s_id", "SID",
 
                             // === AFFILIATE & MARKETING ===
                             "aff_id", "affiliate", "partner",
-                            "coupon", "discount", "promo",
-                            "voucher",
+                            "coupon", "discount", "promo", "voucher",
 
-                            // === AUTRES TRACKING ===
-                            "click_id", "transaction_id",
-                            "source", "medium", "campaign",
+                            // === CMS INTERNALS (noise, not navigation) ===
+                            // WordPress
+                            "_wpnonce", "preview", "preview_id", "preview_nonce", "et_blog",
+                            // PrestaShop (non-routing params only)
+                            "id_product_attribute", "isolang", "id_lang",
+                            // Shopify (recommendation tracking only)
+                            "pr_prod_strat", "pr_rec_id", "pr_rec_pid", "pr_ref_pid", "pr_seq",
+                            "selling_plan",
+                            // Magento
+                            "___store", "___from_store",
 
-                            // === FILTRES SOUVENT INUTILES ===
+                            // === DEDUP HELPERS (same content, different presentation) ===
                             "view", "mode", "display",
+                            "order", "sort", "resultsPerPage", "productListView",
                             "timestamp", "random", "nocache",
-                            "order", "sort", "resultsPerPage", "productListView", // Added for deduplication
                         ];
 
                         // Strip empty fragment (#) — "page#" and "page" are identical content

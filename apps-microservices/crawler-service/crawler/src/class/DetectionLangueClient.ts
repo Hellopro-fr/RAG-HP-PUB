@@ -1,11 +1,19 @@
 import axios, { AxiosInstance } from "axios";
 
+export interface AlternativeUrl {
+    url: string;
+    method: string;
+    reliability: "high" | "medium" | "low";
+    validated: boolean;
+    region_priority?: number; // 0=France (fr-FR), 1=generic (/fr), 2=other region (fr-CA, fr-BE)
+}
+
 export interface DetectionResult {
     ok: boolean;
     method: string;
     url?: string;
     confidence?: number;
-    alternative_urls?: string[];
+    alternative_urls?: AlternativeUrl[];
     error?: string;
 }
 
@@ -33,7 +41,7 @@ export class DetectionLangueClient {
             "http://api-detection-langue-fr-service:8999";
         this.client = axios.create({
             baseURL: `${url}/api/v1`,
-            timeout: 30000,
+            timeout: 120000, // 120s — accommode le retry interne de l'API et la navigation Playwright
         });
     }
 

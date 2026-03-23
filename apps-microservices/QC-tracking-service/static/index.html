@@ -142,6 +142,28 @@
             background: var(--bg-tertiary);
         }
 
+        .show-more-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: calc(100% - 10px);
+            margin: 8px 5px;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border: 1px dashed var(--accent);
+            border-radius: 8px;
+            color: var(--accent);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .show-more-btn:hover {
+            background: rgba(0, 212, 255, 0.1);
+        }
+
         .file-item.active {
             background: rgba(0, 212, 255, 0.1);
             border: 1px solid var(--accent);
@@ -435,15 +457,31 @@
             }
         }
 
+        // Load all files (no limit)
+        async function loadAllFiles() {
+            document.getElementById('fileList').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/browse?path=${encodeURIComponent(currentPath)}&show_all=true`);
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.detail);
+
+                renderFiles(data);
+            } catch (error) {
+                document.getElementById('fileList').innerHTML = `<div class="empty-state"><p>Erreur: ${error.message}</p></div>`;
+            }
+        }
+
         // Render file list
         function renderFiles(data) {
             const container = document.getElementById('fileList');
-            
+
             if (data.items.length === 0) {
                 container.innerHTML = '<div class="empty-state"><p>Dossier vide</p></div>';
                 return;
             }
-            
+
             // Add parent directory link
             let html = '';
             if (data.parent_path !== null) {
@@ -457,15 +495,15 @@
                     </div>
                 `;
             }
-            
+
             data.items.forEach(item => {
                 const icon = item.is_directory ? '📁' : '📄';
                 const iconClass = item.is_directory ? 'folder' : 'file';
                 const meta = item.is_directory ? 'Dossier' : formatSize(item.size);
-                const onclick = item.is_directory 
+                const onclick = item.is_directory
                     ? `navigateTo('${item.path}')`
                     : `viewFile('${item.path}', '${item.name}')`;
-                
+
                 html += `
                     <div class="file-item" onclick="${onclick}" data-path="${item.path}">
                         <span class="file-icon ${iconClass}">${icon}</span>
@@ -476,7 +514,17 @@
                     </div>
                 `;
             });
-            
+
+            // "Voir plus" button if there are more files
+            if (data.has_more) {
+                const remaining = data.total_items - data.items.length;
+                html += `
+                    <button class="show-more-btn" onclick="loadAllFiles()">
+                        📂 Voir plus (${remaining} fichiers restants)
+                    </button>
+                `;
+            }
+
             container.innerHTML = html;
         }
 

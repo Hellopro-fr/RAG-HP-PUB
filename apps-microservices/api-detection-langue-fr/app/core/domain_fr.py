@@ -6,7 +6,11 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
-from app.models.schemas import DetectionMode, DetectionResponse
+from app.models.schemas import (
+    DetectionMode, DetectionResponse, AlternativeUrl,
+    DebugDetectionResponse, DebugInfo, DebugFetchInfo, DebugCleaningInfo,
+    DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo, DebugAlternativesInfo
+)
 from app.services.language_detector import LanguageDetector
 from app.services.redirect_tracker import RedirectTracker, fetch_html
 from app.core.config import settings
@@ -28,9 +32,11 @@ class DomainFR:
         self,
         homepage: str,
         forced_method: Optional[str] = None,
-        use_nlp_detection: bool = True
+        use_nlp_detection: bool = True,
+        original_homepage: Optional[str] = None
     ):
         self.homepage = homepage
+        self.original_homepage = original_homepage or homepage
         self.forced_method = forced_method
         self.use_nlp_detection = use_nlp_detection
         self.tracker = RedirectTracker()
@@ -200,20 +206,32 @@ class DomainFR:
         return recheck
     
     def _check_base_domain(self, base_domain: str, actual_domain: str) -> bool:
-        """Vérifie que deux domaines sont liés."""
+        """
+        Vérifie que deux domaines sont liés.
+
+        Normalise les séparateurs (hyphens, underscores) avant comparaison
+        pour gérer les cas où une entreprise utilise des variantes :
+        Ex: stematjansen.com et stemat-jansen.fr → match
+        """
         if not base_domain or not actual_domain:
             return False
-        
-        base_lower = base_domain.lower()
-        actual_lower = actual_domain.lower()
-        
-        return base_lower in actual_lower or actual_lower in base_lower
+
+        # Normalisation : lowercase + suppression hyphens et underscores
+        base_norm = base_domain.lower().replace('-', '').replace('_', '')
+        actual_norm = actual_domain.lower().replace('-', '').replace('_', '')
+
+        return base_norm in actual_norm or actual_norm in base_norm
     
     async def _validate_single_url(self, url: str) -> bool:
         """
         Validates that a URL is reachable and serves HTML content.
-        Equivalent to PHP handleRedirections($link, null, 'text/html').
+
+        Stratégie en deux phases :
+        1. httpx (rapide, léger) — suffisant pour la plupart des sites
+        2. Playwright (fallback) — pour les sites avec protection anti-bot
+           qui bloquent les requêtes httpx mais acceptent les navigateurs
         """
+        # Phase 1 : validation rapide via httpx
         try:
             async with httpx.AsyncClient(
                 timeout=settings.HTTP_TIMEOUT,
@@ -226,27 +244,41 @@ class DomainFR:
                     content_type = response.headers.get('content-type', '')
                     if 'text/html' in content_type or 'application/xhtml' in content_type:
                         return True
-            return False
         except Exception:
-            return False
+            pass
+
+        # Phase 2 : fallback Playwright pour les sites avec protection anti-bot
+        try:
+            from app.services.scraper import scrape_html
+            effective_proxy = settings.APIFY_PROXY
+            if effective_proxy:
+                result = await scrape_html(url, proxy=effective_proxy)
+                if result:
+                    content, _ = result
+                    if content and len(content) > 100:
+                        return True
+        except Exception:
+            pass
+
+        return False
 
     async def _validate_alternative_urls(
         self,
-        candidates: list[tuple[str, str]]
-    ) -> list[str]:
+        candidates: list[dict]
+    ) -> list[AlternativeUrl]:
         """
         Validates candidate URLs in parallel with retry.
 
-        For each candidate (resolved_url, raw_href):
-        1. Tries to validate the resolved URL
+        For each candidate:
+        1. Tries to validate the resolved URL (HTTP 200 + text/html)
         2. If failed and raw_href is relative (no leading / or http),
            retries with / prepended (matches PHP needEditUrl behavior)
 
         Args:
-            candidates: List of (resolved_url, raw_href) tuples
+            candidates: List of dicts with keys: url, raw_href, method, reliability
 
         Returns:
-            List of validated URLs
+            List of AlternativeUrl with validated=True/False
         """
         if not candidates:
             return []
@@ -254,14 +286,22 @@ class DomainFR:
         semaphore = asyncio.Semaphore(3)
         base_domain = self.get_domain_from_url(self.homepage)
 
-        async def validate_with_retry(
-            resolved_url: str,
-            raw_href: str
-        ) -> Optional[str]:
+        async def validate_with_retry(candidate: dict) -> AlternativeUrl:
+            resolved_url = candidate['url']
+            raw_href = candidate['raw_href']
+            hreflang_val = candidate.get('hreflang_value', '')
+            priority = self._french_region_priority(resolved_url, hreflang_val)
+
             async with semaphore:
                 # First attempt: validate the resolved URL
                 if await self._validate_single_url(resolved_url):
-                    return resolved_url
+                    return AlternativeUrl(
+                        url=resolved_url,
+                        method=candidate['method'],
+                        reliability=candidate['reliability'],
+                        validated=True,
+                        region_priority=priority
+                    )
 
                 # Retry with / prepended (PHP needEditUrl behavior)
                 if (
@@ -278,128 +318,393 @@ class DomainFR:
                             base_domain, link_domain
                         ):
                             if await self._validate_single_url(retry_url):
-                                return retry_url
+                                retry_priority = self._french_region_priority(retry_url, hreflang_val)
+                                return AlternativeUrl(
+                                    url=retry_url,
+                                    method=candidate['method'],
+                                    reliability=candidate['reliability'],
+                                    validated=True,
+                                    region_priority=retry_priority
+                                )
 
-                return None
+                # Validation failed — return as non-validated
+                return AlternativeUrl(
+                    url=resolved_url,
+                    method=candidate['method'],
+                    reliability='low',
+                    validated=False,
+                    region_priority=priority
+                )
 
         results = await asyncio.gather(*[
-            validate_with_retry(url, href)
-            for url, href in candidates
+            validate_with_retry(c) for c in candidates
         ])
 
-        return [url for url in results if url is not None]
+        return [r for r in results if r is not None]
 
-    async def detect_alternative_languages(self, content: str) -> list[str]:
+    @staticmethod
+    def _compare_without_scheme(url1: str, url2: str) -> bool:
         """
-        Recherche des liens vers une version française et les valide.
+        Compare two URLs ignoring scheme (http vs https) and trailing slashes.
+        Port of PHP compareWithoutScheme().
+        """
+        try:
+            p1 = urlparse(url1)
+            p2 = urlparse(url2)
+            return (
+                (p1.hostname or '').lower() == (p2.hostname or '').lower()
+                and (p1.path or '/').rstrip('/') == (p2.path or '/').rstrip('/')
+                and (p1.query or '') == (p2.query or '')
+                and (p1.fragment or '') == (p2.fragment or '')
+            )
+        except Exception:
+            return url1 == url2
 
-        Logique de confiance (alignée sur le comportement PHP) :
-        - Hreflang : trusted sans validation HTTP (déclaration explicite du webmaster)
-        - data-lang / data-gt-lang : validé via HTTP
-        - Liens <a> avec /fr/ : validé via HTTP
-        - Options <option> avec fr : validé via HTTP
+    def _is_self_url(self, resolved: Optional[str]) -> bool:
+        """Check if a resolved URL points to the same page being tested."""
+        if not resolved:
+            return True
+        return self._compare_without_scheme(resolved, self.homepage)
 
-        Patterns portés depuis PHP detectOptionsLanguages() :
-        - Hreflang prioritaire (^fr) + secondaire (contient fr, e.g., be-fr, ca-fr)
-        - data-lang ET data-gt-lang (Google Translate)
-        - Retry avec / préfixé si la validation échoue (PHP needEditUrl)
+    @staticmethod
+    def _french_region_priority(url: str, hreflang_value: str = '') -> int:
+        """
+        Determine la priorite regionale d'une URL francaise.
+
+        Retourne:
+            0 = France specifiquement (fr-FR, fr_FR, /fr/fr, /fr-fr)
+            1 = Francais generique (/fr seul, hreflang="fr")
+            2 = Autre region francophone (fr-CA, fr-BE, /dz/fr, /ca/fr, ca-fr, be-fr)
+
+        Analyse dans l'ordre : hreflang > URL path > query params.
+        Gere les formats normaux et inverses (fr-ca, ca-fr, /fr/dz, /dz/fr).
+        """
+        hreflang_lower = hreflang_value.strip().lower().replace('_', '-')
+        url_lower = url.lower()
+
+        # --- Analyse hreflang (signal le plus fiable) ---
+        if hreflang_lower:
+            # France : fr-fr
+            if hreflang_lower in ('fr-fr',):
+                return 0
+            # Generique : fr seul
+            if hreflang_lower == 'fr':
+                return 1
+            # Autre region : fr-XX ou XX-fr (ou XX != fr)
+            parts = hreflang_lower.split('-')
+            if len(parts) == 2:
+                if parts[0] == 'fr' and parts[1] != 'fr':
+                    return 2  # fr-ca, fr-be, fr-ch, etc.
+                if parts[1] == 'fr' and parts[0] != 'fr':
+                    return 2  # ca-fr, be-fr, etc.
+            # Fallback: contient "fr" d'une maniere ou d'une autre
+            return 1
+
+        # --- Analyse URL path ---
+        try:
+            parsed = urlparse(url_lower)
+            path = (parsed.path or '').strip('/')
+            query = parsed.query or ''
+            segments = [s for s in path.split('/') if s]
+
+            # Patterns France dans le path : fr-fr, fr_fr
+            if any(s in ('fr-fr', 'fr_fr') for s in segments):
+                return 0
+
+            # Pattern /fr/fr (deux segments fr consecutifs)
+            for i in range(len(segments) - 1):
+                if segments[i] == 'fr' and segments[i + 1] == 'fr':
+                    return 0
+
+            # Patterns autre region dans le path
+            # Codes pays ISO 3166-1 alpha-2 courants (hors FR)
+            non_france_codes = {
+                'ca', 'be', 'ch', 'lu', 'mc', 'dz', 'ma', 'tn', 'sn', 'ci',
+                'cm', 'cd', 'cg', 'mg', 'ht', 'ml', 'ne', 'bf', 'bj', 'tg',
+                'gn', 'rw', 'bi', 'ga', 'cf', 'td', 'km', 'dj', 'mu', 'sc',
+                'us', 'gb', 'uk', 'de', 'es', 'it', 'pt', 'nl', 'at', 'au',
+                'nz', 'za', 'in', 'br', 'mx', 'ar', 'co', 'cl', 'pe', 'vn',
+                'mea', 'apac', 'emea', 'latam', 'na',  # Codes regions
+            }
+
+            # Chercher des patterns XX/fr ou fr/XX ou XX-fr ou fr-XX dans le path
+            for s in segments:
+                # Segment combine : fr-ca, ca-fr, fr_be, be_fr
+                parts = re.split(r'[-_]', s)
+                if len(parts) == 2:
+                    if parts[0] == 'fr' and parts[1] in non_france_codes:
+                        return 2
+                    if parts[1] == 'fr' and parts[0] in non_france_codes:
+                        return 2
+
+            # Chercher /XX/fr/ ou /fr/XX/ dans les segments adjacents
+            for i in range(len(segments) - 1):
+                pair = (segments[i], segments[i + 1])
+                if pair[0] == 'fr' and pair[1] in non_france_codes:
+                    return 2  # /fr/dz, /fr/ca
+                if pair[1] == 'fr' and pair[0] in non_france_codes:
+                    return 2  # /dz/fr, /ca/fr
+
+            # Si /fr/ est seul (pas accompagne d'un code pays)
+            if 'fr' in segments:
+                return 1
+
+            # --- Analyse query params ---
+            if 'lang=fr-fr' in query or 'lang=fr_fr' in query:
+                return 0
+            if 'lang=fr' in query:
+                # Verifier si c'est lang=fr-XX
+                lang_match = re.search(r'lang=fr[-_](\w+)', query)
+                if lang_match and lang_match.group(1).lower() != 'fr':
+                    return 2
+                return 1
+
+        except Exception:
+            pass
+
+        # Defaut : generique
+        return 1
+
+    async def detect_alternative_languages(self, content: str) -> list[AlternativeUrl]:
+        """
+        Recherche des liens vers une version française, les valide et les tague.
+
+        Collecte les alternatives depuis TOUTES les méthodes de découverte,
+        chacune taguée avec sa méthode et son niveau de fiabilité.
+        Les résultats sont triés par fiabilité (high > medium > low)
+        et dédupliqués de manière agressive (normalisation d'URL).
+
+        Niveaux de fiabilité :
+        - high   : hreflang (déclaration explicite du webmaster, trusted sans HTTP)
+        - medium : data-lang/data-gt-lang, liens <a>, options (validés via HTTP)
+        - low    : non validé (échec HTTP ou pas de validation)
+
+        L'URL en cours de test (self.homepage) est exclue des résultats.
         """
         if not content:
             return []
 
-        trusted_urls = []
-        candidates = []
-        seen_urls = set()
         base_domain = self.get_domain_from_url(self.homepage)
+        homepage_parsed = urlparse(self.homepage)
+        homepage_host = (homepage_parsed.hostname or '').lower()
 
-        def _add_trusted(resolved: Optional[str]):
-            if resolved and resolved not in seen_urls:
-                link_domain = self.get_domain_from_url(resolved)
-                if self._check_base_domain(base_domain, link_domain):
-                    trusted_urls.append(resolved)
-                    seen_urls.add(resolved)
+        # Domaine original (avant redirection) — permet d'accepter les alternatives
+        # qui pointent vers le domaine d'origine quand une redirection a changé le domaine.
+        # Ex: trojanuv.com → trojantechnologies.com, alternative trouvée: trojanuv.com/fr/
+        original_base_domain = self.get_domain_from_url(self.original_homepage)
+        has_different_original = (original_base_domain != base_domain)
 
-        def _add_candidate(resolved: Optional[str], raw_href: str):
-            if resolved and resolved not in seen_urls:
-                link_domain = self.get_domain_from_url(resolved)
-                if self._check_base_domain(base_domain, link_domain):
-                    candidates.append((resolved, raw_href))
-                    seen_urls.add(resolved)
+        seen_urls = set()
+        all_alternatives: list[AlternativeUrl] = []
+        candidates_to_validate: list[dict] = []
+
+        def _resolve_and_check(href: str) -> Optional[str]:
+            """Resolve a href and check domain match + not self URL.
+            Accepts URLs matching either the current domain or the original domain (before redirect).
+            """
+            resolved = self.resolve_url(self.homepage, href)
+            if not resolved or self._is_self_url(resolved):
+                return None
+            link_domain = self.get_domain_from_url(resolved)
+            # Vérifier contre le domaine actuel (après redirection)
+            if self._check_base_domain(base_domain, link_domain):
+                return resolved
+            # Vérifier contre le domaine original (avant redirection)
+            if has_different_original and self._check_base_domain(original_base_domain, link_domain):
+                return resolved
+            return None
+
+        def _normalize_url(url: str) -> str:
+            """Normalize URL for deduplication (lowercase host, strip trailing /)."""
+            try:
+                p = urlparse(url)
+                base = f"{p.scheme}://{(p.hostname or '').lower()}{(p.path or '/').rstrip('/')}"
+                return base + (f"?{p.query}" if p.query else "")
+            except Exception:
+                return url
+
+        def _add_trusted(resolved: str, method: str, hreflang_value: str = ''):
+            """Add a trusted (hreflang) alternative — no HTTP validation needed."""
+            normalized = _normalize_url(resolved)
+            if normalized not in seen_urls:
+                seen_urls.add(normalized)
+                priority = self._french_region_priority(resolved, hreflang_value)
+                all_alternatives.append(AlternativeUrl(
+                    url=resolved,
+                    method=method,
+                    reliability='high',
+                    validated=True,
+                    region_priority=priority
+                ))
+
+        def _queue_candidate(resolved: str, raw_href: str, method: str, hreflang_value: str = ''):
+            """Queue a candidate for HTTP validation."""
+            normalized = _normalize_url(resolved)
+            if normalized not in seen_urls:
+                seen_urls.add(normalized)
+                candidates_to_validate.append({
+                    'url': resolved,
+                    'raw_href': raw_href,
+                    'method': method,
+                    'reliability': 'medium',
+                    'hreflang_value': hreflang_value
+                })
 
         try:
             soup = BeautifulSoup(content, 'lxml')
 
-            # 1. Hreflang prioritaire : commence par "fr" (trusted)
-            for link in soup.find_all(
-                attrs={'hreflang': re.compile(r'^fr', re.IGNORECASE)}
-            ):
-                href = link.get('href')
-                if href and href != '#':
-                    _add_trusted(self.resolve_url(self.homepage, href))
+            # 1. Hreflang (trusted, high reliability)
+            # Prioritaire: starts with "fr" (fr, fr-FR, fr-BE)
+            # Secondaire: contains "fr" anywhere (be-fr, ca-fr)
+            # Note: PAS de vérification de domaine pour hreflang — c'est une déclaration
+            # explicite du webmaster. Si le site déclare un hreflang vers un autre domaine,
+            # on fait confiance (ex: trojantechnologies.com → trojanuv.com/fr/).
+            for regex in [re.compile(r'^fr', re.IGNORECASE), re.compile(r'fr', re.IGNORECASE)]:
+                for link in soup.find_all(attrs={'hreflang': regex}):
+                    href = link.get('href')
+                    hreflang_val = link.get('hreflang', '')
+                    if href and href != '#':
+                        resolved = self.resolve_url(self.homepage, href)
+                        if resolved and not self._is_self_url(resolved):
+                            _add_trusted(resolved, 'hreflang', hreflang_value=hreflang_val)
 
-            # 2. Hreflang secondaire : contient "fr" (e.g., be-fr, ca-fr) (trusted)
-            for link in soup.find_all(
-                attrs={'hreflang': re.compile(r'fr', re.IGNORECASE)}
-            ):
-                href = link.get('href')
-                if href and href != '#':
-                    _add_trusted(self.resolve_url(self.homepage, href))
-
-            # 3. data-lang et data-gt-lang (need validation)
+            # 2. data-lang et data-gt-lang (need validation, medium reliability)
             for attr_name in ['data-lang', 'data-gt-lang']:
-                # Prioritaire : commence par "fr"
-                for elem in soup.find_all(
-                    attrs={attr_name: re.compile(r'^fr', re.IGNORECASE)}
-                ):
-                    href = elem.get('href')
-                    if href and href != '#':
-                        _add_candidate(
-                            self.resolve_url(self.homepage, href), href
-                        )
-                # Secondaire : contient "fr"
-                for elem in soup.find_all(
-                    attrs={attr_name: re.compile(r'fr', re.IGNORECASE)}
-                ):
-                    href = elem.get('href')
-                    if href and href != '#':
-                        _add_candidate(
-                            self.resolve_url(self.homepage, href), href
-                        )
+                method_name = attr_name.replace('-', '_')
+                for regex in [re.compile(r'^fr', re.IGNORECASE), re.compile(r'fr', re.IGNORECASE)]:
+                    for elem in soup.find_all(attrs={attr_name: regex}):
+                        href = elem.get('href')
+                        lang_val = elem.get(attr_name, '')
+                        if href and href != '#':
+                            resolved = _resolve_and_check(href)
+                            if resolved:
+                                _queue_candidate(resolved, href, method_name, hreflang_value=lang_val)
 
-            # 4. Liens <a> avec /fr/ ou lang=fr (need validation)
+            # 3. Liens <a> avec /fr/ ou lang=fr (need validation, medium reliability)
             fr_pattern = re.compile(
                 r'/(fr|fr-fr|fr_fr)(/|$)|lang=fr', re.IGNORECASE
             )
             for link in soup.find_all('a', href=True):
                 href = link['href']
                 if fr_pattern.search(href) and 'mailto:' not in href:
-                    _add_candidate(
-                        self.resolve_url(self.homepage, href), href
-                    )
+                    resolved = _resolve_and_check(href)
+                    if resolved:
+                        _queue_candidate(resolved, href, 'link_pattern')
 
-            # 5. Options <option> avec value fr (need validation)
+            # 4. Options <option> avec value fr (need validation, medium reliability)
+            # Scanne les <select>/<option> pour :
+            #   a) Patterns /fr/ ou lang=fr dans l'URL
+            #   b) Domaines .fr apparentés (ex: soprema.fr dans un select de soprema-international.com)
+            #   c) Sous-domaines français (ex: fr.domain.com)
             for option in soup.find_all('option'):
                 value = option.get('value', '')
+                if not value or not value.strip():
+                    continue
+
+                # 4a. Pattern /fr/ ou lang=fr
                 if re.search(
                     r'(^|/)fr(/|$)|lang=fr', value, re.IGNORECASE
                 ):
-                    _add_candidate(
-                        self.resolve_url(self.homepage, value), value
-                    )
+                    resolved = _resolve_and_check(value)
+                    if resolved:
+                        _queue_candidate(resolved, value, 'option_tag')
+                    continue
+
+                # 4b. Domaine .fr apparenté (même logique que Method 5 mais pour <option>)
+                try:
+                    opt_parsed = urlparse(value)
+                    opt_host = (opt_parsed.hostname or '').lower()
+                    if opt_host and opt_host.endswith('.fr') and opt_host != homepage_host:
+                        opt_base = self.get_domain_from_url(value)
+                        if self._check_base_domain(base_domain, opt_base):
+                            resolved = _resolve_and_check(value)
+                            if resolved:
+                                _queue_candidate(resolved, value, 'option_domain_fr')
+                            continue
+                except Exception:
+                    pass
+
+                # 4c. Sous-domaine français (même logique que Method 6 mais pour <option>)
+                try:
+                    opt_parsed = urlparse(value)
+                    opt_host = (opt_parsed.hostname or '').lower()
+                    if opt_host and opt_host != homepage_host:
+                        fr_sub_match = re.match(
+                            r'^(fr|french|francais|français|france)\.', opt_host, re.IGNORECASE
+                        )
+                        if fr_sub_match:
+                            opt_base = self.get_domain_from_url(value)
+                            if self._check_base_domain(base_domain, opt_base):
+                                resolved = _resolve_and_check(value)
+                                if resolved:
+                                    _queue_candidate(resolved, value, 'option_subdomain_fr')
+                except Exception:
+                    pass
+
+            # 5. Liens <a> pointant vers un domaine .fr apparenté
+            # Ex: essity.com → essity.fr (même base de domaine avec TLD .fr)
+            # Ne capture que les liens vers des domaines .fr qui partagent le même
+            # nom de domaine principal (évite les faux positifs vers des .fr sans rapport)
+            # Note: homepage_parsed et homepage_host sont définis en haut de la méthode
+            if not homepage_host.endswith('.fr'):
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    if 'mailto:' in href:
+                        continue
+                    try:
+                        link_parsed = urlparse(href)
+                        link_host = (link_parsed.hostname or '').lower()
+                        if link_host.endswith('.fr') and link_host != homepage_host:
+                            # Vérifier que le domaine principal est le même
+                            # Ex: essity.com et essity.fr partagent "essity"
+                            link_base = self.get_domain_from_url(href)
+                            if self._check_base_domain(base_domain, link_base):
+                                resolved = _resolve_and_check(href)
+                                if resolved:
+                                    _queue_candidate(resolved, href, 'domain_fr_link')
+                    except Exception:
+                        continue
+
+            # 6. Liens <a> pointant vers un sous-domaine français
+            # Ex: swann-morton.com → fr.swann-morton.com
+            # Capture les patterns : fr.domain.com, french.domain.com,
+            # francais.domain.com, france.domain.com
+            fr_subdomain_pattern = re.compile(
+                r'^(fr|french|francais|français|france)\.', re.IGNORECASE
+            )
+            homepage_has_fr_subdomain = bool(fr_subdomain_pattern.match(homepage_host))
+            if not homepage_has_fr_subdomain:
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    if 'mailto:' in href:
+                        continue
+                    try:
+                        link_parsed = urlparse(href)
+                        link_host = (link_parsed.hostname or '').lower()
+                        if link_host and link_host != homepage_host and fr_subdomain_pattern.match(link_host):
+                            link_base = self.get_domain_from_url(href)
+                            if self._check_base_domain(base_domain, link_base):
+                                resolved = _resolve_and_check(href)
+                                if resolved:
+                                    _queue_candidate(resolved, href, 'subdomain_fr')
+                    except Exception:
+                        continue
 
         except Exception:
             pass
 
         # Validate candidates via HTTP (parallel, max 3 concurrent)
-        validated = await self._validate_alternative_urls(candidates)
+        validated_results = await self._validate_alternative_urls(candidates_to_validate)
+        all_alternatives.extend(validated_results)
 
-        # Combine: trusted hreflang first, then validated candidates
-        all_urls = list(trusted_urls)
-        for url in validated:
-            if url not in all_urls:
-                all_urls.append(url)
+        # Sort by: 1) reliability (high > medium > low), 2) region priority (France > generic > other)
+        reliability_order = {'high': 0, 'medium': 1, 'low': 2}
+        all_alternatives.sort(key=lambda a: (
+            reliability_order.get(a.reliability, 3),
+            a.region_priority
+        ))
 
-        return all_urls[:5]
+        return all_alternatives[:10]
     
     async def check_page_if_french(
         self,
@@ -620,15 +925,118 @@ class DomainFR:
             )
         
         # Cas 6 : Liens alternatifs français validés/trusted trouvés
-        if alternatives:
-            return DetectionResponse(
-                ok=True,
-                url=alternatives[0],
-                method='alternative_link_validated',
-                alternative_urls=alternatives[1:] if len(alternatives) > 1 else [],
-                confidence=0.8
-            )
-        
+        # Exécute la détection complète (fetch + NLP) sur les meilleures alternatives
+        # pour confirmer qu'elles sont réellement en français, pas juste accessibles.
+        reliable_alternatives = [a for a in alternatives if a.validated]
+        if reliable_alternatives:
+            challenge_blocked_count = 0
+            challenge_blocked_service = None
+            fetch_failed_count = 0
+
+            for alt_candidate in reliable_alternatives:
+                try:
+                    alt_content_result = await fetch_html(alt_candidate.url)
+                    if not alt_content_result:
+                        logger.warning(f"Impossible de récupérer le contenu de l'alternative {alt_candidate.url}")
+                        fetch_failed_count += 1
+                        continue
+
+                    alt_content, alt_final_url = alt_content_result
+
+                    # Vérifier que ce n'est pas une page de challenge
+                    from app.services.language_detector import detect_challenge_page
+                    challenge_service = detect_challenge_page(alt_content)
+                    if challenge_service:
+                        logger.warning(f"Page de challenge {challenge_service} détectée sur l'alternative {alt_candidate.url}")
+                        challenge_blocked_count += 1
+                        challenge_blocked_service = challenge_service
+                        continue
+
+                    # Détection HTML tags sur l'alternative
+                    alt_html_result = self.language_detector.detect_combined(alt_content, use_nlp=False)
+                    alt_html_french = alt_html_result.get('detected') and alt_html_result.get('is_french')
+
+                    # Détection NLP sur l'alternative
+                    alt_nlp = self.language_detector.detect_from_text_content_fasttext(alt_content)
+                    if alt_nlp is None:
+                        alt_nlp = self.language_detector.detect_from_text_content(alt_content)
+
+                    alt_nlp_lang = alt_nlp.get('lang') if alt_nlp else None
+                    alt_nlp_confidence = alt_nlp.get('confidence', 0) if alt_nlp else 0.0
+                    alt_nlp_french = alt_nlp_lang == 'fr' and alt_nlp_confidence >= settings.NLP_MIN_CONFIDENCE
+
+                    if alt_nlp_french:
+                        # Alternative confirmée française par NLP
+                        alt_method_parts = [f'alternative_{alt_candidate.method}']
+                        if alt_html_french:
+                            alt_method_parts.append('html_confirmed')
+                        alt_method_parts.append('nlp_confirmed')
+
+                        logger.info(
+                            f"Alternative {alt_candidate.url} confirmée française "
+                            f"(NLP: {alt_nlp_lang} {alt_nlp_confidence:.3f})"
+                        )
+                        return DetectionResponse(
+                            ok=True,
+                            url=alt_final_url or alt_candidate.url,
+                            method='+'.join(alt_method_parts),
+                            alternative_urls=alternatives,
+                            confidence=alt_nlp_confidence
+                        )
+                    elif alt_html_french:
+                        # HTML dit français mais NLP ne confirme pas (texte court ?)
+                        # Accepté avec confiance réduite
+                        logger.info(
+                            f"Alternative {alt_candidate.url} détectée française par HTML "
+                            f"(NLP indisponible ou non confirmé)"
+                        )
+                        return DetectionResponse(
+                            ok=True,
+                            url=alt_final_url or alt_candidate.url,
+                            method=f'alternative_{alt_candidate.method}+html_confirmed+nlp_skipped',
+                            alternative_urls=alternatives,
+                            confidence=0.6
+                        )
+                    else:
+                        logger.info(
+                            f"Alternative {alt_candidate.url} non confirmée française "
+                            f"(NLP: {alt_nlp_lang} {alt_nlp_confidence:.3f}), "
+                            f"essai suivant..."
+                        )
+                        continue
+
+                except Exception as alt_e:
+                    logger.warning(f"Erreur vérification alternative {alt_candidate.url}: {alt_e}")
+                    fetch_failed_count += 1
+                    continue
+
+            # Si toutes les alternatives ont échoué (challenge + fetch failures),
+            # retourner une erreur spécifique au lieu de Check_nok_v2
+            total_failures = challenge_blocked_count + fetch_failed_count
+            if total_failures > 0 and total_failures == len(reliable_alternatives):
+                # Déterminer le type d'erreur principal
+                if challenge_blocked_count > 0 and challenge_blocked_count >= fetch_failed_count:
+                    if challenge_blocked_service == 'Cloudflare_blocked':
+                        error_msg = 'Alternative(s) française(s) trouvée(s) mais bloquée(s) par Cloudflare WAF'
+                    else:
+                        error_msg = f'Alternative(s) française(s) trouvée(s) mais bloquée(s) par {challenge_blocked_service}'
+                    method = 'challenge_page'
+                else:
+                    error_msg = "Alternative(s) française(s) trouvée(s) mais impossible de récupérer le contenu"
+                    method = 'fetch_failed'
+
+                logger.warning(
+                    f"Toutes les alternatives ({len(reliable_alternatives)}) inaccessibles pour {url} "
+                    f"(challenge: {challenge_blocked_count}, fetch_failed: {fetch_failed_count})"
+                )
+                return DetectionResponse(
+                    ok=False,
+                    url=url,
+                    method=method,
+                    alternative_urls=alternatives,
+                    error=error_msg
+                )
+
         # Cas 7 : NLP disponible mais ne confirme pas, malgré indicateurs HTML/URL
         if nlp_available and (html_indicates_french or url_indicates_french):
             return DetectionResponse(
@@ -640,29 +1048,31 @@ class DomainFR:
             )
         
         # Cas 8 : Dernier recours — signal lexical français
-        # Si les moteurs NLP échouent (contenu mixte, noms de produits, etc.)
-        # mais que le texte contient clairement des mots français exclusifs,
-        # on accepte avec une confiance réduite.
-        try:
-            soup_check = BeautifulSoup(content, 'lxml')
-            for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
-                el.decompose()
-            visible_text = soup_check.get_text(separator=' ', strip=True)
-            
-            if len(visible_text) >= 50:
-                french_signal = self.language_detector._compute_french_signal(visible_text)
-                logger.debug(f"Lexical French signal (last resort): {french_signal:.3f}")
-                
-                if french_signal > 0.3:
-                    return DetectionResponse(
-                        ok=True,
-                        url=url,
-                        method='french_lexical_signal',
-                        confidence=round(min(0.7, french_signal), 3),
-                        alternative_urls=alternatives
-                    )
-        except Exception as e:
-            logger.warning(f"Erreur signal lexical: {e}")
+        # Uniquement si NLP n'est pas disponible (texte trop court, modèle absent).
+        # Si NLP a détecté une autre langue, le signal lexical ne doit JAMAIS
+        # outrepasser le NLP — sinon des sites allemands/espagnols/etc. avec
+        # quelques mots français (navigation, footer) seraient faussement détectés.
+        if not nlp_available:
+            try:
+                soup_check = BeautifulSoup(content, 'lxml')
+                for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                    el.decompose()
+                visible_text = soup_check.get_text(separator=' ', strip=True)
+
+                if len(visible_text) >= 50:
+                    french_signal = self.language_detector._compute_french_signal(visible_text)
+                    logger.debug(f"Lexical French signal (last resort): {french_signal:.3f}")
+
+                    if french_signal > 0.3:
+                        return DetectionResponse(
+                            ok=True,
+                            url=url,
+                            method='french_lexical_signal',
+                            confidence=round(min(0.7, french_signal), 3),
+                            alternative_urls=alternatives
+                        )
+            except Exception as e:
+                logger.warning(f"Erreur signal lexical: {e}")
         
         # Cas 9 : Aucun indicateur français trouvé
         return DetectionResponse(
@@ -670,3 +1080,196 @@ class DomainFR:
             url=url,
             method='Check_nok_v2'
         )
+
+    async def check_page_if_french_debug(
+        self,
+        content: str,
+        mode: DetectionMode = DetectionMode.COMPLETE,
+        fetched_by: str = 'api',
+        include_full_content: bool = False,
+        redirected_from: Optional[str] = None,
+        challenge_detected: Optional[str] = None
+    ) -> DebugDetectionResponse:
+        """
+        Version debug de check_page_if_french qui collecte les informations
+        de chaque etape du pipeline pour diagnostic.
+
+        Args:
+            content: Contenu HTML de la page
+            mode: Mode de detection (simple ou complete)
+            fetched_by: 'api' si recupere par Playwright, 'provided' si fourni
+            include_full_content: Si True, inclut le HTML complet et le texte nettoye complet
+            redirected_from: URL d'origine avant redirection (None si pas de redirection)
+            challenge_detected: Nom du service de protection anti-bot detecte (None si contenu reel)
+
+        Returns:
+            DebugDetectionResponse avec le resultat + infos debug
+        """
+        url = self.homepage
+
+        # --- Debug: Fetch info ---
+        debug_fetch = DebugFetchInfo(
+            fetched_by=fetched_by,
+            raw_html_length=len(content) if content else 0,
+            raw_html_preview=(content[:500] if content else ''),
+            raw_html_full=content if (include_full_content and content) else None,
+            redirected_from=redirected_from,
+            challenge_detected=challenge_detected
+        )
+
+        # --- Debug: Cleaning info ---
+        cleaned_text = self.language_detector.clean_html_to_text(content) if content else None
+        debug_cleaning = DebugCleaningInfo(
+            cleaned_text_length=len(cleaned_text) if cleaned_text else 0,
+            cleaned_text_preview=(cleaned_text[:500] if cleaned_text else ''),
+            cleaned_text_full=cleaned_text if (include_full_content and cleaned_text) else None
+        )
+
+        # --- Etape 1: URL check ---
+        url_check = await self.check_url(url, track_redirect=False)
+        url_indicates_french = url_check.get('ok', False)
+        url_method = url_check.get('method', '')
+        is_strong_url = self._is_strong_french_url(url)
+
+        debug_url_check = DebugUrlCheckInfo(
+            ok=url_indicates_french,
+            method=url_method,
+            is_strong_url=is_strong_url
+        )
+
+        # --- Etape 2: HTML tags ---
+        lang_result = self.language_detector.detect_combined(content, use_nlp=False) if content else {}
+        html_indicates_french = lang_result.get('detected') and lang_result.get('is_french')
+        html_method = lang_result.get('method', '')
+
+        debug_html_tags = DebugHtmlTagsInfo(
+            detected=bool(lang_result.get('detected')),
+            is_french=bool(html_indicates_french),
+            method=html_method or None,
+            value=lang_result.get('value')
+        )
+
+        # --- Etape 3: NLP ---
+        nlp_result = None
+        if content:
+            nlp_result = self.language_detector.detect_from_text_content_fasttext(content)
+
+            if nlp_result is None:
+                nlp_result = self.language_detector.detect_from_text_content(content)
+            elif nlp_result.get('lang') != 'fr' and nlp_result.get('confidence', 0) < 0.75:
+                secondary_result = self.language_detector.detect_from_text_content(content)
+                if secondary_result and secondary_result.get('lang') == 'fr':
+                    nlp_result = secondary_result
+
+        nlp_lang = nlp_result.get('lang') if nlp_result else None
+        nlp_confidence = nlp_result.get('confidence', 0) if nlp_result else 0.0
+        nlp_available = nlp_result is not None
+
+        nlp_confirms_french = nlp_available and nlp_lang == 'fr' and nlp_confidence >= settings.NLP_MIN_CONFIDENCE
+        nlp_soft_french = nlp_available and nlp_lang == 'fr' and nlp_confidence < settings.NLP_MIN_CONFIDENCE
+        nlp_contradicts_french = nlp_available and nlp_lang is not None and nlp_lang != 'fr'
+        nlp_strongly_contradicts = nlp_contradicts_french and nlp_confidence > 0.9
+
+        debug_nlp = DebugNlpInfo(
+            available=nlp_available,
+            lang=nlp_lang,
+            confidence=nlp_confidence if nlp_available else None,
+            method=nlp_result.get('method') if nlp_result else None,
+            details=nlp_result.get('details') if nlp_result else None,
+            confirms_french=nlp_confirms_french,
+            soft_french=nlp_soft_french,
+            contradicts_french=nlp_contradicts_french,
+            strongly_contradicts=nlp_strongly_contradicts
+        )
+
+        # --- Etape 4: Alternatives ---
+        alternatives = []
+        if mode == DetectionMode.COMPLETE and content:
+            alternatives = await self.detect_alternative_languages(content)
+
+        debug_alternatives = DebugAlternativesInfo(
+            candidates_found=len(alternatives),
+            candidates=alternatives
+        )
+
+        # --- Run actual detection to get the result ---
+        # Si une page de challenge a été détectée, on override le résultat
+        # pour éviter un faux positif (le contenu analysé est celui du challenge, pas du site)
+        if challenge_detected:
+            result = DetectionResponse(
+                ok=False,
+                url=url,
+                method='challenge_page',
+                error=f'Contenu bloqué par {challenge_detected} (page de challenge/CAPTCHA détectée)'
+            )
+            decision = f"Challenge page detected ({challenge_detected}) — result overridden to ok=false"
+        else:
+            result = await self.check_page_if_french(content, mode)
+
+            # --- Determine which decision case was applied ---
+            decision = self._identify_decision_case(
+                nlp_confirms_french, is_strong_url, nlp_strongly_contradicts,
+                nlp_soft_french, nlp_available, nlp_contradicts_french,
+                url_indicates_french, html_indicates_french, alternatives,
+                result
+            )
+
+        debug_info = DebugInfo(
+            fetch=debug_fetch,
+            cleaning=debug_cleaning,
+            url_check=debug_url_check,
+            html_tags=debug_html_tags,
+            nlp=debug_nlp,
+            alternatives=debug_alternatives,
+            decision=decision
+        )
+
+        return DebugDetectionResponse(
+            result=result,
+            debug=debug_info
+        )
+
+    @staticmethod
+    def _identify_decision_case(
+        nlp_confirms_french: bool,
+        is_strong_url: bool,
+        nlp_strongly_contradicts: bool,
+        nlp_soft_french: bool,
+        nlp_available: bool,
+        nlp_contradicts_french: bool,
+        url_indicates_french: bool,
+        html_indicates_french: bool,
+        alternatives: list,
+        result: DetectionResponse
+    ) -> str:
+        """Identifie le cas de decision applique pour le debug."""
+        method = result.method
+
+        if nlp_confirms_french:
+            return "Case 1: NLP confirms French"
+
+        if is_strong_url:
+            if nlp_strongly_contradicts:
+                return "Case 2a: TLD .fr but NLP strongly contradicts"
+            return "Case 2b: TLD .fr trusted (NLP soft/skipped/weak disagree)"
+
+        if url_indicates_french and nlp_soft_french:
+            return "Case 3: Moderate URL signal + NLP soft French"
+
+        if html_indicates_french and nlp_soft_french:
+            return "Case 4: HTML indicates French + NLP soft French"
+
+        if not nlp_available and (html_indicates_french or url_indicates_french):
+            return "Case 5: NLP unavailable + HTML/URL signals"
+
+        reliable_alts = [a for a in alternatives if a.validated]
+        if reliable_alts:
+            return f"Case 6: Alternative French URL found ({reliable_alts[0].method})"
+
+        if nlp_available and (html_indicates_french or url_indicates_french):
+            return "Case 7: NLP does not confirm despite HTML/URL indicators"
+
+        if not nlp_available and 'french_lexical_signal' in method:
+            return "Case 8: Last resort — French lexical signal (NLP unavailable)"
+
+        return "Case 9: No French indicators found"
