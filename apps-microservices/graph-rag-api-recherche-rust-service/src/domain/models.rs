@@ -220,9 +220,13 @@ pub struct CaracteristiqueMatching {
     pub statut_matching: i32,
     pub id_caracteristique: i64,
     pub type_caracteristique: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valeur: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valeur_min: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valeur_max: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub unite: Option<String>,
     pub id_valeur: Vec<i64>,
     pub poids: i32,
@@ -335,6 +339,7 @@ pub struct NodeUpdateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct NodeResponse {
     pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
