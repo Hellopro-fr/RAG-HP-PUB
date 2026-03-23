@@ -275,6 +275,11 @@ class PrixExtractor:
             # 1. Construire le prompt avec le contenu du chunk
             prompt_text = self._build_prompt(chunk_metadata, category_name)
 
+            #stopper pour un test
+            self._log(f"[{chunk_index + 1}/{total_chunks}] Prompt: {prompt_text}")
+            raise Exception("Test")
+            return None
+
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
 
