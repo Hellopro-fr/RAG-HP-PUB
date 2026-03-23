@@ -8,12 +8,20 @@ RUN apt-get update && apt-get install -y protobuf-compiler libprotobuf-dev pkg-c
 
 WORKDIR /app
 
-# Copy manifests first for dependency caching
-COPY apps-microservices/graph-rag-api-recherche-rust-service/Cargo.toml ./
-COPY apps-microservices/graph-rag-api-recherche-rust-service/build.rs ./
-
-# Copy proto files
+# Copy proto files (shared across Python and Rust)
 COPY protos /protos
+
+# Copy shared Rust gRPC clients library
+COPY libs/rust-common-utils /app/libs/rust-common-utils
+
+# Copy manifests first for dependency caching
+COPY apps-microservices/graph-rag-api-recherche-rust-service/Cargo.toml ./service/Cargo.toml
+COPY apps-microservices/graph-rag-api-recherche-rust-service/build.rs ./service/build.rs
+
+# Patch the path dependency to match Docker layout
+RUN sed -i 's|path = "../../libs/rust-common-utils"|path = "/app/libs/rust-common-utils"|' /app/service/Cargo.toml
+
+WORKDIR /app/service
 
 # Create a dummy main.rs for dependency caching
 RUN mkdir -p src && echo "fn main() {}" > src/main.rs
@@ -40,7 +48,7 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 WORKDIR /app
 
 # Copy the compiled binary
-COPY --from=builder /app/target/release/graph-rag-api-recherche-rust-service /app/server
+COPY --from=builder /app/service/target/release/graph-rag-api-recherche-rust-service /app/server
 
 ENV RUST_LOG=info
 ENV RUST_BACKTRACE=1

@@ -137,6 +137,7 @@ pub struct MatchingCaracteristique {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MetadonneUtilisateurs {
+    pub pays: Option<String>,
     pub cp: Option<String>,
     pub id_pays: Option<Value>,
     pub typologie: Option<Value>,
@@ -302,9 +303,24 @@ pub struct MatchingResponse {
 // ================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PaysCouverture {
+    pub id_pays: String,
+    pub nom_pays: String,
+    pub couvre_partiel: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DepartementCouverture {
+    pub id_dept: String,
+    pub nom_dept: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct FournisseurGeoResponse {
-    pub id_fournisseur: String,
-    pub couverture: Value,
+    #[serde(default)]
+    pub pays: Vec<PaysCouverture>,
+    #[serde(default)]
+    pub departements: Vec<DepartementCouverture>,
 }
 
 // ================================

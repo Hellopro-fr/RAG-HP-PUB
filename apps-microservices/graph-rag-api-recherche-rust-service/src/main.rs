@@ -5,7 +5,7 @@ mod infrastructure;
 mod routers;
 mod services;
 
-use actix_web::{web, App, HttpServer, middleware};
+use actix_web::{web, App, HttpResponse, HttpServer};
 use tracing::info;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -20,6 +20,7 @@ use crate::domain::models::*;
         routers::query::query_handler,
         routers::recommendation::filter_handler,
         routers::recommendation::filter_by_caracteristique_handler,
+        routers::recommendation::score_specific_product,
         routers::recommendation::matching_handler,
         routers::product::get_product_caracteristiques,
         routers::product::delete_product,
@@ -37,6 +38,7 @@ use crate::domain::models::*;
         CypherQueryRequest,
         CypherQueryResponse,
         ComplexFilterRequest,
+        MatchingPayload,
         MatchingPayloadIdProduit,
         MatchingResponse,
         Produit,
@@ -46,6 +48,8 @@ use crate::domain::models::*;
         NodeUpdateRequest,
         NodeResponse,
         FournisseurGeoResponse,
+        PaysCouverture,
+        DepartementCouverture,
         ScoringOptions,
         MatchingOptions,
         MatchingOptionsScore,
@@ -57,12 +61,11 @@ use crate::domain::models::*;
         SchemaResponse,
     )),
     tags(
-        (name = "Query", description = "RAG intelligent search"),
+        (name = "Intelligent Search", description = "RAG intelligent search"),
         (name = "Recommendation", description = "Product filtering and matching"),
-        (name = "Product", description = "Product characteristics"),
-        (name = "Admin", description = "Admin operations"),
+        (name = "Produits", description = "Product characteristics"),
+        (name = "Admin", description = "Admin and graph node operations"),
         (name = "Fournisseur", description = "Supplier coverage"),
-        (name = "Nodes", description = "Graph node CRUD"),
     ),
     info(
         title = "Graph RAG API Recherche (Rust)",
@@ -104,6 +107,7 @@ async fn main() -> std::io::Result<()> {
             // Recommendation Router
             .service(routers::recommendation::filter_handler)
             .service(routers::recommendation::filter_by_caracteristique_handler)
+            .service(routers::recommendation::score_specific_product)
             .service(routers::recommendation::matching_handler)
             // Product Router
             .service(routers::product::get_product_caracteristiques)
@@ -118,6 +122,10 @@ async fn main() -> std::io::Result<()> {
             .service(routers::nodes::update_node)
             .service(routers::nodes::get_schema)
             .service(routers::nodes::get_node)
+            // Health
+            .route("/health", web::get().to(|| async {
+                HttpResponse::Ok().json(serde_json::json!({"status": "ok"}))
+            }))
     })
     .bind(format!("0.0.0.0:{}", port))?
     .run()
