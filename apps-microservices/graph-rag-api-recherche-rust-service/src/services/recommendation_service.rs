@@ -383,13 +383,17 @@ impl RecommendationService {
     ) -> Vec<CaracteristiqueMatching> {
         let mut caracs = vec![];
         for detail in details {
-            let q_weight = detail.get("q_weight").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+            let q_weight = detail.get("q_weight")
+                .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+                .unwrap_or(1) as i32;
             let constraints = detail.get("constraints").and_then(|c| c.as_array());
             if let Some(constraints) = constraints {
                 for constraint in constraints {
                     let cid = constraint.get("cid").and_then(|v| v.as_str()).unwrap_or("0");
                     let c_score = constraint.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    let c_weight = constraint.get("c_weight_sum").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+                    let c_weight = constraint.get("c_weight_sum")
+                        .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+                        .unwrap_or(1) as i32;
                     let matched_nodes = constraint.get("matched_nodes").and_then(|v| v.as_array());
 
                     let statut = if c_score >= 0.8 {
@@ -437,7 +441,7 @@ impl RecommendationService {
 
                             type_carac = if type_donnee == "numeric" || type_donnee == "numeric_range" { 1 } else { 2 };
 
-                            if let Some(id_val) = node.get("id_source_valeur").and_then(|v| v.as_i64()) {
+                            if let Some(id_val) = node.get("id_source_valeur").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))) {
                                 id_valeurs.push(id_val);
                             }
                         }
@@ -693,7 +697,7 @@ impl RecommendationService {
         for row in &results {
             if let (Some(rid), Some(ordre)) = (
                 row.get("rid").and_then(|v| v.as_str()),
-                row.get("ordre").and_then(|v| v.as_i64()),
+                row.get("ordre").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))),
             ) {
                 rid_to_order.insert(rid.to_string(), ordre);
             }
