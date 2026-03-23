@@ -188,6 +188,7 @@ pub struct MatchingPayload {
     pub top_k: i32,
     pub id_categorie: Option<Value>,
     pub options: Option<MatchingOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub champs_sortie: Option<Vec<String>>,
 }
 
@@ -199,6 +200,7 @@ pub struct MatchingPayloadIdProduit {
     pub id_categorie: Option<Value>,
     pub id_produit: Option<Value>,
     pub options: Option<MatchingOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub champs_sortie: Option<Vec<String>>,
     pub metadonnee_utilisateurs: Option<MetadonneUtilisateurs>,
     pub scoring: Option<ScoringOptions>,
