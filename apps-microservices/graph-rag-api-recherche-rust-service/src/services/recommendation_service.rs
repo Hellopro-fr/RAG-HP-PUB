@@ -64,7 +64,7 @@ impl RecommendationService {
         "#;
         let params = json!({ "ids": char_ids });
         let results = CLIENTS.execute_cypher(query, &params).await;
-        debug!("[recommendation] get_characteristic_labels: char_ids={:?}, gRPC returned {:?} results", char_ids, results);
+        // debug!("[recommendation] get_characteristic_labels: char_ids={:?}, gRPC returned {:?} results", char_ids, results);
         let mut map = HashMap::new();
         for row in results {
             if let (Some(id), Some(label)) = (
@@ -993,9 +993,9 @@ impl RecommendationService {
             .replace("{liste_produits_json}", &liste_produits_json);
 
         // Call Gemini
-        debug!("[RERANK] System prompt size: {} chars", system_prompt.len());
+        // debug!("[RERANK] System prompt size: {} chars", system_prompt.len());
         debug!("[RERANK] Calling Gemini LLM for reranking...");
-        debug!("[RERANK] Liste produits: {}", liste_produits_json);
+        // debug!("[RERANK] Liste produits: {}", liste_produits_json);
         let llm_response = GEMINI_CLIENT.generate_rerank_response(&system_prompt, temperature).await;
         if llm_response.is_none() {
             return (top_produit.to_vec(), liste_produit.to_vec(), vec![]);
