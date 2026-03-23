@@ -5,6 +5,7 @@ Traitement parallèle asynchrone avec asyncio.
 import time
 import logging
 import asyncio
+import contextvars
 from typing import Dict, List, Any, Optional
 
 from app.core.api_client import HelloProAPIClient, GeminiProvider, DeepSeek
@@ -27,34 +28,61 @@ logger = logging.getLogger(__name__)
 
 class PrixExtractor:
     """Extracteur de prix via RAG (Milvus) + LLM (Gemini/DeepSeek)"""
-    
+
+    _current_chunk_id = contextvars.ContextVar('current_chunk_id', default=None)
+
     # ID du prompt statique
     PROMPT_ID = settings.PROMPT_ID  # "140"
 
     # ID process
     ID_PROCESS = "37"
-    
+
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
-    
+
     # Nombre max de traitements parallèles pour les chunks
     MAX_PARALLEL_CHUNKS = 5
 
     ETAPE = "11"
-    
+
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
         self.prompt_config = None  # Sera chargé lors du premier traitement
         self.info_q1 = ""  # Sera chargé lors du traitement (Question 1)
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL_CHUNKS)
+        # Buffer de logs par chunk pour éviter l'entrelacement en mode parallèle
+        self._chunk_log_buffers: Dict[str, List[str]] = {}
 
-    
+
     def _log(self, message: str):
-        """Écrit dans le fichier de tracking et les logs"""
-        if self.tracking_file:
-            utils.write_log(self.tracking_file, message)
-        logger.info(message)
+        """
+        Écrit dans le fichier de tracking et les logs.
+        En mode parallèle, bufferise les logs par chunk pour éviter l'entrelacement.
+        """
+        chunk_id = self._current_chunk_id.get(None)
+
+        if chunk_id is not None:
+            prefixed = f"[C-{chunk_id}] {message}"
+            if chunk_id not in self._chunk_log_buffers:
+                self._chunk_log_buffers[chunk_id] = []
+            self._chunk_log_buffers[chunk_id].append(prefixed)
+            logger.info(prefixed)
+        else:
+            if self.tracking_file:
+                utils.write_log(self.tracking_file, message)
+            logger.info(message)
+
+    def _flush_chunk_logs(self, chunk_id: str):
+        """
+        Écrit tous les logs bufferisés d'un chunk d'un seul bloc dans le fichier de tracking.
+        Garantit que les logs d'un même chunk restent groupés et lisibles.
+        """
+        if chunk_id in self._chunk_log_buffers:
+            logs = self._chunk_log_buffers.pop(chunk_id)
+            if self.tracking_file and logs:
+                block = "\n".join(logs)
+                utils.write_log(self.tracking_file, block)
 
     def _clean_q1_data(self, q1_response: dict) -> dict:
         """
@@ -269,9 +297,12 @@ class PrixExtractor:
         async with self._semaphore:
             chunk_id = str(chunk.get("id", chunk.get("chunk_id", f"unknown_{chunk_index}")))
             # Les données Milvus sont dans metadata.entity
-            metadata = chunk.get("metadata", {})            
+            metadata = chunk.get("metadata", {})
             chunk_metadata = metadata.get("entity", metadata)
             chunk_content = chunk_metadata.get("text", "")
+
+            # Activer le contexte chunk pour bufferiser les logs
+            token = self._current_chunk_id.set(chunk_id)
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
             self._log(f"[{chunk_index + 1}/{total_chunks}] Chunk : {chunk}")
@@ -288,6 +319,8 @@ class PrixExtractor:
             if "code" in result:
                 error_msg = str(result.get("error", "Erreur LLM inconnue"))
                 self._log(f"[{chunk_index + 1}/{total_chunks}] ❌ Erreur LLM chunk {chunk_id}: {error_msg}")
+                self._flush_chunk_logs(chunk_id)
+                self._current_chunk_id.reset(token)
                 raise Exception(f"Erreur LLM pour chunk {chunk_id}: {error_msg}")
 
             # 3. Extraire la réponse
@@ -296,7 +329,7 @@ class PrixExtractor:
 
             # Tenter d'extraire le JSON de la réponse
             prix_data_raw = utils.extract_json_from_text(response_text)
-            if not prix_data_raw:
+            if prix_data_raw is None:
                 self._log("ERREUR: Impossible d'extraire le JSON")
                 await self.api_client.post(
                     "prix",
@@ -310,7 +343,22 @@ class PrixExtractor:
                         "tracking_file": self.tracking_file
                     }
                 )
+                self._flush_chunk_logs(chunk_id)
+                self._current_chunk_id.reset(token)
                 raise Exception(f"Impossible d'extraire le JSON de la réponse LLM pour chunk {chunk_id}")
+
+            # Liste vide = le LLM n'a trouvé aucun prix dans ce chunk → skip
+            if isinstance(prix_data_raw, list) and len(prix_data_raw) == 0:
+                self._log(f"[{chunk_index + 1}/{total_chunks}] ⏭️ Chunk {chunk_id} — aucun prix trouvé par le LLM")
+                self._flush_chunk_logs(chunk_id)
+                self._current_chunk_id.reset(token)
+                return ItemResult(
+                    item_id=chunk_id,
+                    source=settings.MILVUS_SOURCE,
+                    content=chunk_content,
+                    prix_data=None,
+                    status="skipped"
+                )
 
             # 3b. Valider et construire le payload structuré
             payload = self._validate_and_build_payload(
@@ -321,6 +369,8 @@ class PrixExtractor:
                 chunk_metadata=chunk_metadata
             )
             if payload is None:
+                self._flush_chunk_logs(chunk_id)
+                self._current_chunk_id.reset(token)
                 raise ValueError(
                     f"Validation du payload échouée (champs obligatoires manquants) : "
                     f"Catégorie {id_categorie} - Chunk {chunk_id} - Data : {prix_data_raw}"
@@ -329,6 +379,8 @@ class PrixExtractor:
             prix_data = payload.dict()
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] ✅ Chunk {chunk_id} validé")
+            self._flush_chunk_logs(chunk_id)
+            self._current_chunk_id.reset(token)
             return ItemResult(
                 item_id=chunk_id,
                 source=settings.MILVUS_SOURCE,
@@ -456,6 +508,10 @@ class PrixExtractor:
         
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
 
+        # Flush tous les logs bufferisés des chunks (écriture groupée par chunk)
+        for chunk_id_key in list(self._chunk_log_buffers.keys()):
+            self._flush_chunk_logs(chunk_id_key)
+
         #test 
         self._log(f"Résultats: {results}")
         raise Exception("Test")
@@ -465,6 +521,7 @@ class PrixExtractor:
 
         # Collecter et compter les résultats — toute exception lève immédiatement
         success_count = 0
+        skipped_count = 0
         error_count = 0
         item_results: List[ItemResult] = []
         for r in results:
@@ -472,10 +529,12 @@ class PrixExtractor:
                 # Propager l'exception : arrêt immédiat du traitement de la catégorie
                 self._log(f"❌ Exception critique: {r}")
                 raise r
-            elif isinstance(r, ItemResult):
-                item_results.append(r)
+            elif isinstance(r, ItemResult):                
                 if r.status == "success":
+                    item_results.append(r)
                     success_count += 1
+                elif r.status == "skipped":
+                    skipped_count += 1
                 else:
                     error_count += 1
                     self._log(f"❌ Chunk en erreur: {r.item_id} — {r.error_message}")

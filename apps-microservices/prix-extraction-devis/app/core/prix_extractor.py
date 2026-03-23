@@ -5,6 +5,7 @@ Traitement parallèle asynchrone avec asyncio.
 import time
 import logging
 import asyncio
+import contextvars
 from typing import Dict, List, Any, Optional
 
 from app.core.api_client import HelloProAPIClient, GeminiProvider, DeepSeek
@@ -41,6 +42,8 @@ logger = logging.getLogger(__name__)
 class PrixExtractor:
     """Extracteur de prix depuis les données devis via LLM (Gemini/DeepSeek)"""
 
+    _current_item_id = contextvars.ContextVar('current_item_id', default=None)
+
     # ID du prompt statique - Devis
     PROMPT_ID = settings.PROMPT_ID  # "73"
 
@@ -60,12 +63,37 @@ class PrixExtractor:
         self.tracking_file = None
         self.prompt_config = None  # Sera chargé lors du premier traitement
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL_ITEMS)
+        # Buffer de logs par item pour éviter l'entrelacement en mode parallèle
+        self._item_log_buffers: Dict[str, List[str]] = {}
 
     def _log(self, message: str):
-        """Écrit dans le fichier de tracking et les logs"""
-        if self.tracking_file:
-            utils.write_log(self.tracking_file, message)
-        logger.info(message)
+        """
+        Écrit dans le fichier de tracking et les logs.
+        En mode parallèle, bufferise les logs par item pour éviter l'entrelacement.
+        """
+        item_id = self._current_item_id.get(None)
+
+        if item_id is not None:
+            prefixed = f"[I-{item_id}] {message}"
+            if item_id not in self._item_log_buffers:
+                self._item_log_buffers[item_id] = []
+            self._item_log_buffers[item_id].append(prefixed)
+            logger.info(prefixed)
+        else:
+            if self.tracking_file:
+                utils.write_log(self.tracking_file, message)
+            logger.info(message)
+
+    def _flush_item_logs(self, item_id: str):
+        """
+        Écrit tous les logs bufferisés d'un item d'un seul bloc dans le fichier de tracking.
+        Garantit que les logs d'un même item restent groupés et lisibles.
+        """
+        if item_id in self._item_log_buffers:
+            logs = self._item_log_buffers.pop(item_id)
+            if self.tracking_file and logs:
+                block = "\n".join(logs)
+                utils.write_log(self.tracking_file, block)
 
     async def _load_prompt(self, id_categorie: str):
         """Charge le prompt une seule fois au début du traitement"""
@@ -258,6 +286,9 @@ class PrixExtractor:
             item_content = str(item.get("content", item.get("text", item.get("data", ""))))
             source_chunk_id = str(item.get("source_chunk_id", item.get("id", f"item_{item_index}")))
 
+            # Activer le contexte item pour bufferiser les logs
+            token = self._current_item_id.set(item_id)
+
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
 
             # 1. Construire le prompt avec le contenu de l'item
@@ -270,6 +301,8 @@ class PrixExtractor:
             if "code" in result:
                 error_msg = str(result.get("error", "Erreur LLM inconnue"))
                 self._log(f"[{item_index + 1}/{total_items}] ❌ Erreur LLM item {item_id}: {error_msg}")
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
                 raise Exception(f"Erreur LLM pour item {item_id}: {error_msg}")
 
             # 3. Extraire la réponse
@@ -292,6 +325,8 @@ class PrixExtractor:
                         "tracking_file": self.tracking_file
                     }
                 )
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
                 raise Exception(f"Impossible d'extraire le JSON de la réponse LLM pour item {item_id}")
 
             # 3b. Valider et construire le payload structuré
@@ -304,6 +339,8 @@ class PrixExtractor:
                 item_metadata=item.get("metadata", {})
             )
             if payload is None:
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
                 raise Exception(
                     f"Validation du payload échouée (champs obligatoires manquants) : "
                     f"Catégorie {id_categorie} - Item {item_id} - Data : {prix_data_raw}"
@@ -312,6 +349,8 @@ class PrixExtractor:
             prix_data = payload.dict()
 
             self._log(f"[{item_index + 1}/{total_items}] ✅ Item {item_id} validé")
+            self._flush_item_logs(item_id)
+            self._current_item_id.reset(token)
             return ItemResult(
                 item_id=item_id,
                 source="devis",
@@ -553,6 +592,10 @@ class PrixExtractor:
         ]
 
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Flush tous les logs bufferisés des items (écriture groupée par item)
+        for item_id_key in list(self._item_log_buffers.keys()):
+            self._flush_item_logs(item_id_key)
 
         elapsed = time.time() - start_time
 
