@@ -901,7 +901,7 @@ class CaracterisationProduitGenerator:
             "caracterisation",
             "produits",
             "get",
-            {"id_categorie": id_categorie}
+            {"id_categorie": id_categorie , "is_script": True}
         )
         
         if not produits:

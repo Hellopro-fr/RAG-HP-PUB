@@ -16,7 +16,7 @@ use crate::services::node_service::NodeService;
     responses(
         (status = 200, description = "Updated node")
     ),
-    tag = "Nodes"
+    tag = "Admin"
 )]
 #[put("/nodes/{label}/{id}")]
 pub async fn update_node(
@@ -24,29 +24,37 @@ pub async fn update_node(
     body: web::Json<NodeUpdateRequest>,
 ) -> HttpResponse {
     let (label, id) = path.into_inner();
-    let (success, data, error) = NodeService::update_node(&label, &id, &body.properties).await;
+    let (success, data, _error) = NodeService::update_node(&label, &id, &body.properties).await;
     if success {
-        HttpResponse::Ok().json(json!({ "success": true, "data": data }))
+        HttpResponse::Ok().json(json!({
+            "message": format!("Node {} {} updated successfully.", label, id),
+            "node": data,
+        }))
     } else {
-        HttpResponse::BadRequest().json(json!({ "success": false, "error": error }))
+        HttpResponse::NotFound().json(json!({
+            "detail": format!("Node {} with ID {} not found.", label, id)
+        }))
     }
 }
 
-/// GET /nodes/{label}/schema — Get schema for a node label.
+/// GET /nodes/{label} — Get schema for a node label.
 #[utoipa::path(
     get,
-    path = "/nodes/{label}/schema",
+    path = "/nodes/{label}",
     params(("label" = String, Path, description = "Node label")),
     responses(
         (status = 200, description = "Node schema")
     ),
-    tag = "Nodes"
+    tag = "Admin"
 )]
-#[get("/nodes/{label}/schema")]
+#[get("/nodes/{label}")]
 pub async fn get_schema(path: web::Path<String>) -> HttpResponse {
     let label = path.into_inner();
     let schema = NodeService::get_schema(&label).await;
-    HttpResponse::Ok().json(json!({ "schema": schema }))
+    HttpResponse::Ok().json(json!({
+        "label": label,
+        "schema": schema,
+    }))
 }
 
 /// GET /nodes/{label}/{id} — Get a specific node.
@@ -60,16 +68,27 @@ pub async fn get_schema(path: web::Path<String>) -> HttpResponse {
     responses(
         (status = 200, description = "Node data")
     ),
-    tag = "Nodes"
+    tag = "Admin"
 )]
 #[get("/nodes/{label}/{id}")]
 pub async fn get_node(path: web::Path<(String, String)>) -> HttpResponse {
     let (label, id) = path.into_inner();
     match NodeService::get_node(&label, &id).await {
-        Some(node) => HttpResponse::Ok().json(json!({ "success": true, "data": node })),
-        None => HttpResponse::NotFound().json(json!({
-            "success": false,
-            "error": format!("Node {}:{} not found", label, id)
+        Some(node) => HttpResponse::Ok().json(json!({
+            "code": 200,
+            "data": {
+                "label": label,
+                "id": id,
+                "node": node,
+            },
+        })),
+        None => HttpResponse::Ok().json(json!({
+            "code": 404,
+            "data": {
+                "label": label,
+                "id": id,
+                "node": null,
+            },
         })),
     }
 }

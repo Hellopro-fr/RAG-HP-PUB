@@ -1786,7 +1786,7 @@ services:
       NEO4J_DATABASE: ${NEO4J_DATABASE}
       HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
       LLM_SERVICE_URL: llm-service:50051
-      RUST_LOG: graph_rag_api_recherche_rust_service::infrastructure::clients=debug,info
+      RUST_LOG: graph_rag_api_recherche_rust_service=debug
     networks:
       - services-net
       - services-ext-net
@@ -2006,6 +2006,8 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       MAX_CONCURRENCY: 3
+    env_file:
+      - .env
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking
     deploy:

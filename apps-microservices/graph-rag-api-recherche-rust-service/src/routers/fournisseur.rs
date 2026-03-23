@@ -3,48 +3,50 @@ use serde_json::json;
 
 use crate::services::fournisseur_service::FournisseurService;
 
-/// GET /fournisseurs/{fournisseur_id}/couverture —
+/// GET /fournisseur/{id_fournisseur} —
 /// Get geographic coverage by fournisseur ID.
 #[utoipa::path(
     get,
-    path = "/fournisseurs/{fournisseur_id}/couverture",
-    params(("fournisseur_id" = String, Path, description = "Fournisseur ID")),
+    path = "/fournisseur/{id_fournisseur}",
+    params(("id_fournisseur" = String, Path, description = "Fournisseur ID")),
     responses(
         (status = 200, description = "Fournisseur geographic coverage")
     ),
     tag = "Fournisseur"
 )]
-#[get("/fournisseurs/{fournisseur_id}/couverture")]
+#[get("/fournisseur/{id_fournisseur}")]
 pub async fn get_couverture_by_fournisseur(
     path: web::Path<String>,
 ) -> HttpResponse {
-    let fournisseur_id = path.into_inner();
-    let couverture = FournisseurService::get_couverture_by_fournisseur(&fournisseur_id).await;
-    HttpResponse::Ok().json(json!({
-        "id_fournisseur": fournisseur_id,
-        "couverture": couverture,
-    }))
+    let id_fournisseur = path.into_inner();
+    match FournisseurService::get_couverture_by_fournisseur(&id_fournisseur).await {
+        Some(response) => HttpResponse::Ok().json(response),
+        None => HttpResponse::NotFound().json(json!({
+            "detail": format!("Fournisseur with ID '{}' not found.", id_fournisseur)
+        })),
+    }
 }
 
-/// GET /fournisseurs/produit/{produit_id}/couverture —
+/// GET /fournisseur/produit/{id_produit} —
 /// Get geographic coverage by product ID.
 #[utoipa::path(
     get,
-    path = "/fournisseurs/produit/{produit_id}/couverture",
-    params(("produit_id" = String, Path, description = "Product ID")),
+    path = "/fournisseur/produit/{id_produit}",
+    params(("id_produit" = String, Path, description = "Product ID")),
     responses(
         (status = 200, description = "Fournisseur geographic coverage for product")
     ),
     tag = "Fournisseur"
 )]
-#[get("/fournisseurs/produit/{produit_id}/couverture")]
+#[get("/fournisseur/produit/{id_produit}")]
 pub async fn get_couverture_by_produit(
     path: web::Path<String>,
 ) -> HttpResponse {
-    let produit_id = path.into_inner();
-    let couverture = FournisseurService::get_couverture_by_produit(&produit_id).await;
-    HttpResponse::Ok().json(json!({
-        "id_produit": produit_id,
-        "couverture": couverture,
-    }))
+    let id_produit = path.into_inner();
+    match FournisseurService::get_couverture_by_produit(&id_produit).await {
+        Some(response) => HttpResponse::Ok().json(response),
+        None => HttpResponse::NotFound().json(json!({
+            "detail": format!("Geo coverage not found for product '{}'.", id_produit)
+        })),
+    }
 }

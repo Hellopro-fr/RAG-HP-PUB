@@ -12,7 +12,7 @@ use crate::services::rag_service::AgenticRAGService;
     responses(
         (status = 200, description = "Query response with answer and sources")
     ),
-    tag = "Query"
+    tag = "Intelligent Search"
 )]
 #[post("/query")]
 pub async fn query_handler(body: web::Json<QueryRequest>) -> HttpResponse {

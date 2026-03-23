@@ -74,7 +74,7 @@ impl Settings {
             openai_api_key: env_or_opt("OPENAI_API_KEY"),
             gemini_api_key: env_or_opt("GEMINI_API_KEY"),
             anthropic_api_key: env_or_opt("ANTHROPIC_API_KEY"),
-            llm_model_name: env_or("LLM_MODEL_NAME", "gemini-1.5-pro"),
+            llm_model_name: env_or("LLM_MODEL_NAME", "gemini-3.1-flash-lite-preview"),
 
             similarity_threshold: env_or("SIMILARITY_THRESHOLD", "0.75")
                 .parse()

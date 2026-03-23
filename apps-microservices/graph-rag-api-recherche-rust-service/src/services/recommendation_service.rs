@@ -1,13 +1,30 @@
 use regex::Regex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use std::time::Instant;
-use tracing::{error, info, warn};
+use tokio::sync::RwLock;
+use tracing::{debug, error, info, trace, warn};
 
 use crate::domain::models::*;
 use crate::infrastructure::clients::CLIENTS;
 use crate::infrastructure::gemini_client::GEMINI_CLIENT;
 use crate::infrastructure::hellopro_api_client::HELLOPRO_CLIENT;
+
+// Static regex (Opt #6): compiled once instead of every call
+fn html_tag_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"<[^>]+>").unwrap())
+}
+
+fn whitespace_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\s+").unwrap())
+}
+
+// Label cache (Opt #5): TTL-based cache for characteristic labels
+static LABEL_CACHE: OnceLock<RwLock<Option<(HashMap<String, String>, Instant)>>> = OnceLock::new();
+const LABEL_CACHE_TTL_SECS: u64 = 3600; // 1 hour
 
 /// Recommendation Service: implements V4 Hybrid Recommendation Logic.
 /// This is the Rust port of Python's recommendation_service.py (2414 lines).
@@ -52,11 +69,27 @@ impl RecommendationService {
         }
     }
 
-    /// Get characteristic labels from the graph DB.
+    /// Get characteristic labels from the graph DB (with TTL cache).
     async fn get_characteristic_labels(char_ids: &[String]) -> HashMap<String, String> {
         if char_ids.is_empty() {
             return HashMap::new();
         }
+
+        // Check cache (Opt #5)
+        let cache = LABEL_CACHE.get_or_init(|| RwLock::new(None));
+        {
+            let guard = cache.read().await;
+            if let Some((ref cached_map, ref cached_at)) = *guard {
+                if cached_at.elapsed().as_secs() < LABEL_CACHE_TTL_SECS {
+                    // Check if all requested IDs are in cache
+                    if char_ids.iter().all(|id| cached_map.contains_key(id)) {
+                        debug!("[recommendation] get_characteristic_labels: cache hit ({} labels)", cached_map.len());
+                        return cached_map.clone();
+                    }
+                }
+            }
+        }
+
         let query = r#"
             MATCH (c:CaracteristiqueTechnique)
             WHERE c.id_source_caracteristique IN $ids
@@ -73,10 +106,42 @@ impl RecommendationService {
                 map.insert(id.to_string(), label.to_string());
             }
         }
+        debug!("[recommendation] get_characteristic_labels: resolved {} labels (updating cache)", map.len());
+
+        // Update cache, merging with existing entries
+        {
+            let mut guard = cache.write().await;
+            if let Some((ref mut cached_map, ref mut cached_at)) = *guard {
+                cached_map.extend(map.iter().map(|(k, v)| (k.clone(), v.clone())));
+                *cached_at = Instant::now();
+            } else {
+                *guard = Some((map.clone(), Instant::now()));
+            }
+        }
+
         map
     }
 
-    /// Normalize a single constraint's numeric values in parallel.
+    /// Helper: extract (key, val_str) pairs for normalization from a JSON object
+    fn extract_normalize_inputs(raw: &Value) -> Vec<(&'static str, String)> {
+        let mut inputs = vec![];
+        for k in &["min", "max", "exact"] {
+            if let Some(val) = raw.get(*k) {
+                if !val.is_null() {
+                    let v = Self::extract_scalar(val);
+                    let val_str = match &v {
+                        Value::Number(n) => n.to_string(),
+                        Value::String(s) => s.clone(),
+                        _ => v.to_string(),
+                    };
+                    inputs.push((*k, val_str));
+                }
+            }
+        }
+        inputs
+    }
+
+    /// Normalize a single constraint's numeric values in parallel (Opt #2).
     async fn normalize_single_constraint(
         c: &Value,
         label: &str,
@@ -90,61 +155,57 @@ impl RecommendationService {
         let mut target_num: Option<Value> = None;
         let mut blocking_num: Option<Value> = None;
 
-        // Normalize target numeric
-        if let Some(raw_target) = c.get("valeurs_cibles") {
-            if raw_target.is_object() {
-                let mut norm = json!({"unit": null, "min": null, "max": null, "exact": null});
-                for k in &["min", "max", "exact"] {
-                    if let Some(val) = raw_target.get(k) {
-                        if !val.is_null() {
-                            let v = Self::extract_scalar(val);
-                            let val_str = match &v {
-                                Value::Number(n) => n.to_string(),
-                                Value::String(s) => s.clone(),
-                                _ => v.to_string(),
-                            };
-                            if let Some(result) = CLIENTS
-                                .normalize_quantity(&val_str, Some(unit), label)
-                                .await
-                            {
-                                norm[k] = json!(result.valeur_canonique);
-                                norm["unit"] = json!(result.unite_canonique);
-                            }
-                        }
-                    }
+        // Collect all normalization inputs, then run them in parallel
+        let target_inputs = c.get("valeurs_cibles")
+            .filter(|v| v.is_object())
+            .map(|v| Self::extract_normalize_inputs(v))
+            .unwrap_or_default();
+
+        let blocking_inputs = c.get("valeurs_bloquantes")
+            .filter(|v| v.is_object())
+            .map(|v| Self::extract_normalize_inputs(v))
+            .unwrap_or_default();
+
+        // Run ALL normalization calls (target + blocking) in parallel
+        let all_inputs: Vec<(&str, &str, String)> = target_inputs.iter()
+            .map(|(k, v)| ("target", *k, v.clone()))
+            .chain(blocking_inputs.iter().map(|(k, v)| ("blocking", *k, v.clone())))
+            .collect();
+
+        let all_results = futures::future::join_all(
+            all_inputs.iter().map(|(_group, _k, val_str)| {
+                CLIENTS.normalize_quantity(val_str, Some(unit), label)
+            })
+        ).await;
+
+        // Apply results back to target/blocking norms
+        if !target_inputs.is_empty() {
+            let mut norm = json!({"unit": null, "min": null, "max": null, "exact": null});
+            let target_count = target_inputs.len();
+            for (i, result) in all_results.iter().take(target_count).enumerate() {
+                if let Some(ref r) = result {
+                    let k = target_inputs[i].0;
+                    norm[k] = json!(r.valeur_canonique);
+                    norm["unit"] = json!(r.unite_canonique);
                 }
-                if !norm["unit"].is_null() {
-                    target_num = Some(norm);
-                }
+            }
+            if !norm["unit"].is_null() {
+                target_num = Some(norm);
             }
         }
 
-        // Normalize blocking numeric
-        if let Some(raw_blocking) = c.get("valeurs_bloquantes") {
-            if raw_blocking.is_object() {
-                let mut norm = json!({"unit": null, "min": null, "max": null, "exact": null});
-                for k in &["min", "max", "exact"] {
-                    if let Some(val) = raw_blocking.get(k) {
-                        if !val.is_null() {
-                            let v = Self::extract_scalar(val);
-                            let val_str = match &v {
-                                Value::Number(n) => n.to_string(),
-                                Value::String(s) => s.clone(),
-                                _ => v.to_string(),
-                            };
-                            if let Some(result) = CLIENTS
-                                .normalize_quantity(&val_str, Some(unit), label)
-                                .await
-                            {
-                                norm[k] = json!(result.valeur_canonique);
-                                norm["unit"] = json!(result.unite_canonique);
-                            }
-                        }
-                    }
+        if !blocking_inputs.is_empty() {
+            let mut norm = json!({"unit": null, "min": null, "max": null, "exact": null});
+            let target_count = target_inputs.len();
+            for (i, result) in all_results.iter().skip(target_count).enumerate() {
+                if let Some(ref r) = result {
+                    let k = blocking_inputs[i].0;
+                    norm[k] = json!(r.valeur_canonique);
+                    norm["unit"] = json!(r.unite_canonique);
                 }
-                if !norm["unit"].is_null() {
-                    blocking_num = Some(norm);
-                }
+            }
+            if !norm["unit"].is_null() {
+                blocking_num = Some(norm);
             }
         }
 
@@ -229,22 +290,24 @@ impl RecommendationService {
         let critique_weight = score_options.and_then(|s| s.critique).unwrap_or(5);
         let secondaire_weight = score_options.and_then(|s| s.secondaire).unwrap_or(1);
 
-        let mut grouped: HashMap<String, Value> = HashMap::new();
-
-        for c in &request.liste_caracteristique {
+        // Opt #1: Parallelize all normalize_single_constraint calls
+        let normalize_futures: Vec<_> = request.liste_caracteristique.iter().map(|c| {
             let cid = c.id_caracteristique.to_string().trim_matches('"').to_string();
-            let label = label_map.get(&cid).map(|s| s.as_str()).unwrap_or("dimensionless");
+            let label = label_map.get(&cid).cloned().unwrap_or_else(|| "dimensionless".to_string());
             let c_val = serde_json::to_value(c).unwrap_or(json!({}));
-            let mut normalized = Self::normalize_single_constraint(&c_val, label).await;
-
-            let poids_carac = c.poids_caracteristique.as_deref().unwrap_or("critique");
-            let c_weight = if poids_carac == "secondaire" {
-                secondaire_weight
-            } else {
-                critique_weight
-            };
+            let poids_carac = c.poids_caracteristique.as_deref().unwrap_or("critique").to_string();
+            let c_weight = if poids_carac == "secondaire" { secondaire_weight } else { critique_weight };
             let q_weight = c.poids_question.unwrap_or(1);
+            async move {
+                let normalized = Self::normalize_single_constraint(&c_val, &label).await;
+                (cid, c_weight, q_weight, normalized)
+            }
+        }).collect();
 
+        let norm_results = futures::future::join_all(normalize_futures).await;
+
+        let mut grouped: HashMap<String, Value> = HashMap::new();
+        for (cid, c_weight, q_weight, mut normalized) in norm_results {
             if let Some(obj) = normalized.as_object_mut() {
                 obj.insert("c_weight".to_string(), json!(c_weight));
             }
@@ -381,13 +444,17 @@ impl RecommendationService {
     ) -> Vec<CaracteristiqueMatching> {
         let mut caracs = vec![];
         for detail in details {
-            let q_weight = detail.get("q_weight").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+            let q_weight = detail.get("q_weight")
+                .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+                .unwrap_or(1) as i32;
             let constraints = detail.get("constraints").and_then(|c| c.as_array());
             if let Some(constraints) = constraints {
                 for constraint in constraints {
                     let cid = constraint.get("cid").and_then(|v| v.as_str()).unwrap_or("0");
                     let c_score = constraint.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    let c_weight = constraint.get("c_weight_sum").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+                    let c_weight = constraint.get("c_weight_sum")
+                        .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+                        .unwrap_or(1) as i32;
                     let matched_nodes = constraint.get("matched_nodes").and_then(|v| v.as_array());
 
                     let statut = if c_score >= 0.8 {
@@ -408,6 +475,7 @@ impl RecommendationService {
                     let mut unite = None;
                     let mut type_carac = 2;
                     let mut id_valeurs = vec![];
+                    let mut statut = statut;
 
                     if let Some(nodes) = matched_nodes {
                         if !nodes.is_empty() {
@@ -423,9 +491,10 @@ impl RecommendationService {
 
                             let type_donnee = node.get("type_donnee").and_then(|v| v.as_str()).unwrap_or("");
                             if type_donnee != "text" {
-                                valeur = node.get("valeur").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                valeur_min = node.get("valeur_min").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                valeur_max = node.get("valeur_max").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                // Use value_to_string to handle both string and numeric values (matches Python's str())
+                                valeur = node.get("valeur").and_then(|v| if v.is_null() { None } else { Some(v.to_string().trim_matches('"').to_string()) });
+                                valeur_min = node.get("valeur_min").and_then(|v| if v.is_null() { None } else { Some(v.to_string().trim_matches('"').to_string()) });
+                                valeur_max = node.get("valeur_max").and_then(|v| if v.is_null() { None } else { Some(v.to_string().trim_matches('"').to_string()) });
                             }
                             unite = node
                                 .get("unite")
@@ -435,8 +504,20 @@ impl RecommendationService {
 
                             type_carac = if type_donnee == "numeric" || type_donnee == "numeric_range" { 1 } else { 2 };
 
-                            if let Some(id_val) = node.get("id_source_valeur").and_then(|v| v.as_i64()) {
-                                id_valeurs.push(id_val);
+                            // Handle id_source_valeur: try numeric first, then string conversion (matches Python's int())
+                            let id_source_val = node.get("id_source_valeur");
+                            let has_id_source = id_source_val.map(|v| !v.is_null()).unwrap_or(false);
+                            if has_id_source {
+                                if let Some(id_val) = id_source_val.and_then(|v| {
+                                    v.as_i64()
+                                        .or_else(|| v.as_f64().map(|f| f as i64))
+                                        .or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
+                                }) {
+                                    id_valeurs.push(id_val);
+                                }
+                            } else if c_score > 0.0 && (type_donnee == "numeric" || type_donnee == "numeric_range") {
+                                // Match Python: if no id_source_valeur but positive score on numeric type, set statut to Matche
+                                statut = 1;
                             }
                         }
                     }
@@ -626,6 +707,10 @@ impl RecommendationService {
         });
 
         let results = CLIENTS.execute_cypher(&cypher_query, &params).await;
+        debug!("[recommendation] get_products_by_complex_filters: gRPC returned {} results", results.len());
+        if !results.is_empty() {
+            trace!("[recommendation] get_products_by_complex_filters: first result sample={}", serde_json::to_string_pretty(&results[0]).unwrap_or_default());
+        }
 
         let mut scored_products = vec![];
         let mut top_p = vec![];
@@ -657,6 +742,7 @@ impl RecommendationService {
         }
 
         let total_time = start.elapsed().as_secs_f64();
+        debug!("[recommendation] get_products_by_complex_filters: scored_products={}, top_p={}, time={:.3}s", scored_products.len(), top_p.len(), total_time);
         ResultProduct {
             data: scored_products,
             info: Some(json!({
@@ -680,12 +766,13 @@ impl RecommendationService {
         "#;
         let params = json!({ "rids": rids });
         let results = CLIENTS.execute_cypher(query, &params).await;
+        debug!("[recommendation] get_question_weights: rids={:?}, gRPC returned {} results", rids, results.len());
 
         let mut rid_to_order: HashMap<String, i64> = HashMap::new();
         for row in &results {
             if let (Some(rid), Some(ordre)) = (
                 row.get("rid").and_then(|v| v.as_str()),
-                row.get("ordre").and_then(|v| v.as_i64()),
+                row.get("ordre").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))),
             ) {
                 rid_to_order.insert(rid.to_string(), ordre);
             }
@@ -718,8 +805,11 @@ impl RecommendationService {
         request: &MatchingPayloadIdProduit,
     ) -> MatchingResponse {
         let start = Instant::now();
+        debug!("[recommendation] get_products_by_caracteristique_filters: id_produit={:?}, id_categorie={:?}, top_k={}, nb_caracteristiques={}",
+            request.id_produit, request.id_categorie, request.top_k, request.liste_caracteristique.len());
 
         let flat_filters = Self::normalize_constraints_for_caracteristique(request).await;
+        debug!("[recommendation] normalize_constraints: produced {} flat_filters", flat_filters.len());
         let weights_map: Value = flat_filters
             .iter()
             .filter_map(|f| {
@@ -741,23 +831,40 @@ impl RecommendationService {
             request.top_k, target_product_id.as_deref(),
         );
 
-        match CLIENTS.execute_cypher(&cypher_query, &params).await {
-            results if !results.is_empty() => {
-                let (liste_produit, top_produit) =
-                    Self::parse_matching_results(&results, request, blocked_val, different_val);
-                MatchingResponse {
-                    top_produit,
-                    liste_produit,
-                    ecarts: None,
-                    temps_de_traitement: start.elapsed().as_secs_f64(),
-                }
+        debug!("[recommendation] cypher_params: filters={}, weights={}, scoring={}, target_product_id={:?}, id_categorie={:?}",
+            serde_json::to_string(&flat_filters).unwrap_or_default(),
+            serde_json::to_string(&weights_map).unwrap_or_default(),
+            serde_json::to_string(&scoring_params).unwrap_or_default(),
+            target_product_id,
+            request.id_categorie,
+        );
+
+        let results = CLIENTS.execute_cypher(&cypher_query, &params).await;
+        debug!("[recommendation] get_products_by_caracteristique_filters: gRPC returned {} results", results.len());
+        if !results.is_empty() {
+            trace!("[recommendation] get_products_by_caracteristique_filters: first result={}", serde_json::to_string_pretty(&results[0]).unwrap_or_default());
+        } else {
+            debug!("[recommendation] get_products_by_caracteristique_filters: EMPTY results from cypher. target_product_id={:?}, id_categorie={:?}", target_product_id, request.id_categorie);
+            debug!("[recommendation] cypher params={}", serde_json::to_string_pretty(&params).unwrap_or_default());
+        }
+
+        if !results.is_empty() {
+            let (liste_produit, top_produit) =
+                Self::parse_matching_results(&results, request, blocked_val, different_val);
+            debug!("[recommendation] parse_matching_results: liste_produit={}, top_produit={}", liste_produit.len(), top_produit.len());
+            MatchingResponse {
+                top_produit,
+                liste_produit,
+                ecarts: None,
+                temps_de_traitement: start.elapsed().as_secs_f64(),
             }
-            _ => MatchingResponse {
+        } else {
+            MatchingResponse {
                 top_produit: vec![],
                 liste_produit: vec![],
                 ecarts: None,
                 temps_de_traitement: start.elapsed().as_secs_f64(),
-            },
+            }
         }
     }
 
@@ -770,8 +877,10 @@ impl RecommendationService {
         liste_produit: &[Produit],
         id_categorie: &str,
         parcours: &str,
-        id_prompt: i32,
+        _id_prompt: i32,
         request: &MatchingPayloadIdProduit,
+        pre_category_caracs: Vec<Value>,
+        pre_prompt_data: Option<Value>,
     ) -> (Vec<Produit>, Vec<Produit>, Vec<Produit>) {
         let all_produits: Vec<&Produit> = top_produit.iter().chain(liste_produit.iter()).collect();
         if all_produits.is_empty() {
@@ -782,12 +891,14 @@ impl RecommendationService {
         let produit_map: HashMap<String, &Produit> =
             all_produits.iter().map(|p| (p.id_produit.clone(), *p)).collect();
 
-        // Fetch data in parallel
-        let (products_info, all_caracs, category_caracs) = tokio::join!(
+        // Opt #3+4: category_caracs and prompt_data are pre-fetched, only fetch product-specific data
+        let step_hellopro = Instant::now();
+        let (products_info, all_caracs) = tokio::join!(
             HELLOPRO_CLIENT.fetch_products_info(id_categorie, &id_produits),
             HELLOPRO_CLIENT.fetch_all_product_caracteristiques(&id_produits),
-            HELLOPRO_CLIENT.fetch_category_caracteristiques(id_categorie),
         );
+        debug!("[perf] hellopro API fetches took {:.3}s", step_hellopro.elapsed().as_secs_f64());
+        let category_caracs = pre_category_caracs;
 
         // Build liste_carac_id from request
         let liste_carac_id: Vec<String> = request
@@ -796,9 +907,10 @@ impl RecommendationService {
             .map(|c| c.id_caracteristique.to_string().trim_matches('"').to_string())
             .collect();
 
-        // Format products for LLM
-        let html_tag_re = Regex::new(r"<[^>]+>").unwrap();
-        let whitespace_re = Regex::new(r"\s+").unwrap();
+        // Format products for LLM (Opt #6: use static regexes)
+        let step_format = Instant::now();
+        let html_tag_re = html_tag_regex();
+        let whitespace_re = whitespace_regex();
         let mut formatted_products = vec![];
 
         for id_produit in &id_produits {
@@ -925,16 +1037,20 @@ impl RecommendationService {
         let caracteristiques_critiques = critiques_lines.join("\n");
         let liste_produits_json = serde_json::to_string(&formatted_products).unwrap_or_default();
 
-        // Fetch system prompt
-        let prompt_data = HELLOPRO_CLIENT.fetch_prompt(&id_prompt.to_string()).await;
-        let (system_prompt_template, temperature) = if let Some(ref pd) = prompt_data {
+        debug!("[perf] product formatting + prompt build took {:.3}s", step_format.elapsed().as_secs_f64());
+
+        // Opt #3+4: Use pre-fetched prompt data
+        let (system_prompt_template, temperature) = if let Some(ref pd) = pre_prompt_data {
             if let Some(content) = pd.get("contenu_prompt").and_then(|v| v.as_str()) {
+                debug!("System prompt from hellopro.fr: {}", "yes");
                 let temp = pd.get("temperature").and_then(|v| v.as_f64());
                 (content.to_string(), temp)
             } else {
+                debug!("System prompt from hellopro.fr: {}", "no");
                 (Self::default_system_prompt(), None)
             }
         } else {
+            debug!("System prompt from hellopro.fr: {}", "no");
             (Self::default_system_prompt(), None)
         };
 
@@ -944,14 +1060,20 @@ impl RecommendationService {
             .replace("{liste_produits_json}", &liste_produits_json);
 
         // Call Gemini
+        debug!("[RERANK] Calling Gemini LLM for reranking... (prompt: {} chars)", system_prompt.len());
+        let step_gemini = Instant::now();
         let llm_response = GEMINI_CLIENT.generate_rerank_response(&system_prompt, temperature).await;
+        debug!("[perf] Gemini LLM call took {:.3}s", step_gemini.elapsed().as_secs_f64());
         if llm_response.is_none() {
             return (top_produit.to_vec(), liste_produit.to_vec(), vec![]);
         }
         let llm_response = llm_response.unwrap();
 
         // Reorder based on LLM response
-        Self::reorder_from_llm(&llm_response, &produit_map)
+        let step_reorder = Instant::now();
+        let result = Self::reorder_from_llm(&llm_response, &produit_map);
+        debug!("[perf] reorder_from_llm took {:.3}s", step_reorder.elapsed().as_secs_f64());
+        result
     }
 
     fn reorder_from_llm(
@@ -1037,7 +1159,11 @@ impl RecommendationService {
     ) -> MatchingResponse {
         let start = Instant::now();
 
+        // Opt #7: per-step timing
+        let step_norm = Instant::now();
         let flat_filters = Self::normalize_constraints_for_caracteristique(request).await;
+        debug!("[perf] normalize_constraints took {:.3}s", step_norm.elapsed().as_secs_f64());
+
         let weights_map: Value = flat_filters
             .iter()
             .filter_map(|f| {
@@ -1061,25 +1187,43 @@ impl RecommendationService {
             rerank_top_k, target_product_id.as_deref(),
         );
 
-        let results = CLIENTS.execute_cypher(&cypher_query, &params).await;
+        let id_categorie = request.id_categorie.as_ref().map(|v| v.to_string().trim_matches('"').to_string()).unwrap_or_default();
+        let id_prompt = request.rerank.as_ref().and_then(|r| r.id_prompt).unwrap_or(112);
+        let id_prompt_str = id_prompt.to_string();
 
+        // Opt #3+4: Pre-fetch category_caracs + prompt in parallel with Cypher execution
+        let step_cypher = Instant::now();
+        let (results, pre_category_caracs, pre_prompt_data) = tokio::join!(
+            CLIENTS.execute_cypher(&cypher_query, &params),
+            HELLOPRO_CLIENT.fetch_category_caracteristiques(&id_categorie),
+            HELLOPRO_CLIENT.fetch_prompt(&id_prompt_str),
+        );
+        debug!("[perf] cypher+prefetch took {:.3}s, gRPC returned {} results",
+            step_cypher.elapsed().as_secs_f64(), results.len());
+
+        let step_parse = Instant::now();
         let (liste_produit, top_produit) =
             Self::parse_matching_results(&results, request, blocked_val, different_val);
+        debug!("[perf] parse_matching_results took {:.3}s", step_parse.elapsed().as_secs_f64());
 
-        let id_categorie = request.id_categorie.as_ref().map(|v| v.to_string().trim_matches('"').to_string()).unwrap_or_default();
         let parcours = request.rerank.as_ref().and_then(|r| r.parcours.as_deref()).unwrap_or("");
-        let id_prompt = request.rerank.as_ref().and_then(|r| r.id_prompt).unwrap_or(112);
 
+        let step_rerank = Instant::now();
         let (reranked_top, reranked_liste, ecarts) = Self::enrich_and_rerank_with_llm(
             &top_produit, &liste_produit, &id_categorie, parcours, id_prompt, request,
+            pre_category_caracs, pre_prompt_data,
         )
         .await;
+        debug!("[perf] enrich_and_rerank_with_llm took {:.3}s", step_rerank.elapsed().as_secs_f64());
+
+        let total = start.elapsed().as_secs_f64();
+        debug!("[perf] get_products_by_caracteristique_filters_rerank total: {:.3}s", total);
 
         MatchingResponse {
             top_produit: reranked_top,
             liste_produit: reranked_liste,
             ecarts: if ecarts.is_empty() { None } else { Some(ecarts) },
-            temps_de_traitement: start.elapsed().as_secs_f64(),
+            temps_de_traitement: total,
         }
     }
 
@@ -1089,26 +1233,240 @@ impl RecommendationService {
 
     fn default_system_prompt() -> String {
         r#"## RÔLE ET OBJECTIF
-Tu es un expert en matching acheteur-produit pour une marketplace B2B.
-Tu reçois une liste de produits pré-sélectionnés par un système de scoring automatique
-et la demande d'un acheteur professionnel. Tu produis un classement final fiable.
 
-## FORMAT DE SORTIE
-La réponse doit être un objet JSON valide uniquement:
-{{
-  "besoin_acheteur": "Reformulation synthétique du besoin.",
-  "top_produits": [{{ "rang": 1, "id_produit": "X", "nom": "...", "score": 0.85, "completude": 4, "base_calcul": "X/Y", "decision": "VALIDE", "fournisseur_client": true, "justification": "..." }}],
-  "autres_produits": [],
-  "produits_ecartes": []
-}}
+            Tu es un expert en matching acheteur-produit pour une marketplace B2B.
+            Tu reçois une liste de produits pré-sélectionnés par un système de scoring automatique
+            et la demande d'un acheteur professionnel. Tu produis un classement final fiable en
+            écartant les produits incompatibles et en repositionnant les autres selon leur
+            pertinence réelle.
 
-DONNÉES D'ENTRÉE
-[BESOIN_ACHETEUR]
-{besoin_acheteur}
-[CARACTERISTIQUES_CRITIQUES]
-{caracteristiques_critiques}
-[LISTE_PRODUITS]
-{liste_produits_json}
+
+            ## VARIABLES D'ENTRÉE
+
+            - **[BESOIN_ACHETEUR]** : les réponses de l'acheteur au questionnaire
+            - **[CARACTERISTIQUES_CRITIQUES]** : les critères prioritaires et leur niveau
+            (critique ou secondaire)
+            - **[LISTE_PRODUITS]** : les produits pré-sélectionnés avec leurs caractéristiques,
+            incluant pour chaque produit le statut du fournisseur associé (client actif ou non)
+
+
+            ## ÉTAPES DE TRAITEMENT
+
+            ### ÉTAPE 1 — Analyser chaque produit individuellement
+
+            **Pré-qualification contextuelle (obligatoire avant toute vérification de critères)**
+
+            Avant d'examiner les critères individuels, qualifie le besoin de l'acheteur en trois dimensions :
+            - **Type de produit attendu** : quelle est la famille de produit précise, pas le nom générique
+            (ex. : pas le nom de la catégorie seul, mais le type exact avec ses caractéristiques structurantes)
+            - **Contexte d'utilisation** : quel est l'environnement, le secteur, le type d'usage
+            (professionnel/résidentiel, intérieur/extérieur, usage intensif/occasionnel, etc.)
+            - **Profil de l'utilisateur final** : à qui est destiné le produit
+            (garagiste, agriculteur, exploitant forestier, etc.)
+
+            Pour chaque produit, vérifie en priorité si son espace d'usage correspond à celui qualifié
+            ci-dessus. Un produit dont l'espace d'usage est structurellement différent est écarté à
+            cette étape, avant toute vérification de critères.
+
+            Un espace d'usage est structurellement différent quand le changement de contexte implique
+            des exigences techniques différentes, même si le nom du produit est identique.
+            Exemples types : même nom de produit mais usage professionnel ≠ usage résidentiel /
+            même nom de produit mais usage intensif ≠ usage occasionnel / produit neuf ≠ produit d'occasion.
+
+            **A. Compatibilité de type, de segment et d'usage**
+            Deux produits peuvent partager le même nom générique tout en étant incompatibles.
+            Les écarts suivants sont éliminatoires :
+            - Porteur ou interface différent de ce qui est demandé
+            - État (neuf / occasion) différent de ce qui est demandé
+            - Capacité, puissance ou charge significativement inférieure à la cible
+            - Usage spécialisé ne couvrant pas le besoin général exprimé
+            - Segment ou contexte d'utilisation structurellement différent
+            (résidentiel vs professionnel, mobile vs fixe, entrée de gamme vs usage lourd)
+
+            **B. Respect des contraintes absolues**
+            Vérifie chaque critère critique de [CARACTERISTIQUES_CRITIQUES] :
+            - Valeur numérique inférieure à un minimum exigé : ÉCARTÉ
+            - Valeur numérique supérieure à un maximum exigé : ÉCARTÉ
+            - Valeur textuelle incompatible avec la cible : ÉCARTÉ
+            - Valeur non renseignée : non validable, ne suppose pas de compatibilité par défaut
+
+
+            ### ÉTAPE 2 — Calculer le score de chaque produit non écarté
+
+            Le score est calculé sur l'ensemble des caractéristiques de [CARACTERISTIQUES_CRITIQUES],
+            qu'elles soient renseignées ou non dans la fiche produit.
+
+            Formule : Score = Somme(Points_i × Poids_i) / Somme(Poids_i)
+            où la somme porte sur TOUS les critères, renseignés ou non.
+
+            Barème des points :
+            - Valeur dans la cible ou dans la fourchette numérique : 1.0
+            - Correspondance partielle sur critère secondaire : 0.5
+            - Valeur hors fourchette sur critère secondaire : 0.1
+            - Caractéristique non renseignée dans la fiche produit : 0.0
+            - Valeur incompatible sur critère critique : ÉCARTÉ
+
+            Poids : critique = 2 / secondaire = 1
+
+            **Score de complétude informationnelle**
+
+            Après calcul du score principal, attribue un score de complétude de 1 à 5 selon la grille
+            suivante :
+
+            - **5** — Tous les critères critiques sont renseignés ET plus de 75% des critères
+            secondaires sont renseignés
+            - **4** — Tous les critères critiques sont renseignés ET entre 50% et 75% des critères
+            secondaires sont renseignés
+            - **3** — Tous les critères critiques sont renseignés ET moins de 50% des critères
+            secondaires sont renseignés
+            - **2** — Au moins un critère critique non renseigné, mais des critères secondaires présents
+            - **1** — Aucun critère critique renseigné, ou moins de 2 caractéristiques renseignées
+            au total
+
+            **Plafonnement du score par niveau de complétude**
+
+            Le score final ne peut pas dépasser le plafond associé au niveau de complétude du produit :
+
+            - Complétude **5** → plafond **1.0**
+            - Complétude **4** → plafond **0.90**
+            - Complétude **3** → plafond **0.75**
+            - Complétude **2** → plafond **0.60**
+            - Complétude **1** → plafond **0.40**
+
+            Le score affiché en output est le score après application du plafond,
+            exprimé comme un nombre décimal entre 0 et 1 (ex: 0.85).
+
+            Seuils de décision (appliqués sur le score plafonné) :
+            - Score ≥ 0.70 : VALIDE
+            - Score entre 0.40 et 0.69 : DÉGRADÉ
+            - Score < 0.40 : ÉCARTÉ par score insuffisant
+
+            Règles de décision forcées, non contournables par le score :
+            - Aucune caractéristique critique renseignée : décision forcée DÉGRADÉ
+            - Une ou plusieurs caractéristiques critiques manquantes : décision plafonnée à DÉGRADÉ
+            - Score ≥ 0.70 et tous les critères critiques renseignés et compatibles : VALIDE confirmé
+
+            Ce score de complétude est un critère de classement actif, appliqué systématiquement
+            après le score principal et avant la règle fournisseur. À score principal égal ou proche
+            (écart ≤ 5 points), le produit avec la complétude la plus élevée est positionné en priorité.
+
+            L'ordre de priorité dans le classement est donc :
+            1. Score principal plafonné (décroissant)
+            2. Score de complétude (décroissant) si écart de score principal ≤ 5 points
+            3. Statut fournisseur client (dans la marge de 10 points sur le score principal)
+
+            Le score de complétude est affiché dans l'output pour chaque produit classé.
+
+
+            ### ÉTAPE 3 — Appliquer la règle fournisseur
+
+            La règle fournisseur s'applique après calcul des scores et application du score de
+            complétude. Elle peut modifier l'ordre de classement selon les conditions suivantes :
+
+            **Condition d'application :** un produit dont le fournisseur est client actif peut être
+            repositionné devant un produit de fournisseur prospect si et seulement si l'écart de score
+            principal entre les deux est inférieur ou égal à 10 points.
+
+            **Cette règle ne s'applique jamais dans le sens inverse** : un produit prospect ne peut
+            jamais remonter devant un produit client, quelle que soit la situation.
+
+            **La règle s'applique aussi entre paliers de décision** (ex. : un produit client DÉGRADÉ
+            peut passer devant un produit prospect VALIDE si l'écart de score principal est ≤ 10 points).
+
+            Au-delà de 10 points d'écart, le score prime toujours, quel que soit le statut fournisseur.
+
+
+            ### ÉTAPE 4 — Produire le classement final
+
+            - Top produits : les 4 meilleurs produits VALIDES ou DÉGRADÉS par score décroissant.
+            Si moins de 4 produits sont éligibles, le top est réduit en conséquence.
+            - Autres produits : jusqu'à 8 produits VALIDES ou DÉGRADÉS restants par score décroissant.
+            - Produits écartés : listés séparément avec leur score et leur raison d'exclusion.
+            Jamais dans le top ni dans les autres produits.
+
+
+            ## RÈGLES GÉNÉRALES
+
+            - Un seul écart sur un critère critique suffit à écarter le produit, sans calcul.
+            - Ne jamais supposer qu'une information manquante est favorable au produit.
+            - Si l'acheteur a répondu "Je ne sais pas", n'applique pas d'exigence sur ce critère.
+            - Reste factuel. Si tu ne peux pas conclure faute d'information, indique-le
+            dans la justification.
+
+
+            ## FORMAT DE SORTIE
+
+            La réponse doit être un objet JSON valide et uniquement un objet JSON,
+            sans texte avant ou après.
+
+            {{
+            "besoin_acheteur": "Reformulation synthétique du besoin en 2-3 phrases.",
+            "top_produits": [
+                {{
+                "rang": 1,
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.85,
+                "completude": 4,
+                "base_calcul": "X/Y critères renseignés",
+                "decision": "VALIDE",
+                "fournisseur_client": true,
+                "justification": "Raison courte de ce positionnement."
+                }}
+            ],
+            "autres_produits": [
+                {{
+                "rang": 5,
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.52,
+                "completude": 2,
+                "base_calcul": "X/Y critères renseignés",
+                "decision": "DÉGRADÉ",
+                "fournisseur_client": false,
+                "justification": "Raison courte de ce positionnement."
+                }}
+            ],
+            "produits_ecartes": [
+                {{
+                "id_produit": "XXXXX",
+                "nom": "Nom du produit",
+                "score": 0.35,
+                "fournisseur_client": false,
+                "raison_exclusion": "Raison factuelle de l'exclusion."
+                }}
+            ]
+            }}
+
+
+            ## CHECKLIST AVANT SORTIE
+
+            - [ ] Pré-qualification contextuelle effectuée avant toute vérification de critères
+            - [ ] Chaque critère critique vérifié pour chaque produit
+            - [ ] Incompatibilités de segment et d'usage traitées comme éliminatoires
+            - [ ] Valeurs numériques hors fourchette sur critères critiques traitées comme bloquantes
+            - [ ] Score calculé sur l'ensemble des critères, les non renseignés comptent 0
+            - [ ] Règles de décision forcées appliquées après le calcul
+            - [ ] Score de complétude calculé et plafond appliqué pour chaque produit
+            - [ ] Classement appliqué dans l'ordre : score principal → complétude (si écart ≤ 5 pts) → fournisseur (si écart ≤ 10 pts)
+            - [ ] Règle fournisseur appliquée avec marge de 10 points, jamais dans le sens prospect → client
+            - [ ] Aucun produit écarté dans le top ou les autres produits
+            - [ ] Top limité à 4 produits, autres produits limités à 8
+            - [ ] Champ base_calcul et champ completude renseignés pour chaque produit classé
+            - [ ] Champ score renseigné pour chaque produit écarté
+            - [ ] Sortie JSON valide sans texte en dehors du JSON
+
+
+            DONNÉES D'ENTRÉE
+
+            [BESOIN_ACHETEUR]
+            {besoin_acheteur}
+
+            [CARACTERISTIQUES_CRITIQUES]
+            {caracteristiques_critiques}
+
+            [LISTE_PRODUITS]
+            {liste_produits_json}
 "#.to_string()
     }
 }

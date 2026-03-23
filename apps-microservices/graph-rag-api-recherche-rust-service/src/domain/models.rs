@@ -137,6 +137,7 @@ pub struct MatchingCaracteristique {
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MetadonneUtilisateurs {
+    pub pays: Option<String>,
     pub cp: Option<String>,
     pub id_pays: Option<Value>,
     pub typologie: Option<Value>,
@@ -187,6 +188,7 @@ pub struct MatchingPayload {
     pub top_k: i32,
     pub id_categorie: Option<Value>,
     pub options: Option<MatchingOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub champs_sortie: Option<Vec<String>>,
 }
 
@@ -198,6 +200,7 @@ pub struct MatchingPayloadIdProduit {
     pub id_categorie: Option<Value>,
     pub id_produit: Option<Value>,
     pub options: Option<MatchingOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub champs_sortie: Option<Vec<String>>,
     pub metadonnee_utilisateurs: Option<MetadonneUtilisateurs>,
     pub scoring: Option<ScoringOptions>,
@@ -219,9 +222,13 @@ pub struct CaracteristiqueMatching {
     pub statut_matching: i32,
     pub id_caracteristique: i64,
     pub type_caracteristique: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valeur: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valeur_min: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valeur_max: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub unite: Option<String>,
     pub id_valeur: Vec<i64>,
     pub poids: i32,
@@ -302,9 +309,24 @@ pub struct MatchingResponse {
 // ================================
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PaysCouverture {
+    pub id_pays: String,
+    pub nom_pays: String,
+    pub couvre_partiel: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct DepartementCouverture {
+    pub id_dept: String,
+    pub nom_dept: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct FournisseurGeoResponse {
-    pub id_fournisseur: String,
-    pub couverture: Value,
+    #[serde(default)]
+    pub pays: Vec<PaysCouverture>,
+    #[serde(default)]
+    pub departements: Vec<DepartementCouverture>,
 }
 
 // ================================
@@ -319,6 +341,7 @@ pub struct NodeUpdateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct NodeResponse {
     pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,

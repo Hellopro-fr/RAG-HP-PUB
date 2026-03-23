@@ -11,7 +11,7 @@ use crate::services::product_service::ProductService;
     responses(
         (status = 200, description = "Product characteristics")
     ),
-    tag = "Product"
+    tag = "Produits"
 )]
 #[get("/produits/{product_id}/caracteristiques")]
 pub async fn get_product_caracteristiques(
@@ -33,7 +33,7 @@ pub async fn get_product_caracteristiques(
     responses(
         (status = 200, description = "Product deleted")
     ),
-    tag = "Product"
+    tag = "Produits"
 )]
 #[delete("/produits/{product_id}")]
 pub async fn delete_product(path: web::Path<String>) -> HttpResponse {

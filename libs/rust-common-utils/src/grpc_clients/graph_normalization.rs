@@ -42,7 +42,7 @@ impl GraphNormalizationClient {
             label: label.to_string(),
             unit: unit.unwrap_or("").to_string(),
             value: value.to_string(),
-            data_type: String::new(),
+            data_type: "numeric".to_string(),
         });
 
         match self.client.clone().normalize_quantity(request).await {
