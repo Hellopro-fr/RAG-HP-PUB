@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     # LLM - DeepSeek
     DEEPSEEK_API_KEY: str = ""
     
-    # Prompt statique
-    PROMPT_ID: str = "140"
+    # Prompt statique - Briefing Prix - Prompt extraction prix SiteWeb
+    PROMPT_ID: str = "117"
     
     # API HelloPro
     # HP_TOKEN: str = "rKbzpKYtGJplusPJp/H5wcKgvnue46fsfPOowErpbIBy3Px9QLFvwWXfSQpmURUISbkVJlaJS09MI4xf/ity9dvc5f92sLyZplusDcE4yjIfdxZoEoufujINhiajmxUNFPdSMjI3M" #dev
