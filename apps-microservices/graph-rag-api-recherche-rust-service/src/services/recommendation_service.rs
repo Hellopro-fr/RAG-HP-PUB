@@ -2,7 +2,7 @@ use regex::Regex;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Instant;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::domain::models::*;
 use crate::infrastructure::clients::CLIENTS;
@@ -1062,6 +1062,7 @@ impl RecommendationService {
         );
 
         let results = CLIENTS.execute_cypher(&cypher_query, &params).await;
+        debug!("[gRPC] execute_cypher: params={:?}, results={:?}", params, results);
 
         let (liste_produit, top_produit) =
             Self::parse_matching_results(&results, request, blocked_val, different_val);
