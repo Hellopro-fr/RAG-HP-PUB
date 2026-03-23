@@ -102,11 +102,23 @@ impl GraphDatabaseClient {
         match self.client.clone().execute_raw_cypher(request).await {
             Ok(response) => {
                 let resp = response.into_inner();
-                let results: Vec<Value> = resp
+                let raw_results: Vec<Value> = resp
                     .results
                     .iter()
                     .map(Self::prost_struct_to_json)
                     .collect();
+
+                // Unwrap __json_results__ wrapper format (matches Python client behavior)
+                let results = if let Some(first) = raw_results.first() {
+                    if let Some(json_str) = first.get("__json_results__").and_then(|v| v.as_str()) {
+                        serde_json::from_str::<Vec<Value>>(json_str).unwrap_or(raw_results)
+                    } else {
+                        raw_results
+                    }
+                } else {
+                    raw_results
+                };
+
                 (resp.success, results, resp.error_message)
             }
             Err(e) => {
