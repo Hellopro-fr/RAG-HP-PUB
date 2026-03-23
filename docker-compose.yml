@@ -1768,7 +1768,8 @@ services:
     profiles: ["graph-rag-api"]
     ports:
       - "8528:8528"
-      - "8567:8567"
+    expose:
+      - "8568"
     environment:
       API_PORT: 8528
       EMBEDDING_SERVICE_URL: embedding-model-service:50052
@@ -1778,7 +1779,7 @@ services:
       LLM_PROVIDER: gemini
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      PROMETHEUS_PORT: 8567
+      PROMETHEUS_PORT: 8568
       NEO4J_URI: ${NEO4J_URI}
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
