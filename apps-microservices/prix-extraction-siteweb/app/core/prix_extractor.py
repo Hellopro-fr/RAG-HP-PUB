@@ -98,11 +98,14 @@ class PrixExtractor:
         """
         prompt_text = self.prompt_config.get("contenu_prompt", "")
 
-        chunk_siteweb = f"""url : {chunk_metadata.get("url", "")}
-                    Contenu : {chunk_metadata.get("text", "")}
-                    Fournisseur : {chunk_metadata.get("fournisseur", "")}
-                    Page_type : {chunk_metadata.get("page_type", "")}
-                    Date_ajout : {chunk_metadata.get("date_ajout", "")}
+        # Les données Milvus sont dans metadata.entity
+        entity = chunk_metadata.get("entity", chunk_metadata)
+
+        chunk_siteweb = f"""url : {entity.get("url", "")}
+                    Contenu : {entity.get("text", "")}
+                    Fournisseur : {entity.get("fournisseur", "")}
+                    Page_type : {entity.get("page_type", "")}
+                    Date_ajout : {entity.get("date_ajout", "")}
                 """
         
         # Remplacer les placeholders si présents
