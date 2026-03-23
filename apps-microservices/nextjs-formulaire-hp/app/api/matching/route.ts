@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
     const metadonnee_utilisateurs = body.get('metadonnee_utilisateurs');
     const liste_caracteristique   = body.get('liste_caracteristique');
     const scoring    = body.get('scoring');
+    const rerank     = body.get('rerank');
 
     if (!id_categorie) {
       return NextResponse.json(
@@ -49,6 +50,11 @@ export async function POST(request: NextRequest) {
       //console.log('[API Matching] Scoring params added to payload:', testParams);
     } else {
       //console.log('[API Matching] No scoring params received');
+    }
+
+    // Ajouter les paramètres Rerank si présents
+    if (rerank) {
+      payload.rerank = JSON.parse(rerank.toString());
     }
 
     //console.log('[API Matching] Final payload to GraphRAG:', JSON.stringify(payload, null, 2));

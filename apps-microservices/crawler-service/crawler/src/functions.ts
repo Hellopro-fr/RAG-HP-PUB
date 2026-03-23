@@ -34,8 +34,25 @@ export const getApifyProxyUrl = (password?: string): string => {
     const PROXY_HOST_PORT = 8000;
     const PROXY_USERNAME = "auto";
     // const PROXY_USERNAME_FR = "country-FR"; // Unused in original code, but could be useful
-    
+
     return `http://${PROXY_USERNAME}:${password}@${PROXY_HOST}:${PROXY_HOST_PORT}`;
+};
+
+/**
+ * Masque le mot de passe dans une URL proxy pour les logs.
+ * Ex: http://auto:secret123@proxy.apify.com:8000 → http://auto:****@proxy.apify.com:8000
+ */
+export const maskProxyUrl = (proxyUrl: string | undefined): string => {
+    if (!proxyUrl) return "none";
+    try {
+        const url = new URL(proxyUrl);
+        if (url.password) {
+            return proxyUrl.replace(`:${url.password}@`, ':****@');
+        }
+        return proxyUrl;
+    } catch {
+        return proxyUrl;
+    }
 };
 
 export let stats: StatisticState;
@@ -125,16 +142,231 @@ export const processPage = async (
         await waitAndScroll(page, url, log, maxScrolls, timeoutSecs);
 
         // Return the complete page HTML after scrolling
-        return await page.content();
+        // Retry logic: handle race condition where page is mid-navigation
+        return await getPageContentWithRetry(page, url, log);
     } catch (error) {
         log.error(`Error processPage for ${url}: ${error}`);
         // Return current content even if scrolling failed, to avoid crashing the whole crawl
         try {
-            return await page.content();
+            return await getPageContentWithRetry(page, url, log);
         } catch (innerE) {
             throw new Error(`Critical error processPage : ${innerE}`);
         }
     }
+};
+
+/**
+ * Retrieves page HTML content with retry logic for mid-navigation race conditions.
+ * Some pages trigger JS navigation after scroll, causing page.content() to fail with
+ * "Unable to retrieve content because the page is navigating and changing the content".
+ *
+ * @param page - Playwright Page object
+ * @param url - Current page URL for logging
+ * @param log - Logger instance
+ * @param maxRetries - Maximum number of retries (default: 3)
+ * @returns Promise<string> - Page HTML content
+ */
+const getPageContentWithRetry = async (
+    page: Page,
+    url: string,
+    log: Log,
+    maxRetries: number = 3
+): Promise<string> => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await page.content();
+        } catch (error: any) {
+            const errorMsg = String(error?.message || error);
+            if (errorMsg.includes("navigating and changing the content") && attempt < maxRetries) {
+                log.warning(`Page mid-navigation for ${url}, waiting 1s (attempt ${attempt}/${maxRetries})`);
+                await page.waitForTimeout(1000);
+            } else {
+                throw error;
+            }
+        }
+    }
+    // Fallback (should not reach here)
+    return await page.content();
+};
+
+/**
+ * Detects if HTML content is a bot protection challenge page rather than real site content.
+ *
+ * Uses multi-indicator logic to avoid false positives on real sites using Cloudflare CDN.
+ * Requires 2+ strong indicators, or 1 strong + 1 weak, or 1 strong + very short content.
+ *
+ * Ported from api-detection-langue-fr (language_detector.py detect_challenge_page).
+ *
+ * @param html - Raw HTML content to check
+ * @returns Service name (e.g., 'Cloudflare', 'DataDome') or null if content is legitimate
+ */
+export const detectChallengePage = (html: string): string | null => {
+    if (!html) return null;
+
+    const htmlLower = html.toLowerCase();
+
+    // --- Cloudflare WAF Block Page ---
+    // Détection prioritaire : page "Sorry, you have been blocked" — IP rejetée par le WAF
+    // Différent du Turnstile challenge (qui peut se résoudre).
+    // Le block WAF est permanent pour cette IP → non résolvable, noRetry.
+    const cfBlockStrong = [
+        'sorry, you have been blocked',
+        'you are unable to access',
+        'cf-error-details',
+        'attention required!',
+    ];
+    const cfBlockCount = cfBlockStrong.filter(p => htmlLower.includes(p)).length;
+    if (cfBlockCount >= 2) return 'Cloudflare_blocked';
+
+    // --- Cloudflare Turnstile Challenge ---
+    // Ancre obligatoire : chl_page/v1 est EXCLUSIF aux pages de challenge Cloudflare.
+    // Les composants Turnstile (cf-turnstile-response, challenges.cloudflare.com/turnstile)
+    // apparaissent aussi sur les vrais sites pour la protection de formulaires.
+    const cfAnchor = 'chl_page/v1';
+    const cfConfirmations = [
+        'cf-turnstile-response',
+        '<title>just a moment...</title>',
+        '<title>un instant',
+        'noindex',
+        'cdn-cgi/challenge-platform',
+        'challenges.cloudflare.com/turnstile',
+    ];
+
+    if (htmlLower.includes(cfAnchor)) {
+        const cfConfirmCount = cfConfirmations.filter(p => htmlLower.includes(p)).length;
+        if (cfConfirmCount >= 1) return 'Cloudflare';
+        // chl_page/v1 seul + contenu très court → page challenge minimaliste
+        const textOnly = htmlLower
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (textOnly.length < 1000) return 'Cloudflare';
+    }
+
+    // --- DataDome ---
+    const ddIndicators = ['geo.captcha-delivery.com', 'datadome'];
+    const ddCount = ddIndicators.filter(p => htmlLower.includes(p)).length;
+    if (ddCount >= 2) return 'DataDome';
+    if (ddCount >= 1 && html.length < 50000) return 'DataDome';
+
+    // --- PerimeterX / HUMAN ---
+    if (htmlLower.includes('human.com/bot-defender')) return 'PerimeterX';
+
+    // --- Imperva / Incapsula ---
+    const impervaIndicators = ['_incap_ses', 'incapsula', 'visitorid'];
+    const impervaCount = impervaIndicators.filter(p => htmlLower.includes(p)).length;
+    if (impervaCount >= 2) return 'Imperva';
+
+    // --- Pages d'erreur HTTP génériques (403, 503, etc.) ---
+    // Détecte les pages d'erreur serveur/WAF non spécifiques à un fournisseur.
+    const httpErrorMatch = htmlLower.match(
+        /<title>\s*(403|401|406|429|503)\s*[-–—]?\s*(forbidden|unauthorized|not acceptable|too many requests|service unavailable|access denied|error)?\s*<\/title>/
+    );
+
+    if (httpErrorMatch) {
+        const errorCode = httpErrorMatch[1];
+        const errConfirmations = [
+            'noindex', 'you have been blocked', 'access denied',
+            'access to this page has been denied', 'forbidden',
+            'request blocked', 'your ip', 'security service', 'ray id',
+        ];
+        const errConfirmCount = errConfirmations.filter(p => htmlLower.includes(p)).length;
+        if (errConfirmCount >= 1) return `HTTP_${errorCode}_blocked`;
+
+        // Titre d'erreur seul + contenu très court (avec SVG strippé)
+        const textOnly = htmlLower
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (textOnly.length < 500) return `HTTP_${errorCode}_blocked`;
+    }
+
+    return null;
+};
+
+/**
+ * Waits for a challenge page to resolve by polling page.content() at regular intervals.
+ *
+ * Survives full page navigations (which destroy JS context) because it re-reads
+ * page.content() each iteration instead of using page.wait_for_function().
+ *
+ * Ported from api-detection-langue-fr (scraper.py Phase 3).
+ *
+ * @param page - Playwright Page object
+ * @param url - URL being processed (for logging)
+ * @param log - Logger instance
+ * @param challengeService - Name of the detected challenge service
+ * @param timeoutSecs - Max time to wait for resolution (default: 45)
+ * @param intervalSecs - Polling interval (default: 3)
+ * @returns Resolved content string, or null if challenge was not resolved
+ */
+export const waitForChallengeResolution = async (
+    page: Page,
+    url: string,
+    log: Log,
+    challengeService: string,
+    timeoutSecs: number = 45,
+    intervalSecs: number = 3
+): Promise<string | null> => {
+    log.info(
+        `Challenge ${challengeService} detected on ${url}, ` +
+        `polling for resolution (max ${timeoutSecs}s, interval ${intervalSecs}s)...`
+    );
+
+    const startTime = Date.now();
+
+    while ((Date.now() - startTime) / 1000 < timeoutSecs) {
+        await page.waitForTimeout(intervalSecs * 1000);
+
+        let content: string;
+        try {
+            content = await page.content();
+        } catch (e) {
+            // Context may be destroyed during navigation
+            log.debug(`Error reading content during challenge poll for ${url}: ${e}`);
+            await page.waitForTimeout(1000);
+            try {
+                content = await page.content();
+            } catch {
+                continue;
+            }
+        }
+
+        if (!detectChallengePage(content)) {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            log.info(
+                `Challenge ${challengeService} resolved for ${url} ` +
+                `after ${elapsed}s (${content.length} chars)`
+            );
+
+            // Wait for content to stabilize
+            try {
+                await page.waitForLoadState('networkidle', { timeout: 5000 });
+            } catch {
+                // Ignore timeout
+            }
+
+            // Re-extract final content
+            try {
+                content = await page.content();
+            } catch {
+                // Keep previous content
+            }
+
+            return content;
+        }
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        log.debug(`Challenge still present on ${url} (${elapsed}s/${timeoutSecs}s)`);
+    }
+
+    log.warning(`Challenge ${challengeService} NOT resolved for ${url} after ${timeoutSecs}s`);
+    return null;
 };
 
 /**
@@ -254,6 +486,15 @@ export const startCrawler = async (
                 },
             },
             retireBrowserAfterPageCount: 25, // Prevent memory leaks in Chrome
+            // Ignorer les erreurs de certificat SSL (ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR)
+            // Permet de crawler des sites avec certificats expirés ou auto-signés
+            preLaunchHooks: [
+                (_pageId, launchContext) => {
+                    launchContext.launchOptions ??= {};
+                    launchContext.launchOptions.args ??= [];
+                    launchContext.launchOptions.args.push('--ignore-certificate-errors');
+                },
+            ],
         },
 
         // maxConcurrency: 1, // V3 default
@@ -270,6 +511,20 @@ export const startCrawler = async (
         // V3 Logic: Rich error reporting
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
+
+            // Détection des erreurs permanentes — inutile de réessayer
+            // Aligné avec api-detection-langue-fr (redirect_tracker.py _NON_RETRYABLE_ERRORS)
+            const NON_RETRYABLE_ERRORS = [
+                'ERR_NAME_NOT_RESOLVED',     // Le domaine n'existe pas
+                'ERR_CERT_DATE_INVALID',     // Certificat SSL expiré
+                'ERR_SSL_PROTOCOL_ERROR',    // Protocole SSL incompatible
+            ];
+            const errorStr = String(request.errorMessages);
+            const isPermanentError = NON_RETRYABLE_ERRORS.some(err => errorStr.includes(err));
+            if (isPermanentError) {
+                request.noRetry = true;
+                log.warning(`Permanent error detected for ${request.url} — no retry`);
+            }
 
             // Accumulate error stats ONLY if the URL is from the previous crawl
             // This prevents new/broken URLs from triggering the circuit breaker for "Broken Site"
@@ -331,6 +586,24 @@ export const startCrawler = async (
                         `Captcha detected on ${request.url} : ${captchaDetected}`
                     );
                 }
+
+                // Détecter les pages de blocage permanent (WAF, HTTP 403/503)
+                // pour éviter de gaspiller des retries sur des URL définitivement bloquées
+                const challengeType = detectChallengePage(content);
+                if (challengeType) {
+                    const isPermanentBlock = challengeType === 'Cloudflare_blocked'
+                        || challengeType.startsWith('HTTP_');
+                    if (isPermanentBlock) {
+                        request.noRetry = true;
+                        log.warning(
+                            `Permanent block detected on ${request.url}: ${challengeType} — no retry`
+                        );
+                    } else {
+                        log.warning(
+                            `Challenge page detected on ${request.url}: ${challengeType} — will retry`
+                        );
+                    }
+                }
             } catch (error) {
                 log.error(
                     `Error when processing the page ${request.url} : ${error}`
@@ -344,7 +617,7 @@ export const startCrawler = async (
                 id: request.id,
                 url: request.url,
                 errors: request.errorMessages,
-                proxy_used: proxyInfo?.url || "none",
+                proxy_used: maskProxyUrl(proxyInfo?.url),
                 status_code: response?.status() || 0,
                 captcha: captchaDetected,
                 timestamp: new Date().toISOString()
@@ -352,7 +625,7 @@ export const startCrawler = async (
         },
 
         preNavigationHooks: [
-            async () => {
+            async ({ page }) => {
                 const isStopped = isStoppedManualy(domain, false);
                 if (isStopped) {
                     await stopCrawler(
@@ -360,7 +633,7 @@ export const startCrawler = async (
                         "The crawler has been stopped manually."
                     );
                 }
-                
+
                 if (context.stopReason) {
                     await stopCrawler(crawler, `Stopping due to: ${context.stopReason}`);
                 }
@@ -373,6 +646,21 @@ export const startCrawler = async (
                         context.stopReason = "limitCrawl";
                         await stopCrawler(crawler, "Limit of 5000 entries reached.");
                     }
+                }
+
+                // Injection cookie de consentement AVANT navigation
+                // Empêche les bannières cookies de s'afficher et de polluer le contenu
+                try {
+                    await page.context().addCookies([
+                        {
+                            name: "cookieConsent",
+                            value: "accepted",
+                            domain: domain,
+                            path: "/",
+                        },
+                    ]);
+                } catch (e) {
+                    // Ignore cookie injection errors
                 }
             },
         ],

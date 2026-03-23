@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     SIMILARITY_THRESHOLD: float = 0.75
     TOP_K_RETRIEVAL: int = 10
 
+    # HelloPro API
+    HELLOPRO_API_BEARER_TOKEN: str = ""
+
     # Prometheus Metrics
     PROMETHEUS_PORT: int = 8565
 

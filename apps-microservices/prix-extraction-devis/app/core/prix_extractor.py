@@ -382,7 +382,8 @@ class PrixExtractor:
             ]
         """
         # Valeurs par défaut depuis les settings
-        logger.info(f"Prompt Recherche de prix: '{self.prompt_config}'")
+        # logger.info(f"Prompt Recherche de prix: '{self.prompt_config}'")
+        self._log(f"Prompt Recherche de prix: '{self.prompt_config}'")
         
         if not self.prompt_config:
             logger.warning(f"Prompt ID {self.PROMPT_ID} non trouvé, "
@@ -393,39 +394,46 @@ class PrixExtractor:
         # Construire le filtre Milvus
         final_filter_expr = f"id_categorie in ['{id_categorie}'] and page_type in ['{settings.MILVUS_PAGE_TYPE}']"
         
-        logger.info(f"Filtre Milvus: {final_filter_expr}")
+        # logger.info(f"Filtre Milvus: {final_filter_expr}")
+        self._log(f"Filtre Milvus: {final_filter_expr}")
 
         source_results = await database_client.classic_search_vector(
             collection    = source_name,
             filter_expr   = final_filter_expr,
-            output_fields = self.request.fields if self.request.fields else None,
+            k = settings.MILVUS_TOP_K
         )
+        # self._log(f"source_results: {source_results}")
         
         # Convertir les résultats en dictionnaires
         all_results_list = [MessageToDict(res) for res in source_results]
-       
+        # self._log(f"all_results_list: {json.dumps(all_results_list)}")
+        
         # Extraction de la liste pjechanges
-        pjechanges = all_results_list.get("results", {}).get("matches", {}).get("pjechanges", [])
+        # pjechanges = all_results_list.get("results", {}).get("matches", {}).get("pjechanges", [])
         grouped = {}
 
-        for item in pjechanges:
+        for item in all_results_list:
             outer_id = item.get("id")
             metadata = item.get("metadata", {})
-            metadata_id = metadata.get("id")
             entity = metadata.get("entity", {})
             
+            fichier_source = entity.get("fichier_source")
             chunk_number = entity.get("chunk_number")
             chunk_id = entity.get("chunk_id")
             text = entity.get("text", "")
 
-            if metadata_id not in grouped:
-                grouped[metadata_id] = {
+            if not fichier_source:
+                logger.warning(f"Élément ignoré: fichier_source vide pour id={outer_id}")
+                continue
+
+            if fichier_source not in grouped:
+                grouped[fichier_source] = {
                     "fields": entity.copy(),
                     "items_to_sort": []
                 }
             
             # On stocke les infos nécessaires dans un dictionnaire simple
-            grouped[metadata_id]["items_to_sort"].append({
+            grouped[fichier_source]["items_to_sort"].append({
                 "chunk_number": chunk_number,
                 "chunk_id": str(chunk_id),
                 "text": text,
@@ -434,9 +442,9 @@ class PrixExtractor:
 
         final_result = []
 
-        for m_id, content in grouped.items():
+        for fichier_source, content in grouped.items():
             # 2. Trier par chunk_number pour respecter l'ordre (1, 2, 3...)
-            sorted_items = sorted(content["items_to_sort"], key=lambda x: x["chunk_number"])
+            sorted_items = sorted(content["items_to_sort"], key=lambda x: int(x["chunk_number"]) if x["chunk_number"] else 0)
             
             # 3. Fusion du texte avec gestion de l'overlap (chevauchement)
             full_text = ""
@@ -469,7 +477,7 @@ class PrixExtractor:
 
             # 4. Concaténation des IDs et numéros de chunks
             merged_ids = ",".join([i["outer_id"] for i in sorted_items])
-            merged_chunk_numbers = ",".join([str(i["chunk_number"]) for i in sorted_items])
+            merged_chunk_numbers = ",".join([str(int(i["chunk_number"])) if i["chunk_number"] else "0" for i in sorted_items])
             merged_chunk_ids = ",".join([i["chunk_id"] for i in sorted_items])
             
             # 5. Mise à jour de l'objet final
@@ -589,8 +597,11 @@ class PrixExtractor:
                 id_categorie=id_categorie,
                 category_name=category_name
             )
-            for i, item in enumerate(items)
+            for i, item in enumerate(items[:1])#TODO: à enlever après test
         ]
+        self._log(f"tasks: {tasks}")
+        sys.exit(1) #TODO: à enlever après test
+        raise Exception(f"test 2") 
 
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
 

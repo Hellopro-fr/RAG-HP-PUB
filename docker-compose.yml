@@ -615,6 +615,21 @@ services:
       - services-net
     init: true
 
+  api-comparaison-texte-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/api-comparaison-texte/Dockerfile
+    container_name: api-comparaison-texte-service
+    profiles: ["app"]
+    restart: unless-stopped
+    ports:
+      - "8998:8998"
+    env_file:
+      - .env
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   mysql:
     image: mysql:8.0
     container_name: mysql
@@ -1270,6 +1285,8 @@ services:
     volumes:
       - crawler_data:/app/storage
       - ./apps-microservices/crawler-service/crawler_archives:/app/archives
+      - ./apps-microservices/crawler-service/crawler_download_requests:/app/download_requests
+      - ./apps-microservices/crawler-service/crawler_download_results:/app/download_results
     env_file:
       - .env
     environment:
@@ -1277,6 +1294,7 @@ services:
       - MAX_CONCURRENT_CRAWLS=1
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - DETECTION_LANGUE_API_URL=http://api-detection-langue-fr-service:8999
     deploy:
       replicas: 1
       resources:
@@ -1707,6 +1725,8 @@ services:
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       NEO4J_DATABASE: ${NEO4J_DATABASE}
+      HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
+      LLM_SERVICE_URL: llm-service:50051
     networks:
       - services-net
       - services-ext-net
@@ -1734,11 +1754,43 @@ services:
       NEO4J_USER: ${NEO4J_USER}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       NEO4J_DATABASE: ${NEO4J_DATABASE}
+      HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
+      LLM_SERVICE_URL: llm-service:50051
     networks:
       - services-net
       - services-ext-net
       - services-global-net
 
+  graph-rag-api-recherche-rust-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/graph-rag-api-recherche-rust-service/Dockerfile
+    profiles: ["graph-rag-api"]
+    ports:
+      - "8528:8528"
+    expose:
+      - "8568"
+    environment:
+      API_PORT: 8528
+      EMBEDDING_SERVICE_URL: embedding-model-service:50052
+      MILVUS_SERVICE_URL: graph-rag-milvus-service:50056
+      GRAPH_DATABASE_SERVICE_URL: graph-rag-database-connector-service:50055
+      NORMALIZATION_SERVICE_URL: graph-rag-normalize-unite-service:50057
+      LLM_PROVIDER: gemini
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PROMETHEUS_PORT: 8568
+      NEO4J_URI: ${NEO4J_URI}
+      NEO4J_USER: ${NEO4J_USER}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      NEO4J_DATABASE: ${NEO4J_DATABASE}
+      HELLOPRO_API_BEARER_TOKEN: ${HELLOPRO_API_BEARER_TOKEN}
+      LLM_SERVICE_URL: llm-service:50051
+      RUST_LOG: graph_rag_api_recherche_rust_service=debug
+    networks:
+      - services-net
+      - services-ext-net
+      - services-global-net
 
   phpmyadmin:
     image: phpmyadmin:latest

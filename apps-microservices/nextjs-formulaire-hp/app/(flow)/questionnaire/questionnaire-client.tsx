@@ -30,7 +30,7 @@ export default function QuestionnaireClient({
   initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setUseRerank } = useFlowStore();
   const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
   const hasProcessedUrlData = useRef(false);
@@ -117,7 +117,17 @@ export default function QuestionnaireClient({
     } else {
       console.log('[QuestionnaireClient] No scoring params found in URL');
     }
-  }, [searchParams, setMatchingTestParams]);
+
+    // Lire le paramètre rerank (activation du rerank LLM)
+    const rerankValue = searchParams.get('rerank');
+    if (rerankValue === '1' || rerankValue === 'true') {
+      setUseRerank(true);
+      console.log('[QuestionnaireClient] Rerank activated from URL');
+    } else {
+      setUseRerank(false); // Reset au cas où l'utilisateur supprime de l'URL
+    }
+
+  }, [searchParams, setMatchingTestParams, setUseRerank]);
 
   // Traiter les données URL (réponse Q1 pré-remplie depuis le token)
   // Doit s'exécuter AVANT que le questionnaire ne soit rendu

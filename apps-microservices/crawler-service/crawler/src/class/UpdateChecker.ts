@@ -1,7 +1,6 @@
 import { UrlConsolidator } from './UrlConsolidator.js';
 import { StatsManager } from './StatsManager.js';
 import { JsonlWriter } from './JsonlWriter.js';
-import { DomainFR } from './DomainFR.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
 
 /**

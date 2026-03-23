@@ -269,6 +269,13 @@ class MatchingOptions(BaseModel):
     )
 
 
+class RerankingOptions(BaseModel):
+    top_k: int = Field(24, description="Nombre de produits à reclasser")
+    use_rerank: bool = False
+    parcours: str = ""
+    id_prompt: int = Field(112, description="ID du prompt")
+
+
 class ScoringOptions(BaseModel):
     z_unmatched: float = Field(
         0, description="Score pour les geolocalisation non matched"
@@ -337,6 +344,10 @@ class MatchingPayload(BaseModel):
         ),
         description="Options pour le scoring",
     )
+    rerank: Optional[RerankingOptions] = Field(
+        RerankingOptions(top_k=24, use_rerank=False, parcours="", id_prompt=112),
+        description="Options pour le reranking",
+    )
     # autres_criteres        : Optional[Dict[str, Any]]      = Field(None, description = "Autres critères mentionnés par l'acheteur")
 
 
@@ -399,6 +410,9 @@ class Produit(BaseModel):
     info_produit: Optional[Dict[str, Any]] = Field(
         None, description="Informations sur le produit"
     )
+    llm_response: Optional[Dict[str, Any]] = Field(
+        None, description="Réponse du LLM pour le produit"
+    )
     # top_produit    : Optional[bool]                = Field(False, description = "Indique si le produit fait partie des top produits pour la récommendation")
     # raison_matching: str                           = Field(default_factory  = "", description = "Explication du résultat du matching")
 
@@ -410,6 +424,9 @@ class MatchingResponse(BaseModel):
     )
     liste_produit: List[Produit] = Field(
         default_factory=list, description="Liste des produits trouvés classés par score"
+    )
+    ecarts: Optional[List[Produit]] = Field(
+        None, description="Produits écartés par le LLM lors du reranking"
     )
     temps_de_traitement: float = Field(
         ..., description="Temps pris pour effectuer le matching en secondes"

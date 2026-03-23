@@ -126,6 +126,7 @@ export interface Supplier {
       poids_question: number;
       poids?: number;
     }>;
+    llm_response?: any; // ou LlmResponse importé
   };
 }
 

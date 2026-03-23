@@ -13,7 +13,7 @@ from typing import List, Dict, Tuple, Any, Optional
 import anyio
 
 from app.core.config import settings
-from app.schemas.comparator import ImageInput
+from app.schemas.comparator import ImageInput, FailedImage
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class ImageProcessor:
         return data
 
     @staticmethod
-    async def load_images(inputs: List[ImageInput]) -> Tuple[Dict[str, Image.Image], List[str]]:
+    async def load_images(inputs: List[ImageInput]) -> Tuple[Dict[str, Image.Image], List[FailedImage]]:
         """
         Loads images from URLs (download) or Base64 content (decode).
         Returns:
@@ -121,12 +121,12 @@ class ImageProcessor:
                 except Exception as e:
                     header_hex = image_data[:10].hex() if 'image_data' in locals() else "N/A"
                     logger.error(f"Failed to decode base64 for image {inp.id}: {e} (Header: {header_hex})")
-                    failed.append(inp.id)
+                    failed.append(FailedImage(id=inp.id, url=inp.url))
             elif inp.url:
                 # Handle URL - Queue for batch download
                 download_tasks.append(inp)
             else:
-                failed.append(inp.id)
+                failed.append(FailedImage(id=inp.id, url=None))
 
         # Execute downloads if any
         if download_tasks:
@@ -158,12 +158,12 @@ class ImageProcessor:
                     if isinstance(response, Exception):
                         # Enhanced logging to show URL and specific exception type and message
                         logger.warning(f"Download exception for {img_id} ({img_input.url}): {type(response).__name__} - {str(response)}")
-                        failed.append(img_id)
+                        failed.append(FailedImage(id=img_id, url=img_input.url))
                         continue
-                        
+
                     if response.status_code != 200:
                         logger.warning(f"HTTP {response.status_code} for {img_id}")
-                        failed.append(img_id)
+                        failed.append(FailedImage(id=img_id, url=img_input.url))
                         continue
                     
                     try:
@@ -177,7 +177,7 @@ class ImageProcessor:
                     except Exception as e:
                         header_hex = response.content[:10].hex()
                         logger.error(f"Processing error for {img_id}: {e} (Header: {header_hex})")
-                        failed.append(img_id)
+                        failed.append(FailedImage(id=img_id, url=img_input.url))
 
         return images, failed
 
