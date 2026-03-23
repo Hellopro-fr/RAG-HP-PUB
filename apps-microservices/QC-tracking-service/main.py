@@ -33,6 +33,8 @@ class DirectoryContent(BaseModel):
     current_path: str
     parent_path: Optional[str]
     items: List[FileItem]
+    total_items: int = 0
+    has_more: bool = False
 
 
 class SearchResult(BaseModel):
@@ -49,49 +51,68 @@ async def root():
 
 
 @app.get("/api/browse")
-async def browse_directory(path: str = "") -> DirectoryContent:
+async def browse_directory(path: str = "", limit: int = 20, show_all: bool = False) -> DirectoryContent:
     """Browse directory contents"""
     # Sanitize path to prevent directory traversal
     safe_path = os.path.normpath(path).lstrip(os.sep).lstrip(".")
     full_path = os.path.join(TRACKING_BASE_PATH, safe_path)
-    
+
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail=f"Path not found: {path}")
-    
+
     if not os.path.isdir(full_path):
         raise HTTPException(status_code=400, detail="Path is not a directory")
-    
+
     # Security check
     if not os.path.abspath(full_path).startswith(os.path.abspath(TRACKING_BASE_PATH)):
         raise HTTPException(status_code=403, detail="Access denied")
-    
-    items = []
+
+    directories = []
+    files = []
     try:
         for entry in os.scandir(full_path):
             try:
                 stat = entry.stat()
-                items.append(FileItem(
+                item = FileItem(
                     name=entry.name,
                     path=os.path.join(safe_path, entry.name) if safe_path else entry.name,
                     is_directory=entry.is_dir(),
                     size=stat.st_size if entry.is_file() else None,
                     modified=str(stat.st_mtime)
-                ))
+                )
+                if entry.is_dir():
+                    directories.append(item)
+                else:
+                    files.append(item)
             except Exception as e:
                 logger.warning(f"Error reading {entry.name}: {e}")
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
-    
-    # Sort: directories first, then by name
-    items.sort(key=lambda x: (not x.is_directory, x.name.lower()))
-    
+
+    # Sort directories alphabetically, files by most recent first
+    directories.sort(key=lambda x: x.name.lower())
+    files.sort(key=lambda x: float(x.modified or 0), reverse=True)
+
+    total_files = len(files)
+    total_dirs = len(directories)
+
+    # Apply limit only to files (directories are always shown)
+    has_more = False
+    if not show_all and limit > 0 and len(files) > limit:
+        files = files[:limit]
+        has_more = True
+
+    items = directories + files
+
     # Calculate parent path
     parent_path = os.path.dirname(safe_path) if safe_path else None
-    
+
     return DirectoryContent(
         current_path=safe_path or "/",
         parent_path=parent_path,
-        items=items
+        items=items,
+        total_items=total_dirs + total_files,
+        has_more=has_more
     )
 
 
