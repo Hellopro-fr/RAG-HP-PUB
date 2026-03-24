@@ -145,7 +145,7 @@ class PrixExtractor:
         # prompt_text = prompt_text.replace("{ITEM_CONTENT}", item_content)
         # prompt_text = prompt_text.replace("{CONTENU}", item_content)
         # prompt_text = prompt_text.replace("{CATEGORIE}", category_name)
-        prompt_text = prompt_text.replace("{list_PJ}", item_content)
+        prompt_text = prompt_text.replace("{json_devis_pdf}", item_content)
         prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
         prompt_text = prompt_text.replace("{nom_categorie}", category_name)
 
