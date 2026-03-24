@@ -145,7 +145,7 @@ class PrixExtractor:
         # prompt_text = prompt_text.replace("{ITEM_CONTENT}", item_content)
         # prompt_text = prompt_text.replace("{CONTENU}", item_content)
         # prompt_text = prompt_text.replace("{CATEGORIE}", category_name)
-        prompt_text = prompt_text.replace("{list_PJ}", item_content)
+        prompt_text = prompt_text.replace("{json_devis_pdf}", item_content)
         prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
         prompt_text = prompt_text.replace("{nom_categorie}", category_name)
 
@@ -319,7 +319,7 @@ class PrixExtractor:
 
             # 1. Construire le prompt avec le contenu de l'item
             prompt_text = self._build_prompt(item_content, category_name)
-
+            self._log(f"prompt_text = {prompt_text}")
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
 
@@ -334,6 +334,7 @@ class PrixExtractor:
             # 3. Extraire la réponse
             response_text = result.get("message", "")
             self._log(f"[{item_index + 1}/{total_items}] Réponse LLM reçue ({len(response_text)} chars)")
+            self._log(f"response_text = {response_text}")
 
             # Tenter d'extraire le JSON de la réponse
             prix_data_raw = utils.extract_json_from_text(response_text)
@@ -640,8 +641,8 @@ class PrixExtractor:
         total_items = len(items)
         self._log(f"📊 {total_items} items à traiter")
         self._log(f"Items: {json.dumps(items)}")
-        raise Exception("Test")
-        return None
+        # raise Exception("Test")
+        # return None
 
         # Traitement parallèle de tous les items
         self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_ITEMS} max simultanés) ---")
@@ -658,8 +659,8 @@ class PrixExtractor:
             for i, item in enumerate(items[:1])#TODO: à enlever après test
         ]
         self._log(f"tasks: {tasks}")
-        raise Exception("Test")
-        return None
+        # raise Exception("Test")
+        # return None
 
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
 

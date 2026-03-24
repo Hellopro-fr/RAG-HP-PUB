@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
 
     # Prompt statique - Devis
-    PROMPT_ID: str = "73"
+    PROMPT_ID: str = "119"
 
     MILVUS_SOURCE: str = "pjechanges"  # Collection source dans Milvus
     MILVUS_PAGE_TYPE: str = "devis"
