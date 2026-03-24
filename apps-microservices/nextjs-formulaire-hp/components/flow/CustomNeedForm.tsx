@@ -434,7 +434,7 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
                         htmlFor="description"
                         className="block text-sm font-medium text-foreground"
                       >
-                        Votre besoin *
+                        Quelque chose à ajouter ? <span className="text-muted-foreground">(optionnel)</span>
                       </label>
                       <button
                         type="button"
@@ -465,7 +465,7 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
                         onChange={(e) => setDescription(e.target.value)}
                         className={`w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none ${isListening ? "border-red-400 ring-2 ring-red-100" : "border-input"
                           }`}
-                        placeholder="Ex: Je cherche un pont élévateur pour véhicules utilitaires longs, avec hauteur de levée 2m minimum..."
+                        placeholder="Ex: Je cherche du matériel d'occasion, ou j'ai des contraintes spécifiques..."
                       />
                       {isListening && (
                         <div className="absolute bottom-3 right-3 flex items-center gap-1.5 text-xs text-red-500">
@@ -511,8 +511,8 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
                     </button>
                     <button
                       onClick={goToNextStep}
-                      disabled={!budget.trim() && !description.trim()}
-                      className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${budget.trim() && description.trim()
+                      disabled={!budget.trim()}
+                      className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${budget.trim()
                         ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
                         : "bg-muted text-muted-foreground cursor-not-allowed"
                         }`}
