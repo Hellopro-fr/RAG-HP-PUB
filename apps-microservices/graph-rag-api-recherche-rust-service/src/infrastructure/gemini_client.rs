@@ -24,11 +24,24 @@ impl GeminiClient {
         }
     }
 
+    /// Map thinking_level string to Gemini REST API thinkingBudget integer.
+    fn thinking_level_to_budget(level: &str) -> i64 {
+        match level {
+            "none"    =>     0,
+            "minimal" =>   512,
+            "low"     =>  1024,
+            "medium"  =>  8192,
+            "high"    => 24576,
+            _         =>    -1, // auto/dynamic
+        }
+    }
+
     /// Generate content using Gemini REST API with retry logic.
     pub async fn chat(
         &self,
         prompt: &str,
         temperature: Option<f64>,
+        thinking_level: Option<&str>,
     ) -> Result<String, String> {
         let api_key = match &SETTINGS.gemini_api_key {
             Some(key) => key.clone(),
@@ -43,6 +56,10 @@ impl GeminiClient {
         let mut generation_config = serde_json::json!({});
         if let Some(temp) = temperature {
             generation_config["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(level) = thinking_level {
+            let budget = Self::thinking_level_to_budget(level);
+            generation_config["thinkingConfig"] = serde_json::json!({ "thinkingBudget": budget });
         }
 
         let body = serde_json::json!({
@@ -102,8 +119,9 @@ impl GeminiClient {
         &self,
         system_prompt: &str,
         temperature: Option<f64>,
+        thinking_level: Option<&str>,
     ) -> Option<Value> {
-        match self.chat(system_prompt, temperature).await {
+        match self.chat(system_prompt, temperature, thinking_level).await {
             Ok(text) => {
                 // Strip markdown code fences if present
                 let cleaned = text
