@@ -466,7 +466,6 @@ For services that only run on the remote server (most Python/Rust microservices)
 
 ```
 # You CAN do locally:
-pyrefly check apps-microservices/<service>/     # Python type checking
 cargo check                                      # Rust type checking
 pytest tests/ -m "not integration"               # Unit tests with mocks
 
@@ -588,7 +587,7 @@ All Python/FastAPI services in `apps-microservices/` that depend on:
 
 | Action | Command | Notes |
 |--------|---------|-------|
-| Python type checking | `pyrefly check apps-microservices/<service>/` | Configured in `pyrefly.toml` |
+| Python type checking | [TODO: to be filled — Python type checker to be decided by the team] | |
 | Rust type checking | `cd apps-microservices/graph-rag-api-recherche-rust-service && cargo check` | |
 | Unit tests (mocked) | `pytest tests/ -m "not integration"` | Only with mocked dependencies |
 | Lint TypeScript | `cd apps-microservices/<ts-service> && npm run lint` | |
@@ -648,7 +647,7 @@ python -c "from neo4j import GraphDatabase"  # Will hang — no Neo4j server
 - Type hints on all function signatures
 - Pydantic models for request/response validation
 - Async handlers where I/O is involved (`async def`)
-- Type checking: `pyrefly`
+- Type checking: [TODO: Python type checker to be decided by the team]
 
 **Rust/Actix-web services:**
 - Strong typing, no `unwrap()` in production code
@@ -801,7 +800,7 @@ The sub-agent explores, summarizes, and returns results without consuming your m
 
 ### 12.3 Hooks
 
-[TODO: to be filled by the team — configure pre-commit hooks that run pyrefly, cargo check, or eslint before each commit]
+[TODO: to be filled by the team — configure pre-commit hooks that run cargo check, eslint, or your chosen Python type checker before each commit]
 
 ### 12.4 The `primer.md` Pattern in Depth
 
@@ -975,7 +974,7 @@ Follow these steps in order on your first day:
 | Model optimization | `model-optimizer/` |
 | CI/CD workflows | `.github/workflows/ci_services_*.yml`, `.github/workflows/cd_build_push_*.yml` |
 | Docker orchestration | `docker-compose.yml` (root) |
-| Python type checking config | `pyrefly.toml` (root) |
+| Python type checking config | [TODO: to be configured by the team] |
 | Personal config | `~/.claude/CLAUDE.md` |
 | Session primer | `~/.claude/primer.md` |
 

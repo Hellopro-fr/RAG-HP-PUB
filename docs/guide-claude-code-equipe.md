@@ -498,9 +498,7 @@ Claude Code a une fenetre de contexte limitee. Un indicateur de remplissage est 
 Pour les services qui ne tournent qu'en remote (voir section 8), le workflow est adapte :
 
 ```
-# Verifications locales possibles
-pyrefly check apps-microservices/api-recherche-service/src/
-# ou pour Rust
+# Verifications locales possibles (Rust)
 cargo check --manifest-path apps-microservices/graph-rag-api-recherche-rust-service/Cargo.toml
 
 # NE JAMAIS tenter de lancer le service
@@ -597,7 +595,7 @@ La majorite des microservices Python/Rust ne fonctionnent qu'en environnement re
 
 | Action | Commande |
 |--------|----------|
-| Typecheck Python | `pyrefly check apps-microservices/<service>/src/` |
+| Typecheck Python | [TODO: à compléter — outil de type-checking Python à définir par l'équipe] |
 | Typecheck Rust | `cargo check --manifest-path apps-microservices/graph-rag-api-recherche-rust-service/Cargo.toml` |
 | Tests unitaires (avec mocks) | `pytest apps-microservices/<service>/tests/unit/` |
 | Lint | [TODO: a completer par l'equipe -- aucun linter standard configure] |
@@ -688,7 +686,7 @@ chore/<description>        # Maintenance, CI/CD
   fix(graph-rag-etl): handle RabbitMQ connection reset gracefully
   refactor(embedding-service): extract embedding logic into dedicated module
   docs(protos): update gRPC stub documentation
-  chore(ci): add pyrefly check to Python service CI pipeline
+  chore(ci): add type-check step to Python service CI pipeline
   ```
 
 **Pull Requests :**
@@ -825,7 +823,7 @@ Claude va :
 1. Lire les deux services
 2. Identifier le pattern existant
 3. Appliquer le refactoring
-4. Verifier avec pyrefly
+4. Vérifier avec le linter/type-checker du projet
 
 ### Hooks (evenements automatiques)
 
@@ -836,7 +834,7 @@ Les hooks permettent d'executer des commandes automatiquement lors de certains e
 ```json
 // .claude/hooks.json (a creer si necessaire)
 {
-  "on_file_edit": "pyrefly check {file}",
+  "on_file_edit": "[TODO: commande de type-check] {file}",
   "on_commit": "npm run lint-staged"
 }
 ```

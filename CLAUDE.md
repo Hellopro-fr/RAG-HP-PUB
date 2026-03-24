@@ -43,14 +43,14 @@ docs/                 # Project documentation
 - **Messaging**: RabbitMQ (pika) for async processing; most processors consume from queues.
 - **Inter-service RPC**: gRPC via `protos/` definitions; Python stubs in `libs/grpc-stubs`, Rust in `libs/rust-common-utils`.
 - **Containerization**: Every service has a Dockerfile; root `docker-compose.yml` orchestrates infra.
-- **Type checking**: Pyrefly (`pyrefly.toml`) for Python; `cargo check` for Rust.
+- **Type checking**: `cargo check` for Rust. [TODO: Python type checker to be decided by the team].
 - **CI/CD**: GitHub Actions — `ci_services_*.yml` (lint/test), `cd_build_push_*.yml` (Docker build+push).
 - **Commit messages**: Conventional Commits, bilingual EN/FR (see `.claude/rules/commit-messages.md`).
 
 ## Constraints
 
 ### Remote-Only Services
-Most Python/Rust microservices run on a remote server with GPU and network access to Neo4j, Milvus, Qdrant, RabbitMQ, Redis. **Locally you CAN**: lint, typecheck (`pyrefly`, `cargo check`), run unit tests with mocks. **You CANNOT**: run integration tests, start the full service, connect to production DBs.
+Most Python/Rust microservices run on a remote server with GPU and network access to Neo4j, Milvus, Qdrant, RabbitMQ, Redis. **Locally you CAN**: lint, typecheck (`cargo check` for Rust), run unit tests with mocks. **You CANNOT**: run integration tests, start the full service, connect to production DBs.
 
 ### GPU-Dependent
 `vllm-server`, `triton-server`, `embedding-model-service`, `reranking-model-service` — require NVIDIA GPU.
