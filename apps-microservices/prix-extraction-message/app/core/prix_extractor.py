@@ -36,6 +36,9 @@ class PrixExtractor:
     # ID process
     ID_PROCESS = "37"
 
+    # Type extraction (2 = message)
+    TYPE_EXTRACTION = "2"
+
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
 
@@ -48,6 +51,7 @@ class PrixExtractor:
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
         self.prompt_config = None  # Sera chargé lors du premier traitement
+        self.info_q1 = ""  # Sera chargé lors du traitement (Question 1)
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL_ITEMS)
         # Buffer de logs par item pour éviter l'entrelacement en mode parallèle
         self._item_log_buffers: Dict[str, List[str]] = {}
@@ -81,6 +85,26 @@ class PrixExtractor:
                 block = "\n".join(logs)
                 utils.write_log(self.tracking_file, block)
 
+    def _clean_q1_data(self, q1_response: dict) -> dict:
+        """
+        Nettoie les données Question 1 en retirant les champs inutiles
+        (equivalence, id_reponse_parent, id_question_parent, choix, et tous les id_*).
+        """
+        data = q1_response.get("response", q1_response)
+
+        cleaned = {
+            "intitule": data.get("intitule", ""),
+            "justification": data.get("justification", ""),
+            "reponses": []
+        }
+
+        for rep in data.get("reponses", []):
+            cleaned["reponses"].append({
+                "reponse": rep.get("reponse", "")
+            })
+
+        return cleaned
+
     async def _load_prompt(self, id_categorie: str):
         """Charge le prompt une seule fois au début du traitement"""
         if self.prompt_config is None:
@@ -95,7 +119,7 @@ class PrixExtractor:
         Construit le prompt final en injectant le contenu de l'item dans le template.
 
         Args:
-            item_content: Le contenu de l'item à traiter
+            item_content: Le contenu JSON du message à traiter
             category_name: Le nom de la catégorie (optionnel)
 
         Returns:
@@ -104,9 +128,9 @@ class PrixExtractor:
         prompt_text = self.prompt_config.get("contenu_prompt", "")
 
         # Remplacer les placeholders si présents
-        prompt_text = prompt_text.replace("{ITEM_CONTENT}", item_content)
-        prompt_text = prompt_text.replace("{CONTENU}", item_content)
-        prompt_text = prompt_text.replace("{CATEGORIE}", category_name)
+        prompt_text = prompt_text.replace("{info_message}", item_content)
+        prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
+        prompt_text = prompt_text.replace("{nom_categorie}", category_name)
 
         return prompt_text
 
@@ -265,15 +289,15 @@ class PrixExtractor:
             validation du payload échoue.
         """
         async with self._semaphore:
-            item_id = str(item.get("id", item.get("item_id", f"item_{item_index}")))
-            item_content = str(item.get("content", item.get("text", item.get("data", ""))))
+            item_id = str(item.get("id", item.get("id_lead", f"item_{item_index}")))
+            item_content = utils.to_json_string(item)
 
             # Activer le contexte item pour bufferiser les logs
             token = self._current_item_id.set(item_id)
 
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
 
-            # 1. Construire le prompt avec le contenu de l'item
+            # 1. Construire le prompt avec le contenu JSON du message
             prompt_text = self._build_prompt(item_content, category_name)
 
             # 2. Appeler le LLM
@@ -342,29 +366,28 @@ class PrixExtractor:
 
     async def _fetch_items(self, id_categorie: str, category_name: str) -> List[Dict[str, Any]]:
         """
-        Récupère les items à traiter pour cette catégorie.
+        Récupère les messages à traiter pour cette catégorie via l'API.
 
         Returns:
-            Liste d'objets à traiter, chacun contenant au minimum:
-            - 'id': identifiant unique de l'item
-            - 'content': le contenu textuel à envoyer au LLM
-            - 'metadata': (optionnel) données supplémentaires
-
-        TODO: Implémenter la logique d'extraction des données message.
-              Cette méthode doit retourner une liste de dictionnaires représentant
-              les items à traiter. Exemple:
-              [
-                  {"id": "123", "content": "Texte du message...", "metadata": {...}},
-                  {"id": "456", "content": "Autre message...", "metadata": {...}},
-                  ...
-              ]
+            Liste d'objets message, chacun contenant:
+            - 'id': id_lead (identifiant unique)
+            - et les données complètes du message (corps_messages, info_lead, etc.)
         """
-        # TODO: Implémenter la récupération des données message ici.
-        # Exemple: appel API, requête base de données, etc.
-        raise NotImplementedError(
-            "La logique d'extraction des données message n'est pas encore implémentée. "
-            "Veuillez implémenter _fetch_items() dans prix-extraction-message/app/core/prix_extractor.py"
+        messages = await self.api_client.post(
+            "prix",
+            "messages",
+            "get",
+            {"id_categorie": id_categorie}
         )
+        if not messages:
+            return []
+
+        # S'assurer que chaque item a un champ 'id' pour le tracking
+        for msg in messages:
+            if "id" not in msg:
+                msg["id"] = msg.get("id_lead", "")
+
+        return messages
 
     async def extract_prix_for_category(
         self,
@@ -422,17 +445,30 @@ class PrixExtractor:
             self._log("RESET DU PROCESSUS")
             await self.api_client.post(
                 "prix",
-                "extraction_message",
+                "process",
                 "reset",
-                {"id_categorie": id_categorie}
+                {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
             )
 
         # Charger le prompt
         await self._load_prompt(id_categorie)
 
-        # Récupérer les items à traiter
-        # TODO: _fetch_items() doit être implémentée - voir la méthode pour les détails
-        self._log("\n--- Récupération des items message (TODO) ---")
+        # Récupérer Question 1 pour le contexte du prompt
+        self._log("Récupération Question 1...")
+        q1_raw = await self.api_client.post(
+            "question",
+            "question1",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+        if not q1_raw:
+            self._log(f"ERREUR: Aucune donnée Question 1 pour la catégorie {id_categorie}")
+            raise Exception(f"Impossible de récupérer Question 1 pour la catégorie {id_categorie}")
+        self.info_q1 = utils.to_json_string(self._clean_q1_data(q1_raw))
+        self._log(f"Question 1 chargée: {self.info_q1}")
+
+        # Récupérer les items message à traiter
+        self._log("\n--- Récupération des messages ---")
         items = await self._fetch_items(id_categorie, category_name)
 
         if not items:
@@ -504,7 +540,7 @@ class PrixExtractor:
                 "save",
                 {
                     "id_categorie":    id_categorie,
-                    "type_extraction": "1",           # 1 = message
+                    "type_extraction": self.TYPE_EXTRACTION,
                     "id_cibles":       successful_ids  # liste d'IDs (batch)
                 }
             )
