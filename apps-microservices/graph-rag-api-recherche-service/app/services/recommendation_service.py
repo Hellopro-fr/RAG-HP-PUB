@@ -1737,6 +1737,7 @@ class RecommendationService:
         parcours: str = "",
         id_prompt: int = 112,
         request: Optional[MatchingPayloadIdProduit] = None,
+        thinking_level: str = "low",
     ) -> tuple:
         """
         Enrich products with HelloPro API data and rerank using Gemini LLM.
@@ -2221,7 +2222,7 @@ class RecommendationService:
         # return top_produit, liste_produit, []
         try:
             llm_response = await gemini_client.generate_rerank_response(
-                system_prompt, temperature=prompt_temperature
+                system_prompt, temperature=prompt_temperature, thinking_level=thinking_level
             )
         except Exception as e:
             logging.error(f"[RERANK] Gemini rerank call error: {e}", exc_info=True)
@@ -2437,8 +2438,9 @@ class RecommendationService:
                     liste_produit,
                     id_categorie,
                     parcours,
-                    id_prompt=request.rerank.id_prompt,
+                    id_prompt=request.rerank.id_prompt if request.rerank else 112,
                     request=request,
+                    thinking_level=request.rerank.thinking_level if request.rerank else "low",
                 )
             )
 
