@@ -50,6 +50,9 @@ class PrixExtractor:
     # ID process
     ID_PROCESS = "37"
 
+    # Type extraction (1 = devis)
+    TYPE_EXTRACTION = "1"
+
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
 
@@ -62,6 +65,7 @@ class PrixExtractor:
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
         self.prompt_config = None  # Sera chargé lors du premier traitement
+        self.info_q1 = ""  # Sera chargé lors du traitement (Question 1)
         self._semaphore = asyncio.Semaphore(self.MAX_PARALLEL_ITEMS)
         # Buffer de logs par item pour éviter l'entrelacement en mode parallèle
         self._item_log_buffers: Dict[str, List[str]] = {}
@@ -95,6 +99,26 @@ class PrixExtractor:
                 block = "\n".join(logs)
                 utils.write_log(self.tracking_file, block)
 
+    def _clean_q1_data(self, q1_response: dict) -> dict:
+        """
+        Nettoie les données Question 1 en retirant les champs inutiles
+        (equivalence, id_reponse_parent, id_question_parent, choix, et tous les id_*).
+        """
+        data = q1_response.get("response", q1_response)
+
+        cleaned = {
+            "intitule": data.get("intitule", ""),
+            "justification": data.get("justification", ""),
+            "reponses": []
+        }
+
+        for rep in data.get("reponses", []):
+            cleaned["reponses"].append({
+                "reponse": rep.get("reponse", "")
+            })
+
+        return cleaned
+
     async def _load_prompt(self, id_categorie: str):
         """Charge le prompt une seule fois au début du traitement"""
         if self.prompt_config is None:
@@ -122,6 +146,8 @@ class PrixExtractor:
         # prompt_text = prompt_text.replace("{CONTENU}", item_content)
         # prompt_text = prompt_text.replace("{CATEGORIE}", category_name)
         prompt_text = prompt_text.replace("{list_PJ}", item_content)
+        prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
+        prompt_text = prompt_text.replace("{nom_categorie}", category_name)
 
         return prompt_text
 
@@ -554,13 +580,27 @@ class PrixExtractor:
             self._log("RESET DU PROCESSUS")
             await self.api_client.post(
                 "prix",
-                "extraction_devis",
+                "process",
                 "reset",
-                {"id_categorie": id_categorie}
+                {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
             )
 
         # Charger le prompt
         await self._load_prompt(id_categorie)
+
+        # Récupérer Question 1 pour le contexte du prompt
+        self._log("Récupération Question 1...")
+        q1_raw = await self.api_client.post(
+            "question",
+            "question1",
+            "get",
+            {"id_categorie": id_categorie}
+        )
+        if not q1_raw:
+            self._log(f"ERREUR: Aucune donnée Question 1 pour la catégorie {id_categorie}")
+            raise Exception(f"Impossible de récupérer Question 1 pour la catégorie {id_categorie}")
+        self.info_q1 = utils.to_json_string(self._clean_q1_data(q1_raw))
+        self._log(f"Question 1 chargée: {self.info_q1}")
 
         # Récupérer les items à traiter
         # TODO: _fetch_items() doit être implémentée - voir la méthode pour les détails
@@ -577,7 +617,25 @@ class PrixExtractor:
                 errors=0,
                 status="completed"
             )
-        
+
+        # Récupérer les ids items déjà traités
+        self._log("Récupération des ids items déjà traités...")
+        ids_items_traites = await self.api_client.post(
+            "prix",
+            "process",
+            "get",
+            {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
+        )
+
+        # Filtrer les items déjà traités
+        if ids_items_traites:
+            items_filtres = []
+            for item in items:
+                if item["id"] in ids_items_traites:
+                    self._log(f"Item {item['id']} déjà traité")
+                else:
+                    items_filtres.append(item)
+            items = items_filtres
 
         total_items = len(items)
         self._log(f"📊 {total_items} items à traiter")
@@ -643,7 +701,7 @@ class PrixExtractor:
                 "save",
                 {
                     "id_categorie":    id_categorie,
-                    "type_extraction": "2",           # 2 = devis
+                    "type_extraction": self.TYPE_EXTRACTION,
                     "id_cibles":       successful_ids  # liste d'IDs (batch)
                 }
             )
