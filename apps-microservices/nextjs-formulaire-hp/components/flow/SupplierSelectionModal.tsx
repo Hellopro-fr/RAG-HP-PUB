@@ -16,7 +16,7 @@ import SupplierCard from "./SupplierCard";
 import WarningBanner from "./WarningBanner";
 import ContactForm from "./ContactForm";
 import ModifyCriteriaForm from "./ModifyCriteriaForm";
-import CustomNeedForm from "./CustomNeedForm";
+import CustomNeedForm, { CustomNeedVariant } from "./CustomNeedForm";
 import ProductDetailModal from "./ProductDetailModal";
 import ProductComparisonModal from "./ProductComparisonModal";
 import CriteriaChangedBanner from "./CriteriaChangedBanner";
@@ -104,6 +104,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
   const [isExpanded, setIsExpanded] = useState(false);
   const [animatingCount, setAnimatingCount] = useState(false);
   const [viewState, setViewState] = useState<ViewState>("selection");
+  const [customNeedVariant, setCustomNeedVariant] = useState<CustomNeedVariant>('initial');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showComparison, setShowComparison] = useState(false);
@@ -328,7 +329,10 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                     priceCount={priceItems.length}
                     priceItems={priceItems.length > 0 ? priceItems : undefined}
                     detailDescription={phrase_prix}
-                    handleClickNeCorrespondPas={() => setViewState("custom-need")}
+                    handleClickNeCorrespondPas={() => {
+                      setCustomNeedVariant('budget');
+                      setViewState("custom-need");
+                    }}
                   />
                 );
               })()}
@@ -532,6 +536,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
 
           {viewState === "custom-need" && (
             <CustomNeedForm
+              variant={customNeedVariant}
               onBack={() => {
                 // Remettre flowType à 'principal' quand l'utilisateur annule
                 // depuis le formulaire "pas trouvé ce que vous cherchez"
@@ -602,6 +607,7 @@ const SupplierSelectionModal = ({userAnswers, onBackToQuestionnaire }: SupplierS
                   // Définir flowType = 'pas_trouve_recherchez' car l'utilisateur a cliqué "pas trouvé"
                   setStoreFlowType('pas_trouve_recherchez');
                   setFlowType('pas_trouve_recherchez');
+                  setCustomNeedVariant('initial');
                   setViewState("custom-need");
                 }}
                 className="flex-1 min-w-[200px] md:flex-none h-10 md:h-11 rounded-lg border-2 border-muted-foreground/30 bg-muted/50 px-3 md:px-4 text-xs md:text-sm font-medium text-foreground hover:bg-muted hover:border-muted-foreground/50 transition-colors flex items-center justify-center"
