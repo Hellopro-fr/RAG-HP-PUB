@@ -52,6 +52,12 @@ class RecommendationService:
          WITH DISTINCT p, $filters AS active_filters
          """
 
+    CYPHER_STEP1_BY_IDS = """
+         MATCH (p:Produit)
+         WHERE toString(p.id_produit) IN $target_id_produits AND p.est_actif = true
+         WITH p, $filters AS active_filters
+         """
+
     CYPHER_STEP2_SCORING = """
         // --- STEP 2: SCORING by CaracteristiqueTechnique with CONTINUOUS SCORING ---
         UNWIND active_filters AS f
@@ -1318,6 +1324,48 @@ class RecommendationService:
 
         return cypher_query
 
+    def _build_cypher_query_by_ids(
+        self,
+        request: MatchingPayloadIdProduit,
+    ) -> str:
+        """
+        Build a Cypher query that matches products by a list of id_produit values
+        (CYPHER_STEP1_BY_IDS + CYPHER_STEP2_SCORING), with the same projection logic.
+        """
+        query_step_1 = self.CYPHER_STEP1_BY_IDS
+        query_step_2 = self.CYPHER_STEP2_SCORING
+        cypher_query = query_step_1 + query_step_2
+
+        if (
+            request.champs_sortie is not None
+            and len(request.champs_sortie) > 0
+            and "id_produit" not in request.champs_sortie
+        ):
+            request.champs_sortie.append("id_produit")
+        if (
+            request.champs_sortie is not None
+            and len(request.champs_sortie) > 0
+            and "id_fournisseur" not in request.champs_sortie
+        ):
+            request.champs_sortie.append("id_fournisseur")
+
+        # Determine projection
+        if request.champs_sortie:
+            fields = (
+                [f".{f}" for f in request.champs_sortie]
+                if len(request.champs_sortie) > 0
+                else [".*"]
+            )
+            projection = f"{{ {', '.join(fields)} }}"
+        else:
+            projection = "{.*}"
+
+        # Inject projection
+        cypher_query = cypher_query.replace("TOP_P_PROJECTION_PLACEHOLDER", projection)
+        cypher_query = cypher_query.replace("PROJECTION_PLACEHOLDER", projection)
+
+        return cypher_query
+
     def _build_cypher_params(
         self,
         request: MatchingPayloadIdProduit,
@@ -2393,6 +2441,115 @@ class RecommendationService:
                     request=request,
                 )
             )
+
+            # --- Re-query Cypher with only LLM-selected product IDs ---
+            llm_selected_ids = [
+                str(p.id_produit) for p in reranked_top + reranked_liste
+            ]
+
+            if llm_selected_ids:
+                logging.warning(
+                    "[RERANK-REQUERY] Re-running Cypher query with %d LLM-selected product IDs: %s",
+                    len(llm_selected_ids),
+                    llm_selected_ids,
+                )
+                try:
+                    # Build Cypher query restricted to LLM-selected IDs
+                    requery_cypher = self._build_cypher_query_by_ids(request)
+                    requery_params = self._build_cypher_params(
+                        request,
+                        flat_filters,
+                        weights_map,
+                        scoring_params,
+                        top_k=len(llm_selected_ids),
+                        target_product_id=None,
+                    )
+                    # Add the target_id_produits parameter for CYPHER_STEP1_BY_IDS
+                    requery_params["target_id_produits"] = llm_selected_ids
+
+                    requery_start = time.perf_counter()
+                    requery_results = await clients.execute_cypher(
+                        requery_cypher, requery_params
+                    )
+                    requery_time = time.perf_counter() - requery_start
+                    logging.warning(
+                        "[RERANK-REQUERY] Re-query completed in %.3fs, got %d results",
+                        requery_time,
+                        len(requery_results) if requery_results else 0,
+                    )
+
+                    # Parse re-queried results into Produit objects
+                    requery_liste, requery_top = self._parse_matching_results(
+                        requery_results,
+                        request,
+                        blocked_val,
+                        different_val,
+                    )
+
+                    # Build a map of id_produit -> re-queried Produit for fast lookup
+                    requery_map = {}
+                    for p in requery_top + requery_liste:
+                        requery_map[str(p.id_produit)] = p
+
+                    # Rebuild reranked_top preserving LLM order and LLM response data
+                    final_top = []
+                    for idx, p in enumerate(reranked_top):
+                        pid = str(p.id_produit)
+                        if pid in requery_map:
+                            rp = requery_map[pid]
+                            final_top.append(
+                                Produit(
+                                    rang=idx + 1,
+                                    id_produit=rp.id_produit,
+                                    score=p.score,
+                                    caracteristique=rp.caracteristique,
+                                    coeff_geo=rp.coeff_geo,
+                                    coeff_type_frns=rp.coeff_type_frns,
+                                    coeff_etat_score=rp.coeff_etat_score,
+                                    coeff_caracteristique=rp.coeff_caracteristique,
+                                    info_produit=rp.info_produit,
+                                    llm_response=p.llm_response,
+                                )
+                            )
+                        else:
+                            final_top.append(p)
+
+                    # Rebuild reranked_liste preserving LLM order and LLM response data
+                    final_liste = []
+                    for idx, p in enumerate(reranked_liste):
+                        pid = str(p.id_produit)
+                        if pid in requery_map:
+                            rp = requery_map[pid]
+                            final_liste.append(
+                                Produit(
+                                    rang=idx + 1,
+                                    id_produit=rp.id_produit,
+                                    score=p.score,
+                                    caracteristique=rp.caracteristique,
+                                    coeff_geo=rp.coeff_geo,
+                                    coeff_type_frns=rp.coeff_type_frns,
+                                    coeff_etat_score=rp.coeff_etat_score,
+                                    coeff_caracteristique=rp.coeff_caracteristique,
+                                    info_produit=rp.info_produit,
+                                    llm_response=p.llm_response,
+                                )
+                            )
+                        else:
+                            final_liste.append(p)
+
+                    reranked_top = final_top
+                    reranked_liste = final_liste
+                    logging.warning(
+                        "[RERANK-REQUERY] Successfully rebuilt %d top + %d liste products from re-query",
+                        len(reranked_top),
+                        len(reranked_liste),
+                    )
+                except Exception as e:
+                    logging.error(
+                        "[RERANK-REQUERY] Re-query failed, keeping LLM-reranked results: %s",
+                        e,
+                        exc_info=True,
+                    )
 
             total_time = time.perf_counter() - start_time
             return MatchingResponse(
