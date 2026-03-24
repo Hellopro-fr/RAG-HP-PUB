@@ -53,6 +53,13 @@ const CYPHER_STEP1_ANCHOR: &str = r#"
     WITH DISTINCT p, $filters AS active_filters
 "#;
 
+/// CYPHER_STEP1_BY_IDS: match a list of specific product IDs (used for post-LLM requery)
+const CYPHER_STEP1_BY_IDS: &str = r#"
+    MATCH (p:Produit)
+    WHERE toString(p.id_produit) IN $target_id_produits AND p.est_actif = true
+    WITH p, $filters AS active_filters
+"#;
+
 // Note: CYPHER_STEP2_SCORING is extremely long (600+ lines of Cypher).
 // It is loaded as a static string constant to be combined with Step 1.
 const CYPHER_STEP2_SCORING: &str = include_str!("cypher_step2_scoring.cypher");
@@ -374,6 +381,32 @@ impl RecommendationService {
         }
 
         // Build projection
+        let projection = if !champs.is_empty() {
+            let fields: Vec<String> = champs.iter().map(|f| format!(".{}", f)).collect();
+            format!("{{ {} }}", fields.join(", "))
+        } else {
+            "{.*}".to_string()
+        };
+
+        query = query.replace("TOP_P_PROJECTION_PLACEHOLDER", &projection);
+        query = query.replace("PROJECTION_PLACEHOLDER", &projection);
+        query
+    }
+
+    /// Build Cypher query using CYPHER_STEP1_BY_IDS for post-LLM requery.
+    fn build_cypher_query_by_ids(request: &MatchingPayloadIdProduit) -> String {
+        let mut query = format!("{}\n{}", CYPHER_STEP1_BY_IDS, CYPHER_STEP2_SCORING);
+
+        let mut champs = request.champs_sortie.clone().unwrap_or_default();
+        if !champs.is_empty() {
+            if !champs.contains(&"id_produit".to_string()) {
+                champs.push("id_produit".to_string());
+            }
+            if !champs.contains(&"id_fournisseur".to_string()) {
+                champs.push("id_fournisseur".to_string());
+            }
+        }
+
         let projection = if !champs.is_empty() {
             let fields: Vec<String> = champs.iter().map(|f| format!(".{}", f)).collect();
             format!("{{ {} }}", fields.join(", "))
@@ -881,6 +914,7 @@ impl RecommendationService {
         request: &MatchingPayloadIdProduit,
         pre_category_caracs: Vec<Value>,
         pre_prompt_data: Option<Value>,
+        thinking_level: &str,
     ) -> (Vec<Produit>, Vec<Produit>, Vec<Produit>) {
         let all_produits: Vec<&Produit> = top_produit.iter().chain(liste_produit.iter()).collect();
         if all_produits.is_empty() {
@@ -1062,7 +1096,7 @@ impl RecommendationService {
         // Call Gemini
         debug!("[RERANK] Calling Gemini LLM for reranking... (prompt: {} chars)", system_prompt.len());
         let step_gemini = Instant::now();
-        let llm_response = GEMINI_CLIENT.generate_rerank_response(&system_prompt, temperature).await;
+        let llm_response = GEMINI_CLIENT.generate_rerank_response(&system_prompt, temperature, Some(thinking_level)).await;
         debug!("[perf] Gemini LLM call took {:.3}s", step_gemini.elapsed().as_secs_f64());
         if llm_response.is_none() {
             return (top_produit.to_vec(), liste_produit.to_vec(), vec![]);
@@ -1207,21 +1241,92 @@ impl RecommendationService {
         debug!("[perf] parse_matching_results took {:.3}s", step_parse.elapsed().as_secs_f64());
 
         let parcours = request.rerank.as_ref().and_then(|r| r.parcours.as_deref()).unwrap_or("");
+        let thinking_level = request.rerank.as_ref().map(|r| r.thinking_level.as_str()).unwrap_or("minimal");
 
         let step_rerank = Instant::now();
         let (reranked_top, reranked_liste, ecarts) = Self::enrich_and_rerank_with_llm(
             &top_produit, &liste_produit, &id_categorie, parcours, id_prompt, request,
-            pre_category_caracs, pre_prompt_data,
+            pre_category_caracs, pre_prompt_data, thinking_level,
         )
         .await;
         debug!("[perf] enrich_and_rerank_with_llm took {:.3}s", step_rerank.elapsed().as_secs_f64());
+
+        // Re-run Cypher with only LLM-selected product IDs to get fresh scoring data
+        let step_requery = Instant::now();
+        let llm_selected_ids: Vec<String> = reranked_top.iter()
+            .chain(reranked_liste.iter())
+            .map(|p| p.id_produit.clone())
+            .collect();
+
+        let (final_top, final_liste) = if !llm_selected_ids.is_empty() {
+            let requery_cypher = Self::build_cypher_query_by_ids(request);
+            let mut requery_params = Self::build_cypher_params(
+                request, &flat_filters, &weights_map, &scoring_params,
+                llm_selected_ids.len() as i32, None,
+            );
+            requery_params["target_id_produits"] = serde_json::json!(llm_selected_ids);
+
+            let requery_results = CLIENTS.execute_cypher(&requery_cypher, &requery_params).await;
+            debug!("[perf] requery cypher returned {} results", requery_results.len());
+
+            let (requery_liste_raw, requery_top_raw) =
+                Self::parse_matching_results(&requery_results, request, blocked_val, different_val);
+
+            let requery_map: HashMap<String, Produit> = requery_top_raw.into_iter()
+                .chain(requery_liste_raw.into_iter())
+                .map(|p| (p.id_produit.clone(), p))
+                .collect();
+
+            let final_top: Vec<Produit> = reranked_top.into_iter().enumerate().map(|(idx, p)| {
+                if let Some(rp) = requery_map.get(&p.id_produit) {
+                    Produit {
+                        rang: (idx + 1) as i32,
+                        score: p.score,
+                        llm_response: p.llm_response,
+                        caracteristique: rp.caracteristique.clone(),
+                        coeff_geo: rp.coeff_geo,
+                        coeff_type_frns: rp.coeff_type_frns,
+                        coeff_etat_score: rp.coeff_etat_score,
+                        coeff_caracteristique: rp.coeff_caracteristique,
+                        info_produit: rp.info_produit.clone(),
+                        id_produit: p.id_produit,
+                    }
+                } else {
+                    p
+                }
+            }).collect();
+
+            let final_liste: Vec<Produit> = reranked_liste.into_iter().enumerate().map(|(idx, p)| {
+                if let Some(rp) = requery_map.get(&p.id_produit) {
+                    Produit {
+                        rang: (idx + 1) as i32,
+                        score: p.score,
+                        llm_response: p.llm_response,
+                        caracteristique: rp.caracteristique.clone(),
+                        coeff_geo: rp.coeff_geo,
+                        coeff_type_frns: rp.coeff_type_frns,
+                        coeff_etat_score: rp.coeff_etat_score,
+                        coeff_caracteristique: rp.coeff_caracteristique,
+                        info_produit: rp.info_produit.clone(),
+                        id_produit: p.id_produit,
+                    }
+                } else {
+                    p
+                }
+            }).collect();
+
+            (final_top, final_liste)
+        } else {
+            (reranked_top, reranked_liste)
+        };
+        debug!("[perf] requery+merge took {:.3}s", step_requery.elapsed().as_secs_f64());
 
         let total = start.elapsed().as_secs_f64();
         debug!("[perf] get_products_by_caracteristique_filters_rerank total: {:.3}s", total);
 
         MatchingResponse {
-            top_produit: reranked_top,
-            liste_produit: reranked_liste,
+            top_produit: final_top,
+            liste_produit: final_liste,
             ecarts: if ecarts.is_empty() { None } else { Some(ecarts) },
             temps_de_traitement: total,
         }

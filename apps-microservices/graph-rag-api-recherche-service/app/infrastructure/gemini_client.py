@@ -63,7 +63,7 @@ class GeminiClient:
         self._timeout = 120  # seconds
         self.client = genai.Client(api_key=self.api_key)
 
-    def chat(self, prompt: str, temperature: Optional[float] = None) -> Dict[str, Any]:
+    def chat(self, prompt: str, temperature: Optional[float] = None, thinking_level: Optional[str] = None) -> Dict[str, Any]:
         """
         Envoie un prompt à Gemini avec retry automatique
 
@@ -99,12 +99,22 @@ class GeminiClient:
                     effective_temperature = (
                         temperature if temperature is not None else self._temperature
                     )
+                    # Build thinking config if thinking_level is provided
+                    thinking_config = (
+                        types.ThinkingConfig(
+                            thinking_level=thinking_level,
+                            include_thoughts=True,
+                        )
+                        if thinking_level is not None
+                        else None
+                    )
                     response = self.client.models.generate_content(
                         model=self.model,
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             temperature=effective_temperature,
                             response_mime_type="application/json",
+                            thinking_config=thinking_config,
                         ),
                     )
 
@@ -143,6 +153,7 @@ class GeminiClient:
         system_prompt: str,
         # user_data_json: str,
         temperature: Optional[float] = None,
+        thinking_level: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Send enriched product data to Gemini for reranking analysis.
@@ -166,7 +177,7 @@ class GeminiClient:
 
             # Run the synchronous chat call in a thread pool to avoid blocking the event loop
             result = await asyncio.wait_for(
-                asyncio.to_thread(self.chat, combined_prompt, temperature),
+                asyncio.to_thread(self.chat, combined_prompt, temperature, thinking_level),
                 timeout=self._timeout,
             )
 

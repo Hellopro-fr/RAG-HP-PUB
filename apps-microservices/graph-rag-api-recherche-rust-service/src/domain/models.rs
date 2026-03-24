@@ -107,6 +107,12 @@ pub struct RerankingOptions {
     pub parcours: Option<String>,
     #[serde(default)]
     pub id_prompt: Option<i32>,
+    #[serde(default = "default_thinking_level")]
+    pub thinking_level: String,
+}
+
+fn default_thinking_level() -> String {
+    "minimal".to_string()
 }
 
 // ================================
