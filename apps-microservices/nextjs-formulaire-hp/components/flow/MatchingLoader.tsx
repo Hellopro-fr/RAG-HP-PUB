@@ -5,8 +5,12 @@ import { Search, Package, Truck, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MatchingLoaderProps {
-  onComplete: () => void;
-  duration?: number; // in milliseconds
+  /** Progression externe (0-100) pilotée par les appels API */
+  externalProgress?: number;
+  /** @deprecated Utilisé seulement si externalProgress n'est pas fourni */
+  onComplete?: () => void;
+  /** @deprecated Utilisé seulement si externalProgress n'est pas fourni */
+  duration?: number;
 }
 
 const STEPS = [
@@ -32,23 +36,19 @@ const STEPS = [
   },
 ];
 
-const MatchingLoader = ({ onComplete, duration = 5000 }: MatchingLoaderProps) => {
+const MatchingLoader = ({ externalProgress, onComplete, duration = 5000 }: MatchingLoaderProps) => {
+  const useExternal = externalProgress !== undefined;
+
   const [currentStep, setCurrentStep] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const [isComplete, setIsComplete] = useState(false);
+  const [internalProgress, setInternalProgress] = useState(0);
+
+  const progress = useExternal ? externalProgress : internalProgress;
 
   const stepDuration = duration / STEPS.length;
 
+  // Timer interne pour les steps visuels (toujours actif) + progress interne (si pas de externalProgress)
   useEffect(() => {
-    // Progress bar animation
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        const newProgress = prev + (100 / (duration / 50));
-        return Math.min(newProgress, 100);
-      });
-    }, 50);
-
-    // Step transitions
+    // Step transitions — toujours basées sur un timer pour les animations visuelles
     const stepTimer = setInterval(() => {
       setCurrentStep((prev) => {
         if (prev < STEPS.length - 1) {
@@ -58,18 +58,29 @@ const MatchingLoader = ({ onComplete, duration = 5000 }: MatchingLoaderProps) =>
       });
     }, stepDuration);
 
-    // Complete after duration — pas de fade-out, le loader reste visible
-    // La navigation est gérée par le parent quand les données sont prêtes
-    const completeTimer = setTimeout(() => {
-      onComplete();
-    }, duration);
+    // Progress bar interne (fallback si externalProgress non fourni)
+    let progressInterval: ReturnType<typeof setInterval> | undefined;
+    let completeTimer: ReturnType<typeof setTimeout> | undefined;
+
+    if (!useExternal) {
+      progressInterval = setInterval(() => {
+        setInternalProgress((prev) => {
+          const newProgress = prev + (100 / (duration / 50));
+          return Math.min(newProgress, 100);
+        });
+      }, 50);
+
+      completeTimer = setTimeout(() => {
+        onComplete?.();
+      }, duration);
+    }
 
     return () => {
-      clearInterval(progressInterval);
       clearInterval(stepTimer);
-      clearTimeout(completeTimer);
+      if (progressInterval) clearInterval(progressInterval);
+      if (completeTimer) clearTimeout(completeTimer);
     };
-  }, [duration, stepDuration, onComplete]);
+  }, [duration, stepDuration, onComplete, useExternal]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
@@ -97,7 +108,7 @@ const MatchingLoader = ({ onComplete, duration = 5000 }: MatchingLoaderProps) =>
       <div
         className={cn(
           "relative z-10 w-full max-w-lg px-6 transition-all duration-500",
-          isComplete ? "opacity-0 scale-95" : "opacity-100 scale-100"
+          "opacity-100 scale-100"
         )}
       >
         {/* Logo / Brand icon */}
@@ -188,7 +199,7 @@ const MatchingLoader = ({ onComplete, duration = 5000 }: MatchingLoaderProps) =>
         <div className="space-y-2">
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-100 ease-linear rounded-full"
+              className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-700 ease-out rounded-full"
               style={{ width: `${progress}%` }}
             />
           </div>

@@ -54,7 +54,7 @@ async function fetchProductInfo(
 interface UseProcessMatchingResult {
   isLoading: boolean;
   error: Error | null;
-  processMatching: () => Promise<'selection' | 'something-to-add'>;
+  processMatching: (onProgress?: (progress: number) => void) => Promise<'selection' | 'something-to-add'>;
 }
 
 /**
@@ -77,9 +77,10 @@ export function useProcessMatching(): UseProcessMatchingResult {
 
   const { trackDbEvent } = useDbTracking();
 
-  const processMatching = useCallback(async (): Promise<'selection' | 'something-to-add'> => {
+  const processMatching = useCallback(async (onProgress?: (progress: number) => void): Promise<'selection' | 'something-to-add'> => {
     setIsLoading(true);
     setError(null);
+    onProgress?.(0);
 
     try {
       // Consolider les équivalences du questionnaire
@@ -160,6 +161,9 @@ export function useProcessMatching(): UseProcessMatchingResult {
       const totalProducts = apiData.liste_produit.length + (apiData.top_produit?.length || 0);
       const hasInsufficientResults = topProductsWithGoodScore.length < MIN_TOP_PRODUCTS;
 
+      // Matching reçu → 25%
+      onProgress?.(25);
+
       // Stocker les résultats initiaux
       setMatchingResults({ recommended, others });
 
@@ -177,6 +181,9 @@ export function useProcessMatching(): UseProcessMatchingResult {
         }
       }
 
+      // Enrichissement recommandés terminé → 50%
+      onProgress?.(50);
+
       // Enrichir les autres
       let enrichedOthers = others;
       const othersIds = others.map((s) => s.id);
@@ -187,6 +194,9 @@ export function useProcessMatching(): UseProcessMatchingResult {
           setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });
         }
       }
+
+      // Enrichissement autres terminé → 75%
+      onProgress?.(75);
 
       console.log('[useProcessMatching] Matching completed:', {
         recommendedCount: enrichedRecommended.length,

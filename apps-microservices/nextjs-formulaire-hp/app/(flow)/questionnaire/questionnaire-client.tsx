@@ -44,7 +44,7 @@ export default function QuestionnaireClient({
 
   // État pour le loader de matching et la destination après
   const [showLoader, setShowLoader] = useState(false);
-  const [loaderAnimationDone, setLoaderAnimationDone] = useState(false);
+  const [loaderProgress, setLoaderProgress] = useState(0);
   const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | null>(null);
 
   // Récupérer et stocker le categoryId + sauvegarder le token original
@@ -223,35 +223,32 @@ export default function QuestionnaireClient({
 
     // Promise.all : attendre matching ET prix
     // L'échec du prix ne bloque PAS (catch silencieux)
+    // onProgress met à jour la barre (0→25→50→75 via matching, 100 après prix)
     const [destination] = await Promise.all([
-      processMatching(),
+      processMatching(setLoaderProgress),
       fetchPriceEstimation().catch((err) => {
         console.error('[Prix] Error (non-blocking):', err);
       }),
     ]);
 
+    setLoaderProgress(100);
     setRedirectDestination(destination);
   };
 
-  const handleLoaderComplete = () => {
-    // Le timer du loader est terminé — juste un flag, pas de navigation directe
-    setLoaderAnimationDone(true);
-  };
-
-  // Navigation seulement quand les 3 conditions sont réunies : timer + matching + prix
+  // Navigation dès que les données sont prêtes (matching + prix terminés)
   useEffect(() => {
-    if (loaderAnimationDone && redirectDestination) {
+    if (redirectDestination) {
       if (redirectDestination === 'something-to-add') {
         goToSomethingToAdd();
       } else {
         goToSelection();
       }
     }
-  }, [loaderAnimationDone, redirectDestination, goToSelection, goToSomethingToAdd]);
+  }, [redirectDestination, goToSelection, goToSomethingToAdd]);
 
   // Afficher le loader pendant le matching
   if (showLoader) {
-    return <MatchingLoader onComplete={handleLoaderComplete} duration={5000} />;
+    return <MatchingLoader externalProgress={loaderProgress} />;
   }
 
   // Attendre que les données URL soient traitées avant de rendre le questionnaire
