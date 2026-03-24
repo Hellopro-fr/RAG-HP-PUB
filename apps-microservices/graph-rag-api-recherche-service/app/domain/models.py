@@ -274,7 +274,9 @@ class RerankingOptions(BaseModel):
     use_rerank: bool = False
     parcours: str = ""
     id_prompt: int = Field(112, description="ID du prompt")
-    thinking_level: str = Field("low", description="Niveau de réflexion du LLM (low, medium, high)")
+    thinking_level: str = Field(
+        "minimal", description="Niveau de réflexion du LLM (low, medium, high)"
+    )
 
 
 class ScoringOptions(BaseModel):
