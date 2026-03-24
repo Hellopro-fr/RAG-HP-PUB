@@ -531,53 +531,17 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
                 {/* Title */}
                 <div className="text-center">
                   <h2 className="text-2xl font-bold text-foreground">
-                    Ajustez votre recherche
+                    Décrivez votre besoin
                   </h2>
                   <p className="mt-1 text-muted-foreground">
-                    Nous allons rechercher un fournisseur adapté à votre budget et vos contraintes.
+                    Votre besoin est unique ? Décrivez-le et nos experts trouveront les
+                    fournisseurs qu'il vous faut.
                   </p>
                 </div>
 
                 {/* Form */}
                 <div className="space-y-5">
-                  {/* Budget input */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label
-                        htmlFor="budget"
-                        className="block text-sm font-medium text-foreground"
-                      >
-                        Budget souhaité *
-                      </label>
-                    </div>
-                    <div className="relative">
-                      <input
-                        id="budget"
-                        value={budget}
-                        onChange={(e) => setBudget(e.target.value)}
-                        className={`w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none ${isListening ? "border-red-400 ring-2 ring-red-100" : "border-input"
-                          }`}
-                        placeholder="Ex: 2 000 € – 3 000 € HT"
-                      />
-                      {isListening && (
-                        <div className="absolute bottom-3 right-3 flex items-center gap-1.5 text-xs text-red-500">
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                          </span>
-                          Écoute en cours...
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {/* Reassurance */}
-                  <div className="flex items-start gap-3 rounded-xl bg-primary/5 border border-primary/10 p-4">
-                    <UserCheck className="h-5 w-5 shrink-0 text-primary mt-0.5" />
-                    <p className="text-sm text-foreground/80">
-                      Nos experts vont rechercher un fournisseur adapté à votre budget et vos besoins spécifiques.
-                    </p>
-                  </div>
-                  {/* Description */}
+                  {/* Description with voice input */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label
@@ -602,7 +566,7 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
                         ) : (
                           <>
                             <Mic className="h-4 w-4" />
-                            Dicter
+                            🎤 Dicter
                           </>
                         )}
                       </button>
@@ -651,6 +615,15 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
                     </label>
                   </div>
 
+                  {/* Reassurance */}
+                  <div className="flex items-start gap-3 rounded-xl bg-primary/5 border border-primary/10 p-4">
+                    <UserCheck className="h-5 w-5 shrink-0 text-primary mt-0.5" />
+                    <p className="text-sm text-foreground/80">
+                      Un expert analysera votre demande et vous proposera les meilleurs
+                      fournisseurs sous 24h
+                    </p>
+                  </div>
+
                   {/* Actions */}
                   <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
                     <button
@@ -661,8 +634,8 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
                     </button>
                     <button
                       onClick={goToNextStep}
-                      disabled={!budget.trim() && !description.trim()}
-                      className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${budget.trim() && description.trim()
+                      disabled={!description.trim()}
+                      className={`order-1 sm:order-2 w-full sm:w-auto flex-1 sm:flex-none rounded-lg px-8 py-3 text-base font-semibold transition-all flex items-center justify-center gap-2 ${description.trim()
                         ? "bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25"
                         : "bg-muted text-muted-foreground cursor-not-allowed"
                         }`}
