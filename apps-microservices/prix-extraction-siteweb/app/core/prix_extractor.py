@@ -37,6 +37,9 @@ class PrixExtractor:
     # ID process
     ID_PROCESS = "37"
 
+    # Type extraction (4 = siteweb)
+    TYPE_EXTRACTION = "4"
+
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
 
@@ -447,9 +450,9 @@ class PrixExtractor:
             self._log("RESET DU PROCESSUS")
             await self.api_client.post(
                 "prix",
-                "extraction_siteweb",
+                "process",
                 "reset",
-                {"id_categorie": id_categorie}
+                {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
             )
         
         # Charger le prompt
@@ -490,6 +493,25 @@ class PrixExtractor:
         
         total_chunks = len(chunks)
         self._log(f"📊 {total_chunks} chunks trouvés dans Milvus")
+
+        # Recupérer les list ids chunks deja traiter        
+        self._log("Récupération des ids chunks deja traiter...")
+        ids_chunks_traites = await self.api_client.post(
+            "prix",
+            "process",
+            "get",
+            {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
+        )
+
+        # Filtrer les chunks déjà traités
+        if ids_chunks_traites:
+            chunks_filtres = []
+            for chunk in chunks:
+                if chunk["id"] in ids_chunks_traites:
+                    self._log(f"Chunk {chunk['id']} déjà traité")
+                else:
+                    chunks_filtres.append(chunk)
+            chunks = chunks_filtres
         
         # Traitement parallèle de tous les chunks
         self._log(f"\n--- Traitement parallèle ({self.MAX_PARALLEL_CHUNKS} max simultanés) ---")
@@ -512,11 +534,6 @@ class PrixExtractor:
         for chunk_id_key in list(self._chunk_log_buffers.keys()):
             self._flush_chunk_logs(chunk_id_key)
 
-        #test 
-        self._log(f"Résultats: {results}")
-        raise Exception("Test")
-        return None
-
         elapsed = time.time() - start_time
 
         # Collecter et compter les résultats — toute exception lève immédiatement
@@ -529,9 +546,9 @@ class PrixExtractor:
                 # Propager l'exception : arrêt immédiat du traitement de la catégorie
                 self._log(f"❌ Exception critique: {r}")
                 raise r
-            elif isinstance(r, ItemResult):                
+            elif isinstance(r, ItemResult):
+                item_results.append(r)                
                 if r.status == "success":
-                    item_results.append(r)
                     success_count += 1
                 elif r.status == "skipped":
                     skipped_count += 1
@@ -542,9 +559,9 @@ class PrixExtractor:
             else:
                 raise Exception(f"Résultat inattendu: {type(r)} — {r}")
 
-        # Sauvegarde batch des IDs traités avec succès
+        # Sauvegarde batch des IDs traités avec succès ou skipped
         # type_extraction = 4 pour le siteweb
-        successful_ids = [r.item_id for r in item_results if r.status == "success"]
+        successful_ids = [r.item_id for r in item_results if r.status == "success" or r.status == "skipped"]
 
         if successful_ids:
             self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) siteweb ---")
@@ -554,7 +571,7 @@ class PrixExtractor:
                 "save",
                 {
                     "id_categorie":    id_categorie,
-                    "type_extraction": "4",           # 4 = siteweb
+                    "type_extraction": self.TYPE_EXTRACTION,    
                     "id_cibles":       successful_ids  # liste d'IDs (batch)
                 }
             )

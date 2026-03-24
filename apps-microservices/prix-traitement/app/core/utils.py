@@ -3,6 +3,7 @@ Fonctions utilitaires pour le service prix-traitement
 """
 import json
 import re
+import time
 from typing import Dict, Any, Optional
 import logging
 
@@ -58,3 +59,26 @@ async def get_prompt(id_prompt: str) -> Dict[str, Any]:
         {"id_prompt": id_prompt}
     )
     return prompt_config
+
+
+# Cache en mémoire pour les prompts (évite un appel HTTP à chaque requête)
+_prompt_cache: Dict[str, Any] = {}
+PROMPT_CACHE_TTL = 300  # 5 minutes
+
+
+async def get_prompt_cached(id_prompt: str) -> Optional[Dict[str, Any]]:
+    """
+    Récupère un prompt avec cache en mémoire (TTL 300s).
+    Évite de refaire un appel HTTP si le prompt a déjà été chargé récemment.
+    """
+    now = time.time()
+    if id_prompt in _prompt_cache:
+        cached, ts = _prompt_cache[id_prompt]
+        if now - ts < PROMPT_CACHE_TTL:
+            logger.info(f"Prompt id={id_prompt} servi depuis le cache")
+            return cached
+
+    result = await get_prompt(id_prompt)
+    if result is not None:
+        _prompt_cache[id_prompt] = (result, now)
+    return result
