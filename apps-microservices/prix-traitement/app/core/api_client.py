@@ -89,16 +89,28 @@ class GeminiProvider:
                         f"Gemini API tentative: {attempt.retry_state.attempt_number}"
                     )
 
-                    response = self.client.models.generate_content(
-                        model=self.model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
+                    # On n'envoie config que si le thinking_level demandé
+                    # diffère du défaut du modèle :
+                    # - gemini-3.1-flash-lite-preview : défaut = low
+                    # - autres modèles 
+                    needs_config = (
+                        (self.model == "gemini-3.1-flash-lite-preview" and self.thinking_level != "low")
+                        or (self.model != "gemini-3.1-flash-lite-preview")
+                    )
+
+                    generate_kwargs = {
+                        "model": self.model,
+                        "contents": prompt,
+                    }
+                    if needs_config:
+                        generate_kwargs["config"] = types.GenerateContentConfig(
                             thinking_config=types.ThinkingConfig(
                                 thinking_level=self.thinking_level,
                                 include_thoughts=True,
                             )
-                        ),
-                    )
+                        )
+
+                    response = self.client.models.generate_content(**generate_kwargs)
 
         except errors.ClientError as e:
             logger.error(
