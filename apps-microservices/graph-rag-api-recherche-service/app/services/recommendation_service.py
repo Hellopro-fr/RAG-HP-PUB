@@ -2503,7 +2503,7 @@ class RecommendationService:
                                 Produit(
                                     rang=idx + 1,
                                     id_produit=rp.id_produit,
-                                    score=p.score,
+                                    score=rp.score,
                                     caracteristique=rp.caracteristique,
                                     coeff_geo=rp.coeff_geo,
                                     coeff_type_frns=rp.coeff_type_frns,
@@ -2526,7 +2526,7 @@ class RecommendationService:
                                 Produit(
                                     rang=idx + 1,
                                     id_produit=rp.id_produit,
-                                    score=p.score,
+                                    score=rp.score,
                                     caracteristique=rp.caracteristique,
                                     coeff_geo=rp.coeff_geo,
                                     coeff_type_frns=rp.coeff_type_frns,
