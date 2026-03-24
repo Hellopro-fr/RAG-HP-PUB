@@ -248,7 +248,7 @@ class PrixExtractor:
         try:
             payload = ProduitPrixPayload(
                 source="devis",
-                id_lead=item_id,
+                id_lead=str(prix_data.get("id_lead", "")).strip(),
                 id_categorie=id_categorie,
                 nom_categorie=category_name,
                 # Champs obligatoires attendus dans la réponse LLM
@@ -656,7 +656,7 @@ class PrixExtractor:
                 id_categorie=id_categorie,
                 category_name=category_name
             )
-            for i, item in enumerate(items[:1])#TODO: à enlever après test
+            for i, item in enumerate(items)#TODO: à enlever après test
         ]
         self._log(f"tasks: {tasks}")
         # raise Exception("Test")
