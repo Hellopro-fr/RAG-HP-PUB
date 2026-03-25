@@ -181,7 +181,7 @@ class PrixExtractor:
                 type_ia=3,  # Gemini
                 model=self.GEMINI_MODEL,
                 input_token=usage_metadata.get("prompt_token_count", 0),
-                output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+                output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
                 id_process=self.ID_PROCESS,
                 origine="prix-extraction-devis",
                 etat=1 if "code" not in result else 2,
