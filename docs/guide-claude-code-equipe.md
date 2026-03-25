@@ -1,6 +1,6 @@
 # Guide d'equipe -- Claude Code sur RAG-HP-PUB
 
-> **Version :** 1.0 | **Derniere mise a jour :** 2026-03-25
+> **Version :** 1.1 | **Derniere mise a jour :** 2026-03-25
 > **Public cible :** Tous les developpeurs du projet RAG-HP-PUB (juniors inclus)
 
 ---
@@ -47,9 +47,9 @@ Claude Code charge automatiquement plusieurs couches de configuration au demarra
 ### Notre configuration
 
 Le projet RAG-HP-PUB dispose de :
-- **3 agents** : `code-reviewer`, `debugger`, `doc-writer`
-- **7 commandes** : `/commit-msg`, `/explain`, `/plan`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`
-- **2 fichiers de regles** : `code-modification.md`, `commit-messages.md`
+- **4 agents** : `code-reviewer`, `debugger`, `doc-writer`, `test-writer`
+- **8 commandes** : `/commit-msg`, `/explain`, `/plan`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`, `/pre-push`
+- **4 fichiers de regles** : `code-modification.md`, `commit-messages.md`, `security.md`, `language.md`
 - **Un systeme de CLAUDE.md** par service pour donner le contexte local a Claude
 
 ---
@@ -139,7 +139,7 @@ Lancez Claude Code et posez la question :
 Quels agents, commandes et regles as-tu charges pour ce projet ?
 ```
 
-Claude doit repondre avec la liste de nos 3 agents, 7 commandes et 2 fichiers de regles. Si un element manque, verifiez que le fichier existe dans `.claude/` et que sa syntaxe YAML front matter est correcte.
+Claude doit repondre avec la liste de nos 4 agents, 8 commandes et 4 fichiers de regles. Si un element manque, verifiez que le fichier existe dans `.claude/` et que sa syntaxe YAML front matter est correcte.
 
 ---
 
@@ -274,6 +274,37 @@ Il generera ensuite un `CLAUDE.md` conforme au template standard (stack, command
 
 Claude vous demandera de choisir le scenario (a), (b) ou (c), puis proposera des modifications chirurgicales avec un apercu diff avant application.
 
+### 3.8 `/pre-push` -- Verification pre-push
+
+**Quand l'utiliser :** Avant de pousser du code vers le depot distant. Cette commande lance une checklist complete sur tous les services modifies.
+
+**Ce que fait la commande :**
+1. Identifie les fichiers modifies et les regroupe par service
+2. Lance les verifications par langage :
+   - **Python** : compilation syntaxique, imports, tests pytest (si existants)
+   - **Rust** : `cargo check`, `cargo test` (si existants)
+   - **TypeScript/Node.js** : lint et tests (si scripts existants dans package.json)
+   - **Libs partagees** : verification + alerte sur l'impact downstream
+3. Lance `@code-reviewer` sur tous les fichiers modifies
+4. Affiche un tableau recapitulatif avec le statut de chaque service
+
+**Exemple :**
+```
+/pre-push
+```
+
+**Resultat attendu :**
+```
+| Service              | Syntax | Tests | Review | Status |
+|----------------------|--------|-------|--------|--------|
+| api-gateway          | ✅     | ✅    | ✅     | OK     |
+| graph-rag-etl        | ✅     | ⚠️    | ✅     | Warn   |
+
+All checks passed. Safe to push.
+```
+
+> **Regle :** Si des tests manquent, la commande suggerera d'utiliser `@test-writer` pour en generer.
+
 ---
 
 ## 4. Les agents disponibles (@agents)
@@ -346,11 +377,47 @@ ConnectionResetError: [Errno 104] Connection reset by peer
 
 > **Regle absolue :** L'agent ne modifie JAMAIS le code executable. Il ajoute uniquement des commentaires et de la documentation. Le format suit les conventions du langage (docstrings Python, JSDoc pour TypeScript, `///` pour Rust).
 
+### 4.4 `@test-writer` -- Generation de tests
+
+**Role :** Generer des suites de tests pytest pour les services Python FastAPI en suivant les patterns existants du projet.
+
+**Outils :** Read, Write, Edit, Glob, Grep
+
+**Quand l'utiliser :**
+- Quand un service n'a aucun test (69/91 services sont dans ce cas)
+- Quand vous voulez augmenter la couverture de tests d'un service existant
+- Quand `/pre-push` signale l'absence de tests pour un service modifie
+
+**Exemple :**
+```
+@test-writer Genere des tests pour apps-microservices/QC-tracking-service/
+```
+
+**Processus :**
+1. Lit le code source du service (endpoints, schemas, logique metier)
+2. Cherche les `conftest.py` existants pour reutiliser les fixtures
+3. Genere les fichiers de test :
+   - `tests/conftest.py` -- Fixtures partagees (TestClient, mock RabbitMQ, mock gRPC)
+   - `tests/test_<router>.py` -- Un fichier par routeur
+   - `tests/test_<module>.py` -- Un fichier par module de logique metier
+
+**Patterns de test :**
+- `httpx.AsyncClient` pour les endpoints FastAPI
+- Mock des dependances externes (RabbitMQ, gRPC, Milvus, Redis)
+- `pytest.mark.asyncio` pour les tests async
+- Nommage descriptif : `test_<action>_<condition>_<resultat_attendu>`
+
+> **Regles absolues :**
+> - Ne modifie JAMAIS le code source existant -- uniquement les fichiers de test
+> - Ne genere JAMAIS de tests necessitant des connexions reelles aux BDD/queues
+> - Apres generation, suggere la commande de lancement : `pytest apps-microservices/<service>/tests/ -v`
+
 ### Quand NE PAS utiliser un agent
 
 - **Ne pas utiliser `@code-reviewer`** pour de la simple comprehension de code -- utilisez `/explain` a la place.
 - **Ne pas utiliser `@debugger`** si vous n'avez pas de message d'erreur concret -- posez votre question directement a Claude.
 - **Ne pas utiliser `@doc-writer`** si vous voulez aussi refactorer le code -- faites le refactor d'abord, documentez ensuite.
+- **Ne pas utiliser `@test-writer`** pour un seul test unitaire trivial -- ecrivez-le directement avec Claude.
 
 ---
 
@@ -381,6 +448,30 @@ Impose le format **Conventional Commits** bilingue (EN/FR) :
 - Ligne de sujet < 72 caracteres
 
 > **Chemin :** `.claude/rules/commit-messages.md`
+
+### 5.3 `security.md` -- Regles de securite
+
+Impose les bonnes pratiques de securite pour tout le code du projet :
+
+1. **Secrets et URLs** -- JAMAIS de valeurs en dur. Toutes les URLs de services et cles API doivent venir de variables d'environnement via Pydantic `BaseSettings`
+2. **CORS** -- `allow_origins=["*"]` acceptable pour les services internes derriere le gateway. Les services publics (`api-gateway`, `api-html-recherche`) doivent restreindre les origines
+3. **JWT et authentification** -- Les secrets JWT doivent etre en variable d'environnement, jamais de valeurs par defaut comme "changeme-jwt-secret"
+4. **Validation des entrees** -- Utiliser les modeles Pydantic pour TOUTE validation. Assainir les donnees avant injection dans les prompts LLM (prevention d'injection de prompt)
+5. **Logs** -- Les headers sensibles (`authorization`, `cookie`, `x-api-key`) doivent etre masques dans les logs
+
+> **Chemin :** `.claude/rules/security.md`
+
+### 5.4 `language.md` -- Regles de langue
+
+Definit le comportement linguistique de Claude Code :
+
+1. **Langue de reponse** -- Claude repond dans la meme langue que l'utilisateur (francais si l'utilisateur ecrit en francais, anglais si en anglais)
+2. **Identifiants de code** -- Toujours en anglais, quelle que soit la langue de conversation
+3. **Commentaires de code** -- Suivent la langue de conversation (commentaires en francais pour les utilisateurs francophones)
+4. **Messages de commit** -- Toujours generes dans les DEUX langues (EN + FR)
+5. **Fichiers CLAUDE.md** -- Rediges en anglais pour une meilleure adherence aux instructions
+
+> **Chemin :** `.claude/rules/language.md`
 
 ### Comment les regles sont chargees
 
@@ -454,6 +545,8 @@ Ou en etions-nous la derniere fois ?
 | Avant de coder | `/plan` pour les taches complexes |
 | Codage | Travailler en mode normal, Claude applique les regles automatiquement |
 | Apres modification | `/commit-msg` pour generer le message de commit |
+| Tests manquants | `@test-writer` pour generer des tests sur le service modifie |
+| Avant push | `/pre-push` pour la checklist de verification complete |
 | Avant PR | `@code-reviewer` sur les fichiers modifies |
 | Documentation | `@doc-writer` sur les fichiers cles |
 | Erreur rencontree | `@debugger` avec le stack trace |
@@ -888,13 +981,15 @@ Suivez ces etapes dans l'ordre lors de votre arrivee sur le projet :
 - [ ] **2.** Cloner le repo : `git clone git@github.com:<org>/RAG-HP-PUB.git`
 - [ ] **3.** Creer votre fichier `~/.claude/CLAUDE.md` personnel (voir section 2)
 - [ ] **4.** Creer votre fichier `~/.claude/primer.md` initial (voir section 2)
-- [ ] **5.** Lancer `claude` depuis la racine du repo et verifier le chargement : `Quels agents, commandes et regles as-tu charges ?`
+- [ ] **5.** Lancer `claude` depuis la racine du repo et verifier le chargement : `Quels agents, commandes et regles as-tu charges ?` (attendu : 4 agents, 8 commandes, 4 regles)
 - [ ] **6.** Lire le CLAUDE.md racine du projet pour comprendre l'architecture globale
 - [ ] **7.** Identifier les services sur lesquels vous allez travailler et lire leurs CLAUDE.md respectifs : `cat apps-microservices/<service>/CLAUDE.md`
 - [ ] **8.** Faire un premier exercice avec `/explain` sur un fichier du service assigne
 - [ ] **9.** Faire un premier exercice avec `/plan` pour une tache fictive sur votre service
 - [ ] **10.** Lire les sections 6 (Workflow quotidien) et 8 (Remote-only) de ce guide
-- [ ] **11.** Demander a un collegue de vous montrer le workflow `@code-reviewer` -> correction -> `/commit-msg` sur un changement reel
+- [ ] **11.** Essayer `@test-writer` sur un service sans tests : `@test-writer Genere des tests pour apps-microservices/<service>/`
+- [ ] **12.** Essayer `/pre-push` avant votre premier push
+- [ ] **13.** Demander a un collegue de vous montrer le workflow `@code-reviewer` -> correction -> `/commit-msg` sur un changement reel
 
 ---
 
@@ -911,6 +1006,7 @@ Suivez ces etapes dans l'ordre lors de votre arrivee sur le projet :
 | `/new-feature-claude-md` | Maj CLAUDE.md apres feature majeure | Apres ajout d'un module |
 | `/new-service-claude-md` | Generer CLAUDE.md nouveau service | A la creation d'un microservice |
 | `/update-claude-md` | Modification chirurgicale CLAUDE.md | Erreur, changement, rescan |
+| `/pre-push` | Checklist de verification pre-push | Avant chaque push |
 
 ### Agents
 
@@ -919,6 +1015,7 @@ Suivez ces etapes dans l'ordre lors de votre arrivee sur le projet :
 | `@code-reviewer` | Sonnet | Revue qualite/securite | Ne modifie JAMAIS le code |
 | `@debugger` | Sonnet | Diagnostic d'erreurs | Demande confirmation avant d'appliquer |
 | `@doc-writer` | Sonnet | Ajout de documentation | Ne modifie JAMAIS le code executable |
+| `@test-writer` | Sonnet | Generation de tests pytest | Ne modifie JAMAIS le code source |
 
 ### Regles
 
@@ -926,6 +1023,8 @@ Suivez ces etapes dans l'ordre lors de votre arrivee sur le projet :
 |---------|--------|-------|
 | `code-modification.md` | `.claude/rules/` | Impose le protocole de patch minimal |
 | `commit-messages.md` | `.claude/rules/` | Impose les Conventional Commits bilingues |
+| `security.md` | `.claude/rules/` | Interdit les secrets en dur, impose Pydantic BaseSettings |
+| `language.md` | `.claude/rules/` | Reponse dans la langue de l'utilisateur, commits bilingues |
 
 ### Raccourcis et seuils
 
