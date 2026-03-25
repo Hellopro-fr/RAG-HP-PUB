@@ -44,7 +44,7 @@ COPY apps-microservices/prix-traitement/app ./app
 COPY apps-microservices/prix-traitement/main.py .
 
 # Étape 4: Exposer le port
-EXPOSE 8595
+EXPOSE 8591
 
 # Étape 5: Définir la commande de lancement directement
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8591"]
