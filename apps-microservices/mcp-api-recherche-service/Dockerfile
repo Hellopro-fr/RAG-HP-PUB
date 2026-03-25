@@ -56,7 +56,7 @@ FROM golang:1.24-alpine AS builder
 WORKDIR /build
 COPY --from=protogen /build/ /build/
 
-RUN go mod download
+RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/mcp-api-recherche ./cmd/server/
 
 # ── Stage 3: Minimal runtime ─────────────────────────────────────────────────
