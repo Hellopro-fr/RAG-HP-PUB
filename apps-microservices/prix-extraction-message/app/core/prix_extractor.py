@@ -131,7 +131,7 @@ class PrixExtractor:
         prompt_text = self.prompt_config.get("contenu_prompt", "")
 
         # Remplacer les placeholders si présents
-        prompt_text = prompt_text.replace("{info_message}", item_content)
+        prompt_text = prompt_text.replace("{json_message}", item_content)
         prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
         prompt_text = prompt_text.replace("{nom_categorie}", category_name)
 
