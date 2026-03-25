@@ -406,7 +406,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             return {
                 "success": False,
                 "reponse": None,
-                "chunks_count": 0,
+                "api_response": {},
                 "time_elapsed": elapsed,
                 "message": f"Aucun résultat RAG trouvé pour la catégorie {id_categorie}"
             }
@@ -417,7 +417,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             return {
                 "success": False,
                 "reponse": None,
-                "chunks_count": len(chunks),
+                "api_response": {},
                 "time_elapsed": elapsed,
                 "message": f"Impossible de récupérer le prompt id={prompt_id}"
             }
