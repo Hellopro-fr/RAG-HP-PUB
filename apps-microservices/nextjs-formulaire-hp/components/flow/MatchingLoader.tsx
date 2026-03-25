@@ -39,48 +39,55 @@ const STEPS = [
 const MatchingLoader = ({ externalProgress, onComplete, duration = 5000 }: MatchingLoaderProps) => {
   const useExternal = externalProgress !== undefined;
 
-  const [currentStep, setCurrentStep] = useState(0);
-  const [internalProgress, setInternalProgress] = useState(0);
+  // displayProgress anime en smooth vers la cible (externalProgress ou timer interne)
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const [internalTarget, setInternalTarget] = useState(0);
 
-  const progress = useExternal ? externalProgress : internalProgress;
+  const targetProgress = useExternal ? (externalProgress ?? 0) : internalTarget;
 
-  const stepDuration = duration / STEPS.length;
+  // Dériver le step depuis displayProgress
+  const currentStep = displayProgress >= 75 ? 3
+    : displayProgress >= 50 ? 2
+    : displayProgress >= 25 ? 1
+    : 0;
 
-  // Timer interne pour les steps visuels (toujours actif) + progress interne (si pas de externalProgress)
+  // Animation smooth : incrémente displayProgress vers targetProgress
   useEffect(() => {
-    // Step transitions — toujours basées sur un timer pour les animations visuelles
-    const stepTimer = setInterval(() => {
-      setCurrentStep((prev) => {
-        if (prev < STEPS.length - 1) {
-          return prev + 1;
+    const interval = setInterval(() => {
+      setDisplayProgress((prev) => {
+        if (targetProgress === 0) {
+          // Pas encore de réponse API : animer lentement vers 20% max
+          if (prev >= 20) return prev;
+          return prev + 0.5;
         }
-        return prev;
+        // Réponse API reçue : animer vers la cible
+        if (prev >= targetProgress) return prev;
+        return Math.min(prev + 1, targetProgress);
       });
-    }, stepDuration);
+    }, 50);
+    return () => clearInterval(interval);
+  }, [targetProgress]);
 
-    // Progress bar interne (fallback si externalProgress non fourni)
-    let progressInterval: ReturnType<typeof setInterval> | undefined;
-    let completeTimer: ReturnType<typeof setTimeout> | undefined;
+  // Fallback interne (si externalProgress non fourni) : timer classique
+  useEffect(() => {
+    if (useExternal) return;
 
-    if (!useExternal) {
-      progressInterval = setInterval(() => {
-        setInternalProgress((prev) => {
-          const newProgress = prev + (100 / (duration / 50));
-          return Math.min(newProgress, 100);
-        });
-      }, 50);
+    const progressInterval = setInterval(() => {
+      setInternalTarget((prev) => {
+        const newProgress = prev + (100 / (duration / 50));
+        return Math.min(newProgress, 100);
+      });
+    }, 50);
 
-      completeTimer = setTimeout(() => {
-        onComplete?.();
-      }, duration);
-    }
+    const completeTimer = setTimeout(() => {
+      onComplete?.();
+    }, duration);
 
     return () => {
-      clearInterval(stepTimer);
-      if (progressInterval) clearInterval(progressInterval);
-      if (completeTimer) clearTimeout(completeTimer);
+      clearInterval(progressInterval);
+      clearTimeout(completeTimer);
     };
-  }, [duration, stepDuration, onComplete, useExternal]);
+  }, [duration, onComplete, useExternal]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
@@ -199,12 +206,12 @@ const MatchingLoader = ({ externalProgress, onComplete, duration = 5000 }: Match
         <div className="space-y-2">
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-700 ease-out rounded-full"
-              style={{ width: `${progress}%` }}
+              className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
+              style={{ width: `${displayProgress}%` }}
             />
           </div>
           <p className="text-center text-sm text-muted-foreground">
-            {Math.round(progress)}% complété
+            {Math.round(displayProgress)}% complété
           </p>
         </div>
       </div>

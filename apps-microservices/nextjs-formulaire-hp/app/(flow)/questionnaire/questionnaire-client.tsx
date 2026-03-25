@@ -232,6 +232,8 @@ export default function QuestionnaireClient({
     ]);
 
     setLoaderProgress(100);
+    // Attendre que la barre anime jusqu'à 100% avant de naviguer
+    await new Promise(resolve => setTimeout(resolve, 1500));
     setRedirectDestination(destination);
   };
 
