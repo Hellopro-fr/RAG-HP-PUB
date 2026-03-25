@@ -96,6 +96,21 @@ def build_target_schema(
             )
             cloned = FieldSchema(**kwargs)
 
+        # Force id_lead / source_chunk_id to VARCHAR(65535) if present
+        if cloned.name in ("id_lead", "source_chunk_id"):
+            if (
+                cloned.dtype == DataType.VARCHAR
+                and cloned.params.get("max_length") != 65535
+            ):
+                logger.info(f"Overriding field '{cloned.name}' to VARCHAR(65535)")
+                cloned = FieldSchema(
+                    name=cloned.name,
+                    dtype=DataType.VARCHAR,
+                    description=cloned.description,
+                    is_primary=cloned.is_primary,
+                    max_length=65535,
+                )
+
         new_fields.append(cloned)
 
     if not text_field_found:
