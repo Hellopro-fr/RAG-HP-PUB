@@ -292,7 +292,7 @@ class PrixExtractor:
             validation du payload échoue.
         """
         async with self._semaphore:
-            item_id = str(item.get("id", item.get("id_lead", f"item_{item_index}")))
+            item_id = str(item.get("id_lead", item.get("id", f"item_{item_index}")))
             item_content = utils.to_json_string(item)
 
             # Activer le contexte item pour bufferiser les logs
@@ -397,20 +397,16 @@ class PrixExtractor:
             - 'id': id_lead (identifiant unique)
             - et les données complètes du message (corps_messages, info_lead, etc.)
         """
-        messages = await self.api_client.post(
+        data_messages = await self.api_client.post(
             "prix",
             "messages",
             "get",
             {"id_categorie": id_categorie}
         )
+        messages = data_messages.get("messages", [])
         if not messages:
             return []
-
-        # S'assurer que chaque item a un champ 'id' pour le tracking
-        for msg in messages:
-            if "id" not in msg:
-                msg["id"] = msg.get("id_lead", "")
-
+            
         return messages
 
     async def extract_prix_for_category(
