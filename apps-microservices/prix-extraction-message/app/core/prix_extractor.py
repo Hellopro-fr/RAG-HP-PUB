@@ -304,6 +304,8 @@ class PrixExtractor:
             # 1. Construire le prompt avec le contenu JSON du message
             prompt_text = self._build_prompt(item_content, category_name)
 
+            self._log(f"[{item_index + 1}/{total_items}] prompt_text: {prompt_text}")
+
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
 
@@ -317,7 +319,7 @@ class PrixExtractor:
 
             # 3. Extraire la réponse
             response_text = result.get("message", "")
-            self._log(f"[{item_index + 1}/{total_items}] Réponse LLM reçue ({len(response_text)} chars)")
+            self._log(f"[{item_index + 1}/{total_items}] Réponse LLM reçue ({response_text})")
 
             # Tenter d'extraire le JSON de la réponse
             prix_data_raw = utils.extract_json_from_text(response_text)
@@ -406,7 +408,7 @@ class PrixExtractor:
         messages = data_messages.get("messages", [])
         if not messages:
             return []
-            
+
         return messages
 
     async def extract_prix_for_category(
