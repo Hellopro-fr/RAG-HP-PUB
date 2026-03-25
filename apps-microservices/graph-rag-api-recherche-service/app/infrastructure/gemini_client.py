@@ -63,7 +63,12 @@ class GeminiClient:
         self._timeout = 120  # seconds
         self.client = genai.Client(api_key=self.api_key)
 
-    def chat(self, prompt: str, temperature: Optional[float] = None, thinking_level: Optional[str] = None) -> Dict[str, Any]:
+    def chat(
+        self,
+        prompt: str,
+        temperature: Optional[float] = None,
+        thinking_level: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Envoie un prompt à Gemini avec retry automatique
 
@@ -114,7 +119,7 @@ class GeminiClient:
                         config=types.GenerateContentConfig(
                             temperature=effective_temperature,
                             response_mime_type="application/json",
-                            thinking_config=thinking_config,
+                            # thinking_config=thinking_config,
                         ),
                     )
 
@@ -177,7 +182,9 @@ class GeminiClient:
 
             # Run the synchronous chat call in a thread pool to avoid blocking the event loop
             result = await asyncio.wait_for(
-                asyncio.to_thread(self.chat, combined_prompt, temperature, thinking_level),
+                asyncio.to_thread(
+                    self.chat, combined_prompt, temperature, thinking_level
+                ),
                 timeout=self._timeout,
             )
 
