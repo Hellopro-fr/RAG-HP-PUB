@@ -18,22 +18,24 @@ logger = logging.getLogger(__name__)
 
 
 async def call_search_api_async(
-    prompt: str, 
-    num_results: int = None, 
+    prompt: str,
+    num_results: int = None,
     source: str = None,
-    use_reranker: bool = True, 
+    filtre: Dict[str, Any] = None,
+    use_reranker: bool = True,
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Recherche asynchrone dans Milvus via l'API de recherche interne (search_in_milvus).
-    
+
     Args:
         prompt: Le texte de recherche
         num_results: Nombre de résultats à retourner (défaut: settings.MILVUS_TOP_K = 30)
         source: La collection source dans Milvus (défaut: settings.MILVUS_SOURCE = "siteweb")
+        filtre: Filtre Milvus (ex: {"page_type": ["article", "blog"]})
         use_reranker: Utiliser le reranker
         reranker_model: Modèle de reranking
-        
+
     Returns:
         Liste de correspondances ou None en cas d'erreur
     """
@@ -42,12 +44,14 @@ async def call_search_api_async(
         num_results = settings.MILVUS_TOP_K
     if source is None:
         source = settings.MILVUS_SOURCE
-    
+    if filtre is None:
+        filtre = {}
+
     try:
         # Créer la requête pour l'API de recherche interne
         request = SearchRequestWs(
             prompt=prompt,
-            source=[SourcesFiltre(source=source, filtre={})],
+            source=[SourcesFiltre(source=source, filtre=filtre)],
             action=1,
             top_k=num_results,
             options=RerankerOptions(
@@ -78,14 +82,15 @@ async def call_search_api_async(
 
 # Fonction synchrone conservée pour compatibilité
 def call_search_api(
-    prompt: str, 
-    num_results: int = None, 
+    prompt: str,
+    num_results: int = None,
     source: str = None,
-    use_reranker: bool = True, 
+    filtre: Dict[str, Any] = None,
+    use_reranker: bool = True,
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Appelle l'API de recherche de manière synchrone (wrapper autour de la version async).
     DEPRECATED: Utilisez call_search_api_async directement pour de meilleures performances.
     """
-    return asyncio.run(call_search_api_async(prompt, num_results, source, use_reranker, reranker_model))
+    return asyncio.run(call_search_api_async(prompt, num_results, source, filtre, use_reranker, reranker_model))

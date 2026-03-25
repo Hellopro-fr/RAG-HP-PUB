@@ -125,21 +125,22 @@ class Consumer:
                 finally:
                     await extractor.close()
 
-                # Publier chaque item réussi vers data.ready_for_embedding
+                # Publier chaque produit prix réussi vers data.ready_for_embedding
                 published_count = 0
                 for item_result in result.item_results:
                     if item_result.status == "success" and item_result.prix_data:
-                        try:
-                            embedding_message = process_product_data_for_embedding(
-                                prix_data=item_result.prix_data,
-                                id_categorie=id_categorie,
-                                source=item_result.source,
-                                origin="prix-extraction-devis"
-                            )
-                            await self.publisher.publish_message(embedding_message)
-                            published_count += 1
-                        except Exception as pub_err:
-                            logger.warning(f"[CAT-{id_categorie}] ⚠️ Publication skip item {item_result.item_id}: {pub_err}")
+                        for single_prix in item_result.prix_data:
+                            try:
+                                embedding_message = process_product_data_for_embedding(
+                                    prix_data=single_prix,
+                                    id_categorie=id_categorie,
+                                    source=item_result.source,
+                                    origin="prix-extraction-devis"
+                                )
+                                await self.publisher.publish_message(embedding_message)
+                                published_count += 1
+                            except Exception as pub_err:
+                                logger.warning(f"[CAT-{id_categorie}] ⚠️ Publication skip item {item_result.item_id}: {pub_err}")
 
                 logger.info(f"[CAT-{id_categorie}] 📊 Bilan: {result.success}/{result.total_chunks} succès, {result.errors} erreurs, {published_count} messages publiés vers embedding")
                 await message.ack()

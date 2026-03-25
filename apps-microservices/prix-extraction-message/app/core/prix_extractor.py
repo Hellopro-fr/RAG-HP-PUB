@@ -317,7 +317,7 @@ class PrixExtractor:
 
             # Tenter d'extraire le JSON de la réponse
             prix_data_raw = utils.extract_json_from_text(response_text)
-            if not prix_data_raw:
+            if prix_data_raw is None:
                 self._log("ERREUR: Impossible d'extraire le JSON")
                 await self.api_client.post(
                     "prix",
@@ -335,23 +335,43 @@ class PrixExtractor:
                 self._current_item_id.reset(token)
                 raise Exception(f"Impossible d'extraire le JSON de la réponse LLM pour item {item_id}")
 
-            # 3b. Valider et construire le payload structuré
-            payload = self._validate_and_build_payload(
-                prix_data=prix_data_raw,
-                item_id=item_id,
-                id_categorie=id_categorie,
-                category_name=category_name,
-                item_metadata=item.get("metadata", {})
-            )
-            if payload is None:
+            # Liste vide = le LLM n'a trouvé aucun prix dans cet item → skip
+            if isinstance(prix_data_raw, list) and len(prix_data_raw) == 0:
+                self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucun prix trouvé par le LLM")
                 self._flush_item_logs(item_id)
                 self._current_item_id.reset(token)
-                raise ValueError(
-                    f"Validation du payload échouée (champs obligatoires manquants) : "
-                    f"Catégorie {id_categorie} - Item {item_id} - Data : {prix_data_raw}"
+                return ItemResult(
+                    item_id=item_id,
+                    source="message",
+                    content=item_content,
+                    prix_data=None,
+                    status="skipped"
                 )
 
-            prix_data = payload.dict()
+            # Normaliser en liste (le LLM peut retourner un dict ou une liste)
+            if isinstance(prix_data_raw, dict):
+                prix_data_raw = [prix_data_raw]
+
+            # 3b. Valider et construire les payloads pour chaque produit
+            payloads = []
+            for single_prix in prix_data_raw:
+                payload = self._validate_and_build_payload(
+                    prix_data=single_prix,
+                    item_id=item_id,
+                    id_categorie=id_categorie,
+                    category_name=category_name,
+                    item_metadata=item.get("metadata", {})
+                )
+                if payload is None:
+                    self._flush_item_logs(item_id)
+                    self._current_item_id.reset(token)
+                    raise ValueError(
+                        f"Validation du payload échouée (champs obligatoires manquants) : "
+                        f"Catégorie {id_categorie} - Item {item_id} - Data : {single_prix}"
+                    )
+                payloads.append(payload)
+
+            prix_data = [p.dict() for p in payloads]
 
             self._log(f"[{item_index + 1}/{total_items}] ✅ Item {item_id} validé")
             self._flush_item_logs(item_id)
@@ -510,6 +530,7 @@ class PrixExtractor:
 
         # Collecter et compter les résultats — toute exception lève immédiatement
         success_count = 0
+        skipped_count = 0
         error_count = 0
         item_results: List[ItemResult] = []
         for r in results:
@@ -521,6 +542,8 @@ class PrixExtractor:
                 item_results.append(r)
                 if r.status == "success":
                     success_count += 1
+                elif r.status == "skipped":
+                    skipped_count += 1
                 else:
                     error_count += 1
                     self._log(f"❌ Item en erreur: {r.item_id} — {r.error_message}")
@@ -528,9 +551,8 @@ class PrixExtractor:
             else:
                 raise Exception(f"Résultat inattendu: {type(r)} — {r}")
 
-        # Sauvegarde batch des IDs traités avec succès
-        # type_extraction = 1 pour les messages
-        successful_ids = [r.item_id for r in item_results if r.status == "success"]
+        # Sauvegarde batch des IDs traités avec succès ou skipped
+        successful_ids = [r.item_id for r in item_results if r.status in ("success", "skipped")]
 
         if successful_ids:
             self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) message ---")
@@ -557,6 +579,7 @@ class PrixExtractor:
         self._log("EXTRACTION TERMINÉE")
         self._log(f"Total items: {total_items}")
         self._log(f"Succès: {success_count}")
+        self._log(f"Skipped: {skipped_count}")
         self._log(f"Erreurs: {error_count}")
         self._log(f"Durée: {elapsed:.1f}s")
         self._log("=" * 60)
