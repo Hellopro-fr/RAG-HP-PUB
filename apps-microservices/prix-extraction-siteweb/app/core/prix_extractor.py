@@ -2,6 +2,7 @@
 Module principal de traitement: extraction de prix depuis les chunks Milvus via LLM.
 Traitement parallèle asynchrone avec asyncio.
 """
+import re
 import time
 import logging
 import asyncio
@@ -521,7 +522,8 @@ class PrixExtractor:
             self._log(f"{'='*60}")
 
             # Recherche RAG avec prompt enrichi par la réponse Q1
-            search_prompt = f"prix {category_name} {reponse_text} €"
+            reponse_clean = re.sub(r'\s*\(.*?\)', '', reponse_text).strip()
+            search_prompt = f"prix {category_name} {reponse_clean} €"
             self._log(f"\n--- Recherche Milvus: '{search_prompt}' (top_k=30) ---")
             chunks = await call_search_api_async(
                 prompt=search_prompt,
