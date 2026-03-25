@@ -2082,9 +2082,9 @@ services:
     profiles: ["mcp"]
     restart: unless-stopped
     ports:
-      - "8580:8580"
+      - "8582:8582"
     environment:
-      - MCP_PORT=8580
+      - MCP_PORT=8582
       - MCP_SERVICE_NAME=mcp-api-recherche
       - MCP_SERVICE_VERSION=0.1.0
       - EMBEDDING_SERVICE_URL=embedding-model-service:50052
