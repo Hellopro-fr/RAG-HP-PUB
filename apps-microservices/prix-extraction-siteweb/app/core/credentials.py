@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     
     # Milvus RAG Search
     MILVUS_SOURCE: str = "siteweb"  # Collection source dans Milvus
-    MILVUS_TOP_K: int = 30  # Nombre de résultats à récupérer
+    MILVUS_TOP_K: int = 10  # Nombre de résultats à récupérer
     
     # LLM Provider selection - "gemini" ou "deepseek"
     LLM_PROVIDER: str = "gemini"

@@ -524,7 +524,7 @@ class PrixExtractor:
             self._log(f"\n--- Recherche Milvus: '{search_prompt}' (top_k=30) ---")
             chunks = await call_search_api_async(
                 prompt=search_prompt,
-                num_results=30,
+                num_results=settings.MILVUS_TOP_K,
                 source=settings.MILVUS_SOURCE,
                 filtre=filtre_page_type
             )
@@ -599,16 +599,20 @@ class PrixExtractor:
 
             if successful_ids:
                 self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) siteweb ---")
-                save_result = await self.api_client.post(
-                    "prix",
-                    "process",
-                    "save",
-                    {
-                        "id_categorie":    id_categorie,
-                        "type_extraction": self.TYPE_EXTRACTION,
-                        "id_cibles":       successful_ids
-                    }
-                )
+                # save_result = await self.api_client.post(
+                #     "prix",
+                #     "process",
+                #     "save",
+                #     {
+                #         "id_categorie":    id_categorie,
+                #         "type_extraction": self.TYPE_EXTRACTION,
+                #         "id_cibles":       successful_ids
+                #     }
+                # )
+
+                # pour le test
+                save_result = {"nb_insere": len(successful_ids)}
+
                 if save_result and not save_result.get("erreur"):
                     nb = save_result.get("nb_insere", len(successful_ids))
                     self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s)")
@@ -634,6 +638,9 @@ class PrixExtractor:
         self._log(f"Durée: {elapsed_global:.1f}s")
         self._log("=" * 60)
 
+        raise Exception("Test")
+        return None
+        
         await self.api_client.post(
             "prix",
             "mail",
