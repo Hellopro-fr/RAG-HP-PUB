@@ -376,7 +376,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         id_categorie: ID de la catégorie pour filtrer les résultats
         
     Returns:
-        Dict avec 'success', 'reponse_llm', 'chunks_count', 'time_elapsed', 'message'
+        Dict avec 'success', 'reponse', 'chunks_count', 'time_elapsed', 'message'
     """
     start_time = time.time()
     prompt_id = settings.PROMPT_ID_QUESTIONNAIRE
@@ -405,7 +405,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             logger.warning(f"[{id_categorie}] Aucun résultat RAG trouvé")
             return {
                 "success": False,
-                "reponse_llm": None,
+                "reponse": None,
                 "chunks_count": 0,
                 "time_elapsed": elapsed,
                 "message": f"Aucun résultat RAG trouvé pour la catégorie {id_categorie}"
@@ -416,7 +416,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             logger.error(f"[{id_categorie}] Impossible de récupérer le prompt id={prompt_id}")
             return {
                 "success": False,
-                "reponse_llm": None,
+                "reponse": None,
                 "chunks_count": len(chunks),
                 "time_elapsed": elapsed,
                 "message": f"Impossible de récupérer le prompt id={prompt_id}"
