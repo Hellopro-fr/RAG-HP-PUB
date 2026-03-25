@@ -180,7 +180,7 @@ class PrixExtractor:
             await self.api_client.log_llm_usage(
                 type_ia=3,  # Gemini
                 model=self.GEMINI_MODEL,
-                input_token=usage_metadata.get("prompt_token_count", 0),
+                input_token=usage_metadata.get("prompt_token_count") or 0,
                 output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
                 id_process=self.ID_PROCESS,
                 origine="prix-extraction-devis",
