@@ -39,6 +39,9 @@ class PrixExtractor:
     # Type extraction (2 = message)
     TYPE_EXTRACTION = "2"
 
+    # Provider LLM forcé (ne dépend pas de la variable d'env globale LLM_PROVIDER)
+    LLM_PROVIDER = "gemini"
+
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
 
@@ -145,7 +148,7 @@ class PrixExtractor:
         Returns:
             Dict avec le résultat du LLM
         """
-        provider = settings.LLM_PROVIDER.lower()
+        provider = self.LLM_PROVIDER.lower()
 
         if provider == "gemini":
             gemini = GeminiProvider(
@@ -296,6 +299,7 @@ class PrixExtractor:
             token = self._current_item_id.set(item_id)
 
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
+            self._log(f"[{item_index + 1}/{total_items}] item_content: {item_content}")
 
             # 1. Construire le prompt avec le contenu JSON du message
             prompt_text = self._build_prompt(item_content, category_name)
@@ -437,7 +441,7 @@ class PrixExtractor:
         self._log("EXTRACTION PRIX MESSAGE")
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
-        self._log(f"Provider LLM: {settings.LLM_PROVIDER}")
+        self._log(f"Provider LLM: {self.LLM_PROVIDER}")
         self._log("=" * 60)
 
         # Vérifier le stopper manuel

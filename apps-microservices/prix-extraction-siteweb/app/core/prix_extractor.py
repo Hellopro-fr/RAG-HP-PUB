@@ -40,6 +40,9 @@ class PrixExtractor:
     # Type extraction (4 = siteweb)
     TYPE_EXTRACTION = "4"
 
+    # Provider LLM forcé (ne dépend pas de la variable d'env globale LLM_PROVIDER)
+    LLM_PROVIDER = "gemini"
+
     # Modèle Gemini par défaut
     GEMINI_MODEL = settings.GEMINI_MODEL_NAME
 
@@ -154,7 +157,7 @@ class PrixExtractor:
         Returns:
             Dict avec le résultat du LLM
         """
-        provider = settings.LLM_PROVIDER.lower()
+        provider = self.LLM_PROVIDER.lower()
         
         if provider == "gemini":
             gemini = GeminiProvider(
@@ -308,12 +311,10 @@ class PrixExtractor:
             token = self._current_chunk_id.set(chunk_id)
 
             self._log(f"[{chunk_index + 1}/{total_chunks}] Traitement chunk {chunk_id}")
-            self._log(f"[{chunk_index + 1}/{total_chunks}] Chunk : {chunk}")
+            self._log(f"[{chunk_index + 1}/{total_chunks}] chunk_metadata: ({chunk_metadata})")
 
             # 1. Construire le prompt avec le contenu du chunk
             prompt_text = self._build_prompt(chunk_metadata, category_name)
-
-            self._log(f"[{chunk_index + 1}/{total_chunks}] Prompt: ({prompt_text})")
 
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
@@ -427,7 +428,7 @@ class PrixExtractor:
         self._log("EXTRACTION PRIX SITE WEB")
         self._log(f"Catégorie: {id_categorie}")
         self._log(f"Reset: {request.is_reset}")
-        self._log(f"Provider LLM: {settings.LLM_PROVIDER}")
+        self._log(f"Provider LLM: {self.LLM_PROVIDER}")
         self._log(f"Source Milvus: {settings.MILVUS_SOURCE}")
         self._log(f"Top K: {settings.MILVUS_TOP_K}")
         self._log("=" * 60)
@@ -599,19 +600,16 @@ class PrixExtractor:
 
             if successful_ids:
                 self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) siteweb ---")
-                # save_result = await self.api_client.post(
-                #     "prix",
-                #     "process",
-                #     "save",
-                #     {
-                #         "id_categorie":    id_categorie,
-                #         "type_extraction": self.TYPE_EXTRACTION,
-                #         "id_cibles":       successful_ids
-                #     }
-                # )
-
-                # pour le test
-                save_result = {"nb_insere": len(successful_ids)}
+                save_result = await self.api_client.post(
+                    "prix",
+                    "process",
+                    "save",
+                    {
+                        "id_categorie":    id_categorie,
+                        "type_extraction": self.TYPE_EXTRACTION,
+                        "id_cibles":       successful_ids
+                    }
+                )
 
                 if save_result and not save_result.get("erreur"):
                     nb = save_result.get("nb_insere", len(successful_ids))
@@ -637,9 +635,6 @@ class PrixExtractor:
         self._log(f"Erreurs: {total_error}")
         self._log(f"Durée: {elapsed_global:.1f}s")
         self._log("=" * 60)
-
-        raise Exception("Test")
-        return None
         
         await self.api_client.post(
             "prix",

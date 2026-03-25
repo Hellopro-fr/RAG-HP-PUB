@@ -12,15 +12,15 @@ class Settings(BaseSettings):
     
     # Milvus RAG Search
     MILVUS_SOURCE: str = "siteweb"  # Collection source dans Milvus
-    MILVUS_TOP_K: int = 10  # Nombre de résultats à récupérer
+    MILVUS_TOP_K: int = 30  # Nombre de résultats à récupérer
     
     # LLM Provider selection - "gemini" ou "deepseek"
     LLM_PROVIDER: str = "gemini"
     
     # LLM - Gemini
     GEMINI_API_KEY: str
-    # GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
-    GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
+    GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
+    # GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
     
     # LLM - DeepSeek
     DEEPSEEK_API_KEY: str = ""
