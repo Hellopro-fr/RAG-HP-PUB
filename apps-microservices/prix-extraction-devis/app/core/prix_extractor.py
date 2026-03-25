@@ -679,7 +679,7 @@ class PrixExtractor:
                 id_categorie=id_categorie,
                 category_name=category_name
             )
-            for i, item in enumerate(items)#TODO: à enlever après test
+            for i, item in enumerate(items)
         ]
         self._log(f"tasks: {tasks}")
         # raise Exception("Test")
@@ -718,6 +718,9 @@ class PrixExtractor:
 
         # Sauvegarde batch des IDs traités avec succès ou skipped
         successful_ids = [r.item_id for r in item_results if r.status in ("success", "skipped")]
+
+        self._log(f"\n--- TYPE_EXTRACTION {self.TYPE_EXTRACTION} ---")
+
 
         if successful_ids:
             self._log(f"\n--- Sauvegarde batch de {len(successful_ids)} ID(s) devis ---")

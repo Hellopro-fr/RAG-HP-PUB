@@ -1,6 +1,6 @@
 # Claude Code Team Guide — RAG-HP-PUB
 
-> **Version:** 1.0 — March 2026
+> **Version:** 1.1 — March 2026
 > **Audience:** All developers working on the RAG-HP-PUB platform
 > **Prerequisite:** Claude Code CLI installed (`npm install -g @anthropic-ai/claude-code`)
 
@@ -51,9 +51,9 @@ Claude Code reads these files at session start and follows them as instructions.
 
 ### Our Configuration at a Glance
 
-**3 agents:** `code-reviewer`, `debugger`, `doc-writer`
-**7 commands:** `/commit-msg`, `/explain`, `/plan`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`
-**2 rules:** `code-modification.md` (surgical edit protocol), `commit-messages.md` (bilingual Conventional Commits)
+**4 agents:** `code-reviewer`, `debugger`, `doc-writer`, `test-writer`
+**8 commands:** `/commit-msg`, `/explain`, `/plan`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`, `/pre-push`
+**4 rules:** `code-modification.md` (surgical edit protocol), `commit-messages.md` (bilingual Conventional Commits), `security.md` (secrets, CORS, JWT, input validation), `language.md` (response language, bilingual commits)
 
 ---
 
@@ -149,7 +149,7 @@ After launching `claude` from the project root, type:
 What configuration files are you aware of?
 ```
 
-Claude Code should list the root `CLAUDE.md`, both rules in `.claude/rules/`, all agents, and all commands. If anything is missing, check that the file exists and has valid Markdown frontmatter (for agents).
+Claude Code should list the root `CLAUDE.md`, all 4 rules in `.claude/rules/`, all 4 agents, and all 8 commands. If anything is missing, check that the file exists and has valid Markdown frontmatter (for agents).
 
 ---
 
@@ -275,6 +275,37 @@ Claude Code will ask for the service name, path, and whether it runs locally or 
 
 Claude Code asks you to pick (a), (b), or (c), then proposes minimal edits — never a full rewrite — and shows a diff before applying. Files are kept under 80 lines; if they exceed that limit, Claude Code suggests extracting rules to `.claude/rules/`.
 
+### 3.8 `/pre-push` — Pre-Push Verification Checklist
+
+**When to use:** Before pushing code to the remote repository. This command runs a complete checklist on all modified services.
+
+**What it does:**
+1. Identifies modified files and groups them by service
+2. Runs per-language checks:
+   - **Python:** Syntax compilation, import verification, pytest (if tests exist)
+   - **Rust:** `cargo check`, `cargo test` (if tests exist)
+   - **TypeScript/Node.js:** Lint and test scripts (if defined in package.json)
+   - **Shared libraries (`libs/`):** Syntax check + downstream impact warning
+3. Runs `@code-reviewer` on all changed files
+4. Displays a summary table with each service's status
+
+**Example prompt:**
+```
+/pre-push
+```
+
+**Example output:**
+```
+| Service              | Syntax | Tests | Review | Status |
+|----------------------|--------|-------|--------|--------|
+| api-gateway          | ✅     | ✅    | ✅     | OK     |
+| graph-rag-etl        | ✅     | ⚠️    | ✅     | Warn   |
+
+All checks passed. Safe to push.
+```
+
+> **Rule:** If tests are missing for a service, the command suggests using `@test-writer` to generate them.
+
 ---
 
 ## 4. Available Agents (@agents)
@@ -351,11 +382,46 @@ Document all functions in apps-microservices/crawler-service/src/crawler.ts
 
 **Rules:** NEVER modifies executable code. Only adds or updates comments/documentation.
 
+### 4.4 `test-writer` — Test Suite Generator
+
+**Model:** Sonnet
+**Tools:** Read, Write, Edit, Glob, Grep
+
+**When to use:**
+- When a service has no tests (69/91 services currently lack tests)
+- When you want to increase test coverage for an existing service
+- When `/pre-push` flags missing tests for a modified service
+
+**Example prompt:**
+```
+Write tests for apps-microservices/QC-tracking-service/
+```
+
+**What it does:**
+1. Reads the service source code (endpoints, schemas, business logic).
+2. Looks for existing `conftest.py` files to reuse fixtures and patterns.
+3. Generates test files:
+   - `tests/conftest.py` — Shared fixtures (FastAPI TestClient, mock RabbitMQ, mock gRPC)
+   - `tests/test_<router>.py` — One file per router
+   - `tests/test_<module>.py` — One file per business logic module
+
+**Test patterns used:**
+- `httpx.AsyncClient` for FastAPI endpoint tests
+- Mock all external dependencies (RabbitMQ, gRPC, Milvus, Redis)
+- `pytest.mark.asyncio` for async tests
+- Descriptive naming: `test_<action>_<condition>_<expected_result>`
+
+**Rules:**
+- NEVER modifies existing source code — only creates/edits test files.
+- NEVER generates tests that require live connections to databases or queues.
+- After writing tests, suggests running: `pytest apps-microservices/<service>/tests/ -v`
+
 ### When NOT to Use an Agent
 
 - Do not trigger `code-reviewer` for a quick one-line fix — just ask Claude directly.
 - Do not trigger `debugger` if you already know the fix — just describe the change.
 - Do not trigger `doc-writer` for a single function — ask Claude Code directly to add a docstring.
+- Do not trigger `test-writer` for a single trivial unit test — write it directly with Claude.
 
 Agents have their own context window. Use them for substantial tasks where their specialization adds value.
 
@@ -387,6 +453,30 @@ This rule defines how commit messages are generated:
 - Always bilingual: English + French
 - Scope limited to changes made in the current response only
 - Subject line under 72 characters
+
+### 5.3 `security.md` — Security Rules
+
+**Location:** `.claude/rules/security.md`
+
+This rule enforces security best practices across the entire project:
+
+1. **Secrets & URLs** — NEVER hardcode service URLs, API keys, or connection strings. All must come from environment variables via Pydantic `BaseSettings`.
+2. **CORS** — `allow_origins=["*"]` is acceptable for internal services behind the API gateway. Public-facing services (`api-gateway`, `api-html-recherche`) must restrict origins.
+3. **JWT & Authentication** — JWT secrets must be set via environment variables, never default values like "changeme-jwt-secret".
+4. **Input Validation** — Use Pydantic models for ALL request validation. Sanitize data before passing to LLM prompts (prompt injection prevention).
+5. **Logging** — Sensitive headers (`authorization`, `cookie`, `x-api-key`) must be redacted in logs.
+
+### 5.4 `language.md` — Language Rules
+
+**Location:** `.claude/rules/language.md`
+
+This rule defines Claude Code's linguistic behavior:
+
+1. **Response language** — Claude responds in the same language the user writes in (French if user writes French, English if English).
+2. **Code identifiers** — Always in English, regardless of conversation language.
+3. **Code comments** — Follow the conversation language (French comments for French users, English for English users).
+4. **Commit messages** — Always generated in BOTH English and French.
+5. **CLAUDE.md files** — Written in English for maximum instruction adherence.
 
 ### How Rules Are Loaded
 
@@ -457,6 +547,8 @@ Review the plan, confirm, then proceed. This prevents Claude Code from going in 
 ### 6.3 During Work
 
 - After each significant change, run `/commit-msg` to capture progress.
+- If a modified service has no tests, use `@test-writer` to generate a test suite.
+- Before pushing, run `/pre-push` for the full verification checklist.
 - If Claude Code's context is filling up (you notice slower responses or repeated mistakes), use `/compact` at **50-65% context usage** to summarize and free space.
 - For code reviews before committing, trigger the `code-reviewer` agent.
 
@@ -899,13 +991,20 @@ Follow these steps in order on your first day:
    Review apps-microservices/<your-assigned-service>/src/
    ```
 
-10. **Make your first commit** using the bilingual workflow:
+10. **Try `@test-writer`** on a service without tests:
+    ```
+    Write tests for apps-microservices/<your-assigned-service>/
+    ```
+
+11. **Try `/pre-push`** before your first push to see the verification checklist.
+
+12. **Make your first commit** using the bilingual workflow:
     ```
     # After making changes:
     /commit-msg
     ```
 
-11. **End your first session** with "wrap up" to initialize your `primer.md`.
+13. **End your first session** with "wrap up" to initialize your `primer.md`.
 
 ---
 
@@ -922,6 +1021,7 @@ Follow these steps in order on your first day:
 | `/new-feature-claude-md` | Update service CLAUDE.md after feature addition | After adding a significant feature |
 | `/new-service-claude-md` | Generate CLAUDE.md for a new service | When a new microservice is created |
 | `/update-claude-md` | Propose surgical CLAUDE.md updates | Mistake prevention, project changes, rescans |
+| `/pre-push` | Pre-push verification checklist | Before every push |
 
 ### Agents
 
@@ -930,6 +1030,7 @@ Follow these steps in order on your first day:
 | `code-reviewer` | Sonnet | Code quality, security, SOLID/DRY/KISS review | Read, Glob, Grep |
 | `debugger` | Sonnet | Error diagnosis, root cause analysis | Read, Bash, Glob, Grep |
 | `doc-writer` | Sonnet | Add documentation without modifying code | Read, Write, Edit, Glob, Grep |
+| `test-writer` | Sonnet | Generate pytest test suites | Read, Write, Edit, Glob, Grep |
 
 ### Rules
 
@@ -937,6 +1038,8 @@ Follow these steps in order on your first day:
 |-----------|---------|
 | `.claude/rules/code-modification.md` | Surgical edit protocol: read first, minimal diff, preserve formatting, verify after |
 | `.claude/rules/commit-messages.md` | Bilingual Conventional Commits, scope to current response, < 72 chars |
+| `.claude/rules/security.md` | No hardcoded secrets, Pydantic BaseSettings, CORS, JWT, input validation |
+| `.claude/rules/language.md` | Respond in user's language, bilingual commits, English code identifiers |
 
 ### Key Thresholds
 
