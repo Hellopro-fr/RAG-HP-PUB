@@ -208,16 +208,22 @@ def copy_indexes(
             except Exception as e:
                 logger.warning(f"   ⚠️  Could not recreate index on '{field_name}': {e}")
 
-    # Create SPARSE_INVERTED_INDEX for the new sparse field
-    target.create_index(
-        field_name="sparse_embedding",
-        index_params={
-            "index_type": "SPARSE_INVERTED_INDEX",
-            "metric_type": "BM25",
-            "params": {"drop_ratio_build": 0.2},
-        },
+    # Create SPARSE_INVERTED_INDEX for the new sparse field (skip if already indexed)
+    sparse_already_indexed = any(
+        idx.field_name == "sparse_embedding" for idx in source.indexes
     )
-    logger.info("   ↳ SPARSE_INVERTED_INDEX created on 'sparse_embedding'")
+    if not sparse_already_indexed:
+        target.create_index(
+            field_name="sparse_embedding",
+            index_params={
+                "index_type": "SPARSE_INVERTED_INDEX",
+                "metric_type": "BM25",
+                "params": {"drop_ratio_build": 0.2},
+            },
+        )
+        logger.info("   ↳ SPARSE_INVERTED_INDEX created on 'sparse_embedding'")
+    else:
+        logger.info("   ↳ sparse_embedding index already copied from source — skipped")
 
 
 def _write_error_line(error_file_path: str, pk_value, row: dict, error: str):
