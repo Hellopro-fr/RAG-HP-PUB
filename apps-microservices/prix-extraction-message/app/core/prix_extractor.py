@@ -304,8 +304,6 @@ class PrixExtractor:
             # 1. Construire le prompt avec le contenu JSON du message
             prompt_text = self._build_prompt(item_content, category_name)
 
-            self._log(f"[{item_index + 1}/{total_items}] prompt_text: {prompt_text}")
-
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
 
@@ -523,10 +521,6 @@ class PrixExtractor:
         ]
 
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
-
-        self._log(f"Résultats: {results}")
-        raise Exception("Test")
-        return None
 
         # Flush tous les logs bufferisés des items (écriture groupée par item)
         for item_id_key in list(self._item_log_buffers.keys()):
