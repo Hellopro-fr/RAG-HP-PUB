@@ -522,6 +522,10 @@ class PrixExtractor:
 
         results: List[ItemResult] = await asyncio.gather(*tasks, return_exceptions=True)
 
+        self._log(f"Résultats: {results}")
+        raise Exception("Test")
+        return None
+
         # Flush tous les logs bufferisés des items (écriture groupée par item)
         for item_id_key in list(self._item_log_buffers.keys()):
             self._flush_item_logs(item_id_key)
@@ -566,6 +570,7 @@ class PrixExtractor:
                     "id_cibles":       successful_ids  # liste d'IDs (batch)
                 }
             )
+            
             if save_result and not save_result.get("erreur"):
                 nb = save_result.get("nb_insere", len(successful_ids))
                 self._log(f"✅ Batch save OK: {nb} ID(s) enregistré(s) dans extraction_prix_ia")
