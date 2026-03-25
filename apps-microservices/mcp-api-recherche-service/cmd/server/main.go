@@ -58,10 +58,12 @@ func main() {
 	registry := tools.NewRegistry(clients)
 	handler := tools.NewMCPHandler(cfg.Name, cfg.Version, registry)
 
-	// Start the SSE server.
+	// Start the SSE + Streamable HTTP server.
 	mux := http.NewServeMux()
 	sseServer := transport.NewSSEServer(handler)
 	sseServer.Register(mux)
+	streamableServer := transport.NewStreamableHTTPServer(handler)
+	streamableServer.Register(mux)
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -81,7 +83,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("[main] ready — SSE endpoint: http://0.0.0.0:%s/sse", cfg.Port)
+	log.Printf("[main] ready — SSE: http://0.0.0.0:%s/sse | HTTP: http://0.0.0.0:%s/mcp", cfg.Port, cfg.Port)
 
 	<-stop
 	log.Println("[main] shutting down...")
