@@ -152,6 +152,7 @@ class PrixExtractor:
         prompt_text = prompt_text.replace("{json_devis_pdf}", item_content)
         prompt_text = prompt_text.replace("{info_q1}", self.info_q1)
         prompt_text = prompt_text.replace("{nom_categorie}", category_name)
+        self._log(f"prompt_text = {prompt_text}")
 
         return prompt_text
 
@@ -336,7 +337,6 @@ class PrixExtractor:
 
             # 1. Construire le prompt avec le contenu de l'item
             prompt_text = self._build_prompt(item_content, category_name)
-            self._log(f"prompt_text = {prompt_text}")
             # 2. Appeler le LLM
             result = await self._call_llm(prompt_text, id_categorie)
 
