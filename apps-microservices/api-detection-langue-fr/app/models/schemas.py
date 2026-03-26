@@ -5,8 +5,9 @@ from typing import Optional
 
 class DetectionMode(str, Enum):
     """Mode de détection de la langue française"""
-    SIMPLE = "simple"      # Comportement TypeScript (URL + HTML lang uniquement)
-    COMPLETE = "complete"  # Comportement PHP (+ recherche liens alternatifs)
+    SIMPLE = "simple"        # Comportement TypeScript (URL + HTML lang uniquement)
+    COMPLETE = "complete"    # Comportement PHP (+ recherche liens alternatifs)
+    FIRST_MATCH = "first_match"  # Batch groupé : arrêt au premier FR par groupe
 
 
 class DetectionRequest(BaseModel):
@@ -88,6 +89,10 @@ class DetectionResponse(BaseModel):
         default=None,
         description="Message d'erreur si échec"
     )
+    group: Optional[str] = Field(
+        default=None,
+        description="Clé du groupe (first_match mode uniquement)"
+    )
 
 
 class BatchItem(BaseModel):
@@ -96,6 +101,10 @@ class BatchItem(BaseModel):
     html_content: Optional[str] = Field(
         default=None,
         description="Contenu HTML optionnel déjà récupéré"
+    )
+    group: Optional[str] = Field(
+        default=None,
+        description="Clé de groupe pour le mode first_match (ex: 'supplier_42')"
     )
 
 

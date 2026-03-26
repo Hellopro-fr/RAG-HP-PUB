@@ -14,7 +14,7 @@ from app.models.schemas import (
     DetectionMode,
     DebugDetectionResponse
 )
-from app.core.domain_fr import DomainFR
+from app.core.domain_fr import DomainFR, domain_cache
 from app.services.redirect_tracker import fetch_html
 from app.services.language_detector import detect_challenge_page
 
@@ -44,6 +44,12 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
         effective_url = request.url
 
         if not html_content:
+            # Vérification cache (seulement quand l'API récupère elle-même le HTML)
+            cached = await domain_cache.get(request.url)
+            if cached:
+                logger.info(f"Cache HIT {request.url}")
+                return DetectionResponse(**cached)
+
             fetch_result = await fetch_html(request.url, request.proxy_url)
             if not fetch_result:
                 return DetectionResponse(
@@ -88,6 +94,10 @@ async def detect_french(request: DetectionRequest) -> DetectionResponse:
 
         # Lancer la détection
         result = await detector.check_page_if_french(html_content, request.mode)
+
+        # Stocker en cache (seulement si l'API a récupéré le HTML elle-même)
+        if not request.html_content:
+            await domain_cache.set(request.url, effective_url, result.model_dump())
 
         return result
 
@@ -137,83 +147,196 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
     semaphore = asyncio.Semaphore(request.max_concurrency)
     processed_count = 0
 
-    async def process_single(index: int, item: BatchItem) -> DetectionResponse:
+    async def _process_item_core(item: BatchItem) -> DetectionResponse:
+        """Traitement d'un item sans stagger delay (logique partagée)."""
         nonlocal processed_count
         url = item.url
+        item_start = time.time()
 
+        try:
+            html_content = item.html_content
+            effective_url = url
+
+            if not html_content:
+                # Vérification cache (seulement quand l'API récupère elle-même le HTML)
+                cached = await domain_cache.get(url)
+                if cached:
+                    logger.info(f"[BATCH] Cache HIT {url}")
+                    processed_count += 1
+                    return DetectionResponse(**cached)
+
+                fetch_result = await fetch_html(url, request.proxy_url)
+                if not fetch_result:
+                    processed_count += 1
+                    duration_ms = round((time.time() - item_start) * 1000)
+                    logger.warning(f"[BATCH] [{processed_count}/{total_items}] FETCH_FAILED {url} ({duration_ms}ms)")
+                    return DetectionResponse(
+                        ok=False,
+                        url=url,
+                        method='fetch_failed',
+                        error='Impossible de récupérer le contenu HTML'
+                    )
+                html_content, final_url = fetch_result
+                if final_url and final_url != url:
+                    logger.info(f"[BATCH] Redirection: {url} → {final_url}")
+                    effective_url = final_url
+
+            # Vérifier si le contenu est une page de challenge ou block
+            challenge = detect_challenge_page(html_content)
+            if challenge:
+                processed_count += 1
+                duration_ms = round((time.time() - item_start) * 1000)
+                logger.warning(f"[BATCH] [{processed_count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
+                if challenge == 'Cloudflare_blocked':
+                    error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
+                elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
+                    error_code = challenge.split('_')[1]
+                    error_msg = f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
+                else:
+                    error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
+                return DetectionResponse(
+                    ok=False,
+                    url=effective_url,
+                    method='challenge_page',
+                    error=error_msg
+                )
+
+            # Mode de détection : first_match utilise complete en interne par URL
+            detection_mode = request.mode if request.mode != DetectionMode.FIRST_MATCH else DetectionMode.COMPLETE
+
+            detector = DomainFR(
+                homepage=effective_url,
+                use_nlp_detection=request.use_nlp_detection,
+                original_homepage=url if effective_url != url else None
+            )
+
+            result = await detector.check_page_if_french(html_content, detection_mode)
+
+            # Stocker en cache (seulement si l'API a récupéré le HTML elle-même)
+            if not item.html_content:
+                await domain_cache.set(url, effective_url, result.model_dump())
+
+            processed_count += 1
+            duration_ms = round((time.time() - item_start) * 1000)
+            status = "OK" if result.ok else "NOK"
+            logger.info(f"[BATCH] [{processed_count}/{total_items}] {status} {url} method={result.method} ({duration_ms}ms)")
+
+            return result
+
+        except Exception as e:
+            processed_count += 1
+            duration_ms = round((time.time() - item_start) * 1000)
+            logger.error(f"[BATCH] [{processed_count}/{total_items}] ERROR {url}: {e} ({duration_ms}ms)")
+            return DetectionResponse(
+                ok=False,
+                url=url,
+                method='error',
+                error=str(e)
+            )
+
+    async def process_single(index: int, item: BatchItem) -> DetectionResponse:
         # Stagger delay : évite que tous les navigateurs frappent le proxy simultanément
         # Réduit la pression sur le proxy et le risque de déclencher des protections anti-bot
         if index > 0:
             await asyncio.sleep(index * 0.5)
-
         async with semaphore:
-            item_start = time.time()
-            try:
-                html_content = item.html_content
-                effective_url = url
+            return await _process_item_core(item)
 
-                if not html_content:
-                    fetch_result = await fetch_html(url, request.proxy_url)
-                    if not fetch_result:
-                        processed_count += 1
-                        duration_ms = round((time.time() - item_start) * 1000)
-                        logger.warning(f"[BATCH] [{processed_count}/{total_items}] FETCH_FAILED {url} ({duration_ms}ms)")
-                        return DetectionResponse(
-                            ok=False,
-                            url=url,
-                            method='fetch_failed',
-                            error='Impossible de récupérer le contenu HTML'
-                        )
-                    html_content, final_url = fetch_result
-                    if final_url and final_url != url:
-                        logger.info(f"[BATCH] Redirection: {url} → {final_url}")
-                        effective_url = final_url
+    # =========================================================================
+    # Mode first_match : traitement groupé (séquentiel intra-groupe, concurrent inter-groupes)
+    # =========================================================================
+    if request.mode == DetectionMode.FIRST_MATCH:
+        # Partitionner items en groupes nommés et items sans groupe
+        grouped: dict[str, list[BatchItem]] = {}
+        ungrouped: list[BatchItem] = []
+        group_order: list[str] = []  # ordre de première apparition des groupes
 
-                # Vérifier si le contenu est une page de challenge ou block
-                challenge = detect_challenge_page(html_content)
-                if challenge:
-                    processed_count += 1
-                    duration_ms = round((time.time() - item_start) * 1000)
-                    logger.warning(f"[BATCH] [{processed_count}/{total_items}] CHALLENGE_{challenge} {url} ({duration_ms}ms)")
-                    if challenge == 'Cloudflare_blocked':
-                        error_msg = 'Contenu bloqué par Cloudflare WAF (IP rejetée par le pare-feu du site)'
-                    elif challenge.startswith('HTTP_') and challenge.endswith('_blocked'):
-                        error_code = challenge.split('_')[1]
-                        error_msg = f'Contenu bloqué par le serveur (HTTP {error_code} — IP rejetée)'
-                    else:
-                        error_msg = f'Contenu bloqué par {challenge} (page de challenge/CAPTCHA détectée)'
-                    return DetectionResponse(
-                        ok=False,
-                        url=effective_url,
-                        method='challenge_page',
-                        error=error_msg
-                    )
+        for item in items_to_process:
+            if item.group is not None:
+                if item.group not in grouped:
+                    grouped[item.group] = []
+                    group_order.append(item.group)
+                grouped[item.group].append(item)
+            else:
+                ungrouped.append(item)
 
-                detector = DomainFR(
-                    homepage=effective_url,
-                    use_nlp_detection=request.use_nlp_detection,
-                    original_homepage=url if effective_url != url else None
-                )
+        # failed_by_group : items fetch_failed/challenge_page par groupe (pour Pass 2)
+        failed_by_group: dict[str, list[BatchItem]] = {}
 
-                result = await detector.check_page_if_french(html_content, request.mode)
+        async def process_group(group_key: str, group_items: list[BatchItem]) -> DetectionResponse:
+            """Traitement séquentiel : stop au premier FR. Concurrent avec autres groupes via semaphore."""
+            failed: list[BatchItem] = []
+            last_result: Optional[DetectionResponse] = None
 
-                processed_count += 1
-                duration_ms = round((time.time() - item_start) * 1000)
-                status = "OK" if result.ok else "NOK"
-                logger.info(f"[BATCH] [{processed_count}/{total_items}] {status} {url} method={result.method} ({duration_ms}ms)")
+            for item in group_items:
+                async with semaphore:
+                    result = await _process_item_core(item)
+                last_result = result
+                if result.ok:
+                    return DetectionResponse(**{**result.model_dump(), 'group': group_key})
+                if result.method in ('fetch_failed', 'challenge_page'):
+                    failed.append(item)
 
-                return result
+            failed_by_group[group_key] = failed
+            return DetectionResponse(**{**last_result.model_dump(), 'group': group_key})
 
-            except Exception as e:
-                processed_count += 1
-                duration_ms = round((time.time() - item_start) * 1000)
-                logger.error(f"[BATCH] [{processed_count}/{total_items}] ERROR {url}: {e} ({duration_ms}ms)")
-                return DetectionResponse(
-                    ok=False,
-                    url=url,
-                    method='error',
-                    error=str(e)
-                )
+        # Pass 1 : groupes en parallèle, items sans groupe en parallèle indépendant
+        group_results: list[DetectionResponse] = list(await asyncio.gather(*[
+            process_group(key, grouped[key]) for key in group_order
+        ]))
+        ungrouped_results: list[DetectionResponse] = list(await asyncio.gather(*[
+            process_single(i, item) for i, item in enumerate(ungrouped)
+        ]))
+
+        pass1_duration = round((time.time() - start_time) * 1000)
+        logger.info(f"[BATCH][first_match] Pass 1 termine en {pass1_duration}ms")
+
+        # Pass 2 : retry séquentiel pour les groupes sans FR et ayant des fetch_failed
+        for i, group_key in enumerate(group_order):
+            if group_results[i].ok:
+                continue
+            retry_items = failed_by_group.get(group_key, [])
+            if not retry_items:
+                continue
+
+            logger.info(f"[BATCH][first_match] Pass 2 groupe '{group_key}': retry {len(retry_items)} item(s)")
+            for item in retry_items:
+                await asyncio.sleep(2)
+                try:
+                    async with semaphore:
+                        retry_result = await _process_item_core(item)
+                    if retry_result.ok:
+                        group_results[i] = DetectionResponse(**{**retry_result.model_dump(), 'group': group_key})
+                        logger.info(f"[BATCH][first_match] Pass 2 OK groupe '{group_key}' via {item.url}")
+                        break
+                    if retry_result.method not in ('fetch_failed', 'challenge_page'):
+                        group_results[i] = DetectionResponse(**{**retry_result.model_dump(), 'group': group_key})
+                except Exception as e:
+                    logger.warning(f"[BATCH][first_match] Pass 2 ERROR groupe '{group_key}' {item.url}: {e}")
+
+        results = group_results + ungrouped_results
+        success_count = sum(1 for r in results if r.ok)
+        error_count = sum(1 for r in results if r.method in ('error', 'fetch_failed', 'challenge_page'))
+        failed_count = len(results) - success_count - error_count
+        processing_time_ms = (time.time() - start_time) * 1000
+
+        logger.info(
+            f"[BATCH][first_match] Termine: {success_count} OK, {failed_count} non-FR, "
+            f"{error_count} erreurs ({round(processing_time_ms)}ms total)"
+        )
+
+        return BatchDetectionResponse(
+            total=len(results),
+            success_count=success_count,
+            failed_count=failed_count,
+            error_count=error_count,
+            results=results,
+            processing_time_ms=round(processing_time_ms, 2)
+        )
+
+    # =========================================================================
+    # Mode complete / simple : traitement parallèle standard
+    # =========================================================================
 
     # Pass 1 : traitement parallèle
     results = list(await asyncio.gather(*[
@@ -247,37 +370,17 @@ async def detect_french_batch(request: BatchDetectionRequest) -> BatchDetectionR
             await asyncio.sleep(2)
 
             try:
-                html_content = item.html_content
-                effective_url = item.url
-
-                if not html_content:
-                    fetch_result = await fetch_html(item.url, request.proxy_url)
-                    if not fetch_result:
-                        logger.warning(f"[BATCH] Retry ECHEC {item.url}")
-                        continue
-                    html_content, final_url = fetch_result
-                    if final_url and final_url != item.url:
-                        logger.info(f"[BATCH] Retry redirection: {item.url} → {final_url}")
-                        effective_url = final_url
-
-                # Vérifier challenge page sur retry
-                challenge = detect_challenge_page(html_content)
-                if challenge:
-                    logger.warning(f"[BATCH] Retry CHALLENGE_{challenge} {item.url}")
-                    continue
-
-                detector = DomainFR(
-                    homepage=effective_url,
-                    use_nlp_detection=request.use_nlp_detection,
-                    original_homepage=item.url if effective_url != item.url else None
-                )
-                retry_result = await detector.check_page_if_french(html_content, request.mode)
-                results[idx] = retry_result
-                retry_success += 1
-                logger.info(
-                    f"[BATCH] Retry OK {item.url} "
-                    f"(ok={retry_result.ok}, method={retry_result.method})"
-                )
+                async with semaphore:
+                    retry_result = await _process_item_core(item)
+                if retry_result.method not in ('fetch_failed', 'challenge_page'):
+                    results[idx] = retry_result
+                    retry_success += 1
+                    logger.info(
+                        f"[BATCH] Retry OK {item.url} "
+                        f"(ok={retry_result.ok}, method={retry_result.method})"
+                    )
+                else:
+                    logger.warning(f"[BATCH] Retry ECHEC {item.url} ({retry_result.method})")
 
             except Exception as e:
                 logger.warning(f"[BATCH] Retry ERROR {item.url}: {e}")

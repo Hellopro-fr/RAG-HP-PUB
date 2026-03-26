@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     BATCH_DEFAULT_CONCURRENCY: int = 10
     BATCH_MAX_CONCURRENCY: int = 50
     
+    # Redis cache
+    REDIS_URL: Optional[str] = None
+
     # Proxy (optionnel)
     # APIFY_PROXY env var contains the password, not the full URL
     DEFAULT_PROXY_URL: Optional[str] = None
