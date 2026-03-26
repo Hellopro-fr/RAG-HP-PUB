@@ -259,6 +259,8 @@ def insertion_data(produits_data: dict) -> dict:
                             "updated": True,
                             "update_reason": update_reason,
                             "origin": origin,
+                            "mode": mode if mode else None,
+                            "chunk_ids": result.get("data", {}).get("ids", ""),
                         }
                     else:
                         # SKIP - données identiques
