@@ -37,6 +37,7 @@ class QuestionnaireRequest(BaseModel):
     id_categorie: Union[str, int] = Field(..., description="ID de la catégorie cible pour filtrer les résultats")
     nom_categorie: str = Field(..., description="Nom de la catégorie cible pour filtrer les résultats")
     texte_prompt: Optional[str] = Field(None, description="Texte optionnel à injecter comme {requete_rag} dans le prompt LLM (remplace texte_recherche si non vide)")
+    model: Optional[str] = Field(None, description="Modèle Gemini à utiliser (remplace le modèle par défaut si fourni)")
     
     @field_validator('id_categorie')
     @classmethod

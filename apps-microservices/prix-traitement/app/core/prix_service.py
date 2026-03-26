@@ -359,7 +359,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         await api_client.close()
 
 
-async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str, texte_prompt: Optional[str] = None) -> Dict[str, Any]:
+async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None) -> Dict[str, Any]:
     """
     Recherche RAG sur la source "prix" filtrée par id_categorie, 
     formate les chunks et les envoie au LLM (Gemini) avec le prompt 114.
@@ -484,12 +484,14 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         
+        gemini_model = model if isinstance(model, str) and len(model.strip()) > 0 else settings.GEMINI_MODEL_NAME
+
         logger.info(f"[{id_categorie}] Prompt : {final_prompt[:100]}...")
-        logger.info(f"[{id_categorie}] Appel Gemini (model={settings.GEMINI_MODEL_NAME}, {len(final_prompt)} chars)...")
-        
+        logger.info(f"[{id_categorie}] Appel Gemini (model={gemini_model}, {len(final_prompt)} chars)...")
+
         # Utiliser GeminiProvider
         gemini = GeminiProvider(
-            model=settings.GEMINI_MODEL_NAME
+            model=gemini_model
         )
         
         llm_result = await gemini.chat(final_prompt)
@@ -498,7 +500,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
         asyncio.create_task(api_client.log_llm_usage(
             type_ia=3,  # Gemini
-            model=settings.GEMINI_MODEL_NAME,
+            model=gemini_model,
             input_token=usage_metadata.get("prompt_token_count", 0),
             output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
             id_process=ID_PROCESS,
