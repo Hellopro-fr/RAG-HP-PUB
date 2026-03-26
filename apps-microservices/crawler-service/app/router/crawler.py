@@ -132,7 +132,7 @@ async def get_capacity():
             raise HTTPException(status_code=503, detail="Redis connection not available.")
 
         running_jobs_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
-        running_jobs = int(running_jobs_raw) if running_jobs_raw else 0
+        running_jobs = max(0, int(running_jobs_raw)) if running_jobs_raw else 0
         
         # Read the max global jobs value from the central Redis key.
         max_global_raw = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)

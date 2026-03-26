@@ -146,7 +146,7 @@ class CrawlerManager:
 
             if new_count > current_max_global:
                 # Over limit — roll back the optimistic increment and reject
-                await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
                 logger.warning(f"Global concurrency limit reached ({new_count - 1}/{current_max_global}). Rejecting '{crawl_id}'.")
                 detail_payload = {
                 "error_code": "GLOBAL_CAPACITY_EXCEEDED",
@@ -164,7 +164,9 @@ class CrawlerManager:
         # in local_processes until relaunch completes.
         active_local = sum(1 for p in self.local_processes.values() if p.returncode is None)
         if not is_restart and active_local >= settings.MAX_CONCURRENT_CRAWLS:
-            logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'.")
+            # Roll back the global INCR we claimed above before rejecting
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            logger.warning(f"Max concurrent crawls for this replica reached. Rejecting job '{crawl_id}'. Global counter rolled back.")
             detail_payload = {
                 "error_code": "REPLICA_CAPACITY_EXCEEDED",
                 "message": "This service instance is at its maximum capacity.",
@@ -239,7 +241,7 @@ class CrawlerManager:
             logger.error(f"Maximum OOM restarts ({MAX_RESTARTS}) reached for '{crawl_id}'. Failing job.")
             
             # Manually clean up since we skipped the normal failure step
-            await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
             
             job_info["status"] = "failed"
             job_info["isError"] = "OOM_MAX_RESTARTS"
@@ -279,7 +281,7 @@ class CrawlerManager:
         except Exception as e:
             logger.error(f"Failed to relaunch OOM job '{crawl_id}': {e}")
             # Ensure we clean up the slot if relaunch fails
-            await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
 
     async def _send_success_webhook(self, job_info: dict):
         callback_url = job_info.get("callback_url")
@@ -519,7 +521,7 @@ class CrawlerManager:
                  return # EXIT FUNCTION EARLY - NO WEBHOOKS
 
             # Non-OOM path: release the global counter slot
-            await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
 
             final_status = "finished" if is_success else "failed"
             job_info["status"] = final_status
@@ -1012,7 +1014,7 @@ class CrawlerManager:
                 logger.info(f"Marked job '{crawl_id}' as 'failed' in Redis.")
 
                 # 3. Decrement the global running counter
-                await cache_service.decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
 
                 await self._publish_update(crawl_id, "failed")
 
@@ -1258,7 +1260,10 @@ class CrawlerManager:
 
         # Correct the global counter
         counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
-        counter_value = int(counter_value_raw) if counter_value_raw and counter_value_raw.isdigit() else 0
+        try:
+            counter_value = int(counter_value_raw) if counter_value_raw else 0
+        except (ValueError, TypeError):
+            counter_value = 0
 
         if true_running_count != counter_value:
             logger.warning(
