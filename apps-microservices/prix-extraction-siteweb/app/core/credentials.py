@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     
     # LLM - Gemini
     GEMINI_API_KEY: str
-    # GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
-    GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
+    GEMINI_MODEL_NAME: str = "gemini-3.1-pro-preview"
+    # GEMINI_MODEL_NAME: str = "gemini-3.1-flash-lite-preview"
     
     # LLM - DeepSeek
     DEEPSEEK_API_KEY: str = ""

@@ -32,6 +32,9 @@ class PrixExtractor:
 
     ETAPE = "10"
 
+    # Type extraction (3 = produits)
+    TYPE_EXTRACTION = "3"
+
     def __init__(self, api_client: Optional[HelloProAPIClient] = None):
         self.api_client = api_client or HelloProAPIClient()
         self.tracking_file = None
@@ -183,9 +186,9 @@ class PrixExtractor:
             self._log("RESET DU PROCESSUS")
             await self.api_client.post(
                 "prix",
-                "produits",
+                "process",
                 "reset",
-                {"id_categorie": id_categorie}
+                {"id_categorie": id_categorie, "type_extraction": self.TYPE_EXTRACTION}
             )
 
         # Récupérer les produits depuis l'API BO
@@ -253,7 +256,7 @@ class PrixExtractor:
                 "save",
                 {
                     "id_categorie":    id_categorie,
-                    "type_extraction": "3",          # 3 = produits
+                    "type_extraction": self.TYPE_EXTRACTION,
                     "id_cibles":       successful_ids  # liste d'IDs (batch)
                 }
             )

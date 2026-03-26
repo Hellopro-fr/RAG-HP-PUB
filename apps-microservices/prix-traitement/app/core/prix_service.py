@@ -9,7 +9,8 @@ import asyncio
 from typing import Dict, Any, Optional, List
 
 from app.core.api_client import GeminiProvider, HelloProAPIClient
-from app.core.utils import extract_json_from_text, get_prompt
+from app.core.utils import extract_json_from_text, get_prompt_cached
+from app.core.search import call_search_api_async
 from app.core.credentials import settings
 
 logger = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         # =====================================================================
         logger.info(f"[{id_categorie}] Récupération du prompt (id={prompt_id})...")
         
-        prompt_config = await get_prompt(prompt_id)
+        prompt_config = await get_prompt_cached(prompt_id)
         
         if not prompt_config:
             elapsed = time.time() - start_time
@@ -215,7 +216,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
             logger.info(f"[{id_categorie}] Appel Gemini pour réponse '{reponse}' ({len(final_prompt)} chars)...")
             
             # --- Appel Gemini ---
-            llm_result = gemini.chat(final_prompt)
+            llm_result = await gemini.chat(final_prompt)
 
             # Log LLM usage pour Gemini
             usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
@@ -375,7 +376,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         id_categorie: ID de la catégorie pour filtrer les résultats
         
     Returns:
-        Dict avec 'success', 'reponse_llm', 'chunks_count', 'time_elapsed', 'message'
+        Dict avec 'success', 'reponse', 'chunks_count', 'time_elapsed', 'message'
     """
     start_time = time.time()
     prompt_id = settings.PROMPT_ID_QUESTIONNAIRE
@@ -385,47 +386,57 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
     
     try:
         # =====================================================================
-        # ÉTAPE 1 : Recherche RAG dans Milvus (source=prix, filtre=id_categorie)
+        # ÉTAPE 1+3 : Recherche RAG + Récupération du prompt EN PARALLÈLE
         # =====================================================================
-        logger.info(f"[{id_categorie}] Nom catégorie : {nom_categorie} ,  Recherche RAG: texte='{texte_recherche}...', source=prix, top_k=50")
-        
-        from app.core.search import call_search_api_async
-        
-        chunks = await call_search_api_async(
-            prompt=texte_recherche,
-            num_results=50,
-            source="prix",
-            filtre={"id_categorie": id_categorie}
+        logger.info(f"[{id_categorie}] Nom catégorie : {nom_categorie} ,  Recherche RAG + prompt en parallèle: texte='{texte_recherche}...', source=prix, top_k=50")
+
+        chunks, prompt_config = await asyncio.gather(
+            call_search_api_async(
+                prompt=texte_recherche,
+                num_results=50,
+                source="prix",
+                filtre={"id_categorie": id_categorie}
+            ),
+            get_prompt_cached(prompt_id)
         )
-        
+
         if not chunks:
             elapsed = time.time() - start_time
             logger.warning(f"[{id_categorie}] Aucun résultat RAG trouvé")
             return {
                 "success": False,
-                "reponse_llm": None,
-                "chunks_count": 0,
+                "reponse": None,
+                "api_response": {},
                 "time_elapsed": elapsed,
                 "message": f"Aucun résultat RAG trouvé pour la catégorie {id_categorie}"
             }
-        
+
+        if not prompt_config:
+            elapsed = time.time() - start_time
+            logger.error(f"[{id_categorie}] Impossible de récupérer le prompt id={prompt_id}")
+            return {
+                "success": False,
+                "reponse": None,
+                "api_response": {},
+                "time_elapsed": elapsed,
+                "message": f"Impossible de récupérer le prompt id={prompt_id}"
+            }
+
         logger.info(f"[{id_categorie}] {len(chunks)} chunks RAG trouvés")
-        
+
         # =====================================================================
         # ÉTAPE 2 : Formater les chunks pour le prompt
         # =====================================================================
-        # Format basé sur adaptSearchResult (source "prix") dans script.js
-        # et le ContextBuilder dans recherche.py
         formatted_chunks = []
-        
+
         for i, chunk in enumerate(chunks):
             meta = chunk.get("metadata", {}).get("entity", {})
-            
+
             nom_produit = meta.get("nom_produit", "N/A")
             fournisseur = meta.get("fournisseur", "N/A")
             nom_categorie = meta.get("nom_categorie", meta.get("categorie", "N/A"))
             text = meta.get("text", "")
-            
+
             # Construction de la ligne de prix
             prix_line = ""
             valeur_prix = meta.get("valeur_prix", "")
@@ -438,10 +449,10 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
                 if extras:
                     prix_parts.append(f"{' '.join(extras)}")
                 prix_line = " ".join(prix_parts)
-            
+
             caracteristique = meta.get("caracteristique", "")
             date_prix = meta.get("date_prix", "")
-            
+
             chunk_text = f"""Titre : {nom_produit}
             Source : Prix
             Fournisseur : {fournisseur}
@@ -450,32 +461,14 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             Prix : {prix_line}
             Date_prix : {date_prix}
             Caractéristiques : {caracteristique}"""
-            
+
             formatted_chunks.append(chunk_text)
-        
+
         # Joindre tous les chunks avec un séparateur
         all_chunks_text = "\n\n---\n\n".join(formatted_chunks)
-        
+
         logger.info(f"[{id_categorie}] {len(formatted_chunks)} chunks formatés ({len(all_chunks_text)} chars) {all_chunks_text[:100]}")
-        
-        # =====================================================================
-        # ÉTAPE 3 : Récupérer le prompt (id=114)
-        # =====================================================================
-        logger.info(f"[{id_categorie}] Récupération du prompt (id={prompt_id})...")
-        
-        prompt_config = await get_prompt(prompt_id)
-        
-        if not prompt_config:
-            elapsed = time.time() - start_time
-            logger.error(f"[{id_categorie}] Impossible de récupérer le prompt id={prompt_id}")
-            return {
-                "success": False,
-                "reponse_llm": None,
-                "chunks_count": len(chunks),
-                "time_elapsed": elapsed,
-                "message": f"Impossible de récupérer le prompt id={prompt_id}"
-            }
-        
+
         prompt_text = prompt_config.get("contenu_prompt", "")        
         
         # =====================================================================
@@ -495,11 +488,11 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             model=settings.GEMINI_MODEL_NAME
         )
         
-        llm_result = gemini.chat(final_prompt)
+        llm_result = await gemini.chat(final_prompt)
         
-        # Log LLM usage
+        # Log LLM usage (fire-and-forget : n'attend pas la réponse pour ne pas ralentir le client)
         usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
-        await api_client.log_llm_usage(
+        asyncio.create_task(api_client.log_llm_usage(
             type_ia=3,  # Gemini
             model=settings.GEMINI_MODEL_NAME,
             input_token=usage_metadata.get("prompt_token_count", 0),
@@ -509,8 +502,8 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             etat=1 if "error" not in llm_result else 2,
             retour_erreur=str(llm_result.get("error", "")) if "error" in llm_result else "",
             temperature=0.1
-        )
-        
+        ))
+
         elapsed = time.time() - start_time
         # Vérifier si erreur LLM
         if "error" in llm_result:
@@ -555,13 +548,10 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         return {
             "success": False,
             "reponse": None,
-            "api_response": llm_result.get("api_response", {}),
+            "api_response": {},
             "time_elapsed": elapsed,
             "message": f"Erreur inattendue: {str(e)}"
         }
-    
-    finally:
-        await api_client.close()
 
 
 # =========================================================================

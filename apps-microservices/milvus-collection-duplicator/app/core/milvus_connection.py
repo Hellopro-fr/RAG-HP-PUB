@@ -96,6 +96,21 @@ def build_target_schema(
             )
             cloned = FieldSchema(**kwargs)
 
+        # Force id_lead / source_chunk_id to VARCHAR(65535) if present
+        if cloned.name in ("id_lead", "source_chunk_id"):
+            if (
+                cloned.dtype == DataType.VARCHAR
+                and cloned.params.get("max_length") != 65535
+            ):
+                logger.info(f"Overriding field '{cloned.name}' to VARCHAR(65535)")
+                cloned = FieldSchema(
+                    name=cloned.name,
+                    dtype=DataType.VARCHAR,
+                    description=cloned.description,
+                    is_primary=cloned.is_primary,
+                    max_length=65535,
+                )
+
         new_fields.append(cloned)
 
     if not text_field_found:
@@ -193,16 +208,22 @@ def copy_indexes(
             except Exception as e:
                 logger.warning(f"   ⚠️  Could not recreate index on '{field_name}': {e}")
 
-    # Create SPARSE_INVERTED_INDEX for the new sparse field
-    target.create_index(
-        field_name="sparse_embedding",
-        index_params={
-            "index_type": "SPARSE_INVERTED_INDEX",
-            "metric_type": "BM25",
-            "params": {"drop_ratio_build": 0.2},
-        },
+    # Create SPARSE_INVERTED_INDEX for the new sparse field (skip if already indexed)
+    sparse_already_indexed = any(
+        idx.field_name == "sparse_embedding" for idx in source.indexes
     )
-    logger.info("   ↳ SPARSE_INVERTED_INDEX created on 'sparse_embedding'")
+    if not sparse_already_indexed:
+        target.create_index(
+            field_name="sparse_embedding",
+            index_params={
+                "index_type": "SPARSE_INVERTED_INDEX",
+                "metric_type": "BM25",
+                "params": {"drop_ratio_build": 0.2},
+            },
+        )
+        logger.info("   ↳ SPARSE_INVERTED_INDEX created on 'sparse_embedding'")
+    else:
+        logger.info("   ↳ sparse_embedding index already copied from source — skipped")
 
 
 def _write_error_line(error_file_path: str, pk_value, row: dict, error: str):
