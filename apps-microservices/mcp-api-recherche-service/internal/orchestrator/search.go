@@ -148,8 +148,15 @@ func (so *SearchOrchestrator) Search(ctx context.Context, params *SearchParams) 
 				log.Printf("[search] filter build error for %s: %v", sf.Source, err)
 			}
 
+			// Auto-upgrade semantic to hybrid if collection supports sparse embeddings
+			searchType := params.SearchType
+			if searchType == "semantic" && so.collectionSupportsHybrid(ctx, sf.Source) {
+				searchType = "hybrid"
+				log.Printf("[search] auto-upgraded to hybrid search for %s (sparse_embedding detected)", sf.Source)
+			}
+
 			results, err := so.executeSearch(ctx, sf.Source, queryVector, params.Query,
-				topKRetrieval, filterExpr, params.OutputFields, params.SearchType)
+				topKRetrieval, filterExpr, params.OutputFields, searchType)
 			if err != nil {
 				log.Printf("[search] search error for %s: %v", sf.Source, err)
 				mu.Lock()
@@ -350,6 +357,17 @@ func truncate(matches []map[string]any, topK int) []map[string]any {
 		return matches
 	}
 	return matches[:topK]
+}
+
+// collectionSupportsHybrid checks if a collection has a sparse_embedding field,
+// which indicates it supports hybrid (dense + BM25) search.
+func (so *SearchOrchestrator) collectionSupportsHybrid(ctx context.Context, collection string) bool {
+	fields, err := so.filterBuilder.GetFieldTypes(ctx, collection)
+	if err != nil || len(fields) == 0 {
+		return false
+	}
+	_, hasSparse := fields["sparse_embedding"]
+	return hasSparse
 }
 
 func mergeFilters(global, source map[string]any) map[string]any {
