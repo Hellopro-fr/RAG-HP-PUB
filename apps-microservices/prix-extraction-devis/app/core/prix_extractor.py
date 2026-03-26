@@ -2,6 +2,7 @@
 Module principal de traitement: extraction de prix depuis les données devis via LLM.
 Traitement parallèle asynchrone avec asyncio.
 """
+import re
 import time
 import logging
 import asyncio
@@ -319,6 +320,19 @@ class PrixExtractor:
             token = self._current_item_id.set(item_id)
 
             self._log(f"[{item_index + 1}/{total_items}] Traitement item {item_id}")
+
+            # Pré-filtre : si le texte ne contient aucune mention de prix, skip sans appeler le LLM
+            if not re.search(r'€|\beuros?\b|\bEUR\b', item_content, re.IGNORECASE):
+                self._log(f"[{item_index + 1}/{total_items}] ⏭️ Item {item_id} — aucune mention de prix (€/euro/EUR) → skip")
+                self._flush_item_logs(item_id)
+                self._current_item_id.reset(token)
+                return ItemResult(
+                    item_id=item_id,
+                    source="devis",
+                    content=item_content,
+                    prix_data=None,
+                    status="skipped"
+                )
 
             # 1. Construire le prompt avec le contenu de l'item
             prompt_text = self._build_prompt(item_content, category_name)
