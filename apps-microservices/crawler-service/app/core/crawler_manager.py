@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 CRAWL_JOB_PREFIX = "crawl_job:"
 # The global counter for running jobs
 CRAWL_RUNNING_COUNT_KEY = "crawl_jobs:running_count"
+# The dynamic global max crawls key in Redis
+CRAWL_MAX_GLOBAL_KEY = "crawl_jobs:max_global_crawls"
 
 CRAWL_UPDATES_CHANNEL = "crawl_updates"
 STALE_JOB_THRESHOLD_SECONDS = 180  # 3 minutes without heartbeat = dead
@@ -136,7 +138,7 @@ class CrawlerManager:
         # Check dynamic global limit (V3 Logic)
         # If is_restart=True, we skip this because we already consumed a slot.
         if not is_restart:
-            redis_max_global_str = await cache_service.get_key("crawl_jobs:max_global_crawls")
+            redis_max_global_str = await cache_service.get_key(CRAWL_MAX_GLOBAL_KEY)
             current_max_global = int(redis_max_global_str) if redis_max_global_str else settings.DEFAULT_MAX_GLOBAL_CRAWLS
 
             # Optimistic increment: atomically claim a slot, then check the limit.
@@ -235,10 +237,9 @@ class CrawlerManager:
         """
         crawl_id = job_info["crawl_id"]
         restart_count = int(job_info.get("oom_restart_count", 0))
-        MAX_RESTARTS = 2 # Configurable limit
-        
-        if restart_count >= MAX_RESTARTS:
-            logger.error(f"Maximum OOM restarts ({MAX_RESTARTS}) reached for '{crawl_id}'. Failing job.")
+
+        if restart_count >= settings.MAX_OOM_RESTARTS:
+            logger.error(f"Maximum OOM restarts ({settings.MAX_OOM_RESTARTS}) reached for '{crawl_id}'. Failing job.")
             
             # Manually clean up since we skipped the normal failure step
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
@@ -258,7 +259,7 @@ class CrawlerManager:
                 ))
             return
 
-        logger.info(f"Relaunching OOM Job '{crawl_id}' (Attempt {restart_count + 1}/{MAX_RESTARTS+1})")
+        logger.info(f"Relaunching OOM Job '{crawl_id}' (Attempt {restart_count + 1}/{settings.MAX_OOM_RESTARTS + 1})")
         
         # Ensure we don't drop data on restart!
         params = job_info.get("params", {})
@@ -279,7 +280,7 @@ class CrawlerManager:
                 oom_restart_count=restart_count + 1
             )
         except Exception as e:
-            logger.error(f"Failed to relaunch OOM job '{crawl_id}': {e}")
+            logger.error(f"Failed to relaunch OOM job '{crawl_id}': {e}", exc_info=True)
             # Ensure we clean up the slot if relaunch fails
             await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
 
@@ -600,11 +601,16 @@ class CrawlerManager:
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
         
         old_status = job_info.get("status")
-        
+
         # Validate target status
         if target_status not in ("finished", "failed"):
             target_status = "finished"
-        
+
+        # Release the global concurrency slot if the job was holding one
+        if old_status in ("running", "restarting_oom"):
+            await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+            logger.info(f"Force-finish: released global slot for '{crawl_id}' (was '{old_status}').")
+
         # Update status
         job_info["status"] = target_status
         job_info["pid"] = None
@@ -634,17 +640,30 @@ class CrawlerManager:
 
     async def get_all_statuses(self, status_filter: Optional[str] = None) -> Dict[str, CrawlStatus]:
         all_job_keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
-        statuses = {}
+        if not all_job_keys:
+            return {}
+
+        # Batch-fetch all jobs in a single Redis round-trip (pipeline)
+        pipe = cache_service.redis_client.pipeline()
         for key in all_job_keys:
-            crawl_id = key.replace(CRAWL_JOB_PREFIX, "")
-            job_info = await cache_service.get_json(key)
-            if job_info:
-                # Apply filter before computing full status (avoids unnecessary disk I/O)
-                if status_filter and job_info.get("status") != status_filter:
-                    continue
-                status_data = await self.get_status(job_info)
-                if status_data:
-                    statuses[crawl_id] = status_data
+            pipe.get(key)
+        all_jobs_raw = await pipe.execute()
+
+        statuses = {}
+        for i, job_raw in enumerate(all_jobs_raw):
+            if not job_raw:
+                continue
+            try:
+                job_info = json.loads(job_raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            # Apply filter before computing full status (avoids unnecessary disk I/O)
+            if status_filter and job_info.get("status") != status_filter:
+                continue
+            crawl_id = all_job_keys[i].replace(CRAWL_JOB_PREFIX, "")
+            status_data = await self.get_status(job_info)
+            if status_data:
+                statuses[crawl_id] = status_data
         return statuses
 
     async def get_status(self, job_info: dict) -> CrawlStatus:
@@ -1186,7 +1205,7 @@ class CrawlerManager:
 
         if not all_job_keys:
             logger.info("No jobs found in Redis during reconciliation.")
-            await cache_service.redis_client.set(CRAWL_RUNNING_COUNT_KEY, 0)
+            await cache_service.set_key(CRAWL_RUNNING_COUNT_KEY, 0)
             return
 
         # Use a pipeline to fetch all jobs at once for performance
@@ -1203,6 +1222,11 @@ class CrawlerManager:
                 job_data = json.loads(job_raw)
                 crawl_id = job_data.get("crawl_id")
                 status = job_data.get("status")
+
+                # Jobs in restarting_oom hold a real concurrency slot
+                if status == "restarting_oom":
+                    true_running_count += 1
+                    continue
 
                 if status == "running":
                     # Check for staleness
@@ -1271,7 +1295,7 @@ class CrawlerManager:
                 f"Counter value: {counter_value}, Actual running jobs: {true_running_count}. "
                 f"Resetting counter."
             )
-            await cache_service.redis_client.set(CRAWL_RUNNING_COUNT_KEY, true_running_count)
+            await cache_service.set_key(CRAWL_RUNNING_COUNT_KEY, true_running_count)
         else:
             logger.info(f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
 
