@@ -1859,6 +1859,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question1:/app/tracking
     deploy:
@@ -1876,6 +1877,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-question2aN:/app/tracking
     deploy:
@@ -1893,6 +1895,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-caracteristiques:/app/tracking
     deploy:
@@ -1910,6 +1913,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-generation-valeurs:/app/tracking
     deploy:
@@ -1927,6 +1931,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking
     deploy:
@@ -1944,6 +1949,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking
     deploy:
@@ -1961,6 +1967,7 @@ services:
     environment:
       RABBITMQ_URL: ${RABBITMQ_URL}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking
     deploy:
@@ -1985,6 +1992,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking
@@ -2005,6 +2013,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       MAX_CONCURRENCY: 3
     env_file:
       - .env
@@ -2027,6 +2036,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-message:/app/tracking
@@ -2047,6 +2057,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       MAX_CONCURRENCY: 3
     volumes:
       - /mnt/data/docker/images/prix-extraction/prix-extraction-devis:/app/tracking
@@ -2067,6 +2078,7 @@ services:
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
       SERVICE_NAME: prix-traitement
     env_file:
       - .env
