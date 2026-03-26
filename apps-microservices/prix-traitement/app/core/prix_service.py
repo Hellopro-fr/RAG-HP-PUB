@@ -480,6 +480,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         requete_rag_value = texte_recherche
         if isinstance(texte_prompt, str) and len(texte_prompt.strip()) > 0:
             requete_rag_value = texte_prompt.strip()
+            logger.info(f"[{id_categorie}] Requête dans le prompt changé en : {requete_rag_value}")
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         
