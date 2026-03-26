@@ -359,7 +359,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         await api_client.close()
 
 
-async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str) -> Dict[str, Any]:
+async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_categorie: str, texte_prompt: Optional[str] = None) -> Dict[str, Any]:
     """
     Recherche RAG sur la source "prix" filtrée par id_categorie, 
     formate les chunks et les envoie au LLM (Gemini) avec le prompt 114.
@@ -477,7 +477,10 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         # Remplacer les placeholders dans le prompt
         final_prompt = prompt_text
         final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
-        final_prompt = final_prompt.replace("{requete_rag}", texte_recherche)
+        requete_rag_value = texte_recherche
+        if isinstance(texte_prompt, str) and len(texte_prompt.strip()) > 0:
+            requete_rag_value = texte_prompt.strip()
+        final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
         
         logger.info(f"[{id_categorie}] Prompt : {final_prompt[:100]}...")
