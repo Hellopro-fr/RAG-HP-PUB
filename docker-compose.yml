@@ -2109,7 +2109,7 @@ services:
     environment:
       - MCP_GATEWAY_PORT=${MCP_GATEWAY_PORT:-8581}
       - MCP_GATEWAY_NAME=${MCP_GATEWAY_NAME:-hellopro-mcp-gateway}
-      - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/mcp_gateway?parseTime=true&multiStatements=true
+      - MYSQL_DSN=${GATEWAY_MYSQL_USER:-gateway_user}:${GATEWAY_MYSQL_PASS:-gateway_pass}@tcp(mysql:${GATEWAY_MYSQL_PORT:-3306})/${GATEWAY_MYSQL_DB:-gateway_db}?parseTime=true&multiStatements=true
       - ENCRYPTION_KEY=${MCP_ENCRYPTION_KEY}
       - HEALTH_CHECK_INTERVAL=${MCP_HEALTH_CHECK_INTERVAL:-30}
       - AUTH_ENABLED=${MCP_AUTH_ENABLED}
