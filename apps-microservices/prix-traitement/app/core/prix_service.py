@@ -393,7 +393,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
         chunks, prompt_config = await asyncio.gather(
             call_search_api_async(
                 prompt=texte_recherche,
-                num_results=50,
+                num_results=100,
                 source="prix",
                 filtre={"id_categorie": id_categorie}
             ),
